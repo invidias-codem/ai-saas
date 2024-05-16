@@ -56,9 +56,9 @@ export default async function createImages(req: Request) {
           Authorization: authorizationHeader,
         },
         body: JSON.stringify({
-          model:"",
+          model:"dall-e-3",
           prompt,
-          n,
+          n: 1,
           size,
           response_format,
         }),

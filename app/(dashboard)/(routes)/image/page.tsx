@@ -33,8 +33,8 @@ const ImagePage = () => {
       resolver: zodResolver(formSchema),
       defaultValues: {
         prompt: "",
-        amount: "1",
-        resolution: "512x512",
+        amount: "",
+        resolution: "",
       },
     });
   
@@ -55,8 +55,8 @@ const ImagePage = () => {
         const body = JSON.stringify({
           model:"dall-e-3", // Replace with desired image generation model
           prompt: values.prompt,
-          n: parseInt(values.amount, 10),
-          size: "1024x1024",
+          n: parseInt(values.amount),
+          size: values.resolution,
           response_format: "url",
         });
   
