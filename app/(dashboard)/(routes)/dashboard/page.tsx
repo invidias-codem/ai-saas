@@ -9,36 +9,36 @@ const tools = [
         label: "Conversation",
         icon: ChatBubbleIcon,
         color: "text-sky-500",
-        bgColor: "bg-white-500/10",
-        href: "/conversation"
+        bgColor: "bg-white-500\/10",
+        href: "/conversation",
     },
     {
         label: "Juke Box",
         icon: DiscIcon,
         color: "text-orange-500",
-        bgColor: "bg-white-500/10",
-        href: "/music"
+        bgColor: "bg-white-500\/10",
+        href: "/music",
     },
     {
         label: "Quick Clip",
         icon: VideoIcon,
         href: "/clip",
         color: "text-pink-700",
-        bgColor: "bg-white-500/10"
+        bgColor: "bg-white-500\/10",
     },
     {
         label: "Image Capsule",
         icon: ImageIcon,
         href: "/image",
         color: "text-purple-500",
-        bgColor: "bg-white-500/10"
+        bgColor: "bg-white-500\/10",
     },
     {
         label: "Code",
         icon: CodeIcon,
         href: "/code",
         color: "text-green-400",
-        bgColor:"bg-white-500/10"
+        bgColor:"bg-white-500\/10",
     },
     
 ]
@@ -49,8 +49,8 @@ const DashboardPage = () => {
     return (
         <div>
             <div className="mb-8 space-y-4">
-                <h2 className="text-2xl md:text-4xl font-bold text-center">
-                    Unleash the power of Genie's Magic.
+                <h2 className="text-2xl md:text-4xl font-bold text-center\/">
+                    'Unleash the power of Genie's Magic.'
                 </h2>
                 <p className="text-muted-foreground font-light text-sm md:text-lg text-center">
                     See How Genie Can Transform Your Business:
