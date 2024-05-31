@@ -174,7 +174,7 @@ export default function ConversationPage() {
 
     // JSX for your conversation UI elements using messages, userInput, theme, and error states
   
-    const GREETING_MESSAGE = "Hi there! How can I help you code today?";
+    const GREETING_MESSAGE = "Hi there! What would you like to talk about today?";
 
     const TypingIndicator = () => (
 
