@@ -11,6 +11,7 @@ const tools = [
         color: "text-sky-500",
         bgColor: "bg-white-500\/10",
         href: "/conversation",
+        display: true
     },
     {
         label: "Juke Box",
