@@ -50,7 +50,7 @@ const DashboardPage: React.FC = () => {
         <div>
             <div className="mb-8 space-y-4">
                 <h2 className="text-2xl md:text-4xl font-bold text-center">
-                    'Unleash the power of Genie's Magic.'
+                    &apos;Unleash the power of Genie&apos;s Magic.&apos;
                 </h2>
                 <p className="text-muted-foreground font-light text-sm md:text-lg text-center">
                     See How Genie Can Transform Your Business:
@@ -81,3 +81,4 @@ const DashboardPage: React.FC = () => {
 }
 
 export default DashboardPage;
+

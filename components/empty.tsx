@@ -1,10 +1,11 @@
-import Image from "next/image";
-
+/**
+ * Component for displaying a message when there is no content.
+ * @param label The message to display.
+ */
 interface EmptyProps {
-  label: string; // ' can be escaped with &apos;, &lsquo;, &#39;, &rsquo;
+  label: string;
 }
-
-const EmptyState = ({ label }: EmptyProps) => {
+export const EmptyState = ({ label }: EmptyProps) => {
   if (!label) {
     throw new Error('EmptyState: label is required');
   }
@@ -12,18 +13,15 @@ const EmptyState = ({ label }: EmptyProps) => {
   return (
     <div className="h-full p-20 flex flex-col items-center justify-center">
       <div className="relative h-72 w-72">
-        <Image 
-          alt="Empty"
-          fill
-          src="/genie.png"
-        />
+        
       </div>
-      <p className="text-muted-foreground text-sm text-center">
-        {label}
-      </p>
+      <h2 className="text-xl font-semibold mt-4">{label}</h2>
     </div>
   );
 };
 
-export default EmptyState;  // Export the component with the display name
+/**
+ * Export the component with the display name so that it can be used in the HTML output.
+ */
+export default EmptyState as React.ForwardRefExoticComponent<EmptyProps & React.RefAttributes<{}>>;
 
