@@ -96,6 +96,11 @@ export default function ConversationPage() {
           <TypingIndicator />
       
           const result = await (chat as YourChatType)?.sendMessage(userInput) || Promise.reject(new Error("Chat not initialized"));
+          type YourChatType = {
+            sendMessage: (message: string) => Promise<any>;
+            // Add other properties and methods as needed
+          };
+          
           const botMessage = {
             text: result.response.text(),
             role: "bot",
