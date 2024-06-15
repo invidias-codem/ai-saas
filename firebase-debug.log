@@ -1,0 +1,78 @@
+[debug] [2024-06-15T03:32:55.228Z] ----------------------------------------------------------------------
+[debug] [2024-06-15T03:32:55.238Z] Command:       /usr/local/Cellar/node/21.5.0/bin/node /usr/local/bin/firebase deploy
+[debug] [2024-06-15T03:32:55.239Z] CLI Version:   13.9.0
+[debug] [2024-06-15T03:32:55.239Z] Platform:      darwin
+[debug] [2024-06-15T03:32:55.240Z] Node Version:  v21.5.0
+[debug] [2024-06-15T03:32:55.240Z] Time:          Fri Jun 14 2024 23:32:55 GMT-0400 (Eastern Daylight Time)
+[debug] [2024-06-15T03:32:55.240Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2024-06-15T03:32:55.332Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2024-06-15T03:32:55.333Z] > authorizing via signed-in user (jjmohamme14@gmail.com)
+[debug] [2024-06-15T03:32:55.333Z] [iam] checking project genie-ai-1ca85 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2024-06-15T03:32:55.335Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/genie-ai-1ca85:testIamPermissions [none]
+[debug] [2024-06-15T03:32:55.335Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/genie-ai-1ca85:testIamPermissions x-goog-quota-user=projects/genie-ai-1ca85
+[debug] [2024-06-15T03:32:55.335Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/genie-ai-1ca85:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2024-06-15T03:32:55.602Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/genie-ai-1ca85:testIamPermissions 200
+[debug] [2024-06-15T03:32:55.603Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/genie-ai-1ca85:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2024-06-15T03:32:55.603Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/genie-ai-1ca85/serviceAccounts/genie-ai-1ca85@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2024-06-15T03:32:55.603Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/genie-ai-1ca85/serviceAccounts/genie-ai-1ca85@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2024-06-15T03:32:56.142Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/genie-ai-1ca85/serviceAccounts/genie-ai-1ca85@appspot.gserviceaccount.com:testIamPermissions 404
+[debug] [2024-06-15T03:32:56.142Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/genie-ai-1ca85/serviceAccounts/genie-ai-1ca85@appspot.gserviceaccount.com:testIamPermissions {"error":{"code":404,"message":"Unknown service account","status":"NOT_FOUND"}}
+[debug] [2024-06-15T03:32:56.144Z] [functions] service account IAM check errored, deploy may fail: HTTP Error: 404, Unknown service account {"name":"FirebaseError","children":[],"context":{"body":{"error":{"code":404,"message":"Unknown service account","status":"NOT_FOUND"}},"response":{"statusCode":404}},"exit":1,"message":"HTTP Error: 404, Unknown service account","status":404}
+[debug] [2024-06-15T03:32:56.145Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/genie-ai-1ca85 [none]
+[debug] [2024-06-15T03:32:56.608Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/genie-ai-1ca85 200
+[debug] [2024-06-15T03:32:56.609Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/genie-ai-1ca85 {"projectId":"genie-ai-1ca85","projectNumber":"431710853984","displayName":"Genie-AI","name":"projects/genie-ai-1ca85","resources":{"hostingSite":"genie-ai-1ca85"},"state":"ACTIVE","etag":"1_769a7cdc-ab5f-49b4-a965-108a3f7ed14c"}
+[info] 
+[info] === Deploying to 'genie-ai-1ca85'...
+[info] 
+[info] i  deploying firestore, functions, hosting 
+[debug] [2024-06-15T03:32:56.722Z] TypeError [ERR_INVALID_ARG_TYPE]: The "path" argument must be of type string. Received undefined
+    at Object.join (node:path:1175:7)
+    at Config.path (/usr/local/lib/node_modules/firebase-tools/lib/config.js:125:45)
+    at getChildEnvironment (/usr/local/lib/node_modules/firebase-tools/lib/deploy/lifecycleHooks.js:56:49)
+    at runTargetCommands (/usr/local/lib/node_modules/firebase-tools/lib/deploy/lifecycleHooks.js:77:14)
+    at /usr/local/lib/node_modules/firebase-tools/lib/deploy/lifecycleHooks.js:151:24
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async chain (/usr/local/lib/node_modules/firebase-tools/lib/deploy/index.js:40:9)
+    at async deploy (/usr/local/lib/node_modules/firebase-tools/lib/deploy/index.js:96:5)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2024-06-15T03:36:44.454Z] ----------------------------------------------------------------------
+[debug] [2024-06-15T03:36:44.458Z] Command:       /usr/local/Cellar/node/21.5.0/bin/node /usr/local/bin/firebase deploy
+[debug] [2024-06-15T03:36:44.458Z] CLI Version:   13.11.2
+[debug] [2024-06-15T03:36:44.458Z] Platform:      darwin
+[debug] [2024-06-15T03:36:44.458Z] Node Version:  v21.5.0
+[debug] [2024-06-15T03:36:44.459Z] Time:          Fri Jun 14 2024 23:36:44 GMT-0400 (Eastern Daylight Time)
+[debug] [2024-06-15T03:36:44.459Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2024-06-15T03:36:44.549Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2024-06-15T03:36:44.550Z] > authorizing via signed-in user (jjmohamme14@gmail.com)
+[debug] [2024-06-15T03:36:44.550Z] [iam] checking project genie-ai-1ca85 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2024-06-15T03:36:44.564Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/genie-ai-1ca85:testIamPermissions [none]
+[debug] [2024-06-15T03:36:44.565Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/genie-ai-1ca85:testIamPermissions x-goog-quota-user=projects/genie-ai-1ca85
+[debug] [2024-06-15T03:36:44.566Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/genie-ai-1ca85:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2024-06-15T03:36:44.943Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/genie-ai-1ca85:testIamPermissions 200
+[debug] [2024-06-15T03:36:44.944Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/genie-ai-1ca85:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2024-06-15T03:36:44.944Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/genie-ai-1ca85/serviceAccounts/genie-ai-1ca85@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2024-06-15T03:36:44.944Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/genie-ai-1ca85/serviceAccounts/genie-ai-1ca85@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2024-06-15T03:36:45.149Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/genie-ai-1ca85/serviceAccounts/genie-ai-1ca85@appspot.gserviceaccount.com:testIamPermissions 404
+[debug] [2024-06-15T03:36:45.149Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/genie-ai-1ca85/serviceAccounts/genie-ai-1ca85@appspot.gserviceaccount.com:testIamPermissions {"error":{"code":404,"message":"Unknown service account","status":"NOT_FOUND"}}
+[debug] [2024-06-15T03:36:45.150Z] [functions] service account IAM check errored, deploy may fail: HTTP Error: 404, Unknown service account {"name":"FirebaseError","children":[],"context":{"body":{"error":{"code":404,"message":"Unknown service account","status":"NOT_FOUND"}},"response":{"statusCode":404}},"exit":1,"message":"HTTP Error: 404, Unknown service account","status":404}
+[debug] [2024-06-15T03:36:45.151Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/genie-ai-1ca85 [none]
+[debug] [2024-06-15T03:36:45.614Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/genie-ai-1ca85 200
+[debug] [2024-06-15T03:36:45.614Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/genie-ai-1ca85 {"projectId":"genie-ai-1ca85","projectNumber":"431710853984","displayName":"Genie-AI","name":"projects/genie-ai-1ca85","resources":{"hostingSite":"genie-ai-1ca85"},"state":"ACTIVE","etag":"1_769a7cdc-ab5f-49b4-a965-108a3f7ed14c"}
+[info] 
+[info] === Deploying to 'genie-ai-1ca85'...
+[info] 
+[info] i  deploying firestore, functions, hosting 
+[debug] [2024-06-15T03:36:45.741Z] TypeError [ERR_INVALID_ARG_TYPE]: The "path" argument must be of type string. Received undefined
+    at Object.join (node:path:1175:7)
+    at Config.path (/usr/local/lib/node_modules/firebase-tools/lib/config.js:125:45)
+    at getChildEnvironment (/usr/local/lib/node_modules/firebase-tools/lib/deploy/lifecycleHooks.js:56:49)
+    at runTargetCommands (/usr/local/lib/node_modules/firebase-tools/lib/deploy/lifecycleHooks.js:77:14)
+    at /usr/local/lib/node_modules/firebase-tools/lib/deploy/lifecycleHooks.js:151:24
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async chain (/usr/local/lib/node_modules/firebase-tools/lib/deploy/index.js:40:9)
+    at async deploy (/usr/local/lib/node_modules/firebase-tools/lib/deploy/index.js:96:5)
+[error] 
+[error] Error: An unexpected error has occurred.

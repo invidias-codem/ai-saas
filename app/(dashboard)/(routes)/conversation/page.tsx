@@ -3,9 +3,8 @@
 import dotenv from 'dotenv';
 import { useState, useEffect, SetStateAction } from "react";
 import {  HarmCategory, HarmBlockThreshold, GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
-import { MoonIcon } from "@radix-ui/react-icons";
-import { timeStamp } from "console";
-
+import { ClipboardIcon, CodeSandboxLogoIcon, FaceIcon, MoonIcon } from "@radix-ui/react-icons";
+import { CopyToClipboard } from 'react-copy-to-clipboard';
 dotenv.config();
 
 export default function ConversationPage() {
@@ -96,7 +95,7 @@ export default function ConversationPage() {
 
           <TypingIndicator />
       
-          const result = await chat?.sendMessage(userInput) || Promise.reject(new Error("Chat not initialized"));
+          const result = await (chat as YourChatType)?.sendMessage(userInput) || Promise.reject(new Error("Chat not initialized"));
           const botMessage = {
             text: result.response.text(),
             role: "bot",

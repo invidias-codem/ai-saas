@@ -1,6 +1,6 @@
 "use client"
 
-import { OpenAI } from "openai";
+import Vision from '@google-cloud/vision';
 import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Heading } from "@/components/heading";
@@ -24,12 +24,11 @@ import { url } from "inspector";
 
 
 dotenv.config();
-
+const client = new Vision.ImageAnnotatorClient();
 const ImagePage = () => {
     const router = useRouter();
-    const [images, setImages] = useState<string[]>([]);
-  
-    const form = useForm<z.infer<typeof formSchema>>({
+    const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+    const { register, handleSubmit, reset } = useForm<z.infer<typeof formSchema>>({
       resolver: zodResolver(formSchema),
       defaultValues: {
         prompt: "",
@@ -37,203 +36,122 @@ const ImagePage = () => {
         resolution: "",
       },
     });
-  
-    const isLoading = form.formState.isSubmitting;
-  
-    const onSubmit = async (values: z.infer<typeof formSchema>) => {
-      try {
-        setImages([]);
-  
-        // Construct API URL
-        const url = `https://api.openai.com/v1/images/generations`;
-  
-        // Prepare Authorization Header (Ensure correct key and format)
-        const apiKey = process.env.OPENAI_API_KEY;
-        const authorizationHeader = `Bearer ${apiKey}`; // Double-check this line
-  
-        // Prepare Request Body
-        const body = JSON.stringify({
-          model:"dall-e-3", // Replace with desired image generation model
-          prompt: values.prompt,
-          n: parseInt(values.amount),
-          size: values.resolution,
-          response_format: "url",
-        });
-  
-        // Make API Call using fetch
-        const response = await fetch([url], {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: authorizationHeader,
-          },
-          body: body,
-        });
+    const isLoading = false;
 
-  
-        if (!response) {
-          throw new Error(`API request failed with status ${response}`);
+    const onSubmit = async (formData: z.infer<typeof formSchema>) => {
+      try {
+        if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+          throw new Error("Google Application Credentials not found");
         }
-  
-        const data = await response.json();
-  
-        // Extract Image URLs (handle potential missing data)
-        const imageUrls = data.data?.map((image: { url: string }) => image.url);
-  
-        // Update state with image URLs (if on a server-side render)
-        if (typeof window === "undefined") {
-          // Server-side render (SSR)
-          return NextResponse.json(imageUrls); // Return image URLs for SSR
-        } else {
-          // Client-side render (CSR)
-          setImages(imageUrls); // Update state for CSR
+        if (!process.env.NEXT_PUBLIC_OUTPUT_URI) {
+          throw new Error("Output URI not found");
         }
-  
-        form.reset();
+        const vision = require("@google-cloud/vision")({
+          apiEndpoint: process.env.API_ENDPOINT,
+          credentials: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+          projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
+          keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        });
+        if (
+          !(
+            formData.prompt &&
+            formData.amount &&
+            formData.resolution &&
+            formData.prompt.length > 0 &&
+            parseInt(formData.amount) > 0 &&
+            formData.resolution.split("x").length === 2
+          )
+        ) {
+          throw new Error(
+            "Prompt, amount, or resolution is missing or incorrect format"
+          );
+        }
+        const imageGenerationConfig = {
+          prompt: formData.prompt,
+          numberOfImages: parseInt(formData.amount),
+          imageResolution: `${formData.resolution.split("x")[0]}x${
+            formData.resolution.split("x")[1]
+          }`,
+          model: "image-alpha-001",
+          outputConfig: {
+            outputLocation: {
+              outputUri: process.env.NEXT_PUBLIC_OUTPUT_URI,
+            },
+            outputFormat: "URL",
+          },
+        };
+        const request = {
+          image: {
+            content: formData.prompt,
+          },
+          features: [
+            {
+              type: "IMAGE_GENERATION",
+              imageGenerationConfig,
+            },
+          ],
+        };
+        const [response] = await vision.annotate(request);
+        const imageUrls = response.imageGenerationAnnotation?.imageUrls || [];
+        setGeneratedImages(imageUrls);
+        reset();
       } catch (error) {
         console.error("Error generating images:", error);
-        // TODO: Implement proper error handling (e.g., display user-friendly message)
       } finally {
-        router.refresh(); // This might not be necessary depending on your implementation
+        router.refresh();
       }
     };
 
-    return (
-        <div>
-            <Heading 
-               title="Image Capsule"
-               description="Try our Image Generator"
-               icon={ImageIcon}
-               iconColor="text-violet-500"
-               bgColor="bg-violet-500/10"
-            />
-            <div className="px-4 lg:px-8 grid grid-template-rows: auto 1fr">
-                <div>
-                    <Form {...form}>
-                        <form 
-                            onSubmit={form.handleSubmit(onSubmit)}
-                            className="
-                                rounded-lg
-                                border
-                                w-absolute 
-                                p-4
-                                px-3
-                                md:px-6
-                                focus-within:shadow-sm
-                                grid
-                                grid-cols-12
-                                gap-2
-                                position: absolute; bottom: 0;
-                            "
-                        >
-                            <FormField 
-                                name="prompt"
-                                render={({ field }) => (
-                                    <FormItem className="col-span-12 lg:col-span-6">
-                                        <FormControl className="me-0 p-0">
-                                            <Input 
-                                                className="border-0 outline-none
-                                                focus-visible:ring-0
-                                                focus-visible:ring-transparent"
-                                                disabled={isLoading}
-                                                placeholder="Alpacas climbing Pikes Peak"
-                                                {...field}
-                                            />
-                                        </FormControl>
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="amount"
-                                render={({ field }) => (
-                                    <FormItem className="col-span-12 lg:col-span-2">
-                                        <Select
-                                            disabled={isLoading}
-                                            onValueChange={field.onChange}
-                                            value={field.value}
-                                            defaultValue={field.value}
-                                        >
-                                            <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue defaultValue={field.value} />
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                {amountOptions.map((option) => (
-                                                    <SelectItem
-                                                        key={option.value}
-                                                        value={option.value}
-                                                    >
-                                                      {option.label}  
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="resolution"
-                                render={({ field }) => (
-                                    <FormItem className="col-span-12 lg:col-span-2">
-                                        <Select
-                                            disabled={isLoading}
-                                            onValueChange={field.onChange}
-                                            value={field.value}
-                                            defaultValue={field.value}
-                                        >
-                                            <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue defaultValue={field.value} />
-                                                </SelectTrigger>
-                                            </FormControl>
-                                            <SelectContent>
-                                                {resolutionOptions.map((option) => (
-                                                    <SelectItem
-                                                        key={option.value}
-                                                        value={option.value}
-                                                    >
-                                                      {option.label}  
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </FormItem>
-                                )}
-                            />
-                            <Button className="col-span-12 lg:col-span-2 w-full"
-                            disabled={isLoading}>
-                                Vend
-                            </Button>
-                        </form>
-                    </Form>
-                </div>
-                <div className="space-y-4 mt-4">
-  {/* Check if images state has URLs and not loading */}
-  {images && images.length > 0 && !isLoading && (
-    <div className="grid grid-cls-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-8">
-      {/* Loop through image URLs */}
-      {images.map((imageUrl) => (
-        <Card key={imageUrl} className="rounded-lg overflow-hidden">
-          <div className="relative aspect-square">
-            <Image alt="Image" fill src={imageUrl} />
-          </div>
-          <CardFooter className="p-2">
-            <Button onClick={() => window.open(imageUrl)} variant="secondary" className="w-full">
-              <DownloadIcon className="h-4 w-4 mr-2" />
-            </Button>
-          </CardFooter>
-        </Card>
-      ))}
-    </div>
-  )}
-</div>
 
-            </div>
+    return (
+      <div>
+        <Heading 
+           title="Image Capsule"
+           description="Try our Image Generator"
+           icon={ImageIcon}
+           iconColor="text-violet-500"
+           bgColor="bg-violet-500/10"
+        />
+        <div className="px-4 lg:px-8 grid grid-template-rows: auto 1fr">
+          <FormField name="resolution">
+            {({ field, fieldState }) => (
+              <Select
+                disabled={isLoading}
+                {...field}
+                error={fieldState.error?.message}
+                defaultValue={resolutionOptions.find((option) => option.value === field.value)?.label}
+              >
+                <SelectContent>
+                  {resolutionOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </FormField>
+          <div className="space-y-4 mt-4">
+            {generatedImages.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-8">
+                {generatedImages.map((imageUrl) => (
+                  <Card key={imageUrl} className="rounded-lg overflow-hidden">
+                    <div className="relative aspect-square">
+                      <Image alt="Image" fill src={imageUrl} />
+                    </div>
+                    <CardFooter className="p-2">
+                      <Button onClick={() => window.open(imageUrl)} variant="secondary" className="w-full">
+                        <DownloadIcon className="h-4 w-4 mr-2" />
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+      </div>
     );
-}
+};
 
 export default ImagePage;
