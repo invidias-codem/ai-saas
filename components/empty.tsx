@@ -14,7 +14,7 @@ export const EmptyState = ({ label }: EmptyProps) => {
   return (
     <div className="h-full p-20 flex flex-col items-center justify-center">
       <div className="relative h-72 w-72">
-        // Your component logic here
+        Generating Music
       </div>
     </div>
   );

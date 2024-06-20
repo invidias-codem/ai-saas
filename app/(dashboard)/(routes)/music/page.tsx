@@ -12,76 +12,32 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { z } from 'zod';
 import EmptyState from '@/components/empty';
-import { useMemo } from 'react'; // Assuming React hooks for state management
+import axios from 'axios';
 
 const MusicPage = () => {
-  // Consider removing useRouter if not used for navigation
-  const router = useRouter();
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [spectrogramUrl, setSpectrogramUrl] = useState<string | null>(null);
-  const [audioError, setAudioError] = useState<string | null>(null);
-  const [spectrogramError, setSpectrogramError] = useState<string | null>(null);
-
+  const router = useRouter();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      prompt: "",
+      prompt: '',
     },
   });
 
   const isLoading = form.formState.isSubmitting;
 
-  const handleSubmit = async ({ prompt }: z.infer<typeof formSchema>) => {
+  const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      setMusicUrl(null);
-      setSpectrogramUrl(null);
-      setAudioError(null);
-      setSpectrogramError(null);
+      setMusicUrl(null); // Clear previous music on submit
 
-      const response = await fetch("/api/music", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompt }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`API request failed with status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const { audioUrl, spectrogramUrl } = data || {};
-
-      if (audioUrl) {
-        // Check for supported audio format (optional)
-        // You can use libraries like `audio-metadata` to check format before setting state
-        const isSupportedFormat = isAudioSupported(audioUrl); // Implement this function
-
-        if (isSupportedFormat) {
-          setMusicUrl(audioUrl);
-          setSpectrogramUrl(spectrogramUrl);
-          form.reset();
-        } else {
-          setAudioError("Unsupported audio format generated. Please try again.");
-        }
-      } else {
-        setAudioError("Error generating audio. Please try again."); // Set error message
-      }
+      const response = await axios.post("/api/music", values);
+      setMusicUrl(response.data.audio);
+      form.reset();
     } catch (error) {
-      if (error instanceof TypeError) {
-        setAudioError("Network error occurred. Please try again.");
-      } else {
-        console.error(error);
-        setAudioError("Error generating audio. Please try again.");
-      }
+      console.error(error);
     }
   };
-
-  const isAudioSupported = useMemo(() => {
-    const audio = new Audio();
-    return (format: string) => !!audio.canPlayType(format); // Check for format support
-  }, []); // Memoize the audio element creation
 
   return (
     <div>
@@ -93,48 +49,47 @@ const MusicPage = () => {
         bgColor='bg-white-500/10'
       />
       <div className='px-4 lg:px-8'>
-        <div>
-          <Form {...form}>
-            <FormField control={form.control} name="prompt" render={({ field }) => (
-              <>
-                <Input
-                  placeholder="Generate a piano solo..."
-                  {...field}
-                />
-                <Button
-                  className='col-span-12 lg:col-span-2 w-full'
-                  disabled={isLoading}
-                  type="submit"
-                  onClick={form.handleSubmit(handleSubmit)}
-                >
-                  Generate
-                </Button>
-              </>
-            )} />
-          </Form>
-        </div>
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="rounded-lg border w-full p-4 px-3
+            md:px-6 focus-within:shadow-sm grid grid-cols-12 gap-2"
+          >
+            <FormField
+              control={form.control}
+              name="prompt"
+              render={({ field }) => (
+                <FormItem className='col-span-12 lg:col-span-10'>
+                  <FormControl className='m-0 p-0'>
+                    <Input
+                      className='border-0 outline-none focus-visible:ring-0 focus-visible:ring-transparent'
+                      disabled={isLoading}
+                      placeholder="Generate a piano solo..."
+                      {...field}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <Button
+              className="col-span-12 lg:col-span-2 w-full"
+              disabled={isLoading}
+            >
+              Generate
+            </Button>
+          </form>
+        </Form>
       </div>
-      <div className="space-y-4 mt-4">
-        {isLoading && (
-          <div className='p-8 rounded-lg w-full flex items-center justify-center bg-muted'>
-            {/* <Loader className="w-8 h-8 animate-spin" /> */}
-          </div>
-        )}
-        {audioError && (
-          <div className="text-red-500">{audioError}</div>
-        )}
-        {!musicUrl && !isLoading && !audioError && (
-          <EmptyState label='No music generated yet' />
-        )}
-        {musicUrl && (
+
+      <div className='space-y-4 mt-4'>
+        {isLoading && <EmptyState label={'Generating music'} />}
+        {musicUrl && ( // Check for non-null musicUrl
           <>
             <audio controls className='w-full mt-8'>
-              <source src={musicUrl} type="audio/mp3" />
+              <source src={musicUrl} type="audio/mpeg" />
             </audio>
             {spectrogramUrl && (
-              <div className='mt-8'>
-                <img src={spectrogramUrl} alt="Spectrogram" />
-              </div>
+              <img src={spectrogramUrl} typeof='image/jpeg' alt="Spectrogram Visualization" className="w-full mt-4" />
             )}
           </>
         )}
