@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^5.0.1",
-    "@clerk/types": "^5.0.1",
     "@google/generative-ai": "^0.7.1",
     "@hookform/resolvers": "^3.3.4",
     "@radix-ui/react-dialog": "^1.0.5",
