@@ -9,7 +9,7 @@ import { CopyToClipboard } from 'react-copy-to-clipboard';
 export default function CodePage() {
     const [messages, setMessages] = useState<({ text: string; role: string; timestamp: Date; })[]>([]);
     const [userInput, setUserInput] = useState("");
-    const [chat, setChat] = useState(null);
+    const [chat, setChat] = useState(void 0);
     const [theme, setTheme] = useState("dark");
     const [error, setError] = useState(null);
   
@@ -78,7 +78,10 @@ export default function CodePage() {
     }, []);
   
     const handleSendMessage = async () => {
-        if (!chat) return;
+        if (!chat) {
+            console.error("Chat not initialized");
+            return;
+        }
       
         setLoading(true); // Set loading state to true
       
@@ -94,14 +97,18 @@ export default function CodePage() {
 
           <TypingIndicator />
       
-          const result = await chat?.sendMessage(userInput) || Promise.reject(new Error("Chat not initialized"));
-          const botMessage = {
-            text: result.response.text(),
-            role: "bot",
-            timestamp: new Date(),
-          };
+          if (chat) {
+            const result = await chat?.sendMessage(userInput);
+            const botMessage = {
+              text: result.response.text(),
+              role: "bot",
+              timestamp: new Date(),
+            };
       
-          setMessages((prevMessages) => [...prevMessages, botMessage]);
+            setMessages((prevMessages) => [...prevMessages, botMessage]);
+          } else {
+            console.error("Chat not initialized");
+          }
         } catch (error: any) {
           console.error("Error during message sending:", error);
         } finally {

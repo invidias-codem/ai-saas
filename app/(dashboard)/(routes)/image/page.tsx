@@ -1,10 +1,9 @@
 "use client"
 
-import Vision from '@google-cloud/vision';
 import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Heading } from "@/components/heading";
-import { DownloadIcon, ImageIcon } from "@radix-ui/react-icons";
+import {  ImageIcon } from "@radix-ui/react-icons";
 import { useForm } from "react-hook-form";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -14,8 +13,6 @@ import { useState } from "react";
 import EmptyState from "@/components/empty";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { amountOptions, resolutionOptions, formSchema } from "./constants";
-import { Card, CardFooter } from "@/components/ui/card";
-import Image from "next/image";
 import axios from "axios";
 
 import dotenv from 'dotenv';

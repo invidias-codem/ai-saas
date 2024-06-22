@@ -6,6 +6,7 @@ import { auth } from "@clerk/nextjs/server";
 
 
 
+
 dotenv.config();
 
 export default async function createImages(req: Request): Promise<Response> {
@@ -65,12 +66,11 @@ export default async function createImages(req: Request): Promise<Response> {
       aspect_ratio: "3:2",
       output_quality: 79,
       negative_prompt: "ugly, distorted"
-    };
-    
-    // Loop through the stream (actions within the loop not shown)
-    for await (const event of replicate.stream("stability-ai/stable-diffusion-3", { input })) {
-      console.log(event);
-    };
+  };
+  
+  for await (const event of replicate.stream("stability-ai/stable-diffusion-3", { input })) {
+    console.log(event);
+  };
 
     // Return Image URLs or Base64 Data (depending on response_format)
     if (response_format === "url") {
