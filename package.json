@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^5.0.1",
-    "@google-cloud/vision": "^4.3.0",
+    "@clerk/types": "^5.0.1",
     "@google/generative-ai": "^0.7.1",
     "@hookform/resolvers": "^3.3.4",
     "@radix-ui/react-dialog": "^1.0.5",
@@ -47,8 +47,8 @@
     "typescript": "^5"
   },
   "description": "This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).",
-  "main": "firebaseConfig.js",
-  "module": "main.js",
+  "main": "next.config.mjs",
+  "module": "next.config.mjs",
   "directories": {
     "lib": "lib"
   },
