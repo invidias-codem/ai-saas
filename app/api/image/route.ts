@@ -1,88 +1,90 @@
-
+// app/api/image/route.ts
 import { NextResponse } from "next/server";
-import Replicate from "replicate";
-import dotenv from 'dotenv';
 import { auth } from "@clerk/nextjs/server";
+import { env } from "@/lib/env";
+import { VertexAI } from "@google-cloud/vertexai"; 
 
-
-
-
-dotenv.config();
-
-export default async function createImages(req: Request): Promise<Response> {
-  const { userId } = auth();
-  // Parse Request Body
-  const body = await req.json();
-
-  // Extract Image Generation Parameters
-  const { prompt, n = 1, size = "1024x1024", response_format = "url" } = body;
-  
-  // Handle OPTIONS requests
-  if (req.method === "OPTIONS") {
-    return NextResponse.json({ message: "OK" });
-  }
-
-  // Handle POST requests
-  if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
-
+export async function POST(req: Request) {
   try {
-    // Retrieve API Key from Environment Variable
-    const apiKey = process.env.REPLICATE_API_TOKEN;
-    if (!apiKey) {
-      return new Response("Missing REPLICATE_API_KEY environment variable", { status: 401 });
+    const { userId } = auth();
+    if (!userId) {
+      return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    // Validate Input Parameters
-    const validationErrors: string[] = [];
+    const vertex_ai = new VertexAI({
+      project: env.GOOGLE_PROJECT_ID,
+      location: env.GOOGLE_LOCATION,
+    });
+
+    const body = await req.json();
+    const { prompt, amount = "1", resolution = "1024x1024" } = body;
+
     if (!prompt) {
-      validationErrors.push("Prompt is required");
-    }
-    if (isNaN(n) || n <= 0) {
-      validationErrors.push("Number of images (n) must be a positive integer");
-    }
-    if (!size.match(/^\d+x\d+$/)) {
-      validationErrors.push("Resolution (size) must be in format WIDTHxHEIGHT");
-    }
-    if (!["url", "b64_json"].includes(response_format)) {
-      validationErrors.push("Invalid response format. Choose 'url' or 'b64_json'");
+      return new NextResponse("Prompt is required", { status: 400 });
     }
 
-    if (validationErrors.length > 0) {
-      return new Response(validationErrors.join(", "), { status: 400 });
+    const numImages = parseInt(amount, 10);
+    const [height, width] = resolution.split("x").map(Number);
+
+    const generativeModel = vertex_ai.getGenerativeModel({
+      model: "gemini-1.5-flash-latest", // Or "gemini-1.5-pro-latest"
+    });
+
+    const request = {
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `Generate ${numImages} image(s) of: ${prompt}` }],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: "image/png",
+      },
+    };
+
+    const response = await generativeModel.generateContent(request);
+
+    // ✅ 5. Safely extract the Base64 image data
+    const candidates = response.response?.candidates; // Use optional chaining
+
+    if (!candidates || candidates.length === 0) {
+      // Throw an error if no candidates are returned
+      throw new Error("API did not return any image candidates.");
     }
 
-    // Generate Images using Replicate
-    const replicate = new Replicate({ auth: apiKey });
+    const dataUrls = candidates.flatMap(candidate => 
+      candidate.content.parts
+        .filter(part => part.inlineData) // Filter for parts that have inlineData
+        .map(part => {
+          if (!part.inlineData) {
+            // This check is for TypeScript, but the filter already handles it
+            throw new Error("API part did not contain inlineData.");
+          }
+          // Convert Base64 to a Data URL
+          return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        })
+    );
 
-    const [width, height] = size.split("x").map(Number);
-
-    const input = {
-      prompt: prompt,
-      n: n,
-      width: width,
-      height: height,
-      aspect_ratio: "3:2",
-      output_quality: 79,
-      negative_prompt: "ugly, distorted"
-  };
-  
-  for await (const event of replicate.stream("stability-ai/stable-diffusion-3", { input })) {
-    console.log(event);
-  };
-
-    // Return Image URLs or Base64 Data (depending on response_format)
-    if (response_format === "url") {
-      return new Response(JSON.stringify(Response), { status: 200 });
-    } else if (response_format === "b64_json") {
-      return new Response(JSON.stringify({ image: Response }), { status: 200 });
-    } else {
-      return new Response("Invalid response format. Choose 'url' or 'b64_json'", { status: 400 });
+    if (dataUrls.length === 0) {
+      // Throw an error if candidates were returned but none had image data
+      throw new Error("API returned candidates but no valid image data.");
     }
-  } catch (error) {
-    console.error(error);
-    return new Response("Internal Server Error", { status: 500 });
+    
+    // Slice to respect the user's requested amount
+    const finalImages = dataUrls.slice(0, numImages);
+
+    return NextResponse.json(finalImages);
+
+  } catch (error: any) {
+    console.error("[IMAGE_API_ERROR]", error);
+    const errorMessage = error.message || "An unknown error occurred";
+    return new NextResponse(JSON.stringify({ 
+      error: "Internal Server Error",
+      details: errorMessage 
+    }), { 
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
   }
 }
 

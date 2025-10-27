@@ -1,108 +1,61 @@
 "use client";
 
-import dotenv from 'dotenv';
-import { useState, useEffect, SetStateAction } from "react";
-import {  HarmCategory, HarmBlockThreshold, GoogleGenerativeAI, ChatSession } from "@google/generative-ai";
-import { ClipboardIcon, CodeSandboxLogoIcon, FaceIcon, MoonIcon } from "@radix-ui/react-icons";
-import { CopyToClipboard } from 'react-copy-to-clipboard';
-dotenv.config();
+import { useState, SetStateAction } from "react";
+// ‼ Removed all @google/generative-ai imports from the client
+import axios from "axios"; // ✅ Import axios
+
+// Define the message structure
+interface Message {
+  text: string;
+  role: "user" | "bot";
+  timestamp: Date;
+}
 
 export default function ConversationPage() {
-    const [messages, setMessages] = useState<({ text: string; role: string; timestamp: Date; })[]>([]);
+    const [messages, setMessages] = useState<Message[]>([]);
     const [userInput, setUserInput] = useState("");
-    const [chat, setChat] = useState(null);
     const [theme, setTheme] = useState("dark");
-    const [error, setError] = useState(null);
-  
-    const { GoogleGenerativeAI } = require("@google/generative-ai");
-  
-    // Access your API key as an environment variable (see "Set up your API key" above)
-    const apiKey = process.env.API_KEY;
-    const genAI = new GoogleGenerativeAI(apiKey);
-  
-    const mapMessageToHistory = (message: { text: any; role: any; }) => ({
-      text: message.text,
-      role: message.role,
-    });
-  
-    const initializeChat = async () => {
-      try {
-        const model = await genAI.getGenerativeModel({ model: "gemini-pro" });
-  
-        const initialHistory = [
-          {
-            role: "user",
-            parts: [{ text: "Hello, I would like to know as much as you can teach me." }],
-          },
-          {
-            role: "model",
-            parts: [{ text: "Sounds amazing, my name is Genie. Where should we begin this intellectual journey?" }],
-          },
-        ];
-  
-        const newChat = await model.startChat({
-          history: initialHistory, // No need for map here
-          generationConfig: {
-            temperature: 0.9,
-            topK: 40,
-            topP: 0.7,
-            maxOutputTokens: 2048,
-          },
-          safetySettings: [
-            {
-              category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-              threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-              threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-              threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-              threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-            },
-          ],
-        });
-  
-        setChat(newChat);
-      } catch (error) {
-        console.error("Error during chat initialization:", error);
-      }
-    };
-  
-    useEffect(() => {
-      initializeChat(); // Initialize chat on component mount
-    }, []);
-  
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // ✅ State for the initial greeting
+    const [showGreeting, setShowGreeting] = useState(true);
+
+    const GREETING_MESSAGE = "Hi there! What would you like to talk about today?";
+
+    // ‼ Removed initializeChat() and all genAI logic.
+    // The server will handle the conversation history.
+
     const handleSendMessage = async () => {
-        if (!chat) return;
+        if (!userInput.trim()) return;
       
-        setLoading(true); // Set loading state to true
+        setLoading(true);
+        setError(null);
+        setShowGreeting(false); // Hide greeting on first message
+      
+        const userMessage: Message = {
+          text: userInput,
+          role: "user",
+          timestamp: new Date(),
+        };
+      
+        // ✅ Add user message and clear input
+        const newMessages = [...messages, userMessage];
+        setMessages(newMessages);
+        setUserInput("");
       
         try {
-          const userMessage = {
-            text: userInput,
-            role: "user",
-            timestamp: new Date(),
-          };
+          // ✅ Send the *entire* message history to your backend API
+          const response = await axios.post("/api/conversation", {
+            // Pass history in the format your API route expects
+            messages: newMessages.map(msg => ({
+              role: msg.role,
+              text: msg.text
+            }))
+          });
       
-          setMessages((prevMessages) => [...prevMessages, userMessage]);
-          setUserInput("");
-
-          <TypingIndicator />
-      
-          const result = await (chat as YourChatType)?.sendMessage(userInput) || Promise.reject(new Error("Chat not initialized"));
-          type YourChatType = {
-            sendMessage: (message: string) => Promise<any>;
-            // Add other properties and methods as needed
-          };
-          
-          const botMessage = {
-            text: result.response.text(),
+          const botMessage: Message = {
+            text: response.data.text, // Get text from API response
             role: "bot",
             timestamp: new Date(),
           };
@@ -110,15 +63,13 @@ export default function ConversationPage() {
           setMessages((prevMessages) => [...prevMessages, botMessage]);
         } catch (error: any) {
           console.error("Error during message sending:", error);
+          setError("Sorry, something went wrong. Please try again.");
+          // Optionally remove the user's message if the API call failed
+          // setMessages(messages); 
         } finally {
-          setLoading(false); // Set loading state to false regardless of success or failure
+          setLoading(false);
         }
       };
-      
-      const [loading, setLoading] = useState(false);
-      
-      
-      
 
     // Handle Theme change
     const handleThemeChange = (e: { target: { value: SetStateAction<string>; }; }) => {
@@ -136,78 +87,52 @@ export default function ConversationPage() {
                     text: "text-gray-800",
                 };
             case "dark":
-                return {
-                    prmary: "bg-gray-900",
-                    secondary: "bg-gray-800",
-                    accent: "bg-yellow-500",
-                };
             default:
                 return {
-                    primary: "bg-white",
-                    secondary: "bg-gray-100",
-                    acccent: "bg-yellow-500",
-                    text: "text-gray-100",
+                    primary: "bg-gray-900", // Corrected 'prmary' to 'primary'
+                    secondary: "bg-gray-800",
+                    accent: "bg-yellow-500",
+                    text: "text-gray-100", // Added missing 'text' for default
                 };
         }
     };
 
-    const handleKeyPress = (e: {
-      shiftKey: boolean; key: string; preventDefault: () => void; 
-}) => {
-      if (e.key === 'Enter' && e.shiftKey) {
-        // Handle Shift+Enter: Create a new line
-        setUserInput(userInput + '\n'); // Add a newline character to the user input
-      } else if (e.key === 'Tab') {
-        // Handle Tab: Indentation (replace with your desired indentation logic)
-        e.preventDefault(); // Prevent default tab behavior (jumping focus)
-        setUserInput(userInput + '  '); // Add two spaces for basic indentation
-      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        // Handle Arrow Up/Down: Cursor movement (implement logic based on your needs)
-        // This example does nothing for now, replace with cursor movement logic
-      } else if (e.key === 'Enter') {
-        // Handle Enter: Send message
-        e.preventDefault(); // Prevent default form submission (if applicable)
+    const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
         handleSendMessage();
+      } else if (e.key === 'Tab' && !e.shiftKey) {
+        e.preventDefault(); 
+        setUserInput(userInput + '  ');
       }
     };
     
-
-    // Get the theme colors for the current theme
     const {primary, secondary, accent, text } = getThemeColors();
 
-
-    // JSX for your conversation UI elements using messages, userInput, theme, and error states
-  
-    const GREETING_MESSAGE = "Hi there! What would you like to talk about today?";
-
     const TypingIndicator = () => (
-
-      <div className="flex items-center justify-center mt-2">
-      
-      <div className="w-6 h-6 bg-gray-400 rounded-full animate-ping mr-2"></div>
-      
-      <div className="w-6 h-6 bg-gray-400 rounded-full animate-ping mr-2"></div>
-      
-      <div className="w-6 h-6 bg-gray-400 rounded-full animate-ping"></div>
-      
-      <img src="Genie.png" alt="Genie is thinking" className="w-10 h-10 ml-2" />
-      
+      <div className="flex items-center p-2">
+        <img src="/Genie.png" alt="Genie is thinking" className="w-10 h-10 mr-2" />
+        <div className="flex items-center justify-center space-x-1">
+          <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
+          <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.2s]"></div>
+          <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.4s]"></div>
+        </div>
       </div>
-);
+    );
 
 return (
-  <div className={`flex flex-col h-screen p-4 ${primary}`}>
+  <div className={`flex flex-col h-screen p-4 ${primary} ${text}`}>
     <header className="flex justify-between items-center mb-4">
-      <h1 className={`text-3xl font-bold ${text}`}>Genie Chat</h1>
-      <div className="flex space-x-2">
-        <label htmlFor="theme" className={`text-sm ${text}`}>
+      <h1 className="text-3xl font-bold">Genie Chat</h1>
+      <div className="flex space-x-2 items-center">
+        <label htmlFor="theme" className="text-sm">
           Theme:
         </label>
         <select
           id="theme"
           value={theme}
           onChange={handleThemeChange}
-          className={`p-1 rounded-md border ${text}`}
+          className={`p-1 rounded-md border ${primary} ${text} border-gray-500`}
         >
           <option value="light">Light</option>
           <option value="dark">Dark</option>
@@ -215,55 +140,50 @@ return (
       </div>
     </header>
 
-    <main className={`flex-grow overflow-y-auto rounded-md p-2 ${secondary}`}>
-      {/* Show greeting message initially (unchanged) */}
-      {!messages?.length && <p className="text-lg font-medium mb-4">{GREETING_MESSAGE}</p>}
-      {messages && messages.map((msg, index) => (
+    <main className={`flex-grow overflow-y-auto rounded-md p-2 ${secondary} ${text}`}>
+      {showGreeting && <p className="text-lg font-medium mb-4">{GREETING_MESSAGE}</p>}
+      
+      {messages.map((msg, index) => (
         <div
           key={index}
-          className={`mb-4 rounded-lg shadow-md ${
+          className={`mb-4 rounded-lg shadow-md p-3 ${
             msg.role === "user" ? `${accent} text-white` : theme === "light" ? "bg-green-100 text-black" : "bg-white text-black"
           }`}
         >
-          <span className="p-2 break-words">
+          <div className="break-words">
             {msg.text.split('\n').map((line, i) => (
-              <span key={i}>
-                {line.startsWith('*') && <li>{line.slice(1)}</li>}
-                {line.startsWith('```') && (
-                  <pre className="bg-gray-200 rounded p-2">{line.slice(3)}</pre>
-                )}
-                {!line.startsWith('*') && !line.startsWith('```') && <p>{line}</p>}
-              </span>
+              <p key={i}>{line || <br />}</p> // Render empty lines
             ))}
-          </span>
-          <p className={`text-xs ${text} mt-1`}>
+          </div>
+          <p className={`text-xs ${msg.role === "user" ? "text-white/70" : "text-black/70"} mt-2`}>
             {msg.role === "bot" ? "Genie" : "You"} - {msg.timestamp.toLocaleString()}
           </p>
         </div>
       ))}
-      {/* Show typing bubbles before sending a bot message (unchanged) */}
+      
+      {loading && <TypingIndicator />}
+      {error && <p className="text-red-500 p-2">{error}</p>}
     </main>
 
     <footer className="flex items-center mt-4">
       <textarea
-        rows={3} // Adjust rows for desired initial height
-        placeholder="Type your request here..."
+        rows={3}
+        placeholder="Type your request here... (Shift+Enter for new line)"
         value={userInput}
         onChange={(e) => setUserInput(e.target.value)}
-        onKeyDown={handleKeyPress} // Assuming handleKeyPress handles Shift+Enter
-        className={`flex-1 resize-none p-2 rounded-md border border-gray-300 focus:outline-none focus:border-${accent}`}
+        onKeyDown={handleKeyPress}
+        className={`flex-1 resize-none p-2 rounded-l-md border border-gray-300 focus:outline-none focus:border-${accent} ${secondary} ${text}`}
       />
       <button
         onClick={handleSendMessage}
-        className={`p-2 ${accent} text-white rounded-r-md hover:bg-opacity-80 focus:outline-none`}
+        disabled={loading || !userInput.trim()}
+        className={`p-2 ${accent} text-white rounded-r-md hover:bg-opacity-80 focus:outline-none disabled:opacity-50`}
       >
         Send
       </button>
     </footer>
   </div>
 );
-
-
-  }
+}
 
 

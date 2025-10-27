@@ -35,3 +35,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+*keys
+*keys/genie-ai-1ca85-a79dca93b5cd.json

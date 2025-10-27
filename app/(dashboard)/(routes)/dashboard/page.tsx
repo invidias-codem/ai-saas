@@ -23,7 +23,7 @@ const tools = [
     {
         label: "Quick Clip",
         icon: VideoIcon,
-        href: "/clip",
+        href: "/video",
         color: "text-pink-700",
         bgColor: "bg-white-500\/10",
     },

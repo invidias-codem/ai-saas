@@ -1,5 +1,10 @@
+// app/(dashboard)/layout.tsx
+
 import Navbar from "@/components/navbar";
 import Sidebar from "@/components/sidebar";
+
+// ✅ ADD THIS LINE to force dynamic rendering for this layout
+export const dynamic = 'force-dynamic';
 
 const DashboardLayout = ({
     children
@@ -19,4 +24,4 @@ const DashboardLayout = ({
     )
 }
 
-export default DashboardLayout
+export default DashboardLayout;

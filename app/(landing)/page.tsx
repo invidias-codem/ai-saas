@@ -1,5 +1,9 @@
+// app/(landing)/page.tsx
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+
+// ✅ ADD THIS LINE to force dynamic rendering for this page
+export const dynamic = 'force-dynamic';
 
 const LandingPage = () => {
     return (
@@ -23,5 +27,4 @@ const LandingPage = () => {
     );
   };
   
-
 export default LandingPage;

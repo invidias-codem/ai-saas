@@ -31,7 +31,7 @@ const routes = [
     {
         label: "Quick Clip",
         icon: VideoIcon,
-        href: "/clip",
+        href: "/video",
         color: "text-pink-700",
     },
     {
