@@ -1,107 +1,83 @@
-// app/api/video/route.ts
+// app/api/video/route.ts 
+// (Optimized for asynchronous polling)
+
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { env } from '@/lib/env';
-import { GoogleAuth } from 'google-auth-library'; // Import GoogleAuth
-import axios from 'axios'; // Import axios
+import { env } from '@/lib/env'; // Your environment variables
+import Replicate from 'replicate'; // Import the Replicate library
+import { z } from 'zod'; // For input validation
 
-// 1. Initialize Google Auth, just like in your status route
-const googleAuth = new GoogleAuth({
-  scopes: "https://www.googleapis.com/auth/cloud-platform",
-  // This will automatically find your GOOGLE_APPLICATION_CREDENTIALS
+// Initialize the Replicate client using the API token from your environment
+const replicate = new Replicate({
+  auth: env.REPLICATE_API_TOKEN,
 });
 
-// 2. Define your project constants
-const outputBucket = 'gs://genie-ai-1ca85.firebasestorage.app/video-outputs/';
-const modelId = 'veo-3.0-fast-generate-001'; // Or your preferred Veo model
+// Model identifier
+const VEO_MODEL = "google/veo-3";
+
+const requestSchema = z.object({
+  prompt: z.string().min(1, { message: "Prompt is required." }),
+  aspect_ratio: z.string().optional(),
+  duration: z.coerce.number().int().positive().optional(),
+  image: z.string().url().optional(),
+  negative_prompt: z.string().optional(),
+  resolution: z.string().optional(),
+  generate_audio: z.boolean().optional(),
+  seed: z.number().int().optional(),
+});
 
 export async function POST(request: Request) {
   try {
-    // 3. Clerk Authentication
+    // 1. Clerk Authentication
     const { userId } = auth();
     if (!userId) {
-      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), { 
-        status: 401, 
-        headers: { "Content-Type": "application/json" } 
+      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
       });
     }
 
-    // 4. Read all parameters from the body
+    // 2. Input Validation
     const body = await request.json();
-    const { 
-      prompt, 
-      aspectRatio, 
-      duration, 
-      resolution, 
-      generateAudio = true 
-    } = body;
+    const validation = requestSchema.safeParse(body);
 
-    if (!prompt) {
-      return new NextResponse(JSON.stringify({ error: "Prompt is required" }), { 
-        status: 400, 
-        headers: { "Content-Type": "application/json" } 
+    if (!validation.success) {
+      console.warn("Invalid request body for /api/video:", validation.error.flatten());
+      return new NextResponse(JSON.stringify({
+        error: "Invalid input.",
+        details: validation.error.flatten().fieldErrors
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
       });
     }
 
-    // 5. Construct the full API URL for the REST request
-    const apiUrl = `https://${env.GOOGLE_LOCATION}-aiplatform.googleapis.com/v1beta1/projects/${env.GOOGLE_PROJECT_ID}/locations/${env.GOOGLE_LOCATION}/publishers/google/models/${modelId}:predictLongRunning`;
+    const input = validation.data;
+    console.log(`Starting Replicate prediction for ${VEO_MODEL} with input:`, input);
 
-    // 6. Build the request payload as a plain JSON object
-    // (No 'helpers.toValue' needed)
-    const requestPayload = {
-      instances: [
-        {
-          prompt: prompt,
-          // You can also add 'image' here if you pass an image
-        },
-      ],
-      parameters: {
-        durationSeconds: parseInt(duration, 10) || 4,
-        aspectRatio: aspectRatio || "16:9",
-        resolution: resolution || "720p",
-        generateAudio: generateAudio,
-        outputVideoSpec: {
-          outputGcsUri: outputBucket,
-        },
-      },
-    };
-
-    // 7. Get an auth token
-    const client = await googleAuth.getClient();
-    const accessToken = (await client.getAccessToken()).token;
-    if (!accessToken) {
-      throw new Error("Failed to retrieve access token.");
-    }
-
-    console.log('Sending long-running REST request to Veo model...');
-
-    // 8. Make the POST request with axios
-    const response = await axios.post(apiUrl, requestPayload, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
+    // 3. ✅ Call Replicate's create prediction API (asynchronous)
+    // This starts the job and returns immediately
+    const prediction = await replicate.predictions.create({
+      model: VEO_MODEL,
+      input: input,
+      // You could also add a webhook URL here to be notified on completion
+      // webhook: `${env.VERCEL_URL}/api/webhooks/replicate`
+      // webhook_events_filter: ["completed"]
     });
 
-    // 9. Get the operation name from the response
-    const operationName = response.data.name;
-    if (!operationName) {
-      throw new Error("API did not return an operation name.");
-    }
+    console.log("Replicate job started. Sending prediction object to client:", prediction.id);
 
-    console.log("Started video generation operation:", operationName);
-
-    // 10. Return the operation name for the client to poll
-    return NextResponse.json({ operationName: operationName });
+    // 4. ✅ Return the initial prediction object to the client
+    // The client will use this object (especially prediction.id) to poll for status.
+    return NextResponse.json(prediction);
 
   } catch (error: any) {
-    // 11. Handle errors (including axios errors)
-    console.error('[VIDEO_API_ERROR]', error.response?.data || error.message);
-    const details = error.response?.data?.error?.message || error.message || "Failed to start video generation.";
-    return new NextResponse(JSON.stringify({ 
+    console.error('[REPLICATE_VIDEO_API_ERROR]', error);
+    const details = error.message || "Failed to start video generation via Replicate.";
+    return new NextResponse(JSON.stringify({
       error: "Internal Server Error",
       details: details
-    }), { 
+    }), {
       status: 500,
       headers: { "Content-Type": "application/json" }
     });

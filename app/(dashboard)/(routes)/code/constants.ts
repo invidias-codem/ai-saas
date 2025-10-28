@@ -1,5 +1,3 @@
-import * as z from "zod";
+import { promptSchema } from "../../../../lib/schemas";
 
-export const formSchema = z.object({
-    prompt: z.string().min(1, "Prompt is required")
-});
+export const formSchema = promptSchema;

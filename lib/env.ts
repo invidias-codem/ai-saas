@@ -19,6 +19,8 @@ const envSchema = z.object({
   // ADD THESE FOR VERTEX AI (IMAGEN)
   GOOGLE_PROJECT_ID: z.string().min(1, { message: "GOOGLE_PROJECT_ID is required" }),
   GOOGLE_LOCATION: z.string().min(1).default("us-central1"), // e.g., "us-central1"
+
+  GCP_SERVICE_ACCOUNT_KEY_JSON: z.string().min(1, { message: "GCP_SERVICE_ACCOUNT_KEY_JSON (raw JSON) is required for Google Cloud APIs" }),
 });
 
 // Parse the environment variables and export the result

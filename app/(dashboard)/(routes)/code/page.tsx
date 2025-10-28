@@ -1,13 +1,22 @@
 "use client";
 
-import { useState, SetStateAction } from "react"; // Removed unused 'useEffect'
-import { CodeSandboxLogoIcon, FaceIcon } from "@radix-ui/react-icons";
+import { useState, useRef, ChangeEvent, KeyboardEvent } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
-// Removed the broken 'CodeProps' import
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'; // Or your preferred theme
 import { useClipboard } from "use-clipboard-copy";
+
+// Shadcn UI & Icons
+import { Heading } from "@/components/heading";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { CodeIcon, Paperclip } from "lucide-react"; // Use lucide-react icons
+import { cn } from "@/lib/utils";
+import EmptyState from "@/components/empty"; // Assuming EmptyState component exists
+import { PersonIcon } from "@radix-ui/react-icons";
 
 // Define the message structure
 interface Message {
@@ -16,28 +25,38 @@ interface Message {
   timestamp: Date;
 }
 
-// Helper component to manage clipboard state
-const CodeBlock = ({ codeString, language }: { codeString: string, language: string }) => {
-  const clipboard = useClipboard({
-    copiedTimeout: 1500, // Reset "Copied!" text after 1.5s
-  });
+// Define state for the selected file (including content)
+interface SelectedFile {
+  name: string;
+  type: string;
+  base64Data: string; // Store content as Base64
+}
 
-  const handleCopy = () => {
-    clipboard.copy(codeString);
-  };
+// Helper component for Code Blocks with Copy Button
+const CodeBlock = ({ codeString, language }: { codeString: string, language: string | undefined }) => {
+  const clipboard = useClipboard({ copiedTimeout: 1500 });
+  const handleCopy = () => { clipboard.copy(codeString); };
+
+  // Determine language for highlighter, default if not specified
+  const effectiveLanguage = language || 'plaintext';
 
   return (
-    <div className="relative">
+    <div className="relative my-2 text-sm"> {/* Ensure text size is consistent */}
       <button
         onClick={handleCopy}
         className="absolute top-2 right-2 p-1 bg-gray-700 rounded text-white text-xs hover:bg-gray-600 z-10"
+        aria-label="Copy code"
       >
         {clipboard.copied ? "Copied!" : "Copy"}
       </button>
       <SyntaxHighlighter
         style={vscDarkPlus}
-        language={language}
+        language={effectiveLanguage}
         PreTag="div"
+        className="!bg-gray-800 rounded p-4 overflow-x-auto" // Added padding and overflow
+        // Use custom style to potentially override line height/padding if needed
+        customStyle={{ margin: 0 }}
+        wrapLongLines={true} // Helps prevent horizontal scroll where possible
       >
         {codeString}
       </SyntaxHighlighter>
@@ -45,216 +64,225 @@ const CodeBlock = ({ codeString, language }: { codeString: string, language: str
   );
 };
 
-
+// Main Page Component
 export default function CodePage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [userInput, setUserInput] = useState("");
-  const [theme, setTheme] = useState("dark");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
+  const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const GREETING_MESSAGE = "Hi there! How can I help you code today?";
+  const GREETING_MESSAGE = "Hi there! Ask me a coding question or attach a code file for review or explanation.";
 
+  // Helper function to read file as Base64
+  const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64String = (reader.result as string).split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = (error) => reject(error);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle sending message (text and file data)
   const handleSendMessage = async () => {
-    if (!userInput.trim()) return;
+    const trimmedInput = userInput.trim();
+    if (!trimmedInput && !selectedFile) return;
 
     setLoading(true);
     setError(null);
     setShowGreeting(false);
 
-    const userMessage: Message = {
-      text: userInput,
-      role: "user",
-      timestamp: new Date(),
-    };
+    let messageText = trimmedInput;
+    // Append file info for display in the user's message bubble
+    if (selectedFile) {
+      messageText += `\n\n[Analysing File: ${selectedFile.name}]`;
+    }
 
-    // Optimistically update the UI
+    const userMessage: Message = { text: messageText, role: "user", timestamp: new Date() };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
-    setUserInput("");
+    setUserInput(""); // Clear text input
+
+    // Prepare payload, including file data if present
+    const apiPayload = {
+      messages: newMessages.map(msg => ({ // Send history for context
+        role: msg.role,
+        text: msg.text // Keep previous texts for context
+      })),
+      currentUserPrompt: trimmedInput, // Send only the current text input
+      fileData: selectedFile // Send the file object { name, type, base64Data }
+    };
+
+    // Clear selected file *after* preparing payload
+    setSelectedFile(null);
 
     try {
-      const response = await axios.post("/api/code", {
-        // Send only the necessary data
-        messages: newMessages.map(msg => ({
-          role: msg.role,
-          text: msg.text
-        }))
-      });
-
-      const botMessage: Message = {
-        text: response.data.text,
-        role: "bot",
-        timestamp: new Date(),
-      };
-
-      // Update messages with the bot's response
+      // Send payload to the backend code API route
+      const response = await axios.post("/api/code", apiPayload);
+      const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
       setMessages((prevMessages) => [...prevMessages, botMessage]);
     } catch (error: any) {
-      console.error("Error during message sending:", error);
-      
-      // ✅ START: Optimized Error Handling
-      // Check if the server sent back a specific 'details' message
-      if (error.response && error.response.data && error.response.data.details) {
-        setError(`Sorry, something went wrong: ${error.response.data.details}`);
-      } else {
-        // Fallback to a generic error
-        setError("Sorry, something went wrong. Please try again.");
-      }
-      // ✅ END: Optimized Error Handling
-
-      // Optional: Roll back optimistic update or show error inline
-      // setMessages(messages); // This would remove the user's message
+      console.error("[CODE_PAGE_ERROR]", error);
+      setError(error.response?.data?.details || "Sorry, something went wrong processing your request.");
+      // Optionally roll back optimistic UI: setMessages(messages);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleThemeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setTheme(e.target.value);
-  };
+  // Trigger file input click
+  const handleAttachClick = () => { fileInputRef.current?.click(); };
 
-  const getThemeColors = () => {
-    switch (theme) {
-      case "light":
-        return {
-          primary: "bg-white",
-          secondary: "bg-gray-100",
-          accent: "bg-blue-500",
-          text: "text-gray-800",
-        };
-      case "dark":
-      default:
-        return {
-          primary: "bg-gray-900",
-          secondary: "bg-gray-800",
-          accent: "bg-yellow-500",
-          text: "text-gray-100",
-        };
+  // Handle file selection and read content
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      console.log("File selected:", file.name, file.type, file.size);
+      setLoading(true); // Indicate file reading
+      setError(null);
+      try {
+        const base64Data = await readFileAsBase64(file);
+        setSelectedFile({
+          name: file.name,
+          // Use a specific MIME type if known, otherwise default
+          type: file.type || 'text/plain', // Default to text/plain for code files if type unknown
+          base64Data: base64Data
+        });
+      } catch (err) {
+        console.error("Error reading file:", err);
+        setError("Sorry, could not read the selected file.");
+        setSelectedFile(null);
+      } finally {
+        setLoading(false);
+      }
     }
+    if (fileInputRef.current) { fileInputRef.current.value = ""; } // Reset input
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Send message on Enter (but not Shift+Enter)
+  // Handle Enter/Tab key press
+  const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
-    } else if (e.key === 'Tab' && !e.shiftKey) {
-      // Add tab indentation
+    } else if (e.key === 'Tab' && !e.shiftKey) { // Basic Tab indentation
       e.preventDefault();
       const { selectionStart, selectionEnd, value } = e.currentTarget;
       setUserInput(value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd));
-      // Move cursor after the inserted tab
       e.currentTarget.selectionStart = e.currentTarget.selectionEnd = selectionStart + 2;
     }
   };
 
-  const { primary, secondary, accent, text } = getThemeColors();
-
+  // Typing Indicator Component
   const TypingIndicator = () => (
-    <div className="flex items-center p-2">
-      <img src="/Genie.png" alt="Genie is thinking" className="w-10 h-10 mr-2" />
-      <div className="flex items-center justify-center space-x-1">
-        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></div>
-        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.2s]"></div>
-        <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.4s]"></div>
+    <div className="flex items-center space-x-2 p-2">
+      <Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>
+      <div className="flex items-center space-x-1.5 p-2 rounded-lg bg-muted">
+        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse"></div>
+        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse [animation-delay:0.2s]"></div>
+        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse [animation-delay:0.4s]"></div>
       </div>
     </div>
   );
 
   return (
-    <div className={`flex flex-col h-screen p-4 ${primary} ${text}`}>
-      <header className="flex justify-between items-center mb-4">
-        <h1 className="text-3xl font-bold">Genie Code</h1>
-        <div className="flex space-x-2 items-center">
-          <label htmlFor="theme" className="text-sm">
-            Theme:
-          </label>
-          <select
-            id="theme"
-            value={theme}
-            onChange={handleThemeChange}
-            className={`p-1 rounded-md border ${primary} ${text} border-gray-500`}
-          >
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </div>
-      </header>
+    <div className="h-full flex flex-col p-4 md:p-6 lg:p-8">
+      <Heading
+        title="Genie Code"
+        description="Your AI pair programmer. Ask questions or attach code."
+        icon={CodeIcon}
+        iconColor="text-green-500" // Adjusted color
+        bgColor="bg-green-500/10"
+      />
 
-      <main className={`flex-grow overflow-y-auto rounded-md p-2 ${secondary} ${text}`}>
-        {showGreeting && <p className="text-lg font-medium mb-4">{GREETING_MESSAGE}</p>}
+      <ScrollArea className="flex-grow rounded-md border p-2 md:p-4 my-4 bg-background">
+        {/* Greeting */}
+        {showGreeting && (
+          <div className="flex items-start space-x-2 md:space-x-3 mb-4">
+            <Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>
+            <div className="p-3 rounded-lg bg-muted text-sm">{GREETING_MESSAGE}</div>
+          </div>
+        )}
 
+        {/* Messages */}
         {messages.map((msg, index) => (
-          <div
-            key={index}
-            className={`mb-4 rounded-lg shadow-md ${
-              msg.role === "user" ? `${accent} text-white` : theme === "light" ? "bg-green-100 text-black" : "bg-white text-black"
-            }`}
-          >
-            <div className="p-3 break-words">
+          <div key={index} className={cn("mb-4 flex items-start space-x-2 md:space-x-3", msg.role === "user" ? "justify-end" : "justify-start")}>
+            {msg.role === "bot" && (<Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>)}
+            <div className={cn("max-w-[85%] sm:max-w-[75%] rounded-lg shadow-sm text-sm break-words", // Removed padding here, handled by markdown/codeblock
+                               msg.role === "user" ? "bg-primary text-primary-foreground p-3" // Add padding back for user messages
+                                                   : "bg-muted")}> {/* Bot messages get padding from children */}
               {msg.role === "bot" ? (
                 <ReactMarkdown
                   components={{
-                    // ✅ FIXED: This logic now correctly differentiates
-                    // between fenced code blocks (with language) and
-                    // inline code.
+                    // Use CodeBlock component for fenced code blocks
                     code({ node, className, children, ...props }) {
                       const match = /language-(\w+)/.exec(className || '');
                       const codeString = String(children).replace(/\n$/, '');
-                      
-                      // If 'match' exists, it's a fenced code block
                       return match ? (
-                        <CodeBlock
-                          codeString={codeString}
-                          language={match[1]} // e.g., "tsx", "css"
-                        />
+                        <CodeBlock codeString={codeString} language={match[1]} />
                       ) : (
-                        // Otherwise, it's inline code (e.g., `useState`)
-                        <code className={className} {...props}>
+                        // Style inline code
+                        <code className={cn("bg-background px-1 rounded text-xs font-mono", className)} {...props}>
                           {children}
                         </code>
                       );
                     },
+                     // Add standard styling for paragraphs within bot messages
+                     p: ({ node, ...props }) => <p {...props} className="mb-2 last:mb-0 px-3 py-1" />, // Added padding to paragraphs
                   }}
                 >
                   {msg.text}
                 </ReactMarkdown>
               ) : (
-                // ✅ CHANGED: Use `whitespace-pre-wrap` to preserve
-                // newlines from the textarea, which is cleaner
-                // than splitting and mapping.
-                <p className="whitespace-pre-wrap font-sans">{msg.text}</p>
+                <p className="whitespace-pre-wrap">{msg.text}</p> // User message text
               )}
             </div>
-            <p className={`text-xs ${msg.role === "user" ? "text-white/70" : "text-black/70"} mt-1 px-3 pb-2 flex items-center`}>
-              {msg.role === "user" ? <FaceIcon className="mr-1" /> : <CodeSandboxLogoIcon className="mr-1" />}
-              {msg.role === "bot" ? "Genie" : "You"} - {msg.timestamp.toLocaleString()}
-            </p>
+            {msg.role === "user" && (<Avatar className="h-8 w-8"><AvatarFallback><PersonIcon /></AvatarFallback></Avatar>)}
           </div>
         ))}
-
         {loading && <TypingIndicator />}
-        {error && <p className="text-red-500 p-2">{error}</p>}
-      </main>
+        {error && <p className="text-destructive text-sm p-2 text-center">{error}</p>}
+      </ScrollArea>
 
-      <footer className="flex items-center mt-4">
-        <textarea
-          rows={3}
-          placeholder="Write clear and concise instructions for the code... (Shift+Enter for new line)"
+      {/* Footer */}
+      <footer className="flex items-end gap-1 md:gap-2 mt-4">
+        <Button variant="ghost" size="icon" onClick={handleAttachClick} disabled={loading} aria-label="Attach code file">
+          <Paperclip className="h-5 w-5" />
+        </Button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          className="hidden"
+          accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.md,text/plain"
+        />
+        {selectedFile && (
+          <div className="text-xs text-muted-foreground p-2 border rounded-md bg-muted truncate max-w-[100px] sm:max-w-[150px]">
+            {selectedFile.name}
+          </div>
+        )}
+        <Textarea
+          rows={1}
+          placeholder={selectedFile ? "Add instructions for the code..." : "Ask a coding question or attach code..."}
           value={userInput}
           onChange={(e) => setUserInput(e.target.value)}
           onKeyDown={handleKeyPress}
-          className={`flex-1 resize-none p-2 rounded-l-md border border-gray-300 focus:outline-none focus:border-${accent} ${secondary} ${text}`}
+          disabled={loading}
+          className="flex-1 resize-none max-h-40 min-h-[40px] focus-visible:ring-1 focus-visible:ring-ring text-sm font-mono" // Monospace font
         />
-        <button
+        <Button
           onClick={handleSendMessage}
-          disabled={loading || !userInput.trim()}
-          className={`p-2 ${accent} text-white rounded-r-md hover:bg-opacity-80 focus:outline-none disabled:opacity-50`}
+          disabled={loading || (!userInput.trim() && !selectedFile)}
+          size="icon"
+          aria-label="Send message"
         >
-          Send
-        </button>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M3.105 3.105a1.5 1.5 0 011.995-.21l12 6a1.5 1.5 0 010 2.21l-12 6A1.5 1.5 0 013 16.5V3.5a1.5 1.5 0 01.105-.395z"></path></svg>
+        </Button>
       </footer>
     </div>
   );

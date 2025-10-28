@@ -1,5 +1,4 @@
-import * as z from "zod";
+import { promptSchema } from "../../../../lib/schemas";
 
-export const formSchema = z.object({
-    prompt: z.string().min(1, "Prompt is required")
-});
+// Re-export as 'formSchema' so your page.tsx file doesn't need any changes.
+export const formSchema = promptSchema;

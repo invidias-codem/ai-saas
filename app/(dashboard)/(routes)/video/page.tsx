@@ -1,7 +1,8 @@
+// app/(dashboard)/(routes)/video/page.tsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-// Import new constants and UI components
+// ✅ Added useEffect
+import { useState, useEffect } from "react";
 import { formSchema, resolutionOptions, durationOptions, aspectRatioOptions } from './constants';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Heading } from '@/components/heading';
@@ -15,143 +16,108 @@ import { z } from 'zod';
 import EmptyState from '@/components/empty';
 import axios from 'axios';
 
-// ... (interfaces remain the same) ...
-interface VideoStatusResult {
-  gcsUri?: string;
-  mimeType?: string;
-}
-interface VideoDisplayResult {
-  signedUrl: string;
-  originalGcsUri: string;
+// ✅ Define the structure of the prediction object we expect
+interface ReplicatePrediction {
+  id: string;
+  status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
+  output?: string; // Expecting a single string URL as output based on your previous route
+  error?: {
+    detail: string;
+  };
 }
 
 const VideoPage = () => {
-  // ... (state hooks remain the same) ...
-  const [operationName, setOperationName] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "starting" | "polling" | "completed" | "failed">("idle");
-  const [videos, setVideos] = useState<VideoDisplayResult[]>([]);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState<"idle" | "generating" | "completed" | "failed">("idle");
   const [error, setError] = useState<string | null>(null);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // ✅ Added state to hold the prediction ID
+  const [predictionId, setPredictionId] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       prompt: '',
       aspectRatio: "16:9",
-      duration: "4",
+      duration: "4", 
       resolution: "720p",
     },
   });
 
-  const isLoading = status === "starting" || status === "polling";
+  const isLoading = status === "generating";
 
-  // ... (fetchSignedUrls, checkStatus, useEffects, onSubmit, getStatusMessage remain the same) ...
-   // Function to fetch signed URLs
-   const fetchSignedUrls = async (gcsUris: string[]) => {
-    try {
-      const signedUrlPromises = gcsUris.map(gcsUri =>
-        axios.post('/api/video/signed-url', { gcsUri })
-      );
-      const responses = await Promise.all(signedUrlPromises);
-
-      const signedUrlsData: VideoDisplayResult[] = responses.map((response, index) => ({
-        signedUrl: response.data.signedUrl,
-        originalGcsUri: gcsUris[index],
-      }));
-
-      setVideos(signedUrlsData);
-      setError(null);
-
-    } catch (err: any) {
-        console.error("Error fetching signed URLs:", err);
-        setError(err.response?.data?.details || "Failed to load generated videos.");
-        setVideos([]);
-        setStatus("failed");
+  // ✅ useEffect hook for polling the prediction status
+  useEffect(() => {
+    // Stop polling if there's no prediction ID or the job is done
+    if (!predictionId || status !== "generating") {
+      return;
     }
-  };
 
+    // Set up an interval to poll every 3 seconds
+    const interval = setInterval(async () => {
+      try {
+        const response = await axios.get<ReplicatePrediction>(`/api/video/predictions/${predictionId}`);
+        const prediction = response.data;
 
-  // Function to check operation status
-  const checkStatus = async (opName: string) => {
-    try {
-      console.log(`Polling status for ${opName}...`);
-      const response = await axios.get(`/api/video/status?operationName=${opName}`);
-      const data = response.data;
-
-      if (data.status === "completed") {
-        setStatus("completed");
-        setError(null);
-        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-        setOperationName(null);
-
-        const results: VideoStatusResult[] = data.videos || [];
-        const gcsUrisToFetch = results.map(v => v.gcsUri).filter((uri): uri is string => !!uri);
-
-        if (gcsUrisToFetch.length > 0) {
-            console.log("Generation complete, fetching signed URLs for:", gcsUrisToFetch);
-            await fetchSignedUrls(gcsUrisToFetch);
-        } else {
-             console.warn("Generation completed, but no GCS URIs found.");
-             setError("Generation finished, but couldn't find the video file details.");
-             setStatus("failed");
-             setVideos([]);
+        switch (prediction.status) {
+          case "succeeded":
+            setStatus("completed");
+            setVideoUrl(prediction.output || null); // Set the output URL
+            setPredictionId(null); // Clear ID to stop polling
+            form.reset(); // Reset form on success
+            clearInterval(interval);
+            break;
+          
+          case "failed":
+          case "canceled":
+            setStatus("failed");
+            setError(prediction.error?.detail || "Video generation failed.");
+            setPredictionId(null); // Clear ID to stop polling
+            clearInterval(interval);
+            break;
+          
+          case "starting":
+          case "processing":
+            // Still generating, do nothing and let the interval continue
+            setStatus("generating"); 
+            break;
         }
-
-      } else if (data.status === "failed") {
+      } catch (err: any) {
+        console.error("[VIDEO_POLLING_ERROR]", err);
         setStatus("failed");
-        setError(data.error || "Video generation failed.");
-        if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-        setOperationName(null);
-      } else {
-        setStatus("polling");
+        setError("Failed to get video status. Please try again.");
+        setPredictionId(null); // Clear ID to stop polling
+        clearInterval(interval);
       }
-    } catch (err: any) {
-      console.error("Error polling status:", err);
-      setError(err.response?.data?.details || "Failed to check video status.");
-      setStatus("failed");
-      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-      setOperationName(null);
-    }
-  };
+    }, 3000); // Poll every 3 seconds
 
-  // Effect to clean up interval on unmount
-  useEffect(() => {
-    return () => { if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current); };
-  }, []);
+    // Cleanup function to clear the interval
+    return () => clearInterval(interval);
 
-  // Effect to start/stop polling based on status and operationName
-  useEffect(() => {
-    if (operationName && status === 'polling') {
-      if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = setInterval(() => {
-        if (operationName) checkStatus(operationName);
-      }, 7000); // Poll every 7 seconds
-    } else if (status !== 'polling' && pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-     // Cleanup on unmount or when dependencies change
-     return () => { if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current); };
-  }, [operationName, status]); // Re-run effect if operationName or status changes
+  }, [predictionId, status, form]); // Dependencies for the hook
 
-  // Form submission handler
+
+  // ✅ Updated Form submission handler
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setError(null);
-    setStatus("starting");
-    setVideos([]);
-    setOperationName(null);
-    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+    setVideoUrl(null); 
+    setStatus("generating");
+    setPredictionId(null); // Clear any old prediction ID
 
     try {
-      const response = await axios.post("/api/video", values);
-      const opName = response.data.operationName;
-      if (opName) {
-        setOperationName(opName);
-        setStatus("polling"); // Immediately start polling
+      // Call the API to *start* the prediction
+      console.log("Sending data to /api/video:", values);
+      // ✅ Expect the initial prediction object in response
+      const response = await axios.post<ReplicatePrediction>("/api/video", values); 
+      const prediction = response.data;
+
+      if (prediction && prediction.id) {
+        // ✅ Set the prediction ID to start polling
+        setPredictionId(prediction.id); 
       } else {
-         throw new Error("API did not return an operation name.");
+        throw new Error("API response did not contain a prediction ID.");
       }
-      form.reset();
+      // Note: We do NOT reset the form here anymore, only on success
+
     } catch (err: any) {
       console.error("[VIDEO_PAGE_SUBMIT_ERROR]", err);
       setError(err.response?.data?.details || "Failed to start video generation.");
@@ -162,20 +128,19 @@ const VideoPage = () => {
    // Helper function for status messages
    const getStatusMessage = (): string => {
     switch (status) {
-      case "starting": return "Warming up the magic lamp...";
-      case "polling": return "Genie is creating your video, please wait...";
-      case "completed": return videos.length > 0 ? "Your video is ready!" : "Generation completed, but no video data found.";
-      case "failed": return "Video generation failed."; // Error message is shown separately
-      default: return "Generate a video based on your prompt."; // Idle message
+      // ✅ Updated generating message
+      case "generating": return "Genie is creating your video... this may take a moment."; 
+      case "completed": return "Your video is ready!";
+      case "failed": return "Video generation failed.";
+      default: return "Generate a video based on your prompt.";
     }
   };
-
 
   return (
     <div>
       <Heading
         title="Quick Clip"
-        description="Generate videos with Veo 3!"
+        description="Generate videos with Replicate!"
         icon={VideoIcon}
         iconColor="text-pink-700"
         bgColor="bg-pink-700/10"
@@ -218,7 +183,6 @@ const VideoPage = () => {
                   >
                     <FormControl>
                       <SelectTrigger>
-                        {/* ✅ REMOVED placeholder prop */}
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
@@ -248,7 +212,6 @@ const VideoPage = () => {
                   >
                     <FormControl>
                       <SelectTrigger>
-                         {/* ✅ REMOVED placeholder prop */}
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
@@ -276,39 +239,45 @@ const VideoPage = () => {
         </Form>
       </div>
 
-      {/* --- RENDER AREA (No changes needed here) --- */}
+      {/* --- RENDER AREA (This logic remains the same as it's driven by 'status') --- */}
       <div className='space-y-4 mt-4 px-4 lg:px-8'>
-        {(isLoading || status === 'completed' || status === 'failed') && !error && (
+        {/* Loading/Status Message */}
+        {isLoading && (
            <div className="p-8 rounded-lg w-full flex items-center justify-center bg-muted">
             <EmptyState label={getStatusMessage()} />
           </div>
         )}
+
+        {/* Error State */}
         {error && <p className="text-red-500 text-center p-4">{error}</p>}
-        {status === "idle" && !isLoading && !error && videos.length === 0 && (
+
+        {/* Idle/Empty State */}
+        {status === "idle" && !isLoading && !error && !videoUrl && (
             <EmptyState label={getStatusMessage()}/>
         )}
-        {status === "completed" && videos.length > 0 && (
+
+        {/* Completed State */}
+        {status === "completed" && videoUrl && (
           <div className="flex flex-col items-center gap-6 mt-8">
-            {videos.map((video) => (
-              <div key={video.originalGcsUri} className="w-full max-w-2xl">
-                <video
-                  controls
-                  className="w-full rounded-lg shadow-md mb-2"
-                  src={video.signedUrl}
-                >
-                  Your browser does not support the video tag.
-                </video>
-                <a
-                  href={video.signedUrl}
-                  download={`genie-video-${Date.now()}.mp4`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 w-full"
-                >
-                  <DownloadIcon className="mr-2 h-4 w-4" /> Download Video
-                </a>
-              </div>
-            ))}
+            <div className="w-full max-w-2xl">
+              <video
+                controls
+                controlsList="nodownload noremoteplayback"
+                className="w-full rounded-lg shadow-md mb-2"
+                src={videoUrl}
+              >
+                Your browser does not support the video tag.
+              </video>
+              <a
+                href={videoUrl}
+                download={`genie-video-${Date.now()}.mp4`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 w-full"
+              >
+                <DownloadIcon className="mr-2 h-4 w-4" /> Download Video
+              </a>
+            </div>
           </div>
         )}
       </div>

@@ -17,6 +17,6 @@ export const amountOptions = [
 // ✅ UPDATED: Valid resolutions for Imagen 3
 export const resolutionOptions = [
     { value: "1024x1024", label: "Square (1024x1024)" },
-    { value: "1536x680", label: "Widescreen (1536x680)" },
-    { value: "680x1536", label: "Portrait (680x1536)" },
+    // { value: "1536x680", label: "Widescreen (1536x680)" },
+    // { value: "680x1536", label: "Portrait (680x1536)" },
 ];
