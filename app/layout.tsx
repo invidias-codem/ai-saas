@@ -1,9 +1,9 @@
 // app/layout.tsx
-import  Metadata  from "next";
+import type { Metadata } from "next"; // ✅ This is the corrected line
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
-import { env } from "@/lib/env"; // ✅ Import your env configuration
+import { env } from "@/lib/env";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -18,9 +18,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    // ✅ Pass the publishableKey from your environment variables
     <ClerkProvider 
-      publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY} //
+      publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
     >
       <html lang="en">
         <body className={inter.className}>{children}</body>
