@@ -9,7 +9,7 @@ import { z } from "zod";
 
 // 1. Initialize Replicate client
 const replicate = new Replicate({
-  auth: env.REPLICATE_API_TOKEN,
+  auth: env.REPLICATE_API_TOKEN_MUSIC,
 });
 
 // 2. Define the input schema
@@ -22,7 +22,7 @@ const requestSchema = z.object({
 });
 
 // 3. Define the Replicate Model Identifier
-const MODEL_ID = "meta/musicgen:671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb";
+const MUSICGEN_VERSION = "671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb";
 
 export async function POST(req: Request) {
   // ✅ Define prompt here to make it accessible in the catch block
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
 
     // 6. Call Replicate's create prediction API (asynchronous)
     const prediction = await replicate.predictions.create({
-        model: MODEL_ID,
+        version: MUSICGEN_VERSION,
         input: input,
     });
     

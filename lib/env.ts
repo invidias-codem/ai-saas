@@ -15,6 +15,8 @@ const envSchema = z.object({
   // Server-side AI keys
   GOOGLE_API_KEY: z.string().min(1),
   REPLICATE_API_TOKEN: z.string().min(1),
+  REPLICATE_API_TOKEN_MUSIC: z.string().min(1), // Added
+  REPLICATE_API_TOKEN_VIDEO: z.string().min(1), // Added
 
   // ADD THESE FOR VERTEX AI (IMAGEN)
   GOOGLE_PROJECT_ID: z.string().min(1, { message: "GOOGLE_PROJECT_ID is required" }),

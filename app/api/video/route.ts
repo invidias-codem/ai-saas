@@ -9,7 +9,7 @@ import { z } from 'zod'; // For input validation
 
 // Initialize the Replicate client using the API token from your environment
 const replicate = new Replicate({
-  auth: env.REPLICATE_API_TOKEN,
+  auth: env.REPLICATE_API_TOKEN_VIDEO,
 });
 
 // Model identifier
