@@ -13,7 +13,7 @@ const replicate = new Replicate({
 });
 
 // Model identifier
-const VEO_MODEL = "google/veo-3";
+const VEO_MODEL = "google/veo-3-fast";
 
 const requestSchema = z.object({
   prompt: z.string().min(1, { message: "Prompt is required." }),
