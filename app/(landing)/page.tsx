@@ -130,7 +130,8 @@ const LandingPage = () => {
             <div className="grid md:grid-cols-3 gap-8">
               {testimonials.map((item, i) => (
                 <div key={i} className="p-6 rounded-xl bg-[#192339] border border-white/5">
-                  <p className="text-gray-300 mb-4 italic">"{item.quote}"</p>
+                  {/* ✅ FIXED: Replaced raw quotes with &quot; */}
+                  <p className="text-gray-300 mb-4 italic">&quot;{item.quote}&quot;</p>
                   <div className="flex items-center justify-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500" />
                     <div className="text-left">
@@ -153,20 +154,22 @@ const LandingPage = () => {
           <div className="w-8 h-8 bg-white/10 rounded-full hover:bg-white/20 cursor-pointer transition" />
         </div>
 
-        {/* ✅ Scout Forge Badge */}
+        {/* Scout Forge Badge */}
         <div className="mb-8 flex justify-center">
           <a 
             href="https://scoutforge.net/reviews/genie-ai/" 
             title="Trusted and reviewed by Scout Forge" 
             target="_blank" 
             rel="noopener noreferrer"
-            className="hover:opacity-80 transition-opacity"
+            className="hover:opacity-80 transition-opacity relative w-[250px] h-[54px] block" // Adjust height based on aspect ratio
           >
-            {/* Using standard img tag to ensure it works without next.config.js changes */}
-            <img 
+            {/* ✅ FIXED: Replaced <img> with <Image /> and set unoptimized={true} for external assets */}
+            <Image 
               src="https://scoutforge.net/wp-content/themes/wp-theme/assets/img/badges/badge-light.webp" 
-              style={{ maxWidth: "250px", height: "auto" }} 
-              alt="Trusted and Reviewed by Scout Forge" 
+              alt="Trusted and Reviewed by Scout Forge"
+              fill
+              className="object-contain"
+              unoptimized={true} 
             />
           </a>
         </div>
