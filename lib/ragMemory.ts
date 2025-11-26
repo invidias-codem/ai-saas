@@ -417,24 +417,35 @@ export async function getHighConfidenceFacts(
   limit = 10
 ): Promise<any[]> {
   try {
-    if (!process.env.NEXT_PUBLIC_RAG_ENABLED || !process.env.RAG_CLOUD_FUNCTION_URL) {
-      return [];
+    // Try Cloud Function first if configured
+    if (process.env.NEXT_PUBLIC_RAG_ENABLED && process.env.RAG_CLOUD_FUNCTION_URL) {
+      try {
+        const response = await axios.post(
+          `${process.env.RAG_CLOUD_FUNCTION_URL}/retrieveFacts`,
+          {
+            userId,
+            limit,
+          },
+          {
+            timeout: 3000,
+          }
+        );
+
+        const facts = response.data.facts || [];
+        if (facts.length > 0) {
+          return facts;
+        }
+      } catch (cloudFunctionError) {
+        console.warn('Cloud Function retrieval failed, falling back to direct Firestore:', cloudFunctionError);
+        // Fall through to direct Firestore retrieval
+      }
     }
 
-    const response = await axios.post(
-      `${process.env.RAG_CLOUD_FUNCTION_URL}/retrieveFacts`,
-      {
-        userId,
-        limit,
-      },
-      {
-        timeout: 3000,
-      }
-    );
-
-    return response.data.facts || [];
+    // Fallback: Direct Firestore retrieval
+    console.log('Using direct Firestore retrieval for facts');
+    return await getHighConfidenceFactsDirectly(userId, limit);
   } catch (error) {
-    console.error('Error retrieving facts:', error);
+    console.error('Error retrieving facts (all methods failed):', error);
     return [];
   }
 }
@@ -499,4 +510,70 @@ export function formatFactsForPrompt(facts: any[]): string {
 
   prompt += '\nReference the above facts to ensure accuracy in your response.\n';
   return prompt;
+}
+
+/**
+ * Direct Firestore retrieval of facts (bypasses Cloud Function for reliability)
+ * Used when Cloud Function endpoint is unavailable
+ */
+export async function getHighConfidenceFactsDirectly(
+  userId: string,
+  limit = 10
+): Promise<any[]> {
+  try {
+    // Dynamic import to avoid issues in server context
+    const admin = await import('firebase-admin');
+    
+    // Initialize if needed
+    if (!admin.default.apps.length) {
+      admin.default.initializeApp();
+    }
+
+    const db = admin.default.firestore();
+    const now = Date.now();
+
+    // Query facts collection for user
+    const factsRef = db.collection('users').doc(userId).collection('facts');
+    
+    // Get facts ordered by confidence and recency
+    const snapshot = await factsRef
+      .orderBy('confidence', 'desc')
+      .orderBy('extractedAt', 'desc')
+      .limit(limit * 2)
+      .get();
+
+    const facts: any[] = [];
+    
+    snapshot.docs.forEach((doc) => {
+      const data = doc.data();
+      
+      // Skip soft-deleted facts
+      if (data.isDeleted === true) {
+        return;
+      }
+      
+      // Skip expired conversation facts
+      if (data.expiresAt && data.expiresAt < now) {
+        return;
+      }
+
+      // Only include high-confidence facts (0.75+)
+      if (data.confidence >= 0.75) {
+        facts.push({
+          id: doc.id,
+          type: data.type,
+          content: data.content,
+          confidence: data.confidence,
+          scope: data.scope,
+          extractedAt: data.extractedAt,
+          expiresAt: data.expiresAt,
+        });
+      }
+    });
+
+    return facts.slice(0, limit);
+  } catch (error) {
+    console.error('Error retrieving facts directly from Firestore:', error);
+    return [];
+  }
 }

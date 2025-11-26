@@ -70,6 +70,10 @@ export async function POST(req: Request) {
 
     // ✅ Retrieve high-confidence facts for accurate responses (prevents hallucinations)
     const facts = await getHighConfidenceFacts(userId);
+    console.log(`[Memory Persistence] Retrieved ${facts.length} facts for user ${userId}`);
+    if (facts.length > 0) {
+      console.log('[Memory Persistence] Sample facts:', facts.slice(0, 2).map(f => ({ type: f.type, content: f.content.substring(0, 50) })));
+    }
     const factContext = formatFactsForPrompt(facts);
 
     // ✅ Retrieve relevant memories for context
