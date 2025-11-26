@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Heading } from "@/components/heading";
-import { GearIcon, TrashIcon, RotateCwIcon, CheckIcon } from "@radix-ui/react-icons";
-import { Github, Slack, Trello, Brain, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Github, Slack, Trello, Brain, AlertCircle, CheckCircle2, Trash2, RotateCw, Settings } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -215,7 +214,7 @@ const SettingsPage = () => {
       <Heading
         title="Settings"
         description="Manage your account settings, integrations, and memories."
-        icon={GearIcon}
+        icon={Settings}
         iconColor="text-gray-700"
         bgColor="bg-gray-700/10"
       />
@@ -322,7 +321,7 @@ const SettingsPage = () => {
                               className="h-8 w-8 p-0"
                               title="Keep this memory for 90 more days"
                             >
-                              <RotateCwIcon
+                              <RotateCw
                                 className={cn(
                                   "w-4 h-4",
                                   extendingFact === fact.id && "animate-spin"
@@ -338,7 +337,7 @@ const SettingsPage = () => {
                             className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                             title="Delete this memory"
                           >
-                            <TrashIcon
+                            <Trash2
                               className={cn(
                                 "w-4 h-4",
                                 deletingFact === fact.id && "opacity-50"
