@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, KeyboardEvent } from "react";
+import { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -11,10 +11,19 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {  Paperclip } from "lucide-react";
+import {  Paperclip, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/empty";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
+import { 
+  getSessionMemoryFromCookie, 
+  saveSessionMemoryToCookie, 
+  getOrCreateSessionId,
+  clearSessionMemoryCookie,
+  SessionMessage,
+  getMemoryStats
+} from "@/lib/sessionCookieMemory";
+import { useSessionCleanup } from "@/lib/useSessionCleanup";
 
 // Message structure
 interface Message {
@@ -80,9 +89,67 @@ export default function ConversationPage() {
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
+  const [sessionId, setSessionId] = useState("");
+  const [sessionRestored, setSessionRestored] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sessionCleanup = useSessionCleanup();
 
   const GREETING_MESSAGE = "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights.";
+
+  // ✅ Load session memory on mount
+  useEffect(() => {
+    const initializeSession = () => {
+      try {
+        // Get or create session ID
+        const sid = getOrCreateSessionId();
+        setSessionId(sid);
+
+        // Restore messages from cookie
+        const savedMessages = getSessionMemoryFromCookie();
+        if (savedMessages.length > 0) {
+          const restoredMessages: Message[] = savedMessages.map(msg => ({
+            text: msg.text,
+            role: msg.role,
+            timestamp: new Date(msg.timestamp),
+          }));
+          
+          setMessages(restoredMessages);
+          setShowGreeting(false);
+          
+          const stats = getMemoryStats();
+          console.log('[SessionMemory] Restored conversation:', {
+            messages: stats.totalMessages,
+            userMessages: stats.userMessages,
+            botMessages: stats.botMessages,
+            sessionAge: `${stats.sessionAgeMinutes}m ago`,
+            cookieSize: stats.cookieSize,
+          });
+        } else {
+          console.log('[SessionMemory] No previous session found - starting fresh');
+        }
+        
+        setSessionRestored(true);
+      } catch (err) {
+        console.error('[SessionMemory] Failed to initialize session:', err);
+        setSessionRestored(true);
+      }
+    };
+
+    initializeSession();
+  }, []);
+
+  // ✅ Save to cookie whenever messages change
+  useEffect(() => {
+    if (sessionRestored && sessionId && messages.length > 0) {
+      const sessionMessages: SessionMessage[] = messages.map(msg => ({
+        text: msg.text,
+        role: msg.role,
+        timestamp: msg.timestamp.getTime(),
+      }));
+      
+      saveSessionMemoryToCookie(sessionMessages, 'current-user', sessionId);
+    }
+  }, [messages, sessionRestored, sessionId]);
 
   const handleSendMessage = async () => { /* ... (keep existing logic) ... */
       const trimmedInput = userInput.trim();
@@ -115,13 +182,31 @@ export default function ConversationPage() {
 
   return (
     <div className="h-full flex flex-col p-4 md:p-6 lg:p-8">
-      <Heading
-        title="Genie Conversation"
-        description="Chat with Genie or upload a file for insights."
-        icon={ChatBubbleIcon}
-        iconColor="text-sky-500"
-        bgColor="bg-sky-500/10"
-      />
+      <div className="space-y-4">
+        <Heading
+          title="Genie Conversation"
+          description="Chat with Genie or upload a file for insights."
+          icon={ChatBubbleIcon}
+          iconColor="text-sky-500"
+          bgColor="bg-sky-500/10"
+        />
+        
+        {/* ✅ Session Memory Indicator */}
+        {sessionRestored && messages.length > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <span>
+              Session memory: <strong>{messages.length}</strong> {messages.length === 1 ? 'message' : 'messages'} (
+              {(() => {
+                const stats = getMemoryStats();
+                return stats.sessionAgeMinutes > 0 
+                  ? `${stats.sessionAgeMinutes}m old` 
+                  : 'just now';
+              })()})
+            </span>
+          </div>
+        )}
+      </div>
 
       <ScrollArea className="flex-grow rounded-md border p-2 md:p-4 my-4 bg-background">
         {showGreeting && (
