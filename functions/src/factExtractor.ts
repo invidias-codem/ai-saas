@@ -69,7 +69,7 @@ export async function extractFactsFromConversation(
 function extractKeywordFacts(content: string): ExtractedFact[] {
   const facts: ExtractedFact[] = [];
   const now = Date.now();
-  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+  const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000; // Conversation facts expire after 90 days
 
   // 1. DECISION facts - look for decision keywords (caps lock or explicit markers)
   const decisionPatterns = [
@@ -87,7 +87,7 @@ function extractKeywordFacts(content: string): ExtractedFact[] {
           content: decision,
           confidence: 0.90, // High confidence for explicit decision markers
           extractedAt: now,
-          expiresAt: now + thirtyDaysMs,
+          expiresAt: now + ninetyDaysMs, // Expire after 90 days
           scope: 'conversation',
         });
       }
@@ -111,7 +111,7 @@ function extractKeywordFacts(content: string): ExtractedFact[] {
           content: action,
           confidence: 0.85, // High confidence for explicit action markers
           extractedAt: now,
-          expiresAt: now + thirtyDaysMs,
+          expiresAt: now + ninetyDaysMs, // Expire after 90 days
           scope: 'conversation',
         });
       }
@@ -135,7 +135,7 @@ function extractKeywordFacts(content: string): ExtractedFact[] {
           content: blocker,
           confidence: 0.88, // High confidence for explicit blocker markers
           extractedAt: now,
-          expiresAt: now + thirtyDaysMs,
+          expiresAt: now + ninetyDaysMs, // Expire after 90 days
           scope: 'conversation',
         });
       }
@@ -158,7 +158,7 @@ function extractKeywordFacts(content: string): ExtractedFact[] {
           content: project,
           confidence: 0.80, // Moderate confidence for project mentions
           extractedAt: now,
-          expiresAt: now + thirtyDaysMs,
+          // User-level facts DO NOT expire (removed expiresAt)
           scope: 'user',
         });
       }
@@ -465,7 +465,8 @@ function getEditDistance(longer: string, shorter: string): number {
 }
 
 /**
- * Clean up expired conversation-level facts (30+ days old)
+ * Clean up expired conversation-level facts (90+ days old)
+ * User-level facts never expire and persist indefinitely
  */
 export async function cleanupExpiredFacts(userId: string): Promise<number> {
   try {

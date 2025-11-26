@@ -35,7 +35,8 @@ export declare function getHighConfidenceFacts(userId: string, scope: FactScope,
  */
 export declare function formatFactsForPrompt(facts: ExtractedFact[]): string;
 /**
- * Clean up expired conversation-level facts (30+ days old)
+ * Clean up expired conversation-level facts (90+ days old)
+ * User-level facts never expire and persist indefinitely
  */
 export declare function cleanupExpiredFacts(userId: string): Promise<number>;
 /**

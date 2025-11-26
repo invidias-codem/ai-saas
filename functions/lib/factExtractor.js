@@ -84,7 +84,7 @@ async function extractFactsFromConversation(messages, assistantResponse) {
 function extractKeywordFacts(content) {
     const facts = [];
     const now = Date.now();
-    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+    const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000; // Conversation facts expire after 90 days
     // 1. DECISION facts - look for decision keywords (caps lock or explicit markers)
     const decisionPatterns = [
         /(?:DECISION|DECIDED|WILL USE|WE'LL USE|CHOOSING):\s*(.+?)(?:\n|$)/gi,
@@ -100,7 +100,7 @@ function extractKeywordFacts(content) {
                     content: decision,
                     confidence: 0.90, // High confidence for explicit decision markers
                     extractedAt: now,
-                    expiresAt: now + thirtyDaysMs,
+                    expiresAt: now + ninetyDaysMs, // Expire after 90 days
                     scope: 'conversation',
                 });
             }
@@ -122,7 +122,7 @@ function extractKeywordFacts(content) {
                     content: action,
                     confidence: 0.85, // High confidence for explicit action markers
                     extractedAt: now,
-                    expiresAt: now + thirtyDaysMs,
+                    expiresAt: now + ninetyDaysMs, // Expire after 90 days
                     scope: 'conversation',
                 });
             }
@@ -144,7 +144,7 @@ function extractKeywordFacts(content) {
                     content: blocker,
                     confidence: 0.88, // High confidence for explicit blocker markers
                     extractedAt: now,
-                    expiresAt: now + thirtyDaysMs,
+                    expiresAt: now + ninetyDaysMs, // Expire after 90 days
                     scope: 'conversation',
                 });
             }
@@ -165,7 +165,7 @@ function extractKeywordFacts(content) {
                     content: project,
                     confidence: 0.80, // Moderate confidence for project mentions
                     extractedAt: now,
-                    expiresAt: now + thirtyDaysMs,
+                    // User-level facts DO NOT expire (removed expiresAt)
                     scope: 'user',
                 });
             }
@@ -430,7 +430,8 @@ function getEditDistance(longer, shorter) {
     return costs[shorter.length];
 }
 /**
- * Clean up expired conversation-level facts (30+ days old)
+ * Clean up expired conversation-level facts (90+ days old)
+ * User-level facts never expire and persist indefinitely
  */
 async function cleanupExpiredFacts(userId) {
     try {
