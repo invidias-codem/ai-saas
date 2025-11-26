@@ -14,6 +14,10 @@ import {
   getHighConfidenceFacts,
   formatFactsForPrompt
 } from '@/lib/ragMemory';
+import { 
+  getHighConfidenceFactsIntelligent,
+  rankMemoriesIntelligently
+} from '@/lib/intelligentMemory';
 
 const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
 
@@ -68,16 +72,38 @@ export async function POST(req: Request) {
     const userContext = await gatherUserContext(userId, clerkUser);
     const userContextPrompt = formatUserContextForPrompt(userContext);
 
-    // ✅ Retrieve high-confidence facts for accurate responses (prevents hallucinations)
-    const facts = await getHighConfidenceFacts(userId);
-    console.log(`[Memory Persistence] Retrieved ${facts.length} facts for user ${userId}`);
-    if (facts.length > 0) {
-      console.log('[Memory Persistence] Sample facts:', facts.slice(0, 2).map(f => ({ type: f.type, content: f.content.substring(0, 50) })));
+    // ✅ Retrieve high-confidence facts with intelligent ranking
+    // Uses context relevance and importance scoring for smarter retrieval
+    const userQuery = messages[messages.length - 1]?.text || '';
+    const allFacts = await getHighConfidenceFacts(userId);
+    
+    // Create mock vector similarities based on keyword matching
+    const similarities = new Map<string, number>();
+    const queryWords = userQuery.toLowerCase().split(/\s+/);
+    for (const fact of allFacts) {
+      const factWords = fact.content.toLowerCase().split(/\s+/);
+      const overlap = factWords.filter((w: string) => queryWords.includes(w)).length;
+      const similarity = overlap / Math.max(factWords.length, queryWords.length, 1);
+      similarities.set(fact.id || '', Math.min(1, similarity * 1.5)); // Scale up slightly
     }
-    const factContext = formatFactsForPrompt(facts);
+    
+    const intelligentFacts = rankMemoriesIntelligently(
+      allFacts,
+      similarities,
+      userQuery
+    );
+    
+    console.log(`[Memory Intelligence] Retrieved ${intelligentFacts.length} intelligently ranked facts for user ${userId}`);
+    if (intelligentFacts.length > 0) {
+      console.log('[Memory Intelligence] Top facts:', intelligentFacts.slice(0, 2).map(f => ({ 
+        type: f.type, 
+        content: f.content.substring(0, 40),
+        relevance: f.contextRelevance?.toFixed(2)
+      })));
+    }
+    const factContext = formatFactsForPrompt(intelligentFacts);
 
     // ✅ Retrieve relevant memories for context
-    const userQuery = messages[messages.length - 1]?.text || '';
     const memoryContext = await getRAGMemoryContext(userId, userQuery, 'conversation');
 
     // Adapt messages for GenAI history format

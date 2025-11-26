@@ -12,10 +12,15 @@ export interface ExtractedFact {
   type: FactType;
   content: string;
   confidence: number; // 0-1
+  sentiment?: number; // -1.0 (negative) to 1.0 (positive)
   extractedAt: number;
   expiresAt?: number; // timestamp for conversation facts to expire after 30 days
   conversationId?: string;
   scope: FactScope;
+  usageCount?: number;
+  impactScore?: number;
+  lastUsedAt?: number;
+  userRating?: number;
 }
 
 interface ExtractionResult {
@@ -191,6 +196,89 @@ function extractKeywordFacts(content: string): ExtractedFact[] {
 }
 
 /**
+ * Analyze sentiment of text using keyword-based scoring
+ * Returns score from -1.0 (very negative) to 1.0 (very positive)
+ */
+function analyzeSentiment(text: string): number {
+  if (!text || text.length === 0) return 0;
+
+  const lowerText = text.toLowerCase();
+
+  // Positive indicators
+  const positiveKeywords: { [key: string]: number } = {
+    excellent: 2,
+    amazing: 2,
+    great: 1.5,
+    good: 1,
+    helpful: 1.5,
+    love: 1.5,
+    perfect: 2,
+    wonderful: 1.5,
+    fantastic: 2,
+    brilliant: 1.5,
+    success: 1,
+    solved: 1.5,
+    working: 0.5,
+    thanks: 0.5,
+    appreciate: 1,
+    useful: 1,
+    insightful: 1.5,
+    effective: 1,
+  };
+
+  // Negative indicators
+  const negativeKeywords: { [key: string]: number } = {
+    terrible: -2,
+    awful: -2,
+    horrible: -2,
+    bad: -1,
+    hate: -1.5,
+    useless: -2,
+    broken: -1.5,
+    error: -1,
+    problem: -0.8,
+    difficult: -0.5,
+    confusing: -1,
+    frustrating: -1.5,
+    failed: -1.5,
+    wrong: -1,
+    issue: -0.8,
+    challenge: -0.3,
+  };
+
+  let score = 0;
+  let keywordCount = 0;
+
+  // Score positive keywords
+  for (const [keyword, value] of Object.entries(positiveKeywords)) {
+    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+    const matches = lowerText.match(regex);
+    if (matches) {
+      score += value * matches.length;
+      keywordCount += matches.length;
+    }
+  }
+
+  // Score negative keywords
+  for (const [keyword, value] of Object.entries(negativeKeywords)) {
+    const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+    const matches = lowerText.match(regex);
+    if (matches) {
+      score += value * matches.length;
+      keywordCount += matches.length;
+    }
+  }
+
+  // Normalize to -1.0 to 1.0 range
+  if (keywordCount === 0) {
+    return 0;
+  }
+
+  const normalized = score / (keywordCount * 2); // Max 2 per keyword
+  return Math.max(-1, Math.min(1, normalized));
+}
+
+/**
  * Stage 2: Score extracted facts using Gemini for confidence calibration
  * Validates extraction accuracy and adjusts confidence scores
  */
@@ -232,17 +320,22 @@ Include only facts with confidence >= 0.60.`;
 
     const scores = JSON.parse(jsonMatch[0]) as Array<{ index: number; confidence: number }>;
 
-    // Update confidence scores based on Gemini assessment
+    // Update confidence scores and add sentiment based on Gemini assessment
     return facts.map((fact, index) => {
       const score = scores.find((s) => s.index === index + 1);
       return {
         ...fact,
         confidence: score?.confidence ?? fact.confidence,
+        sentiment: analyzeSentiment(fact.content), // Add sentiment analysis
       };
     });
   } catch (error) {
     functions.logger.error('Error scoring facts with Gemini:', error);
-    return facts; // Return original facts with original confidence if Gemini fails
+    // Return facts with sentiment analysis even if Gemini scoring fails
+    return facts.map((fact) => ({
+      ...fact,
+      sentiment: analyzeSentiment(fact.content),
+    }));
   }
 }
 
