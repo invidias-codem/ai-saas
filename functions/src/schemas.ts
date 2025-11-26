@@ -96,3 +96,16 @@ export interface SlackIntegration {
   createdAt: number;
   updatedAt: number;
 }
+
+// Extracted fact - key-value knowledge base for preventing hallucinations
+export interface ExtractedFact {
+  id?: string;
+  type: 'decision' | 'action_item' | 'blocker' | 'project' | 'verification';
+  content: string;
+  confidence: number; // 0-1 confidence score
+  extractedAt: number;
+  expiresAt?: number; // For conversation-level facts (30 days)
+  conversationId?: string;
+  scope: 'conversation' | 'user'; // conversation-level vs persistent user facts
+  createdAt?: number;
+}

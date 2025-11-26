@@ -82,4 +82,15 @@ export interface SlackIntegration {
     createdAt: number;
     updatedAt: number;
 }
+export interface ExtractedFact {
+    id?: string;
+    type: 'decision' | 'action_item' | 'blocker' | 'project' | 'verification';
+    content: string;
+    confidence: number;
+    extractedAt: number;
+    expiresAt?: number;
+    conversationId?: string;
+    scope: 'conversation' | 'user';
+    createdAt?: number;
+}
 //# sourceMappingURL=schemas.d.ts.map

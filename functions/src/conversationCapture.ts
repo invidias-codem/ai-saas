@@ -9,6 +9,7 @@ import { storeUserMemory, formatMemoriesForContext } from './ragMemoryService';
 import { updateUserContext } from './userInitializer';
 import { triggerZapierWebhook } from './zapierIntegration';
 import { sendSlackNotification } from './slackIntegration';
+import { extractFactsFromConversation, storeExtractedFacts, cleanupExpiredFacts } from './factExtractor';
 import { UserMemory, InteractionEvent } from './schemas';
 
 /**
@@ -66,6 +67,27 @@ export const captureConversationMemory = functions.https.onRequest(
       }
 
       const memory = await storeUserMemory(userId, memoryInput);
+
+      // Extract and store critical facts for hallucination prevention
+      try {
+        const factExtractionResult = await extractFactsFromConversation(
+          messages || [],
+          summary
+        );
+        
+        if (factExtractionResult.facts.length > 0) {
+          const storedFacts = await storeExtractedFacts(userId, factExtractionResult.facts);
+          functions.logger.debug(
+            `Extracted and stored ${storedFacts} facts for user ${userId}`
+          );
+        }
+
+        // Cleanup expired conversation-level facts (optional, can be scheduled as separate function)
+        await cleanupExpiredFacts(userId);
+      } catch (error) {
+        functions.logger.warn('Error extracting facts:', error);
+        // Don't fail the entire capture if fact extraction fails
+      }
 
       // Update user context
       await updateUserContext(userId, tokensUsed || 0, featureType, tags);

@@ -407,3 +407,96 @@ export function formatUserContextForPrompt(userContext: UserContextData): string
 
   return `\n## About This User\n${lines.join('\n')}\n`;
 }
+
+/**
+ * Retrieve high-confidence facts for a user
+ * Facts are extracted from conversations and stored for hallucination prevention
+ */
+export async function getHighConfidenceFacts(
+  userId: string,
+  limit = 10
+): Promise<any[]> {
+  try {
+    if (!process.env.NEXT_PUBLIC_RAG_ENABLED || !process.env.RAG_CLOUD_FUNCTION_URL) {
+      return [];
+    }
+
+    const response = await axios.post(
+      `${process.env.RAG_CLOUD_FUNCTION_URL}/retrieveFacts`,
+      {
+        userId,
+        limit,
+      },
+      {
+        timeout: 3000,
+      }
+    );
+
+    return response.data.facts || [];
+  } catch (error) {
+    console.error('Error retrieving facts:', error);
+    return [];
+  }
+}
+
+/**
+ * Format extracted facts into context string for prompt injection
+ */
+export function formatFactsForPrompt(facts: any[]): string {
+  if (!facts || facts.length === 0) {
+    return '';
+  }
+
+  const grouped = new Map<string, any[]>();
+  facts.forEach((fact) => {
+    if (!grouped.has(fact.type)) {
+      grouped.set(fact.type, []);
+    }
+    grouped.get(fact.type)!.push(fact);
+  });
+
+  let prompt = '\n## Critical Context (Verified Facts)\n';
+
+  // Decisions (highest priority)
+  if (grouped.has('decision')) {
+    prompt += '\n**Decisions Made:**\n';
+    grouped.get('decision')!.forEach((f) => {
+      prompt += `- ${f.content}\n`;
+    });
+  }
+
+  // Action Items
+  if (grouped.has('action_item')) {
+    prompt += '\n**Action Items:**\n';
+    grouped.get('action_item')!.forEach((f) => {
+      prompt += `- ${f.content}\n`;
+    });
+  }
+
+  // Blockers
+  if (grouped.has('blocker')) {
+    prompt += '\n**Current Blockers:**\n';
+    grouped.get('blocker')!.forEach((f) => {
+      prompt += `- ${f.content}\n`;
+    });
+  }
+
+  // Projects
+  if (grouped.has('project')) {
+    prompt += '\n**Active Projects:**\n';
+    grouped.get('project')!.forEach((f) => {
+      prompt += `- ${f.content}\n`;
+    });
+  }
+
+  // Verifications
+  if (grouped.has('verification')) {
+    prompt += '\n**Verified Information:**\n';
+    grouped.get('verification')!.forEach((f) => {
+      prompt += `- ${f.content}\n`;
+    });
+  }
+
+  prompt += '\nReference the above facts to ensure accuracy in your response.\n';
+  return prompt;
+}

@@ -129,3 +129,20 @@ export const slackIntegrationSchema = z.object({
 });
 
 export type SlackIntegration = z.infer<typeof slackIntegrationSchema>;
+
+/**
+ * Extracted fact - key-value knowledge base for preventing hallucinations
+ */
+export const extractedFactSchema = z.object({
+    id: z.string().optional(),
+    type: z.enum(["decision", "action_item", "blocker", "project", "verification"]),
+    content: z.string(),
+    confidence: z.number().min(0).max(1), // 0-1 confidence score
+    extractedAt: z.number(),
+    expiresAt: z.number().optional(), // For conversation-level facts (30 days)
+    conversationId: z.string().optional(),
+    scope: z.enum(["conversation", "user"]), // conversation-level vs persistent user facts
+    createdAt: z.number().optional(),
+});
+
+export type ExtractedFact = z.infer<typeof extractedFactSchema>;

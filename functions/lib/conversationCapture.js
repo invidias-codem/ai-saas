@@ -46,6 +46,7 @@ const ragMemoryService_1 = require("./ragMemoryService");
 const userInitializer_1 = require("./userInitializer");
 const zapierIntegration_1 = require("./zapierIntegration");
 const slackIntegration_1 = require("./slackIntegration");
+const factExtractor_1 = require("./factExtractor");
 /**
  * HTTP Cloud Function - Capture conversation after API call
  * Called from Next.js API routes to store interaction in memory
@@ -87,6 +88,20 @@ exports.captureConversationMemory = functions.https.onRequest(async (req, res) =
             };
         }
         const memory = await (0, ragMemoryService_1.storeUserMemory)(userId, memoryInput);
+        // Extract and store critical facts for hallucination prevention
+        try {
+            const factExtractionResult = await (0, factExtractor_1.extractFactsFromConversation)(messages || [], summary);
+            if (factExtractionResult.facts.length > 0) {
+                const storedFacts = await (0, factExtractor_1.storeExtractedFacts)(userId, factExtractionResult.facts);
+                functions.logger.debug(`Extracted and stored ${storedFacts} facts for user ${userId}`);
+            }
+            // Cleanup expired conversation-level facts (optional, can be scheduled as separate function)
+            await (0, factExtractor_1.cleanupExpiredFacts)(userId);
+        }
+        catch (error) {
+            functions.logger.warn('Error extracting facts:', error);
+            // Don't fail the entire capture if fact extraction fails
+        }
         // Update user context
         await (0, userInitializer_1.updateUserContext)(userId, tokensUsed || 0, featureType, tags);
         // Log interaction event

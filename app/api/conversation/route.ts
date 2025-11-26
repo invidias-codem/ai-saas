@@ -10,7 +10,9 @@ import {
   generateSummary,
   estimateTokenCount,
   gatherUserContext,
-  formatUserContextForPrompt
+  formatUserContextForPrompt,
+  getHighConfidenceFacts,
+  formatFactsForPrompt
 } from '@/lib/ragMemory';
 
 const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
@@ -66,6 +68,10 @@ export async function POST(req: Request) {
     const userContext = await gatherUserContext(userId, clerkUser);
     const userContextPrompt = formatUserContextForPrompt(userContext);
 
+    // ✅ Retrieve high-confidence facts for accurate responses (prevents hallucinations)
+    const facts = await getHighConfidenceFacts(userId);
+    const factContext = formatFactsForPrompt(facts);
+
     // ✅ Retrieve relevant memories for context
     const userQuery = messages[messages.length - 1]?.text || '';
     const memoryContext = await getRAGMemoryContext(userId, userQuery, 'conversation');
@@ -81,8 +87,8 @@ export async function POST(req: Request) {
        return new NextResponse("Invalid prompt", { status: 400 });
     }
 
-    // ✅ Inject user context + memory context into the prompt
-    const enhancedPromptText = userContextPrompt + memoryContext + lastUserMessage.parts[0].text;
+    // ✅ Inject user context + facts (HIGH PRIORITY) + memory context into the prompt
+    const enhancedPromptText = userContextPrompt + factContext + memoryContext + lastUserMessage.parts[0].text;
 
     const chat = model.startChat({
       // ✅ Prepend system instruction and greeting to history
