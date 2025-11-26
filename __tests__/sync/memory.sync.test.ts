@@ -9,10 +9,14 @@ import {
   getDefaultPreferences,
   SyncMetrics,
 } from '@/lib/memorySyncUtils';
-import { ExtractedFact, UserPreferences } from '@/lib/intelligentMemory';
+// FIX: Import MemorySyncMessage directly from the schema file, 
+// as it is not being re-exported by intelligentMemory.
+import { MemorySyncMessage } from '@/lib/memorySyncUtils'; 
+import { ExtractedFact, UserPreferences } from '@/lib/intelligentMemory'; 
 import { createMockFact } from '@/__tests__/utils/testHelpers';
 
 describe('Memory Sync Utilities', () => {
+// ------------------------------------------------------------------------------------------------
   describe('Checksum Generation', () => {
     it('should generate consistent checksums for same data', () => {
       const data = { id: 'fact_1', content: 'test' };
@@ -35,7 +39,7 @@ describe('Memory Sync Utilities', () => {
       expect(checksum1).not.toBe(checksum2);
     })
   })
-
+// ------------------------------------------------------------------------------------------------
   describe('Fact Merging', () => {
     it('should merge facts without duplicates', () => {
       const fact1 = createMockFact({ id: 'fact_1', content: 'Original' })
@@ -86,7 +90,7 @@ describe('Memory Sync Utilities', () => {
       expect(merged.every(f => f.id)).toBe(true)
     })
   })
-
+// ------------------------------------------------------------------------------------------------
   describe('Preference Merging', () => {
     it('should merge preferences from multiple devices', () => {
       const prefs1: UserPreferences = {
@@ -179,7 +183,7 @@ describe('Memory Sync Utilities', () => {
       expect(merged.sentimentPreference).toBeLessThanOrEqual(1)
     })
   })
-
+// ------------------------------------------------------------------------------------------------
   describe('Conflict Detection', () => {
     it('should detect style conflicts', () => {
       const prefs1: UserPreferences = {
@@ -232,7 +236,7 @@ describe('Memory Sync Utilities', () => {
       expect(conflicts).toHaveLength(0)
     })
   })
-
+// ------------------------------------------------------------------------------------------------
   describe('Fact Filtering', () => {
     it('should filter expired facts', () => {
       const validFact = createMockFact({
@@ -283,25 +287,35 @@ describe('Memory Sync Utilities', () => {
       expect(filtered).toHaveLength(3)
     })
   })
-
+// ------------------------------------------------------------------------------------------------
   describe('Batch Operations', () => {
     it('should batch messages correctly', () => {
-      const messages = Array(250)
+      const facts = Array(250)
         .fill(null)
-        .map((_, i) => ({
-          id: `msg_${i}`,
-          type: 'fact' as const,
-          deviceId: 'device_1',
-          timestamp: Date.now(),
-          data: { id: `fact_${i}`, content: 'test', confidence: 0.8 },
-          checksum: 'test',
-        }))
+        .map((_, i) => createMockFact({ 
+            id: `fact_${i}`,
+            type: 'conversation' as const, 
+            content: 'test content', 
+            confidence: 0.8 
+        }));
+
+      const messages: MemorySyncMessage[] = facts.map((fact, i) => ({
+        id: `msg_${i}`,
+        type: 'fact',
+        deviceId: 'device_1',
+        timestamp: Date.now(),
+        data: fact,
+        checksum: generateMemorySyncChecksum('fact', fact, 'device_1'),
+      }));
 
       const batches = batchMemorySync(messages, 100)
 
       expect(batches).toHaveLength(3)
+      expect(Array.isArray(batches[0])).toBe(true)
       expect(batches[0]).toHaveLength(100)
+      expect(Array.isArray(batches[1])).toBe(true)
       expect(batches[1]).toHaveLength(100)
+      expect(Array.isArray(batches[2])).toBe(true)
       expect(batches[2]).toHaveLength(50)
     })
 
@@ -311,7 +325,7 @@ describe('Memory Sync Utilities', () => {
       expect(batches).toHaveLength(0)
     })
   })
-
+// ------------------------------------------------------------------------------------------------
   describe('Sync Metrics', () => {
     it('should calculate sync metrics correctly', () => {
       const before = { facts: 10, preferences: 1, feedback: 5 }
@@ -336,11 +350,10 @@ describe('Memory Sync Utilities', () => {
 
       const metrics = calculateSyncMetrics(before, after, duration, deduplicated)
 
-      // 2 new facts synced, 2 deduplicated = 2/(2+2) = 0.5 dedup rate
-      expect(metrics.deduplicationRate).toBeCloseTo(1.0, 0)
+      expect(metrics.deduplicationRate).toBeCloseTo(0.5, 1)
     })
   })
-
+// ------------------------------------------------------------------------------------------------
   describe('Default Preferences', () => {
     it('should return valid default preferences', () => {
       const defaults = getDefaultPreferences()

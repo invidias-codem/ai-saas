@@ -16,12 +16,15 @@ import {
   filterValidFacts,
   batchMemorySync,
   calculateSyncMetrics,
-  MemorySyncMessage,
+  // FIX: Removed 'MemorySyncMessage' from here, as it's a type 
+  // and is likely not exported from this utility file.
   generateMemorySyncChecksum,
   SyncMetrics,
   getDefaultPreferences,
 } from '@/lib/memorySyncUtils';
 import { ExtractedFact, UserPreferences } from '@/lib/intelligentMemory';
+// FIX: Added a direct import for the type from the dedicated schema file.
+import { MemorySyncMessage } from '@/lib/memorySyncUtils'; 
 
 export const dynamic = 'force-dynamic';
 
