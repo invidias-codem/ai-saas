@@ -16,3 +16,4 @@ export { handleSlackCommand, handleSlackInteractivity } from './slackIntegration
 export { retrieveFactsForUser } from './factExtractor';
 export { getFactAnalytics, getMemoryAnalytics } from './memoryAnalytics';
 export { extendFactTTL, deleteFact, softDeleteFact } from './memoryRefresh';
+export { scheduleFactCleanup } from './scheduleFactCleanup';

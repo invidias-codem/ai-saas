@@ -37,7 +37,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.softDeleteFact = exports.deleteFact = exports.extendFactTTL = exports.getMemoryAnalytics = exports.getFactAnalytics = exports.retrieveFactsForUser = exports.handleSlackInteractivity = exports.handleSlackCommand = exports.handleZapierAuth = exports.handleZapierWebhook = exports.getMemoryStats = exports.handleMemoryUpdate = exports.retrieveMemories = exports.captureConversationMemory = exports.updateUserContext = exports.initializeUserMemory = void 0;
+exports.scheduleFactCleanup = exports.softDeleteFact = exports.deleteFact = exports.extendFactTTL = exports.getMemoryAnalytics = exports.getFactAnalytics = exports.retrieveFactsForUser = exports.handleSlackInteractivity = exports.handleSlackCommand = exports.handleZapierAuth = exports.handleZapierWebhook = exports.getMemoryStats = exports.handleMemoryUpdate = exports.retrieveMemories = exports.captureConversationMemory = exports.updateUserContext = exports.initializeUserMemory = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -65,4 +65,6 @@ var memoryRefresh_1 = require("./memoryRefresh");
 Object.defineProperty(exports, "extendFactTTL", { enumerable: true, get: function () { return memoryRefresh_1.extendFactTTL; } });
 Object.defineProperty(exports, "deleteFact", { enumerable: true, get: function () { return memoryRefresh_1.deleteFact; } });
 Object.defineProperty(exports, "softDeleteFact", { enumerable: true, get: function () { return memoryRefresh_1.softDeleteFact; } });
+var scheduleFactCleanup_1 = require("./scheduleFactCleanup");
+Object.defineProperty(exports, "scheduleFactCleanup", { enumerable: true, get: function () { return scheduleFactCleanup_1.scheduleFactCleanup; } });
 //# sourceMappingURL=index.js.map
