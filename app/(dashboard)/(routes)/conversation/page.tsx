@@ -24,6 +24,18 @@ import {
   getMemoryStats
 } from "@/lib/sessionCookieMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
+import { 
+  getOrCreateDeviceId, 
+  getDeviceInfo,
+  getDeviceName
+} from "@/lib/deviceIdentifier";
+import {
+  registerSyncSession,
+  detectMultiDeviceLogin,
+  trackMessageSent,
+  getSyncStatus
+} from "@/lib/deviceSync";
+import { toSyncMessages } from "@/lib/messageMerge";
 
 // Message structure
 interface Message {
@@ -91,18 +103,27 @@ export default function ConversationPage() {
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [sessionId, setSessionId] = useState("");
   const [sessionRestored, setSessionRestored] = useState(false);
+  const [deviceId, setDeviceId] = useState("");
+  const [multiDeviceStatus, setMultiDeviceStatus] = useState<any>(null);
+  const [userId, setUserId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionCleanup = useSessionCleanup();
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const GREETING_MESSAGE = "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights.";
 
-  // ✅ Load session memory on mount
+  // ✅ Load session memory on mount + initialize device sync
   useEffect(() => {
-    const initializeSession = () => {
+    const initializeSession = async () => {
       try {
         // Get or create session ID
         const sid = getOrCreateSessionId();
         setSessionId(sid);
+
+        // Get device info
+        const did = getOrCreateDeviceId();
+        setDeviceId(did);
+        console.log('[DeviceSync] Initialized device:', getDeviceName(getDeviceInfo()));
 
         // Restore messages from cookie
         const savedMessages = getSessionMemoryFromCookie();
@@ -128,6 +149,31 @@ export default function ConversationPage() {
           console.log('[SessionMemory] No previous session found - starting fresh');
         }
         
+        // Get user ID from Clerk (via API call since we can't use useAuth here directly)
+        try {
+          const response = await fetch('/api/auth/user');
+          if (response.ok) {
+            const data = await response.json();
+            setUserId(data.userId);
+            
+            // Register device sync session
+            registerSyncSession(data.userId, savedMessages.length);
+            
+            // Check for multi-device login
+            const status = detectMultiDeviceLogin(data.userId);
+            setMultiDeviceStatus(status);
+            
+            if (status.isMultiDevice) {
+              console.log('[DeviceSync] Multi-device detected:', {
+                deviceCount: status.deviceCount,
+                devices: status.devices.map(d => d.deviceId.substring(0, 12)),
+              });
+            }
+          }
+        } catch (err) {
+          console.warn('[DeviceSync] Could not fetch user info:', err);
+        }
+        
         setSessionRestored(true);
       } catch (err) {
         console.error('[SessionMemory] Failed to initialize session:', err);
@@ -138,7 +184,7 @@ export default function ConversationPage() {
     initializeSession();
   }, []);
 
-  // ✅ Save to cookie whenever messages change
+  // ✅ Save to cookie whenever messages change + track device activity
   useEffect(() => {
     if (sessionRestored && sessionId && messages.length > 0) {
       const sessionMessages: SessionMessage[] = messages.map(msg => ({
@@ -148,8 +194,88 @@ export default function ConversationPage() {
       }));
       
       saveSessionMemoryToCookie(sessionMessages, 'current-user', sessionId);
+      
+      // Track message sent for device sync
+      if (deviceId) {
+        trackMessageSent(messages.length);
+      }
     }
-  }, [messages, sessionRestored, sessionId]);
+  }, [messages, sessionRestored, sessionId, deviceId]);
+
+  // ✅ Setup periodic sync to cloud every 5 minutes
+  useEffect(() => {
+    if (!sessionRestored || !userId || !deviceId || messages.length === 0) return;
+
+    const syncToCloud = async () => {
+      try {
+        const messagesToSync = messages.map(msg => ({
+          text: msg.text,
+          role: msg.role,
+          timestamp: msg.timestamp.getTime(),
+        }));
+
+        const syncMessages = toSyncMessages(messagesToSync, deviceId);
+
+        const response = await axios.post('/api/sync/conversation', {
+          deviceId,
+          messages: syncMessages,
+          isNewDevice: false,
+          lastSyncTimestamp: Date.now(),
+        });
+
+        if (response.data.merged) {
+          // Merge cloud messages with local
+          const mergedMessages: Message[] = response.data.merged.map((m: any) => ({
+            text: m.text,
+            role: m.role,
+            timestamp: new Date(m.timestamp),
+          }));
+
+          // Update if merged version has more messages
+          if (mergedMessages.length > messages.length) {
+            setMessages(mergedMessages);
+            saveSessionMemoryToCookie(
+              mergedMessages.map(msg => ({
+                text: msg.text,
+                role: msg.role,
+                timestamp: msg.timestamp.getTime(),
+              })),
+              'current-user',
+              sessionId
+            );
+          }
+
+          // Update multi-device status
+          if (response.data.deviceCount > 1) {
+            setMultiDeviceStatus({
+              isMultiDevice: true,
+              deviceCount: response.data.deviceCount,
+            });
+          }
+
+          console.log('[DeviceSync] Cloud sync successful:', {
+            synced: response.data.messagesSynced,
+            merged: response.data.totalMerged,
+            devices: response.data.deviceCount,
+          });
+        }
+      } catch (err) {
+        console.warn('[DeviceSync] Cloud sync failed (will retry):', err);
+      }
+    };
+
+    // Initial sync after 10 seconds
+    const initialTimeout = setTimeout(syncToCloud, 10000);
+
+    // Then periodic sync every 5 minutes
+    const syncInterval = setInterval(syncToCloud, 5 * 60 * 1000);
+    syncIntervalRef.current = syncInterval;
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(syncInterval);
+    };
+  }, [sessionRestored, userId, deviceId, messages, sessionId]);
 
   const handleSendMessage = async () => { /* ... (keep existing logic) ... */
       const trimmedInput = userInput.trim();
@@ -203,6 +329,16 @@ export default function ConversationPage() {
                   ? `${stats.sessionAgeMinutes}m old` 
                   : 'just now';
               })()})
+            </span>
+          </div>
+        )}
+
+        {/* ✅ Multi-Device Sync Indicator */}
+        {multiDeviceStatus?.isMultiDevice && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-700 dark:text-green-300">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <span>
+              📱 Syncing across <strong>{multiDeviceStatus.deviceCount}</strong> device{multiDeviceStatus.deviceCount !== 1 ? 's' : ''}
             </span>
           </div>
         )}
