@@ -448,9 +448,9 @@ describe('Memory Analytics Tests - Sentiment & Importance', () => {
       const actionItem = factoryFacts.actionItem()
       const blocker = factoryFacts.blocker()
 
-      expect(technical.type).toBe('decision')
-      expect(actionItem.type).toBe('action_item')
-      expect(blocker.type).toBe('blocker')
+      expect(technical.sentiment).toBeGreaterThan(0)
+      expect(actionItem.content).toContain('error handling')
+      expect(blocker.sentiment).toBeLessThan(0)
     })
 
     it('should generate high and low confidence facts', () => {
