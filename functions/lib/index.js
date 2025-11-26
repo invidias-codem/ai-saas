@@ -37,7 +37,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.retrieveFactsForUser = exports.handleSlackInteractivity = exports.handleSlackCommand = exports.handleZapierAuth = exports.handleZapierWebhook = exports.getMemoryStats = exports.handleMemoryUpdate = exports.retrieveMemories = exports.captureConversationMemory = exports.updateUserContext = exports.initializeUserMemory = void 0;
+exports.softDeleteFact = exports.deleteFact = exports.extendFactTTL = exports.getMemoryAnalytics = exports.getFactAnalytics = exports.retrieveFactsForUser = exports.handleSlackInteractivity = exports.handleSlackCommand = exports.handleZapierAuth = exports.handleZapierWebhook = exports.getMemoryStats = exports.handleMemoryUpdate = exports.retrieveMemories = exports.captureConversationMemory = exports.updateUserContext = exports.initializeUserMemory = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -58,4 +58,11 @@ Object.defineProperty(exports, "handleSlackCommand", { enumerable: true, get: fu
 Object.defineProperty(exports, "handleSlackInteractivity", { enumerable: true, get: function () { return slackIntegration_1.handleSlackInteractivity; } });
 var factExtractor_1 = require("./factExtractor");
 Object.defineProperty(exports, "retrieveFactsForUser", { enumerable: true, get: function () { return factExtractor_1.retrieveFactsForUser; } });
+var memoryAnalytics_1 = require("./memoryAnalytics");
+Object.defineProperty(exports, "getFactAnalytics", { enumerable: true, get: function () { return memoryAnalytics_1.getFactAnalytics; } });
+Object.defineProperty(exports, "getMemoryAnalytics", { enumerable: true, get: function () { return memoryAnalytics_1.getMemoryAnalytics; } });
+var memoryRefresh_1 = require("./memoryRefresh");
+Object.defineProperty(exports, "extendFactTTL", { enumerable: true, get: function () { return memoryRefresh_1.extendFactTTL; } });
+Object.defineProperty(exports, "deleteFact", { enumerable: true, get: function () { return memoryRefresh_1.deleteFact; } });
+Object.defineProperty(exports, "softDeleteFact", { enumerable: true, get: function () { return memoryRefresh_1.softDeleteFact; } });
 //# sourceMappingURL=index.js.map
