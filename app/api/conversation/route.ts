@@ -1,8 +1,17 @@
 // app/api/conversation/route.ts
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { env } from '@/lib/env';
+import { 
+  getRAGMemoryContext, 
+  captureMemory, 
+  extractTags, 
+  generateSummary,
+  estimateTokenCount,
+  gatherUserContext,
+  formatUserContextForPrompt
+} from '@/lib/ragMemory';
 
 const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
 
@@ -17,11 +26,11 @@ const model = genAI.getGenerativeModel({
   ],
 });
 
-// ✅ Add instruction for data formatting
+// ✅ Add instruction for data formatting with RAG context notice
 const SYSTEM_INSTRUCTION = {
     role: "user", // System instructions often go under the 'user' role for initial setup
     parts: [{
-      text: "You are 'Genie', a helpful AI assistant. Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization."
+      text: "You are 'Genie', a helpful AI assistant. Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences."
     }],
 };
 
@@ -34,9 +43,16 @@ const GREETING = {
 
 export async function POST(req: Request) {
   try {
+    // ✅ Get authenticated user from Clerk
     const { userId } = auth();
     if (!userId) {
       return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    // ✅ Get full Clerk user object for context
+    const clerkUser = await currentUser();
+    if (!clerkUser) {
+      return new NextResponse("User not found", { status: 401 });
     }
 
     const body = await req.json();
@@ -45,6 +61,14 @@ export async function POST(req: Request) {
     if (!messages || messages.length === 0) {
       return new NextResponse("Messages are required", { status: 400 });
     }
+
+    // ✅ Gather comprehensive user context
+    const userContext = await gatherUserContext(userId, clerkUser);
+    const userContextPrompt = formatUserContextForPrompt(userContext);
+
+    // ✅ Retrieve relevant memories for context
+    const userQuery = messages[messages.length - 1]?.text || '';
+    const memoryContext = await getRAGMemoryContext(userId, userQuery, 'conversation');
 
     // Adapt messages for GenAI history format
     const history = messages.map((msg: { role: string; text: string; }) => ({
@@ -56,6 +80,9 @@ export async function POST(req: Request) {
     if (!lastUserMessage || lastUserMessage.role !== 'user') {
        return new NextResponse("Invalid prompt", { status: 400 });
     }
+
+    // ✅ Inject user context + memory context into the prompt
+    const enhancedPromptText = userContextPrompt + memoryContext + lastUserMessage.parts[0].text;
 
     const chat = model.startChat({
       // ✅ Prepend system instruction and greeting to history
@@ -69,8 +96,36 @@ export async function POST(req: Request) {
       },
     });
 
-    const result = await chat.sendMessage(lastUserMessage.parts[0].text);
+    const result = await chat.sendMessage(enhancedPromptText);
     const responseText = result.response.text();
+
+    // ✅ Capture this interaction for future context
+    const tokensUsed = estimateTokenCount(userQuery + responseText);
+    const tags = extractTags(userQuery);
+    const summary = generateSummary([
+      { role: 'user', content: userQuery },
+      { role: 'assistant', content: responseText }
+    ]);
+
+    // ✅ Send to Cloud Function for async memory capture with user metadata
+    captureMemory(
+      userId,
+      'conversation',
+      userQuery.substring(0, 50) || 'Conversation',
+      summary,
+      messages,
+      tokensUsed,
+      tags,
+      {
+        userName: userContext.fullName,
+        userEmail: userContext.email,
+        responseLength: responseText.length,
+        interactionStyle: userContext.interactionStyle,
+      }
+    ).catch(err => console.error('Memory capture failed:', err));
+
+    // ✅ Log successful conversation
+    console.log(`[CONVERSATION] User: ${userContext.fullName} (${userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
 
     return NextResponse.json({ text: responseText });
 

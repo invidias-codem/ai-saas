@@ -23,6 +23,23 @@ const envSchema = z.object({
   GOOGLE_LOCATION: z.string().min(1).default("us-central1"), // e.g., "us-central1"
 
   GCP_SERVICE_ACCOUNT_KEY_JSON: z.string().min(1, { message: "GCP_SERVICE_ACCOUNT_KEY_JSON (raw JSON) is required for Google Cloud APIs" }),
+
+  // RAG Memory Configuration
+  NEXT_PUBLIC_RAG_ENABLED: z.string().optional().default("true"),
+  RAG_CLOUD_FUNCTION_URL: z.string().optional(),
+  RAG_MEMORY_RETENTION_DAYS: z.string().optional().default("90"),
+  RAG_RETRIEVAL_LIMIT: z.string().optional().default("5"),
+  RAG_SIMILARITY_THRESHOLD: z.string().optional().default("0.6"),
+
+  // Zapier Integration
+  ZAPIER_CLIENT_ID: z.string().optional(),
+  ZAPIER_CLIENT_SECRET: z.string().optional(),
+  ZAPIER_API_KEY: z.string().optional(),
+
+  // Slack Integration
+  SLACK_BOT_TOKEN: z.string().optional(),
+  SLACK_SIGNING_SECRET: z.string().optional(),
+  SLACK_APP_ID: z.string().optional(),
 });
 
 // Parse the environment variables and export the result
