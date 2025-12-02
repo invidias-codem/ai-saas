@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DownloadIcon, ImageIcon } from "@radix-ui/react-icons";
-import Image from "next/image"; // ✅ Import the Image component
+import Image from "next/image";
 
 import { Heading } from "@/components/heading";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
@@ -21,101 +21,121 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
+import { Card, CardFooter } from "@/components/ui/card";
 import { amountOptions, resolutionOptions, formSchema } from "./constants";
 
-// (Keep your existing interface and state logic)
+// Interface for a single Replicate prediction
 interface ReplicatePrediction {
   id: string;
   status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
-  output?: string[]; 
+  output?: string | string[]; // nano-banana output can be string or array of strings
   error?: {
-    detail: string;
+    detail?: string;
   };
 }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const ImagePage = () => {
   const [images, setImages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [predictionId, setPredictionId] = useState<string | null>(null);
+  const [predictionIds, setPredictionIds] = useState<string[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       prompt: "",
       amount: "1",
-      resolution: resolutionOptions[0].value,
+      resolution: "1:1",
     },
   });
 
-  // (Keep your existing useEffect polling logic)
+  // Polling effect for multiple predictions
   useEffect(() => {
-    if (!predictionId) return;
+    if (predictionIds.length === 0 || !isLoading) {
+      return;
+    }
 
-    const interval = setInterval(async () => {
-      try {
-        const response = await axios.get<ReplicatePrediction>(`/api/image/predictions/${predictionId}`);
-        const prediction = response.data;
-        switch (prediction.status) {
-          case "succeeded":
-            if (prediction.output && Array.isArray(prediction.output)) {
-              setImages(prediction.output);
+    const pollPredictions = async () => {
+      const newImages: string[] = [];
+      let allDone = true;
+      let pollError: string | null = null;
+
+      for (const id of predictionIds) {
+        try {
+          const response = await axios.get(`/api/image/predictions/${id}`);
+          const prediction: ReplicatePrediction = response.data;
+
+          if (prediction.status === "succeeded" && prediction.output) {
+            // ✅ Correctly handle array output from nano-bana
+            if (Array.isArray(prediction.output)) {
+              newImages.push(...prediction.output);
+            } else {
+              newImages.push(prediction.output);
             }
-            setIsLoading(false);
-            setPredictionId(null);
-            form.reset();
-            clearInterval(interval);
+          } else if (prediction.status === "failed" || prediction.status === "canceled") {
+            pollError = prediction.error?.detail || "A prediction failed.";
+            allDone = true;
             break;
-          case "failed":
-          case "canceled":
-            setError(prediction.error?.detail || "Image generation failed.");
-            setIsLoading(false);
-            setPredictionId(null);
-            clearInterval(interval);
-            break;
-          case "starting":
-          case "processing":
-            break;
+          } else {
+            allDone = false; // At least one is still processing
+          }
+        } catch (err: any) {
+          console.error(`Polling error for prediction ${id}:`, err);
+          pollError = err.response?.data?.error || "Failed to poll prediction status.";
+          allDone = true;
+          break;
         }
-      } catch (err: any) {
-        console.error("[IMAGE_POLLING_ERROR]", err);
-        setError("Failed to get image status. Please try again.");
-        setIsLoading(false);
-        setPredictionId(null);
-        clearInterval(interval);
       }
-    }, 3000);
 
-    return () => clearInterval(interval);
-  }, [predictionId, form]);
+      if (pollError) {
+        setError(pollError);
+        setIsLoading(false);
+        setPredictionIds([]);
+      } else if (allDone) {
+        setImages(prev => [...prev, ...newImages].filter((url): url is string => !!url));
+        setIsLoading(false);
+        setPredictionIds([]);
+        form.reset();
+      } else {
+        // Continue polling
+        await sleep(3000);
+        pollPredictions();
+      }
+    };
 
-  // (Keep your existing onSubmit logic)
+    pollPredictions();
+  }, [predictionIds, isLoading, form]);
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setError(null);
-    setImages([]); 
     setIsLoading(true);
-    setPredictionId(null);
+    setImages([]);
+    setPredictionIds([]); // Clear previous IDs
 
     try {
-      const response = await axios.post<ReplicatePrediction>("/api/image", values);
-      const prediction = response.data;
-      if (prediction && prediction.id) {
-        setPredictionId(prediction.id);
-      } else {
-        throw new Error("API response did not contain a prediction ID.");
-      }
+      // ✅ Corrected API endpoint to /api/image
+      const response = await axios.post<ReplicatePrediction[]>("/api/image", values);
+      
+      const ids = response.data.map(p => p.id);
+      setPredictionIds(ids);
+
     } catch (error: any) {
       console.error("[IMAGE_PAGE_ERROR]", error);
-      const errorMessage = error.response?.data?.details || "Sorry, something went wrong starting the image generation.";
-      setError(errorMessage);
+      // ✅ Handle complex error objects from the backend
+      if (error.response?.data?.details?.fieldErrors?.resolution) {
+        setError(`Invalid resolution: ${error.response.data.details.fieldErrors.resolution[0]}`);
+      } else {
+        const errorMessage = error.response?.data?.details || error.response?.data?.error || "Sorry, something went wrong starting the image generation.";
+        setError(errorMessage);
+      }
       setIsLoading(false);
     }
   };
 
   return (
     <div>
-      {/* (Keep your Heading and Form sections) */}
       <Heading
         title="Image Capsule"
         description="Turn your prompt into an image with Seedream 4!"
@@ -129,7 +149,6 @@ const ImagePage = () => {
             onSubmit={form.handleSubmit(onSubmit)}
             className="rounded-lg border w-full p-4 px-3 md:px-6 focus-within:shadow-sm grid grid-cols-12 gap-2"
           >
-            {/* (Keep FormFields) */}
             <FormField
               name="prompt"
               render={({ field }) => (
@@ -157,8 +176,8 @@ const ImagePage = () => {
                     defaultValue={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Amount" />
+                      <SelectTrigger>
+                        <SelectValue defaultValue={field.value} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -184,8 +203,8 @@ const ImagePage = () => {
                     defaultValue={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Resolution" />
+                      <SelectTrigger>
+                        <SelectValue defaultValue={field.value} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -213,42 +232,38 @@ const ImagePage = () => {
       {/* Output Area */}
       <div className="space-y-4 mt-4 px-4 lg:px-8">
         {isLoading && (
-          <div className="p-8 rounded-lg w-full flex items-center justify-center bg-muted">
-            <EmptyState label={"Genie is creating your masterpiece..."} />
+          <div className="p-20">
+            <div className="flex flex-col items-center justify-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-500" />
+              <p className="text-sm text-muted-foreground mt-2">
+                AI is thinking...
+              </p>
+            </div>
           </div>
         )}
-        {error && <p className="text-red-500 text-center p-4">{error}</p>}
+        {error && !isLoading && (
+           <EmptyState label={error} />
+        )}
         {images.length === 0 && !isLoading && !error && (
           <EmptyState label="No images generated yet." />
         )}
         {images.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-8">
-            {images.map((src, index) => (
-              <Card
-                key={src.substring(0, 50)}
-                className="rounded-lg overflow-hidden"
-              >
+            {images.map((src) => (
+              <Card key={src} className="rounded-lg overflow-hidden">
                 <div className="relative aspect-square">
-                  {/* ✅ Replaced <img> with <Image /> using fill prop */}
-                  <Image
-                    src={src}
-                    alt="Generated Image"
-                    fill
-                    className="object-cover"
-                  />
+                  <Image alt="Generated Image" fill src={src} />
                 </div>
-                <div className="p-2">
-                  <a
-                    href={src}
-                    download={`genie-image-${index + 1}.png`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center w-full px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-violet-600 hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500"
+                <CardFooter className="p-2">
+                  <Button
+                    onClick={() => window.open(src)}
+                    variant="secondary"
+                    className="w-full"
                   >
-                    <DownloadIcon className="mr-1 h-3 w-3" />
+                    <DownloadIcon className="h-4 w-4 mr-2" />
                     Download
-                  </a>
-                </div>
+                  </Button>
+                </CardFooter>
               </Card>
             ))}
           </div>
@@ -259,5 +274,3 @@ const ImagePage = () => {
 };
 
 export default ImagePage;
-
-

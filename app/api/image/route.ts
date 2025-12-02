@@ -12,29 +12,20 @@ const replicate = new Replicate({
   auth: env.REPLICATE_API_TOKEN,
 });
 
-// Model identifier
-const SEEDREAM_MODEL = "bytedance/seedream-4";
+// Model identifier for nano-banana
+const NANO_BANANA_MODEL = "google/nano-banana";
 
-// Define the input schema
+// Define the allowed aspect ratios for the nano-banana model
+const allowedAspectRatios = z.enum([
+  "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "match_input_image"
+]);
+
+// Define the input schema for our API
 const requestSchema = z.object({
-  prompt: z.string().min(1, { message: "Prompt cannot be empty." }),
-  amount: z.coerce.number().int().min(1).max(4).default(1), 
-  resolution: z.string().min(1).default("1024x1024"),
+  prompt: z.string().min(1, "Prompt is required."),
+  amount: z.string().transform(s => parseInt(s, 10)).pipe(z.number().min(1).max(4)),
+  resolution: allowedAspectRatios, // Corresponds to aspect_ratio
 });
-
-// Helper to parse resolution string
-function parseResolution(resolution: string): { width: number, height: number } {
-    const parts = resolution.split('x');
-    if (parts.length === 2) {
-        const width = parseInt(parts[0], 10);
-        const height = parseInt(parts[1], 10);
-        if (!isNaN(width) && !isNaN(height) && width >= 1024 && height >= 1024) { 
-            return { width, height };
-        }
-    }
-    console.warn(`Invalid or unsupported resolution string "${resolution}", defaulting to 1024x1024`);
-    return { width: 1024, height: 1024 }; // Fallback
-}
 
 export async function POST(req: Request) {
   try {
@@ -60,30 +51,31 @@ export async function POST(req: Request) {
       });
     }
 
-    const { prompt, amount, resolution } = validation.data;
-    const { width, height } = parseResolution(resolution);
+    const { prompt, amount, resolution: aspect_ratio } = validation.data;
 
-    // Prepare input for the seedream-4 model
+    // Prepare input for the nano-banana model
     const input = {
       prompt: prompt,
-      width: width,
-      height: height,
-      max_images: amount, 
-      sequential_image_generation: (amount > 1 ? "auto" : "disabled") as "auto" | "disabled",
+      aspect_ratio: aspect_ratio,
+      output_format: "jpg", // Specify output format
     };
     
-    console.log(`Starting Replicate prediction for ${SEEDREAM_MODEL} with input:`, input);
+    console.log(`Starting ${amount} Replicate prediction(s) for ${NANO_BANANA_MODEL} with input:`, input);
 
-    // ✅ Call Replicate's create prediction API (asynchronous)
-    const prediction = await replicate.predictions.create({
-        model: SEEDREAM_MODEL,
+    // Since nano-banana generates one image per prediction, we create multiple predictions.
+    const predictionPromises = Array.from({ length: amount }, () => 
+      replicate.predictions.create({
+        model: NANO_BANANA_MODEL,
         input: input,
-    });
+      })
+    );
 
-    console.log("Replicate job started. Sending prediction object to client:", prediction.id);
+    const predictions = await Promise.all(predictionPromises);
 
-    // ✅ Return the initial prediction object
-    return NextResponse.json(prediction);
+    console.log(`Replicate jobs started. Sending ${predictions.length} prediction objects to client.`);
+
+    // Return the array of initial prediction objects
+    return NextResponse.json(predictions);
 
   } catch (error: any) {
     console.error("[IMAGE_API_ERROR]", error);
@@ -99,19 +91,3 @@ export async function POST(req: Request) {
 }
 
 
-  
-  
-
-
-  
-  
-      
-  
-
-
-
-
-
-
-  
-  

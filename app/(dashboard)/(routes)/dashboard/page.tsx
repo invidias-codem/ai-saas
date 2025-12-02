@@ -11,9 +11,10 @@ const tools = [
     icon: ChatBubbleIcon,
     color: "text-sky-500",
     bgColor: "bg-sky-500/10",
-    href: "/conversation",
+    href: "/under-construction/conversation",
     // Bento: Make the main chat feature prominent
-    cols: "md:col-span-2", 
+    cols: "md:col-span-2",
+    status: "wip",
   },
   {
     label: "Juke Box",
@@ -42,10 +43,11 @@ const tools = [
   {
     label: "Code",
     icon: CodeIcon,
-    href: "/code",
+    href: "/under-construction/code",
     color: "text-green-400",
     bgColor: "bg-green-500/10",
     cols: "md:col-span-1",
+    status: "wip",
   },
 ];
 
@@ -71,13 +73,20 @@ const DashboardPage = () => {
               onClick={() => router.push(tool.href)}
               key={tool.href}
               className={cn(
-                "p-4 border-black/5 flex flex-col justify-between hover:shadow-lg transition cursor-pointer group",
+                "p-4 border-black/5 flex flex-col justify-between hover:shadow-lg transition cursor-pointer group relative overflow-hidden",
                 // Apply the bento column span logic here
                 tool.cols,
                 // Add a subtle height constraint for consistency
                 "h-40 sm:h-48"
               )}
             >
+              {/* WIP Banner */}
+              {tool.status === "wip" && (
+                <div className="absolute top-3 -right-12 transform rotate-45 bg-amber-500 text-white text-xs font-bold px-12 py-1 shadow-md">
+                  WIP 🚧
+                </div>
+              )}
+
               {/* Header: Icon and Arrow */}
               <div className="flex items-start justify-between w-full">
                 <div className={cn("p-2 w-fit rounded-md transition-transform group-hover:scale-110", tool.bgColor)}>

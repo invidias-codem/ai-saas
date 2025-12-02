@@ -2,12 +2,11 @@
 
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { env } from '@/lib/env'; // Your environment variables
-import Replicate from 'replicate'; // Import the Replicate library
+import Replicate from "replicate";
 
-// Initialize the Replicate client
+// Initialize Replicate client
 const replicate = new Replicate({
-  auth: env.REPLICATE_API_TOKEN,
+  auth: process.env.REPLICATE_API_TOKEN!,
 });
 
 /**
