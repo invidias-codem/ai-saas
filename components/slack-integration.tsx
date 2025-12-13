@@ -124,7 +124,8 @@ export function SlackIntegration({ userId }: SlackIntegrationProps) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     
     if (appUrl) {
-      origin = appUrl;
+      // Remove trailing slash if present to avoid double slashes
+      origin = appUrl.replace(/\/$/, '');
     } else if (origin.startsWith('http://localhost')) {
       setConnecting(false);
       setErrorMessage(
