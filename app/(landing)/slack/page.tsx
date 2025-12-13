@@ -4,24 +4,17 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
 import { 
-  ChatBubbleIcon, 
   CodeIcon, 
   LightningBoltIcon,
   CheckIcon,
-  QuestionMarkCircledIcon,
 } from "@radix-ui/react-icons";
-import { Slack, MessageSquare, Bot, Zap, Shield, Clock, Users } from "lucide-react";
+import { Slack, MessageSquare, Bot, Zap, Shield, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const SlackLandingPage = () => {
-  // Construct the Add to Slack URL
-  const slackClientId = process.env.NEXT_PUBLIC_SLACK_CLIENT_ID || '';
-  const redirectUri = typeof window !== 'undefined' 
-    ? `${window.location.origin}/api/integrations/slack/callback`
-    : '';
-  const scopes = 'app_mentions:read,chat:write,commands,im:history,im:read,im:write,reactions:write,users:read';
-  
-  const addToSlackUrl = `https://slack.com/oauth/v2/authorize?client_id=${slackClientId}&scope=${scopes}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  // Redirect through our auth endpoint which handles the OAuth flow server-side
+  // This ensures the redirect_uri is constructed consistently
+  const addToSlackUrl = '/api/integrations/slack/auth';
 
   return (
     <div className="bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
@@ -77,7 +70,7 @@ const SlackLandingPage = () => {
           </p>
           
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-4">
-            <a href={addToSlackUrl} className="w-full sm:w-auto">
+            <Link href={addToSlackUrl} className="w-full sm:w-auto">
               <Button 
                 size="lg" 
                 className="w-full sm:w-auto bg-[#4A154B] hover:bg-[#3a1039] text-white rounded-xl text-lg px-8 py-6 shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2"
@@ -85,7 +78,7 @@ const SlackLandingPage = () => {
                 <Slack className="w-5 h-5" />
                 Add to Slack
               </Button>
-            </a>
+            </Link>
             <Link href="/sign-up" className="w-full sm:w-auto">
               <Button 
                 variant="outline" 
@@ -202,7 +195,7 @@ const SlackLandingPage = () => {
             <p className="text-gray-400 mb-8">
               Add Genie AI to your Slack workspace and start boosting your team&apos;s productivity today.
             </p>
-            <a href={addToSlackUrl}>
+            <Link href={addToSlackUrl}>
               <Button 
                 size="lg" 
                 className="bg-[#4A154B] hover:bg-[#3a1039] text-white rounded-xl text-lg px-10 py-6 shadow-lg"
@@ -210,7 +203,7 @@ const SlackLandingPage = () => {
                 <Slack className="w-5 h-5 mr-2" />
                 Add to Slack — It&apos;s Free
               </Button>
-            </a>
+            </Link>
           </div>
         </section>
       </main>
