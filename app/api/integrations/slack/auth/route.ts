@@ -15,14 +15,7 @@ export async function GET(req: Request) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    const { searchParams } = new URL(req.url);
-    const redirectUri = searchParams.get('redirect_uri');
-
-    if (!redirectUri) {
-      return new NextResponse('Missing redirect_uri parameter', { status: 400 });
-    }
-
-    // Get Client ID from environment - use SLACK_CLIENT_ID (not SLACK_APP_ID)
+    // Get Client ID from environment
     const clientId = process.env.SLACK_CLIENT_ID;
     if (!clientId) {
       console.error('[SLACK_AUTH] SLACK_CLIENT_ID not configured');
@@ -35,22 +28,40 @@ export async function GET(req: Request) {
       );
     }
 
-    // Generate state for CSRF protection
+    // Construct redirect URI on the server side to ensure consistency
+    // Use NEXT_PUBLIC_APP_URL if set, otherwise derive from request
+    let baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    
+    if (baseUrl) {
+      // Remove trailing slash if present
+      baseUrl = baseUrl.replace(/\/+$/, '');
+    } else {
+      // Fallback to request origin
+      const requestUrl = new URL(req.url);
+      baseUrl = requestUrl.origin;
+    }
+    
+    const redirectUri = `${baseUrl}/api/integrations/slack/callback`;
+
+    // Generate state for CSRF protection (includes userId and timestamp)
     const state = Buffer.from(`${userId}:${Date.now()}`).toString('base64');
 
-    // Redirect to Slack OAuth
+    // Build Slack OAuth URL
     const slackAuthUrl = new URL(SLACK_AUTH_URL);
     slackAuthUrl.searchParams.append('client_id', clientId);
     slackAuthUrl.searchParams.append('redirect_uri', redirectUri);
     slackAuthUrl.searchParams.append('response_type', 'code');
     slackAuthUrl.searchParams.append('state', state);
-    // Updated scopes for bot functionality
     slackAuthUrl.searchParams.append(
       'scope',
       'app_mentions:read,chat:write,commands,im:history,im:read,im:write,reactions:write,users:read'
     );
 
-    console.log('[SLACK_AUTH] Redirecting to Slack OAuth with client_id:', clientId.substring(0, 10) + '...');
+    console.log('[SLACK_AUTH] Initiating OAuth flow:', {
+      clientId: clientId.substring(0, 10) + '...',
+      redirectUri,
+      userId,
+    });
 
     return NextResponse.redirect(slackAuthUrl.toString());
   } catch (error: any) {

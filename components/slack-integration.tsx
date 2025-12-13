@@ -119,23 +119,8 @@ export function SlackIntegration({ userId }: SlackIntegrationProps) {
     setConnecting(true);
     setErrorMessage(null);
     
-    // Use environment variable for production URL, or current origin
-    let origin = window.location.origin;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    
-    if (appUrl) {
-      // Remove trailing slash if present to avoid double slashes
-      origin = appUrl.replace(/\/$/, '');
-    } else if (origin.startsWith('http://localhost')) {
-      setConnecting(false);
-      setErrorMessage(
-        'Development mode: Please set NEXT_PUBLIC_APP_URL to your ngrok URL to test Slack OAuth.'
-      );
-      return;
-    }
-    
-    const redirectUri = `${origin}/api/integrations/slack/callback`;
-    window.location.href = `/api/integrations/slack/auth?redirect_uri=${encodeURIComponent(redirectUri)}`;
+    // Simply redirect to the auth endpoint - it will construct the redirect_uri server-side
+    window.location.href = '/api/integrations/slack/auth';
   };
 
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
