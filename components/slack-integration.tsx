@@ -460,7 +460,7 @@ export function SlackIntegration({ userId }: SlackIntegrationProps) {
               )}
             </Button>
             <p className="text-xs text-center text-muted-foreground mt-3">
-              You'll be redirected to Slack to authorize the connection
+              You&apos;ll be redirected to Slack to authorize the connection
             </p>
           </div>
         </div>
