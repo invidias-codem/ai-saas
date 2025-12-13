@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardFooter } from "@/components/ui/card";
 import { amountOptions, resolutionOptions, formSchema } from "./constants";
+import { ShareIconButton } from "@/components/share-button";
 
 // Interface for a single Replicate prediction
 interface ReplicatePrediction {
@@ -249,20 +250,39 @@ const ImagePage = () => {
         )}
         {images.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-8">
-            {images.map((src) => (
-              <Card key={src} className="rounded-lg overflow-hidden">
+            {images.map((src, index) => (
+              <Card key={src} className="rounded-lg overflow-hidden group">
                 <div className="relative aspect-square">
                   <Image alt="Generated Image" fill src={src} />
+                  {/* Share button overlay - appears on hover */}
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <ShareIconButton
+                      content={{
+                        title: "AI Generated Image by Genie",
+                        text: `Check out this AI-generated image I created with Genie! 🎨`,
+                        url: src,
+                      }}
+                      className="bg-background/80 backdrop-blur-sm shadow-sm border"
+                    />
+                  </div>
                 </div>
-                <CardFooter className="p-2">
+                <CardFooter className="p-2 gap-2">
                   <Button
                     onClick={() => window.open(src)}
                     variant="secondary"
-                    className="w-full"
+                    className="flex-1"
                   >
                     <DownloadIcon className="h-4 w-4 mr-2" />
                     Download
                   </Button>
+                  <ShareIconButton
+                    content={{
+                      title: "AI Generated Image by Genie",
+                      text: `Check out this AI-generated image I created with Genie! 🎨`,
+                      url: src,
+                    }}
+                    className="md:hidden" // Show on mobile, hide on desktop (hover works there)
+                  />
                 </CardFooter>
               </Card>
             ))}

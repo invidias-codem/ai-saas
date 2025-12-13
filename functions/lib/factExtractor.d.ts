@@ -5,10 +5,15 @@ export interface ExtractedFact {
     type: FactType;
     content: string;
     confidence: number;
+    sentiment?: number;
     extractedAt: number;
     expiresAt?: number;
     conversationId?: string;
     scope: FactScope;
+    usageCount?: number;
+    impactScore?: number;
+    lastUsedAt?: number;
+    userRating?: number;
 }
 interface ExtractionResult {
     facts: ExtractedFact[];

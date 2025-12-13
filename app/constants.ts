@@ -19,7 +19,7 @@ export const routes = [
   {
     label: "Conversation",
     icon: MessageSquare,
-    href: "/under-construction/conversation", // Changed from /conversation
+    href: "/conversation",
     color: "text-violet-500",
   },
   {
@@ -43,7 +43,7 @@ export const routes = [
   {
     label: "Code Generation",
     icon: Code,
-    href: "/under-construction/code", // Changed from /code
+    href: "/code",
     color: "text-green-700",
   },
   {

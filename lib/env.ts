@@ -40,6 +40,9 @@ const envSchema = z.object({
   SLACK_BOT_TOKEN: z.string().optional(),
   SLACK_SIGNING_SECRET: z.string().optional(),
   SLACK_APP_ID: z.string().optional(),
+  SLACK_CLIENT_ID: z.string().optional(),
+  SLACK_CLIENT_SECRET: z.string().optional(),
+  NEXT_PUBLIC_SLACK_CLIENT_ID: z.string().optional(), // For client-side Add to Slack button
 });
 
 // Parse the environment variables and export the result

@@ -147,36 +147,49 @@ const LandingPage = () => {
       </main>
 
       {/* Footer */}
-      <footer className="py-10 border-t border-white/10 bg-[#111827] text-center">
-        <div className="flex justify-center gap-6 mb-6">
-          <div className="w-8 h-8 bg-white/10 rounded-full hover:bg-white/20 cursor-pointer transition" />
-          <div className="w-8 h-8 bg-white/10 rounded-full hover:bg-white/20 cursor-pointer transition" />
-          <div className="w-8 h-8 bg-white/10 rounded-full hover:bg-white/20 cursor-pointer transition" />
-        </div>
+      <footer className="py-10 border-t border-white/10 bg-[#111827]">
+        <div className="max-w-7xl mx-auto px-6">
+          {/* Links */}
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
+            <div className="flex items-center gap-2">
+              <div className="relative w-6 h-6">
+                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" /> 
+              </div>
+              <span className="text-lg font-bold text-white">Genie AI</span>
+            </div>
+            
+            <div className="flex items-center gap-6 text-sm text-gray-400">
+              <Link href="/slack" className="hover:text-white transition">Slack Integration</Link>
+              <Link href="/support" className="hover:text-white transition">Support</Link>
+              <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
+            </div>
+          </div>
 
-        {/* Scout Forge Badge */}
-        <div className="mb-8 flex justify-center">
-          <a 
-            href="https://scoutforge.net/reviews/genie-ai/" 
-            title="Trusted and reviewed by Scout Forge" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="hover:opacity-80 transition-opacity relative w-[250px] h-[54px] block" // Adjust height based on aspect ratio
-          >
-            {/* ✅ FIXED: Replaced <img> with <Image /> and set unoptimized={true} for external assets */}
-            <Image 
-              src="https://scoutforge.net/wp-content/themes/wp-theme/assets/img/badges/badge-light.webp" 
-              alt="Trusted and Reviewed by Scout Forge"
-              fill
-              className="object-contain"
-              unoptimized={true} 
-            />
-          </a>
-        </div>
+          {/* Scout Forge Badge */}
+          <div className="mb-8 flex justify-center">
+            <a 
+              href="https://scoutforge.net/reviews/genie-ai/" 
+              title="Trusted and reviewed by Scout Forge" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="hover:opacity-80 transition-opacity relative w-[250px] h-[54px] block"
+            >
+              <Image 
+                src="https://scoutforge.net/wp-content/themes/wp-theme/assets/img/badges/badge-light.webp" 
+                alt="Trusted and Reviewed by Scout Forge"
+                fill
+                className="object-contain"
+                unoptimized={true} 
+              />
+            </a>
+          </div>
 
-        <p className="text-gray-500 text-sm">
-          © {new Date().getFullYear()} Genie AI. All rights reserved.
-        </p>
+          <div className="pt-8 border-t border-white/10 text-center">
+            <p className="text-gray-500 text-sm">
+              © {new Date().getFullYear()} Genie AI. All rights reserved.
+            </p>
+          </div>
+        </div>
       </footer>
 
       {/* Pricing Modal */}

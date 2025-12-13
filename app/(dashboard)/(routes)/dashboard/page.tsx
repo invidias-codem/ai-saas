@@ -11,10 +11,9 @@ const tools = [
     icon: ChatBubbleIcon,
     color: "text-sky-500",
     bgColor: "bg-sky-500/10",
-    href: "/under-construction/conversation",
+    href: "/conversation",
     // Bento: Make the main chat feature prominent
     cols: "md:col-span-2",
-    status: "wip",
   },
   {
     label: "Juke Box",
@@ -43,11 +42,10 @@ const tools = [
   {
     label: "Code",
     icon: CodeIcon,
-    href: "/under-construction/code",
+    href: "/code",
     color: "text-green-400",
     bgColor: "bg-green-500/10",
     cols: "md:col-span-1",
-    status: "wip",
   },
 ];
 
@@ -80,13 +78,6 @@ const DashboardPage = () => {
                 "h-40 sm:h-48"
               )}
             >
-              {/* WIP Banner */}
-              {tool.status === "wip" && (
-                <div className="absolute top-3 -right-12 transform rotate-45 bg-amber-500 text-white text-xs font-bold px-12 py-1 shadow-md">
-                  WIP 🚧
-                </div>
-              )}
-
               {/* Header: Icon and Arrow */}
               <div className="flex items-start justify-between w-full">
                 <div className={cn("p-2 w-fit rounded-md transition-transform group-hover:scale-110", tool.bgColor)}>

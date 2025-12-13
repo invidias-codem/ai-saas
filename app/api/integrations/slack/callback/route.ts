@@ -3,99 +3,133 @@
  * Handles the OAuth redirect after user authorizes Slack app
  */
 
-import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import axios from 'axios';
-import { env } from '@/lib/env';
 
 const SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
 
 export async function GET(req: Request) {
   try {
-    const { userId } = auth();
-    if (!userId) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-
     const { searchParams } = new URL(req.url);
     const code = searchParams.get('code');
     const state = searchParams.get('state');
     const error = searchParams.get('error');
 
-    // Check for authorization errors
+    // Determine the base URL for redirects
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+
+    // Check for authorization errors from Slack
     if (error) {
-      return new NextResponse(
-        JSON.stringify({
-          error: 'Authorization denied',
-          details: error,
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      console.error('[SLACK_CALLBACK] Authorization error from Slack:', error);
+      const settingsUrl = new URL('/settings', baseUrl);
+      settingsUrl.searchParams.set('slack_error', error);
+      return NextResponse.redirect(settingsUrl.toString());
     }
 
     if (!code || !state) {
-      return new NextResponse('Invalid callback parameters', { status: 400 });
+      console.error('[SLACK_CALLBACK] Missing code or state parameter');
+      const settingsUrl = new URL('/settings', baseUrl);
+      settingsUrl.searchParams.set('slack_error', 'missing_parameters');
+      return NextResponse.redirect(settingsUrl.toString());
     }
 
-    // Verify state parameter
+    // Extract userId from state parameter (we encoded it during auth)
+    // State format: base64(userId:timestamp)
+    let stateUserId: string;
+    let stateTimestamp: number;
+    
     try {
-      const [stateUserId] = Buffer.from(state, 'base64').toString().split(':');
-      if (stateUserId !== userId) {
-        return new NextResponse('State mismatch - possible CSRF attack', {
-          status: 400,
-        });
+      const decodedState = Buffer.from(state, 'base64').toString();
+      const [userId, timestamp] = decodedState.split(':');
+      stateUserId = userId;
+      stateTimestamp = parseInt(timestamp, 10);
+      
+      // Verify state is not too old (10 minutes max)
+      const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+      if (stateTimestamp < tenMinutesAgo) {
+        console.error('[SLACK_CALLBACK] State expired');
+        const settingsUrl = new URL('/settings', baseUrl);
+        settingsUrl.searchParams.set('slack_error', 'state_expired');
+        return NextResponse.redirect(settingsUrl.toString());
       }
+      
+      console.log('[SLACK_CALLBACK] State validated for user:', stateUserId);
     } catch (err) {
-      return new NextResponse('Invalid state parameter', { status: 400 });
+      console.error('[SLACK_CALLBACK] Invalid state parameter:', err);
+      const settingsUrl = new URL('/settings', baseUrl);
+      settingsUrl.searchParams.set('slack_error', 'invalid_state');
+      return NextResponse.redirect(settingsUrl.toString());
     }
 
-    // Exchange code for access token
-    const tokenResponse = await axios.post(SLACK_TOKEN_URL, {
-      client_id: env.SLACK_APP_ID,
-      client_secret: process.env.SLACK_CLIENT_SECRET,
-      code,
+    // Get credentials from environment
+    const clientId = process.env.SLACK_CLIENT_ID;
+    const clientSecret = process.env.SLACK_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      console.error('[SLACK_CALLBACK] Missing SLACK_CLIENT_ID or SLACK_CLIENT_SECRET');
+      return new NextResponse('Slack integration not configured', { status: 500 });
+    }
+
+    // Exchange code for access token using form-urlencoded format
+    const tokenResponse = await fetch(SLACK_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code: code,
+      }),
     });
 
-    const {
-      access_token: botToken,
-      user_id: slackUserId,
-      channel: slackChannelId,
-      ok,
-    } = tokenResponse.data;
+    const tokenData = await tokenResponse.json();
 
-    if (!ok) {
-      return new NextResponse(
-        JSON.stringify({
-          error: 'Slack authorization failed',
-          details: tokenResponse.data.error,
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+    console.log('[SLACK_CALLBACK] Token response:', {
+      ok: tokenData.ok,
+      error: tokenData.error,
+      team: tokenData.team?.name,
+    });
+
+    if (!tokenData.ok) {
+      console.error('[SLACK_CALLBACK] Token exchange failed:', tokenData.error);
+      const settingsUrl = new URL('/settings', baseUrl);
+      settingsUrl.searchParams.set('slack_error', tokenData.error || 'token_exchange_failed');
+      return NextResponse.redirect(settingsUrl.toString());
     }
 
-    // TODO: Store bot token, user ID, channel in Firestore securely
-    // For now, return success response
-    // In production: Encrypt and store in user's integrations collection
+    // Successfully got tokens
+    const {
+      access_token: botToken,
+      authed_user,
+      team,
+      bot_user_id,
+    } = tokenData;
 
-    return new NextResponse(
-      JSON.stringify({
-        success: true,
-        message: 'Slack integration configured successfully',
-        // Don't expose tokens in response
-      }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
+    console.log('[SLACK_CALLBACK] Successfully authenticated:', {
+      team: team?.name,
+      botUserId: bot_user_id,
+      userId: authed_user?.id,
+      clerkUserId: stateUserId,
+    });
+
+    // Log the bot token (first 20 chars) for debugging
+    console.log('[SLACK_CALLBACK] Bot token received:', botToken?.substring(0, 20) + '...');
+
+    // TODO: Store bot token securely in Firestore for this user (stateUserId)
+    // For now, the bot token should be set as SLACK_BOT_TOKEN env var
+    // In production, you would store per-user tokens in the database
+
+    // Redirect to settings page with success
+    const settingsUrl = new URL('/settings', baseUrl);
+    settingsUrl.searchParams.set('slack_success', 'true');
+    settingsUrl.searchParams.set('slack_team', team?.name || 'Workspace');
+    return NextResponse.redirect(settingsUrl.toString());
+
   } catch (error: any) {
     console.error('[SLACK_CALLBACK_ERROR]', error);
-    return new NextResponse(
-      JSON.stringify({
-        error: 'Failed to complete Slack authentication',
-        details: error.message,
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+    const settingsUrl = new URL('/settings', baseUrl);
+    settingsUrl.searchParams.set('slack_error', 'callback_failed');
+    return NextResponse.redirect(settingsUrl.toString());
   }
 }

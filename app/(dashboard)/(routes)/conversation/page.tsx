@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {  Paperclip, AlertCircle } from "lucide-react";
+import { Paperclip, AlertCircle } from "lucide-react";
+import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/empty";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
@@ -352,34 +353,47 @@ export default function ConversationPage() {
             </div>
         )}
         {messages.map((msg, index) => (
-          <div key={index} className={cn("mb-4 flex items-start space-x-2 md:space-x-3", msg.role === "user" ? "justify-end" : "justify-start")}>
+          <div key={index} className={cn("mb-4 flex items-start space-x-2 md:space-x-3 group", msg.role === "user" ? "justify-end" : "justify-start")}>
             {msg.role === "bot" && (<Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>)}
-            <div className={cn("max-w-[85%] sm:max-w-[75%] rounded-lg shadow-sm p-3 text-sm break-words", msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted")}>
+            <div className={cn("max-w-[85%] sm:max-w-[75%] rounded-lg shadow-sm p-3 text-sm break-words relative", msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted")}>
               {msg.role === "bot" ? (
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    // ✅ ONLY ONE 'table' definition, pointing to our component
-                    table: RenderTableAsChart,
-                    // Standard markdown element styling
-                    pre: ({ node, ...props }) => <pre {...props} className="bg-muted p-2 rounded overflow-x-auto text-xs my-2" />,
-                    code({ node, className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || '');
-                      return match ? (
-                        <div className="my-2"> {/* Placeholder for CodeBlock */}
-                          <pre><code className={className} {...props}>{children}</code></pre>
-                        </div>
-                      ) : ( <code className={cn("bg-muted px-1 rounded text-xs", className)} {...props}>{children}</code> );
-                    },
-                    p: ({ node, ...props }) => <p {...props} className="mb-2 last:mb-0" />,
-                    ul: ({ node, ...props }) => <ul {...props} className="list-disc list-inside mb-2 pl-4" />,
-                    ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-inside mb-2 pl-4" />,
-                    li: ({ node, ...props }) => <li {...props} className="mb-1" />,
-                    blockquote: ({ node, ...props }) => <blockquote {...props} className="border-l-4 border-border pl-4 italic text-muted-foreground my-2" />,
-                  }}
-                >
-                  {msg.text}
-                </ReactMarkdown>
+                <>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      // ✅ ONLY ONE 'table' definition, pointing to our component
+                      table: RenderTableAsChart,
+                      // Standard markdown element styling
+                      pre: ({ node, ...props }) => <pre {...props} className="bg-muted p-2 rounded overflow-x-auto text-xs my-2" />,
+                      code({ node, className, children, ...props }) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        return match ? (
+                          <div className="my-2"> {/* Placeholder for CodeBlock */}
+                            <pre><code className={className} {...props}>{children}</code></pre>
+                          </div>
+                        ) : ( <code className={cn("bg-muted px-1 rounded text-xs", className)} {...props}>{children}</code> );
+                      },
+                      p: ({ node, ...props }) => <p {...props} className="mb-2 last:mb-0" />,
+                      ul: ({ node, ...props }) => <ul {...props} className="list-disc list-inside mb-2 pl-4" />,
+                      ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-inside mb-2 pl-4" />,
+                      li: ({ node, ...props }) => <li {...props} className="mb-1" />,
+                      blockquote: ({ node, ...props }) => <blockquote {...props} className="border-l-4 border-border pl-4 italic text-muted-foreground my-2" />,
+                    }}
+                  >
+                    {msg.text}
+                  </ReactMarkdown>
+                  {/* Share button - appears on hover */}
+                  <div className="absolute -bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <ShareIconButton
+                      content={{
+                        title: "Genie AI Response",
+                        text: msg.text.length > 280 ? msg.text.substring(0, 277) + "..." : msg.text,
+                        url: typeof window !== "undefined" ? window.location.href : undefined,
+                      }}
+                      className="bg-background shadow-sm border"
+                    />
+                  </div>
+                </>
               ) : (
                 <p className="whitespace-pre-wrap">{msg.text}</p>
               )}

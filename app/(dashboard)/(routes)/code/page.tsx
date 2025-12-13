@@ -17,6 +17,7 @@ import { CodeIcon, Paperclip } from "lucide-react"; // Use lucide-react icons
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/empty"; // Assuming EmptyState component exists
 import { PersonIcon } from "@radix-ui/react-icons";
+import { ShareIconButton } from "@/components/share-button";
 
 // Define the message structure
 interface Message {
@@ -211,33 +212,46 @@ export default function CodePage() {
 
         {/* Messages */}
         {messages.map((msg, index) => (
-          <div key={index} className={cn("mb-4 flex items-start space-x-2 md:space-x-3", msg.role === "user" ? "justify-end" : "justify-start")}>
+          <div key={index} className={cn("mb-4 flex items-start space-x-2 md:space-x-3 group", msg.role === "user" ? "justify-end" : "justify-start")}>
             {msg.role === "bot" && (<Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>)}
-            <div className={cn("max-w-[85%] sm:max-w-[75%] rounded-lg shadow-sm text-sm break-words", // Removed padding here, handled by markdown/codeblock
+            <div className={cn("max-w-[85%] sm:max-w-[75%] rounded-lg shadow-sm text-sm break-words relative", // Added relative for share button positioning
                                msg.role === "user" ? "bg-primary text-primary-foreground p-3" // Add padding back for user messages
                                                    : "bg-muted")}> {/* Bot messages get padding from children */}
               {msg.role === "bot" ? (
-                <ReactMarkdown
-                  components={{
-                    // Use CodeBlock component for fenced code blocks
-                    code({ node, className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || '');
-                      const codeString = String(children).replace(/\n$/, '');
-                      return match ? (
-                        <CodeBlock codeString={codeString} language={match[1]} />
-                      ) : (
-                        // Style inline code
-                        <code className={cn("bg-background px-1 rounded text-xs font-mono", className)} {...props}>
-                          {children}
-                        </code>
-                      );
-                    },
-                     // Add standard styling for paragraphs within bot messages
-                     p: ({ node, ...props }) => <p {...props} className="mb-2 last:mb-0 px-3 py-1" />, // Added padding to paragraphs
-                  }}
-                >
-                  {msg.text}
-                </ReactMarkdown>
+                <>
+                  <ReactMarkdown
+                    components={{
+                      // Use CodeBlock component for fenced code blocks
+                      code({ node, className, children, ...props }) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        const codeString = String(children).replace(/\n$/, '');
+                        return match ? (
+                          <CodeBlock codeString={codeString} language={match[1]} />
+                        ) : (
+                          // Style inline code
+                          <code className={cn("bg-background px-1 rounded text-xs font-mono", className)} {...props}>
+                            {children}
+                          </code>
+                        );
+                      },
+                       // Add standard styling for paragraphs within bot messages
+                       p: ({ node, ...props }) => <p {...props} className="mb-2 last:mb-0 px-3 py-1" />, // Added padding to paragraphs
+                    }}
+                  >
+                    {msg.text}
+                  </ReactMarkdown>
+                  {/* Share button - appears on hover */}
+                  <div className="absolute -bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <ShareIconButton
+                      content={{
+                        title: "Genie Code Response",
+                        text: msg.text.length > 280 ? msg.text.substring(0, 277) + "..." : msg.text,
+                        url: typeof window !== "undefined" ? window.location.href : undefined,
+                      }}
+                      className="bg-background shadow-sm border"
+                    />
+                  </div>
+                </>
               ) : (
                 <p className="whitespace-pre-wrap">{msg.text}</p> // User message text
               )}

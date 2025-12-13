@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { z } from 'zod';
 import EmptyState from '@/components/empty';
 import axios from 'axios';
+import { ShareButton } from '@/components/share-button';
 
 // ✅ Define the structure of the prediction object
 interface ReplicatePrediction {
@@ -167,10 +168,28 @@ const MusicPage = () => {
             <EmptyState label={'No music generated yet.'}/>
         )}
         {musicUrl && (
-          <audio controls className='w-full mt-8'>
-            <source src={musicUrl} type="audio/mpeg" /> 
-            Your browser does not support the audio element.
-          </audio>
+          <div className="mt-8 space-y-4">
+            <audio controls className='w-full'>
+              <source src={musicUrl} type="audio/mpeg" /> 
+              Your browser does not support the audio element.
+            </audio>
+            <div className="flex justify-center gap-2">
+              <Button
+                onClick={() => window.open(musicUrl)}
+                variant="secondary"
+              >
+                Download Track
+              </Button>
+              <ShareButton
+                content={{
+                  title: "AI Generated Music by Genie",
+                  text: "🎵 Check out this AI-generated track I created with Genie's Juke Box!",
+                  url: musicUrl,
+                }}
+                variant="outline"
+              />
+            </div>
+          </div>
         )}
       </div>
     </div>

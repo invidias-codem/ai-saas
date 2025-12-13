@@ -1,12 +1,29 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Heading } from "@/components/heading";
-import { Github, Slack, Trello, Brain, AlertCircle, CheckCircle2, Trash2, RotateCw, Settings } from "lucide-react";
+import { Github, Slack, Trello, Brain, AlertCircle, CheckCircle2, Trash2, RotateCw, Settings, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@clerk/nextjs";
+import SlackIntegration from "@/components/slack-integration";
+
+// Loading fallback for Slack integration
+function SlackIntegrationSkeleton() {
+  return (
+    <Card className="p-6 border-black/5">
+      <div className="flex items-center gap-3">
+        <div className="animate-pulse bg-gray-200 rounded-lg w-10 h-10" />
+        <div className="space-y-2 flex-1">
+          <div className="animate-pulse bg-gray-200 rounded h-4 w-32" />
+          <div className="animate-pulse bg-gray-200 rounded h-3 w-48" />
+        </div>
+        <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+      </div>
+    </Card>
+  );
+}
 
 // Define the Integration interface
 interface Integration {
@@ -43,22 +60,14 @@ interface FactAnalytics {
 
 const SettingsPage = () => {
   const { userId } = useAuth();
+  // Other integrations (Slack is handled separately above)
   const [integrations, setIntegrations] = useState<Integration[]>([
-    {
-      id: "slack",
-      label: "Slack",
-      description: "Connect to your Slack workspace",
-      icon: Slack,
-      connected: false,
-      color: "text-pink-700",
-      bgColor: "bg-pink-700/10",
-    },
     {
       id: "github",
       label: "GitHub",
       description: "Sync with your repositories",
       icon: Github,
-      connected: true,
+      connected: false,
       color: "text-slate-700",
       bgColor: "bg-slate-700/10",
     },
@@ -220,6 +229,13 @@ const SettingsPage = () => {
       />
 
       <div className="px-4 lg:px-8 space-y-6">
+        {/* Slack Integration Section */}
+        {userId && (
+          <Suspense fallback={<SlackIntegrationSkeleton />}>
+            <SlackIntegration userId={userId} />
+          </Suspense>
+        )}
+
         {/* Memory Bank Section */}
         {analytics && (
           <Card className="p-6 border-black/5">
@@ -362,9 +378,10 @@ const SettingsPage = () => {
           </Card>
         )}
 
-        {/* Integrations Card Section */}
+        {/* Other Integrations Card Section */}
         <Card className="p-4 border-black/5">
-          <h3 className="text-lg font-medium mb-4">Integrations</h3>
+          <h3 className="text-lg font-medium mb-2">Other Integrations</h3>
+          <p className="text-sm text-muted-foreground mb-4">Connect additional services to enhance your workflow</p>
           <div className="grid gap-4">
             {integrations.map((integration) => (
               <div

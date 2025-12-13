@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { z } from 'zod';
 import EmptyState from '@/components/empty';
 import axios from 'axios';
+import { ShareButton } from '@/components/share-button';
 
 // ✅ Define the structure of the prediction object we expect
 interface ReplicatePrediction {
@@ -263,20 +264,30 @@ const VideoPage = () => {
               <video
                 controls
                 controlsList="nodownload noremoteplayback"
-                className="w-full rounded-lg shadow-md mb-2"
+                className="w-full rounded-lg shadow-md mb-4"
                 src={videoUrl}
               >
                 Your browser does not support the video tag.
               </video>
-              <a
-                href={videoUrl}
-                download={`genie-video-${Date.now()}.mp4`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 w-full"
-              >
-                <DownloadIcon className="mr-2 h-4 w-4" /> Download Video
-              </a>
+              <div className="flex gap-2 w-full">
+                <a
+                  href={videoUrl}
+                  download={`genie-video-${Date.now()}.mp4`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                >
+                  <DownloadIcon className="mr-2 h-4 w-4" /> Download Video
+                </a>
+                <ShareButton
+                  content={{
+                    title: "AI Generated Video by Genie",
+                    text: "🎬 Check out this AI-generated video I created with Genie's Quick Clip!",
+                    url: videoUrl,
+                  }}
+                  variant="outline"
+                />
+              </div>
             </div>
           </div>
         )}

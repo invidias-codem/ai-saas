@@ -16,9 +16,17 @@ export default authMiddleware({
     "/", // Landing page
     "/sign-in",
     "/sign-up",
+    "/api/integrations/slack/callback", // Slack OAuth callback
+    "/api/integrations/slack/events",   // Slack Events API
+    "/api/integrations/slack/command",  // Slack slash commands
   ],
   
-  ignoredRoutes: ["/ws"],
+  ignoredRoutes: [
+    "/ws",
+    "/api/integrations/slack/callback", // Also ignore for Slack redirects
+    "/api/integrations/slack/events",   // Slack sends events without auth
+    "/api/integrations/slack/command",  // Slack sends commands without auth
+  ],
 
   afterAuth(auth, req) {
     // Handle public routes
