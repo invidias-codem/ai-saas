@@ -1,13 +1,14 @@
 /**
- * Slack Interactivity Handler (Multi-Tenant)
- * Handles button clicks, menu selections, and modal submissions from ANY workspace
+ * Slack Interactivity Handler (Multi-Tenant) v3.0
  * 
- * This endpoint receives interaction payloads from all installed workspaces.
- * It dynamically resolves the correct bot token for each workspace
- * using the team.id from the interaction payload.
+ * Enhanced with Agents & AI Apps features:
+ * - Feedback buttons (👍/👎) handling
+ * - Regenerate response functionality
+ * - Settings modal
+ * - Message shortcuts
  * 
  * Supported interaction types:
- * - block_actions: Button clicks, menu selections
+ * - block_actions: Button clicks, menu selections, feedback buttons
  * - view_submission: Modal form submissions
  * - shortcut: Global and message shortcuts
  */
@@ -17,9 +18,11 @@ import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
 import { db } from '@/lib/firebaseAdmin';
+import { createFeedbackBlocks, createStreamer } from '@/lib/slack/assistantHelpers';
+
 const SLACK_API_BASE = 'https://slack.com/api';
 
-// Initialize Gemini for regenerate functionality
+// Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
 const model = genAI.getGenerativeModel({
   model: "gemini-2.0-flash",
@@ -30,6 +33,13 @@ const model = genAI.getGenerativeModel({
     { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
   ],
 });
+
+const GENIE_SYSTEM_PROMPT = `You are 'Genie', a helpful AI assistant integrated with Slack. 
+You provide concise, helpful responses suitable for chat. 
+Keep responses brief but informative - Slack users prefer shorter messages.
+Use Slack markdown formatting: *bold*, _italic_, \`code\`, \`\`\`code blocks\`\`\`.
+When appropriate, use bullet points for clarity.
+Be friendly and professional.`;
 
 /**
  * Verify Slack request signature
@@ -124,6 +134,39 @@ async function sendSlackMessage(
 }
 
 /**
+ * Update an existing message
+ */
+async function updateSlackMessage(
+  token: string,
+  channel: string,
+  ts: string,
+  text: string,
+  blocks?: any[]
+): Promise<{ ok: boolean; error?: string }> {
+  const payload: Record<string, any> = {
+    channel,
+    ts,
+    text,
+    mrkdwn: true,
+  };
+
+  if (blocks) {
+    payload.blocks = blocks;
+  }
+
+  const response = await fetch(`${SLACK_API_BASE}/chat.update`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return response.json();
+}
+
+/**
  * Open a modal in Slack
  */
 async function openModal(
@@ -152,20 +195,20 @@ async function openModal(
 async function storeFeedback(
   teamId: string,
   userId: string,
-  messageTs: string,
-  feedbackType: 'helpful' | 'not_helpful',
-  context?: string
+  feedbackType: 'positive' | 'negative',
+  responseId: string,
+  prompt?: string
 ): Promise<void> {
   try {
     await db.collection('slackFeedback').add({
       teamId,
       userId,
-      messageTs,
       feedbackType,
-      context,
+      responseId,
+      prompt,
       timestamp: Date.now(),
     });
-    console.log('[SLACK_INTERACTIVITY] Stored feedback:', { teamId, feedbackType });
+    console.log('[SLACK_INTERACTIVITY] Stored feedback:', { teamId, feedbackType, responseId });
   } catch (error) {
     console.error('[SLACK_INTERACTIVITY] Failed to store feedback:', error);
   }
@@ -176,7 +219,26 @@ async function storeFeedback(
  */
 async function generateGenieResponse(prompt: string): Promise<string> {
   try {
-    const result = await model.generateContent(prompt);
+    const chat = model.startChat({
+      history: [
+        {
+          role: "user",
+          parts: [{ text: GENIE_SYSTEM_PROMPT }],
+        },
+        {
+          role: "model",
+          parts: [{ text: "I understand. I'm Genie, ready to help in Slack with concise, helpful responses." }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.8,
+        maxOutputTokens: 1024,
+      },
+    });
+
+    const result = await chat.sendMessage(prompt);
     return result.response.text();
   } catch (error) {
     console.error('[SLACK_INTERACTIVITY] Error generating response:', error);
@@ -185,7 +247,7 @@ async function generateGenieResponse(prompt: string): Promise<string> {
 }
 
 /**
- * Handle block_actions (button clicks, menu selections)
+ * Handle block_actions (button clicks, menu selections, feedback)
  */
 async function handleBlockActions(
   config: SlackConfig,
@@ -194,29 +256,147 @@ async function handleBlockActions(
   const { actions, user, channel, message, response_url, trigger_id } = payload;
 
   for (const action of actions) {
-    const { action_id, value, block_id } = action;
+    const { action_id, value, block_id, type: actionType } = action;
 
     console.log('[SLACK_INTERACTIVITY] Processing action:', {
       teamId: config.teamId,
       actionId: action_id,
+      actionType,
       userId: user?.id,
-      value,
     });
 
+    // ─────────────────────────────────────────────────────────────────
+    // Handle Feedback Buttons (new format from context_actions block)
+    // ─────────────────────────────────────────────────────────────────
+    if (action_id === 'genie_feedback') {
+      try {
+        // Parse the feedback value
+        const feedbackData = JSON.parse(value || '{}');
+        const feedbackType = feedbackData.type as 'positive' | 'negative';
+        const responseId = feedbackData.responseId;
+        const prompt = feedbackData.prompt;
+
+        // Store feedback
+        await storeFeedback(
+          config.teamId,
+          user.id,
+          feedbackType,
+          responseId,
+          prompt
+        );
+
+        // Update message to show feedback received
+        if (response_url) {
+          // Remove the feedback buttons and show thank you message
+          const updatedBlocks = message?.blocks?.map((block: any) => {
+            if (block.type === 'context_actions') {
+              return {
+                type: 'context',
+                elements: [
+                  {
+                    type: 'mrkdwn',
+                    text: feedbackType === 'positive' 
+                      ? '✅ _Thanks for the positive feedback!_'
+                      : '📝 _Thanks for your feedback! We\'ll work on improving._',
+                  },
+                ],
+              };
+            }
+            return block;
+          }) || [];
+
+          await updateMessageViaResponseUrl(response_url, {
+            text: message?.text || '',
+            blocks: updatedBlocks,
+            replace_original: true,
+          });
+        }
+        continue;
+      } catch (error) {
+        console.error('[SLACK_INTERACTIVITY] Error handling feedback:', error);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Handle Regenerate Button
+    // ─────────────────────────────────────────────────────────────────
+    if (action_id === 'genie_regenerate') {
+      try {
+        const regenerateData = JSON.parse(value || '{}');
+        const prompt = regenerateData.prompt;
+        const responseId = regenerateData.responseId;
+
+        if (!prompt) {
+          console.error('[SLACK_INTERACTIVITY] No prompt for regenerate');
+          continue;
+        }
+
+        // Show loading state
+        if (response_url) {
+          await updateMessageViaResponseUrl(response_url, {
+            text: '🔄 Regenerating response...',
+            blocks: [
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: '🔄 _Regenerating response..._',
+                },
+              },
+            ],
+            replace_original: true,
+          });
+        }
+
+        // Generate new response
+        const newResponse = await generateGenieResponse(prompt);
+        const newResponseId = `regen-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+        // Update with new response and feedback buttons
+        if (response_url) {
+          await updateMessageViaResponseUrl(response_url, {
+            text: newResponse,
+            blocks: [
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: newResponse,
+                },
+              },
+              ...createFeedbackBlocks(newResponseId, prompt),
+              {
+                type: 'context',
+                elements: [
+                  {
+                    type: 'mrkdwn',
+                    text: '_🔄 Response regenerated_',
+                  },
+                ],
+              },
+            ],
+            replace_original: true,
+          });
+        }
+        continue;
+      } catch (error) {
+        console.error('[SLACK_INTERACTIVITY] Error regenerating:', error);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Legacy Feedback Actions (for backwards compatibility)
+    // ─────────────────────────────────────────────────────────────────
     switch (action_id) {
-      // ─────────────────────────────────────────────────────────────────
-      // Feedback Actions
-      // ─────────────────────────────────────────────────────────────────
       case 'feedback_helpful':
         await storeFeedback(
           config.teamId,
           user.id,
+          'positive',
           message?.ts || '',
-          'helpful',
           value
         );
         
-        // Update the message to show feedback received
         if (response_url) {
           await updateMessageViaResponseUrl(response_url, {
             text: message?.text || '',
@@ -241,12 +421,11 @@ async function handleBlockActions(
         await storeFeedback(
           config.teamId,
           user.id,
+          'negative',
           message?.ts || '',
-          'not_helpful',
           value
         );
         
-        // Update the message to show feedback received
         if (response_url) {
           await updateMessageViaResponseUrl(response_url, {
             text: message?.text || '',
@@ -267,12 +446,8 @@ async function handleBlockActions(
         }
         break;
 
-      // ─────────────────────────────────────────────────────────────────
-      // Regenerate Response
-      // ─────────────────────────────────────────────────────────────────
       case 'regenerate_response':
         if (response_url && value) {
-          // Show loading state
           await updateMessageViaResponseUrl(response_url, {
             text: '🔄 Regenerating response...',
             blocks: [
@@ -287,10 +462,9 @@ async function handleBlockActions(
             replace_original: true,
           });
 
-          // Generate new response
           const newResponse = await generateGenieResponse(value);
+          const newResponseId = `regen-${Date.now()}`;
 
-          // Update with new response
           await updateMessageViaResponseUrl(response_url, {
             text: newResponse,
             blocks: [
@@ -301,29 +475,7 @@ async function handleBlockActions(
                   text: `🧞 *Genie:*\n${newResponse}`,
                 },
               },
-              {
-                type: 'actions',
-                elements: [
-                  {
-                    type: 'button',
-                    text: { type: 'plain_text', text: '👍', emoji: true },
-                    action_id: 'feedback_helpful',
-                    value: value,
-                  },
-                  {
-                    type: 'button',
-                    text: { type: 'plain_text', text: '👎', emoji: true },
-                    action_id: 'feedback_not_helpful',
-                    value: value,
-                  },
-                  {
-                    type: 'button',
-                    text: { type: 'plain_text', text: '🔄 Regenerate', emoji: true },
-                    action_id: 'regenerate_response',
-                    value: value,
-                  },
-                ],
-              },
+              ...createFeedbackBlocks(newResponseId, value),
               {
                 type: 'context',
                 elements: [
@@ -339,100 +491,6 @@ async function handleBlockActions(
         }
         break;
 
-      // ──────────────────────────────────────────���──────────────────────
-      // Expand/Show More
-      // ─────────────────────────────────────────────────────────────────
-      case 'expand_response':
-        if (response_url && value) {
-          // Show loading state
-          await updateMessageViaResponseUrl(response_url, {
-            text: '📖 Expanding response...',
-            blocks: [
-              ...(message?.blocks?.filter((b: any) => b.type !== 'actions') || []),
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: '📖 _Expanding response..._',
-                },
-              },
-            ],
-            replace_original: true,
-          });
-
-          // Generate expanded response
-          const expandedPrompt = `Please provide a more detailed and comprehensive explanation of the following topic. Include examples, use cases, and any relevant details: ${value}`;
-          const expandedResponse = await generateGenieResponse(expandedPrompt);
-
-          // Update with expanded response
-          await updateMessageViaResponseUrl(response_url, {
-            text: expandedResponse,
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: `📖 *Expanded Response:*\n${expandedResponse}`,
-                },
-              },
-              {
-                type: 'actions',
-                elements: [
-                  {
-                    type: 'button',
-                    text: { type: 'plain_text', text: '👍', emoji: true },
-                    action_id: 'feedback_helpful',
-                    value: value,
-                  },
-                  {
-                    type: 'button',
-                    text: { type: 'plain_text', text: '👎', emoji: true },
-                    action_id: 'feedback_not_helpful',
-                    value: value,
-                  },
-                ],
-              },
-            ],
-            replace_original: true,
-          });
-        }
-        break;
-
-      // ─────────────────────────────────────────────────────────────────
-      // Save to Memory
-      // ─────────────────────────────────────────────────────────────────
-      case 'save_to_memory':
-        if (value) {
-          try {
-            // Store in user's memory collection
-            await db
-              .collection('slackMemories')
-              .add({
-                teamId: config.teamId,
-                userId: user.id,
-                content: value,
-                source: 'slack_interaction',
-                messageTs: message?.ts,
-                channelId: channel?.id,
-                timestamp: Date.now(),
-              });
-
-            if (response_url) {
-              await updateMessageViaResponseUrl(response_url, {
-                text: '💾 Saved to memory!',
-                response_type: 'ephemeral',
-                replace_original: false,
-              });
-            }
-          } catch (error) {
-            console.error('[SLACK_INTERACTIVITY] Failed to save to memory:', error);
-          }
-        }
-        break;
-
-      // ─────────────────────────────────────────────────────────────────
-      // Open Settings Modal
-      // ─────────────────────────────────────────────────────────────────
       case 'open_settings':
         if (trigger_id) {
           await openModal(config.botToken, trigger_id, {
@@ -517,7 +575,9 @@ async function handleBlockActions(
         break;
 
       default:
-        console.log('[SLACK_INTERACTIVITY] Unknown action:', action_id);
+        if (!['genie_feedback', 'genie_regenerate'].includes(action_id)) {
+          console.log('[SLACK_INTERACTIVITY] Unknown action:', action_id);
+        }
     }
   }
 }
@@ -530,7 +590,7 @@ async function handleViewSubmission(
   payload: any
 ): Promise<{ response_action?: string; errors?: Record<string, string> }> {
   const { view, user } = payload;
-  const { callback_id, state } = view;
+  const { callback_id, state, private_metadata } = view;
 
   console.log('[SLACK_INTERACTIVITY] Processing view submission:', {
     teamId: config.teamId,
@@ -547,7 +607,6 @@ async function handleViewSubmission(
           (opt: any) => opt.value
         ) || [];
 
-        // Store user preferences
         await db
           .collection('slackUserPreferences')
           .doc(`${config.teamId}_${user.id}`)
@@ -562,14 +621,7 @@ async function handleViewSubmission(
             { merge: true }
           );
 
-        console.log('[SLACK_INTERACTIVITY] Saved user preferences:', {
-          teamId: config.teamId,
-          userId: user.id,
-          responseStyle,
-          notifications,
-        });
-
-        // Return empty object to close the modal
+        console.log('[SLACK_INTERACTIVITY] Saved user preferences');
         return {};
       } catch (error) {
         console.error('[SLACK_INTERACTIVITY] Failed to save preferences:', error);
@@ -577,6 +629,63 @@ async function handleViewSubmission(
           response_action: 'errors',
           errors: {
             response_style: 'Failed to save settings. Please try again.',
+          },
+        };
+      }
+
+    case 'ask_genie_modal':
+      try {
+        const values = state?.values || {};
+        const question = values.question_block?.question_input?.value;
+        const metadata = private_metadata ? JSON.parse(private_metadata) : {};
+        const channelId = metadata.channelId;
+
+        if (question && channelId) {
+          // Generate response
+          const response = await generateGenieResponse(question);
+          const responseId = `modal-${Date.now()}`;
+
+          // Send response to channel
+          await sendSlackMessage(
+            config.botToken,
+            channelId,
+            response,
+            [
+              {
+                type: 'context',
+                elements: [
+                  {
+                    type: 'mrkdwn',
+                    text: `🧞 *Genie* • Asked by <@${user.id}>`,
+                  },
+                ],
+              },
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `*Q:* ${question}`,
+                },
+              },
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: response,
+                },
+              },
+              ...createFeedbackBlocks(responseId, question),
+            ]
+          );
+        }
+
+        return {};
+      } catch (error) {
+        console.error('[SLACK_INTERACTIVITY] Failed to process question:', error);
+        return {
+          response_action: 'errors',
+          errors: {
+            question_block: 'Failed to process your question. Please try again.',
           },
         };
       }
@@ -604,7 +713,6 @@ async function handleShortcut(
 
   switch (callback_id) {
     case 'ask_genie':
-      // Open a modal to ask Genie
       await openModal(config.botToken, trigger_id, {
         type: 'modal',
         title: {
@@ -644,11 +752,11 @@ async function handleShortcut(
       break;
 
     case 'summarize_message':
-      // Summarize the selected message
       if (message?.text) {
         const summary = await generateGenieResponse(
           `Please summarize the following message concisely: ${message.text}`
         );
+        const responseId = `summary-${Date.now()}`;
 
         await sendSlackMessage(
           config.botToken,
@@ -656,12 +764,57 @@ async function handleShortcut(
           summary,
           [
             {
+              type: 'context',
+              elements: [
+                {
+                  type: 'mrkdwn',
+                  text: `📝 *Summary* • Requested by <@${user.id}>`,
+                },
+              ],
+            },
+            {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `📝 *Summary:*\n${summary}`,
+                text: summary,
               },
             },
+            ...createFeedbackBlocks(responseId, message.text),
+          ],
+          message.ts
+        );
+      }
+      break;
+
+    case 'explain_message':
+      if (message?.text) {
+        const explanation = await generateGenieResponse(
+          `Please explain the following message in simple terms: ${message.text}`
+        );
+        const responseId = `explain-${Date.now()}`;
+
+        await sendSlackMessage(
+          config.botToken,
+          channel.id,
+          explanation,
+          [
+            {
+              type: 'context',
+              elements: [
+                {
+                  type: 'mrkdwn',
+                  text: `📚 *Explanation* • Requested by <@${user.id}>`,
+                },
+              ],
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: explanation,
+              },
+            },
+            ...createFeedbackBlocks(responseId, message.text),
           ],
           message.ts
         );
@@ -689,7 +842,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Parse the payload (Slack sends as application/x-www-form-urlencoded)
+    // Parse the payload
     const params = new URLSearchParams(rawBody);
     const payloadString = params.get('payload');
 
@@ -707,18 +860,14 @@ export async function POST(req: Request) {
       userId: payload.user?.id,
     });
 
-    // ───────────────────────────────────────────────────────��─────────
-    // Extract Team ID (CRITICAL FOR MULTI-TENANCY)
-    // ─────────────────────────────────────────────────────────────────
+    // Extract Team ID
     const teamId = team?.id;
     if (!teamId) {
       console.error('[SLACK_INTERACTIVITY] No team_id in payload');
       return NextResponse.json({ ok: false, error: 'Missing team_id' });
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // Fetch Dynamic Credentials for this Workspace
-    // ─────────────────────────────────────────────────────────────────
+    // Fetch workspace config
     let config: SlackConfig;
     try {
       config = await getSlackConfig(teamId);
@@ -730,25 +879,20 @@ export async function POST(req: Request) {
       });
     }
 
-    // ──────────────────────────────��──────────────────────────────────
-    // Handle Different Interaction Types
-    // ─────────────────────────────────────────────────────────────────
+    // Handle different interaction types
     switch (type) {
       case 'block_actions':
-        // Process asynchronously, respond immediately
         handleBlockActions(config, payload).catch((err) =>
           console.error('[SLACK_INTERACTIVITY] block_actions error:', err)
         );
         return NextResponse.json({ ok: true });
 
       case 'view_submission':
-        // Must respond synchronously for modals
         const viewResponse = await handleViewSubmission(config, payload);
         return NextResponse.json(viewResponse);
 
       case 'shortcut':
       case 'message_action':
-        // Process asynchronously, respond immediately
         handleShortcut(config, payload).catch((err) =>
           console.error('[SLACK_INTERACTIVITY] shortcut error:', err)
         );
@@ -768,7 +912,14 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   return NextResponse.json({
     status: 'Slack Interactivity endpoint active',
-    version: '2.0.0',
+    version: '3.0.0',
+    features: [
+      'multi-tenant',
+      'feedback-buttons',
+      'regenerate',
+      'settings-modal',
+      'shortcuts',
+    ],
     timestamp: new Date().toISOString(),
   });
 }

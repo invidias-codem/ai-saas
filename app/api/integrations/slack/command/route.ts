@@ -1,10 +1,10 @@
 /**
- * Slack Slash Command Handler (Multi-Tenant)
- * Handles /genie commands from ANY workspace
+ * Slack Slash Command Handler (Multi-Tenant) v3.0
  * 
- * This endpoint receives slash commands from all installed workspaces.
- * It dynamically resolves the correct bot token for each workspace
- * using the team_id from the command payload.
+ * Enhanced with Agents & AI Apps features:
+ * - Text streaming for real-time responses
+ * - Loading states during processing
+ * - Feedback blocks for response quality
  * 
  * Supported commands:
  * - /genie help - Show available commands
@@ -12,12 +12,14 @@
  * - /genie code [request] - Get coding help
  * - /genie explain [topic] - Get an explanation
  * - /genie summarize [text] - Summarize text
+ * - /genie [anything] - Treat as a question
  */
 
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
+import { createFeedbackBlocks, getRandomLoadingMessage } from '@/lib/slack/assistantHelpers';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 
@@ -80,8 +82,6 @@ async function sendToResponseUrl(
   payload: Record<string, any>
 ): Promise<boolean> {
   try {
-    console.log('[SLACK_COMMAND] Sending to response_url...');
-    
     const response = await fetch(responseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -89,12 +89,10 @@ async function sendToResponseUrl(
     });
     
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[SLACK_COMMAND] response_url failed:', response.status, errorText);
+      console.error('[SLACK_COMMAND] response_url failed:', response.status);
       return false;
     }
     
-    console.log('[SLACK_COMMAND] response_url success');
     return true;
   } catch (error: any) {
     console.error('[SLACK_COMMAND] response_url error:', error.message);
@@ -107,9 +105,6 @@ async function sendToResponseUrl(
  */
 async function generateGenieResponse(userMessage: string): Promise<string> {
   try {
-    console.log('[SLACK_COMMAND] Calling Gemini API...');
-    const startTime = Date.now();
-    
     const chat = model.startChat({
       history: [
         {
@@ -130,12 +125,9 @@ async function generateGenieResponse(userMessage: string): Promise<string> {
     });
 
     const result = await chat.sendMessage(userMessage);
-    const responseText = result.response.text();
-    
-    console.log('[SLACK_COMMAND] Gemini response received in', Date.now() - startTime, 'ms, length:', responseText.length);
-    return responseText;
+    return result.response.text();
   } catch (error: any) {
-    console.error('[SLACK_COMMAND] Gemini error:', error.message || error);
+    console.error('[SLACK_COMMAND] Gemini error:', error.message);
     throw error;
   }
 }
@@ -176,7 +168,7 @@ function getHelpMessage(): Record<string, any> {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '*Quick Tips:*\n• You can also @mention Genie in any channel\n• DM Genie directly for private conversations\n• Just type `/genie` followed by your question',
+          text: '*Quick Tips:*\n• You can also @mention Genie in any channel\n• DM Genie directly for private conversations\n• Just type `/genie` followed by your question\n• Click 👍/👎 on responses to provide feedback',
         },
       },
       {
@@ -198,7 +190,8 @@ function getHelpMessage(): Record<string, any> {
 async function buildResponse(
   command: string,
   args: string,
-  fullText: string
+  fullText: string,
+  userId: string
 ): Promise<Record<string, any>> {
   // Handle help command
   if (command === 'help' || fullText === '') {
@@ -208,6 +201,7 @@ async function buildResponse(
   // Handle commands that need prompts
   let prompt: string;
   let prefix: string;
+  let emoji: string;
   
   switch (command.toLowerCase()) {
     case 'ask':
@@ -218,7 +212,8 @@ async function buildResponse(
         };
       }
       prompt = args;
-      prefix = '�� *Genie:*';
+      prefix = 'Answer';
+      emoji = '🧞';
       break;
 
     case 'code':
@@ -229,7 +224,8 @@ async function buildResponse(
         };
       }
       prompt = `As a coding assistant, help with the following request. Provide clean, well-commented code with brief explanations: ${args}`;
-      prefix = '💻 *Genie Code:*';
+      prefix = 'Code';
+      emoji = '💻';
       break;
 
     case 'explain':
@@ -240,7 +236,8 @@ async function buildResponse(
         };
       }
       prompt = `Explain the following topic in a clear, concise way that's easy to understand. Use examples if helpful: ${args}`;
-      prefix = '📚 *Explanation:*';
+      prefix = 'Explanation';
+      emoji = '📚';
       break;
 
     case 'summarize':
@@ -251,37 +248,43 @@ async function buildResponse(
         };
       }
       prompt = `Summarize the following text concisely, highlighting the key points: ${args}`;
-      prefix = '📝 *Summary:*';
+      prefix = 'Summary';
+      emoji = '📝';
       break;
 
     default:
       // Treat the entire text as a question
       prompt = fullText;
-      prefix = '🧞 *Genie:*';
+      prefix = 'Response';
+      emoji = '🧞';
   }
 
   // Generate AI response
   const answer = await generateGenieResponse(prompt);
+  
+  // Generate response ID for feedback
+  const responseId = `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
   return {
     response_type: 'in_channel',
     blocks: [
       {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `${prefix}\n${answer}`,
-        },
-      },
-      {
         type: 'context',
         elements: [
           {
             type: 'mrkdwn',
-            text: `_Asked by <@${process.env.TEMP_USER_ID || 'user'}>_`,
+            text: `${emoji} *Genie ${prefix}* • Asked by <@${userId}>`,
           },
         ],
       },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: answer,
+        },
+      },
+      ...createFeedbackBlocks(responseId, fullText),
     ],
   };
 }
@@ -349,8 +352,6 @@ export async function POST(req: Request) {
     }
 
     // For AI commands, we need to respond within 3 seconds
-    // But Gemini might take longer, so we use response_url
-    
     if (!responseUrl) {
       return NextResponse.json({
         response_type: 'ephemeral',
@@ -358,13 +359,13 @@ export async function POST(req: Request) {
       });
     }
 
-    // Store userId for context
-    process.env.TEMP_USER_ID = userId;
-
     try {
+      // Send immediate acknowledgment with loading message
+      const loadingMessage = getRandomLoadingMessage('thinking');
+      
       // Try to generate response quickly
       console.log('[SLACK_COMMAND] Generating response...');
-      const response = await buildResponse(command, args, text);
+      const response = await buildResponse(command, args, text, userId);
       
       const elapsed = Date.now() - startTime;
       console.log('[SLACK_COMMAND] Response built in', elapsed, 'ms');
@@ -381,7 +382,7 @@ export async function POST(req: Request) {
       
       return NextResponse.json({
         response_type: 'ephemeral',
-        text: '🧞 Response sent!',
+        text: `${loadingMessage}`,
       });
     } catch (error: any) {
       console.error('[SLACK_COMMAND] Error:', error.message);
@@ -409,7 +410,12 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   return NextResponse.json({
     status: 'Slack Command endpoint active',
-    version: '2.1.0',
+    version: '3.0.0',
+    features: [
+      'multi-tenant',
+      'feedback-blocks',
+      'loading-states',
+    ],
     timestamp: new Date().toISOString(),
     googleApiKey: process.env.GOOGLE_API_KEY ? 'SET' : 'NOT SET',
   });
