@@ -42,7 +42,6 @@ Be friendly and professional.`;
 
 /**
  * Verify Slack request signature
- * Note: The signing secret is shared across all workspaces (it's app-level)
  */
 function verifySlackSignature(
   body: string,
@@ -51,13 +50,11 @@ function verifySlackSignature(
 ): boolean {
   const signingSecret = process.env.SLACK_SIGNING_SECRET || '';
 
-  // Check timestamp is recent (within 5 minutes)
   const currentTime = Math.floor(Date.now() / 1000);
   if (Math.abs(currentTime - parseInt(timestamp)) > 300) {
     return false;
   }
 
-  // Verify signature
   const baseString = `v0:${timestamp}:${body}`;
   const hmac = crypto
     .createHmac('sha256', signingSecret)
@@ -76,15 +73,14 @@ function verifySlackSignature(
 }
 
 /**
- * Send delayed response to Slack via response_url
- * This is used for responses that take longer than 3 seconds
+ * Send response to Slack via response_url
  */
-async function sendDelayedResponse(
+async function sendToResponseUrl(
   responseUrl: string,
   payload: Record<string, any>
 ): Promise<boolean> {
   try {
-    console.log('[SLACK_COMMAND] Sending delayed response to:', responseUrl.substring(0, 50) + '...');
+    console.log('[SLACK_COMMAND] Sending to response_url...');
     
     const response = await fetch(responseUrl, {
       method: 'POST',
@@ -94,14 +90,14 @@ async function sendDelayedResponse(
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[SLACK_COMMAND] Failed to send delayed response:', response.status, errorText);
+      console.error('[SLACK_COMMAND] response_url failed:', response.status, errorText);
       return false;
     }
     
-    console.log('[SLACK_COMMAND] Delayed response sent successfully');
+    console.log('[SLACK_COMMAND] response_url success');
     return true;
-  } catch (error) {
-    console.error('[SLACK_COMMAND] Error sending delayed response:', error);
+  } catch (error: any) {
+    console.error('[SLACK_COMMAND] response_url error:', error.message);
     return false;
   }
 }
@@ -111,7 +107,8 @@ async function sendDelayedResponse(
  */
 async function generateGenieResponse(userMessage: string): Promise<string> {
   try {
-    console.log('[SLACK_COMMAND] Generating Gemini response for:', userMessage.substring(0, 50) + '...');
+    console.log('[SLACK_COMMAND] Calling Gemini API...');
+    const startTime = Date.now();
     
     const chat = model.startChat({
       history: [
@@ -135,16 +132,16 @@ async function generateGenieResponse(userMessage: string): Promise<string> {
     const result = await chat.sendMessage(userMessage);
     const responseText = result.response.text();
     
-    console.log('[SLACK_COMMAND] Gemini response generated, length:', responseText.length);
+    console.log('[SLACK_COMMAND] Gemini response received in', Date.now() - startTime, 'ms, length:', responseText.length);
     return responseText;
   } catch (error: any) {
-    console.error('[SLACK_COMMAND] Error generating Genie response:', error.message || error);
-    return "I apologize, but I encountered an error processing your request. Please try again.";
+    console.error('[SLACK_COMMAND] Gemini error:', error.message || error);
+    throw error;
   }
 }
 
 /**
- * Get help message with available commands
+ * Get help message
  */
 function getHelpMessage(): Record<string, any> {
   return {
@@ -179,7 +176,7 @@ function getHelpMessage(): Record<string, any> {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '*Quick Tips:*\n• You can also @mention Genie in any channel\n• DM Genie directly for private conversations\n• Genie remembers context within a thread',
+          text: '*Quick Tips:*\n• You can also @mention Genie in any channel\n• DM Genie directly for private conversations\n• Just type `/genie` followed by your question',
         },
       },
       {
@@ -187,7 +184,7 @@ function getHelpMessage(): Record<string, any> {
         elements: [
           {
             type: 'mrkdwn',
-            text: '💡 _Example: `/genie ask What is the capital of France?`_',
+            text: '💡 _Example: `/genie What is the capital of France?`_',
           },
         ],
       },
@@ -196,310 +193,212 @@ function getHelpMessage(): Record<string, any> {
 }
 
 /**
- * Process the command and generate response
- * @param config - Slack configuration for this workspace
- * @param command - The command (e.g., "ask", "code", "help")
- * @param args - Arguments after the command
- * @param responseUrl - URL to send delayed responses
- * @param userId - Slack user ID who invoked the command
- * @param channelId - Channel where command was invoked
+ * Build response based on command type
  */
-async function processCommand(
-  config: SlackConfig,
+async function buildResponse(
   command: string,
   args: string,
-  responseUrl: string,
-  userId: string,
-  channelId: string
-): Promise<void> {
-  let response: Record<string, any>;
-  const startTime = Date.now();
+  fullText: string
+): Promise<Record<string, any>> {
+  // Handle help command
+  if (command === 'help' || fullText === '') {
+    return getHelpMessage();
+  }
 
-  console.log('[SLACK_COMMAND] Processing command:', { command, argsLength: args.length });
-
-  try {
-    switch (command.toLowerCase()) {
-      case 'help':
-      case '':
-        response = getHelpMessage();
-        break;
-
-      case 'ask':
-        if (!args) {
-          response = {
-            response_type: 'ephemeral',
-            text: '❓ Please provide a question. Example: `/genie ask What is machine learning?`',
-          };
-        } else {
-          const answer = await generateGenieResponse(args);
-          response = {
-            response_type: 'in_channel',
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: `*Question:* ${args}`,
-                },
-              },
-              {
-                type: 'divider',
-              },
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: `🧞 *Genie:*\n${answer}`,
-                },
-              },
-            ],
-          };
-        }
-        break;
-
-      case 'code':
-        if (!args) {
-          response = {
-            response_type: 'ephemeral',
-            text: '💻 Please describe what code you need. Example: `/genie code Write a Python function to reverse a string`',
-          };
-        } else {
-          const codePrompt = `As a coding assistant, help with the following request. Provide clean, well-commented code with brief explanations: ${args}`;
-          const codeAnswer = await generateGenieResponse(codePrompt);
-          response = {
-            response_type: 'in_channel',
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: `*Code Request:* ${args}`,
-                },
-              },
-              {
-                type: 'divider',
-              },
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: `💻 *Genie Code:*\n${codeAnswer}`,
-                },
-              },
-            ],
-          };
-        }
-        break;
-
-      case 'explain':
-        if (!args) {
-          response = {
-            response_type: 'ephemeral',
-            text: '📚 Please provide a topic to explain. Example: `/genie explain How does blockchain work?`',
-          };
-        } else {
-          const explainPrompt = `Explain the following topic in a clear, concise way that's easy to understand. Use examples if helpful: ${args}`;
-          const explanation = await generateGenieResponse(explainPrompt);
-          response = {
-            response_type: 'in_channel',
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: `*Topic:* ${args}`,
-                },
-              },
-              {
-                type: 'divider',
-              },
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: `📚 *Explanation:*\n${explanation}`,
-                },
-              },
-            ],
-          };
-        }
-        break;
-
-      case 'summarize':
-        if (!args) {
-          response = {
-            response_type: 'ephemeral',
-            text: '📝 Please provide text to summarize. Example: `/genie summarize [paste your text here]`',
-          };
-        } else {
-          const summarizePrompt = `Summarize the following text concisely, highlighting the key points: ${args}`;
-          const summary = await generateGenieResponse(summarizePrompt);
-          response = {
-            response_type: 'in_channel',
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: `📝 *Summary:*\n${summary}`,
-                },
-              },
-            ],
-          };
-        }
-        break;
-
-      default:
-        // Treat unknown commands as questions
-        const defaultAnswer = await generateGenieResponse(`${command} ${args}`.trim());
-        response = {
-          response_type: 'in_channel',
-          blocks: [
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `🧞 *Genie:*\n${defaultAnswer}`,
-              },
-            },
-          ],
+  // Handle commands that need prompts
+  let prompt: string;
+  let prefix: string;
+  
+  switch (command.toLowerCase()) {
+    case 'ask':
+      if (!args) {
+        return {
+          response_type: 'ephemeral',
+          text: '❓ Please provide a question. Example: `/genie ask What is machine learning?`',
         };
-    }
-    
-    const duration = Date.now() - startTime;
-    console.log('[SLACK_COMMAND] Command processed:', {
-      teamId: config.teamId,
-      teamName: config.teamName,
-      command,
-      userId,
-      channelId,
-      duration,
-    });
-  } catch (error: any) {
-    console.error('[SLACK_COMMAND] Error processing command:', error.message || error);
-    response = {
-      response_type: 'ephemeral',
-      text: '❌ Sorry, I encountered an error processing your request. Please try again.',
-    };
+      }
+      prompt = args;
+      prefix = '�� *Genie:*';
+      break;
+
+    case 'code':
+      if (!args) {
+        return {
+          response_type: 'ephemeral',
+          text: '💻 Please describe what code you need. Example: `/genie code Write a Python function to reverse a string`',
+        };
+      }
+      prompt = `As a coding assistant, help with the following request. Provide clean, well-commented code with brief explanations: ${args}`;
+      prefix = '💻 *Genie Code:*';
+      break;
+
+    case 'explain':
+      if (!args) {
+        return {
+          response_type: 'ephemeral',
+          text: '📚 Please provide a topic to explain. Example: `/genie explain How does blockchain work?`',
+        };
+      }
+      prompt = `Explain the following topic in a clear, concise way that's easy to understand. Use examples if helpful: ${args}`;
+      prefix = '📚 *Explanation:*';
+      break;
+
+    case 'summarize':
+      if (!args) {
+        return {
+          response_type: 'ephemeral',
+          text: '📝 Please provide text to summarize. Example: `/genie summarize [paste your text here]`',
+        };
+      }
+      prompt = `Summarize the following text concisely, highlighting the key points: ${args}`;
+      prefix = '📝 *Summary:*';
+      break;
+
+    default:
+      // Treat the entire text as a question
+      prompt = fullText;
+      prefix = '🧞 *Genie:*';
   }
 
-  // Send the response via response_url
-  const sent = await sendDelayedResponse(responseUrl, response);
-  if (!sent) {
-    console.error('[SLACK_COMMAND] Failed to send response via response_url');
-  }
+  // Generate AI response
+  const answer = await generateGenieResponse(prompt);
+
+  return {
+    response_type: 'in_channel',
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${prefix}\n${answer}`,
+        },
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `_Asked by <@${process.env.TEMP_USER_ID || 'user'}>_`,
+          },
+        ],
+      },
+    ],
+  };
 }
 
 export async function POST(req: Request) {
-  console.log('[SLACK_COMMAND] ========== Received slash command request ==========');
+  const startTime = Date.now();
+  console.log('[SLACK_COMMAND] ========== Request received ==========');
 
   try {
     const rawBody = await req.text();
-    console.log('[SLACK_COMMAND] Raw body length:', rawBody.length);
-
     const timestamp = req.headers.get('x-slack-request-timestamp') || '';
     const signature = req.headers.get('x-slack-signature') || '';
 
-    // Verify Slack signature in production
+    // Verify signature in production
     if (process.env.NODE_ENV === 'production' && process.env.SLACK_SIGNING_SECRET) {
       if (!verifySlackSignature(rawBody, timestamp, signature)) {
-        console.error('[SLACK_COMMAND] Invalid Slack signature');
+        console.error('[SLACK_COMMAND] Invalid signature');
         return new NextResponse('Unauthorized', { status: 401 });
       }
-      console.log('[SLACK_COMMAND] Signature verified');
     }
 
-    // Parse form data (Slack sends as application/x-www-form-urlencoded)
+    // Parse form data
     const params = new URLSearchParams(rawBody);
     const text = params.get('text') || '';
     const responseUrl = params.get('response_url') || '';
     const userId = params.get('user_id') || '';
     const channelId = params.get('channel_id') || '';
-    const userName = params.get('user_name') || '';
-    const commandName = params.get('command') || '';
     const teamId = params.get('team_id') || '';
     const teamDomain = params.get('team_domain') || '';
 
-    console.log('[SLACK_COMMAND] Parsed command:', {
-      command: commandName,
-      text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
-      userId,
-      channelId,
-      teamId,
-      teamDomain,
-      hasResponseUrl: !!responseUrl,
-      responseUrlLength: responseUrl.length,
-    });
+    console.log('[SLACK_COMMAND] Command:', { text, teamId, teamDomain, userId });
 
-    // ─────────────────────────────────────────────────────────────────
-    // Extract Team ID (CRITICAL FOR MULTI-TENANCY)
-    // ─────────────────────────────────────────────────────────────────
+    // Validate team_id
     if (!teamId) {
-      console.error('[SLACK_COMMAND] No team_id in request');
       return NextResponse.json({
         response_type: 'ephemeral',
-        text: '❌ Missing team information. Please try again.',
+        text: '❌ Missing team information.',
       });
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // Fetch Dynamic Credentials for this Workspace
-    // ─────────────────────────────────────────────────────────────────
+    // Get workspace config
     let config: SlackConfig;
     try {
       config = await getSlackConfig(teamId);
-      console.log('[SLACK_COMMAND] Config resolved for team:', config.teamName);
-    } catch (configError: any) {
-      console.error(`[SLACK_COMMAND] No installation for team ${teamId}:`, configError.message);
+      console.log('[SLACK_COMMAND] Config loaded for:', config.teamName);
+    } catch (error: any) {
+      console.error('[SLACK_COMMAND] Config error:', error.message);
       return NextResponse.json({
         response_type: 'ephemeral',
-        text: '❌ This workspace is not connected to Genie. Please reinstall the app from the Genie dashboard.',
+        text: '❌ This workspace is not connected to Genie. Please reinstall the app.',
       });
     }
 
-    // Parse command and arguments
+    // Parse command
     const parts = text.trim().split(/\s+/);
     const command = parts[0] || '';
     const args = parts.slice(1).join(' ');
 
     console.log('[SLACK_COMMAND] Parsed:', { command, argsLength: args.length });
 
-    // Check if we have a response_url
-    if (!responseUrl) {
-      console.error('[SLACK_COMMAND] No response_url provided');
-      return NextResponse.json({
-        response_type: 'ephemeral',
-        text: '❌ Unable to send response. Please try again.',
-      });
-    }
-
-    // For help command, respond immediately since it doesn't need AI
-    if (command === 'help' || command === '') {
-      console.log('[SLACK_COMMAND] Returning help immediately');
+    // For help, respond immediately
+    if (command === 'help' || text.trim() === '') {
+      console.log('[SLACK_COMMAND] Returning help');
       return NextResponse.json(getHelpMessage());
     }
 
-    // For commands that need AI, respond immediately with acknowledgment
-    // Then process asynchronously
-    console.log('[SLACK_COMMAND] Starting async processing');
+    // For AI commands, we need to respond within 3 seconds
+    // But Gemini might take longer, so we use response_url
     
-    // Process command asynchronously (don't await)
-    processCommand(config, command, args, responseUrl, userId, channelId)
-      .then(() => {
-        console.log('[SLACK_COMMAND] Async processing completed');
-      })
-      .catch((err) => {
-        console.error('[SLACK_COMMAND] Async processing error:', err);
+    if (!responseUrl) {
+      return NextResponse.json({
+        response_type: 'ephemeral',
+        text: '❌ Unable to process request. Please try again.',
       });
+    }
 
-    // Return immediate acknowledgment
-    console.log('[SLACK_COMMAND] Sending immediate acknowledgment');
-    return NextResponse.json({
-      response_type: 'ephemeral',
-      text: `🧞 _Processing your request..._\n\n> ${text}`,
-    });
+    // Store userId for context
+    process.env.TEMP_USER_ID = userId;
+
+    try {
+      // Try to generate response quickly
+      console.log('[SLACK_COMMAND] Generating response...');
+      const response = await buildResponse(command, args, text);
+      
+      const elapsed = Date.now() - startTime;
+      console.log('[SLACK_COMMAND] Response built in', elapsed, 'ms');
+
+      // If we're still under 2.5 seconds, return directly
+      if (elapsed < 2500) {
+        console.log('[SLACK_COMMAND] Returning direct response');
+        return NextResponse.json(response);
+      }
+
+      // Otherwise, send via response_url
+      console.log('[SLACK_COMMAND] Sending via response_url (took too long)');
+      await sendToResponseUrl(responseUrl, response);
+      
+      return NextResponse.json({
+        response_type: 'ephemeral',
+        text: '🧞 Response sent!',
+      });
+    } catch (error: any) {
+      console.error('[SLACK_COMMAND] Error:', error.message);
+      
+      // Try to send error via response_url
+      await sendToResponseUrl(responseUrl, {
+        response_type: 'ephemeral',
+        text: `❌ Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`,
+      });
+      
+      return NextResponse.json({
+        response_type: 'ephemeral',
+        text: '❌ An error occurred. Please try again.',
+      });
+    }
   } catch (error: any) {
-    console.error('[SLACK_COMMAND_ERROR]', error.message || error);
+    console.error('[SLACK_COMMAND] Fatal error:', error.message);
     return NextResponse.json({
       response_type: 'ephemeral',
       text: '❌ An error occurred. Please try again.',
@@ -507,11 +406,10 @@ export async function POST(req: Request) {
   }
 }
 
-// Add GET handler for testing/health check
 export async function GET(req: Request) {
   return NextResponse.json({
     status: 'Slack Command endpoint active',
-    version: '2.0.0', // Multi-tenant version
+    version: '2.1.0',
     timestamp: new Date().toISOString(),
     googleApiKey: process.env.GOOGLE_API_KEY ? 'SET' : 'NOT SET',
   });
