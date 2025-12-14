@@ -7,55 +7,7 @@
  * fetches the correct token for each workspace from Firestore.
  */
 
-import * as admin from 'firebase-admin';
-
-// Initialize Firebase Admin with proper credentials
-function initializeFirebaseAdmin() {
-  if (admin.apps.length > 0) {
-    return admin.app();
-  }
-
-  // Try to use GCP_SERVICE_ACCOUNT_KEY_JSON if available
-  const serviceAccountJson = process.env.GCP_SERVICE_ACCOUNT_KEY_JSON;
-  
-  if (serviceAccountJson) {
-    try {
-      const serviceAccount = JSON.parse(serviceAccountJson);
-      return admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        projectId: serviceAccount.project_id,
-      });
-    } catch (error) {
-      console.error('[TOKEN_MANAGER] Failed to parse service account JSON:', error);
-    }
-  }
-
-  // Try individual environment variables
-  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-
-  if (projectId && clientEmail && privateKey) {
-    return admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId,
-        clientEmail,
-        privateKey,
-      }),
-      projectId,
-    });
-  }
-
-  // Fall back to application default credentials (works in GCP environments)
-  console.log('[TOKEN_MANAGER] Using application default credentials');
-  return admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-  });
-}
-
-// Initialize Firebase
-const firebaseApp = initializeFirebaseAdmin();
-const db = admin.firestore();
+import { db, admin } from '@/lib/firebaseAdmin';
 
 /**
  * Slack configuration for a specific workspace

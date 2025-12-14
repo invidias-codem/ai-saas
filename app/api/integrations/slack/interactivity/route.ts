@@ -16,50 +16,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
-import * as admin from 'firebase-admin';
-
-// Initialize Firebase Admin with proper credentials
-function initializeFirebaseAdmin() {
-  if (admin.apps.length > 0) {
-    return admin.app();
-  }
-
-  const serviceAccountJson = process.env.GCP_SERVICE_ACCOUNT_KEY_JSON;
-  
-  if (serviceAccountJson) {
-    try {
-      const serviceAccount = JSON.parse(serviceAccountJson);
-      return admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        projectId: serviceAccount.project_id,
-      });
-    } catch (error) {
-      console.error('[SLACK_INTERACTIVITY] Failed to parse service account JSON:', error);
-    }
-  }
-
-  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-
-  if (projectId && clientEmail && privateKey) {
-    return admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId,
-        clientEmail,
-        privateKey,
-      }),
-      projectId,
-    });
-  }
-
-  return admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-  });
-}
-
-const firebaseApp = initializeFirebaseAdmin();
-const db = admin.firestore();
+import { db } from '@/lib/firebaseAdmin';
 const SLACK_API_BASE = 'https://slack.com/api';
 
 // Initialize Gemini for regenerate functionality
