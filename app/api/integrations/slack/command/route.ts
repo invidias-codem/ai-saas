@@ -1,18 +1,21 @@
 /**
- * Slack Slash Command Handler (Multi-Tenant) v3.0
+ * Slack Slash Command Handler (Multi-Tenant) v3.1
  * 
- * Enhanced with Agents & AI Apps features:
- * - Text streaming for real-time responses
- * - Loading states during processing
- * - Feedback blocks for response quality
+ * Enhanced with Code Assistant capabilities:
+ * - Automatic code detection and language identification
+ * - Intent detection (debug, explain, generate, etc.)
+ * - Code-specific prompts and formatting
+ * - New code subcommands: debug, review, convert, test
  * 
  * Supported commands:
  * - /genie help - Show available commands
  * - /genie ask [question] - Ask Genie anything
- * - /genie code [request] - Get coding help
- * - /genie explain [topic] - Get an explanation
+ * - /genie code [request] - Get coding help (auto-detects intent)
+ * - /genie debug [code] - Debug code
+ * - /genie review [code] - Review code quality
+ * - /genie explain [topic/code] - Get an explanation
  * - /genie summarize [text] - Summarize text
- * - /genie [anything] - Treat as a question
+ * - /genie [anything] - Treat as a question (auto-detects code)
  */
 
 import { NextResponse } from 'next/server';
@@ -20,13 +23,42 @@ import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
 import { getRandomLoadingMessage } from '@/lib/slack/assistantHelpers';
+import {
+  isCodeRelated,
+  detectLanguage,
+  detectCodeIntent,
+  buildCodePrompt,
+  convertMarkdownToSlack,
+  getIntentEmoji,
+  getIntentLabel,
+  getLanguageDisplayName,
+  CODE_SYSTEM_PROMPT,
+  CodeIntent,
+} from '@/lib/slack/codeAssistant';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
-const model = genAI.getGenerativeModel({
+
+// General assistant model
+const generalModel = genAI.getGenerativeModel({
   model: "gemini-2.0-flash",
+  safetySettings: [
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  ],
+});
+
+// Code-specific model
+const codeModel = genAI.getGenerativeModel({
+  model: "gemini-2.0-flash",
+  systemInstruction: {
+    role: "user",
+    parts: [{ text: CODE_SYSTEM_PROMPT }],
+  },
   safetySettings: [
     { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
     { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -101,11 +133,11 @@ async function sendToResponseUrl(
 }
 
 /**
- * Generate AI response using Gemini
+ * Generate general AI response using Gemini
  */
 async function generateGenieResponse(userMessage: string): Promise<string> {
   try {
-    const chat = model.startChat({
+    const chat = generalModel.startChat({
       history: [
         {
           role: "user",
@@ -133,6 +165,60 @@ async function generateGenieResponse(userMessage: string): Promise<string> {
 }
 
 /**
+ * Generate code-specific AI response using Gemini
+ */
+async function generateCodeResponse(
+  userMessage: string,
+  language: string | null,
+  intent: CodeIntent
+): Promise<string> {
+  try {
+    const prompt = buildCodePrompt(userMessage, {
+      detectedLanguage: language,
+      intent,
+    });
+
+    const chat = codeModel.startChat({
+      generationConfig: {
+        temperature: 0.3, // Lower temperature for more precise code
+        topK: 40,
+        topP: 0.8,
+        maxOutputTokens: 2048, // More tokens for code responses
+      },
+    });
+
+    const result = await chat.sendMessage(prompt);
+    const response = result.response.text();
+    
+    // Convert markdown to Slack format
+    return convertMarkdownToSlack(response);
+  } catch (error: any) {
+    console.error('[SLACK_COMMAND] Code generation error:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get loading message based on intent
+ */
+function getCodeLoadingMessage(intent: CodeIntent): string {
+  const messages: Record<CodeIntent, string[]> = {
+    debugging: ['🐛 Analyzing the bug...', '🔍 Looking for issues...'],
+    explanation: ['📚 Analyzing the code...', '🔍 Breaking it down...'],
+    generation: ['💻 Writing code...', '⌨️ Coding...'],
+    review: ['🔍 Reviewing code...', '📋 Checking quality...'],
+    optimization: ['⚡ Optimizing...', '🚀 Finding improvements...'],
+    conversion: ['🔄 Converting code...', '🔀 Translating...'],
+    documentation: ['📝 Writing docs...', '📄 Documenting...'],
+    testing: ['🧪 Writing tests...', '✅ Creating test cases...'],
+    refactoring: ['🔧 Refactoring...', '🛠️ Restructuring...'],
+  };
+  
+  const intentMessages = messages[intent];
+  return intentMessages[Math.floor(Math.random() * intentMessages.length)];
+}
+
+/**
  * Get help message
  */
 function getHelpMessage(): Record<string, any> {
@@ -151,14 +237,14 @@ function getHelpMessage(): Record<string, any> {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '*Available Commands:*',
+          text: '*General Commands:*',
         },
       },
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '`/genie help` - Show this help message\n`/genie ask [question]` - Ask Genie anything\n`/genie code [request]` - Get coding help\n`/genie explain [topic]` - Get an explanation\n`/genie summarize [text]` - Summarize text',
+          text: '`/genie help` - Show this help message\n`/genie ask [question]` - Ask Genie anything\n`/genie explain [topic]` - Get an explanation\n`/genie summarize [text]` - Summarize text',
         },
       },
       {
@@ -168,7 +254,24 @@ function getHelpMessage(): Record<string, any> {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: '*Quick Tips:*\n• You can also @mention Genie in any channel\n• DM Genie directly for private conversations\n• Just type `/genie` followed by your question\n• Click 👍/👎 on responses to provide feedback',
+          text: '*💻 Code Commands:*',
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '`/genie code [request]` - Write or help with code\n`/genie debug [code]` - Find and fix bugs\n`/genie review [code]` - Get code review feedback\n`/genie test [code]` - Generate unit tests\n`/genie optimize [code]` - Improve performance',
+        },
+      },
+      {
+        type: 'divider',
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*Quick Tips:*\n• Genie auto-detects code in your messages\n• Include code blocks with \\`\\`\\` for better results\n• Mention the programming language for accuracy\n• You can also @mention Genie or DM directly',
         },
       },
       {
@@ -176,12 +279,43 @@ function getHelpMessage(): Record<string, any> {
         elements: [
           {
             type: 'mrkdwn',
-            text: '💡 _Example: `/genie What is the capital of France?`_',
+            text: '💡 _Examples:_\n`/genie code Write a Python function to sort a list`\n`/genie debug Why does this throw an error: const x = undefined.map()`',
           },
         ],
       },
     ],
   };
+}
+
+/**
+ * Create feedback blocks for responses
+ */
+function createFeedbackBlocks(prompt: string): any[] {
+  return [
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '👍', emoji: true },
+          action_id: 'feedback_helpful',
+          value: prompt.substring(0, 200),
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '👎', emoji: true },
+          action_id: 'feedback_not_helpful',
+          value: prompt.substring(0, 200),
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '🔄 Regenerate', emoji: true },
+          action_id: 'regenerate_response',
+          value: prompt.substring(0, 500),
+        },
+      ],
+    },
+  ];
 }
 
 /**
@@ -202,6 +336,9 @@ async function buildResponse(
   let prompt: string;
   let prefix: string;
   let emoji: string;
+  let isCodeCommand = false;
+  let detectedLanguage: string | null = null;
+  let intent: CodeIntent = 'generation';
   
   switch (command.toLowerCase()) {
     case 'ask':
@@ -211,31 +348,108 @@ async function buildResponse(
           text: '❓ Please provide a question. Example: `/genie ask What is machine learning?`',
         };
       }
+      // Check if the question is code-related
+      if (isCodeRelated(args)) {
+        isCodeCommand = true;
+        detectedLanguage = detectLanguage(args);
+        intent = detectCodeIntent(args);
+      }
       prompt = args;
-      prefix = 'Answer';
-      emoji = '🧞';
+      prefix = isCodeCommand ? getIntentLabel(intent) : 'Answer';
+      emoji = isCodeCommand ? getIntentEmoji(intent) : '🧞';
       break;
 
     case 'code':
       if (!args) {
         return {
           response_type: 'ephemeral',
-          text: '💻 Please describe what code you need. Example: `/genie code Write a Python function to reverse a string`',
+          text: '💻 Please describe what code you need.\n\n*Examples:*\n• `/genie code Write a Python function to reverse a string`\n• `/genie code Create a React component for a login form`\n• `/genie code SQL query to find duplicate records`',
         };
       }
-      prompt = `As a coding assistant, help with the following request. Provide clean, well-commented code with brief explanations: ${args}`;
-      prefix = 'Code';
-      emoji = '💻';
+      isCodeCommand = true;
+      detectedLanguage = detectLanguage(args);
+      intent = detectCodeIntent(args);
+      prompt = args;
+      prefix = getIntentLabel(intent);
+      emoji = getIntentEmoji(intent);
+      break;
+
+    case 'debug':
+      if (!args) {
+        return {
+          response_type: 'ephemeral',
+          text: '🐛 Please provide code to debug.\n\n*Example:*\n`/genie debug const x = undefined.map(y => y * 2)`',
+        };
+      }
+      isCodeCommand = true;
+      detectedLanguage = detectLanguage(args);
+      intent = 'debugging';
+      prompt = `Debug this code and explain the issue: ${args}`;
+      prefix = 'Debug';
+      emoji = '🐛';
+      break;
+
+    case 'review':
+      if (!args) {
+        return {
+          response_type: 'ephemeral',
+          text: '🔍 Please provide code to review.\n\n*Example:*\n`/genie review function add(a,b){return a+b}`',
+        };
+      }
+      isCodeCommand = true;
+      detectedLanguage = detectLanguage(args);
+      intent = 'review';
+      prompt = `Review this code for quality, bugs, and improvements: ${args}`;
+      prefix = 'Review';
+      emoji = '🔍';
+      break;
+
+    case 'test':
+      if (!args) {
+        return {
+          response_type: 'ephemeral',
+          text: '🧪 Please provide code to generate tests for.\n\n*Example:*\n`/genie test function multiply(a, b) { return a * b; }`',
+        };
+      }
+      isCodeCommand = true;
+      detectedLanguage = detectLanguage(args);
+      intent = 'testing';
+      prompt = `Write comprehensive unit tests for this code: ${args}`;
+      prefix = 'Tests';
+      emoji = '🧪';
+      break;
+
+    case 'optimize':
+      if (!args) {
+        return {
+          response_type: 'ephemeral',
+          text: '⚡ Please provide code to optimize.\n\n*Example:*\n`/genie optimize for(let i=0;i<arr.length;i++){...}`',
+        };
+      }
+      isCodeCommand = true;
+      detectedLanguage = detectLanguage(args);
+      intent = 'optimization';
+      prompt = `Optimize this code for better performance: ${args}`;
+      prefix = 'Optimization';
+      emoji = '⚡';
       break;
 
     case 'explain':
       if (!args) {
         return {
           response_type: 'ephemeral',
-          text: '📚 Please provide a topic to explain. Example: `/genie explain How does blockchain work?`',
+          text: '📚 Please provide a topic or code to explain.\n\n*Examples:*\n• `/genie explain How does async/await work?`\n• `/genie explain arr.reduce((a,b) => a+b, 0)`',
         };
       }
-      prompt = `Explain the following topic in a clear, concise way that's easy to understand. Use examples if helpful: ${args}`;
+      // Check if explaining code
+      if (isCodeRelated(args)) {
+        isCodeCommand = true;
+        detectedLanguage = detectLanguage(args);
+        intent = 'explanation';
+      }
+      prompt = isCodeCommand 
+        ? `Explain this code in detail: ${args}`
+        : `Explain the following topic in a clear, concise way that's easy to understand. Use examples if helpful: ${args}`;
       prefix = 'Explanation';
       emoji = '📚';
       break;
@@ -253,14 +467,36 @@ async function buildResponse(
       break;
 
     default:
-      // Treat the entire text as a question
-      prompt = fullText;
-      prefix = 'Response';
-      emoji = '🧞';
+      // Treat the entire text as a question - auto-detect if code-related
+      if (isCodeRelated(fullText)) {
+        isCodeCommand = true;
+        detectedLanguage = detectLanguage(fullText);
+        intent = detectCodeIntent(fullText);
+        prompt = fullText;
+        prefix = getIntentLabel(intent);
+        emoji = getIntentEmoji(intent);
+      } else {
+        prompt = fullText;
+        prefix = 'Response';
+        emoji = '🧞';
+      }
   }
 
   // Generate AI response
-  const answer = await generateGenieResponse(prompt);
+  let answer: string;
+  
+  if (isCodeCommand) {
+    console.log('[SLACK_COMMAND] Code request detected:', {
+      language: detectedLanguage,
+      intent,
+    });
+    answer = await generateCodeResponse(prompt, detectedLanguage, intent);
+  } else {
+    answer = await generateGenieResponse(prompt);
+  }
+
+  // Build language info string
+  const langInfo = detectedLanguage ? ` (${getLanguageDisplayName(detectedLanguage)})` : '';
 
   return {
     response_type: 'in_channel',
@@ -270,7 +506,7 @@ async function buildResponse(
         elements: [
           {
             type: 'mrkdwn',
-            text: `${emoji} *Genie ${prefix}* • Asked by <@${userId}>`,
+            text: `${emoji} *Genie ${prefix}${langInfo}* • Asked by <@${userId}>`,
           },
         ],
       },
@@ -281,29 +517,7 @@ async function buildResponse(
           text: answer,
         },
       },
-      {
-        type: 'actions',
-        elements: [
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: '👍', emoji: true },
-            action_id: 'feedback_helpful',
-            value: fullText.substring(0, 200),
-          },
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: '👎', emoji: true },
-            action_id: 'feedback_not_helpful',
-            value: fullText.substring(0, 200),
-          },
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: '🔄 Regenerate', emoji: true },
-            action_id: 'regenerate_response',
-            value: fullText.substring(0, 500),
-          },
-        ],
-      },
+      ...createFeedbackBlocks(fullText),
     ],
   };
 }
@@ -379,8 +593,25 @@ export async function POST(req: Request) {
     }
 
     try {
-      // Send immediate acknowledgment with loading message
-      const loadingMessage = getRandomLoadingMessage('thinking');
+      // Determine loading message based on command type
+      let loadingMessage: string;
+      const codeCommands = ['code', 'debug', 'review', 'test', 'optimize'];
+      
+      if (codeCommands.includes(command.toLowerCase())) {
+        const intentMap: Record<string, CodeIntent> = {
+          code: 'generation',
+          debug: 'debugging',
+          review: 'review',
+          test: 'testing',
+          optimize: 'optimization',
+        };
+        loadingMessage = getCodeLoadingMessage(intentMap[command.toLowerCase()]);
+      } else if (isCodeRelated(text)) {
+        const intent = detectCodeIntent(text);
+        loadingMessage = getCodeLoadingMessage(intent);
+      } else {
+        loadingMessage = getRandomLoadingMessage('thinking');
+      }
       
       // Try to generate response quickly
       console.log('[SLACK_COMMAND] Generating response...');
@@ -401,7 +632,7 @@ export async function POST(req: Request) {
       
       return NextResponse.json({
         response_type: 'ephemeral',
-        text: `${loadingMessage}`,
+        text: loadingMessage,
       });
     } catch (error: any) {
       console.error('[SLACK_COMMAND] Error:', error.message);
@@ -429,11 +660,26 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   return NextResponse.json({
     status: 'Slack Command endpoint active',
-    version: '3.0.0',
+    version: '3.1.0', // Code Assistant version
     features: [
       'multi-tenant',
       'feedback-blocks',
       'loading-states',
+      'code-detection',
+      'language-detection',
+      'intent-detection',
+      'code-commands',
+    ],
+    commands: [
+      '/genie help',
+      '/genie ask',
+      '/genie code',
+      '/genie debug',
+      '/genie review',
+      '/genie test',
+      '/genie optimize',
+      '/genie explain',
+      '/genie summarize',
     ],
     timestamp: new Date().toISOString(),
     googleApiKey: process.env.GOOGLE_API_KEY ? 'SET' : 'NOT SET',
