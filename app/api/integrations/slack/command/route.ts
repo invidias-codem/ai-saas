@@ -82,8 +82,10 @@ function verifySlackSignature(
 async function sendDelayedResponse(
   responseUrl: string,
   payload: Record<string, any>
-): Promise<void> {
+): Promise<boolean> {
   try {
+    console.log('[SLACK_COMMAND] Sending delayed response to:', responseUrl.substring(0, 50) + '...');
+    
     const response = await fetch(responseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -91,10 +93,16 @@ async function sendDelayedResponse(
     });
     
     if (!response.ok) {
-      console.error('[SLACK_COMMAND] Failed to send delayed response:', response.status);
+      const errorText = await response.text();
+      console.error('[SLACK_COMMAND] Failed to send delayed response:', response.status, errorText);
+      return false;
     }
+    
+    console.log('[SLACK_COMMAND] Delayed response sent successfully');
+    return true;
   } catch (error) {
     console.error('[SLACK_COMMAND] Error sending delayed response:', error);
+    return false;
   }
 }
 
@@ -103,6 +111,8 @@ async function sendDelayedResponse(
  */
 async function generateGenieResponse(userMessage: string): Promise<string> {
   try {
+    console.log('[SLACK_COMMAND] Generating Gemini response for:', userMessage.substring(0, 50) + '...');
+    
     const chat = model.startChat({
       history: [
         {
@@ -123,9 +133,12 @@ async function generateGenieResponse(userMessage: string): Promise<string> {
     });
 
     const result = await chat.sendMessage(userMessage);
-    return result.response.text();
-  } catch (error) {
-    console.error('[SLACK_COMMAND] Error generating Genie response:', error);
+    const responseText = result.response.text();
+    
+    console.log('[SLACK_COMMAND] Gemini response generated, length:', responseText.length);
+    return responseText;
+  } catch (error: any) {
+    console.error('[SLACK_COMMAND] Error generating Genie response:', error.message || error);
     return "I apologize, but I encountered an error processing your request. Please try again.";
   }
 }
@@ -201,6 +214,8 @@ async function processCommand(
 ): Promise<void> {
   let response: Record<string, any>;
   const startTime = Date.now();
+
+  console.log('[SLACK_COMMAND] Processing command:', { command, argsLength: args.length });
 
   try {
     switch (command.toLowerCase()) {
@@ -351,16 +366,17 @@ async function processCommand(
         };
     }
     
-    console.log('[SLACK_COMMAND] Processed command:', {
+    const duration = Date.now() - startTime;
+    console.log('[SLACK_COMMAND] Command processed:', {
       teamId: config.teamId,
       teamName: config.teamName,
       command,
       userId,
       channelId,
-      duration: Date.now() - startTime,
+      duration,
     });
-  } catch (error) {
-    console.error('[SLACK_COMMAND] Error processing command:', error);
+  } catch (error: any) {
+    console.error('[SLACK_COMMAND] Error processing command:', error.message || error);
     response = {
       response_type: 'ephemeral',
       text: '❌ Sorry, I encountered an error processing your request. Please try again.',
@@ -368,11 +384,14 @@ async function processCommand(
   }
 
   // Send the response via response_url
-  await sendDelayedResponse(responseUrl, response);
+  const sent = await sendDelayedResponse(responseUrl, response);
+  if (!sent) {
+    console.error('[SLACK_COMMAND] Failed to send response via response_url');
+  }
 }
 
 export async function POST(req: Request) {
-  console.log('[SLACK_COMMAND] Received slash command request');
+  console.log('[SLACK_COMMAND] ========== Received slash command request ==========');
 
   try {
     const rawBody = await req.text();
@@ -387,6 +406,7 @@ export async function POST(req: Request) {
         console.error('[SLACK_COMMAND] Invalid Slack signature');
         return new NextResponse('Unauthorized', { status: 401 });
       }
+      console.log('[SLACK_COMMAND] Signature verified');
     }
 
     // Parse form data (Slack sends as application/x-www-form-urlencoded)
@@ -402,12 +422,13 @@ export async function POST(req: Request) {
 
     console.log('[SLACK_COMMAND] Parsed command:', {
       command: commandName,
-      text,
+      text: text.substring(0, 50) + (text.length > 50 ? '...' : ''),
       userId,
       channelId,
       teamId,
       teamDomain,
       hasResponseUrl: !!responseUrl,
+      responseUrlLength: responseUrl.length,
     });
 
     // ─────────────────────────────────────────────────────────────────
@@ -427,46 +448,58 @@ export async function POST(req: Request) {
     let config: SlackConfig;
     try {
       config = await getSlackConfig(teamId);
-    } catch (configError) {
-      console.error(`[SLACK_COMMAND] No installation for team ${teamId}:`, configError);
+      console.log('[SLACK_COMMAND] Config resolved for team:', config.teamName);
+    } catch (configError: any) {
+      console.error(`[SLACK_COMMAND] No installation for team ${teamId}:`, configError.message);
       return NextResponse.json({
         response_type: 'ephemeral',
         text: '❌ This workspace is not connected to Genie. Please reinstall the app from the Genie dashboard.',
       });
     }
 
-    console.log('[SLACK_COMMAND] Resolved config for team:', {
-      teamId: config.teamId,
-      teamName: config.teamName,
-    });
-
     // Parse command and arguments
     const parts = text.trim().split(/\s+/);
     const command = parts[0] || '';
     const args = parts.slice(1).join(' ');
 
-    // Acknowledge immediately (Slack requires response within 3 seconds)
-    const immediateResponse = {
-      response_type: 'ephemeral' as const,
-      text:
-        command === 'help' || command === ''
-          ? '📖 Loading help...'
-          : `🧞 Processing your request: "${text}"...`,
-    };
+    console.log('[SLACK_COMMAND] Parsed:', { command, argsLength: args.length });
 
-    // Process command asynchronously
-    if (responseUrl) {
-      processCommand(config, command, args, responseUrl, userId, channelId).catch(
-        (err) => {
-          console.error('[SLACK_COMMAND] Processing error:', err);
-        }
-      );
+    // Check if we have a response_url
+    if (!responseUrl) {
+      console.error('[SLACK_COMMAND] No response_url provided');
+      return NextResponse.json({
+        response_type: 'ephemeral',
+        text: '❌ Unable to send response. Please try again.',
+      });
     }
 
-    console.log('[SLACK_COMMAND] Sending immediate response');
-    return NextResponse.json(immediateResponse);
+    // For help command, respond immediately since it doesn't need AI
+    if (command === 'help' || command === '') {
+      console.log('[SLACK_COMMAND] Returning help immediately');
+      return NextResponse.json(getHelpMessage());
+    }
+
+    // For commands that need AI, respond immediately with acknowledgment
+    // Then process asynchronously
+    console.log('[SLACK_COMMAND] Starting async processing');
+    
+    // Process command asynchronously (don't await)
+    processCommand(config, command, args, responseUrl, userId, channelId)
+      .then(() => {
+        console.log('[SLACK_COMMAND] Async processing completed');
+      })
+      .catch((err) => {
+        console.error('[SLACK_COMMAND] Async processing error:', err);
+      });
+
+    // Return immediate acknowledgment
+    console.log('[SLACK_COMMAND] Sending immediate acknowledgment');
+    return NextResponse.json({
+      response_type: 'ephemeral',
+      text: `🧞 _Processing your request..._\n\n> ${text}`,
+    });
   } catch (error: any) {
-    console.error('[SLACK_COMMAND_ERROR]', error);
+    console.error('[SLACK_COMMAND_ERROR]', error.message || error);
     return NextResponse.json({
       response_type: 'ephemeral',
       text: '❌ An error occurred. Please try again.',
@@ -480,5 +513,6 @@ export async function GET(req: Request) {
     status: 'Slack Command endpoint active',
     version: '2.0.0', // Multi-tenant version
     timestamp: new Date().toISOString(),
+    googleApiKey: process.env.GOOGLE_API_KEY ? 'SET' : 'NOT SET',
   });
 }
