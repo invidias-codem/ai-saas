@@ -68,17 +68,17 @@ export function BlogHeader({ post }: BlogHeaderProps) {
       </div>
 
       {/* Title */}
-      <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight leading-tight mb-6">
+      <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-tight mb-4 sm:mb-6">
         {post.title}
       </h1>
 
       {/* Description */}
-      <p className="text-xl text-gray-400 mb-8 leading-relaxed">
+      <p className="text-base sm:text-lg md:text-xl text-gray-400 mb-6 sm:mb-8 leading-relaxed">
         {post.description}
       </p>
 
       {/* Meta Row */}
-      <div className="flex flex-wrap items-center gap-6 pb-8 border-b border-white/10">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-6 pb-6 sm:pb-8 border-b border-white/10">
         {/* Author */}
         <div className="flex items-center gap-3">
           <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gradient-to-tr from-purple-500 to-blue-500">

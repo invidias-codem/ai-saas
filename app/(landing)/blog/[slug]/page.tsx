@@ -130,27 +130,27 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         </div>
 
         {/* Header */}
-        <header className="relative z-10 py-6 px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
+        <header className="relative z-10 py-4 px-4 sm:py-6 sm:px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
           <Link href="/" className="flex items-center gap-2">
-            <div className="relative w-8 h-8">
+            <div className="relative w-7 h-7 sm:w-8 sm:h-8">
               <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
             </div>
-            <span className="text-2xl font-bold text-white tracking-tight">Genie AI</span>
+            <span className="text-xl sm:text-2xl font-bold text-white tracking-tight">Genie AI</span>
           </Link>
-          <div className="flex items-center gap-x-2">
+          <div className="flex items-center gap-x-1 sm:gap-x-2">
             <Link href="/blog">
-              <Button variant="ghost" className="text-purple-400 hover:text-purple-300 hover:bg-white/10 rounded-full">
-                <BookOpen className="w-4 h-4 mr-2" />
-                Blog
+              <Button variant="ghost" className="text-purple-400 hover:text-purple-300 hover:bg-white/10 rounded-full px-2 sm:px-4">
+                <BookOpen className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Blog</span>
               </Button>
             </Link>
-            <Link href="/dashboard">
+            <Link href="/dashboard" className="hidden sm:block">
               <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10 rounded-full">
                 Log in
               </Button>
             </Link>
             <Link href="/dashboard">
-              <Button className="bg-white text-black hover:bg-gray-200 rounded-full font-semibold">
+              <Button className="bg-white text-black hover:bg-gray-200 rounded-full font-semibold text-sm sm:text-base px-3 sm:px-4">
                 Get Started
               </Button>
             </Link>
