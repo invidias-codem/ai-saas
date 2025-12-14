@@ -19,7 +19,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
-import { createFeedbackBlocks, getRandomLoadingMessage } from '@/lib/slack/assistantHelpers';
+import { getRandomLoadingMessage } from '@/lib/slack/assistantHelpers';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 
@@ -261,9 +261,6 @@ async function buildResponse(
 
   // Generate AI response
   const answer = await generateGenieResponse(prompt);
-  
-  // Generate response ID for feedback
-  const responseId = `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
   return {
     response_type: 'in_channel',
@@ -284,7 +281,29 @@ async function buildResponse(
           text: answer,
         },
       },
-      ...createFeedbackBlocks(responseId, fullText),
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '👍', emoji: true },
+            action_id: 'feedback_helpful',
+            value: fullText.substring(0, 200),
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '👎', emoji: true },
+            action_id: 'feedback_not_helpful',
+            value: fullText.substring(0, 200),
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '🔄 Regenerate', emoji: true },
+            action_id: 'regenerate_response',
+            value: fullText.substring(0, 500),
+          },
+        ],
+      },
     ],
   };
 }
