@@ -46,12 +46,12 @@ const LandingPage = () => {
             Pricing
           </Button>
 
-          <Link href="/sign-in">
+          <Link href="/dashboard">
             <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10 rounded-full">
               Log in
             </Button>
           </Link>
-          <Link href="/sign-up">
+          <Link href="/dashboard">
             <Button className="bg-white text-black hover:bg-gray-200 rounded-full font-semibold">
               Get Started
             </Button>
@@ -78,7 +78,7 @@ const LandingPage = () => {
           </p>
           
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-4">
-            <Link href="/sign-up" className="w-full sm:w-auto">
+            <Link href="/dashboard" className="w-full sm:w-auto">
               <Button size="lg" className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-full text-lg px-8 py-6 shadow-lg shadow-purple-500/25">
                 Start Generating For Free
               </Button>
@@ -260,7 +260,7 @@ const LandingPage = () => {
 
             {/* Modal Footer */}
             <div className="p-6 border-t border-white/10 bg-black/20 sm:rounded-b-2xl">
-              <Link href="/sign-up" className="w-full">
+              <Link href="/dashboard" className="w-full">
                 <Button className="w-full bg-white text-black hover:bg-gray-200 font-semibold py-6 rounded-xl text-lg">
                   Start Creating Now
                 </Button>

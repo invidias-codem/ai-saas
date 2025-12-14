@@ -144,12 +144,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 Blog
               </Button>
             </Link>
-            <Link href="/sign-in">
+            <Link href="/dashboard">
               <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10 rounded-full">
                 Log in
               </Button>
             </Link>
-            <Link href="/sign-up">
+            <Link href="/dashboard">
               <Button className="bg-white text-black hover:bg-gray-200 rounded-full font-semibold">
                 Get Started
               </Button>

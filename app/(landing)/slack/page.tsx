@@ -39,12 +39,12 @@ const SlackLandingPage = () => {
               Support
             </Button>
           </Link>
-          <Link href="/sign-in">
+          <Link href="/dashboard">
             <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10 rounded-full">
               Log in
             </Button>
           </Link>
-          <Link href="/sign-up">
+          <Link href="/dashboard">
             <Button className="bg-white text-black hover:bg-gray-200 rounded-full font-semibold">
               Get Started
             </Button>
@@ -79,7 +79,7 @@ const SlackLandingPage = () => {
                 Add to Slack
               </Button>
             </Link>
-            <Link href="/sign-up" className="w-full sm:w-auto">
+            <Link href="/dashboard" className="w-full sm:w-auto">
               <Button 
                 variant="outline" 
                 size="lg"
