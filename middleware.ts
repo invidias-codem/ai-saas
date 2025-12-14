@@ -16,16 +16,18 @@ export default authMiddleware({
     "/", // Landing page
     "/sign-in",
     "/sign-up",
-    "/api/integrations/slack/callback", // Slack OAuth callback
-    "/api/integrations/slack/events",   // Slack Events API
-    "/api/integrations/slack/command",  // Slack slash commands
+    "/api/integrations/slack/callback",      // Slack OAuth callback
+    "/api/integrations/slack/events",        // Slack Events API
+    "/api/integrations/slack/command",       // Slack slash commands
+    "/api/integrations/slack/interactivity", // Slack interactivity (buttons, modals)
   ],
   
   ignoredRoutes: [
     "/ws",
-    "/api/integrations/slack/callback", // Also ignore for Slack redirects
-    "/api/integrations/slack/events",   // Slack sends events without auth
-    "/api/integrations/slack/command",  // Slack sends commands without auth
+    "/api/integrations/slack/callback",      // Also ignore for Slack redirects
+    "/api/integrations/slack/events",        // Slack sends events without auth
+    "/api/integrations/slack/command",       // Slack sends commands without auth
+    "/api/integrations/slack/interactivity", // Slack sends interactions without auth
   ],
 
   afterAuth(auth, req) {

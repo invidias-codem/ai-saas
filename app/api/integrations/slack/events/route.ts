@@ -1,12 +1,20 @@
 /**
- * Slack Events API Endpoint
- * Handles incoming Slack events including messages, app mentions, and DMs
- * This enables Genie to respond to messages in Slack channels
+ * Slack Events API Endpoint (Multi-Tenant)
+ * Handles incoming Slack events from ANY workspace
+ * 
+ * This endpoint receives events from all installed workspaces.
+ * It dynamically resolves the correct bot token for each workspace
+ * using the team_id from the event payload.
+ * 
+ * Supported events:
+ * - app_mention: When someone @mentions the bot
+ * - message (im): Direct messages to the bot
  */
 
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 
@@ -31,6 +39,7 @@ Be friendly and professional.`;
 
 /**
  * Verify Slack request signature
+ * Note: The signing secret is shared across all workspaces (it's app-level, not workspace-level)
  */
 function verifySlackSignature(
   body: string,
@@ -38,11 +47,11 @@ function verifySlackSignature(
   signature: string
 ): boolean {
   const signingSecret = process.env.SLACK_SIGNING_SECRET || '';
-  
+
   // Check timestamp is recent (within 5 minutes)
   const currentTime = Math.floor(Date.now() / 1000);
   if (Math.abs(currentTime - parseInt(timestamp)) > 300) {
-    console.error('Slack request timestamp too old');
+    console.error('[SLACK_EVENTS] Request timestamp too old');
     return false;
   }
 
@@ -54,25 +63,29 @@ function verifySlackSignature(
     .digest('hex');
   const expectedSignature = `v0=${hmac}`;
 
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSignature)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Send a message to Slack
+ * @param token - Bot token for the specific workspace
+ * @param channel - Channel ID
+ * @param text - Message text
+ * @param threadTs - Optional thread timestamp for replies
  */
 async function sendSlackMessage(
+  token: string,
   channel: string,
   text: string,
   threadTs?: string
-): Promise<void> {
-  const botToken = process.env.SLACK_BOT_TOKEN;
-  if (!botToken) {
-    throw new Error('SLACK_BOT_TOKEN not configured');
-  }
-
+): Promise<{ ok: boolean; ts?: string; error?: string }> {
   const payload: Record<string, any> = {
     channel,
     text,
@@ -87,35 +100,36 @@ async function sendSlackMessage(
   const response = await fetch(`${SLACK_API_BASE}/chat.postMessage`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${botToken}`,
+      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
   });
 
   const data = await response.json();
+  
   if (!data.ok) {
-    console.error('Slack API error:', data.error);
-    throw new Error(`Slack API error: ${data.error}`);
+    console.error('[SLACK_EVENTS] Slack API error:', data.error);
   }
+  
+  return data;
 }
 
 /**
  * Add a reaction to a message (to show processing)
+ * @param token - Bot token for the specific workspace
  */
 async function addReaction(
+  token: string,
   channel: string,
   timestamp: string,
   emoji: string
 ): Promise<void> {
-  const botToken = process.env.SLACK_BOT_TOKEN;
-  if (!botToken) return;
-
   try {
     await fetch(`${SLACK_API_BASE}/reactions.add`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${botToken}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -125,26 +139,25 @@ async function addReaction(
       }),
     });
   } catch (error) {
-    console.error('Failed to add reaction:', error);
+    console.error('[SLACK_EVENTS] Failed to add reaction:', error);
   }
 }
 
 /**
  * Remove a reaction from a message
+ * @param token - Bot token for the specific workspace
  */
 async function removeReaction(
+  token: string,
   channel: string,
   timestamp: string,
   emoji: string
 ): Promise<void> {
-  const botToken = process.env.SLACK_BOT_TOKEN;
-  if (!botToken) return;
-
   try {
     await fetch(`${SLACK_API_BASE}/reactions.remove`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${botToken}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -154,7 +167,7 @@ async function removeReaction(
       }),
     });
   } catch (error) {
-    console.error('Failed to remove reaction:', error);
+    console.error('[SLACK_EVENTS] Failed to remove reaction:', error);
   }
 }
 
@@ -185,22 +198,25 @@ async function generateGenieResponse(userMessage: string): Promise<string> {
     const result = await chat.sendMessage(userMessage);
     return result.response.text();
   } catch (error) {
-    console.error('Error generating Genie response:', error);
+    console.error('[SLACK_EVENTS] Error generating Genie response:', error);
     return "I apologize, but I encountered an error processing your request. Please try again.";
   }
 }
 
 /**
  * Handle app_mention events (when someone @mentions the bot)
+ * @param config - Slack configuration for this workspace
+ * @param event - The event payload from Slack
  */
-async function handleAppMention(event: any): Promise<void> {
+async function handleAppMention(config: SlackConfig, event: any): Promise<void> {
   const { channel, text, ts, thread_ts, user } = event;
-  
+
   // Remove the bot mention from the text
   const cleanText = text.replace(/<@[A-Z0-9]+>/g, '').trim();
-  
+
   if (!cleanText) {
     await sendSlackMessage(
+      config.botToken,
       channel,
       "Hi! How can I help you? Just mention me with your question.",
       thread_ts || ts
@@ -209,23 +225,32 @@ async function handleAppMention(event: any): Promise<void> {
   }
 
   // Add thinking reaction
-  await addReaction(channel, ts, 'thinking_face');
+  await addReaction(config.botToken, channel, ts, 'thinking_face');
 
   try {
     // Generate response
     const response = await generateGenieResponse(cleanText);
-    
+
     // Remove thinking reaction and add done reaction
-    await removeReaction(channel, ts, 'thinking_face');
-    await addReaction(channel, ts, 'white_check_mark');
-    
+    await removeReaction(config.botToken, channel, ts, 'thinking_face');
+    await addReaction(config.botToken, channel, ts, 'white_check_mark');
+
     // Send response in thread
-    await sendSlackMessage(channel, response, thread_ts || ts);
+    await sendSlackMessage(config.botToken, channel, response, thread_ts || ts);
+    
+    console.log('[SLACK_EVENTS] Handled app_mention:', {
+      teamId: config.teamId,
+      channel,
+      user,
+      inputLength: cleanText.length,
+      outputLength: response.length,
+    });
   } catch (error) {
-    console.error('Error handling app mention:', error);
-    await removeReaction(channel, ts, 'thinking_face');
-    await addReaction(channel, ts, 'x');
+    console.error('[SLACK_EVENTS] Error handling app mention:', error);
+    await removeReaction(config.botToken, channel, ts, 'thinking_face');
+    await addReaction(config.botToken, channel, ts, 'x');
     await sendSlackMessage(
+      config.botToken,
       channel,
       "Sorry, I encountered an error. Please try again.",
       thread_ts || ts
@@ -235,29 +260,36 @@ async function handleAppMention(event: any): Promise<void> {
 
 /**
  * Handle direct messages to the bot
+ * @param config - Slack configuration for this workspace
+ * @param event - The event payload from Slack
  */
-async function handleDirectMessage(event: any): Promise<void> {
+async function handleDirectMessage(config: SlackConfig, event: any): Promise<void> {
   const { channel, text, ts, user } = event;
-  
-  // Ignore bot's own messages
-  if (event.bot_id) return;
-  
+
   // Add thinking reaction
-  await addReaction(channel, ts, 'thinking_face');
+  await addReaction(config.botToken, channel, ts, 'thinking_face');
 
   try {
     // Generate response
     const response = await generateGenieResponse(text);
-    
+
     // Remove thinking reaction
-    await removeReaction(channel, ts, 'thinking_face');
-    
+    await removeReaction(config.botToken, channel, ts, 'thinking_face');
+
     // Send response
-    await sendSlackMessage(channel, response);
+    await sendSlackMessage(config.botToken, channel, response);
+    
+    console.log('[SLACK_EVENTS] Handled DM:', {
+      teamId: config.teamId,
+      user,
+      inputLength: text.length,
+      outputLength: response.length,
+    });
   } catch (error) {
-    console.error('Error handling DM:', error);
-    await removeReaction(channel, ts, 'thinking_face');
+    console.error('[SLACK_EVENTS] Error handling DM:', error);
+    await removeReaction(config.botToken, channel, ts, 'thinking_face');
     await sendSlackMessage(
+      config.botToken,
       channel,
       "Sorry, I encountered an error. Please try again."
     );
@@ -266,11 +298,11 @@ async function handleDirectMessage(event: any): Promise<void> {
 
 export async function POST(req: Request) {
   let rawBody = '';
-  
+
   try {
     rawBody = await req.text();
     console.log('[SLACK_EVENTS] Received request, body length:', rawBody.length);
-    
+
     // Parse body first to handle challenge ASAP
     let body: any;
     try {
@@ -280,8 +312,10 @@ export async function POST(req: Request) {
       return new NextResponse('Invalid JSON', { status: 400 });
     }
 
-    // Handle URL verification challenge IMMEDIATELY (required for Slack Events API setup)
-    // This must respond quickly with just the challenge value
+    // ─────────────────────────────────────────────────────────────────
+    // Handle URL verification challenge IMMEDIATELY
+    // This is required for Slack Events API setup and must respond quickly
+    // ─────────────────────────────────────────────────────────────────
     if (body.type === 'url_verification') {
       console.log('[SLACK_EVENTS] URL verification challenge received');
       return new NextResponse(body.challenge, {
@@ -290,10 +324,45 @@ export async function POST(req: Request) {
       });
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // Extract Team ID (CRITICAL FOR MULTI-TENANCY)
+    // ─────────────────────────────────────────────────────────────────
+    const teamId = body.team_id;
+    if (!teamId) {
+      console.error('[SLACK_EVENTS] No team_id in request');
+      return new NextResponse('Missing team_id', { status: 400 });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Fetch Dynamic Credentials for this Workspace
+    // ─────────────────────────────────────────────────────────────────
+    let config: SlackConfig;
+    try {
+      config = await getSlackConfig(teamId);
+    } catch (configError) {
+      console.error(`[SLACK_EVENTS] No installation for team ${teamId}:`, configError);
+      // Return 200 to prevent Slack from retrying
+      // The workspace needs to reinstall the app
+      return NextResponse.json({ 
+        ok: false, 
+        error: 'workspace_not_installed',
+        message: 'This workspace needs to reinstall the Genie app.',
+      });
+    }
+
+    console.log('[SLACK_EVENTS] Resolved config for team:', {
+      teamId: config.teamId,
+      teamName: config.teamName,
+      botUserId: config.botUserId,
+    });
+
+    // ───────────────────────────────────────────────��─────────────────
+    // Verify Slack Signature
+    // Note: Signing secret is app-level, shared across all workspaces
+    // ─────────────────────────────────────────────────────────────────
     const timestamp = req.headers.get('x-slack-request-timestamp') || '';
     const signature = req.headers.get('x-slack-signature') || '';
 
-    // Verify Slack signature (skip in development if needed)
     if (process.env.NODE_ENV === 'production' && process.env.SLACK_SIGNING_SECRET) {
       if (!verifySlackSignature(rawBody, timestamp, signature)) {
         console.error('[SLACK_EVENTS] Invalid Slack signature');
@@ -301,32 +370,49 @@ export async function POST(req: Request) {
       }
     }
 
-    // Handle events
+    // ─────────────────────────────────────────────────────────────────
+    // Handle Events
+    // ─────────────────────────────────────────────────────────────────
     if (body.type === 'event_callback') {
       const event = body.event;
 
-      // Respond immediately to avoid Slack retry
-      // Process event asynchronously
+      // ───────────────────────────────────────────���─────────────────────
+      // CRITICAL: Ignore bot's own messages using DYNAMIC botUserId
+      // This prevents infinite loops where the bot responds to itself
+      // ─────────────────────────────────────────────────────────────────
+      if (event.user === config.botUserId || event.bot_id) {
+        console.log('[SLACK_EVENTS] Ignoring bot message');
+        return NextResponse.json({ ok: true });
+      }
+
+      // Process event asynchronously to respond quickly to Slack
+      // Slack will retry if we don't respond within 3 seconds
       const responsePromise = (async () => {
-        switch (event.type) {
-          case 'app_mention':
-            await handleAppMention(event);
-            break;
-          
-          case 'message':
-            // Only handle DMs (channel type 'im')
-            if (event.channel_type === 'im' && !event.bot_id) {
-              await handleDirectMessage(event);
-            }
-            break;
-          
-          default:
-            console.log('Unhandled event type:', event.type);
+        try {
+          switch (event.type) {
+            case 'app_mention':
+              await handleAppMention(config, event);
+              break;
+
+            case 'message':
+              // Only handle DMs (channel type 'im')
+              if (event.channel_type === 'im' && !event.bot_id && !event.subtype) {
+                await handleDirectMessage(config, event);
+              }
+              break;
+
+            default:
+              console.log('[SLACK_EVENTS] Unhandled event type:', event.type);
+          }
+        } catch (handlerError) {
+          console.error('[SLACK_EVENTS] Event handler error:', handlerError);
         }
       })();
 
-      // Don't await - respond immediately
-      responsePromise.catch(err => console.error('Event processing error:', err));
+      // Don't await - respond immediately to Slack
+      responsePromise.catch((err) =>
+        console.error('[SLACK_EVENTS] Event processing error:', err)
+      );
 
       return NextResponse.json({ ok: true });
     }
@@ -341,10 +427,11 @@ export async function POST(req: Request) {
   }
 }
 
-// Also handle GET for verification
+// Also handle GET for verification/health check
 export async function GET(req: Request) {
-  return NextResponse.json({ 
+  return NextResponse.json({
     status: 'Slack Events API endpoint active',
-    timestamp: new Date().toISOString()
+    version: '2.0.0', // Multi-tenant version
+    timestamp: new Date().toISOString(),
   });
 }
