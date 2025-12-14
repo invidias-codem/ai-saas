@@ -1,13 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
-import * as admin from "firebase-admin";
 import { NextResponse } from "next/server";
+import { db } from "@/lib/firebaseAdmin";
 
 // Force dynamic rendering since this route uses Clerk auth (headers)
 export const dynamic = 'force-dynamic';
-
-// Initialize Firebase Admin app and Firestore
-const firebaseApp = !admin.apps.length ? admin.initializeApp() : admin.app();
-const db = admin.firestore();
 
 export async function GET() {
   try {

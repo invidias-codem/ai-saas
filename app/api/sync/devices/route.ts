@@ -10,14 +10,11 @@
  */
 
 import { auth } from '@clerk/nextjs/server';
-import * as admin from 'firebase-admin';
 import { NextResponse } from 'next/server';
 import { mergeUserPreferences } from '@/lib/memorySyncUtils';
+import { db } from '@/lib/firebaseAdmin';
 
 export const dynamic = 'force-dynamic';
-
-const firebaseApp = !admin.apps.length ? admin.initializeApp() : admin.app();
-const db = admin.firestore();
 
 interface DeviceInfo {
   id: string;

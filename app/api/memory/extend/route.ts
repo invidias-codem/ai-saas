@@ -1,14 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
-import * as admin from "firebase-admin";
 import { NextResponse } from "next/server";
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-  });
-}
-
-const db = admin.firestore();
+import { db } from "@/lib/firebaseAdmin";
 
 export async function POST(request: Request) {
   try {

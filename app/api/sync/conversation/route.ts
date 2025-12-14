@@ -8,14 +8,11 @@
  */
 
 import { auth } from '@clerk/nextjs/server';
-import * as admin from 'firebase-admin';
 import { NextResponse } from 'next/server';
 import { mergeMessages, SyncMessage } from '@/lib/messageMerge';
+import { db } from '@/lib/firebaseAdmin';
 
 export const dynamic = 'force-dynamic';
-
-const firebaseApp = !admin.apps.length ? admin.initializeApp() : admin.app();
-const db = admin.firestore();
 
 interface ConversationSyncPayload {
   deviceId: string;
