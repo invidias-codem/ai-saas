@@ -19,11 +19,47 @@ import {
   hasInstallation,
 } from '@/lib/slack/tokenManager';
 
-// Initialize Firebase Admin if not already done
-if (!admin.apps.length) {
-  admin.initializeApp();
+// Initialize Firebase Admin with proper credentials
+function initializeFirebaseAdmin() {
+  if (admin.apps.length > 0) {
+    return admin.app();
+  }
+
+  const serviceAccountJson = process.env.GCP_SERVICE_ACCOUNT_KEY_JSON;
+  
+  if (serviceAccountJson) {
+    try {
+      const serviceAccount = JSON.parse(serviceAccountJson);
+      return admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        projectId: serviceAccount.project_id,
+      });
+    } catch (error) {
+      console.error('[SLACK_CALLBACK] Failed to parse service account JSON:', error);
+    }
+  }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+  if (projectId && clientEmail && privateKey) {
+    return admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId,
+        clientEmail,
+        privateKey,
+      }),
+      projectId,
+    });
+  }
+
+  return admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+  });
 }
 
+const firebaseApp = initializeFirebaseAdmin();
 const db = admin.firestore();
 const SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
 
