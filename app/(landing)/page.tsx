@@ -159,6 +159,7 @@ const LandingPage = () => {
             </div>
             
             <div className="flex items-center gap-6 text-sm text-gray-400">
+              <Link href="/blog" className="hover:text-white transition">Blog</Link>
               <Link href="/slack" className="hover:text-white transition">Slack Integration</Link>
               <Link href="/support" className="hover:text-white transition">Support</Link>
               <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>

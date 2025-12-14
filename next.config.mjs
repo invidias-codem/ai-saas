@@ -1,5 +1,10 @@
+import createMDX from '@next/mdx';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enable MDX pages
+  pageExtensions: ['js', 'jsx', 'mdx', 'ts', 'tsx'],
+  
   images: {
     remotePatterns: [
       {
@@ -8,11 +13,23 @@ const nextConfig = {
         port: '',
         pathname: '/**',
       },
-      // You can add other hostnames here if needed
+      {
+        protocol: 'https',
+        hostname: 'scoutforge.net',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
 };
 
-export default nextConfig;
+const withMDX = createMDX({
+  // Add markdown plugins here if needed
+  options: {
+    remarkPlugins: [],
+    rehypePlugins: [],
+  },
+});
 
-  
+// Merge MDX config with Next.js config
+export default withMDX(nextConfig);
