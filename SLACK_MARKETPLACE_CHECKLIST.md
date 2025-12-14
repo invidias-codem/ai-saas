@@ -2,6 +2,38 @@
 
 This checklist helps prepare Genie AI for the Slack Marketplace submission.
 
+**Version:** 2.0.0 (Multi-Tenant)  
+**Last Updated:** January 2025
+
+---
+
+## ✅ Distribution Prerequisites
+
+### Enable Features & Functionality
+- [x] **Events API** - Enabled and verified
+- [x] **Slash Commands** - `/genie` configured
+- [x] **Interactivity** - Buttons, modals, shortcuts enabled
+- [x] **OAuth Flow** - Complete installation flow
+
+### Add OAuth Redirect URLs
+- [x] **Production URL**: `https://your-domain.com/api/integrations/slack/callback`
+- [ ] Verify URL is added in Slack App Settings → OAuth & Permissions → Redirect URLs
+
+### Remove Hard Coded Information
+- [x] **No hardcoded OAuth tokens** - Tokens stored in Firestore per workspace
+- [x] **No hardcoded webhook URLs** - All URLs from environment variables
+- [x] **Dynamic token resolution** - Using `getSlackConfig(teamId)` for all API calls
+- [x] **SLACK_BOT_TOKEN removed** - No longer using single bot token
+
+### Use HTTPS For Your Features
+- [ ] **Events URL**: `https://your-domain.com/api/integrations/slack/events`
+- [ ] **Command URL**: `https://your-domain.com/api/integrations/slack/command`
+- [ ] **Interactivity URL**: `https://your-domain.com/api/integrations/slack/interactivity`
+- [ ] **OAuth Callback**: `https://your-domain.com/api/integrations/slack/callback`
+- [ ] All endpoints use TLS 1.2+
+
+---
+
 ## ✅ App Configuration
 
 ### Basic Information
@@ -35,6 +67,13 @@ This checklist helps prepare Genie AI for the Slack Marketplace submission.
 - [x] Short description: "Chat with Genie AI"
 - [x] Usage hint: "[help|ask|code|explain|summarize] [your message]"
 
+### Interactivity & Shortcuts
+- [x] Interactivity enabled
+- [x] Request URL set: `/api/integrations/slack/interactivity`
+- [x] Shortcuts configured (optional):
+  - Global: `ask_genie` - "Ask Genie"
+  - Message: `summarize_message` - "Summarize with Genie"
+
 ---
 
 ## 📄 Required Pages
@@ -46,7 +85,7 @@ This checklist helps prepare Genie AI for the Slack Marketplace submission.
 - [ ] Clear path to installation
 - [ ] Publicly accessible (no login required)
 
-**Suggested URL**: `https://your-domain.com/slack`
+**URL**: `https://your-domain.com/slack`
 
 ### Support Page
 - [ ] Clear contact method (email or form)
@@ -54,7 +93,7 @@ This checklist helps prepare Genie AI for the Slack Marketplace submission.
 - [ ] Response time commitment (within 2 business days)
 - [ ] Publicly accessible
 
-**Suggested URL**: `https://your-domain.com/support`
+**URL**: `https://your-domain.com/support`
 
 ### Privacy Policy Page
 - [ ] What data is collected
@@ -64,7 +103,7 @@ This checklist helps prepare Genie AI for the Slack Marketplace submission.
 - [ ] Contact information for data requests
 - [ ] Publicly accessible
 
-**Suggested URL**: `https://your-domain.com/privacy`
+**URL**: `https://your-domain.com/privacy`
 
 ---
 
@@ -74,7 +113,8 @@ This checklist helps prepare Genie AI for the Slack Marketplace submission.
 - [ ] Screenshot 1: Slash command in action
 - [ ] Screenshot 2: @mention response
 - [ ] Screenshot 3: DM conversation
-- [ ] Screenshot 4: Help command output
+- [ ] Screenshot 4: Interactive buttons (feedback, regenerate)
+- [ ] Screenshot 5: Settings modal
 
 ### Video (Optional but recommended)
 - [ ] 30-90 seconds length
@@ -89,14 +129,21 @@ This checklist helps prepare Genie AI for the Slack Marketplace submission.
 
 ### OAuth & Tokens
 - [x] Using `state` parameter for CSRF protection
-- [x] Tokens stored securely (environment variables)
+- [x] Tokens stored securely in Firestore (not env vars)
 - [x] Not logging tokens
 - [x] Not exposing tokens to end users
+- [x] Token validation on startup
 
 ### Request Verification
 - [x] Verifying Slack signatures on all endpoints
 - [x] Using signing secret (not verification token)
 - [x] Timestamp validation (within 5 minutes)
+
+### Multi-Tenant Security
+- [x] Workspace isolation (each team has own token)
+- [x] Token lookup by team_id only
+- [x] No cross-workspace data access
+- [x] Installation events logged for audit
 
 ### TLS
 - [ ] All endpoints use HTTPS (TLS 1.2+)
@@ -138,6 +185,13 @@ This checklist helps prepare Genie AI for the Slack Marketplace submission.
 - [x] Ephemeral responses for errors
 - [x] Clear usage hints
 
+### Interactive Elements
+- [x] Feedback buttons (helpful/not helpful)
+- [x] Regenerate response button
+- [x] Expand response button
+- [x] Settings modal
+- [x] Save to memory button
+
 ### Notifications
 - [x] Not spamming users
 - [x] Not using @channel or @everyone
@@ -146,18 +200,39 @@ This checklist helps prepare Genie AI for the Slack Marketplace submission.
 
 ---
 
-## 📋 Pre-Submission Checklist
+## 🧪 Testing Requirements
 
-### Testing
+### Test Coverage
+- [x] **90 tests** across 6 test suites
+- [x] Token manager tests (22 tests)
+- [x] Events API tests (11 tests)
+- [x] Command handler tests (14 tests)
+- [x] Interactivity tests (17 tests)
+- [x] OAuth callback tests (13 tests)
+- [x] Integration tests (13 tests)
+
+### Manual Testing
 - [ ] Test on at least 5 active workspaces
 - [ ] Test all slash commands
 - [ ] Test @mentions
 - [ ] Test DMs
+- [ ] Test interactive buttons
+- [ ] Test settings modal
 - [ ] Test error scenarios
 - [ ] Test with different user permissions
 
+---
+
+## 📋 Pre-Submission Checklist
+
+### Code Review
+- [x] No hardcoded tokens or secrets
+- [x] All API calls use dynamic token resolution
+- [x] Error handling for missing installations
+- [x] Graceful degradation for API failures
+
 ### Documentation
-- [ ] Update SLACK_INTEGRATION_GUIDE.md
+- [x] SLACK_INTEGRATION_GUIDE.md updated
 - [ ] Create user-facing documentation
 - [ ] Prepare FAQ
 
@@ -173,26 +248,47 @@ This checklist helps prepare Genie AI for the Slack Marketplace submission.
 
 ### Environment Variables (Production)
 ```env
-# Slack Integration (Production)
+# Slack App Credentials (Required)
 SLACK_CLIENT_ID=your-production-client-id
 SLACK_CLIENT_SECRET=your-production-client-secret
-SLACK_BOT_TOKEN=xoxb-your-production-bot-token
 SLACK_SIGNING_SECRET=your-production-signing-secret
-SLACK_APP_ID=your-production-app-id
 
-# App URL (Production)
+# App URL (Required for OAuth)
 NEXT_PUBLIC_APP_URL=https://your-production-domain.com
+
+# Firebase (for token storage)
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=your-service-account@project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# Google AI (for Gemini)
+GOOGLE_API_KEY=your-google-api-key
+
+# NOTE: SLACK_BOT_TOKEN is NO LONGER NEEDED
+# Tokens are stored per-workspace in Firestore
 ```
 
 ### Slack App Settings (Production)
-1. Update OAuth Redirect URLs:
-   - `https://your-production-domain.com/api/integrations/slack/callback`
 
-2. Update Event Subscriptions Request URL:
-   - `https://your-production-domain.com/api/integrations/slack/events`
+1. **OAuth & Permissions > Redirect URLs**:
+   ```
+   https://your-production-domain.com/api/integrations/slack/callback
+   ```
 
-3. Update Slash Command Request URL:
-   - `https://your-production-domain.com/api/integrations/slack/command`
+2. **Event Subscriptions > Request URL**:
+   ```
+   https://your-production-domain.com/api/integrations/slack/events
+   ```
+
+3. **Slash Commands > /genie Request URL**:
+   ```
+   https://your-production-domain.com/api/integrations/slack/command
+   ```
+
+4. **Interactivity & Shortcuts > Request URL**:
+   ```
+   https://your-production-domain.com/api/integrations/slack/interactivity
+   ```
 
 ---
 
@@ -214,6 +310,20 @@ NEXT_PUBLIC_APP_URL=https://your-production-domain.com
 
 ---
 
+## 🗄️ Firestore Collections
+
+The multi-tenant architecture uses these Firestore collections:
+
+| Collection | Document ID | Purpose |
+|------------|-------------|---------|
+| `slackInstallations` | `{teamId}` | Bot tokens and workspace info |
+| `slackInstallationEvents` | Auto-generated | Installation/uninstall audit log |
+| `slackFeedback` | Auto-generated | User feedback on responses |
+| `slackMemories` | Auto-generated | Saved responses |
+| `slackUserPreferences` | `{teamId}_{userId}` | User settings |
+
+---
+
 ## 📚 Resources
 
 - [Slack Marketplace Overview](https://docs.slack.dev/slack-marketplace/)
@@ -221,6 +331,24 @@ NEXT_PUBLIC_APP_URL=https://your-production-domain.com
 - [Review Guide](https://docs.slack.dev/slack-marketplace/slack-marketplace-review-guide)
 - [Distributing Your App](https://docs.slack.dev/slack-marketplace/distributing-your-app-in-the-slack-marketplace)
 - [Security Best Practices](https://docs.slack.dev/security)
+- [Messaging Documentation](https://docs.slack.dev/messaging/)
+
+---
+
+## ✅ Final Checklist Before Activation
+
+Before clicking "Activate Public Distribution":
+
+- [ ] All OAuth Redirect URLs added
+- [ ] All Request URLs use HTTPS
+- [ ] No hardcoded tokens (confirmed - using Firestore)
+- [ ] Tested OAuth flow end-to-end
+- [ ] Tested on multiple workspaces
+- [ ] Landing page live
+- [ ] Support page live
+- [ ] Privacy policy live
+- [ ] App icon uploaded
+- [ ] Screenshots prepared
 
 ---
 
@@ -230,3 +358,4 @@ NEXT_PUBLIC_APP_URL=https://your-production-domain.com
 - Review process typically takes 1-2 weeks
 - Be responsive to reviewer feedback
 - Keep app updated after approval
+- Multi-tenant architecture ensures each workspace is isolated
