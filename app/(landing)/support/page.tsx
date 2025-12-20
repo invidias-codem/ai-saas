@@ -307,6 +307,7 @@ const SupportPage = () => {
               <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
               <Link href="/slack" className="hover:text-white transition">Slack Integration</Link>
               <Link href="/" className="hover:text-white transition">Home</Link>
+              <Link href="/blog" className="hover:text-white transition">Blog</Link>
             </div>
           </div>
           

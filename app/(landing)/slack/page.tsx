@@ -223,6 +223,7 @@ const SlackLandingPage = () => {
               <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
               <Link href="/support" className="hover:text-white transition">Support</Link>
               <Link href="/" className="hover:text-white transition">Home</Link>
+              <Link href="/blog" className="hover:text-white transition">Blog</Link>
             </div>
           </div>
           
