@@ -1,40 +1,50 @@
 /**
- * Slack Events API Endpoint (Multi-Tenant) v3.1
+ * Slack Events API Endpoint (Multi-Tenant) v3.2
  * 
- * Enhanced with Code Assistant capabilities:
- * - Automatic code detection in messages
- * - Language-specific code assistance
- * - Intent detection (debug, explain, generate, etc.)
- * - Markdown to Slack formatting conversion
- * 
- * Existing features:
- * - Text streaming for real-time responses
- * - Loading states during processing
- * - Suggested prompts for new threads
- * - Thread titles for organization
- * - Feedback blocks for response quality
- * 
- * Supported events:
- * - app_mention: When someone @mentions the bot
- * - message (im): Direct messages to the bot
- * - assistant_thread_started: When user opens AI container
- * - assistant_thread_context_changed: When user switches channels
- * - app_home_opened: When user opens App Home
+ * Enhanced with Thread-Level Memory and App Home features.
  */
 
+import fs from 'fs';
+import path from 'path';
+
+// Helper to log to file (for debugging when terminal is inaccessible)
+function logDebug(message: string, data?: any) {
+  try {
+    const logPath = path.join(process.cwd(), 'debug_slack.log');
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] ${message}\n${data ? JSON.stringify(data, null, 2) + '\n' : ''}`;
+    fs.appendFileSync(logPath, logEntry);
+  } catch (e) {
+    // Ignore logging errors
+  }
+}
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
+import {
+  getSlackConfig,
+  SlackConfig,
+  getThreadHistory,
+  updateThreadHistory,
+  SlackThreadMessage,
+  publishAppHome,
+} from '@/lib/slack';
 import {
   setAssistantStatus,
   clearAssistantStatus,
+  cycleLoadingMessages,
   setSuggestedPrompts,
-  setThreadTitle,
-  createStreamer,
+  DEFAULT_GENIE_PROMPTS,
   getContextAwarePrompts,
+  setThreadTitle,
   generateThreadTitle,
+  startStream,
+  appendStream,
+  stopStream,
+  createFeedbackBlocks,
+  createStreamer,
   getRandomLoadingMessage,
+  getWelcomeMessageBlocks,
 } from '@/lib/slack/assistantHelpers';
 import {
   isCodeRelated,
@@ -155,11 +165,14 @@ async function sendSlackMessage(
   });
 
   const data = await response.json();
-  
+
   if (!data.ok) {
     console.error('[SLACK_EVENTS] Slack API error:', data.error);
+    logDebug('Slack API Error in sendSlackMessage:', data.error);
+  } else {
+    logDebug('Slack Message Sent Successfully:', data.ts);
   }
-  
+
   return data;
 }
 
@@ -224,7 +237,10 @@ function createStandardFeedbackBlocks(prompt: string): any[] {
 /**
  * Generate general AI response using Gemini with streaming
  */
-async function* generateGenieResponseStream(userMessage: string): AsyncGenerator<string, void, unknown> {
+async function* generateGenieResponseStream(
+  userMessage: string,
+  history: SlackThreadMessage[] = []
+): AsyncGenerator<string, void, unknown> {
   try {
     const chat = generalModel.startChat({
       history: [
@@ -236,6 +252,7 @@ async function* generateGenieResponseStream(userMessage: string): AsyncGenerator
           role: "model",
           parts: [{ text: "I understand. I'm Genie, ready to help in Slack with concise, helpful responses." }],
         },
+        ...history.map(h => ({ role: h.role, parts: [{ text: h.content }] })),
       ],
       generationConfig: {
         temperature: 0.7,
@@ -246,7 +263,7 @@ async function* generateGenieResponseStream(userMessage: string): AsyncGenerator
     });
 
     const result = await chat.sendMessageStream(userMessage);
-    
+
     for await (const chunk of result.stream) {
       const text = chunk.text();
       if (text) {
@@ -265,7 +282,8 @@ async function* generateGenieResponseStream(userMessage: string): AsyncGenerator
 async function* generateCodeResponseStream(
   userMessage: string,
   language: string | null,
-  intent: CodeIntent
+  intent: CodeIntent,
+  history: SlackThreadMessage[] = []
 ): AsyncGenerator<string, void, unknown> {
   try {
     // Build optimized prompt for code
@@ -275,6 +293,7 @@ async function* generateCodeResponseStream(
     });
 
     const chat = codeModel.startChat({
+      history: history.map(h => ({ role: h.role, parts: [{ text: h.content }] })),
       generationConfig: {
         temperature: 0.3, // Lower temperature for more precise code
         topK: 40,
@@ -284,7 +303,7 @@ async function* generateCodeResponseStream(
     });
 
     const result = await chat.sendMessageStream(prompt);
-    
+
     for await (const chunk of result.stream) {
       const text = chunk.text();
       if (text) {
@@ -300,8 +319,18 @@ async function* generateCodeResponseStream(
 /**
  * Generate general AI response (non-streaming fallback)
  */
-async function generateGenieResponse(userMessage: string): Promise<string> {
+async function generateGenieResponse(
+  userMessage: string,
+  history: SlackThreadMessage[] = []
+): Promise<string> {
   try {
+    // Ensure history roles are alternating and content is valid if needed
+    // For now we just map, but safeguard content
+    const historyParts = history.map(h => ({
+      role: h.role === 'user' ? 'user' : 'model',
+      parts: [{ text: h.content || " " }] // Ensure no empty content
+    }));
+
     const chat = generalModel.startChat({
       history: [
         {
@@ -312,6 +341,7 @@ async function generateGenieResponse(userMessage: string): Promise<string> {
           role: "model",
           parts: [{ text: "I understand. I'm Genie, ready to help in Slack with concise, helpful responses." }],
         },
+        ...historyParts as any,
       ],
       generationConfig: {
         temperature: 0.7,
@@ -322,7 +352,13 @@ async function generateGenieResponse(userMessage: string): Promise<string> {
     });
 
     const result = await chat.sendMessage(userMessage);
-    return result.response.text();
+    const text = result.response.text();
+
+    if (!text || text.trim().length === 0) {
+      throw new Error('Empty response from AI model');
+    }
+
+    return text;
   } catch (error) {
     console.error('[SLACK_EVENTS] Error generating Genie response:', error);
     return "I apologize, but I encountered an error processing your request. Please try again.";
@@ -335,7 +371,8 @@ async function generateGenieResponse(userMessage: string): Promise<string> {
 async function generateCodeResponse(
   userMessage: string,
   language: string | null,
-  intent: CodeIntent
+  intent: CodeIntent,
+  history: SlackThreadMessage[] = []
 ): Promise<string> {
   try {
     const prompt = buildCodePrompt(userMessage, {
@@ -343,7 +380,13 @@ async function generateCodeResponse(
       intent,
     });
 
+    const historyParts = history.map(h => ({
+      role: h.role === 'user' ? 'user' : 'model',
+      parts: [{ text: h.content || " " }]
+    }));
+
     const chat = codeModel.startChat({
+      history: historyParts as any,
       generationConfig: {
         temperature: 0.3,
         topK: 40,
@@ -354,7 +397,11 @@ async function generateCodeResponse(
 
     const result = await chat.sendMessage(prompt);
     const response = result.response.text();
-    
+
+    if (!response || response.trim().length === 0) {
+      throw new Error('Empty response from AI model');
+    }
+
     // Convert markdown to Slack format
     return convertMarkdownToSlack(response);
   } catch (error) {
@@ -379,11 +426,11 @@ function getSmartLoadingMessage(isCode: boolean, intent?: CodeIntent): string {
       testing: ['🧪 Writing tests...', '✅ Creating test cases...', '🔬 Testing...'],
       refactoring: ['🔧 Refactoring...', '🛠️ Restructuring...', '✨ Cleaning up...'],
     };
-    
+
     const messages = intent ? codeMessages[intent] : codeMessages.generation;
     return messages[Math.floor(Math.random() * messages.length)];
   }
-  
+
   return getRandomLoadingMessage('thinking');
 }
 
@@ -393,7 +440,7 @@ function getSmartLoadingMessage(isCode: boolean, intent?: CodeIntent): string {
  */
 async function handleAssistantThreadStarted(config: SlackConfig, event: any): Promise<void> {
   const { channel_id, thread_ts, context } = event.assistant_thread || event;
-  
+
   console.log('[SLACK_EVENTS] Assistant thread started:', {
     teamId: config.teamId,
     channel: channel_id,
@@ -406,14 +453,15 @@ async function handleAssistantThreadStarted(config: SlackConfig, event: any): Pr
     await sendSlackMessage(
       config.botToken,
       channel_id,
-      "🧞 Hi! I'm Genie, your AI assistant. I can help with general questions and *code assistance* (debugging, explaining, writing code, and more). How can I help you today?",
-      thread_ts
+      "🧞 Hi! I'm Genie, your AI assistant.", // Fallback text
+      thread_ts,
+      getWelcomeMessageBlocks()
     );
 
     // Set suggested prompts - mix of general and code prompts
     const hasChannelContext = context?.channel_id != null;
     const generalPrompts = getContextAwarePrompts(hasChannelContext);
-    
+
     // Combine general and code prompts
     const combinedPrompts = [
       generalPrompts[0], // First general prompt
@@ -421,7 +469,7 @@ async function handleAssistantThreadStarted(config: SlackConfig, event: any): Pr
       CODE_SUGGESTED_PROMPTS[1], // Debug code
       generalPrompts[1], // Second general prompt
     ];
-    
+
     await setSuggestedPrompts(
       config.botToken,
       channel_id,
@@ -442,7 +490,7 @@ async function handleAssistantThreadStarted(config: SlackConfig, event: any): Pr
  */
 async function handleAssistantThreadContextChanged(config: SlackConfig, event: any): Promise<void> {
   const { channel_id, thread_ts, context } = event.assistant_thread || event;
-  
+
   console.log('[SLACK_EVENTS] Assistant thread context changed:', {
     teamId: config.teamId,
     newChannelContext: context?.channel_id,
@@ -452,7 +500,7 @@ async function handleAssistantThreadContextChanged(config: SlackConfig, event: a
   try {
     const hasChannelContext = context?.channel_id != null;
     const generalPrompts = getContextAwarePrompts(hasChannelContext);
-    
+
     // Combine general and code prompts
     const combinedPrompts = [
       generalPrompts[0],
@@ -460,7 +508,7 @@ async function handleAssistantThreadContextChanged(config: SlackConfig, event: a
       CODE_SUGGESTED_PROMPTS[1],
       generalPrompts[1],
     ];
-    
+
     await setSuggestedPrompts(
       config.botToken,
       channel_id,
@@ -479,10 +527,20 @@ async function handleAssistantThreadContextChanged(config: SlackConfig, event: a
 async function handleAppMention(config: SlackConfig, event: any): Promise<void> {
   const { channel, text, ts, thread_ts, user } = event;
 
-  // Remove the bot mention from the text
-  const cleanText = text.replace(/<@[A-Z0-9]+>/g, '').trim();
+  // Remove the bot mention from the text (handle both <@U123> and <@U123|name>)
+  const cleanText = text.replace(/<@[A-Z0-9]+(\|[^>]+)?>/g, '').trim();
+
+  console.log('[SLACK_EVENTS] App mention received:', {
+    rawText: text,
+    cleanText,
+    channel,
+    ts,
+    thread_ts,
+  });
 
   if (!cleanText) {
+    console.log('[SLACK_EVENTS] Clean text is empty, sending help message');
+    logDebug('Clean text is empty');
     await sendSlackMessage(
       config.botToken,
       channel,
@@ -498,6 +556,8 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
   const isCode = isCodeRelated(cleanText);
   const language = isCode ? detectLanguage(cleanText) : null;
   const intent = isCode ? detectCodeIntent(cleanText) : null;
+
+  logDebug('Message Analysis:', { cleanText, isCode, language, intent });
 
   console.log('[SLACK_EVENTS] Message analysis:', {
     isCode,
@@ -515,6 +575,10 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
   );
 
   try {
+    const history = await getThreadHistory(config.teamId, threadTs);
+    let fullResponse = '';
+    let responseSent = false;
+
     // Try streaming first
     const streamer = createStreamer({
       botToken: config.botToken,
@@ -523,49 +587,68 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
     });
 
     const started = await streamer.start();
-    
+
     if (started) {
       // Stream the response based on type
       if (isCode && intent) {
-        for await (const chunk of generateCodeResponseStream(cleanText, language, intent)) {
+        for await (const chunk of generateCodeResponseStream(cleanText, language, intent, history)) {
           // Convert markdown to Slack format for each chunk
           await streamer.append(convertMarkdownToSlack(chunk));
         }
       } else {
-        for await (const chunk of generateGenieResponseStream(cleanText)) {
+        for await (const chunk of generateGenieResponseStream(cleanText, history)) {
           await streamer.append(chunk);
         }
       }
       await streamer.stop();
-      
-      console.log('[SLACK_EVENTS] Streamed response for app_mention:', {
-        teamId: config.teamId,
-        channel,
-        user,
-        isCode,
-        language,
-        intent,
-        inputLength: cleanText.length,
-        outputLength: streamer.getBuffer().length,
-      });
-    } else {
-      // Fallback to non-streaming
-      console.log('[SLACK_EVENTS] Streaming not available, using fallback');
-      
+
+      fullResponse = streamer.getBuffer();
+
+      // If content was generated, we consider it sent
+      if (fullResponse && fullResponse.trim().length > 0) {
+        await updateThreadHistory(config.teamId, threadTs, { role: 'user', content: cleanText });
+        await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: fullResponse });
+        responseSent = true;
+
+        console.log('[SLACK_EVENTS] Streamed response for app_mention:', {
+          teamId: config.teamId,
+          channel,
+          user,
+          isCode,
+          language,
+          intent,
+          inputLength: cleanText.length,
+          outputLength: fullResponse.length,
+          historyLength: history.length,
+        });
+      } else {
+        console.warn('[SLACK_EVENTS] Stream produced empty response, falling back to non-streaming');
+        logDebug('Stream produced empty response');
+      }
+    }
+
+    if (!responseSent) {
+      // Fallback to non-streaming (or if streaming failed/returned empty)
+      console.log('[SLACK_EVENTS] Using fallback generation (reason: stream failed or empty)');
+      logDebug('Using fallback generation');
+
       let response: string;
       let prefix: string;
-      
+
       if (isCode && intent) {
-        response = await generateCodeResponse(cleanText, language, intent);
+        response = await generateCodeResponse(cleanText, language, intent, history);
         const emoji = getIntentEmoji(intent);
         const label = getIntentLabel(intent);
         const langInfo = language ? ` (${getLanguageDisplayName(language)})` : '';
         prefix = `${emoji} *Genie ${label}${langInfo}:*\n`;
       } else {
-        response = await generateGenieResponse(cleanText);
+        response = await generateGenieResponse(cleanText, history);
         prefix = '🧞 *Genie:*\n';
       }
-      
+
+      await updateThreadHistory(config.teamId, threadTs, { role: 'user', content: cleanText });
+      await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: response });
+
       await sendSlackMessage(
         config.botToken,
         channel,
@@ -577,7 +660,7 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
 
     // Clear loading status
     await clearAssistantStatus(config.botToken, channel, threadTs);
-    
+
     // Add completion reaction based on type
     const reactionEmoji = isCode ? 'computer' : 'white_check_mark';
     await addReaction(config.botToken, channel, ts, reactionEmoji);
@@ -599,7 +682,7 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
  */
 async function handleDirectMessage(config: SlackConfig, event: any): Promise<void> {
   const { channel, text, ts, thread_ts, user } = event;
-  
+
   // Use thread_ts if available, otherwise use ts as the thread
   const threadTs = thread_ts || ts;
 
@@ -635,6 +718,10 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
   }
 
   try {
+    const history = await getThreadHistory(config.teamId, threadTs);
+    let fullResponse = '';
+    let responseSent = false;
+
     // Try streaming first
     const streamer = createStreamer({
       botToken: config.botToken,
@@ -643,46 +730,63 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
     });
 
     const started = await streamer.start();
-    
+
     if (started) {
       // Stream the response based on type
       if (isCode && intent) {
-        for await (const chunk of generateCodeResponseStream(text, language, intent)) {
+        for await (const chunk of generateCodeResponseStream(text, language, intent, history)) {
           await streamer.append(convertMarkdownToSlack(chunk));
         }
       } else {
-        for await (const chunk of generateGenieResponseStream(text)) {
+        for await (const chunk of generateGenieResponseStream(text, history)) {
           await streamer.append(chunk);
         }
       }
       await streamer.stop();
-      
-      console.log('[SLACK_EVENTS] Streamed DM response:', {
-        teamId: config.teamId,
-        user,
-        isCode,
-        language,
-        intent,
-        inputLength: text.length,
-        outputLength: streamer.getBuffer().length,
-      });
-    } else {
+
+      fullResponse = streamer.getBuffer();
+
+      // If content was generated, we consider it sent
+      if (fullResponse && fullResponse.trim().length > 0) {
+        await updateThreadHistory(config.teamId, threadTs, { role: 'user', content: text });
+        await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: fullResponse });
+        responseSent = true;
+
+        console.log('[SLACK_EVENTS] Streamed DM response:', {
+          teamId: config.teamId,
+          user,
+          isCode,
+          language,
+          intent,
+          inputLength: text.length,
+          outputLength: fullResponse.length,
+          historyLength: history.length,
+        });
+      } else {
+        console.warn('[SLACK_EVENTS] DM stream produced empty response, falling back to non-streaming');
+      }
+    }
+
+    if (!responseSent) {
       // Fallback to non-streaming
       console.log('[SLACK_EVENTS] Streaming not available for DM, using fallback');
-      
+
       let response: string;
       let prefix = '';
-      
+
       if (isCode && intent) {
-        response = await generateCodeResponse(text, language, intent);
+        response = await generateCodeResponse(text, language, intent, history);
         const emoji = getIntentEmoji(intent);
         const label = getIntentLabel(intent);
         const langInfo = language ? ` (${getLanguageDisplayName(language)})` : '';
         prefix = `${emoji} *${label}${langInfo}:*\n`;
       } else {
-        response = await generateGenieResponse(text);
+        response = await generateGenieResponse(text, history);
       }
-      
+
+      await updateThreadHistory(config.teamId, threadTs, { role: 'user', content: text });
+      await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: response });
+
       await sendSlackMessage(
         config.botToken,
         channel,
@@ -707,22 +811,184 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
 }
 
 /**
+ * Handle workflow_step_execute event
+ * Executes custom workflow steps (Analyze / Generate)
+ */
+async function handleWorkflowStepExecute(config: SlackConfig, event: any): Promise<void> {
+  const { callback_id, workflow_step } = event;
+  const { inputs, workflow_step_execute_id } = workflow_step;
+
+  console.log('[SLACK_EVENTS] Executing workflow step:', { callbackId: callback_id, executeId: workflow_step_execute_id });
+
+  try {
+    let outputs = {};
+
+    // 1. Analyze Text
+    if (callback_id === 'analyze_text_step') {
+      const text = inputs.text?.value;
+      if (text) {
+        const analysis = await generateCodeResponse(
+          `Analyze the following text/code and provide a summary:\n\n${text}`,
+          null,
+          'review'
+        );
+        outputs = { analysis };
+      }
+    }
+
+    // 2. Generate Code
+    else if (callback_id === 'generate_code_step') {
+      const prompt = inputs.prompt?.value;
+      if (prompt) {
+        const code = await generateCodeResponse(
+          `Generate code for the following request:\n\n${prompt}`,
+          null,
+          'generation'
+        );
+        outputs = { code };
+      }
+    }
+
+    // Report success back to Slack
+    await fetch(`${SLACK_API_BASE}/workflows.stepCompleted`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.botToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        workflow_step_execute_id: workflow_step_execute_id,
+        outputs
+      })
+    });
+
+  } catch (error) {
+    console.error('[SLACK_EVENTS] Error executing workflow step:', error);
+    // Report fail
+    await fetch(`${SLACK_API_BASE}/workflows.stepFailed`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.botToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        workflow_step_execute_id: workflow_step_execute_id,
+        error: { message: 'Failed to execute step' }
+      })
+    });
+  }
+}
+
+/**
+ * Handle file_shared events
+ * Downloads code/text files and analyzes them
+ */
+async function handleFileShared(config: SlackConfig, event: any): Promise<void> {
+  const { file_id, user_id, channel_id } = event;
+
+  console.log('[SLACK_EVENTS] File shared:', { fileId: file_id, userId: user_id, channelId: channel_id });
+
+  try {
+    // 1. Get file info
+    const fileInfoResponse = await fetch(`${SLACK_API_BASE}/files.info?file=${file_id}`, {
+      headers: { 'Authorization': `Bearer ${config.botToken}` }
+    });
+    const fileInfoData = await fileInfoResponse.json();
+
+    if (!fileInfoData.ok) {
+      console.error('[SLACK_EVENTS] Failed to get file info:', fileInfoData.error);
+      return;
+    }
+
+    const file = fileInfoData.file;
+
+    // Check if it's a text-based file we can process
+    // supported: text, python, javascript, etc. (mimetype usually starts with text/ or application/json/javascript)
+    // Slack 'filetype' field is useful: python, javascript, text, markdown, json, etc.
+    const supportedTypes = ['text', 'python', 'javascript', 'typescript', 'json', 'markdown', 'html', 'css', 'yaml', 'xml', 'shell', 'java', 'c', 'cpp', 'go', 'ruby', 'php'];
+
+    if (!supportedTypes.includes(file.filetype) && !file.mimetype.startsWith('text/')) {
+      console.log('[SLACK_EVENTS] Unsupported file type:', file.filetype);
+      // Optional: Respond saying we can't read this file yet
+      return;
+    }
+
+    // 2. Download content
+    const contentResponse = await fetch(file.url_private, {
+      headers: { 'Authorization': `Bearer ${config.botToken}` }
+    });
+
+    if (!contentResponse.ok) {
+      console.error('[SLACK_EVENTS] Failed to download file content');
+      return;
+    }
+
+    const content = await contentResponse.text();
+
+    if (!content) {
+      return;
+    }
+
+    // 3. Set status
+    // Note: We don't have a thread_ts yet usually, unless it was shared in a thread.
+    // 'shares' object in file info tells us where it was shared.
+    const threadTs = file.shares?.public?.[channel_id]?.[0]?.ts || event.ts;
+
+    await setAssistantStatus(
+      config.botToken,
+      channel_id,
+      threadTs,
+      "📄 Reading file..."
+    );
+
+    // 4. Analyze with Gemini
+    // Construct a prompt context
+    const analysisPrompt = `
+I have analyzed the uploaded file: \`${file.name}\` (${file.filetype}).
+
+File Content:
+\`\`\`${file.filetype}
+${content.substring(0, 10000)} ${content.length > 10000 ? '...(truncated)' : ''}
+\`\`\`
+
+Please provide a summary and code analysis of this file. Identify purpose, key logic, and any potential issues.
+`;
+
+    const response = await generateCodeResponse(analysisPrompt, null, 'review');
+
+    // 5. Reply
+    await sendSlackMessage(
+      config.botToken,
+      channel_id,
+      `📄 *File Analysis: ${file.name}*\n\n${response}`,
+      threadTs,
+      createStandardFeedbackBlocks(analysisPrompt)
+    );
+
+    await clearAssistantStatus(config.botToken, channel_id, threadTs);
+    await addReaction(config.botToken, channel_id, threadTs, 'eyes');
+
+  } catch (error) {
+    console.error('[SLACK_EVENTS] Error handling file share:', error);
+    await sendSlackMessage(config.botToken, channel_id, "I tried to read the file but encountered an error.", event.ts);
+  }
+}
+
+/**
  * Handle app_home_opened event
  */
 async function handleAppHomeOpened(config: SlackConfig, event: any): Promise<void> {
-  const { user, tab, channel } = event;
-  
+  const { user, tab, team_id } = event;
+
   console.log('[SLACK_EVENTS] App Home opened:', {
-    teamId: config.teamId,
+    teamId: team_id,
     user,
     tab,
   });
 
   // Only handle Home tab for now
   if (tab === 'home') {
-    // TODO: Implement App Home view publishing
-    // This will be implemented in Phase 6
-    console.log('[SLACK_EVENTS] Home tab opened - view publishing not yet implemented');
+    await publishAppHome(user, team_id);
   }
 }
 
@@ -737,6 +1003,7 @@ export async function POST(req: Request) {
     let body: any;
     try {
       body = JSON.parse(rawBody);
+      logDebug('Received event body:', body);
     } catch (parseError) {
       console.error('[SLACK_EVENTS] Failed to parse JSON:', parseError);
       return new NextResponse('Invalid JSON', { status: 400 });
@@ -770,8 +1037,8 @@ export async function POST(req: Request) {
       config = await getSlackConfig(teamId);
     } catch (configError) {
       console.error(`[SLACK_EVENTS] No installation for team ${teamId}:`, configError);
-      return NextResponse.json({ 
-        ok: false, 
+      return NextResponse.json({
+        ok: false,
         error: 'workspace_not_installed',
         message: 'This workspace needs to reinstall the Genie app.',
       });
@@ -838,8 +1105,14 @@ export async function POST(req: Request) {
               break;
 
             // ─────────────────────────────────────────────────────────
-            // App Home Events
-            // ─────────────────────────────────────────────────────────
+            case 'workflow_step_execute':
+              await handleWorkflowStepExecute(config, event);
+              break;
+
+            case 'file_shared':
+              await handleFileShared(config, event);
+              break;
+
             case 'app_home_opened':
               await handleAppHomeOpened(config, event);
               break;
@@ -874,7 +1147,7 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   return NextResponse.json({
     status: 'Slack Events API endpoint active',
-    version: '3.1.0', // Code Assistant version
+    version: '3.2.0', // Updated version
     features: [
       'multi-tenant',
       'text-streaming',
@@ -886,6 +1159,8 @@ export async function GET(req: Request) {
       'language-detection',
       'intent-detection',
       'code-specific-prompts',
+      'thread-level-memory', // Added feature
+      'app-home-dashboard', // Added feature
     ],
     timestamp: new Date().toISOString(),
   });

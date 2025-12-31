@@ -69,6 +69,15 @@ jest.mock('@google/generative-ai', () => ({
         sendMessage: jest.fn().mockResolvedValue({
           response: { text: () => 'AI response from Genie' },
         }),
+        sendMessageStream: jest.fn().mockResolvedValue({
+          stream: (async function*() {
+            yield { text: () => 'This is a ' };
+            yield { text: () => 'streamed response.' };
+          })(),
+          response: Promise.resolve({
+            text: () => 'This is a streamed response.',
+          }),
+        }),
       }),
       generateContent: jest.fn().mockResolvedValue({
         response: { text: () => 'Generated content from Genie' },

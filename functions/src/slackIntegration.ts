@@ -34,7 +34,7 @@ export const handleSlackCommand = functions.https.onRequest(async (req, res) => 
     });
 
     // Process command asynchronously
-    await processSlackCommand(user_id, channel_id, text, response_url, team_id);
+    await processSlackCommand(user_id, channel_id, text, response_url, team_id, req.body);
   } catch (error) {
     console.error('Error handling Slack command:', error);
     res.status(500).json({ error: `Failed to process command: ${error}` });
@@ -70,21 +70,42 @@ export const handleSlackInteractivity = functions.https.onRequest(
 );
 
 /**
+ * Resolve Slack User to Internal User
+ */
+async function resolveSlackUser(teamId: string, slackUserId: string): Promise<string> {
+  try {
+    const db = admin.firestore();
+    const mappingDoc = await db.collection('slackUserMappings').doc(`${teamId}:${slackUserId}`).get();
+    if (mappingDoc.exists) {
+      return mappingDoc.data()?.userId || slackUserId;
+    }
+  } catch (error) {
+    console.warn('Error resolving slack user:', error);
+  }
+  return slackUserId;
+}
+
+/**
  * Process Slack command
  */
 async function processSlackCommand(
-  userId: string,
+  slackUserId: string,
   channelId: string,
   text: string,
   responseUrl: string,
-  teamId?: string
+  teamId: string,
+  reqBody: any
 ): Promise<void> {
   try {
     const db = admin.firestore();
 
+    // Resolve to internal User ID if linked
+    const userId = await resolveSlackUser(teamId, slackUserId);
+
     // Parse command: /genie [action] [args...]
     const parts = text.trim().split(/\s+/);
     const action = parts[0] || 'help';
+    const args = parts.slice(1).join(' ');
 
     let response: Record<string, any>;
 
@@ -97,12 +118,54 @@ async function processSlackCommand(
         response = await getMemorySummary(userId);
         break;
 
+      case 'remember':
+        if (!args) {
+          response = { text: 'Please provide something to remember. Usage: `/genie remember [text]`' };
+        } else {
+          await db
+            .collection('users')
+            .doc(userId)
+            .collection('memories')
+            .add({
+              userId,
+              featureType: 'slack',
+              title: `Memory: ${args.substring(0, 30)}...`,
+              summary: args,
+              messages: [],
+              tags: ['slack', 'command'],
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            });
+
+          response = {
+            response_type: 'ephemeral',
+            text: '🧠 Memory stored successfully!'
+          };
+        }
+        break;
+
       case 'stats':
         response = await getUserStats(userId);
         break;
 
       case 'notify':
-        response = await configureNotifications(userId, channelId);
+        response = await configureNotifications(userId, channelId, teamId);
+        break;
+
+      case 'configure':
+        // Open configuration modal
+        const triggerId = (reqBody as any).trigger_id;
+        if (!triggerId) {
+          response = { text: 'Error: No trigger_id found.' };
+        } else {
+          await openConfigurationModal(triggerId, channelId, teamId);
+          // Slash commands require immediate 200, so we return empty/200 OK 
+          // but here we are returning a response object that gets sent to axios.post(responseUrl).
+          // Actually, for opening modals, we usually ack immediately (done in handler) and then call views.open.
+          // But processSlackCommand is async *after* ack.
+          // So we just return nothing or a temp message.
+          response = { text: '', response_type: 'ephemeral', delete_original: true }; // Dummy
+        }
         break;
 
       default:
@@ -258,7 +321,8 @@ async function getUserStats(userId: string): Promise<Record<string, any>> {
  */
 async function configureNotifications(
   userId: string,
-  channelId: string
+  channelId: string,
+  teamId: string
 ): Promise<Record<string, any>> {
   try {
     const db = admin.firestore();
@@ -273,6 +337,7 @@ async function configureNotifications(
         'integrations.slackEnabled': true,
         'integrations.slackChannelId': channelId,
         'integrations.slackUserId': userId,
+        'integrations.slackTeamId': teamId,
       });
 
     return {
@@ -337,6 +402,126 @@ export async function sendSlackNotification(
   } catch (error) {
     console.error(`Error sending Slack notification: ${error}`);
     // Don't throw - notification failure shouldn't block operations
+  }
+}
+
+/**
+ * Open configuration modal
+ */
+async function openConfigurationModal(triggerId: string, channelId: string, teamId: string): Promise<void> {
+  try {
+    const db = admin.firestore();
+
+    // Get existing config
+    let currentConfig = {
+      persona: 'default',
+      responseStyle: 'concise',
+      proactiveEnabled: false
+    };
+
+    try {
+      const configDoc = await db.collection('slack_channel_configs').doc(`${teamId}_${channelId}`).get();
+      if (configDoc.exists) {
+        currentConfig = { ...currentConfig, ...configDoc.data() };
+      }
+    } catch (e) {
+      console.warn('Error fetching config for modal:', e);
+    }
+
+    const botToken = process.env.SLACK_BOT_TOKEN;
+    if (!botToken) throw new Error('SLACK_BOT_TOKEN missing');
+
+    await axios.post(`${SLACK_API_BASE}/views.open`, {
+      trigger_id: triggerId,
+      view: {
+        type: 'modal',
+        callback_id: 'configure_channel_submission',
+        private_metadata: JSON.stringify({ channelId, teamId }),
+        title: {
+          type: 'plain_text',
+          text: 'Channel Settings'
+        },
+        submit: {
+          type: 'plain_text',
+          text: 'Save'
+        },
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `Configure Genie behavior for <#${channelId}>`
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'persona_block',
+            label: {
+              type: 'plain_text',
+              text: 'Bot Persona'
+            },
+            element: {
+              type: 'static_select',
+              action_id: 'persona_selection',
+              initial_option: {
+                text: { type: 'plain_text', text: currentConfig.persona.charAt(0).toUpperCase() + currentConfig.persona.slice(1) },
+                value: currentConfig.persona
+              },
+              options: [
+                { text: { type: 'plain_text', text: 'Default' }, value: 'default' },
+                { text: { type: 'plain_text', text: 'Developer' }, value: 'developer' },
+                { text: { type: 'plain_text', text: 'Pirate' }, value: 'pirate' },
+                { text: { type: 'plain_text', text: 'Executive' }, value: 'executive' }
+              ]
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'style_block',
+            label: {
+              type: 'plain_text',
+              text: 'Response Style'
+            },
+            element: {
+              type: 'static_select',
+              action_id: 'style_selection',
+              initial_option: {
+                text: { type: 'plain_text', text: currentConfig.responseStyle.charAt(0).toUpperCase() + currentConfig.responseStyle.slice(1) },
+                value: currentConfig.responseStyle
+              },
+              options: [
+                { text: { type: 'plain_text', text: 'Concise' }, value: 'concise' },
+                { text: { type: 'plain_text', text: 'Detailed' }, value: 'detailed' },
+                { text: { type: 'plain_text', text: 'Bullet Points' }, value: 'bullet-points' }
+              ]
+            }
+          },
+          {
+            type: 'section',
+            block_id: 'proactive_block',
+            text: {
+              type: 'mrkdwn',
+              text: '*Daily Summaries*\nEnable daily proactive summaries for this channel?'
+            },
+            accessory: {
+              type: 'checkboxes',
+              action_id: 'proactive_checkbox',
+              initial_options: currentConfig.proactiveEnabled ? [{ value: 'enabled', text: { type: 'plain_text', text: 'Enable' } }] : [],
+              options: [
+                {
+                  text: { type: 'plain_text', text: 'Enable' },
+                  value: 'enabled'
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }, {
+      headers: { 'Authorization': `Bearer ${botToken}` }
+    });
+  } catch (error) {
+    console.error('Error opening config modal:', error);
   }
 }
 

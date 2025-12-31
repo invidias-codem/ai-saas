@@ -8,7 +8,13 @@
  * - Text streaming (chat.startStream, chat.appendStream, chat.stopStream)
  */
 
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 const SLACK_API_BASE = 'https://slack.com/api';
+
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 /**
  * Suggested prompt configuration
@@ -72,11 +78,11 @@ export async function setAssistantStatus(
     });
 
     const data = await response.json();
-    
+
     if (!data.ok) {
       console.error('[ASSISTANT] Failed to set status:', data.error);
     }
-    
+
     return data;
   } catch (error: any) {
     console.error('[ASSISTANT] Error setting status:', error.message);
@@ -111,10 +117,10 @@ export async function cycleLoadingMessages(
 
   const cycle = async () => {
     if (stopped) return;
-    
+
     await setAssistantStatus(botToken, channelId, threadTs, messages[index]);
     index = (index + 1) % messages.length;
-    
+
     if (!stopped) {
       setTimeout(cycle, intervalMs);
     }
@@ -169,11 +175,11 @@ export async function setSuggestedPrompts(
     });
 
     const data = await response.json();
-    
+
     if (!data.ok) {
       console.error('[ASSISTANT] Failed to set suggested prompts:', data.error);
     }
-    
+
     return data;
   } catch (error: any) {
     console.error('[ASSISTANT] Error setting suggested prompts:', error.message);
@@ -264,11 +270,11 @@ export async function setThreadTitle(
     });
 
     const data = await response.json();
-    
+
     if (!data.ok) {
       console.error('[ASSISTANT] Failed to set thread title:', data.error);
     }
-    
+
     return data;
   } catch (error: any) {
     console.error('[ASSISTANT] Error setting thread title:', error.message);
@@ -282,10 +288,10 @@ export async function setThreadTitle(
 export function generateThreadTitle(userMessage: string): string {
   // Take first 50 characters or first sentence
   const firstSentence = userMessage.split(/[.!?]/)[0];
-  const title = firstSentence.length > 50 
+  const title = firstSentence.length > 50
     ? firstSentence.substring(0, 47) + '...'
     : firstSentence;
-  
+
   return title.trim() || 'New conversation';
 }
 
@@ -330,12 +336,14 @@ export async function startStream(
     });
 
     const data = await response.json();
-    
+
     if (!data.ok) {
       console.error('[STREAM] Failed to start stream:', data.error);
+      // Log to file if available (hacky import)
+      try { require('fs').appendFileSync(require('path').join(process.cwd(), 'debug_slack.log'), `[STREAM_ERROR] ${data.error}\n`); } catch (e) { }
       return { ok: false, error: data.error };
     }
-    
+
     return {
       ok: true,
       state: {
@@ -378,11 +386,11 @@ export async function appendStream(
     });
 
     const data = await response.json();
-    
+
     if (!data.ok) {
       console.error('[STREAM] Failed to append stream:', data.error);
     }
-    
+
     return data;
   } catch (error: any) {
     console.error('[STREAM] Error appending stream:', error.message);
@@ -418,11 +426,11 @@ export async function stopStream(
     });
 
     const data = await response.json();
-    
+
     if (!data.ok) {
       console.error('[STREAM] Failed to stop stream:', data.error);
     }
-    
+
     return data;
   } catch (error: any) {
     console.error('[STREAM] Error stopping stream:', error.message);
@@ -459,7 +467,7 @@ export function createStreamer(config: StreamConfig) {
         console.error('[STREAMER] Stream not started');
         return false;
       }
-      
+
       buffer += text;
       const result = await appendStream(config.botToken, state, text);
       return result.ok;
@@ -473,7 +481,7 @@ export function createStreamer(config: StreamConfig) {
         console.error('[STREAMER] Stream not started');
         return false;
       }
-      
+
       const result = await stopStream(config.botToken, state, finalText);
       state = null;
       return result.ok;
@@ -517,8 +525,8 @@ export function createFeedbackBlocks(
           positive_button: {
             text: { type: 'plain_text', text: '👍' },
             accessibility_label: 'This response was helpful',
-            value: JSON.stringify({ 
-              type: 'positive', 
+            value: JSON.stringify({
+              type: 'positive',
               responseId,
               prompt: originalPrompt?.substring(0, 200),
             }),
@@ -526,8 +534,8 @@ export function createFeedbackBlocks(
           negative_button: {
             text: { type: 'plain_text', text: '👎' },
             accessibility_label: 'This response was not helpful',
-            value: JSON.stringify({ 
-              type: 'negative', 
+            value: JSON.stringify({
+              type: 'negative',
               responseId,
               prompt: originalPrompt?.substring(0, 200),
             }),
@@ -607,4 +615,77 @@ export function getRandomLoadingMessage(
 ): string {
   const messages = LOADING_MESSAGES[category];
   return messages[Math.floor(Math.random() * messages.length)];
+}
+
+/**
+ * Get the Welcome Message Blocks with interactive buttons
+ */
+export function getWelcomeMessageBlocks(userId?: string): any[] {
+  const greeting = userId ? `Hi <@${userId}>!` : "Hi!";
+
+  return [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `🧞 *${greeting} I'm Genie, your AI assistant.*`,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: "I can help you with understanding code, writing new features, debugging, and much more. I also remember our conversations to provide better context.",
+      },
+    },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '❓ Ask a Question',
+            emoji: true,
+          },
+          action_id: 'onboarding_ask_question',
+        },
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '📊 See My Stats',
+            emoji: true,
+          },
+          action_id: 'onboarding_see_stats',
+        },
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '🏠 Visit App Home',
+            emoji: true,
+          },
+          action_id: 'onboarding_app_home',
+        },
+      ],
+    },
+  ];
+}
+
+/**
+ * Generate AI response for code or analysis
+ */
+export async function generateCodeResponse(
+  prompt: string,
+  context: string | null = null,
+  type: 'review' | 'generation' = 'review'
+): Promise<string> {
+  try {
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  } catch (error) {
+    console.error('[ASSISTANT] Error generating AI response:', error);
+    return "I apologize, but I encountered an error processing your code request. Please try again.";
+  }
 }

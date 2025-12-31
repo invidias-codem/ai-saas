@@ -28,6 +28,15 @@ jest.mock('@google/generative-ai', () => ({
             text: () => 'This is a test response from Genie.',
           },
         }),
+        sendMessageStream: jest.fn().mockResolvedValue({
+          stream: (async function*() {
+            yield { text: () => 'This is a ' };
+            yield { text: () => 'streamed response.' };
+          })(),
+          response: Promise.resolve({
+            text: () => 'This is a streamed response.',
+          }),
+        }),
       }),
     }),
   })),
@@ -107,7 +116,7 @@ describe('Slack Command Handler', () => {
 
       expect(response.status).toBe(200);
       expect(data.response_type).toBe('ephemeral');
-      expect(data.text).toContain('Loading help');
+      expect(data.text).toContain('Genie AI Slack Commands');
     });
 
     it('should return help message for empty command', async () => {
@@ -127,7 +136,8 @@ describe('Slack Command Handler', () => {
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      expect(data.text).toContain('Processing');
+      expect(data.response_type).toBe('ephemeral');
+      expect(data.text).toContain('Processing your request...');
 
       // Wait for async processing
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -143,7 +153,7 @@ describe('Slack Command Handler', () => {
 
     it('should return error for /genie ask without question', async () => {
       const request = createCommandRequest({ text: 'ask' });
-      const response = await POST(request);
+      await POST(request);
 
       // Wait for async processing
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -165,7 +175,8 @@ describe('Slack Command Handler', () => {
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      expect(data.text).toContain('Processing');
+      expect(data.response_type).toBe('ephemeral');
+      expect(data.text).toContain('Processing your request...');
     });
 
     it('should return error for /genie code without request', async () => {
@@ -191,7 +202,8 @@ describe('Slack Command Handler', () => {
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      expect(data.text).toContain('Processing');
+      expect(data.response_type).toBe('ephemeral');
+      expect(data.text).toContain('Processing your request...');
     });
   });
 
@@ -204,7 +216,8 @@ describe('Slack Command Handler', () => {
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      expect(data.text).toContain('Processing');
+      expect(data.response_type).toBe('ephemeral');
+      expect(data.text).toContain('Processing your request...');
     });
   });
 
@@ -215,7 +228,8 @@ describe('Slack Command Handler', () => {
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      expect(data.text).toContain('Processing');
+      expect(data.response_type).toBe('ephemeral');
+      expect(data.text).toContain('Processing your request...');
     });
   });
 
@@ -323,7 +337,7 @@ describe('Slack Command Handler', () => {
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('Slack Command endpoint active');
-      expect(data.version).toBe('2.0.0');
+      expect(data.version).toBe('3.1.0');
     });
   });
 });

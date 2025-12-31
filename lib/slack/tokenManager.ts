@@ -59,10 +59,36 @@ export async function getSlackConfig(teamId: string): Promise<SlackConfig> {
     throw new Error('Team ID is required');
   }
 
+  // DEVELOPMENT OVERRIDE: Prioritize local .env token if available
+  // This ensures local testing works even if the DB has stale/missing data
+  if (process.env.SLACK_BOT_TOKEN && (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV)) {
+    console.warn(`[TOKEN_MANAGER] ⚠️ Using local environment override for team ${teamId}`);
+    return {
+      teamId,
+      teamName: 'Development Workspace',
+      botToken: process.env.SLACK_BOT_TOKEN,
+      botUserId: process.env.SLACK_BOT_USER_ID || '',
+      scopes: ['app_mentions:read', 'chat:write'],
+    };
+  }
+
   const installationRef = db.collection('slackInstallations').doc(teamId);
   const doc = await installationRef.get();
 
   if (!doc.exists) {
+    // Development Fallback: Use local environment variables if available
+    // This allows developers to test without needing a synchronized Firestore database
+    if (process.env.SLACK_BOT_TOKEN && (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV)) {
+      console.warn(`[TOKEN_MANAGER] Using local environment fallback for team ${teamId}`);
+      return {
+        teamId,
+        teamName: 'Development Workspace',
+        botToken: process.env.SLACK_BOT_TOKEN,
+        botUserId: process.env.SLACK_BOT_USER_ID || '', // Optional: Set in .env for better mention cleaning
+        scopes: ['app_mentions:read', 'chat:write'],
+      };
+    }
+
     console.error(`[TOKEN_MANAGER] No installation found for team ${teamId}`);
     throw new Error(`No Slack installation found for team ${teamId}`);
   }

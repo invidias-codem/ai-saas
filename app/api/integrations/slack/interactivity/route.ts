@@ -1,22 +1,13 @@
 /**
- * Slack Interactivity Handler (Multi-Tenant) v3.0
+ * Slack Interactivity Handler (Multi-Tenant) v3.1
  * 
- * Enhanced with Agents & AI Apps features:
- * - Feedback buttons (👍/👎) handling
- * - Regenerate response functionality
- * - Settings modal
- * - Message shortcuts
- * 
- * Supported interaction types:
- * - block_actions: Button clicks, menu selections, feedback buttons
- * - view_submission: Modal form submissions
- * - shortcut: Global and message shortcuts
+ * Enhanced with corrected action handling.
  */
 
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
+import { getSlackConfig, SlackConfig, resolveSlackUser, saveChannelConfig, type ChannelConfig } from '@/lib/slack';
 import { db } from '@/lib/firebaseAdmin';
 import { createFeedbackBlocks, createStreamer } from '@/lib/slack/assistantHelpers';
 
@@ -242,7 +233,61 @@ async function generateGenieResponse(prompt: string): Promise<string> {
     return result.response.text();
   } catch (error) {
     console.error('[SLACK_INTERACTIVITY] Error generating response:', error);
-    return "I apologize, but I encountered an error. Please try again.";
+    return "I apologize, but I encountered an error processing your request. Please try again.";
+  }
+}
+
+/**
+ * Handle workflow_step_edit
+ */
+async function handleWorkflowStepEdit(
+  config: SlackConfig,
+  triggerId: string,
+  callbackId: string,
+  workflowStep: any
+): Promise<void> {
+  const stepInputs = workflowStep.inputs || {};
+
+  // 1. Analyze Text Step
+  if (callbackId === 'analyze_text_step') {
+    await openModal(config.botToken, triggerId, {
+      type: 'workflow_step',
+      callback_id: 'analyze_text_save',
+      blocks: [
+        {
+          type: 'input',
+          block_id: 'input_text_block',
+          label: { type: 'plain_text', text: 'Text to Analyze' },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'text_input',
+            initial_value: stepInputs.text?.value || '',
+            multiline: true
+          }
+        }
+      ]
+    });
+  }
+
+  // 2. Generate Code Step
+  else if (callbackId === 'generate_code_step') {
+    await openModal(config.botToken, triggerId, {
+      type: 'workflow_step',
+      callback_id: 'generate_code_save',
+      blocks: [
+        {
+          type: 'input',
+          block_id: 'prompt_block',
+          label: { type: 'plain_text', text: 'Code Generation Prompt' },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'prompt_input',
+            initial_value: stepInputs.prompt?.value || '',
+            multiline: true
+          }
+        }
+      ]
+    });
   }
 }
 
@@ -265,322 +310,331 @@ async function handleBlockActions(
       userId: user?.id,
     });
 
-    // ─────────────────────────────────────────────────────────────────
-    // Handle Feedback Buttons (new format from context_actions block)
-    // ─────────────────────────────────────────────────────────────────
-    if (action_id === 'genie_feedback') {
+    if (action_id === 'feedback_helpful' || action_id === 'feedback_not_helpful') {
+      await storeFeedback(
+        config.teamId,
+        user.id,
+        action_id === 'feedback_helpful' ? 'positive' : 'negative',
+        message?.ts || '',
+        value
+      );
+
+      if (response_url) {
+        await updateMessageViaResponseUrl(response_url, {
+          text: message?.text || '',
+          blocks: [
+            ...(message?.blocks?.filter((b: any) => b.type !== 'actions') || []),
+            {
+              type: 'context',
+              elements: [
+                {
+                  type: 'mrkdwn',
+                  text: action_id === 'feedback_helpful' ? '✅ _Thanks for your feedback!_' : '📝 _Thanks for your feedback! We\'ll work on improving._',
+                },
+              ],
+            },
+          ],
+          replace_original: true,
+        });
+      }
+      continue;
+    }
+
+    if (action_id === 'regenerate_response') {
+      if (response_url && value) {
+        await updateMessageViaResponseUrl(response_url, {
+          text: '🔄 Regenerating response...',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '🔄 _Regenerating response..._',
+              },
+            },
+          ],
+          replace_original: true,
+        });
+
+        const newResponse = await generateGenieResponse(value);
+        const newResponseId = `regen-${Date.now()}`;
+
+        await updateMessageViaResponseUrl(response_url, {
+          text: newResponse,
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: \`	Genie*\n\${newResponse}\`,
+              },
+            },
+            ...createFeedbackBlocks(newResponseId, value),
+            {
+              type: 'context',
+              elements: [
+                {
+                  type: 'mrkdwn',
+                  text: '_Response regenerated_',
+                },
+              ],
+            },
+          ],
+          replace_original: true,
+        });
+      }
+      continue;
+    }
+
+    if (action_id === 'save_to_memory') {
       try {
-        // Parse the feedback value
-        const feedbackData = JSON.parse(value || '{}');
-        const feedbackType = feedbackData.type as 'positive' | 'negative';
-        const responseId = feedbackData.responseId;
-        const prompt = feedbackData.prompt;
+        // Try to resolve internal user ID
+        const internalUserId = await resolveSlackUser(config.teamId, user.id);
 
-        // Store feedback
-        await storeFeedback(
-          config.teamId,
-          user.id,
-          feedbackType,
-          responseId,
-          prompt
-        );
+        if (internalUserId) {
+          // Store in main user memory
+          await db
+            .collection('users')
+            .doc(internalUserId)
+            .collection('memories')
+            .add({
+              userId: internalUserId,
+              featureType: 'slack',
+              title: \`Slack Memory from <#\${channel?.id}>\`,
+              summary: value,
+              messages: [
+                {
+                  role: 'user',
+                  content: value,
+                  metadata: {
+                    slackTs: message?.ts,
+                    slackChannel: channel?.id,
+                    slackUser: user.id
+                  }
+                }
+              ],
+              tags: ['slack', 'saved'],
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            });
 
-        // Update message to show feedback received
+          if (response_url) {
+            await updateMessageViaResponseUrl(response_url, {
+              text: '🧠 Memory saved to your personal knowledge base!',
+              response_type: 'ephemeral',
+            });
+          }
+        } else {
+          // Fallback: Store in slackMemories (legacy/unlinked)
+          // TODO: Prompt user to link account
+          await db.collection('slackMemories').add({
+            teamId: config.teamId,
+            userId: user.id,
+            channelId: channel?.id,
+            messageTs: message?.ts,
+            content: value,
+            timestamp: Date.now(),
+          });
+
+          if (response_url) {
+            await updateMessageViaResponseUrl(response_url, {
+              text: '💾 Memory saved! (Link your account to sync with web app)',
+              response_type: 'ephemeral',
+            });
+          }
+        }
+
+      } catch (error) {
+        console.error('[SLACK_INTERACTIVITY] Failed to save memory:', error);
         if (response_url) {
-          // Remove the feedback buttons and show thank you message
-          const updatedBlocks = message?.blocks?.map((block: any) => {
-            if (block.type === 'context_actions') {
-              return {
-                type: 'context',
-                elements: [
+          await updateMessageViaResponseUrl(response_url, {
+            text: '❌ Failed to save memory.',
+            response_type: 'ephemeral',
+          });
+        }
+      }
+      continue;
+    }
+
+    if (action_id === 'open_settings') {
+      if (trigger_id) {
+        await openModal(config.botToken, trigger_id, {
+          type: 'modal',
+          title: {
+            type: 'plain_text',
+            text: '⚙️ Genie Settings',
+          },
+          submit: {
+            type: 'plain_text',
+            text: 'Save',
+          },
+          close: {
+            type: 'plain_text',
+            text: 'Cancel',
+          },
+          callback_id: 'settings_modal',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '*Customize your Genie experience*',
+              },
+            },
+            {
+              type: 'input',
+              block_id: 'response_style',
+              label: {
+                type: 'plain_text',
+                text: 'Response Style',
+              },
+              element: {
+                type: 'static_select',
+                action_id: 'response_style_select',
+                placeholder: {
+                  type: 'plain_text',
+                  text: 'Select a style',
+                },
+                options: [
                   {
-                    type: 'mrkdwn',
-                    text: feedbackType === 'positive' 
-                      ? '✅ _Thanks for the positive feedback!_'
-                      : '📝 _Thanks for your feedback! We\'ll work on improving._',
+                    text: { type: 'plain_text', text: 'Concise' },
+                    value: 'concise',
+                  },
+                  {
+                    text: { type: 'plain_text', text: 'Detailed' },
+                    value: 'detailed',
+                  },
+                  {
+                    text: { type: 'plain_text', text: 'Technical' },
+                    value: 'technical',
                   },
                 ],
-              };
+              },
+            },
+            {
+              type: 'input',
+              block_id: 'notifications',
+              optional: true,
+              label: {
+                type: 'plain_text',
+                text: 'Enable Notifications',
+              },
+              element: {
+                type: 'checkboxes',
+                action_id: 'notifications_checkboxes',
+                options: [
+                  {
+                    text: { type: 'plain_text', text: 'Daily summaries' },
+                    value: 'daily_summary',
+                  },
+                  {
+                    text: { type: 'plain_text', text: 'Memory updates' },
+                    value: 'memory_updates',
+                  },
+                ],
+              },
+            },
+          ],
+        });
+      }
+      continue;
+    }
+
+    if (action_id === 'onboarding_ask_question') {
+      if (trigger_id) {
+        // Reuse the same modal as 'ask_genie' shortcut
+        await openModal(config.botToken, trigger_id, {
+          type: 'modal',
+          title: {
+            type: 'plain_text',
+            text: 'Ask Genie',
+          },
+          submit: {
+            type: 'plain_text',
+            text: 'Ask',
+          },
+          close: {
+            type: 'plain_text',
+            text: 'Cancel',
+          },
+          callback_id: 'ask_genie_modal',
+          private_metadata: JSON.stringify({ channelId: channel?.id }),
+          blocks: [
+            {
+              type: 'input',
+              block_id: 'question_block',
+              label: {
+                type: 'plain_text',
+                text: 'Your Question',
+              },
+              element: {
+                type: 'plain_text_input',
+                action_id: 'question_input',
+                multiline: true,
+                placeholder: {
+                  type: 'plain_text',
+                  text: 'What would you like to know?',
+                },
+              },
+            },
+          ],
+        });
+      }
+      continue;
+    }
+
+    if (action_id === 'onboarding_see_stats') {
+      if (response_url) {
+        // We can't easily import getUserStats here as it's not exported, so we'll simulate a simple version or duplicates logic
+        // For now, let's send a simple message
+        await updateMessageViaResponseUrl(response_url, {
+          text: '📊 *View your full stats in the App Home tab!*',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: "📊 *Your Stats*\n\nVisit the *App Home* tab to see your detailed usage statistics and recent memories.",
+              },
+            },
+            {
+              type: 'actions',
+              elements: [
+                {
+                  type: 'button',
+                  text: { type: 'plain_text', text: 'How to find App Home' },
+                  action_id: 'onboarding_app_home'
+                }
+              ]
             }
-            return block;
-          }) || [];
-
-          await updateMessageViaResponseUrl(response_url, {
-            text: message?.text || '',
-            blocks: updatedBlocks,
-            replace_original: true,
-          });
-        }
-        continue;
-      } catch (error) {
-        console.error('[SLACK_INTERACTIVITY] Error handling feedback:', error);
+          ],
+          response_type: 'ephemeral',
+        });
       }
+      continue;
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    // Handle Regenerate Button
-    // ─────────────────────────────────────────────────────────────────
-    if (action_id === 'genie_regenerate') {
-      try {
-        const regenerateData = JSON.parse(value || '{}');
-        const prompt = regenerateData.prompt;
-        const responseId = regenerateData.responseId;
-
-        if (!prompt) {
-          console.error('[SLACK_INTERACTIVITY] No prompt for regenerate');
-          continue;
-        }
-
-        // Show loading state
-        if (response_url) {
-          await updateMessageViaResponseUrl(response_url, {
-            text: '🔄 Regenerating response...',
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: '🔄 _Regenerating response..._',
-                },
+    if (action_id === 'onboarding_app_home') {
+      if (response_url) {
+        await updateMessageViaResponseUrl(response_url, {
+          text: '🏠 *How to find App Home*',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: "*Using Genie's App Home*\n\nClick on the *'Genie'* app name in your Slack sidebar (under 'Apps'). Then click on the *'Home'* tab at the top of the screen.",
               },
-            ],
-            replace_original: true,
-          });
-        }
-
-        // Generate new response
-        const newResponse = await generateGenieResponse(prompt);
-        const newResponseId = `regen-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-        // Update with new response and feedback buttons
-        if (response_url) {
-          await updateMessageViaResponseUrl(response_url, {
-            text: newResponse,
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: newResponse,
-                },
-              },
-              ...createFeedbackBlocks(newResponseId, prompt),
-              {
-                type: 'context',
-                elements: [
-                  {
-                    type: 'mrkdwn',
-                    text: '_🔄 Response regenerated_',
-                  },
-                ],
-              },
-            ],
-            replace_original: true,
-          });
-        }
-        continue;
-      } catch (error) {
-        console.error('[SLACK_INTERACTIVITY] Error regenerating:', error);
+            }
+          ],
+          response_type: 'ephemeral',
+        });
       }
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-    // Legacy Feedback Actions (for backwards compatibility)
-    // ─────────────────────────────────────────────────────────────────
-    switch (action_id) {
-      case 'feedback_helpful':
-        await storeFeedback(
-          config.teamId,
-          user.id,
-          'positive',
-          message?.ts || '',
-          value
-        );
-        
-        if (response_url) {
-          await updateMessageViaResponseUrl(response_url, {
-            text: message?.text || '',
-            blocks: [
-              ...(message?.blocks?.filter((b: any) => b.type !== 'actions') || []),
-              {
-                type: 'context',
-                elements: [
-                  {
-                    type: 'mrkdwn',
-                    text: '✅ _Thanks for your feedback!_',
-                  },
-                ],
-              },
-            ],
-            replace_original: true,
-          });
-        }
-        break;
-
-      case 'feedback_not_helpful':
-        await storeFeedback(
-          config.teamId,
-          user.id,
-          'negative',
-          message?.ts || '',
-          value
-        );
-        
-        if (response_url) {
-          await updateMessageViaResponseUrl(response_url, {
-            text: message?.text || '',
-            blocks: [
-              ...(message?.blocks?.filter((b: any) => b.type !== 'actions') || []),
-              {
-                type: 'context',
-                elements: [
-                  {
-                    type: 'mrkdwn',
-                    text: '📝 _Thanks for your feedback! We\'ll work on improving._',
-                  },
-                ],
-              },
-            ],
-            replace_original: true,
-          });
-        }
-        break;
-
-      case 'regenerate_response':
-        if (response_url && value) {
-          await updateMessageViaResponseUrl(response_url, {
-            text: '🔄 Regenerating response...',
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: '🔄 _Regenerating response..._',
-                },
-              },
-            ],
-            replace_original: true,
-          });
-
-          const newResponse = await generateGenieResponse(value);
-          const newResponseId = `regen-${Date.now()}`;
-
-          await updateMessageViaResponseUrl(response_url, {
-            text: newResponse,
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: `🧞 *Genie:*\n${newResponse}`,
-                },
-              },
-              ...createFeedbackBlocks(newResponseId, value),
-              {
-                type: 'context',
-                elements: [
-                  {
-                    type: 'mrkdwn',
-                    text: '_Response regenerated_',
-                  },
-                ],
-              },
-            ],
-            replace_original: true,
-          });
-        }
-        break;
-
-      case 'open_settings':
-        if (trigger_id) {
-          await openModal(config.botToken, trigger_id, {
-            type: 'modal',
-            title: {
-              type: 'plain_text',
-              text: '⚙️ Genie Settings',
-            },
-            submit: {
-              type: 'plain_text',
-              text: 'Save',
-            },
-            close: {
-              type: 'plain_text',
-              text: 'Cancel',
-            },
-            callback_id: 'settings_modal',
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: '*Customize your Genie experience*',
-                },
-              },
-              {
-                type: 'input',
-                block_id: 'response_style',
-                label: {
-                  type: 'plain_text',
-                  text: 'Response Style',
-                },
-                element: {
-                  type: 'static_select',
-                  action_id: 'response_style_select',
-                  placeholder: {
-                    type: 'plain_text',
-                    text: 'Select a style',
-                  },
-                  options: [
-                    {
-                      text: { type: 'plain_text', text: 'Concise' },
-                      value: 'concise',
-                    },
-                    {
-                      text: { type: 'plain_text', text: 'Detailed' },
-                      value: 'detailed',
-                    },
-                    {
-                      text: { type: 'plain_text', text: 'Technical' },
-                      value: 'technical',
-                    },
-                  ],
-                },
-              },
-              {
-                type: 'input',
-                block_id: 'notifications',
-                optional: true,
-                label: {
-                  type: 'plain_text',
-                  text: 'Enable Notifications',
-                },
-                element: {
-                  type: 'checkboxes',
-                  action_id: 'notifications_checkboxes',
-                  options: [
-                    {
-                      text: { type: 'plain_text', text: 'Daily summaries' },
-                      value: 'daily_summary',
-                    },
-                    {
-                      text: { type: 'plain_text', text: 'Memory updates' },
-                      value: 'memory_updates',
-                    },
-                  ],
-                },
-              },
-            ],
-          });
-        }
-        break;
-
-      default:
-        if (!['genie_feedback', 'genie_regenerate'].includes(action_id)) {
-          console.log('[SLACK_INTERACTIVITY] Unknown action:', action_id);
-        }
+      continue;
     }
   }
 }
+
 
 /**
  * Handle view_submission (modal form submissions)
@@ -609,7 +663,7 @@ async function handleViewSubmission(
 
         await db
           .collection('slackUserPreferences')
-          .doc(`${config.teamId}_${user.id}`)
+          .doc(\`\${config.teamId}_\${user.id}\`)
           .set(
             {
               teamId: config.teamId,
@@ -633,6 +687,75 @@ async function handleViewSubmission(
         };
       }
 
+    case 'configure_channel_submission':
+      try {
+        const values = state?.values || {};
+        const metadata = private_metadata ? JSON.parse(private_metadata) : {};
+        const { channelId, teamId } = metadata;
+
+        const persona = values.persona_block?.persona_selection?.selected_option?.value;
+        const responseStyle = values.style_block?.style_selection?.selected_option?.value;
+        const proactiveEnabled = values.proactive_block?.proactive_checkbox?.selected_options?.some((o: any) => o.value === 'enabled') || false;
+
+        if (channelId && teamId) {
+           await saveChannelConfig(teamId, channelId, {
+             persona,
+             responseStyle,
+             proactiveEnabled
+           } as ChannelConfig);
+           
+           console.log(\`[SLACK_INTERACTIVITY] Saved config for channel \${channelId}\`);
+        }
+
+        return {};
+      } catch (error) {
+        console.error('[SLACK_INTERACTIVITY] Failed to save channel config:', error);
+         return {
+           response_action: 'errors',
+           errors: {
+             persona_block: 'Failed to save settings.',
+           },
+         };
+      }
+
+    // Workflow Steps Saving
+    case 'analyze_text_save':
+    case 'generate_code_save':
+       const values = state?.values || {};
+       const inputs: any = {};
+       const outputs: any = [];
+
+       if (callback_id === 'analyze_text_save') {
+           const text = values.input_text_block?.text_input?.value;
+           inputs.text = { value: text };
+           outputs.push({ name: 'analysis', type: 'text', label: 'Analysis Result' });
+       } else {
+           const prompt = values.prompt_block?.prompt_input?.value;
+           inputs.prompt = { value: prompt };
+           outputs.push({ name: 'code', type: 'text', label: 'Generated Code' });
+       }
+       
+       try {
+           const editId = view.workflow_step?.workflow_step_edit_id;
+           if (editId) {
+               await fetch(\`\${SLACK_API_BASE}/workflows.updateStep\`, {
+                   method: 'POST',
+                   headers: { 
+                       'Authorization': \`Bearer \${config.botToken}\`,
+                       'Content-Type': 'application/json' 
+                   },
+                   body: JSON.stringify({
+                       workflow_step_edit_id: editId,
+                       inputs,
+                       outputs
+                   })
+               });
+           }
+       } catch (e) {
+           console.error('[WORKFLOW] Error updating step:', e);
+       }
+       return {};
+
     case 'ask_genie_modal':
       try {
         const values = state?.values || {};
@@ -643,7 +766,7 @@ async function handleViewSubmission(
         if (question && channelId) {
           // Generate response
           const response = await generateGenieResponse(question);
-          const responseId = `modal-${Date.now()}`;
+          const responseId = \`modal-\${Date.now()}\`;
 
           // Send response to channel
           await sendSlackMessage(
@@ -656,7 +779,7 @@ async function handleViewSubmission(
                 elements: [
                   {
                     type: 'mrkdwn',
-                    text: `🧞 *Genie* • Asked by <@${user.id}>`,
+                    text: \`	Genie* • Asked by <@\${user.id}>\`,
                   },
                 ],
               },
@@ -664,7 +787,7 @@ async function handleViewSubmission(
                 type: 'section',
                 text: {
                   type: 'mrkdwn',
-                  text: `*Q:* ${question}`,
+                  text: \`*Q:* \${question}\`,
                 },
               },
               {
@@ -717,7 +840,7 @@ async function handleShortcut(
         type: 'modal',
         title: {
           type: 'plain_text',
-          text: '🧞 Ask Genie',
+          text: '⚙️ Genie Settings',
         },
         submit: {
           type: 'plain_text',
@@ -754,9 +877,9 @@ async function handleShortcut(
     case 'summarize_message':
       if (message?.text) {
         const summary = await generateGenieResponse(
-          `Please summarize the following message concisely: ${message.text}`
+          \`Please summarize the following message concisely: \${message.text}\`
         );
-        const responseId = `summary-${Date.now()}`;
+        const responseId = \`summary-\${Date.now()}\`;
 
         await sendSlackMessage(
           config.botToken,
@@ -768,7 +891,7 @@ async function handleShortcut(
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: `📝 *Summary* • Requested by <@${user.id}>`,
+                  text: \`	Summary* • Requested by <@\${user.id}>\`,
                 },
               ],
             },
@@ -789,9 +912,9 @@ async function handleShortcut(
     case 'explain_message':
       if (message?.text) {
         const explanation = await generateGenieResponse(
-          `Please explain the following message in simple terms: ${message.text}`
+          \`Please explain the following message in simple terms: \${message.text}\`
         );
-        const responseId = `explain-${Date.now()}`;
+        const responseId = \`explain-\${Date.now()}\`;
 
         await sendSlackMessage(
           config.botToken,
@@ -803,7 +926,7 @@ async function handleShortcut(
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: `📚 *Explanation* • Requested by <@${user.id}>`,
+                  text: \`	Explanation* • Requested by <@\${user.id}>\`,
                 },
               ],
             },
@@ -872,7 +995,7 @@ export async function POST(req: Request) {
     try {
       config = await getSlackConfig(teamId);
     } catch (configError) {
-      console.error(`[SLACK_INTERACTIVITY] No installation for team ${teamId}:`, configError);
+      console.error(\`[SLACK_INTERACTIVITY] No installation for team \${teamId}:\`, configError);
       return NextResponse.json({
         ok: false,
         error: 'workspace_not_installed',
@@ -881,6 +1004,10 @@ export async function POST(req: Request) {
 
     // Handle different interaction types
     switch (type) {
+      case 'workflow_step_edit':
+         await handleWorkflowStepEdit(config, payload.trigger_id, payload.callback_id, payload.workflow_step);
+         return new NextResponse('', { status: 200 });
+
       case 'block_actions':
         handleBlockActions(config, payload).catch((err) =>
           console.error('[SLACK_INTERACTIVITY] block_actions error:', err)
@@ -919,6 +1046,7 @@ export async function GET(req: Request) {
       'regenerate',
       'settings-modal',
       'shortcuts',
+      'workflow-steps'
     ],
     timestamp: new Date().toISOString(),
   });

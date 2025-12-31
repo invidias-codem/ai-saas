@@ -53,6 +53,13 @@ jest.mock('firebase-admin', () => {
 jest.mock('@google/generative-ai', () => ({
   GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
     getGenerativeModel: jest.fn().mockReturnValue({
+      startChat: jest.fn().mockReturnValue({
+        sendMessage: jest.fn().mockResolvedValue({
+          response: {
+            text: () => 'Regenerated response from Genie.',
+          },
+        }),
+      }),
       generateContent: jest.fn().mockResolvedValue({
         response: {
           text: () => 'Regenerated response from Genie.',
@@ -520,7 +527,7 @@ describe('Slack Interactivity Handler', () => {
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('Slack Interactivity endpoint active');
-      expect(data.version).toBe('2.0.0');
+      expect(data.version).toBe('3.0.0');
     });
   });
 });

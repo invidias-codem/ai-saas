@@ -4,22 +4,30 @@
  */
 
 // Mock NextResponse before importing the route
+// Mock NextResponse before importing the route
 jest.mock('next/server', () => {
-  const MockNextResponse = jest.fn().mockImplementation((body: any, init?: any) => ({
-    status: init?.status || 200,
-    text: () => Promise.resolve(body),
-    json: () => Promise.resolve(typeof body === 'string' ? JSON.parse(body) : body),
-    headers: new Map(Object.entries(init?.headers || {})),
-  }));
-  
-  MockNextResponse.json = jest.fn((data: any, init?: any) => ({
-    status: init?.status || 200,
-    json: () => Promise.resolve(data),
-    text: () => Promise.resolve(JSON.stringify(data)),
-  }));
-  
+  // Define a simple mock class-like structure with static json method
+  const StaticNextResponse = {
+    json: (data: any, init?: any) => ({
+      status: init?.status || 200,
+      json: async () => data,
+      text: async () => JSON.stringify(data),
+    })
+  };
+
+  // The default export or named export needs to be callable as new NextResponse()
+  // But our code might also use NextResponse.json()
+
   return {
-    NextResponse: MockNextResponse,
+    NextResponse: Object.assign(
+      jest.fn((body: any, init?: any) => ({
+        status: init?.status || 200,
+        text: async () => body,
+        json: async () => typeof body === 'string' ? JSON.parse(body) : body,
+        headers: new Map(Object.entries(init?.headers || {})),
+      })),
+      StaticNextResponse
+    ),
     NextRequest: jest.fn(),
   };
 });
@@ -30,17 +38,48 @@ jest.mock('@/lib/slack/tokenManager', () => ({
 }));
 
 // Mock Firebase Admin
-jest.mock('firebase-admin', () => ({
-  apps: [],
-  initializeApp: jest.fn(),
-  firestore: jest.fn().mockReturnValue({
+// Mock @/lib/firebaseAdmin to bypass initialization
+jest.mock('@/lib/firebaseAdmin', () => ({
+  db: {
     collection: jest.fn().mockReturnValue({
       doc: jest.fn().mockReturnValue({
         get: jest.fn(),
         set: jest.fn(),
+        update: jest.fn(),
+        collection: jest.fn().mockReturnValue({ // Nested collection for memories
+          orderBy: jest.fn().mockReturnValue({
+            limit: jest.fn().mockReturnValue({
+              get: jest.fn().mockResolvedValue({
+                empty: true,
+                docs: []
+              })
+            })
+          }),
+          add: jest.fn(),
+        }),
       }),
+      orderBy: jest.fn().mockReturnValue({
+        limit: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({
+            empty: true,
+            docs: []
+          })
+        })
+      }),
+      where: jest.fn().mockReturnValue({
+        get: jest.fn().mockResolvedValue({ docs: [] })
+      }),
+      add: jest.fn(),
     }),
-  }),
+  },
+  admin: {
+    firestore: {
+      FieldValue: {
+        serverTimestamp: jest.fn(),
+        arrayUnion: jest.fn(),
+      }
+    }
+  }
 }));
 
 // Mock Google Generative AI
@@ -52,6 +91,15 @@ jest.mock('@google/generative-ai', () => ({
           response: {
             text: () => 'This is a test response from Genie.',
           },
+        }),
+        sendMessageStream: jest.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield { text: () => 'This is a ' };
+            yield { text: () => 'streamed response.' };
+          })(),
+          response: Promise.resolve({
+            text: () => 'This is a streamed response.',
+          }),
         }),
       }),
     }),
@@ -84,7 +132,7 @@ describe('Slack Events API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Setup default mock for getSlackConfig
     const { getSlackConfig } = require('@/lib/slack/tokenManager');
     getSlackConfig.mockResolvedValue(mockSlackConfig);
@@ -214,6 +262,130 @@ describe('Slack Events API', () => {
 
       expect(response.status).toBe(200);
       expect(data.ok).toBe(true);
+    });
+
+    it('should handle app_home_opened event', async () => {
+      const event = {
+        type: 'app_home_opened',
+        user: 'U_USER_123',
+        tab: 'home',
+        channel: 'C_HOME',
+        event_ts: '1234567890.123456',
+      };
+
+      const request = createEventRequest(event);
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.ok).toBe(true);
+
+      // Wait for async background processing
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Verify views.publish was called
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('views.publish'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"type":"home"'),
+        })
+      );
+    });
+
+    it('should handle file_shared event', async () => {
+      // Create request with file_shared event
+      const req = {
+        text: () => Promise.resolve(JSON.stringify({
+          token: 'verification_token',
+          team_id: 'T_TEAM_123',
+          api_app_id: 'A_APP_123',
+          event: {
+            type: 'file_shared',
+            file_id: 'F_FILE_123',
+            user_id: 'U_USER_123',
+            channel_id: 'C_CHANNEL_123',
+            event_ts: '1234567890.123456',
+          },
+          type: 'event_callback',
+          event_id: 'Ev12345',
+          event_time: 1234567890,
+        })),
+        headers: {
+          get: (key: string) => {
+            if (key === 'x-slack-request-timestamp') return Math.floor(Date.now() / 1000).toString();
+            if (key === 'x-slack-signature') return 'v0=mock_signature';
+            return null;
+          },
+        },
+      } as any;
+
+      // Mock specific fetch responses for file handling
+      (global.fetch as jest.Mock).mockImplementation((url, options) => {
+        // Handle files.info
+        if (url && url.toString().includes('files.info')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              ok: true,
+              file: {
+                id: 'F_FILE_123',
+                name: 'test.py',
+                filetype: 'python',
+                mimetype: 'text/x-python',
+                url_private: 'https://files.slack.com/test.py',
+                shares: { public: { 'C_CHANNEL_123': [{ ts: '1234567890.123456' }] } }
+              }
+            })
+          });
+        }
+        // Handle file download
+        if (url === 'https://files.slack.com/test.py') {
+          return Promise.resolve({
+            ok: true,
+            text: () => Promise.resolve('print("Hello World")')
+          });
+        }
+        // Handle chat.postMessage
+        if (url && url.toString().includes('chat.postMessage')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, ts: '1234567891.000000' }) });
+        }
+        // Handle reactions.add
+        if (url && url.toString().includes('reactions.add')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+        }
+        // Default catch-all (views.publish etc)
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+      });
+
+      const response = await POST(req);
+      const data = await response.text();
+      // POST returns NextResponse, we check status
+
+      expect(response.status).toBe(200);
+
+      // Wait for async background processing
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Check if files.info was called
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('files.info'),
+        expect.anything()
+      );
+
+      // Check if file content was downloaded
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://files.slack.com/test.py',
+        expect.anything()
+      );
+
+      // Check if analysis was posted
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('chat.postMessage'),
+        expect.objectContaining({
+          body: expect.stringContaining('File Analysis: test.py')
+        })
+      );
     });
   });
 
@@ -358,7 +530,7 @@ describe('Slack Events API', () => {
 
       expect(response.status).toBe(200);
       expect(data.status).toBe('Slack Events API endpoint active');
-      expect(data.version).toBe('2.0.0');
+      expect(data.version).toBe('3.2.0');
       expect(data.timestamp).toBeDefined();
     });
   });
