@@ -663,7 +663,7 @@ async function handleViewSubmission(
 
         await db
           .collection('slackUserPreferences')
-          .doc(\`\${config.teamId}_\${user.id}\`)
+          .doc(`${config.teamId}_${user.id}`)
           .set(
             {
               teamId: config.teamId,
@@ -698,63 +698,63 @@ async function handleViewSubmission(
         const proactiveEnabled = values.proactive_block?.proactive_checkbox?.selected_options?.some((o: any) => o.value === 'enabled') || false;
 
         if (channelId && teamId) {
-           await saveChannelConfig(teamId, channelId, {
-             persona,
-             responseStyle,
-             proactiveEnabled
-           } as ChannelConfig);
-           
-           console.log(\`[SLACK_INTERACTIVITY] Saved config for channel \${channelId}\`);
+          await saveChannelConfig(teamId, channelId, {
+            persona,
+            responseStyle,
+            proactiveEnabled
+          } as ChannelConfig);
+
+          console.log(`[SLACK_INTERACTIVITY] Saved config for channel ${channelId}`);
         }
 
         return {};
       } catch (error) {
         console.error('[SLACK_INTERACTIVITY] Failed to save channel config:', error);
-         return {
-           response_action: 'errors',
-           errors: {
-             persona_block: 'Failed to save settings.',
-           },
-         };
+        return {
+          response_action: 'errors',
+          errors: {
+            persona_block: 'Failed to save settings.',
+          },
+        };
       }
 
     // Workflow Steps Saving
     case 'analyze_text_save':
     case 'generate_code_save':
-       const values = state?.values || {};
-       const inputs: any = {};
-       const outputs: any = [];
+      const values = state?.values || {};
+      const inputs: any = {};
+      const outputs: any = [];
 
-       if (callback_id === 'analyze_text_save') {
-           const text = values.input_text_block?.text_input?.value;
-           inputs.text = { value: text };
-           outputs.push({ name: 'analysis', type: 'text', label: 'Analysis Result' });
-       } else {
-           const prompt = values.prompt_block?.prompt_input?.value;
-           inputs.prompt = { value: prompt };
-           outputs.push({ name: 'code', type: 'text', label: 'Generated Code' });
-       }
-       
-       try {
-           const editId = view.workflow_step?.workflow_step_edit_id;
-           if (editId) {
-               await fetch(\`\${SLACK_API_BASE}/workflows.updateStep\`, {
-                   method: 'POST',
-                   headers: { 
-                       'Authorization': \`Bearer \${config.botToken}\`,
-                       'Content-Type': 'application/json' 
-                   },
-                   body: JSON.stringify({
-                       workflow_step_edit_id: editId,
-                       inputs,
-                       outputs
-                   })
-               });
-           }
-       } catch (e) {
-           console.error('[WORKFLOW] Error updating step:', e);
-       }
-       return {};
+      if (callback_id === 'analyze_text_save') {
+        const text = values.input_text_block?.text_input?.value;
+        inputs.text = { value: text };
+        outputs.push({ name: 'analysis', type: 'text', label: 'Analysis Result' });
+      } else {
+        const prompt = values.prompt_block?.prompt_input?.value;
+        inputs.prompt = { value: prompt };
+        outputs.push({ name: 'code', type: 'text', label: 'Generated Code' });
+      }
+
+      try {
+        const editId = view.workflow_step?.workflow_step_edit_id;
+        if (editId) {
+          await fetch(`${SLACK_API_BASE}/workflows.updateStep`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${config.botToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              workflow_step_edit_id: editId,
+              inputs,
+              outputs
+            })
+          });
+        }
+      } catch (e) {
+        console.error('[WORKFLOW] Error updating step:', e);
+      }
+      return {};
 
     case 'ask_genie_modal':
       try {
@@ -877,9 +877,9 @@ async function handleShortcut(
     case 'summarize_message':
       if (message?.text) {
         const summary = await generateGenieResponse(
-          \`Please summarize the following message concisely: \${message.text}\`
+          `Please summarize the following message concisely: ${ message.text } `
         );
-        const responseId = \`summary-\${Date.now()}\`;
+        const responseId = `summary - ${ Date.now() } `;
 
         await sendSlackMessage(
           config.botToken,
@@ -891,7 +891,7 @@ async function handleShortcut(
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: \`	Summary* • Requested by <@\${user.id}>\`,
+                  text: `📝 * Summary * • Requested by < @${ user.id }> `,
                 },
               ],
             },
@@ -912,9 +912,9 @@ async function handleShortcut(
     case 'explain_message':
       if (message?.text) {
         const explanation = await generateGenieResponse(
-          \`Please explain the following message in simple terms: \${message.text}\`
+          `Please explain the following message in simple terms: ${ message.text } `
         );
-        const responseId = \`explain-\${Date.now()}\`;
+        const responseId = `explain - ${ Date.now() } `;
 
         await sendSlackMessage(
           config.botToken,
@@ -926,7 +926,7 @@ async function handleShortcut(
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: \`	Explanation* • Requested by <@\${user.id}>\`,
+                  text: `💡 * Explanation * • Requested by < @${ user.id }> `,
                 },
               ],
             },
@@ -995,7 +995,7 @@ export async function POST(req: Request) {
     try {
       config = await getSlackConfig(teamId);
     } catch (configError) {
-      console.error(\`[SLACK_INTERACTIVITY] No installation for team \${teamId}:\`, configError);
+      console.error(`[SLACK_INTERACTIVITY] No installation for team ${ teamId }: `, configError);
       return NextResponse.json({
         ok: false,
         error: 'workspace_not_installed',
