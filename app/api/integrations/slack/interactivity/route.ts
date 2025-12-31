@@ -366,7 +366,7 @@ async function handleBlockActions(
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: \`	Genie*\n\${newResponse}\`,
+                text: `🧞 *Genie*\n${newResponse}`,
               },
             },
             ...createFeedbackBlocks(newResponseId, value),
@@ -779,7 +779,7 @@ async function handleViewSubmission(
                 elements: [
                   {
                     type: 'mrkdwn',
-                    text: \`	Genie* • Asked by <@\${user.id}>\`,
+                    text: `🧞 * Genie * • Asked by < @${ user.id } > `,
                   },
                 ],
               },
