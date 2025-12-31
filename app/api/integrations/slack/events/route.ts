@@ -242,6 +242,8 @@ async function* generateGenieResponseStream(
   history: SlackThreadMessage[] = []
 ): AsyncGenerator<string, void, unknown> {
   try {
+    const sanitizedHistory = sanitizeHistory(history);
+
     const chat = generalModel.startChat({
       history: [
         {
@@ -252,7 +254,7 @@ async function* generateGenieResponseStream(
           role: "model",
           parts: [{ text: "I understand. I'm Genie, ready to help in Slack with concise, helpful responses." }],
         },
-        ...history.map(h => ({ role: h.role, parts: [{ text: h.content }] })),
+        ...sanitizedHistory as any,
       ],
       generationConfig: {
         temperature: 0.7,
@@ -277,6 +279,33 @@ async function* generateGenieResponseStream(
 }
 
 /**
+ * Helper to sanitize history for Gemini (alternating roles)
+ */
+function sanitizeHistory(history: SlackThreadMessage[]): { role: string; parts: { text: string }[] }[] {
+  const sanitized: { role: string; parts: { text: string }[] }[] = [];
+
+  if (history.length === 0) return sanitized;
+
+  let lastRole = '';
+  let currentContent = '';
+
+  for (const msg of history) {
+    const role = msg.role === 'user' ? 'user' : 'model';
+    const content = msg.content || ' ';
+
+    if (role === lastRole) {
+      // Merge with previous message
+      sanitized[sanitized.length - 1].parts[0].text += `\n\n${content}`;
+    } else {
+      sanitized.push({ role, parts: [{ text: content }] });
+      lastRole = role;
+    }
+  }
+
+  return sanitized;
+}
+
+/**
  * Generate code-specific AI response using Gemini with streaming
  */
 async function* generateCodeResponseStream(
@@ -292,8 +321,10 @@ async function* generateCodeResponseStream(
       intent,
     });
 
+    const sanitizedHistory = sanitizeHistory(history);
+
     const chat = codeModel.startChat({
-      history: history.map(h => ({ role: h.role, parts: [{ text: h.content }] })),
+      history: sanitizedHistory as any,
       generationConfig: {
         temperature: 0.3, // Lower temperature for more precise code
         topK: 40,
@@ -324,12 +355,8 @@ async function generateGenieResponse(
   history: SlackThreadMessage[] = []
 ): Promise<string> {
   try {
-    // Ensure history roles are alternating and content is valid if needed
-    // For now we just map, but safeguard content
-    const historyParts = history.map(h => ({
-      role: h.role === 'user' ? 'user' : 'model',
-      parts: [{ text: h.content || " " }] // Ensure no empty content
-    }));
+    // Ensure history roles are alternating by sanitizing
+    const sanitizedHistory = sanitizeHistory(history);
 
     const chat = generalModel.startChat({
       history: [
@@ -341,7 +368,7 @@ async function generateGenieResponse(
           role: "model",
           parts: [{ text: "I understand. I'm Genie, ready to help in Slack with concise, helpful responses." }],
         },
-        ...historyParts as any,
+        ...sanitizedHistory as any,
       ],
       generationConfig: {
         temperature: 0.7,
@@ -380,13 +407,10 @@ async function generateCodeResponse(
       intent,
     });
 
-    const historyParts = history.map(h => ({
-      role: h.role === 'user' ? 'user' : 'model',
-      parts: [{ text: h.content || " " }]
-    }));
+    const sanitizedHistory = sanitizeHistory(history);
 
     const chat = codeModel.startChat({
-      history: historyParts as any,
+      history: sanitizedHistory as any,
       generationConfig: {
         temperature: 0.3,
         topK: 40,

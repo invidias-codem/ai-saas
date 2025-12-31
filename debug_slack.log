@@ -1,0 +1,64 @@
+[2025-12-31T02:22:09.388Z] Received event body:
+{
+  "token": "mock-token",
+  "team_id": "T09PBMA9QP6",
+  "api_app_id": "A012345678",
+  "event": {
+    "client_msg_id": "test-msg-id",
+    "type": "app_mention",
+    "text": "<@U09UD3YN53K> hello test",
+    "user": "U09PBPEUKE0",
+    "ts": "1767147726921",
+    "channel": "D09UD3Z2ZT3",
+    "event_ts": "1767147726921"
+  },
+  "type": "event_callback",
+  "event_id": "Ev012345678",
+  "event_time": 1767147726,
+  "authed_users": [
+    "U09UD3YN53K"
+  ]
+}
+[2025-12-31T02:22:10.278Z] Message Analysis:
+{
+  "cleanText": "hello test",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[STREAM_ERROR] channel_not_found
+[2025-12-31T02:22:10.653Z] Using fallback generation
+[2025-12-31T02:22:11.370Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2025-12-31T02:24:08.461Z] Received event body:
+{
+  "token": "mock-token",
+  "team_id": "T09PBMA9QP6",
+  "api_app_id": "A012345678",
+  "event": {
+    "client_msg_id": "test-msg-id",
+    "type": "app_mention",
+    "text": "<@U09UD3YN53K> hello test",
+    "user": "U09PBPEUKE0",
+    "ts": "1767147848141",
+    "channel": "D09UD3Z2ZT3",
+    "event_ts": "1767147848141"
+  },
+  "type": "event_callback",
+  "event_id": "Ev012345678",
+  "event_time": 1767147848,
+  "authed_users": [
+    "U09UD3YN53K"
+  ]
+}
+[2025-12-31T02:24:08.569Z] Message Analysis:
+{
+  "cleanText": "hello test",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[STREAM_ERROR] channel_not_found
+[2025-12-31T02:24:09.034Z] Using fallback generation
+[2025-12-31T02:24:09.645Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
