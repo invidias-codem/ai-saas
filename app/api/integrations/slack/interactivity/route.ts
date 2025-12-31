@@ -766,7 +766,7 @@ async function handleViewSubmission(
         if (question && channelId) {
           // Generate response
           const response = await generateGenieResponse(question);
-          const responseId = \`modal-\${Date.now()}\`;
+          const responseId = `modal-${Date.now()}`;
 
           // Send response to channel
           await sendSlackMessage(
@@ -779,7 +779,7 @@ async function handleViewSubmission(
                 elements: [
                   {
                     type: 'mrkdwn',
-                    text: `🧞 * Genie * • Asked by < @${ user.id } > `,
+                    text: `🧞 * Genie * • Asked by < @${user.id} > `,
                   },
                 ],
               },
@@ -787,7 +787,7 @@ async function handleViewSubmission(
                 type: 'section',
                 text: {
                   type: 'mrkdwn',
-                  text: \`*Q:* \${question}\`,
+                  text: `*Q:* ${question}`,
                 },
               },
               {
@@ -877,9 +877,9 @@ async function handleShortcut(
     case 'summarize_message':
       if (message?.text) {
         const summary = await generateGenieResponse(
-          `Please summarize the following message concisely: ${ message.text } `
+          `Please summarize the following message concisely: ${message.text} `
         );
-        const responseId = `summary - ${ Date.now() } `;
+        const responseId = `summary - ${Date.now()} `;
 
         await sendSlackMessage(
           config.botToken,
@@ -891,7 +891,7 @@ async function handleShortcut(
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: `📝 * Summary * • Requested by < @${ user.id }> `,
+                  text: `📝 * Summary * • Requested by < @${user.id}> `,
                 },
               ],
             },
@@ -912,9 +912,9 @@ async function handleShortcut(
     case 'explain_message':
       if (message?.text) {
         const explanation = await generateGenieResponse(
-          `Please explain the following message in simple terms: ${ message.text } `
+          `Please explain the following message in simple terms: ${message.text} `
         );
-        const responseId = `explain - ${ Date.now() } `;
+        const responseId = `explain - ${Date.now()} `;
 
         await sendSlackMessage(
           config.botToken,
@@ -926,7 +926,7 @@ async function handleShortcut(
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: `💡 * Explanation * • Requested by < @${ user.id }> `,
+                  text: `💡 * Explanation * • Requested by < @${user.id}> `,
                 },
               ],
             },
@@ -995,7 +995,7 @@ export async function POST(req: Request) {
     try {
       config = await getSlackConfig(teamId);
     } catch (configError) {
-      console.error(`[SLACK_INTERACTIVITY] No installation for team ${ teamId }: `, configError);
+      console.error(`[SLACK_INTERACTIVITY] No installation for team ${teamId}: `, configError);
       return NextResponse.json({
         ok: false,
         error: 'workspace_not_installed',
@@ -1005,8 +1005,8 @@ export async function POST(req: Request) {
     // Handle different interaction types
     switch (type) {
       case 'workflow_step_edit':
-         await handleWorkflowStepEdit(config, payload.trigger_id, payload.callback_id, payload.workflow_step);
-         return new NextResponse('', { status: 200 });
+        await handleWorkflowStepEdit(config, payload.trigger_id, payload.callback_id, payload.workflow_step);
+        return new NextResponse('', { status: 200 });
 
       case 'block_actions':
         handleBlockActions(config, payload).catch((err) =>
