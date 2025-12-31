@@ -400,7 +400,7 @@ async function handleBlockActions(
             .add({
               userId: internalUserId,
               featureType: 'slack',
-              title: \`Slack Memory from <#\${channel?.id}>\`,
+              title: `Slack Memory from <#${channel?.id}>`,
               summary: value,
               messages: [
                 {
