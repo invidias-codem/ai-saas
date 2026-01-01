@@ -15,10 +15,9 @@ import {
   getHighConfidenceFacts,
   formatFactsForPrompt
 } from '@/lib/ragMemory';
-import {
-  getHighConfidenceFactsIntelligent,
-  rankMemoriesIntelligently
+rankMemoriesIntelligently
 } from '@/lib/intelligentMemory';
+import { sanitizeHistory } from '@/lib/gemini';
 
 const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
 
@@ -144,7 +143,7 @@ export async function POST(req: Request) {
     const memoryContext = await getRAGMemoryContext(userId, userQuery, 'conversation');
 
     // Adapt messages for GenAI history format
-    const history = messages.map((msg: { role: string; text: string; }) => ({
+    let history = messages.map((msg: { role: string; text: string; }) => ({
       role: msg.role === 'bot' ? 'model' : 'user',
       parts: [{ text: msg.text }],
     }));
@@ -155,11 +154,22 @@ export async function POST(req: Request) {
     }
 
     // ✅ Inject user context + facts (HIGH PRIORITY) + memory context into the prompt
-    const enhancedPromptText = userContextPrompt + factContext + memoryContext + lastUserMessage.parts[0].text;
+    let enhancedPromptText = userContextPrompt + factContext + memoryContext + lastUserMessage.parts[0].text;
+
+    // Construct preliminary history with system instruction and greeting
+    const fullHistory = [SYSTEM_INSTRUCTION, GREETING, ...history];
+
+    // ✅ Sanitize History using helper
+    const { sanitizedHistory, prependToPrompt } = sanitizeHistory(fullHistory);
+
+    if (prependToPrompt) {
+      // Prepend the trailing history message to the current prompt to maintain context
+      enhancedPromptText = prependToPrompt + "\n\n" + enhancedPromptText;
+    }
 
     const chat = model.startChat({
-      // ✅ Prepend system instruction and greeting to history
-      history: [SYSTEM_INSTRUCTION, GREETING, ...history],
+      // ✅ Use the sanitized history which acts as the "past"
+      history: sanitizedHistory,
       generationConfig: {
         // Your generation config
         temperature: 0.9,
