@@ -15,8 +15,7 @@ import {
   getHighConfidenceFacts,
   formatFactsForPrompt
 } from '@/lib/ragMemory';
-rankMemoriesIntelligently
-} from '@/lib/intelligentMemory';
+import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
 import { sanitizeHistory } from '@/lib/gemini';
 
 const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
