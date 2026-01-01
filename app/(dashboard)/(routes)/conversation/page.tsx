@@ -16,17 +16,17 @@ import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/empty";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
-import { 
-  getSessionMemoryFromCookie, 
-  saveSessionMemoryToCookie, 
+import {
+  getSessionMemoryFromCookie,
+  saveSessionMemoryToCookie,
   getOrCreateSessionId,
   clearSessionMemoryCookie,
   SessionMessage,
   getMemoryStats
 } from "@/lib/sessionCookieMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
-import { 
-  getOrCreateDeviceId, 
+import {
+  getOrCreateDeviceId,
   getDeviceInfo,
   getDeviceName
 } from "@/lib/deviceIdentifier";
@@ -55,10 +55,10 @@ interface SelectedFile {
 const RenderTableAsChart = ({ node, ...props }: any) => {
   try {
     const table = node;
-    const headers = table.children[0]?.children.map((th: any) => th.children[0]?.value) || [];
-    const rows = table.children.slice(1).map((tr: any) =>
-      tr.children.map((td: any) => td.children[0]?.value)
-    );
+    const headers = table.children?.[0]?.children?.map((th: any) => th.children?.[0]?.value) || [];
+    const rows = table.children?.slice(1)?.map((tr: any) =>
+      tr.children?.map((td: any) => td.children?.[0]?.value)
+    ) || [];
 
     if (headers.length === 2 && rows.length > 0 && !isNaN(parseFloat(rows[0][1]))) {
       const data = rows.map((row: any) => ({ name: row[0], value: parseFloat(row[1]) }));
@@ -69,20 +69,20 @@ const RenderTableAsChart = ({ node, ...props }: any) => {
           <ResponsiveContainer width="100%" height="100%">
             {data.length <= 5 ? (
               <PieChart>
-                 <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
-                    {data.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'][index % 5]} />)}
-                 </Pie>
-                 <Tooltip />
-                 <Legend wrapperStyle={{ fontSize: '12px' }} />
+                <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
+                  {data.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'][index % 5]} />)}
+                </Pie>
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
               </PieChart>
             ) : (
               <BarChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                 <CartesianGrid strokeDasharray="3 3" />
-                 <XAxis dataKey="name" angle={-30} textAnchor="end" height={50} interval={0} fontSize={10} />
-                 <YAxis fontSize={10} />
-                 <Tooltip wrapperStyle={{ fontSize: '12px' }} />
-                 <Legend wrapperStyle={{ fontSize: '12px' }} />
-                 <Bar dataKey="value" fill="#8884d8" />
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" angle={-30} textAnchor="end" height={50} interval={0} fontSize={10} />
+                <YAxis fontSize={10} />
+                <Tooltip wrapperStyle={{ fontSize: '12px' }} />
+                <Legend wrapperStyle={{ fontSize: '12px' }} />
+                <Bar dataKey="value" fill="#8884d8" />
               </BarChart>
             )}
           </ResponsiveContainer>
@@ -134,10 +134,10 @@ export default function ConversationPage() {
             role: msg.role,
             timestamp: new Date(msg.timestamp),
           }));
-          
+
           setMessages(restoredMessages);
           setShowGreeting(false);
-          
+
           const stats = getMemoryStats();
           console.log('[SessionMemory] Restored conversation:', {
             messages: stats.totalMessages,
@@ -149,21 +149,21 @@ export default function ConversationPage() {
         } else {
           console.log('[SessionMemory] No previous session found - starting fresh');
         }
-        
+
         // Get user ID from Clerk (via API call since we can't use useAuth here directly)
         try {
           const response = await fetch('/api/auth/user');
           if (response.ok) {
             const data = await response.json();
             setUserId(data.userId);
-            
+
             // Register device sync session
             registerSyncSession(data.userId, savedMessages.length);
-            
+
             // Check for multi-device login
             const status = detectMultiDeviceLogin(data.userId);
             setMultiDeviceStatus(status);
-            
+
             if (status.isMultiDevice) {
               console.log('[DeviceSync] Multi-device detected:', {
                 deviceCount: status.deviceCount,
@@ -174,7 +174,7 @@ export default function ConversationPage() {
         } catch (err) {
           console.warn('[DeviceSync] Could not fetch user info:', err);
         }
-        
+
         setSessionRestored(true);
       } catch (err) {
         console.error('[SessionMemory] Failed to initialize session:', err);
@@ -193,9 +193,9 @@ export default function ConversationPage() {
         role: msg.role,
         timestamp: msg.timestamp.getTime(),
       }));
-      
+
       saveSessionMemoryToCookie(sessionMessages, 'current-user', sessionId);
-      
+
       // Track message sent for device sync
       if (deviceId) {
         trackMessageSent(messages.length);
@@ -279,32 +279,32 @@ export default function ConversationPage() {
   }, [sessionRestored, userId, deviceId, messages, sessionId]);
 
   const handleSendMessage = async () => { /* ... (keep existing logic) ... */
-      const trimmedInput = userInput.trim();
-      if (!trimmedInput && !selectedFile) return;
-      setLoading(true); setError(null); setShowGreeting(false);
-      let messageText = trimmedInput;
-      if (selectedFile) { messageText += `\n\n[Attached File: ${selectedFile.name} (${selectedFile.type})]`; }
-      const userMessage: Message = { text: messageText, role: "user", timestamp: new Date() };
-      const newMessages = [...messages, userMessage];
-      setMessages(newMessages); setUserInput(""); setSelectedFile(null);
-      try {
-          const response = await axios.post("/api/conversation", { messages: newMessages.map(msg => ({ role: msg.role, text: msg.text })) });
-          const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
-          setMessages((prevMessages) => [...prevMessages, botMessage]);
-      } catch (error: any) {
-          console.error("Error sending message:", error);
-          setError(error.response?.data?.details || "Sorry, something went wrong.");
-      } finally { setLoading(false); }
+    const trimmedInput = userInput.trim();
+    if (!trimmedInput && !selectedFile) return;
+    setLoading(true); setError(null); setShowGreeting(false);
+    let messageText = trimmedInput;
+    if (selectedFile) { messageText += `\n\n[Attached File: ${selectedFile.name} (${selectedFile.type})]`; }
+    const userMessage: Message = { text: messageText, role: "user", timestamp: new Date() };
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages); setUserInput(""); setSelectedFile(null);
+    try {
+      const response = await axios.post("/api/conversation", { messages: newMessages.map(msg => ({ role: msg.role, text: msg.text })) });
+      const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
+      setMessages((prevMessages) => [...prevMessages, botMessage]);
+    } catch (error: any) {
+      console.error("Error sending message:", error);
+      setError(error.response?.data?.details || "Sorry, something went wrong.");
+    } finally { setLoading(false); }
   };
   const handleAttachClick = () => { fileInputRef.current?.click(); };
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => { /* ... (keep existing logic) ... */
-      const file = event.target.files?.[0];
-      if (file) { setSelectedFile({ name: file.name, type: file.type || 'unknown' }); }
-      if(fileInputRef.current) { fileInputRef.current.value = ""; }
+    const file = event.target.files?.[0];
+    if (file) { setSelectedFile({ name: file.name, type: file.type || 'unknown' }); }
+    if (fileInputRef.current) { fileInputRef.current.value = ""; }
   };
   const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } };
   const TypingIndicator = () => { /* ... (keep existing logic) ... */
-    return ( <div className="flex items-center space-x-2 p-2"><Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar><div className="flex items-center space-x-1.5 p-2 rounded-lg bg-muted"><div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse"></div><div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse [animation-delay:0.2s]"></div><div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse [animation-delay:0.4s]"></div></div></div> );
+    return (<div className="flex items-center space-x-2 p-2"><Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar><div className="flex items-center space-x-1.5 p-2 rounded-lg bg-muted"><div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse"></div><div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse [animation-delay:0.2s]"></div><div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse [animation-delay:0.4s]"></div></div></div>);
   };
 
   return (
@@ -317,7 +317,7 @@ export default function ConversationPage() {
           iconColor="text-sky-500"
           bgColor="bg-sky-500/10"
         />
-        
+
         {/* ✅ Session Memory Indicator */}
         {sessionRestored && messages.length > 0 && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300">
@@ -326,8 +326,8 @@ export default function ConversationPage() {
               Session memory: <strong>{messages.length}</strong> {messages.length === 1 ? 'message' : 'messages'} (
               {(() => {
                 const stats = getMemoryStats();
-                return stats.sessionAgeMinutes > 0 
-                  ? `${stats.sessionAgeMinutes}m old` 
+                return stats.sessionAgeMinutes > 0
+                  ? `${stats.sessionAgeMinutes}m old`
                   : 'just now';
               })()})
             </span>
@@ -347,10 +347,10 @@ export default function ConversationPage() {
 
       <ScrollArea className="flex-grow rounded-md border p-2 md:p-4 my-4 bg-background">
         {showGreeting && (
-            <div className="flex items-start space-x-2 md:space-x-3 mb-4">
-                 <Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>
-                <div className="p-3 rounded-lg bg-muted text-sm">{GREETING_MESSAGE}</div>
-            </div>
+          <div className="flex items-start space-x-2 md:space-x-3 mb-4">
+            <Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>
+            <div className="p-3 rounded-lg bg-muted text-sm">{GREETING_MESSAGE}</div>
+          </div>
         )}
         {messages.map((msg, index) => (
           <div key={index} className={cn("mb-4 flex items-start space-x-2 md:space-x-3 group", msg.role === "user" ? "justify-end" : "justify-start")}>
@@ -371,7 +371,7 @@ export default function ConversationPage() {
                           <div className="my-2"> {/* Placeholder for CodeBlock */}
                             <pre><code className={className} {...props}>{children}</code></pre>
                           </div>
-                        ) : ( <code className={cn("bg-muted px-1 rounded text-xs", className)} {...props}>{children}</code> );
+                        ) : (<code className={cn("bg-muted px-1 rounded text-xs", className)} {...props}>{children}</code>);
                       },
                       p: ({ node, ...props }) => <p {...props} className="mb-2 last:mb-0" />,
                       ul: ({ node, ...props }) => <ul {...props} className="list-disc list-inside mb-2 pl-4" />,
@@ -406,14 +406,14 @@ export default function ConversationPage() {
       </ScrollArea>
 
       <footer className="flex items-end gap-1 md:gap-2 mt-4">
-          <Button variant="ghost" size="icon" onClick={handleAttachClick} disabled={loading} aria-label="Attach file">
-            <Paperclip className="h-5 w-5" />
-          </Button>
-           <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-         {selectedFile && (<div className="text-xs text-muted-foreground p-2 border rounded-md bg-muted truncate max-w-[100px] sm:max-w-[150px]">{selectedFile.name}</div>)}
+        <Button variant="ghost" size="icon" onClick={handleAttachClick} disabled={loading} aria-label="Attach file">
+          <Paperclip className="h-5 w-5" />
+        </Button>
+        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+        {selectedFile && (<div className="text-xs text-muted-foreground p-2 border rounded-md bg-muted truncate max-w-[100px] sm:max-w-[150px]">{selectedFile.name}</div>)}
         <Textarea rows={1} placeholder={selectedFile ? "Add message..." : "Type message or attach..."} value={userInput} onChange={(e) => setUserInput(e.target.value)} onKeyDown={handleKeyPress} disabled={loading} className="flex-1 resize-none max-h-40 min-h-[40px] focus-visible:ring-1 focus-visible:ring-ring text-sm" />
         <Button onClick={handleSendMessage} disabled={loading || (!userInput.trim() && !selectedFile)} size="icon" aria-label="Send message">
-           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M3.105 3.105a1.5 1.5 0 011.995-.21l12 6a1.5 1.5 0 010 2.21l-12 6A1.5 1.5 0 013 16.5V3.5a1.5 1.5 0 01.105-.395z"></path></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M3.105 3.105a1.5 1.5 0 011.995-.21l12 6a1.5 1.5 0 010 2.21l-12 6A1.5 1.5 0 013 16.5V3.5a1.5 1.5 0 01.105-.395z"></path></svg>
         </Button>
       </footer>
     </div>

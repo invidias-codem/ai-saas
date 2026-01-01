@@ -54,8 +54,8 @@ export function getSessionMemoryFromCookie(): SessionMessage[] {
 
     if (!cookieValue) return [];
 
-    // Decode from base64
-    const decoded = atob(cookieValue);
+    // Decode from base64 (unicode safe)
+    const decoded = decodeURIComponent(escape(atob(cookieValue)));
     const data: SessionCookieData = JSON.parse(decoded);
 
     // Validate structure
@@ -88,17 +88,16 @@ export function saveSessionMemoryToCookie(
       messageCount: messages.length,
     };
 
-    // Encode to base64 for safe cookie storage
-    const encoded = btoa(JSON.stringify(data));
-    
+    // Encode to base64 for safe cookie storage (unicode safe)
+    const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+
     // Set cookie with secure options
     const options = COOKIE_CONFIG.COOKIE_OPTIONS;
-    const cookieString = `${COOKIE_CONFIG.SESSION_MEMORY}=${encoded}; Max-Age=${options.maxAge}; Path=${options.path}; SameSite=${options.sameSite}${
-      options.secure ? '; Secure' : ''
-    }`;
+    const cookieString = `${COOKIE_CONFIG.SESSION_MEMORY}=${encoded}; Max-Age=${options.maxAge}; Path=${options.path}; SameSite=${options.sameSite}${options.secure ? '; Secure' : ''
+      }`;
 
     document.cookie = cookieString;
-    
+
     console.log(`[SessionCookie] Saved ${messages.length} messages to session memory`);
   } catch (error) {
     console.error('[SessionCookie] Failed to save session memory:', error);
@@ -139,16 +138,15 @@ export function getOrCreateSessionId(): string {
 
     // Create new session ID
     const newSessionId = generateSessionId();
-    
+
     // Store in cookie (same lifetime as memory cookie)
     const options = COOKIE_CONFIG.COOKIE_OPTIONS;
-    const cookieString = `${COOKIE_CONFIG.SESSION_ID}=${newSessionId}; Max-Age=${options.maxAge}; Path=${options.path}; SameSite=${options.sameSite}${
-      options.secure ? '; Secure' : ''
-    }`;
-    
+    const cookieString = `${COOKIE_CONFIG.SESSION_ID}=${newSessionId}; Max-Age=${options.maxAge}; Path=${options.path}; SameSite=${options.sameSite}${options.secure ? '; Secure' : ''
+      }`;
+
     document.cookie = cookieString;
     console.log('[SessionCookie] Created new session ID');
-    
+
     return newSessionId;
   } catch (error) {
     console.error('[SessionCookie] Failed to get/create session ID:', error);
@@ -191,7 +189,7 @@ export function getSessionInfo(): {
       };
     }
 
-    const decoded = atob(cookieValue);
+    const decoded = decodeURIComponent(escape(atob(cookieValue)));
     const data: SessionCookieData = JSON.parse(decoded);
 
     return {
