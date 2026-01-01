@@ -260,7 +260,13 @@ export default function ConversationPage() {
             devices: response.data.deviceCount,
           });
         }
-      } catch (err) {
+      } catch (err: any) {
+        if (err.response?.status === 401) {
+          console.warn('[DeviceSync] Unauthorized during sync - session likely expired');
+          // Optional: Redirect or just stop syncing to avoid spamming console
+          // window.location.href = "/sign-in"; 
+          // For sync, maybe just log it since it runs in background
+        }
         console.warn('[DeviceSync] Cloud sync failed (will retry):', err);
       }
     };
@@ -293,6 +299,10 @@ export default function ConversationPage() {
       setMessages((prevMessages) => [...prevMessages, botMessage]);
     } catch (error: any) {
       console.error("Error sending message:", error);
+      if (error.response?.status === 401) {
+        window.location.href = "/sign-in?redirect_url=" + encodeURIComponent(window.location.pathname);
+        return;
+      }
       setError(error.response?.data?.details || "Sorry, something went wrong.");
     } finally { setLoading(false); }
   };
