@@ -3,10 +3,11 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { env } from '@/lib/env';
-import { 
-  getRAGMemoryContext, 
-  captureMemory, 
-  extractTags, 
+import { z } from "zod";
+import {
+  getRAGMemoryContext,
+  captureMemory,
+  extractTags,
   generateSummary,
   estimateTokenCount,
   gatherUserContext,
@@ -14,7 +15,7 @@ import {
   getHighConfidenceFacts,
   formatFactsForPrompt
 } from '@/lib/ragMemory';
-import { 
+import {
   getHighConfidenceFactsIntelligent,
   rankMemoriesIntelligently
 } from '@/lib/intelligentMemory';
@@ -34,16 +35,16 @@ const model = genAI.getGenerativeModel({
 
 // ✅ Add instruction for data formatting with RAG context notice
 const SYSTEM_INSTRUCTION = {
-    role: "user", // System instructions often go under the 'user' role for initial setup
-    parts: [{
-      text: "You are 'Genie', a helpful AI assistant. Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences."
-    }],
+  role: "user", // System instructions often go under the 'user' role for initial setup
+  parts: [{
+    text: "You are 'Genie', a helpful AI assistant. Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences."
+  }],
 };
 
 // Optional: Initial greeting from the model
 const GREETING = {
-    role: "model",
-    parts: [{ text: "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights."}]
+  role: "model",
+  parts: [{ text: "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights." }]
 };
 
 
@@ -62,11 +63,47 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { messages } = body;
 
-    if (!messages || messages.length === 0) {
-      return new NextResponse("Messages are required", { status: 400 });
+
+
+    // Adapt schema structure if needed, or update promptSchema to match expected 'messages' array
+    // The current promptSchema is { prompt: string }, but the code expects { messages: [...] }
+    // We should probably update the schema or just check the messages here if we stick to existing code logic
+    // but the task was to use Zod.
+    // Let's check if the existing code uses `messages` or `prompt`.
+    // It uses `const { messages } = body;`.
+    // And schema says `prompt`. This is a mismatch in the existing codebase vs the schema file I saw.
+    // I should probably fix the schema or handle it here.
+    // Let's assume for this specific edit we want to validate `messages` specifically.
+
+    // For now, let's stick to the existing logic but wrapped in a manual check or define a local schema if the imported one is wrong.
+    // The imported `promptSchema` was just `prompt: z.string()`.
+    // The code uses `messages`. 
+    // I will define a local schema or just use the messages check for now to avoid breaking it if I can't see the schema update yet.
+    // Wait, I saw lib/schemas.ts has `promptSchema = z.object({ prompt: z.string()... })`.
+    // But the route uses `messages`.
+    // I will add a `chatSchema` here to be safe and clear.
+
+    const chatSchema = z.object({
+      messages: z.array(z.object({
+        role: z.string(),
+        text: z.string()
+      })).min(1, "Messages are required")
+    });
+
+    const validationResult = chatSchema.safeParse(body);
+
+    if (!validationResult.success) {
+      return new NextResponse(JSON.stringify({
+        error: "Validation Error",
+        details: validationResult.error.flatten()
+      }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
     }
+
+    const { messages } = validationResult.data;
 
     // ✅ Gather comprehensive user context
     const userContext = await gatherUserContext(userId, clerkUser);
@@ -76,7 +113,7 @@ export async function POST(req: Request) {
     // Uses context relevance and importance scoring for smarter retrieval
     const userQuery = messages[messages.length - 1]?.text || '';
     const allFacts = await getHighConfidenceFacts(userId);
-    
+
     // Create mock vector similarities based on keyword matching
     const similarities = new Map<string, number>();
     const queryWords = userQuery.toLowerCase().split(/\s+/);
@@ -86,17 +123,17 @@ export async function POST(req: Request) {
       const similarity = overlap / Math.max(factWords.length, queryWords.length, 1);
       similarities.set(fact.id || '', Math.min(1, similarity * 1.5)); // Scale up slightly
     }
-    
+
     const intelligentFacts = rankMemoriesIntelligently(
       allFacts,
       similarities,
       userQuery
     );
-    
+
     console.log(`[Memory Intelligence] Retrieved ${intelligentFacts.length} intelligently ranked facts for user ${userId}`);
     if (intelligentFacts.length > 0) {
-      console.log('[Memory Intelligence] Top facts:', intelligentFacts.slice(0, 2).map(f => ({ 
-        type: f.type, 
+      console.log('[Memory Intelligence] Top facts:', intelligentFacts.slice(0, 2).map(f => ({
+        type: f.type,
         content: f.content.substring(0, 40),
         relevance: f.contextRelevance?.toFixed(2)
       })));
@@ -114,7 +151,7 @@ export async function POST(req: Request) {
 
     const lastUserMessage = history.pop();
     if (!lastUserMessage || lastUserMessage.role !== 'user') {
-       return new NextResponse("Invalid prompt", { status: 400 });
+      return new NextResponse("Invalid prompt", { status: 400 });
     }
 
     // ✅ Inject user context + facts (HIGH PRIORITY) + memory context into the prompt
@@ -144,12 +181,17 @@ export async function POST(req: Request) {
     ]);
 
     // ✅ Send to Cloud Function for async memory capture with user metadata
+    const formattedMessages = messages.map((msg: { role: string; text: string }) => ({
+      role: (msg.role === 'bot' ? 'assistant' : 'user') as "user" | "assistant" | "system",
+      content: msg.text
+    }));
+
     captureMemory(
       userId,
       'conversation',
       userQuery.substring(0, 50) || 'Conversation',
       summary,
-      messages,
+      formattedMessages,
       tokensUsed,
       tags,
       {

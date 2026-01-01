@@ -9,6 +9,10 @@ import path from 'path';
 
 // Helper to log to file (for debugging when terminal is inaccessible)
 function logDebug(message: string, data?: any) {
+  // Disable file logging in production to prevent PII leakage and ephemeral filesystem issues
+  if (process.env.NODE_ENV === 'production') {
+    return;
+  }
   try {
     const logPath = path.join(process.cwd(), 'debug_slack.log');
     const timestamp = new Date().toISOString();
@@ -1077,14 +1081,25 @@ export async function POST(req: Request) {
     // ─────────────────────────────────────────────────────────────────
     // Verify Slack Signature
     // ─────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────
+    // Verify Slack Signature
+    // ─────────────────────────────────────────────────────────────────
     const timestamp = req.headers.get('x-slack-request-timestamp') || '';
     const signature = req.headers.get('x-slack-signature') || '';
 
-    if (process.env.NODE_ENV === 'production' && process.env.SLACK_SIGNING_SECRET) {
+    // Enforce verification if we have the secret, regardless of environment
+    // This allows testing dev environments securely if they are exposed
+    if (process.env.SLACK_SIGNING_SECRET) {
       if (!verifySlackSignature(rawBody, timestamp, signature)) {
         console.error('[SLACK_EVENTS] Invalid Slack signature');
         return new NextResponse('Unauthorized', { status: 401 });
       }
+    } else if (process.env.NODE_ENV === 'production') {
+      // Critical: Production MUST have the secret
+      console.error('[SLACK_EVENTS] SLACK_SIGNING_SECRET missing in production');
+      return new NextResponse('Server Configuration Error', { status: 500 });
+    } else {
+      console.warn('[SLACK_EVENTS] Skipping signature verification (no secret set in non-prod)');
     }
 
     // ─────────────────────────────────────────────────────────────────
