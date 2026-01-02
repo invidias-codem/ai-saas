@@ -7,9 +7,7 @@ import { MemoryIndicator } from "./memory-indicator";
 const Navbar = () => {
     return (
         <div className="flex items-center p-4">
-            <Button variant={"ghost"} size={"icon"} className="md:hidden">
-                <MobileSidebar />
-            </Button>
+            <MobileSidebar />
             <div className="flex w-full justify-end items-center gap-x-2">
                 {/* Memory Indicator */}
                 <MemoryIndicator />

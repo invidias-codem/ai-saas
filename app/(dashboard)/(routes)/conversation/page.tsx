@@ -318,7 +318,7 @@ export default function ConversationPage() {
   };
 
   return (
-    <div className="h-full flex flex-col p-4 md:p-6 lg:p-8">
+    <div className="h-[calc(100%-4rem)] md:h-full flex flex-col p-2 md:p-6 lg:p-8">
       <div className="space-y-4">
         <Heading
           title="Genie Conversation"

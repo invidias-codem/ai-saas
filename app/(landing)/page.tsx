@@ -4,12 +4,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
-import { 
-  ChatBubbleIcon, 
-  CodeIcon, 
-  DiscIcon, 
-  ImageIcon, 
-  VideoIcon, 
+import {
+  ChatBubbleIcon,
+  CodeIcon,
+  DiscIcon,
+  ImageIcon,
+  VideoIcon,
   RocketIcon,
   CheckIcon,
   Cross2Icon
@@ -21,7 +21,7 @@ const LandingPage = () => {
 
   return (
     <div className="bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
-      
+
       {/* Background Gradients */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl" />
@@ -29,18 +29,18 @@ const LandingPage = () => {
       </div>
 
       {/* Header */}
-      <header className="relative z-10 py-6 px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
+      <header className="relative z-10 py-4 px-4 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
         <div className="flex items-center gap-2">
           <div className="relative w-8 h-8">
-             <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" /> 
+            <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
           </div>
           <span className="text-2xl font-bold text-white tracking-tight">Genie AI</span>
         </div>
         <div className="flex items-center gap-x-2">
           {/* Pricing Trigger Button */}
-          <Button 
+          <Button
             onClick={() => setIsPricingOpen(true)}
-            variant="ghost" 
+            variant="ghost"
             className="text-gray-300 hover:text-white hover:bg-white/10 rounded-full hidden sm:inline-flex"
           >
             Pricing
@@ -61,22 +61,22 @@ const LandingPage = () => {
 
       <main className="relative z-10 flex-grow">
         {/* Hero Section */}
-        <section className="pt-20 pb-32 px-4 text-center space-y-8 max-w-4xl mx-auto">
+        <section className="pt-20 pb-20 px-4 text-center space-y-8 max-w-4xl mx-auto">
           <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-white backdrop-blur-xl animate-fade-in">
             <span className="flex h-2 w-2 rounded-full bg-sky-400 mr-2"></span>
             The All-in-One AI Platform
           </div>
-          
+
           <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-white tracking-tight leading-[1.1]">
             Unleash Your Potential <br />
             with <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">Genie AI</span>
           </h1>
-          
+
           <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
-            Generate content, write code, compose music, and create videos in seconds. 
+            Generate content, write code, compose music, and create videos in seconds.
             Streamline your workflow with the smartest AI assistant.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-4">
             <Link href="/dashboard" className="w-full sm:w-auto">
               <Button size="lg" className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-full text-lg px-8 py-6 shadow-lg shadow-purple-500/25">
@@ -84,9 +84,9 @@ const LandingPage = () => {
               </Button>
             </Link>
             {/* Mobile Pricing Button */}
-            <Button 
+            <Button
               onClick={() => setIsPricingOpen(true)}
-              variant="outline" 
+              variant="outline"
               size="lg"
               className="w-full sm:w-auto sm:hidden rounded-full border-white/20 text-white hover:bg-white/10"
             >
@@ -104,11 +104,11 @@ const LandingPage = () => {
             <h2 className="text-3xl font-bold text-white mb-4">Supercharge your creativity</h2>
             <p className="text-gray-400">Five powerful tools in one dashboard.</p>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
             {features.map((feature) => (
-              <div 
-                key={feature.label} 
+              <div
+                key={feature.label}
                 className="group p-6 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition duration-200 backdrop-blur-sm cursor-default"
               >
                 <div className={cn("w-12 h-12 rounded-lg flex items-center justify-center mb-4 transition-transform group-hover:scale-110", feature.bgColor)}>
@@ -153,11 +153,11 @@ const LandingPage = () => {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
             <div className="flex items-center gap-2">
               <div className="relative w-6 h-6">
-                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" /> 
+                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" sizes="(max-width: 768px) 32px, 32px" />
               </div>
               <span className="text-lg font-bold text-white">Genie AI</span>
             </div>
-            
+
             <div className="flex items-center gap-6 text-sm text-gray-400">
               <Link href="/blog" className="hover:text-white transition">Blog</Link>
               <Link href="/slack" className="hover:text-white transition">Slack Integration</Link>
@@ -168,19 +168,19 @@ const LandingPage = () => {
 
           {/* Scout Forge Badge */}
           <div className="mb-8 flex justify-center">
-            <a 
-              href="https://scoutforge.net/reviews/genie-ai/" 
-              title="Trusted and reviewed by Scout Forge" 
-              target="_blank" 
+            <a
+              href="https://scoutforge.net/reviews/genie-ai/"
+              title="Trusted and reviewed by Scout Forge"
+              target="_blank"
               rel="noopener noreferrer"
               className="hover:opacity-80 transition-opacity relative w-[250px] h-[54px] block"
             >
-              <Image 
-                src="https://scoutforge.net/wp-content/themes/wp-theme/assets/img/badges/badge-light.webp" 
+              <Image
+                src="https://scoutforge.net/wp-content/themes/wp-theme/assets/img/badges/badge-light.webp"
                 alt="Trusted and Reviewed by Scout Forge"
                 fill
                 className="object-contain"
-                unoptimized={true} 
+                unoptimized={true}
               />
             </a>
           </div>
@@ -197,23 +197,23 @@ const LandingPage = () => {
       {isPricingOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           {/* Backdrop */}
-          <div 
+          <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
             onClick={() => setIsPricingOpen(false)}
           />
-          
+
           {/* Modal Content */}
           <div className="relative w-full max-w-lg bg-[#111827] border border-white/10 sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-10 fade-in duration-300">
-            
+
             {/* Modal Header */}
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-white">Flexible Pricing</h2>
                 <p className="text-sm text-gray-400">Pay only for what you generate.</p>
               </div>
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => setIsPricingOpen(false)}
                 className="text-gray-400 hover:text-white rounded-full"
               >
@@ -224,12 +224,12 @@ const LandingPage = () => {
             {/* Modal Body (Scrollable) */}
             <div className="p-6 overflow-y-auto space-y-4">
               {pricingTiers.map((tier, index) => (
-                <div 
+                <div
                   key={index}
                   className={cn(
                     "relative p-4 rounded-xl border cursor-pointer transition-all",
-                    tier.popular 
-                      ? "border-purple-500 bg-purple-500/10 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)]" 
+                    tier.popular
+                      ? "border-purple-500 bg-purple-500/10 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)]"
                       : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
                   )}
                 >
