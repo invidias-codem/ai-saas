@@ -17,13 +17,13 @@ import { cn } from "@/lib/utils";
 import EmptyState from "@/components/empty";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
 import {
-  getSessionMemoryFromCookie,
-  saveSessionMemoryToCookie,
+  getSessionMemoryFromStorage,
+  saveSessionMemoryToStorage,
   getOrCreateSessionId,
-  clearSessionMemoryCookie,
+  clearSessionMemoryStorage,
   SessionMessage,
   getMemoryStats
-} from "@/lib/sessionCookieMemory";
+} from "@/lib/sessionClientMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
 import {
   getOrCreateDeviceId,
@@ -126,8 +126,8 @@ export default function ConversationPage() {
         setDeviceId(did);
         console.log('[DeviceSync] Initialized device:', getDeviceName(getDeviceInfo()));
 
-        // Restore messages from cookie
-        const savedMessages = getSessionMemoryFromCookie();
+        // Restore messages from storage
+        const savedMessages = getSessionMemoryFromStorage();
         if (savedMessages.length > 0) {
           const restoredMessages: Message[] = savedMessages.map(msg => ({
             text: msg.text,
@@ -144,7 +144,7 @@ export default function ConversationPage() {
             userMessages: stats.userMessages,
             botMessages: stats.botMessages,
             sessionAge: `${stats.sessionAgeMinutes}m ago`,
-            cookieSize: stats.cookieSize,
+            storageSize: stats.storageSize,
           });
         } else {
           console.log('[SessionMemory] No previous session found - starting fresh');
@@ -194,7 +194,7 @@ export default function ConversationPage() {
         timestamp: msg.timestamp.getTime(),
       }));
 
-      saveSessionMemoryToCookie(sessionMessages, 'current-user', sessionId);
+      saveSessionMemoryToStorage(sessionMessages, 'current-user', sessionId);
 
       // Track message sent for device sync
       if (deviceId) {
@@ -235,7 +235,7 @@ export default function ConversationPage() {
           // Update if merged version has more messages
           if (mergedMessages.length > messages.length) {
             setMessages(mergedMessages);
-            saveSessionMemoryToCookie(
+            saveSessionMemoryToStorage(
               mergedMessages.map(msg => ({
                 text: msg.text,
                 role: msg.role,
@@ -318,8 +318,8 @@ export default function ConversationPage() {
   };
 
   return (
-    <div className="h-[calc(100%-4rem)] md:h-full flex flex-col p-2 md:p-6 lg:p-8">
-      <div className="space-y-4">
+    <div className="h-[calc(100dvh-5rem)] md:h-full flex flex-col">
+      <div className="px-4 py-2">
         <Heading
           title="Genie Conversation"
           description="Chat with Genie or upload a file for insights."
@@ -329,103 +329,132 @@ export default function ConversationPage() {
         />
 
         {/* ✅ Session Memory Indicator */}
-        {sessionRestored && messages.length > 0 && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300">
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span>
-              Session memory: <strong>{messages.length}</strong> {messages.length === 1 ? 'message' : 'messages'} (
-              {(() => {
-                const stats = getMemoryStats();
-                return stats.sessionAgeMinutes > 0
-                  ? `${stats.sessionAgeMinutes}m old`
-                  : 'just now';
-              })()})
-            </span>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2 mt-2">
+          {sessionRestored && messages.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-700 dark:text-blue-300">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>
+                Memory: <strong>{messages.length}</strong> msgs
+              </span>
+            </div>
+          )}
 
-        {/* ✅ Multi-Device Sync Indicator */}
-        {multiDeviceStatus?.isMultiDevice && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-700 dark:text-green-300">
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span>
-              📱 Syncing across <strong>{multiDeviceStatus.deviceCount}</strong> device{multiDeviceStatus.deviceCount !== 1 ? 's' : ''}
-            </span>
-          </div>
-        )}
+          {/* ✅ Multi-Device Sync Indicator */}
+          {multiDeviceStatus?.isMultiDevice && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 text-xs text-green-700 dark:text-green-300">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <span>
+                Sync: <strong>{multiDeviceStatus.deviceCount}</strong> devices
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
-      <ScrollArea className="flex-grow rounded-md border p-2 md:p-4 my-4 bg-background">
-        {showGreeting && (
-          <div className="flex items-start space-x-2 md:space-x-3 mb-4">
-            <Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>
-            <div className="p-3 rounded-lg bg-muted text-sm">{GREETING_MESSAGE}</div>
+      <div className="flex-grow flex flex-col md:px-8 overflow-hidden">
+        <ScrollArea className="flex-1 p-0 md:p-4 rounded-md border-0 md:border bg-background/50 backdrop-blur-sm shadow-sm md:shadow-sm">
+          <div className="max-w-3xl mx-auto px-3 md:px-0">
+            {showGreeting && (
+              <div className="flex items-start space-x-2 md:space-x-3 mb-8 mt-4">
+                <Avatar className="h-8 w-8 mt-1"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>
+                <div className="p-4 rounded-2xl bg-muted/50 text-sm leading-relaxed border border-border/50 max-w-full">
+                  {GREETING_MESSAGE}
+                </div>
+              </div>
+            )}
+            {messages.map((msg, index) => (
+              <div key={index} className={cn("mb-8 flex gap-2 md:gap-3 group",
+                msg.role === "user" ? "flex-col-reverse md:flex-row items-end justify-end" : "flex-col md:flex-row items-start justify-start")}>
+                {msg.role === "bot" && (<Avatar className="h-8 w-8 md:mt-1 flex-shrink-0"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>)}
+                <div className={cn("max-w-[98%] md:max-w-[80%] rounded-2xl shadow-sm p-3 md:p-4 text-sm break-words relative leading-relaxed",
+                  msg.role === "user" ? "bg-primary text-primary-foreground rounded-tr-none md:rounded-tr-none rounded-br-none md:rounded-br-xl" : "bg-muted/80 dark:bg-muted/40 backdrop-blur-sm rounded-tl-none md:rounded-tl-none rounded-bl-none md:rounded-bl-xl border border-border/50")}>
+                  {msg.role === "bot" ? (
+                    <>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          // ✅ ONLY ONE 'table' definition, pointing to our component
+                          table: RenderTableAsChart,
+                          // Standard markdown element styling
+                          pre: ({ node, ...props }) => <div className="relative w-full overflow-hidden my-3 rounded-lg border bg-zinc-950/90 dark:bg-zinc-900/90"><pre {...props} className="p-3 overflow-x-auto text-xs text-zinc-50" /></div>,
+                          code({ node, className, children, ...props }) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            return match ? (
+                              <div className="relative"> {/* Placeholder for CodeBlock */}
+                                <code className={className} {...props}>{children}</code>
+                              </div>
+                            ) : (<code className={cn("bg-zinc-200 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-mono text-xs", className)} {...props}>{children}</code>);
+                          },
+                          p: ({ node, ...props }) => <p {...props} className="mb-2 last:mb-0" />,
+                          ul: ({ node, ...props }) => <ul {...props} className="list-disc list-inside mb-2 pl-2 space-y-1" />,
+                          ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-inside mb-2 pl-2 space-y-1" />,
+                          li: ({ node, ...props }) => <li {...props} className="pl-1" />,
+                          blockquote: ({ node, ...props }) => <blockquote {...props} className="border-l-4 border-primary/30 pl-4 py-1 italic text-muted-foreground my-2 bg-muted/30 rounded-r" />,
+                          a: ({ node, ...props }) => <a {...props} className="text-primary underline underline-offset-4 hover:text-primary/80 transition-colors" target="_blank" rel="noreferrer" />,
+                        }}
+                      >
+                        {msg.text}
+                      </ReactMarkdown>
+                      {/* Share button - appears on hover */}
+                      <div className="absolute -bottom-6 left-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+                        <ShareIconButton
+                          content={{
+                            title: "Genie AI Response",
+                            text: msg.text.length > 280 ? msg.text.substring(0, 277) + "..." : msg.text,
+                            url: typeof window !== "undefined" ? window.location.href : undefined,
+                          }}
+                          className="h-6 w-6 bg-background shadow-sm border"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                  )}
+                </div>
+                {msg.role === "user" && (<Avatar className="hidden md:flex h-8 w-8 md:mt-1 flex-shrink-0"><AvatarFallback><PersonIcon /></AvatarFallback></Avatar>)}
+              </div>
+            ))}
+            {loading && <TypingIndicator />}
+            <div className="h-4" /> {/* Spacer */}
           </div>
-        )}
-        {messages.map((msg, index) => (
-          <div key={index} className={cn("mb-4 flex items-start space-x-2 md:space-x-3 group", msg.role === "user" ? "justify-end" : "justify-start")}>
-            {msg.role === "bot" && (<Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>)}
-            <div className={cn("max-w-[85%] sm:max-w-[75%] rounded-lg shadow-sm p-3 text-sm break-words relative", msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted")}>
-              {msg.role === "bot" ? (
-                <>
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      // ✅ ONLY ONE 'table' definition, pointing to our component
-                      table: RenderTableAsChart,
-                      // Standard markdown element styling
-                      pre: ({ node, ...props }) => <pre {...props} className="bg-muted p-2 rounded overflow-x-auto text-xs my-2" />,
-                      code({ node, className, children, ...props }) {
-                        const match = /language-(\w+)/.exec(className || '');
-                        return match ? (
-                          <div className="my-2"> {/* Placeholder for CodeBlock */}
-                            <pre><code className={className} {...props}>{children}</code></pre>
-                          </div>
-                        ) : (<code className={cn("bg-muted px-1 rounded text-xs", className)} {...props}>{children}</code>);
-                      },
-                      p: ({ node, ...props }) => <p {...props} className="mb-2 last:mb-0" />,
-                      ul: ({ node, ...props }) => <ul {...props} className="list-disc list-inside mb-2 pl-4" />,
-                      ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-inside mb-2 pl-4" />,
-                      li: ({ node, ...props }) => <li {...props} className="mb-1" />,
-                      blockquote: ({ node, ...props }) => <blockquote {...props} className="border-l-4 border-border pl-4 italic text-muted-foreground my-2" />,
-                    }}
-                  >
-                    {msg.text}
-                  </ReactMarkdown>
-                  {/* Share button - appears on hover */}
-                  <div className="absolute -bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <ShareIconButton
-                      content={{
-                        title: "Genie AI Response",
-                        text: msg.text.length > 280 ? msg.text.substring(0, 277) + "..." : msg.text,
-                        url: typeof window !== "undefined" ? window.location.href : undefined,
-                      }}
-                      className="bg-background shadow-sm border"
-                    />
-                  </div>
-                </>
-              ) : (
-                <p className="whitespace-pre-wrap">{msg.text}</p>
-              )}
-            </div>
-            {msg.role === "user" && (<Avatar className="h-8 w-8"><AvatarFallback><PersonIcon /></AvatarFallback></Avatar>)}
-          </div>
-        ))}
-        {loading && <TypingIndicator />}
-        {error && <p className="text-destructive text-sm p-2 text-center">{error}</p>}
-      </ScrollArea>
+        </ScrollArea>
 
-      <footer className="flex items-end gap-1 md:gap-2 mt-4">
-        <Button variant="ghost" size="icon" onClick={handleAttachClick} disabled={loading} aria-label="Attach file">
-          <Paperclip className="h-5 w-5" />
-        </Button>
-        <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
-        {selectedFile && (<div className="text-xs text-muted-foreground p-2 border rounded-md bg-muted truncate max-w-[100px] sm:max-w-[150px]">{selectedFile.name}</div>)}
-        <Textarea rows={1} placeholder={selectedFile ? "Add message..." : "Type message or attach..."} value={userInput} onChange={(e) => setUserInput(e.target.value)} onKeyDown={handleKeyPress} disabled={loading} className="flex-1 resize-none max-h-40 min-h-[40px] focus-visible:ring-1 focus-visible:ring-ring text-sm" />
-        <Button onClick={handleSendMessage} disabled={loading || (!userInput.trim() && !selectedFile)} size="icon" aria-label="Send message">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M3.105 3.105a1.5 1.5 0 011.995-.21l12 6a1.5 1.5 0 010 2.21l-12 6A1.5 1.5 0 013 16.5V3.5a1.5 1.5 0 01.105-.395z"></path></svg>
-        </Button>
-      </footer>
+        {error && <div className="p-2 text-center"><p className="text-destructive text-sm bg-destructive/10 py-1 px-3 rounded-full inline-block">{error}</p></div>}
+
+        <div className="p-2 pt-0 md:p-4 max-w-3xl mx-auto w-full">
+          <div className="flex items-end gap-2 p-2 rounded-xl border bg-background shadow-xs focus-within:ring-1 focus-within:ring-ring transition-all">
+            <Button variant="ghost" size="icon" onClick={handleAttachClick} disabled={loading} aria-label="Attach file" className="h-9 w-9 text-muted-foreground hover:text-primary shrink-0">
+              <Paperclip className="h-5 w-5" />
+            </Button>
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+
+            <div className="flex-1 min-w-0 flex flex-col justify-center">
+              {selectedFile && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md mb-1 w-fit max-w-full">
+                  <span className="truncate max-w-[150px]">{selectedFile.name}</span>
+                  <button onClick={() => setSelectedFile(null)} className="hover:text-destructive">×</button>
+                </div>
+              )}
+              <Textarea
+                rows={1}
+                placeholder="Ask me anything..."
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
+                onKeyDown={handleKeyPress}
+                disabled={loading}
+                className="min-h-[24px] max-h-40 border-0 focus-visible:ring-0 resize-none p-0 bg-transparent text-sm leading-relaxed"
+              />
+            </div>
+
+            <Button onClick={handleSendMessage} disabled={loading || (!userInput.trim() && !selectedFile)} size="icon" aria-label="Send message" className="h-9 w-9 shrink-0 shadow-none transition-transform active:scale-95">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" /></svg>
+            </Button>
+          </div>
+          <div className="text-[10px] text-muted-foreground text-center mt-2 hidden md:block">
+            AI can make mistakes. Consider checking important information.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

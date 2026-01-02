@@ -7,7 +7,7 @@
 
 import { useEffect } from 'react';
 import { useAuth } from '@clerk/nextjs';
-import { clearSessionMemoryCookie, getSessionInfo } from '@/lib/sessionCookieMemory';
+import { clearSessionMemoryStorage, getSessionInfo } from '@/lib/sessionClientMemory';
 
 export function useSessionCleanup() {
   const { userId, isSignedIn } = useAuth();
@@ -19,7 +19,7 @@ export function useSessionCleanup() {
 
     if (isSignedIn === false) {
       if (CLEAR_ON_LOGOUT) {
-        clearSessionMemoryCookie();
+        clearSessionMemoryStorage();
         console.log('[SessionCleanup] Session cleared on logout');
       } else {
         console.log('[SessionCleanup] Keeping session memory - user can resume when logged back in');
@@ -29,7 +29,7 @@ export function useSessionCleanup() {
 
   return {
     manualClear: () => {
-      clearSessionMemoryCookie();
+      clearSessionMemoryStorage();
       console.log('[SessionCleanup] Session manually cleared');
     },
     getStatus: () => {
