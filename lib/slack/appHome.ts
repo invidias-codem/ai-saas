@@ -106,6 +106,45 @@ async function buildAppHomeView(userId: string, teamId: string): Promise<any> {
         type: 'section',
         text: {
           type: 'mrkdwn',
+          text: "*What Genie Can Do* 🚀",
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "• *Code Analysis:* Debug, review, explain, and generate code in 15+ languages\n• *File Analysis:* Read and analyze PDFs, code files, and text documents\n• *Link Extraction:* Summarize content from shared URLs\n• *Thread Memory:* Remember context within conversation threads\n• *Multi-Language:* Support for Python, JavaScript, TypeScript, Go, Java, and more",
+        },
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "*Current Limitations* ⚠️",
+        },
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: "• *No Code Execution:* I analyze code but cannot run it\n• *Session Memory:* I may not remember details across different threads\n• *No Proactive Monitoring:* I respond when asked, not automatically\n• *Limited Slack Actions:* I can't manage channels or users directly\n• *External Services:* I need explicit integrations to access APIs",
+        },
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: "_We're actively working to improve! Check our roadmap for upcoming features._",
+          },
+        ],
+      },
+      { type: 'divider' },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
           text: "*What's New in Genie* ✨\n• *Thread Memory:* I now remember context within our threads!\n• *App Home:* Check back here for your stats and recent memories.\n• *Better Code Support:* I'm now smarter at debugging and writing code.",
         },
       },
