@@ -46,7 +46,7 @@ export async function downloadSlackFile(
     try {
         const response = await axios.get(url, {
             headers: {
-                Authorization: `Bearer ${token} `,
+                Authorization: `Bearer ${token}`,
             },
             responseType: 'arraybuffer',
         });

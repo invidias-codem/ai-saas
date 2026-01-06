@@ -758,9 +758,14 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
     const started = await streamer.start();
 
     if (started) {
+      // Build message with file context for code mode
+      const messageWithContext = eventContext
+        ? `${cleanText}\n\n=== ATTACHED FILE/LINK CONTENT ===\n${eventContext}`
+        : cleanText;
+
       // Stream the response based on type
       if (isCode && intent) {
-        for await (const chunk of generateCodeResponseStream(cleanText, language, intent, history)) {
+        for await (const chunk of generateCodeResponseStream(messageWithContext, language, intent, history)) {
           // Convert markdown to Slack format for each chunk
           await streamer.append(convertMarkdownToSlack(chunk));
         }
@@ -805,8 +810,13 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
       let response: string;
       let prefix: string;
 
+      // Build message with file context for code mode (reuse same pattern as streaming)
+      const messageWithContext = eventContext
+        ? `${cleanText}\n\n=== ATTACHED FILE/LINK CONTENT ===\n${eventContext}`
+        : cleanText;
+
       if (isCode && intent) {
-        response = await generateCodeResponse(cleanText, language, intent, history);
+        response = await generateCodeResponse(messageWithContext, language, intent, history);
         const emoji = getIntentEmoji(intent);
         const label = getIntentLabel(intent);
         const langInfo = language ? ` (${getLanguageDisplayName(language)})` : '';
@@ -931,9 +941,14 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
     const started = await streamer.start();
 
     if (started) {
+      // Build message with file context for code mode
+      const messageWithContext = eventContext
+        ? `${text}\n\n=== ATTACHED FILE/LINK CONTENT ===\n${eventContext}`
+        : text;
+
       // Stream the response based on type
       if (isCode && intent) {
-        for await (const chunk of generateCodeResponseStream(text, language, intent, history)) {
+        for await (const chunk of generateCodeResponseStream(messageWithContext, language, intent, history)) {
           await streamer.append(convertMarkdownToSlack(chunk));
         }
       } else {
@@ -977,8 +992,13 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
       let response: string;
       let prefix = '';
 
+      // Build message with file context for code mode
+      const messageWithContext = eventContext
+        ? `${text}\n\n=== ATTACHED FILE/LINK CONTENT ===\n${eventContext}`
+        : text;
+
       if (isCode && intent) {
-        response = await generateCodeResponse(text, language, intent, history);
+        response = await generateCodeResponse(messageWithContext, language, intent, history);
         const emoji = getIntentEmoji(intent);
         const label = getIntentLabel(intent);
         const langInfo = language ? ` (${getLanguageDisplayName(language)})` : '';
