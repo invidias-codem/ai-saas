@@ -1,6 +1,7 @@
 
 import axios from 'axios';
-import pdf from 'pdf-parse';
+// @ts-ignore
+const pdf = require('pdf-parse');
 
 /**
  * Supported file types for analysis
