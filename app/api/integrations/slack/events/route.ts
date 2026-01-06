@@ -1155,17 +1155,9 @@ async function handleFileShared(config: SlackConfig, event: any): Promise<void> 
       return;
     }
 
-    // 3. Set status
-    // Note: We don't have a thread_ts yet usually, unless it was shared in a thread.
-    // 'shares' object in file info tells us where it was shared.
+    // 3. Indicate processing with a reaction (assistant status API only works in AI container threads)
     const threadTs = file.shares?.public?.[channel_id]?.[0]?.ts || event.ts;
-
-    await setAssistantStatus(
-      config.botToken,
-      channel_id,
-      threadTs,
-      "📄 Reading file..."
-    );
+    await addReaction(config.botToken, channel_id, threadTs, 'hourglass_flowing_sand');
 
     // 4. Analyze with Gemini
     // Construct a prompt context
@@ -1191,8 +1183,8 @@ Please provide a summary and code analysis of this file. Identify purpose, key l
       createStandardFeedbackBlocks(analysisPrompt)
     );
 
-    await clearAssistantStatus(config.botToken, channel_id, threadTs);
-    await addReaction(config.botToken, channel_id, threadTs, 'eyes');
+    // Replace hourglass with completion indicator
+    await addReaction(config.botToken, channel_id, threadTs, 'white_check_mark');
 
   } catch (error) {
     console.error('[SLACK_EVENTS] Error handling file share:', error);
