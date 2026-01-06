@@ -522,7 +522,8 @@ export function createStreamer(config: StreamConfig) {
       }
 
       buffer += text;
-      const result = await appendStream(config.botToken, state, text);
+      // FIX: Send the FULL buffer, not just the chunk, because chat.update replaces content
+      const result = await appendStream(config.botToken, state, buffer);
       return result.ok;
     },
 
@@ -535,7 +536,13 @@ export function createStreamer(config: StreamConfig) {
         return false;
       }
 
-      const result = await stopStream(config.botToken, state, finalText);
+      if (finalText) {
+        buffer += finalText;
+      }
+
+      // FIX: Ensure interactions/buttons are added if needed, or just finalize text
+      // We pass the full buffer as the final text
+      const result = await stopStream(config.botToken, state, buffer);
       state = null;
       return result.ok;
     },
