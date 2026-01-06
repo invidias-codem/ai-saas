@@ -259,14 +259,29 @@ async function* generateGenieResponseStream(
       finalSystemPrompt += `\n\nCONTEXT FROM CHANNEL HISTORY (Use this to be aware of the "vibe" and topics discussed):\n${contextMessages}`;
     }
 
+    // Prepare history with system prompt
+    // Gemini requires alternating roles (User -> Model -> User).
+    // We cannot have System Prompt (User) followed immediately by History (User).
+    // So we merge System Prompt into the FIRST history message if it's from User.
+    const historyForGemini = [...sanitizedHistory];
+
+    if (historyForGemini.length > 0 && historyForGemini[0].role === 'user') {
+      // Merge system prompt into first user message
+      historyForGemini[0] = {
+        role: 'user',
+        parts: [{ text: `${finalSystemPrompt}\n\n---\n\n${historyForGemini[0].parts[0].text}` }]
+      };
+    } else {
+      // History is empty OR starts with model (rare/impossible if sanitized correctly).
+      // Prepend system prompt as a standalone user message.
+      historyForGemini.unshift({
+        role: 'user',
+        parts: [{ text: finalSystemPrompt }]
+      });
+    }
+
     const chat = generalModel.startChat({
-      history: [
-        {
-          role: "user",
-          parts: [{ text: finalSystemPrompt }],
-        },
-        ...sanitizedHistory as any,
-      ],
+      history: historyForGemini as any,
       generationConfig: {
         temperature: 0.7,
         topK: 40,
