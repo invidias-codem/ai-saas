@@ -156,20 +156,43 @@ async function processEventContext(config: SlackConfig, event: any): Promise<str
   let context = '';
   const contextParts: string[] = [];
 
+  // Normalize files array: handle both event.files (array) and event.file (single)
+  let files: any[] = [];
+  if (event.files) {
+    files = [...event.files];
+  }
+  if (event.file) {
+    files.push(event.file);
+  }
+
+  if (files.length > 0) {
+    console.log(`[SLACK_EVENTS] Found ${files.length} files in event. Processing...`);
+  }
+
   // 1. Process Files
-  if (event.files && event.files.length > 0) {
-    for (const file of event.files) {
+  if (files.length > 0) {
+    for (const file of files) {
+      console.log(`[SLACK_EVENTS] Checking file: ${file.name} (${file.filetype}, ${file.mimetype})`);
+
       if (isSupportedFileType(file.filetype) || file.mimetype?.startsWith('text/')) {
         try {
           if (file.url_private) {
+            console.log(`[SLACK_EVENTS] Downloading file from ${file.url_private}`);
             const buffer = await downloadSlackFile(file.url_private, config.botToken);
+            console.log(`[SLACK_EVENTS] Downloaded ${buffer.length} bytes`);
+
             const content = await extractFileContent(buffer, file.filetype, file.name);
+            console.log(`[SLACK_EVENTS] Extracted ${content.length} characters`);
 
             contextParts.push(`\n[FILE CONTENT] Filename: ${file.name} (${file.filetype})\n\`\`\`\n${content.substring(0, 10000)}\n\`\`\`\n`);
+          } else {
+            console.warn('[SLACK_EVENTS] File missing url_private');
           }
         } catch (error) {
           console.error(`[SLACK_EVENTS] Error processing file ${file.name}:`, error);
         }
+      } else {
+        console.log('[SLACK_EVENTS] Unsupported file type:', file.filetype);
       }
     }
   }
