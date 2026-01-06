@@ -52,7 +52,18 @@ import {
   getWelcomeMessageBlocks,
   getChannelHistory,
   shouldFetchContext,
+  getChannelHistory,
+  shouldFetchContext,
 } from '@/lib/slack/assistantHelpers';
+import {
+  downloadSlackFile,
+  extractFileContent,
+  isSupportedFileType,
+} from '@/lib/slack/fileHelpers';
+import {
+  extractUrlContent,
+  extractUrlsFromText,
+} from '@/lib/slack/linkHelpers';
 import {
   isCodeRelated,
   detectLanguage,
@@ -137,6 +148,57 @@ function verifySlackSignature(
   } catch {
     return false;
   }
+}
+
+/**
+ * Process files and links from an event to generate context
+ */
+async function processEventContext(config: SlackConfig, event: any): Promise<string> {
+  let context = '';
+  const contextParts: string[] = [];
+
+  // 1. Process Files
+  if (event.files && event.files.length > 0) {
+    for (const file of event.files) {
+      if (isSupportedFileType(file.filetype) || file.mimetype?.startsWith('text/')) {
+        try {
+          if (file.url_private) {
+            const buffer = await downloadSlackFile(file.url_private, config.botToken);
+            const content = await extractFileContent(buffer, file.filetype, file.name);
+
+            contextParts.push(`\n[FILE CONTENT] Filename: ${file.name} (${file.filetype})\n\`\`\`\n${content.substring(0, 10000)}\n\`\`\`\n`);
+          }
+        } catch (error) {
+          console.error(`[SLACK_EVENTS] Error processing file ${file.name}:`, error);
+        }
+      }
+    }
+  }
+
+  // 2. Process Links
+  if (event.text) {
+    const urls = extractUrlsFromText(event.text);
+    for (const url of urls) {
+      // Avoid scraping Slack internal links
+      if (!url.includes('slack.com')) {
+        try {
+          const urlData = await extractUrlContent(url);
+          if (urlData) {
+            contextParts.push(`\n[LINK CONTENT] Title: ${urlData.title}\nURL: ${url}\nDescription: ${urlData.description}\nContent:\n\`\`\`\n${urlData.content.substring(0, 5000)}\n\`\`\`\n`);
+          }
+        } catch (error) {
+          console.error(`[SLACK_EVENTS] Error processing link ${url}:`, error);
+        }
+      }
+    }
+  }
+
+  if (contextParts.length > 0) {
+    context = contextParts.join('\n');
+    console.log('[SLACK_EVENTS] Generated event context length:', context.length);
+  }
+
+  return context;
 }
 
 /**
@@ -648,6 +710,18 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
       }
     }
 
+    // Process files and links from the event
+    const eventContext = await processEventContext(config, event);
+    if (eventContext) {
+      console.log('[SLACK_EVENTS] Found file/link context, appending...');
+      contextMessages = contextMessages
+        ? `${contextMessages}\n\n=== NEW CONTENT FROM THIS MESSAGE ===\n${eventContext}`
+        : eventContext;
+
+      // If we found content, we likely want to use it even if needsContext was false
+      // so we ensure contextMessages is passed
+    }
+
     let fullResponse = '';
     let responseSent = false;
 
@@ -792,6 +866,28 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
 
   try {
     const history = await getThreadHistory(config.teamId, threadTs);
+
+    // Fetch context if needed
+    const needsContext = shouldFetchContext(text);
+    let contextMessages = "";
+
+    if (needsContext) {
+      const contextResult = await getChannelHistory(config.botToken, channel, 10);
+      if (contextResult.ok && contextResult.messages) {
+        contextMessages = contextResult.messages
+          .map((m: any) => `[${m.user}]: ${m.text}`)
+          .join('\n');
+      }
+    }
+
+    // Process files and links
+    const eventContext = await processEventContext(config, event);
+    if (eventContext) {
+      contextMessages = contextMessages
+        ? `${contextMessages}\n\n=== NEW CONTENT FROM THIS MESSAGE ===\n${eventContext}`
+        : eventContext;
+    }
+
     let fullResponse = '';
     let responseSent = false;
 
@@ -811,7 +907,8 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
           await streamer.append(convertMarkdownToSlack(chunk));
         }
       } else {
-        for await (const chunk of generateGenieResponseStream(text, history)) {
+        // Pass contextMessages (which now includes file/link content)
+        for await (const chunk of generateGenieResponseStream(text, history, contextMessages)) {
           await streamer.append(chunk);
         }
       }
