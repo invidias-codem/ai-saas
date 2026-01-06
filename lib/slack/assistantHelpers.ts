@@ -365,13 +365,6 @@ export function generateThreadTitle(userMessage: string): string {
 // Text Streaming
 // ─────────────────────────────────────────────────────────────────
 
-/**
- * Start a streaming message
- * 
- * @param config - Stream configuration
- * @param initialText - Initial text to show (optional)
- * @returns Stream state with message_ts for appending
- */
 export async function startStream(
   config: StreamConfig,
   initialText: string = ''
@@ -379,20 +372,16 @@ export async function startStream(
   try {
     const payload: Record<string, any> = {
       channel: config.channel,
-      thread_ts: config.threadTs,
-      markdown_text: initialText,
-      markdown: true,
+      text: initialText || '...', // Initial placeholder
+      mrkdwn: true,
     };
 
-    // Add optional fields if provided
-    if (config.teamId) {
-      payload.recipient_team_id = config.teamId;
-    }
-    if (config.userId) {
-      payload.recipient_user_id = config.userId;
+    if (config.threadTs) {
+      payload.thread_ts = config.threadTs;
     }
 
-    const response = await fetch(`${SLACK_API_BASE}/chat.startStream`, {
+    // Use chat.postMessage to start the "stream" (create the message container)
+    const response = await fetch(`${SLACK_API_BASE}/chat.postMessage`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${config.botToken}`,
@@ -404,16 +393,14 @@ export async function startStream(
     const data = await response.json();
 
     if (!data.ok) {
-      console.error('[STREAM] Failed to start stream:', data.error);
-      // Log to file if available (hacky import)
-      try { require('fs').appendFileSync(require('path').join(process.cwd(), 'debug_slack.log'), `[STREAM_ERROR] ${data.error}\n`); } catch (e) { }
+      console.error('[STREAM] Failed to start stream (postMessage):', data.error);
       return { ok: false, error: data.error };
     }
 
     return {
       ok: true,
       state: {
-        messageTs: data.message_ts,
+        messageTs: data.ts,
         channel: config.channel,
         threadTs: config.threadTs,
       },
@@ -426,10 +413,7 @@ export async function startStream(
 
 /**
  * Append text to an active stream
- * 
- * @param botToken - Bot token for the workspace
- * @param state - Stream state from startStream
- * @param text - Text to append
+ * Implemented via chat.update
  */
 export async function appendStream(
   botToken: string,
@@ -437,7 +421,10 @@ export async function appendStream(
   text: string
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const response = await fetch(`${SLACK_API_BASE}/chat.appendStream`, {
+    // Note: Slack checks for rate limits (~1 update per second recommended).
+    // In a high-frequency stream, this might get ratelimited.
+    // Ideally we should debounce updates in the streamer wrapper.
+    const response = await fetch(`${SLACK_API_BASE}/chat.update`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${botToken}`,
@@ -445,16 +432,19 @@ export async function appendStream(
       },
       body: JSON.stringify({
         channel: state.channel,
-        message_ts: state.messageTs,
-        thread_ts: state.threadTs,
-        markdown_text: text,
+        ts: state.messageTs,
+        text: text, // Update the full text
+        mrkdwn: true,
       }),
     });
 
     const data = await response.json();
 
     if (!data.ok) {
-      console.error('[STREAM] Failed to append stream:', data.error);
+      // Ignore some errors like 'ratelimited' to avoid crashing the stream flow
+      if (data.error !== 'ratelimited') {
+        console.error('[STREAM] Failed to append stream (update):', data.error);
+      }
     }
 
     return data;
@@ -466,10 +456,7 @@ export async function appendStream(
 
 /**
  * Stop an active stream
- * 
- * @param botToken - Bot token for the workspace
- * @param state - Stream state from startStream
- * @param finalText - Optional final text to append before stopping
+ * Final update to ensure text is correct
  */
 export async function stopStream(
   botToken: string,
@@ -477,7 +464,7 @@ export async function stopStream(
   finalText: string = ''
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    const response = await fetch(`${SLACK_API_BASE}/chat.stopStream`, {
+    const response = await fetch(`${SLACK_API_BASE}/chat.update`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${botToken}`,
@@ -485,16 +472,16 @@ export async function stopStream(
       },
       body: JSON.stringify({
         channel: state.channel,
-        message_ts: state.messageTs,
-        thread_ts: state.threadTs,
-        markdown_text: finalText,
+        ts: state.messageTs,
+        text: finalText,
+        mrkdwn: true,
       }),
     });
 
     const data = await response.json();
 
     if (!data.ok) {
-      console.error('[STREAM] Failed to stop stream:', data.error);
+      console.error('[STREAM] Failed to stop stream (final update):', data.error);
     }
 
     return data;

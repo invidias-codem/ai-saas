@@ -119,12 +119,12 @@ async function sendToResponseUrl(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    
+
     if (!response.ok) {
       console.error('[SLACK_COMMAND] response_url failed:', response.status);
       return false;
     }
-    
+
     return true;
   } catch (error: any) {
     console.error('[SLACK_COMMAND] response_url error:', error.message);
@@ -189,7 +189,7 @@ async function generateCodeResponse(
 
     const result = await chat.sendMessage(prompt);
     const response = result.response.text();
-    
+
     // Convert markdown to Slack format
     return convertMarkdownToSlack(response);
   } catch (error: any) {
@@ -213,7 +213,7 @@ function getCodeLoadingMessage(intent: CodeIntent): string {
     testing: ['🧪 Writing tests...', '✅ Creating test cases...'],
     refactoring: ['🔧 Refactoring...', '🛠️ Restructuring...'],
   };
-  
+
   const intentMessages = messages[intent];
   return intentMessages[Math.floor(Math.random() * intentMessages.length)];
 }
@@ -339,7 +339,7 @@ async function buildResponse(
   let isCodeCommand = false;
   let detectedLanguage: string | null = null;
   let intent: CodeIntent = 'generation';
-  
+
   switch (command.toLowerCase()) {
     case 'ask':
       if (!args) {
@@ -447,7 +447,7 @@ async function buildResponse(
         detectedLanguage = detectLanguage(args);
         intent = 'explanation';
       }
-      prompt = isCodeCommand 
+      prompt = isCodeCommand
         ? `Explain this code in detail: ${args}`
         : `Explain the following topic in a clear, concise way that's easy to understand. Use examples if helpful: ${args}`;
       prefix = 'Explanation';
@@ -484,7 +484,7 @@ async function buildResponse(
 
   // Generate AI response
   let answer: string;
-  
+
   if (isCodeCommand) {
     console.log('[SLACK_COMMAND] Code request detected:', {
       language: detectedLanguage,
@@ -544,11 +544,7 @@ export async function POST(req: Request) {
     const text = params.get('text') || '';
     const responseUrl = params.get('response_url') || '';
     const userId = params.get('user_id') || '';
-    const channelId = params.get('channel_id') || '';
     const teamId = params.get('team_id') || '';
-    const teamDomain = params.get('team_domain') || '';
-
-    console.log('[SLACK_COMMAND] Command:', { text, teamId, teamDomain, userId });
 
     // Validate team_id
     if (!teamId) {
@@ -562,7 +558,6 @@ export async function POST(req: Request) {
     let config: SlackConfig;
     try {
       config = await getSlackConfig(teamId);
-      console.log('[SLACK_COMMAND] Config loaded for:', config.teamName);
     } catch (error: any) {
       console.error('[SLACK_COMMAND] Config error:', error.message);
       return NextResponse.json({
@@ -571,20 +566,15 @@ export async function POST(req: Request) {
       });
     }
 
-    // Parse command
     const parts = text.trim().split(/\s+/);
     const command = parts[0] || '';
     const args = parts.slice(1).join(' ');
 
-    console.log('[SLACK_COMMAND] Parsed:', { command, argsLength: args.length });
-
-    // For help, respond immediately
+    // Handle help immediately
     if (command === 'help' || text.trim() === '') {
-      console.log('[SLACK_COMMAND] Returning help');
       return NextResponse.json(getHelpMessage());
     }
 
-    // For AI commands, we need to respond within 3 seconds
     if (!responseUrl) {
       return NextResponse.json({
         response_type: 'ephemeral',
@@ -592,62 +582,52 @@ export async function POST(req: Request) {
       });
     }
 
-    try {
-      // Determine loading message based on command type
-      let loadingMessage: string;
-      const codeCommands = ['code', 'debug', 'review', 'test', 'optimize'];
-      
-      if (codeCommands.includes(command.toLowerCase())) {
-        const intentMap: Record<string, CodeIntent> = {
-          code: 'generation',
-          debug: 'debugging',
-          review: 'review',
-          test: 'testing',
-          optimize: 'optimization',
-        };
-        loadingMessage = getCodeLoadingMessage(intentMap[command.toLowerCase()]);
-      } else if (isCodeRelated(text)) {
-        const intent = detectCodeIntent(text);
-        loadingMessage = getCodeLoadingMessage(intent);
-      } else {
-        loadingMessage = getRandomLoadingMessage('thinking');
-      }
-      
-      // Try to generate response quickly
-      console.log('[SLACK_COMMAND] Generating response...');
-      const response = await buildResponse(command, args, text, userId);
-      
-      const elapsed = Date.now() - startTime;
-      console.log('[SLACK_COMMAND] Response built in', elapsed, 'ms');
+    // Determine loading message
+    let loadingMessage: string;
+    const codeCommands = ['code', 'debug', 'review', 'test', 'optimize'];
 
-      // If we're still under 2.5 seconds, return directly
-      if (elapsed < 2500) {
-        console.log('[SLACK_COMMAND] Returning direct response');
-        return NextResponse.json(response);
-      }
-
-      // Otherwise, send via response_url
-      console.log('[SLACK_COMMAND] Sending via response_url (took too long)');
-      await sendToResponseUrl(responseUrl, response);
-      
-      return NextResponse.json({
-        response_type: 'ephemeral',
-        text: loadingMessage,
-      });
-    } catch (error: any) {
-      console.error('[SLACK_COMMAND] Error:', error.message);
-      
-      // Try to send error via response_url
-      await sendToResponseUrl(responseUrl, {
-        response_type: 'ephemeral',
-        text: `❌ Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`,
-      });
-      
-      return NextResponse.json({
-        response_type: 'ephemeral',
-        text: '❌ An error occurred. Please try again.',
-      });
+    if (codeCommands.includes(command.toLowerCase())) {
+      const intentMap: Record<string, CodeIntent> = {
+        code: 'generation',
+        debug: 'debugging',
+        review: 'review',
+        test: 'testing',
+        optimize: 'optimization',
+      };
+      loadingMessage = getCodeLoadingMessage(intentMap[command.toLowerCase()]);
+    } else if (isCodeRelated(text)) {
+      const intent = detectCodeIntent(text);
+      loadingMessage = getCodeLoadingMessage(intent);
+    } else {
+      loadingMessage = getRandomLoadingMessage('thinking');
     }
+
+    // START ASYNC PROCESSING (Fire and Forget)
+    // In Vercel, this might finish if the lambda isn't killed immediately
+    // Ideally use Inngest or QStash, but for now this pattern is used in events/route.ts
+    (async () => {
+      try {
+        console.log('[SLACK_COMMAND] Async processing started for:', command);
+        const response = await buildResponse(command, args, text, userId);
+
+        // Send to response_url
+        await sendToResponseUrl(responseUrl, response);
+        console.log('[SLACK_COMMAND] Async response sent successfully');
+      } catch (error: any) {
+        console.error('[SLACK_COMMAND] Async processing error:', error.message);
+        await sendToResponseUrl(responseUrl, {
+          response_type: 'ephemeral',
+          text: `❌ Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`,
+        });
+      }
+    })();
+
+    // Return immediate acknowledgement
+    return NextResponse.json({
+      response_type: 'ephemeral',
+      text: `*${loadingMessage}*`,
+    });
+
   } catch (error: any) {
     console.error('[SLACK_COMMAND] Fatal error:', error.message);
     return NextResponse.json({
