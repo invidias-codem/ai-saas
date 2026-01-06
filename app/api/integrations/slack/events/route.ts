@@ -846,6 +846,10 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
     language,
     intent,
     textLength: text.length,
+    hasFiles: !!event.files,
+    filesLength: event.files?.length,
+    hasFile: !!event.file,
+    eventKeys: Object.keys(event),
   });
 
   // Set loading status with context-aware message
