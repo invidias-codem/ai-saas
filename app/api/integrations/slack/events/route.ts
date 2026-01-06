@@ -1279,7 +1279,8 @@ Please provide a summary and code analysis of this file. Identify purpose, key l
 
               case 'message':
                 // Handle DMs (channel type 'im')
-                if (event.channel_type === 'im' && !event.bot_id && !event.subtype) {
+                // Allow 'file_share' subtype so we can process file uploads in DMs
+                if (event.channel_type === 'im' && !event.bot_id && (!event.subtype || event.subtype === 'file_share')) {
                   await handleDirectMessage(config, event);
                 }
                 break;
