@@ -1,7 +1,5 @@
-
 import axios from 'axios';
-// @ts-ignore
-const pdf = require('pdf-parse');
+import { extractText } from 'unpdf';
 
 /**
  * Supported file types for analysis
@@ -48,7 +46,7 @@ export async function downloadSlackFile(
     try {
         const response = await axios.get(url, {
             headers: {
-                Authorization: `Bearer ${token}`,
+                Authorization: `Bearer ${token} `,
             },
             responseType: 'arraybuffer',
         });
@@ -73,8 +71,10 @@ export async function extractFileContent(
     // Handle PDF
     if (type === 'pdf') {
         try {
-            const data = await pdf(buffer);
-            return data.text;
+            // unpdf extracts text from buffer
+            // unpdf might return text as string or string[] (per page)
+            const { text } = await extractText(buffer);
+            return Array.isArray(text) ? text.join('\n') : text;
         } catch (error) {
             console.error('[FILE_HELPERS] PDF parsing error:', error);
             throw new Error('Failed to parse PDF content');
