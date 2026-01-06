@@ -67,7 +67,6 @@ export async function getChannelHistory(
   botToken: string,
   channelId: string,
   limit: number = 20
-  limit: number = 20
 ): Promise<{ ok: boolean; messages?: any[]; error?: string }> {
   try {
     const url = `${SLACK_API_BASE}/conversations.history?channel=${channelId}&limit=${limit}`;
