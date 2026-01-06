@@ -52,8 +52,7 @@ import {
   getWelcomeMessageBlocks,
   getChannelHistory,
   shouldFetchContext,
-  getChannelHistory,
-  shouldFetchContext,
+
 } from '@/lib/slack/assistantHelpers';
 import {
   downloadSlackFile,
