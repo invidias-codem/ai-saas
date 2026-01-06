@@ -1025,6 +1025,12 @@ export async function POST(req: Request) {
         );
         return NextResponse.json({ ok: true });
 
+      case 'block_suggestion':
+        console.log('[SLACK_INTERACTIVITY] Received block_suggestion (options load request)');
+        // Return empty options by default as we don't have external selects yet
+        // If we add them, we'll route based on action_id here
+        return NextResponse.json({ options: [] });
+
       default:
         console.log('[SLACK_INTERACTIVITY] Unknown interaction type:', type);
         return NextResponse.json({ ok: true });
