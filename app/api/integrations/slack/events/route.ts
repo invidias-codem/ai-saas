@@ -917,7 +917,10 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
 
         // If content was generated, we consider it sent
         if (fullResponse && fullResponse.trim().length > 0) {
-          await updateThreadHistory(config.teamId, threadTs, { role: 'user', content: text });
+          await updateThreadHistory(config.teamId, threadTs, {
+            role: 'user',
+            content: eventContext ? `${text}\n\n${eventContext}` : text
+          });
           await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: fullResponse });
           responseSent = true;
 
@@ -953,7 +956,10 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
           response = await generateGenieResponse(text, history);
         }
 
-        await updateThreadHistory(config.teamId, threadTs, { role: 'user', content: text });
+        await updateThreadHistory(config.teamId, threadTs, {
+          role: 'user',
+          content: eventContext ? `${text}\n\n${eventContext}` : text
+        });
         await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: response });
 
         await sendSlackMessage(
