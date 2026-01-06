@@ -54,7 +54,7 @@ export async function updateThreadHistory(teamId: string, threadTs: string, mess
     const docRef = db.collection(THREAD_COLLECTION).doc(`${teamId}-${threadTs}`);
     const newMessage: SlackThreadMessage = {
       ...message,
-      timestamp: FieldValue.serverTimestamp(),
+      timestamp: new Date() as any, // Firestore arrays cannot contain serverTimestamp()
     };
 
     await docRef.set(

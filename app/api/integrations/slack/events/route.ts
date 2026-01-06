@@ -49,6 +49,8 @@ import {
   createStreamer,
   getRandomLoadingMessage,
   getWelcomeMessageBlocks,
+  getChannelHistory,
+  shouldFetchContext,
 } from '@/lib/slack/assistantHelpers';
 import {
   isCodeRelated,
@@ -60,6 +62,7 @@ import {
   getIntentLabel,
   getLanguageDisplayName,
   CODE_SYSTEM_PROMPT,
+  KINDNESS_SYSTEM_PROMPT,
   CODE_SUGGESTED_PROMPTS,
   CodeIntent,
 } from '@/lib/slack/codeAssistant';
@@ -243,20 +246,27 @@ function createStandardFeedbackBlocks(prompt: string): any[] {
  */
 async function* generateGenieResponseStream(
   userMessage: string,
-  history: SlackThreadMessage[] = []
+  history: SlackThreadMessage[] = [],
+  contextMessages: string = ""
 ): AsyncGenerator<string, void, unknown> {
   try {
     const sanitizedHistory = sanitizeHistory(history);
+
+    // Inject context if provided
+    let finalSystemPrompt = KINDNESS_SYSTEM_PROMPT;
+    if (contextMessages) {
+      finalSystemPrompt += `\n\nCONTEXT FROM CHANNEL HISTORY (Use this to be aware of the "vibe" and topics discussed):\n${contextMessages}`;
+    }
 
     const chat = generalModel.startChat({
       history: [
         {
           role: "user",
-          parts: [{ text: GENIE_SYSTEM_PROMPT }],
+          parts: [{ text: finalSystemPrompt }],
         },
         {
           role: "model",
-          parts: [{ text: "I understand. I'm Genie, ready to help in Slack with concise, helpful responses." }],
+          parts: [{ text: "I understand! I am Genie, and I am ready to match my Killer Kindness persona! ✨" }],
         },
         ...sanitizedHistory as any,
       ],
@@ -362,15 +372,20 @@ async function generateGenieResponse(
     // Ensure history roles are alternating by sanitizing
     const sanitizedHistory = sanitizeHistory(history);
 
+    // Inject context if provided
+    let finalSystemPrompt = KINDNESS_SYSTEM_PROMPT;
+    // Note: In non-streaming fallback, we might not have easy access to context without prop drilling
+    // For now we use the base prompt, but ideally this function should also accept contextMessages
+
     const chat = generalModel.startChat({
       history: [
         {
           role: "user",
-          parts: [{ text: GENIE_SYSTEM_PROMPT }],
+          parts: [{ text: finalSystemPrompt }],
         },
         {
           role: "model",
-          parts: [{ text: "I understand. I'm Genie, ready to help in Slack with concise, helpful responses." }],
+          parts: [{ text: "I understand! I'm Genie, and I am ready to match my Killer Kindness persona! ✨" }],
         },
         ...sanitizedHistory as any,
       ],
@@ -604,8 +619,26 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
 
   try {
     const history = await getThreadHistory(config.teamId, threadTs);
+
+    // Fetch context if the user asks for it (simple keyword check for now)
+    // In a real implementation, we might use an LLM router to decide if context is needed
+    // Logic extracted to shouldFetchContext for testing
+    const needsContext = shouldFetchContext(cleanText);
+
+    let contextMessages = "";
+    if (needsContext) {
+      console.log('[SLACK_EVENTS] Fetching channel context for request...');
+      const contextResult = await getChannelHistory(config.botToken, channel, 15); // Last 15 messages
+      if (contextResult.ok && contextResult.messages) {
+        contextMessages = contextResult.messages
+          .map((m: any) => `[${m.user}]: ${m.text}`)
+          .join('\n');
+      }
+    }
+
     let fullResponse = '';
     let responseSent = false;
+
 
     // Try streaming first
     const streamer = createStreamer({
@@ -624,7 +657,7 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
           await streamer.append(convertMarkdownToSlack(chunk));
         }
       } else {
-        for await (const chunk of generateGenieResponseStream(cleanText, history)) {
+        for await (const chunk of generateGenieResponseStream(cleanText, history, contextMessages)) {
           await streamer.append(chunk);
         }
       }

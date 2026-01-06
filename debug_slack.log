@@ -62,3 +62,240 @@
 [2025-12-31T02:24:09.034Z] Using fallback generation
 [2025-12-31T02:24:09.645Z] Slack API Error in sendSlackMessage:
 "channel_not_found"
+[2026-01-06T17:46:00.964Z] Received event body:
+{
+  "token": "mock_token",
+  "team_id": "T123456",
+  "api_app_id": "A123456",
+  "event": {
+    "type": "app_mention",
+    "user": "U123456",
+    "text": "<@U0123456> Genie, what is the vibe here?",
+    "ts": "1767721555.123456",
+    "channel": "C123456",
+    "event_ts": "1767721555.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev1767721555",
+  "event_time": 1767721555
+}
+[2026-01-06T17:46:37.497Z] Received event body:
+{
+  "token": "mock_token",
+  "team_id": "T123456",
+  "api_app_id": "A123456",
+  "event": {
+    "type": "app_mention",
+    "user": "U123456",
+    "text": "<@U0123456> Genie, what is the vibe here?",
+    "ts": "1767721597.123456",
+    "channel": "C123456",
+    "event_ts": "1767721597.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev1767721597",
+  "event_time": 1767721597
+}
+[2026-01-06T17:46:37.505Z] Message Analysis:
+{
+  "cleanText": "Genie, what is the vibe here?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[STREAM_ERROR] channel_not_found
+[2026-01-06T17:46:39.110Z] Using fallback generation
+[2026-01-06T17:46:40.348Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2026-01-06T17:52:27.560Z] Received event body:
+{
+  "token": "mock_token",
+  "team_id": "T123456",
+  "api_app_id": "A123456",
+  "event": {
+    "type": "app_mention",
+    "user": "U123456",
+    "text": "<@U0123456> Genie, what is the vibe here?",
+    "ts": "1767721941.123456",
+    "channel": "C123456",
+    "event_ts": "1767721941.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev1767721941",
+  "event_time": 1767721941
+}
+[2026-01-06T17:52:27.570Z] Message Analysis:
+{
+  "cleanText": "Genie, what is the vibe here?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[STREAM_ERROR] channel_not_found
+[2026-01-06T17:52:35.696Z] Using fallback generation
+[2026-01-06T17:52:37.411Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2026-01-06T17:59:46.642Z] Received event body:
+{
+  "token": "mock_token",
+  "team_id": "T123456",
+  "api_app_id": "A123456",
+  "event": {
+    "type": "app_mention",
+    "user": "U123456",
+    "text": "<@U0123456> Genie, what is the vibe here?",
+    "ts": "1767722382.123456",
+    "channel": "C123456",
+    "event_ts": "1767722382.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev1767722382",
+  "event_time": 1767722382
+}
+[2026-01-06T17:59:46.653Z] Message Analysis:
+{
+  "cleanText": "Genie, what is the vibe here?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[STREAM_ERROR] channel_not_found
+[2026-01-06T17:59:47.968Z] Using fallback generation
+[2026-01-06T17:59:49.765Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2026-01-06T18:13:51.578Z] Received event body:
+{
+  "token": "mock_token",
+  "team_id": "T123456",
+  "api_app_id": "A123456",
+  "event": {
+    "type": "app_mention",
+    "user": "U123456",
+    "text": "<@U0123456> Genie, what is the vibe here?",
+    "ts": "1767723230.123456",
+    "channel": "C123456",
+    "event_ts": "1767723230.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev1767723230",
+  "event_time": 1767723230
+}
+[2026-01-06T18:13:51.592Z] Message Analysis:
+{
+  "cleanText": "Genie, what is the vibe here?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[STREAM_ERROR] channel_not_found
+[2026-01-06T18:13:52.220Z] Using fallback generation
+[2026-01-06T18:13:53.976Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2026-01-06T18:17:10.539Z] Received event body:
+{
+  "token": "mock_token",
+  "team_id": "T123456",
+  "api_app_id": "A123456",
+  "event": {
+    "type": "app_mention",
+    "user": "U123456",
+    "text": "<@U0123456> Genie, what is the vibe here?",
+    "ts": "1767723430.123456",
+    "channel": "C123456",
+    "event_ts": "1767723430.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev1767723430",
+  "event_time": 1767723430
+}
+[2026-01-06T18:17:10.546Z] Message Analysis:
+{
+  "cleanText": "Genie, what is the vibe here?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[STREAM_ERROR] channel_not_found
+[2026-01-06T18:17:11.018Z] Using fallback generation
+[2026-01-06T18:17:13.002Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2026-01-06T18:18:13.187Z] Received event body:
+{
+  "token": "mock_token",
+  "team_id": "T123456",
+  "api_app_id": "A123456",
+  "event": {
+    "type": "app_mention",
+    "user": "U123456",
+    "text": "<@U0123456> Genie, what is the vibe here?",
+    "ts": "1767723492.123456",
+    "channel": "C123456",
+    "event_ts": "1767723492.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev1767723492",
+  "event_time": 1767723492
+}
+[2026-01-06T18:18:13.196Z] Message Analysis:
+{
+  "cleanText": "Genie, what is the vibe here?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[STREAM_ERROR] channel_not_found
+[2026-01-06T18:18:13.534Z] Using fallback generation
+[2026-01-06T18:18:15.184Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2026-01-06T18:19:24.345Z] Received event body:
+{
+  "token": "mock_token",
+  "team_id": "T123456",
+  "api_app_id": "A123456",
+  "event": {
+    "type": "app_mention",
+    "user": "U123456",
+    "text": "<@U0123456> Genie, what is the vibe here?",
+    "ts": "1767723559.123456",
+    "channel": "C123456",
+    "event_ts": "1767723559.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev1767723559",
+  "event_time": 1767723559
+}
+[2026-01-06T18:19:24.359Z] Message Analysis:
+{
+  "cleanText": "Genie, what is the vibe here?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[STREAM_ERROR] channel_not_found
+[2026-01-06T18:19:25.095Z] Using fallback generation
+[2026-01-06T18:19:26.997Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2026-01-06T18:22:04.649Z] Received event body:
+{
+  "token": "mock_token",
+  "team_id": "T123456",
+  "api_app_id": "A123456",
+  "event": {
+    "type": "app_mention",
+    "user": "U123456",
+    "text": "<@U0123456> Genie, what is the vibe here?",
+    "ts": "1767723723.123456",
+    "channel": "C123456",
+    "event_ts": "1767723723.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev1767723723",
+  "event_time": 1767723723
+}
+[2026-01-06T18:22:04.655Z] Message Analysis:
+{
+  "cleanText": "Genie, what is the vibe here?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}

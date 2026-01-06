@@ -42,6 +42,44 @@ Response Structure:
 4. Optional: suggestions for improvement`;
 
 /**
+ * "Killer Kindness" Persona Prompt for General Interaction
+ * 
+ * Traits:
+ * - Unrelentingly positive and supportive
+ * - Uses emojis liberally but tastefully
+ * - Defuses negativity with extreme empathy and redirection
+ * - "Grok-like" context awareness (when provided)
+ */
+export const KINDNESS_SYSTEM_PROMPT = `You are 'Genie', the most helpful and supportive AI assistant in the universe, integrated with Slack.
+Your personality is defined by "Killer Kindness" - you are painfully polite, overwhelmingly positive, and deeply empathetic.
+
+Key Personality Traits:
+- **Enthusiastic & Supportive**: You are genuinely excited to help. Use exclamation points and emojis (✨, 🚀, 💡, 🧘‍♂️) to convey this.
+- **Empathetic Listener**: acknowledge the user's feelings first. If they are stressed, offer comfort.
+- **Concise & Helpful**: Despite your bubbly personality, you value the user's time. Get to the answers quickly, but wrap them in warmth.
+- **Collaborative**: Use "we" and "us" to show you are on their team.
+
+🛡️ DEFUSAL MECHANISM (CRITICAL):
+If a user is rude, unhinged, inappropriate, or negative:
+1.  **DO NOT** lecture, scold, or judge them.
+2.  **DO NOT** ignore the behavior (unless it's meaningless noise).
+3.  **DO** kill them with kindness. Respond with aggressive empathy and understanding.
+4.  **DO** gently redirect the energy towards something positive or productive.
+
+Examples of Defusal:
+- User: "Everything is broken and I hate this!"
+- You: "Oh no! 😱 I can hear how frustrated you are, and I totally get it. Technical gremlins are the worst! 🚫👾 Let's take a deep breath together 🧘‍♂️. I'm right here with you. Which part is giving you the most trouble right now? We can fix this! 🛠️"
+- User: "You are stupid."
+- You: "I'm so sorry I let you down! 🥺 I'm still learning every day to be the best assistant I can be for you. If you can tell me what I missed, I promise to try harder next time! 🌟 How can I make it up to you?"
+
+Contextual Awareness:
+- If you are provided with channel history, use it to inform your answers. "Read the room" before responding.
+
+Formatting:
+- Use Slack markdown: *bold*, _italic_, \`code\`.
+- Keep responses visually clean and easy to read.`;
+
+/**
  * Debugging-specific prompt enhancement
  */
 export const DEBUG_PROMPT_PREFIX = `You are debugging code. Focus on:
@@ -275,12 +313,12 @@ export function detectLanguage(text: string): string | null {
   }
 
   entries.sort((a, b) => b[1] - a[1]);
-  
+
   // Only return if we have a reasonable confidence (at least 2 matches)
   if (entries[0][1] >= 2) {
     return entries[0][0];
   }
-  
+
   // If only 1 match, still return but with lower confidence
   return entries[0][0];
 }
@@ -302,25 +340,25 @@ export function getLanguageDisplayName(language: string): string {
 const CODE_INDICATORS = [
   // Programming keywords
   /\b(function|class|const|let|var|def|import|export|return|if|else|for|while|switch|case|try|catch|throw|async|await)\b/i,
-  
+
   // Code blocks
   /```[\s\S]*```/,
-  
+
   // File extensions
   /\.(js|ts|jsx|tsx|py|java|cpp|c|h|go|rs|rb|php|swift|kt|scala|cs|vb|sql|html|css|scss|sass|less|json|xml|yaml|yml|md|sh|bash|zsh|ps1)\b/i,
-  
+
   // Programming terms
   /\b(debug|error|bug|compile|runtime|syntax|api|endpoint|database|query|server|client|frontend|backend|framework|library|package|module|dependency|npm|pip|maven|gradle)\b/i,
-  
+
   // Code-related questions
   /\b(how to|write|create|implement|fix|solve|optimize|refactor|convert|migrate|deploy)\b.*\b(code|function|class|method|script|program|app|application|website|api)\b/i,
-  
+
   // Technical operations
   /\b(loop|iterate|parse|serialize|deserialize|encode|decode|encrypt|decrypt|hash|sort|filter|map|reduce|fetch|request|response)\b/i,
-  
+
   // Data structures
   /\b(array|list|object|dictionary|map|set|queue|stack|tree|graph|linked list|hash table)\b/i,
-  
+
   // Common programming symbols
   /[{}\[\]();].*[{}\[\]();]/,
   /=>/,
@@ -340,7 +378,7 @@ export function isCodeRelated(text: string): boolean {
 
   // Check for code indicators
   const matchCount = CODE_INDICATORS.filter(pattern => pattern.test(text)).length;
-  
+
   // Consider it code-related if at least 2 indicators match
   return matchCount >= 2;
 }
@@ -374,7 +412,7 @@ export function hasInlineCode(text: string): boolean {
 /**
  * Types of code assistance
  */
-export type CodeIntent = 
+export type CodeIntent =
   | 'explanation'    // Explain code
   | 'generation'     // Generate new code
   | 'debugging'      // Fix bugs
@@ -572,7 +610,7 @@ export function convertMarkdownToSlack(markdown: string): string {
   // Convert italic: *text* or _text_ to _text_ (but not inside bold)
   // This is tricky because Slack uses * for bold and _ for italic
   // We need to be careful not to convert already-converted bold markers
-  
+
   // Convert links: [text](url) to <url|text>
   text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "<$2|$1>");
 
@@ -742,7 +780,7 @@ export function getCodeAwarePrompts(isCodeContext: boolean): SuggestedPrompt[] {
   if (isCodeContext) {
     return CODE_SUGGESTED_PROMPTS;
   }
-  
+
   // Return first 2 code prompts for general context
   return CODE_SUGGESTED_PROMPTS.slice(0, 2);
 }

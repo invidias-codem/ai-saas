@@ -46,6 +46,73 @@ export interface StreamState {
 
 // ─────────────────────────────────────────────────────────────────
 // Loading States
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * Check if the text implies a need for channel context
+ */
+export function shouldFetchContext(text: string): boolean {
+  const contextKeywords = ["context", "summary", "summarize", "catch up", "happened", "previous", "channel", "everyone", "vibe"];
+  return contextKeywords.some(keyword => text.toLowerCase().includes(keyword));
+}
+
+/**
+ * Fetch recent history from a channel for context (excluding bot's own messages)
+ * 
+ * @param botToken - Bot token for the workspace
+ * @param channelId - Channel ID to fetch history from
+ * @param limit - Number of messages to fetch (default: 10)
+ */
+export async function getChannelHistory(
+  botToken: string,
+  channelId: string,
+  limit: number = 20
+  limit: number = 20
+): Promise<{ ok: boolean; messages?: any[]; error?: string }> {
+  try {
+    const url = `${SLACK_API_BASE}/conversations.history?channel=${channelId}&limit=${limit}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json();
+
+    if (!data.ok) {
+      console.error('[ASSISTANT] Failed to fetch channel history:', data.error);
+      return { ok: false, error: data.error };
+    }
+
+    // Filter and sanitize messages
+    // We want to capture the "vibe" but ignore system messages and bot clutter
+    const messages = (data.messages || [])
+      .filter((msg: any) =>
+        msg.type === 'message' &&
+        !msg.subtype && // Ignore subtype messages (joins, leaves, etc.)
+        msg.text && // Must have text
+        msg.text.length > 0
+      )
+      .map((msg: any) => ({
+        user: msg.user,
+        text: msg.text,
+        ts: msg.ts,
+        // If it's a bot, mark it (optional, useful for context)
+        is_bot: !!msg.bot_id
+      }))
+      .reverse(); // Oldest first for context window
+
+    return { ok: true, messages };
+  } catch (error: any) {
+    console.error('[ASSISTANT] Error fetching channel history:', error.message);
+    return { ok: false, error: error.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Loading States
 // ─────────────────────��───────────────────────────────────────────
 
 /**
