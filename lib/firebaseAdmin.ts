@@ -36,7 +36,14 @@ function getServiceAccountFromEnv(): admin.ServiceAccount | null {
   if (serviceAccountJson) {
     try {
       // Clean string to remove potential bad control characters (newlines)
-      const cleanedJson = serviceAccountJson.replace(/[\n\r]+/g, '');
+      let cleanedJson = serviceAccountJson.replace(/[\n\r]+/g, '').trim();
+
+      // Remove wrapping quotes if present (common copy-paste error)
+      if ((cleanedJson.startsWith("'") && cleanedJson.endsWith("'")) ||
+        (cleanedJson.startsWith('"') && cleanedJson.endsWith('"'))) {
+        cleanedJson = cleanedJson.slice(1, -1);
+      }
+
       const parsed = JSON.parse(cleanedJson);
       if (parsed.project_id && parsed.private_key && parsed.client_email) {
         return {
