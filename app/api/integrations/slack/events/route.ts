@@ -763,362 +763,366 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
         console.log('[SLACK_EVENTS] Streamed response for app_mention:', {
           teamId: config.teamId,
           channel,
-          // ... (skip logs) ...
-        } else {
-          console.warn('[SLACK_EVENTS] Stream produced empty response, falling back to non-streaming');
-          logDebug('Stream produced empty response');
-        }
+          user,
+          isCode,
+          language,
+          intent,
+        });
+      } else {
+        console.warn('[SLACK_EVENTS] Stream produced empty response, falling back to non-streaming');
+        logDebug('Stream produced empty response');
+      }
     }
 
-      if (!responseSent) {
-        // Fallback to non-streaming (or if streaming failed/returned empty)
-        console.log('[SLACK_EVENTS] Using fallback generation (reason: stream failed or empty)');
-        logDebug('Using fallback generation');
+    if (!responseSent) {
+      // Fallback to non-streaming (or if streaming failed/returned empty)
+      console.log('[SLACK_EVENTS] Using fallback generation (reason: stream failed or empty)');
+      logDebug('Using fallback generation');
 
-        let response: string;
-        let prefix: string;
+      let response: string;
+      let prefix: string;
 
-        if (isCode && intent) {
-          response = await generateCodeResponse(cleanText, language, intent, history);
-          const emoji = getIntentEmoji(intent);
-          const label = getIntentLabel(intent);
-          const langInfo = language ? ` (${getLanguageDisplayName(language)})` : '';
-          prefix = `${emoji} *Genie ${label}${langInfo}:*\n`;
-        } else {
-          response = await generateGenieResponse(cleanText, history);
-          prefix = '🧞 *Genie:*\n';
-        }
-
-        await updateThreadHistory(config.teamId, threadTs, {
-          role: 'user',
-          content: eventContext ? `${cleanText}\n\n${eventContext}` : cleanText
-        });
-        await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: response });
-
-        await sendSlackMessage(
-          config.botToken,
-          channel,
-          `${prefix}${response}`,
-          threadTs,
-          createStandardFeedbackBlocks(cleanText)
-        );
+      if (isCode && intent) {
+        response = await generateCodeResponse(cleanText, language, intent, history);
+        const emoji = getIntentEmoji(intent);
+        const label = getIntentLabel(intent);
+        const langInfo = language ? ` (${getLanguageDisplayName(language)})` : '';
+        prefix = `${emoji} *Genie ${label}${langInfo}:*\n`;
+      } else {
+        response = await generateGenieResponse(cleanText, history);
+        prefix = '🧞 *Genie:*\n';
       }
 
-      // Clear loading status
-      await clearAssistantStatus(config.botToken, channel, threadTs);
+      await updateThreadHistory(config.teamId, threadTs, {
+        role: 'user',
+        content: eventContext ? `${cleanText}\n\n${eventContext}` : cleanText
+      });
+      await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: response });
 
-      // Add completion reaction based on type
-      const reactionEmoji = isCode ? 'computer' : 'white_check_mark';
-      await addReaction(config.botToken, channel, ts, reactionEmoji);
-    } catch (error) {
-      console.error('[SLACK_EVENTS] Error handling app mention:', error);
-      await clearAssistantStatus(config.botToken, channel, threadTs);
-      await addReaction(config.botToken, channel, ts, 'x');
       await sendSlackMessage(
         config.botToken,
         channel,
-        "Sorry, I encountered an error. Please try again.",
-        threadTs
+        `${prefix}${response}`,
+        threadTs,
+        createStandardFeedbackBlocks(cleanText)
       );
     }
+
+    // Clear loading status
+    await clearAssistantStatus(config.botToken, channel, threadTs);
+
+    // Add completion reaction based on type
+    const reactionEmoji = isCode ? 'computer' : 'white_check_mark';
+    await addReaction(config.botToken, channel, ts, reactionEmoji);
+  } catch (error) {
+    console.error('[SLACK_EVENTS] Error handling app mention:', error);
+    await clearAssistantStatus(config.botToken, channel, threadTs);
+    await addReaction(config.botToken, channel, ts, 'x');
+    await sendSlackMessage(
+      config.botToken,
+      channel,
+      "Sorry, I encountered an error. Please try again.",
+      threadTs
+    );
   }
+}
 
 /**
  * Handle direct messages with code detection
  */
 async function handleDirectMessage(config: SlackConfig, event: any): Promise<void> {
-    const { channel, text, ts, thread_ts, user } = event;
+  const { channel, text, ts, thread_ts, user } = event;
 
-    // Use thread_ts if available, otherwise use ts as the thread
-    const threadTs = thread_ts || ts;
+  // Use thread_ts if available, otherwise use ts as the thread
+  const threadTs = thread_ts || ts;
 
-    // Detect if this is a code-related request
-    const isCode = isCodeRelated(text);
-    const language = isCode ? detectLanguage(text) : null;
-    const intent = isCode ? detectCodeIntent(text) : null;
+  // Detect if this is a code-related request
+  const isCode = isCodeRelated(text);
+  const language = isCode ? detectLanguage(text) : null;
+  const intent = isCode ? detectCodeIntent(text) : null;
 
-    console.log('[SLACK_EVENTS] DM analysis:', {
-      isCode,
-      language,
-      intent,
-      textLength: text.length,
-    });
+  console.log('[SLACK_EVENTS] DM analysis:', {
+    isCode,
+    language,
+    intent,
+    textLength: text.length,
+  });
 
-    // Set loading status with context-aware message
-    await setAssistantStatus(
-      config.botToken,
-      channel,
-      threadTs,
-      getSmartLoadingMessage(isCode, intent || undefined)
-    );
+  // Set loading status with context-aware message
+  await setAssistantStatus(
+    config.botToken,
+    channel,
+    threadTs,
+    getSmartLoadingMessage(isCode, intent || undefined)
+  );
 
-    // Set thread title based on first message
-    if (!thread_ts) {
-      let title = generateThreadTitle(text);
-      // Add code indicator to title if it's a code request
-      if (isCode && intent) {
-        const emoji = getIntentEmoji(intent);
-        title = `${emoji} ${title}`;
+  // Set thread title based on first message
+  if (!thread_ts) {
+    let title = generateThreadTitle(text);
+    // Add code indicator to title if it's a code request
+    if (isCode && intent) {
+      const emoji = getIntentEmoji(intent);
+      title = `${emoji} ${title}`;
+    }
+    await setThreadTitle(config.botToken, channel, ts, title);
+  }
+
+  try {
+    const history = await getThreadHistory(config.teamId, threadTs);
+
+    // Fetch context if needed
+    const needsContext = shouldFetchContext(text);
+    let contextMessages = "";
+
+    if (needsContext) {
+      const contextResult = await getChannelHistory(config.botToken, channel, 10);
+      if (contextResult.ok && contextResult.messages) {
+        contextMessages = contextResult.messages
+          .map((m: any) => `[${m.user}]: ${m.text}`)
+          .join('\n');
       }
-      await setThreadTitle(config.botToken, channel, ts, title);
     }
 
-    try {
-      const history = await getThreadHistory(config.teamId, threadTs);
+    // Process files and links
+    const eventContext = await processEventContext(config, event);
+    if (eventContext) {
+      contextMessages = contextMessages
+        ? `${contextMessages}\n\n=== NEW CONTENT FROM THIS MESSAGE ===\n${eventContext}`
+        : eventContext;
+    }
 
-      // Fetch context if needed
-      const needsContext = shouldFetchContext(text);
-      let contextMessages = "";
+    let fullResponse = '';
+    let responseSent = false;
 
-      if (needsContext) {
-        const contextResult = await getChannelHistory(config.botToken, channel, 10);
-        if (contextResult.ok && contextResult.messages) {
-          contextMessages = contextResult.messages
-            .map((m: any) => `[${m.user}]: ${m.text}`)
-            .join('\n');
+    // Try streaming first
+    const streamer = createStreamer({
+      botToken: config.botToken,
+      channel,
+      threadTs,
+    });
+
+    const started = await streamer.start();
+
+    if (started) {
+      // Stream the response based on type
+      if (isCode && intent) {
+        for await (const chunk of generateCodeResponseStream(text, language, intent, history)) {
+          await streamer.append(convertMarkdownToSlack(chunk));
+        }
+      } else {
+        // Pass contextMessages (which now includes file/link content)
+        for await (const chunk of generateGenieResponseStream(text, history, contextMessages)) {
+          await streamer.append(chunk);
         }
       }
+      await streamer.stop();
 
-      // Process files and links
-      const eventContext = await processEventContext(config, event);
-      if (eventContext) {
-        contextMessages = contextMessages
-          ? `${contextMessages}\n\n=== NEW CONTENT FROM THIS MESSAGE ===\n${eventContext}`
-          : eventContext;
-      }
+      fullResponse = streamer.getBuffer();
 
-      let fullResponse = '';
-      let responseSent = false;
-
-      // Try streaming first
-      const streamer = createStreamer({
-        botToken: config.botToken,
-        channel,
-        threadTs,
-      });
-
-      const started = await streamer.start();
-
-      if (started) {
-        // Stream the response based on type
-        if (isCode && intent) {
-          for await (const chunk of generateCodeResponseStream(text, language, intent, history)) {
-            await streamer.append(convertMarkdownToSlack(chunk));
-          }
-        } else {
-          // Pass contextMessages (which now includes file/link content)
-          for await (const chunk of generateGenieResponseStream(text, history, contextMessages)) {
-            await streamer.append(chunk);
-          }
-        }
-        await streamer.stop();
-
-        fullResponse = streamer.getBuffer();
-
-        // If content was generated, we consider it sent
-        if (fullResponse && fullResponse.trim().length > 0) {
-          await updateThreadHistory(config.teamId, threadTs, {
-            role: 'user',
-            content: eventContext ? `${text}\n\n${eventContext}` : text
-          });
-          await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: fullResponse });
-          responseSent = true;
-
-          console.log('[SLACK_EVENTS] Streamed DM response:', {
-            teamId: config.teamId,
-            user,
-            isCode,
-            language,
-            intent,
-            inputLength: text.length,
-            outputLength: fullResponse.length,
-            historyLength: history.length,
-          });
-        } else {
-          console.warn('[SLACK_EVENTS] DM stream produced empty response, falling back to non-streaming');
-        }
-      }
-
-      if (!responseSent) {
-        // Fallback to non-streaming
-        console.log('[SLACK_EVENTS] Streaming not available for DM, using fallback');
-
-        let response: string;
-        let prefix = '';
-
-        if (isCode && intent) {
-          response = await generateCodeResponse(text, language, intent, history);
-          const emoji = getIntentEmoji(intent);
-          const label = getIntentLabel(intent);
-          const langInfo = language ? ` (${getLanguageDisplayName(language)})` : '';
-          prefix = `${emoji} *${label}${langInfo}:*\n`;
-        } else {
-          response = await generateGenieResponse(text, history);
-        }
-
+      // If content was generated, we consider it sent
+      if (fullResponse && fullResponse.trim().length > 0) {
         await updateThreadHistory(config.teamId, threadTs, {
           role: 'user',
           content: eventContext ? `${text}\n\n${eventContext}` : text
         });
-        await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: response });
+        await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: fullResponse });
+        responseSent = true;
 
-        await sendSlackMessage(
-          config.botToken,
-          channel,
-          `${prefix}${response}`,
-          threadTs,
-          createStandardFeedbackBlocks(text)
-        );
+        console.log('[SLACK_EVENTS] Streamed DM response:', {
+          teamId: config.teamId,
+          user,
+          isCode,
+          language,
+          intent,
+          inputLength: text.length,
+          outputLength: fullResponse.length,
+          historyLength: history.length,
+        });
+      } else {
+        console.warn('[SLACK_EVENTS] DM stream produced empty response, falling back to non-streaming');
+      }
+    }
+
+    if (!responseSent) {
+      // Fallback to non-streaming
+      console.log('[SLACK_EVENTS] Streaming not available for DM, using fallback');
+
+      let response: string;
+      let prefix = '';
+
+      if (isCode && intent) {
+        response = await generateCodeResponse(text, language, intent, history);
+        const emoji = getIntentEmoji(intent);
+        const label = getIntentLabel(intent);
+        const langInfo = language ? ` (${getLanguageDisplayName(language)})` : '';
+        prefix = `${emoji} *${label}${langInfo}:*\n`;
+      } else {
+        response = await generateGenieResponse(text, history);
       }
 
-      // Clear loading status
-      await clearAssistantStatus(config.botToken, channel, threadTs);
-    } catch (error) {
-      console.error('[SLACK_EVENTS] Error handling DM:', error);
-      await clearAssistantStatus(config.botToken, channel, threadTs);
+      await updateThreadHistory(config.teamId, threadTs, {
+        role: 'user',
+        content: eventContext ? `${text}\n\n${eventContext}` : text
+      });
+      await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: response });
+
       await sendSlackMessage(
         config.botToken,
         channel,
-        "Sorry, I encountered an error. Please try again.",
-        threadTs
-      );
-    }
-  }
-
-  /**
-   * Handle workflow_step_execute event
-   * Executes custom workflow steps (Analyze / Generate)
-   */
-  async function handleWorkflowStepExecute(config: SlackConfig, event: any): Promise<void> {
-    const { callback_id, workflow_step } = event;
-    const { inputs, workflow_step_execute_id } = workflow_step;
-
-    console.log('[SLACK_EVENTS] Executing workflow step:', { callbackId: callback_id, executeId: workflow_step_execute_id });
-
-    try {
-      let outputs = {};
-
-      // 1. Analyze Text
-      if (callback_id === 'analyze_text_step') {
-        const text = inputs.text?.value;
-        if (text) {
-          const analysis = await generateCodeResponse(
-            `Analyze the following text/code and provide a summary:\n\n${text}`,
-            null,
-            'review'
-          );
-          outputs = { analysis };
-        }
-      }
-
-      // 2. Generate Code
-      else if (callback_id === 'generate_code_step') {
-        const prompt = inputs.prompt?.value;
-        if (prompt) {
-          const code = await generateCodeResponse(
-            `Generate code for the following request:\n\n${prompt}`,
-            null,
-            'generation'
-          );
-          outputs = { code };
-        }
-      }
-
-      // Report success back to Slack
-      await fetch(`${SLACK_API_BASE}/workflows.stepCompleted`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.botToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          workflow_step_execute_id: workflow_step_execute_id,
-          outputs
-        })
-      });
-
-    } catch (error) {
-      console.error('[SLACK_EVENTS] Error executing workflow step:', error);
-      // Report fail
-      await fetch(`${SLACK_API_BASE}/workflows.stepFailed`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.botToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          workflow_step_execute_id: workflow_step_execute_id,
-          error: { message: 'Failed to execute step' }
-        })
-      });
-    }
-  }
-
-  /**
-   * Handle file_shared events
-   * Downloads code/text files and analyzes them
-   */
-  async function handleFileShared(config: SlackConfig, event: any): Promise<void> {
-    const { file_id, user_id, channel_id } = event;
-
-    console.log('[SLACK_EVENTS] File shared:', { fileId: file_id, userId: user_id, channelId: channel_id });
-
-    try {
-      // 1. Get file info
-      const fileInfoResponse = await fetch(`${SLACK_API_BASE}/files.info?file=${file_id}`, {
-        headers: { 'Authorization': `Bearer ${config.botToken}` }
-      });
-      const fileInfoData = await fileInfoResponse.json();
-
-      if (!fileInfoData.ok) {
-        console.error('[SLACK_EVENTS] Failed to get file info:', fileInfoData.error);
-        return;
-      }
-
-      const file = fileInfoData.file;
-
-      // Check if it's a text-based file we can process
-      // supported: text, python, javascript, etc. (mimetype usually starts with text/ or application/json/javascript)
-      // Slack 'filetype' field is useful: python, javascript, text, markdown, json, etc.
-      const supportedTypes = ['text', 'python', 'javascript', 'typescript', 'json', 'markdown', 'html', 'css', 'yaml', 'xml', 'shell', 'java', 'c', 'cpp', 'go', 'ruby', 'php'];
-
-      if (!supportedTypes.includes(file.filetype) && !file.mimetype.startsWith('text/')) {
-        console.log('[SLACK_EVENTS] Unsupported file type:', file.filetype);
-        // Optional: Respond saying we can't read this file yet
-        return;
-      }
-
-      // 2. Download content
-      const contentResponse = await fetch(file.url_private, {
-        headers: { 'Authorization': `Bearer ${config.botToken}` }
-      });
-
-      if (!contentResponse.ok) {
-        console.error('[SLACK_EVENTS] Failed to download file content');
-        return;
-      }
-
-      const content = await contentResponse.text();
-
-      if (!content) {
-        return;
-      }
-
-      // 3. Set status
-      // Note: We don't have a thread_ts yet usually, unless it was shared in a thread.
-      // 'shares' object in file info tells us where it was shared.
-      const threadTs = file.shares?.public?.[channel_id]?.[0]?.ts || event.ts;
-
-      await setAssistantStatus(
-        config.botToken,
-        channel_id,
+        `${prefix}${response}`,
         threadTs,
-        "📄 Reading file..."
+        createStandardFeedbackBlocks(text)
       );
+    }
 
-      // 4. Analyze with Gemini
-      // Construct a prompt context
-      const analysisPrompt = `
+    // Clear loading status
+    await clearAssistantStatus(config.botToken, channel, threadTs);
+  } catch (error) {
+    console.error('[SLACK_EVENTS] Error handling DM:', error);
+    await clearAssistantStatus(config.botToken, channel, threadTs);
+    await sendSlackMessage(
+      config.botToken,
+      channel,
+      "Sorry, I encountered an error. Please try again.",
+      threadTs
+    );
+  }
+}
+
+/**
+ * Handle workflow_step_execute event
+ * Executes custom workflow steps (Analyze / Generate)
+ */
+async function handleWorkflowStepExecute(config: SlackConfig, event: any): Promise<void> {
+  const { callback_id, workflow_step } = event;
+  const { inputs, workflow_step_execute_id } = workflow_step;
+
+  console.log('[SLACK_EVENTS] Executing workflow step:', { callbackId: callback_id, executeId: workflow_step_execute_id });
+
+  try {
+    let outputs = {};
+
+    // 1. Analyze Text
+    if (callback_id === 'analyze_text_step') {
+      const text = inputs.text?.value;
+      if (text) {
+        const analysis = await generateCodeResponse(
+          `Analyze the following text/code and provide a summary:\n\n${text}`,
+          null,
+          'review'
+        );
+        outputs = { analysis };
+      }
+    }
+
+    // 2. Generate Code
+    else if (callback_id === 'generate_code_step') {
+      const prompt = inputs.prompt?.value;
+      if (prompt) {
+        const code = await generateCodeResponse(
+          `Generate code for the following request:\n\n${prompt}`,
+          null,
+          'generation'
+        );
+        outputs = { code };
+      }
+    }
+
+    // Report success back to Slack
+    await fetch(`${SLACK_API_BASE}/workflows.stepCompleted`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.botToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        workflow_step_execute_id: workflow_step_execute_id,
+        outputs
+      })
+    });
+
+  } catch (error) {
+    console.error('[SLACK_EVENTS] Error executing workflow step:', error);
+    // Report fail
+    await fetch(`${SLACK_API_BASE}/workflows.stepFailed`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.botToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        workflow_step_execute_id: workflow_step_execute_id,
+        error: { message: 'Failed to execute step' }
+      })
+    });
+  }
+}
+
+/**
+ * Handle file_shared events
+ * Downloads code/text files and analyzes them
+ */
+async function handleFileShared(config: SlackConfig, event: any): Promise<void> {
+  const { file_id, user_id, channel_id } = event;
+
+  console.log('[SLACK_EVENTS] File shared:', { fileId: file_id, userId: user_id, channelId: channel_id });
+
+  try {
+    // 1. Get file info
+    const fileInfoResponse = await fetch(`${SLACK_API_BASE}/files.info?file=${file_id}`, {
+      headers: { 'Authorization': `Bearer ${config.botToken}` }
+    });
+    const fileInfoData = await fileInfoResponse.json();
+
+    if (!fileInfoData.ok) {
+      console.error('[SLACK_EVENTS] Failed to get file info:', fileInfoData.error);
+      return;
+    }
+
+    const file = fileInfoData.file;
+
+    // Check if it's a text-based file we can process
+    // supported: text, python, javascript, etc. (mimetype usually starts with text/ or application/json/javascript)
+    // Slack 'filetype' field is useful: python, javascript, text, markdown, json, etc.
+    const supportedTypes = ['text', 'python', 'javascript', 'typescript', 'json', 'markdown', 'html', 'css', 'yaml', 'xml', 'shell', 'java', 'c', 'cpp', 'go', 'ruby', 'php'];
+
+    if (!supportedTypes.includes(file.filetype) && !file.mimetype.startsWith('text/')) {
+      console.log('[SLACK_EVENTS] Unsupported file type:', file.filetype);
+      // Optional: Respond saying we can't read this file yet
+      return;
+    }
+
+    // 2. Download content
+    const contentResponse = await fetch(file.url_private, {
+      headers: { 'Authorization': `Bearer ${config.botToken}` }
+    });
+
+    if (!contentResponse.ok) {
+      console.error('[SLACK_EVENTS] Failed to download file content');
+      return;
+    }
+
+    const content = await contentResponse.text();
+
+    if (!content) {
+      return;
+    }
+
+    // 3. Set status
+    // Note: We don't have a thread_ts yet usually, unless it was shared in a thread.
+    // 'shares' object in file info tells us where it was shared.
+    const threadTs = file.shares?.public?.[channel_id]?.[0]?.ts || event.ts;
+
+    await setAssistantStatus(
+      config.botToken,
+      channel_id,
+      threadTs,
+      "📄 Reading file..."
+    );
+
+    // 4. Analyze with Gemini
+    // Construct a prompt context
+    const analysisPrompt = `
 I have analyzed the uploaded file: \`${file.name}\` (${file.filetype}).
 
 File Content:
@@ -1129,226 +1133,226 @@ ${content.substring(0, 10000)} ${content.length > 10000 ? '...(truncated)' : ''}
 Please provide a summary and code analysis of this file. Identify purpose, key logic, and any potential issues.
 `;
 
-      const response = await generateCodeResponse(analysisPrompt, null, 'review');
+    const response = await generateCodeResponse(analysisPrompt, null, 'review');
 
-      // 5. Reply
-      await sendSlackMessage(
-        config.botToken,
-        channel_id,
-        `📄 *File Analysis: ${file.name}*\n\n${response}`,
-        threadTs,
-        createStandardFeedbackBlocks(analysisPrompt)
-      );
+    // 5. Reply
+    await sendSlackMessage(
+      config.botToken,
+      channel_id,
+      `📄 *File Analysis: ${file.name}*\n\n${response}`,
+      threadTs,
+      createStandardFeedbackBlocks(analysisPrompt)
+    );
 
-      await clearAssistantStatus(config.botToken, channel_id, threadTs);
-      await addReaction(config.botToken, channel_id, threadTs, 'eyes');
+    await clearAssistantStatus(config.botToken, channel_id, threadTs);
+    await addReaction(config.botToken, channel_id, threadTs, 'eyes');
 
-    } catch (error) {
-      console.error('[SLACK_EVENTS] Error handling file share:', error);
-      await sendSlackMessage(config.botToken, channel_id, "I tried to read the file but encountered an error.", event.ts);
-    }
+  } catch (error) {
+    console.error('[SLACK_EVENTS] Error handling file share:', error);
+    await sendSlackMessage(config.botToken, channel_id, "I tried to read the file but encountered an error.", event.ts);
   }
+}
 
-  /**
-   * Handle app_home_opened event
-   */
-  async function handleAppHomeOpened(config: SlackConfig, event: any): Promise<void> {
-    const { user, tab, team_id } = event;
+/**
+ * Handle app_home_opened event
+ */
+async function handleAppHomeOpened(config: SlackConfig, event: any): Promise<void> {
+  const { user, tab, team_id } = event;
 
-    console.log('[SLACK_EVENTS] App Home opened:', {
-      teamId: team_id,
-      user,
-      tab,
+  console.log('[SLACK_EVENTS] App Home opened:', {
+    teamId: team_id,
+    user,
+    tab,
+  });
+
+  // Only handle Home tab for now
+  if (tab === 'home') {
+    await publishAppHome(user, team_id);
+  }
+}
+
+export async function POST(req: Request) {
+  let rawBody = '';
+
+  try {
+    rawBody = await req.text();
+    console.log('[SLACK_EVENTS] Received request, body length:', rawBody.length);
+
+    // Parse body first to handle challenge ASAP
+    let body: any;
+    try {
+      body = JSON.parse(rawBody);
+      logDebug('Received event body:', body);
+    } catch (parseError) {
+      console.error('[SLACK_EVENTS] Failed to parse JSON:', parseError);
+      return new NextResponse('Invalid JSON', { status: 400 });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Handle URL verification challenge IMMEDIATELY
+    // ─────────────────────────────────────────────────────────────────
+    if (body.type === 'url_verification') {
+      console.log('[SLACK_EVENTS] URL verification challenge received');
+      return new NextResponse(body.challenge, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Extract Team ID (CRITICAL FOR MULTI-TENANCY)
+    // ─────────────────────────────────────────────────────────────────
+    const teamId = body.team_id;
+    if (!teamId) {
+      console.error('[SLACK_EVENTS] No team_id in request');
+      return new NextResponse('Missing team_id', { status: 400 });
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Fetch Dynamic Credentials for this Workspace
+    // ─────────────────────────────────────────────────────────────────
+    let config: SlackConfig;
+    try {
+      config = await getSlackConfig(teamId);
+    } catch (configError) {
+      console.error(`[SLACK_EVENTS] No installation for team ${teamId}:`, configError);
+      return NextResponse.json({
+        ok: false,
+        error: 'workspace_not_installed',
+        message: 'This workspace needs to reinstall the Genie app.',
+      });
+    }
+
+    console.log('[SLACK_EVENTS] Resolved config for team:', {
+      teamId: config.teamId,
+      teamName: config.teamName,
+      botUserId: config.botUserId,
     });
 
-    // Only handle Home tab for now
-    if (tab === 'home') {
-      await publishAppHome(user, team_id);
+    // ─────────────────────────────────────────────────────────────────
+    // Verify Slack Signature
+    // ─────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────
+    // Verify Slack Signature
+    // ─────────────────────────────────────────────────────────────────
+    const timestamp = req.headers.get('x-slack-request-timestamp') || '';
+    const signature = req.headers.get('x-slack-signature') || '';
+
+    // Enforce verification if we have the secret, regardless of environment
+    // This allows testing dev environments securely if they are exposed
+    if (process.env.SLACK_SIGNING_SECRET) {
+      if (!verifySlackSignature(rawBody, timestamp, signature)) {
+        console.error('[SLACK_EVENTS] Invalid Slack signature');
+        return new NextResponse('Unauthorized', { status: 401 });
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      // Critical: Production MUST have the secret
+      console.error('[SLACK_EVENTS] SLACK_SIGNING_SECRET missing in production');
+      return new NextResponse('Server Configuration Error', { status: 500 });
+    } else {
+      console.warn('[SLACK_EVENTS] Skipping signature verification (no secret set in non-prod)');
     }
-  }
 
-  export async function POST(req: Request) {
-    let rawBody = '';
+    // ─────────────────────────────────────────────────────────────────
+    // Handle Events
+    // ─────────────────────────────────────────────────────────────────
+    if (body.type === 'event_callback') {
+      const event = body.event;
 
-    try {
-      rawBody = await req.text();
-      console.log('[SLACK_EVENTS] Received request, body length:', rawBody.length);
-
-      // Parse body first to handle challenge ASAP
-      let body: any;
-      try {
-        body = JSON.parse(rawBody);
-        logDebug('Received event body:', body);
-      } catch (parseError) {
-        console.error('[SLACK_EVENTS] Failed to parse JSON:', parseError);
-        return new NextResponse('Invalid JSON', { status: 400 });
-      }
-
-      // ─────────────────────────────────────────────────────────────────
-      // Handle URL verification challenge IMMEDIATELY
-      // ─────────────────────────────────────────────────────────────────
-      if (body.type === 'url_verification') {
-        console.log('[SLACK_EVENTS] URL verification challenge received');
-        return new NextResponse(body.challenge, {
-          status: 200,
-          headers: { 'Content-Type': 'text/plain' },
-        });
-      }
-
-      // ─────────────────────────────────────────────────────────────────
-      // Extract Team ID (CRITICAL FOR MULTI-TENANCY)
-      // ─────────────────────────────────────────────────────────────────
-      const teamId = body.team_id;
-      if (!teamId) {
-        console.error('[SLACK_EVENTS] No team_id in request');
-        return new NextResponse('Missing team_id', { status: 400 });
-      }
-
-      // ─────────────────────────────────────────────────────────────────
-      // Fetch Dynamic Credentials for this Workspace
-      // ─────────────────────────────────────────────────────────────────
-      let config: SlackConfig;
-      try {
-        config = await getSlackConfig(teamId);
-      } catch (configError) {
-        console.error(`[SLACK_EVENTS] No installation for team ${teamId}:`, configError);
-        return NextResponse.json({
-          ok: false,
-          error: 'workspace_not_installed',
-          message: 'This workspace needs to reinstall the Genie app.',
-        });
-      }
-
-      console.log('[SLACK_EVENTS] Resolved config for team:', {
-        teamId: config.teamId,
-        teamName: config.teamName,
-        botUserId: config.botUserId,
-      });
-
-      // ─────────────────────────────────────────────────────────────────
-      // Verify Slack Signature
-      // ─────────────────────────────────────────────────────────────────
-      // ─────────────────────────────────────────────────────────────────
-      // Verify Slack Signature
-      // ─────────────────────────────────────────────────────────────────
-      const timestamp = req.headers.get('x-slack-request-timestamp') || '';
-      const signature = req.headers.get('x-slack-signature') || '';
-
-      // Enforce verification if we have the secret, regardless of environment
-      // This allows testing dev environments securely if they are exposed
-      if (process.env.SLACK_SIGNING_SECRET) {
-        if (!verifySlackSignature(rawBody, timestamp, signature)) {
-          console.error('[SLACK_EVENTS] Invalid Slack signature');
-          return new NextResponse('Unauthorized', { status: 401 });
-        }
-      } else if (process.env.NODE_ENV === 'production') {
-        // Critical: Production MUST have the secret
-        console.error('[SLACK_EVENTS] SLACK_SIGNING_SECRET missing in production');
-        return new NextResponse('Server Configuration Error', { status: 500 });
-      } else {
-        console.warn('[SLACK_EVENTS] Skipping signature verification (no secret set in non-prod)');
-      }
-
-      // ─────────────────────────────────────────────────────────────────
-      // Handle Events
-      // ─────────────────────────────────────────────────────────────────
-      if (body.type === 'event_callback') {
-        const event = body.event;
-
-        // Ignore bot's own messages
-        if (event.user === config.botUserId || event.bot_id) {
-          console.log('[SLACK_EVENTS] Ignoring bot message');
-          return NextResponse.json({ ok: true });
-        }
-
-        // Process event asynchronously
-        const responsePromise = (async () => {
-          try {
-            switch (event.type) {
-              // ─────────────────────────────────────────────────────────
-              // Assistant Thread Events (Agents & AI Apps)
-              // ─────────────────────────────────────────────────────────
-              case 'assistant_thread_started':
-                await handleAssistantThreadStarted(config, event);
-                break;
-
-              case 'assistant_thread_context_changed':
-                await handleAssistantThreadContextChanged(config, event);
-                break;
-
-              // ─────────────────────────────────────────────────────────
-              // Message Events (Enhanced with code detection)
-              // ─────────────────────────────────────────────────────────
-              case 'app_mention':
-                await handleAppMention(config, event);
-                break;
-
-              case 'message':
-                // Handle DMs (channel type 'im')
-                // Allow 'file_share' subtype so we can process file uploads in DMs
-                if (event.channel_type === 'im' && !event.bot_id && (!event.subtype || event.subtype === 'file_share')) {
-                  await handleDirectMessage(config, event);
-                }
-                break;
-
-              // ─────────────────────────────────────────────────────────
-              case 'workflow_step_execute':
-                await handleWorkflowStepExecute(config, event);
-                break;
-
-              case 'file_shared':
-                await handleFileShared(config, event);
-                break;
-
-              case 'app_home_opened':
-                await handleAppHomeOpened(config, event);
-                break;
-
-              default:
-                console.log('[SLACK_EVENTS] Unhandled event type:', event.type);
-            }
-          } catch (handlerError) {
-            console.error('[SLACK_EVENTS] Event handler error:', handlerError);
-          }
-        })();
-
-        // Don't await - respond immediately to Slack
-        waitUntil(responsePromise.catch((err) =>
-          console.error('[SLACK_EVENTS] Event processing error:', err)
-        ));
-
+      // Ignore bot's own messages
+      if (event.user === config.botUserId || event.bot_id) {
+        console.log('[SLACK_EVENTS] Ignoring bot message');
         return NextResponse.json({ ok: true });
       }
 
-      return NextResponse.json({ ok: true });
-    } catch (error: any) {
-      console.error('[SLACK_EVENTS_ERROR]', error);
-      return new NextResponse(
-        JSON.stringify({ error: 'Internal server error' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-  }
+      // Process event asynchronously
+      const responsePromise = (async () => {
+        try {
+          switch (event.type) {
+            // ─────────────────────────────────────────────────────────
+            // Assistant Thread Events (Agents & AI Apps)
+            // ─────────────────────────────────────────────────────────
+            case 'assistant_thread_started':
+              await handleAssistantThreadStarted(config, event);
+              break;
 
-  // Health check endpoint
-  export async function GET(req: Request) {
-    return NextResponse.json({
-      status: 'Slack Events API endpoint active',
-      version: '3.2.0', // Updated version
-      features: [
-        'multi-tenant',
-        'text-streaming',
-        'loading-states',
-        'suggested-prompts',
-        'thread-titles',
-        'feedback-blocks',
-        'code-detection',
-        'language-detection',
-        'intent-detection',
-        'code-specific-prompts',
-        'thread-level-memory', // Added feature
-        'app-home-dashboard', // Added feature
-      ],
-      timestamp: new Date().toISOString(),
-    });
+            case 'assistant_thread_context_changed':
+              await handleAssistantThreadContextChanged(config, event);
+              break;
+
+            // ─────────────────────────────────────────────────────────
+            // Message Events (Enhanced with code detection)
+            // ─────────────────────────────────────────────────────────
+            case 'app_mention':
+              await handleAppMention(config, event);
+              break;
+
+            case 'message':
+              // Handle DMs (channel type 'im')
+              // Allow 'file_share' subtype so we can process file uploads in DMs
+              if (event.channel_type === 'im' && !event.bot_id && (!event.subtype || event.subtype === 'file_share')) {
+                await handleDirectMessage(config, event);
+              }
+              break;
+
+            // ─────────────────────────────────────────────────────────
+            case 'workflow_step_execute':
+              await handleWorkflowStepExecute(config, event);
+              break;
+
+            case 'file_shared':
+              await handleFileShared(config, event);
+              break;
+
+            case 'app_home_opened':
+              await handleAppHomeOpened(config, event);
+              break;
+
+            default:
+              console.log('[SLACK_EVENTS] Unhandled event type:', event.type);
+          }
+        } catch (handlerError) {
+          console.error('[SLACK_EVENTS] Event handler error:', handlerError);
+        }
+      })();
+
+      // Don't await - respond immediately to Slack
+      waitUntil(responsePromise.catch((err) =>
+        console.error('[SLACK_EVENTS] Event processing error:', err)
+      ));
+
+      return NextResponse.json({ ok: true });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error: any) {
+    console.error('[SLACK_EVENTS_ERROR]', error);
+    return new NextResponse(
+      JSON.stringify({ error: 'Internal server error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
+}
+
+// Health check endpoint
+export async function GET(req: Request) {
+  return NextResponse.json({
+    status: 'Slack Events API endpoint active',
+    version: '3.2.0', // Updated version
+    features: [
+      'multi-tenant',
+      'text-streaming',
+      'loading-states',
+      'suggested-prompts',
+      'thread-titles',
+      'feedback-blocks',
+      'code-detection',
+      'language-detection',
+      'intent-detection',
+      'code-specific-prompts',
+      'thread-level-memory', // Added feature
+      'app-home-dashboard', // Added feature
+    ],
+    timestamp: new Date().toISOString(),
+  });
+}
