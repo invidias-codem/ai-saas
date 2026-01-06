@@ -71,9 +71,9 @@ export async function extractFileContent(
     // Handle PDF
     if (type === 'pdf') {
         try {
-            // unpdf extracts text from buffer
-            // unpdf might return text as string or string[] (per page)
-            const { text } = await extractText(buffer);
+            // unpdf requires Uint8Array, not Buffer
+            const uint8Array = new Uint8Array(buffer);
+            const { text } = await extractText(uint8Array);
             return Array.isArray(text) ? text.join('\n') : text;
         } catch (error) {
             console.error('[FILE_HELPERS] PDF parsing error:', error);
