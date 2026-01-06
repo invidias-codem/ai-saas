@@ -19,6 +19,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
@@ -603,9 +604,8 @@ export async function POST(req: Request) {
     }
 
     // START ASYNC PROCESSING (Fire and Forget)
-    // In Vercel, this might finish if the lambda isn't killed immediately
-    // Ideally use Inngest or QStash, but for now this pattern is used in events/route.ts
-    (async () => {
+    // Use waitUntil to ensure Vercel doesn't kill the lambda
+    waitUntil((async () => {
       try {
         console.log('[SLACK_COMMAND] Async processing started for:', command);
         const response = await buildResponse(command, args, text, userId);
@@ -620,7 +620,7 @@ export async function POST(req: Request) {
           text: `❌ Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`,
         });
       }
-    })();
+    })());
 
     // Return immediate acknowledgement
     return NextResponse.json({

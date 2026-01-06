@@ -5,6 +5,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { getSlackConfig, SlackConfig, resolveSlackUser, saveChannelConfig, type ChannelConfig } from '@/lib/slack';
@@ -1009,20 +1010,21 @@ export async function POST(req: Request) {
         return new NextResponse('', { status: 200 });
 
       case 'block_actions':
-        handleBlockActions(config, payload).catch((err) =>
+        waitUntil(handleBlockActions(config, payload).catch((err) =>
           console.error('[SLACK_INTERACTIVITY] block_actions error:', err)
-        );
+        ));
         return NextResponse.json({ ok: true });
 
       case 'view_submission':
+        // view_submission must return a payload immediately if updating view, so we await this one
         const viewResponse = await handleViewSubmission(config, payload);
         return NextResponse.json(viewResponse);
 
       case 'shortcut':
       case 'message_action':
-        handleShortcut(config, payload).catch((err) =>
+        waitUntil(handleShortcut(config, payload).catch((err) =>
           console.error('[SLACK_INTERACTIVITY] shortcut error:', err)
-        );
+        ));
         return NextResponse.json({ ok: true });
 
       case 'block_suggestion':

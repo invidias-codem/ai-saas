@@ -23,6 +23,7 @@ function logDebug(message: string, data?: any) {
   }
 }
 import { NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import {
@@ -1198,9 +1199,9 @@ export async function POST(req: Request) {
       })();
 
       // Don't await - respond immediately to Slack
-      responsePromise.catch((err) =>
+      waitUntil(responsePromise.catch((err) =>
         console.error('[SLACK_EVENTS] Event processing error:', err)
-      );
+      ));
 
       return NextResponse.json({ ok: true });
     }
