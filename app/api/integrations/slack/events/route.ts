@@ -260,37 +260,32 @@ async function* generateGenieResponseStream(
     }
 
     const chat = generalModel.startChat({
-      history: [
         {
-          role: "user",
-          parts: [{ text: finalSystemPrompt }],
-        },
-        {
-          role: "model",
-          parts: [{ text: "I understand! I am Genie, and I am ready to match my Killer Kindness persona! ✨" }],
-        },
-        ...sanitizedHistory as any,
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.8,
-        maxOutputTokens: 1024,
+        role: "user",
+        parts: [{ text: finalSystemPrompt }],
       },
-    });
+      ...sanitizedHistory as any,
+      ],
+    generationConfig: {
+      temperature: 0.7,
+        topK: 40,
+          topP: 0.8,
+            maxOutputTokens: 1024,
+      },
+  });
 
-    const result = await chat.sendMessageStream(userMessage);
+  const result = await chat.sendMessageStream(userMessage);
 
-    for await (const chunk of result.stream) {
-      const text = chunk.text();
-      if (text) {
-        yield text;
-      }
+  for await (const chunk of result.stream) {
+    const text = chunk.text();
+    if (text) {
+      yield text;
     }
-  } catch (error) {
-    console.error('[SLACK_EVENTS] Error generating Genie response:', error);
-    yield "I apologize, but I encountered an error processing your request. Please try again.";
   }
+} catch (error) {
+  console.error('[SLACK_EVENTS] Error generating Genie response:', error);
+  yield "I apologize, but I encountered an error processing your request. Please try again.";
+}
 }
 
 /**
