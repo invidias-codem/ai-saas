@@ -24,6 +24,7 @@ export interface SessionStorageData {
     sessionId: string;
     userId: string;
     messageCount: number;
+    activeConversationId?: string; // ID of the current conversation in Firebase
 }
 
 // Storage configuration

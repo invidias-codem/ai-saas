@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@clerk/nextjs";
 import SlackIntegration from "@/components/slack-integration";
+import { ConversationHistory } from "@/components/conversation-history";
 
 // Loading fallback for Slack integration
 function SlackIntegrationSkeleton() {
@@ -134,10 +135,10 @@ const SettingsPage = () => {
         setAnalytics((prev) =>
           prev
             ? {
-                ...prev,
-                facts: prev.facts.filter((f) => f.id !== factId),
-                totalFacts: prev.totalFacts - 1,
-              }
+              ...prev,
+              facts: prev.facts.filter((f) => f.id !== factId),
+              totalFacts: prev.totalFacts - 1,
+            }
             : null
         );
       }
@@ -165,19 +166,19 @@ const SettingsPage = () => {
         setAnalytics((prev) =>
           prev
             ? {
-                ...prev,
-                facts: prev.facts.map((f) =>
-                  f.id === factId
-                    ? {
-                        ...f,
-                        expiresAt: data.newExpiresAt,
-                        daysUntilExpiry: Math.ceil(
-                          (data.newExpiresAt - Date.now()) / (24 * 60 * 60 * 1000)
-                        ),
-                      }
-                    : f
-                ),
-              }
+              ...prev,
+              facts: prev.facts.map((f) =>
+                f.id === factId
+                  ? {
+                    ...f,
+                    expiresAt: data.newExpiresAt,
+                    daysUntilExpiry: Math.ceil(
+                      (data.newExpiresAt - Date.now()) / (24 * 60 * 60 * 1000)
+                    ),
+                  }
+                  : f
+              ),
+            }
             : null
         );
       }
@@ -235,6 +236,9 @@ const SettingsPage = () => {
             <SlackIntegration userId={userId} />
           </Suspense>
         )}
+
+        {/* Conversation History Section */}
+        <ConversationHistory />
 
         {/* Memory Bank Section */}
         {analytics && (

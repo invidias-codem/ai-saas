@@ -1,21 +1,18 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, KeyboardEvent } from "react";
+import { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'; // Or your preferred theme
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useClipboard } from "use-clipboard-copy";
 
-// Shadcn UI & Icons
-import { Heading } from "@/components/heading";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { CodeIcon, Paperclip } from "lucide-react"; // Use lucide-react icons
+import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, ArrowDown } from "lucide-react";
+import { CodeIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
-import EmptyState from "@/components/empty"; // Assuming EmptyState component exists
 import { PersonIcon } from "@radix-ui/react-icons";
 import { ShareIconButton } from "@/components/share-button";
 
@@ -26,38 +23,42 @@ interface Message {
   timestamp: Date;
 }
 
-// Define state for the selected file (including content)
+// Define state for the selected file
 interface SelectedFile {
   name: string;
   type: string;
-  base64Data: string; // Store content as Base64
+  base64Data: string;
 }
 
-// Helper component for Code Blocks with Copy Button
+// Modern Code Block with Copy Button
 const CodeBlock = ({ codeString, language }: { codeString: string, language: string | undefined }) => {
   const clipboard = useClipboard({ copiedTimeout: 1500 });
   const handleCopy = () => { clipboard.copy(codeString); };
-
-  // Determine language for highlighter, default if not specified
   const effectiveLanguage = language || 'plaintext';
 
   return (
-    <div className="relative my-2 text-sm"> {/* Ensure text size is consistent */}
-      <button
-        onClick={handleCopy}
-        className="absolute top-2 right-2 p-1 bg-gray-700 rounded text-white text-xs hover:bg-gray-600 z-10"
-        aria-label="Copy code"
-      >
-        {clipboard.copied ? "Copied!" : "Copy"}
-      </button>
+    <div className="relative w-full overflow-hidden my-4 rounded-xl border bg-zinc-950 dark:bg-zinc-900 shadow-md">
+      <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800">
+        <span className="text-xs text-zinc-400 font-mono">{effectiveLanguage}</span>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 px-2 py-1 text-xs text-zinc-400 hover:text-white transition-colors rounded-md hover:bg-zinc-800"
+          aria-label="Copy code"
+        >
+          {clipboard.copied ? (
+            <><Check className="h-3.5 w-3.5" /> Copied!</>
+          ) : (
+            <><Copy className="h-3.5 w-3.5" /> Copy</>
+          )}
+        </button>
+      </div>
       <SyntaxHighlighter
         style={vscDarkPlus}
         language={effectiveLanguage}
         PreTag="div"
-        className="!bg-gray-800 rounded p-4 overflow-x-auto" // Added padding and overflow
-        // Use custom style to potentially override line height/padding if needed
-        customStyle={{ margin: 0 }}
-        wrapLongLines={true} // Helps prevent horizontal scroll where possible
+        className="!bg-transparent !m-0 p-4 overflow-x-auto text-sm font-mono leading-relaxed scrollbar-thin scrollbar-thumb-zinc-700"
+        customStyle={{ margin: 0, background: 'transparent' }}
+        wrapLongLines={true}
       >
         {codeString}
       </SyntaxHighlighter>
@@ -74,8 +75,39 @@ export default function CodePage() {
   const [showGreeting, setShowGreeting] = useState(true);
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null); // Chat container for scroll
+  const [showScrollButton, setShowScrollButton] = useState(false);
 
-  const GREETING_MESSAGE = "Hi there! Ask me a coding question or attach a code file for review or explanation.";
+  const GREETING_MESSAGE = "Ask me a coding question, debug code, or attach a file for analysis.";
+
+  // No auto-scroll - let users scroll manually to read responses from the beginning
+
+  // Scroll to bottom function for manual trigger
+  const scrollToBottom = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  // Track scroll position to show/hide scroll-to-bottom button
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      // Show button when scrolled up more than 200px from bottom
+      const isScrolledUp = scrollHeight - scrollTop - clientHeight > 200;
+      setShowScrollButton(isScrolledUp && messages.length > 2);
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [messages.length]);
 
   // Helper function to read file as Base64
   const readFileAsBase64 = (file: File): Promise<string> => {
@@ -90,7 +122,7 @@ export default function CodePage() {
     });
   };
 
-  // Handle sending message (text and file data)
+  // Handle sending message
   const handleSendMessage = async () => {
     const trimmedInput = userInput.trim();
     if (!trimmedInput && !selectedFile) return;
@@ -100,7 +132,6 @@ export default function CodePage() {
     setShowGreeting(false);
 
     let messageText = trimmedInput;
-    // Append file info for display in the user's message bubble
     if (selectedFile) {
       messageText += `\n\n[Analysing File: ${selectedFile.name}]`;
     }
@@ -108,51 +139,44 @@ export default function CodePage() {
     const userMessage: Message = { text: messageText, role: "user", timestamp: new Date() };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
-    setUserInput(""); // Clear text input
+    setUserInput("");
 
-    // Prepare payload, including file data if present
     const apiPayload = {
-      messages: newMessages.map(msg => ({ // Send history for context
-        role: msg.role,
-        text: msg.text // Keep previous texts for context
-      })),
-      currentUserPrompt: trimmedInput, // Send only the current text input
-      fileData: selectedFile // Send the file object { name, type, base64Data }
+      messages: newMessages.map(msg => ({ role: msg.role, text: msg.text })),
+      currentUserPrompt: trimmedInput,
+      fileData: selectedFile
     };
 
-    // Clear selected file *after* preparing payload
     setSelectedFile(null);
 
     try {
-      // Send payload to the backend code API route
       const response = await axios.post("/api/code", apiPayload);
       const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
       setMessages((prevMessages) => [...prevMessages, botMessage]);
     } catch (error: any) {
       console.error("[CODE_PAGE_ERROR]", error);
+      if (error.response?.status === 401) {
+        window.location.href = "/sign-in?redirect_url=" + encodeURIComponent(window.location.pathname);
+        return;
+      }
       setError(error.response?.data?.details || "Sorry, something went wrong processing your request.");
-      // Optionally roll back optimistic UI: setMessages(messages);
     } finally {
       setLoading(false);
     }
   };
 
-  // Trigger file input click
   const handleAttachClick = () => { fileInputRef.current?.click(); };
 
-  // Handle file selection and read content
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      console.log("File selected:", file.name, file.type, file.size);
-      setLoading(true); // Indicate file reading
+      setLoading(true);
       setError(null);
       try {
         const base64Data = await readFileAsBase64(file);
         setSelectedFile({
           name: file.name,
-          // Use a specific MIME type if known, otherwise default
-          type: file.type || 'text/plain', // Default to text/plain for code files if type unknown
+          type: file.type || 'text/plain',
           base64Data: base64Data
         });
       } catch (err) {
@@ -163,15 +187,14 @@ export default function CodePage() {
         setLoading(false);
       }
     }
-    if (fileInputRef.current) { fileInputRef.current.value = ""; } // Reset input
+    if (fileInputRef.current) { fileInputRef.current.value = ""; }
   };
 
-  // Handle Enter/Tab key press
   const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
-    } else if (e.key === 'Tab' && !e.shiftKey) { // Basic Tab indentation
+    } else if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault();
       const { selectionStart, selectionEnd, value } = e.currentTarget;
       setUserInput(value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd));
@@ -179,112 +202,197 @@ export default function CodePage() {
     }
   };
 
-  // Typing Indicator Component
-  const TypingIndicator = () => (
-    <div className="flex items-center space-x-2 p-2">
-      <Avatar className="h-8 w-8"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>
-      <div className="flex items-center space-x-1.5 p-2 rounded-lg bg-muted">
-        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse"></div>
-        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse [animation-delay:0.2s]"></div>
-        <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse [animation-delay:0.4s]"></div>
+  // Modern Typing Indicator (matching conversation page)
+  const TypingIndicator = () => {
+    return (
+      <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
+        <Avatar className="h-8 w-8 ring-1 ring-border/50">
+          <AvatarImage src="/Genie.png" />
+          <AvatarFallback className="bg-gradient-to-br from-green-500 to-emerald-500 text-white text-xs">AI</AvatarFallback>
+        </Avatar>
+        <div className="flex items-center space-x-1.5 h-8">
+          <div className="h-2 w-2 bg-green-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+          <div className="h-2 w-2 bg-emerald-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+          <div className="h-2 w-2 bg-teal-400 rounded-full animate-bounce"></div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
-    <div className="h-[calc(100dvh-5rem)] md:h-full flex flex-col">
-      <div className="px-4 py-2">
-        <Heading
-          title="Genie Code"
-          description="Your AI pair programmer. Ask questions or attach code."
-          icon={CodeIcon}
-          iconColor="text-green-500"
-          bgColor="bg-green-500/10"
-        />
-      </div>
+    <div className="flex flex-col h-[100dvh] bg-background text-foreground relative overflow-hidden">
 
-      <div className="flex-grow flex flex-col md:px-8 overflow-hidden">
-        <ScrollArea className="flex-1 p-2 md:p-4 rounded-md border bg-background/50 backdrop-blur-sm shadow-sm">
+      {/* Header - Compact and pinned top */}
+      <header className="flex-none px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-md z-20 flex items-center justify-between sticky top-0">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+            <CodeIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
+          </div>
+          <div>
+            <h1 className="text-sm font-semibold leading-tight">Genie Code</h1>
+            <p className="text-[10px] text-muted-foreground">AI pair programmer</p>
+          </div>
+        </div>
+
+        {/* Message count indicator */}
+        <div className="flex gap-2">
+          {messages.length > 0 && (
+            <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+              <AlertCircle className="h-3 w-3" />
+              {messages.length} msgs
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Main Chat Area */}
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden w-full scroll-smooth">
+        <div className="max-w-3xl mx-auto w-full px-4 py-6 md:px-6">
+
           {/* Greeting */}
-          <div className="max-w-4xl mx-auto">
-            {showGreeting && (
-              <div className="flex items-start space-x-2 md:space-x-3 mb-8 mt-4">
-                <Avatar className="h-8 w-8 mt-1"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>
-                <div className="p-4 rounded-2xl bg-muted/50 text-sm leading-relaxed border border-border/50 max-w-[90%]">
-                  {GREETING_MESSAGE}
-                </div>
+          {showGreeting && (
+            <div className="flex flex-col items-center justify-center min-h-[40vh] text-center space-y-4 animate-in fade-in zoom-in duration-500">
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-green-500 via-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-green-500/20">
+                <CodeIcon className="h-8 w-8 text-white" />
               </div>
-            )}
+              <div className="space-y-2 max-w-sm">
+                <h2 className="text-xl font-semibold tracking-tight">Code Assistant</h2>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  {GREETING_MESSAGE}
+                </p>
+              </div>
+            </div>
+          )}
 
-            {/* Messages */}
-            {messages.map((msg, index) => (
-              <div key={index} className={cn("mb-8 flex gap-2 md:gap-3 group",
-                msg.role === "user" ? "flex-col-reverse md:flex-row items-end justify-end" : "flex-col md:flex-row items-start justify-start")}>
-                {msg.role === "bot" && (<Avatar className="h-8 w-8 md:mt-1 flex-shrink-0"><AvatarImage src="/Genie.png" alt="Genie Avatar" /><AvatarFallback>G</AvatarFallback></Avatar>)}
-                <div className={cn("max-w-full md:max-w-[85%] rounded-2xl shadow-sm text-sm break-words relative leading-relaxed",
-                  msg.role === "user" ? "bg-primary text-primary-foreground p-4 rounded-tr-none md:rounded-tr-none rounded-br-none md:rounded-br-xl" : "bg-muted/80 dark:bg-muted/40 backdrop-blur-sm rounded-tl-none md:rounded-tl-none rounded-bl-none md:rounded-bl-xl border border-border/50")}>
+          {/* Message List */}
+          {messages.map((msg, index) => (
+            <div key={index} className={cn(
+              "group w-full mb-6 flex",
+              msg.role === "user" ? "justify-end" : "justify-start"
+            )}>
+              <div className={cn(
+                "flex max-w-[90%] md:max-w-[85%] gap-3",
+                msg.role === "user" ? "flex-row-reverse" : "flex-row"
+              )}>
+                {/* Avatars */}
+                <div className="flex-shrink-0 mt-1">
+                  {msg.role === "bot" ? (
+                    <Avatar className="h-8 w-8 ring-1 ring-border/50 bg-background">
+                      <AvatarImage src="/Genie.png" />
+                      <AvatarFallback className="text-[10px] bg-gradient-to-br from-green-500 to-emerald-500 text-white">AI</AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <PersonIcon className="h-4 w-4 text-primary" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Content Bubble */}
+                <div className={cn(
+                  "relative text-[15px] leading-7",
+                  msg.role === "user"
+                    ? "bg-secondary text-secondary-foreground rounded-[20px] rounded-tr-sm px-5 py-3 shadow-sm"
+                    : "bg-transparent text-foreground px-0 py-0"
+                )}>
                   {msg.role === "bot" ? (
                     <>
-                      <div className="p-4 pb-2">
-                        <ReactMarkdown
-                          components={{
-                            // Use CodeBlock component for fenced code blocks
-                            code({ node, className, children, ...props }) {
-                              const match = /language-(\w+)/.exec(className || '');
-                              const codeString = String(children).replace(/\n$/, '');
-                              return match ? (
-                                <div className="my-4 -mx-4 md:mx-0"> {/* Negative margin on mobile to let code span full width */}
-                                  <CodeBlock codeString={codeString} language={match[1]} />
-                                </div>
-                              ) : (
-                                // Style inline code
-                                <code className={cn("bg-zinc-200 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-mono text-xs", className)} {...props}>
-                                  {children}
-                                </code>
-                              );
-                            },
-                            // Add standard styling for paragraphs within bot messages
-                            p: ({ node, ...props }) => <p {...props} className="mb-3 last:mb-0" />,
-                            ul: ({ node, ...props }) => <ul {...props} className="list-disc list-inside mb-3 pl-2 space-y-1" />,
-                            ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-inside mb-3 pl-2 space-y-1" />,
-                            li: ({ node, ...props }) => <li {...props} className="pl-1" />,
-                          }}
-                        >
-                          {msg.text}
-                        </ReactMarkdown>
-                      </div>
-                      {/* Share button - appears on hover */}
-                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <ReactMarkdown
+                        components={{
+                          code({ node, className, children, ...props }) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            const codeString = String(children).replace(/\n$/, '');
+                            return match ? (
+                              <CodeBlock codeString={codeString} language={match[1]} />
+                            ) : (
+                              <code className="bg-muted px-1.5 py-0.5 rounded-md font-mono text-[13px] text-green-600 dark:text-green-400" {...props}>
+                                {children}
+                              </code>
+                            );
+                          },
+                          p: ({ node, ...props }) => <p {...props} className="mb-4 last:mb-0" />,
+                          ul: ({ node, ...props }) => <ul {...props} className="list-disc list-outside ml-4 mb-4 space-y-2 marker:text-muted-foreground" />,
+                          ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-outside ml-4 mb-4 space-y-2 marker:text-muted-foreground" />,
+                          li: ({ node, ...props }) => <li {...props} className="pl-1" />,
+                          h1: ({ node, ...props }) => <h1 {...props} className="text-2xl font-semibold mb-4 mt-6 first:mt-0 tracking-tight" />,
+                          h2: ({ node, ...props }) => <h2 {...props} className="text-xl font-semibold mb-3 mt-5 tracking-tight" />,
+                          h3: ({ node, ...props }) => <h3 {...props} className="text-lg font-medium mb-2 mt-4" />,
+                          blockquote: ({ node, ...props }) => <blockquote {...props} className="border-l-4 border-green-500/40 pl-4 italic text-muted-foreground my-4" />,
+                          a: ({ node, ...props }) => <a {...props} className="text-green-500 hover:text-green-600 font-medium underline underline-offset-4 transition-colors" target="_blank" rel="noreferrer" />,
+                        }}
+                      >
+                        {msg.text}
+                      </ReactMarkdown>
+
+                      {/* Action Bar (Copy/Share) */}
+                      <div className="mt-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <ShareIconButton
                           content={{
                             title: "Genie Code Response",
-                            text: msg.text.length > 280 ? msg.text.substring(0, 277) + "..." : msg.text,
+                            text: msg.text.substring(0, 300),
                             url: typeof window !== "undefined" ? window.location.href : undefined,
                           }}
-                          className="h-8 w-8 bg-background/50 hover:bg-background shadow-sm border"
+                          className="h-8 w-8 bg-background border rounded-full hover:bg-muted text-muted-foreground"
                         />
                       </div>
                     </>
                   ) : (
-                    <p className="whitespace-pre-wrap">{msg.text}</p> // User message text
+                    <p className="whitespace-pre-wrap">{msg.text}</p>
                   )}
                 </div>
-                {msg.role === "user" && (<Avatar className="h-8 w-8 mt-1 flex-shrink-0"><AvatarFallback><PersonIcon /></AvatarFallback></Avatar>)}
               </div>
-            ))}
-            {loading && <TypingIndicator />}
-            <div className="h-4" /> {/* Spacer */}
-          </div>
-        </ScrollArea>
+            </div>
+          ))}
 
-        {error && <div className="p-2 text-center"><p className="text-destructive text-sm bg-destructive/10 py-1 px-3 rounded-full inline-block">{error}</p></div>}
+          {loading && <TypingIndicator />}
 
-        {/* Footer */}
-        <div className="p-2 pt-0 md:p-4 max-w-4xl mx-auto w-full">
-          <div className="flex items-end gap-2 p-2 rounded-xl border bg-background shadow-xs focus-within:ring-1 focus-within:ring-ring transition-all">
-            <Button variant="ghost" size="icon" onClick={handleAttachClick} disabled={loading} aria-label="Attach code file" className="h-9 w-9 text-muted-foreground hover:text-primary shrink-0">
-              <Paperclip className="h-5 w-5" />
-            </Button>
+          {/* Error Message */}
+          {error && (
+            <div className="flex justify-center mb-4 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-2 text-destructive bg-destructive/5 border border-destructive/20 px-4 py-2 rounded-full text-sm">
+                <AlertCircle className="h-4 w-4" />
+                {error}
+              </div>
+            </div>
+          )}
+
+          {/* Invisible element to scroll to */}
+          <div ref={bottomRef} className="h-4" />
+        </div>
+      </div>
+
+      {/* Scroll to Bottom Button */}
+      {showScrollButton && (
+        <button
+          onClick={scrollToBottom}
+          className="fixed bottom-28 right-6 z-30 h-10 w-10 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-lg flex items-center justify-center transition-all duration-200 animate-in fade-in slide-in-from-bottom-2"
+          aria-label="Scroll to bottom"
+        >
+          <ArrowDown className="h-5 w-5" />
+        </button>
+      )}
+
+      {/* Input Area - Floating & Glassmorphism */}
+      <div className="flex-none w-full p-4 bg-gradient-to-t from-background via-background to-transparent pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="max-w-3xl mx-auto relative">
+          {/* File Preview Pill */}
+          {selectedFile && (
+            <div className="absolute -top-10 left-0 animate-in slide-in-from-bottom-2 fade-in">
+              <div className="flex items-center gap-2 bg-background border border-border shadow-sm px-3 py-1.5 rounded-full text-xs font-medium text-foreground">
+                <Paperclip className="h-3 w-3 text-green-500" />
+                <span className="max-w-[150px] truncate">{selectedFile.name}</span>
+                <button
+                  onClick={() => setSelectedFile(null)}
+                  className="text-muted-foreground hover:text-destructive transition-colors ml-1"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Input Container */}
+          <div className="relative flex items-end gap-2 bg-muted/40 hover:bg-muted/60 focus-within:bg-background focus-within:ring-2 focus-within:ring-green-500/20 border border-border/50 rounded-[26px] p-2 transition-all duration-200 shadow-sm">
             <input
               type="file"
               ref={fileInputRef}
@@ -293,43 +401,48 @@ export default function CodePage() {
               accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.md,text/plain"
             />
 
-            <div className="flex-1 min-w-0 flex flex-col justify-center">
-              {selectedFile && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md mb-1 w-fit max-w-full">
-                  <span className="truncate max-w-[150px]">{selectedFile.name}</span>
-                  <button onClick={() => setSelectedFile(null)} className="hover:text-destructive">×</button>
-                </div>
-              )}
-              <Textarea
-                rows={1}
-                placeholder={selectedFile ? "Add instructions..." : "Ask a coding question..."}
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                onKeyDown={handleKeyPress}
-                disabled={loading}
-                className="min-h-[24px] max-h-40 border-0 focus-visible:ring-0 resize-none p-0 bg-transparent text-sm font-mono leading-relaxed"
-              />
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleAttachClick}
+              disabled={loading}
+              className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 shrink-0"
+            >
+              <Paperclip className="h-5 w-5" />
+            </Button>
+
+            <Textarea
+              rows={1}
+              placeholder="Ask a coding question..."
+              value={userInput}
+              onChange={(e) => setUserInput(e.target.value)}
+              onKeyDown={handleKeyPress}
+              disabled={loading}
+              className="flex-1 min-h-[44px] max-h-32 py-3 bg-transparent border-0 focus-visible:ring-0 resize-none text-base leading-relaxed placeholder:text-muted-foreground/70 font-mono"
+            />
 
             <Button
               onClick={handleSendMessage}
               disabled={loading || (!userInput.trim() && !selectedFile)}
               size="icon"
-              aria-label="Send message"
-              className="h-9 w-9 shrink-0 shadow-none transition-transform active:scale-95"
+              className={cn(
+                "h-10 w-10 rounded-full shrink-0 transition-all duration-200",
+                (userInput.trim() || selectedFile)
+                  ? "bg-green-600 hover:bg-green-700 text-white shadow-md transform active:scale-95"
+                  : "bg-transparent text-muted-foreground hover:bg-muted/50"
+              )}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5"><path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" /></svg>
+              <SendHorizontal className="h-5 w-5" />
             </Button>
           </div>
-          <div className="text-[10px] text-muted-foreground text-center mt-2 hidden md:block">
-            AI generated code. Review before using.
+
+          <div className="text-center mt-2">
+            <p className="text-[10px] text-muted-foreground/60 font-medium">
+              AI generated code. Review before using.
+            </p>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-
-
-

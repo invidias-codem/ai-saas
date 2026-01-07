@@ -15,6 +15,7 @@ import {
   Cross2Icon
 } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
+import { LandingChat } from "@/components/landing-chat";
 
 const LandingPage = () => {
   const [isPricingOpen, setIsPricingOpen] = useState(false);
@@ -60,27 +61,32 @@ const LandingPage = () => {
       </header>
 
       <main className="relative z-10 flex-grow">
-        {/* Hero Section */}
-        <section className="pt-20 pb-20 px-4 text-center space-y-8 max-w-4xl mx-auto">
+        {/* Hero Section - Compact to fit chat above the fold */}
+        <section className="pt-8 pb-8 px-4 text-center space-y-4 max-w-4xl mx-auto">
           <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-white backdrop-blur-xl animate-fade-in">
             <span className="flex h-2 w-2 rounded-full bg-sky-400 mr-2"></span>
             The All-in-One AI Platform
           </div>
 
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-white tracking-tight leading-[1.1]">
-            Unleash Your Potential <br />
-            with <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">Genie AI</span>
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight leading-[1.1]">
+            Unleash Your Potential with <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">Genie AI</span>
           </h1>
 
-          <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-base sm:text-lg text-gray-400 max-w-2xl mx-auto leading-relaxed">
             Generate content, write code, compose music, and create videos in seconds.
             Streamline your workflow with the smartest AI assistant.
           </p>
 
-          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-4">
+          {/* Interactive Genie Chat */}
+          <div className="pt-4">
+            <LandingChat />
+          </div>
+
+          {/* Fallback CTA for users who prefer to sign up directly */}
+          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-6">
             <Link href="/dashboard" className="w-full sm:w-auto">
-              <Button size="lg" className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-full text-lg px-8 py-6 shadow-lg shadow-purple-500/25">
-                Start Generating For Free
+              <Button size="lg" className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white rounded-full text-sm px-6 py-4 border border-white/10">
+                Or skip to dashboard →
               </Button>
             </Link>
             {/* Mobile Pricing Button */}
@@ -92,9 +98,6 @@ const LandingPage = () => {
             >
               View Pricing
             </Button>
-            <div className="text-sm text-gray-500 mt-2 sm:mt-0 hidden sm:block">
-              No credit card required
-            </div>
           </div>
         </section>
 
@@ -173,14 +176,13 @@ const LandingPage = () => {
               title="Trusted and reviewed by Scout Forge"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:opacity-80 transition-opacity relative w-[250px] h-[54px] block"
+              className="hover:opacity-80 transition-opacity relative w-[400px] h-[86px] block"
             >
               <Image
-                src="https://scoutforge.net/wp-content/themes/wp-theme/assets/img/badges/badge-light.webp"
+                src="/scoutforge-badge.png"
                 alt="Trusted and Reviewed by Scout Forge"
                 fill
                 className="object-contain"
-                unoptimized={true}
               />
             </a>
           </div>

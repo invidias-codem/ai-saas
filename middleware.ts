@@ -11,19 +11,24 @@ export default authMiddleware({
   signUpUrl: process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL,
   afterSignInUrl: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL,
   afterSignUpUrl: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL, // Often the same as after-sign-in
-  
+
   publicRoutes: [
     "/", // Landing page
     "/sign-in",
     "/sign-up",
+    "/privacy",  // Privacy policy page - public
+    "/support",  // Support page - public
+    "/slack",    // Slack integration landing page - public
+    "/api/guest-chat",                        // Guest chat API - public for landing page
     "/api/integrations/slack/callback",      // Slack OAuth callback
     "/api/integrations/slack/events",        // Slack Events API
     "/api/integrations/slack/command",       // Slack slash commands
     "/api/integrations/slack/interactivity", // Slack interactivity (buttons, modals)
   ],
-  
+
   ignoredRoutes: [
     "/ws",
+    "/api/guest-chat",                        // Guest chat - no auth needed
     "/api/integrations/slack/callback",      // Also ignore for Slack redirects
     "/api/integrations/slack/events",        // Slack sends events without auth
     "/api/integrations/slack/command",       // Slack sends commands without auth
@@ -52,10 +57,17 @@ export default authMiddleware({
         headers: { "Content-Type": "application/json" },
       });
     }
-    
+
     // For all other protected pages, redirect to sign-in.
     const signInUrl = new URL("/sign-in", req.url);
     signInUrl.searchParams.set("redirect_url", req.url);
+
+    // Add a friendly indicator for blog pages so we can show a custom message
+    const isBlogRoute = req.nextUrl.pathname.startsWith("/blog");
+    if (isBlogRoute) {
+      signInUrl.searchParams.set("from", "blog");
+    }
+
     return NextResponse.redirect(signInUrl);
   },
 });
@@ -63,4 +75,3 @@ export default authMiddleware({
 export const config = {
   matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
 };
-
