@@ -31,7 +31,7 @@ function ImagePlaceholder({ title, category }: { title: string; category: string
 
 export function BlogCard({ post, featured = false }: BlogCardProps) {
   const [imageError, setImageError] = useState(false);
-  const category = BLOG_CATEGORIES[post.category];
+  const category = BLOG_CATEGORIES[post.category] || BLOG_CATEGORIES['industry-insights'];
 
   if (featured) {
     return (
@@ -119,7 +119,7 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          
+
           {/* Category Badge */}
           <div className="absolute top-4 left-4 z-10">
             <span className={cn(
