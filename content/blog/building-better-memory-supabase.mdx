@@ -1,0 +1,80 @@
+---
+title: "Under the Hood: Migrating Genie's Memory to Supabase"
+description: "A deep dive into how we re-architected Genie's memory system using Supabase and pgvector for semantic search and sub-second retrieval latency."
+publishedAt: "2026-01-11"
+author: "genie-team"
+category: "engineering"
+tags: ["supabase", "rag", "engineering", "memory", "postgres"]
+featured: true
+ogImage: "/blog/supabase-memory-og.png"
+---
+
+# Under the Hood: Migrating Genie's Memory to Supabase
+
+At Genie, our mission is to build an AI that doesn't just chat, but *collaborates*. A true collaborator remembers. They remember the API endpoint you discussed last week, the architectural decision you made yesterday, and the bug you've been fighting all morning.
+
+For a long time, Genie's memory was functional but limited. We relied on simple key-value stores and token-heavy context stuffing. It worked for short sessions, but as conversations grew, so did the latency—and the "amnesia."
+
+Today, we're sharing how we completely re-architected Genie's memory system using **Supabase** and **pgvector**, achieving semantic understanding and sub-second retrieval times.
+
+## The Problem with "Simple" Memory
+
+Our initial implementation was based on what we call "Session Context." Every time you sent a message, we'd bundle up the last $N$ messages and send them to the LLM.
+
+This had two major flaws:
+1.  **Context Window Limits**: We had to aggressively prune old messages. If you referenced a decision from 100 messages ago, Genie hallucinated or simply didn't know.
+2.  **Cost & Latency**: Sending massive context windows is expensive and slow.
+
+We needed a system that could store *infinite* history but only retrieve the *relevant* bits. We needed Retrieval-Augmented Generation (RAG).
+
+## Enter Supabase & pgvector
+
+We chose Supabase for three main reasons:
+1.  **Postgres is King**: It's robust, reliable, and we already know how to query it.
+2.  **pgvector**: The ability to store vector embeddings right next to our relational data (users, conversations) is a game-changer. No syncing data between a primary DB and a separate vector DB (like Pinecone or Weaviate).
+3.  **Real-time Capabilities**: We can push updates to the UI instantly when a memory is formed.
+
+### The New Architecture: "Memory Bank"
+
+We introduced a new concept called the **Memory Bank**. It's not just a log of chats; it's a crystallized knowledge graph.
+
+Here is the simplified schema we deployed:
+
+```sql
+create extension if not exists vector;
+
+create table memories (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id),
+  content text not null,
+  embedding vector(1536),
+  importance integer default 3,
+  created_at timestamptz default now()
+);
+```
+
+When you talk to Genie now, a background process (our "Cortex") runs asynchronously:
+1.  It analyzes your message.
+2.  It generates an embedding using OpenAI's `text-embedding-3-small`.
+3.  It performs a cosine similarity search against your `memories` table in Supabase.
+4.  It injects the top 5 most relevant memories into the system prompt.
+
+### The Results
+
+The shift has been dramatic.
+
+*   **Latency**: Retrieval takes <100ms. Code generation starts almost instantly.
+*   **Accuracy**: Genie can now recall file paths, variable names, and project constraints discussed weeks ago.
+*   **Developer Experience**: Dealing with standard SQL to debug memory issues is infinitely better than black-box vector stores.
+
+## What's Next? 2026 Roadmap
+
+This migration sets the stage for our ambitious 2026 roadmap. We are moving beyond "Chat" and into "Agency."
+
+Later this year, we'll be rolling out **Active Memory**—where Genie proactively updates its own knowledge base based on your code commits, not just your chat messages.
+
+Stay tuned. The memory upgrade is live for all users today.
+
+<Callout type="info" title="Try it out">
+Mention `@Genie` in your next thread and ask, "What was the API key format we decided on last week?" Watch the magic happen.
+</Callout>
