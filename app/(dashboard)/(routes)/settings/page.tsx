@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { Heading } from "@/components/heading";
-import { Github, Slack, Trello, Brain, AlertCircle, CheckCircle2, Trash2, RotateCw, Settings, Loader2 } from "lucide-react";
+import { Github, Slack, Trello, Brain, AlertCircle, CheckCircle2, Trash2, RotateCw, Settings, Loader2, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -87,6 +87,79 @@ const SettingsPage = () => {
   const [loading, setLoading] = useState(true);
   const [deletingFact, setDeletingFact] = useState<string | null>(null);
   const [extendingFact, setExtendingFact] = useState<string | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(true);
+  const [backfilling, setBackfilling] = useState(false);
+
+  const [togglingScope, setTogglingScope] = useState<string | null>(null);
+
+  // Add handler
+  const handleToggleScope = async (memoryId: string, currentScope: string) => {
+    try {
+      setTogglingScope(memoryId);
+      const newScope = currentScope === 'persistent' ? 'conversation' : 'persistent';
+      
+      const response = await fetch("/api/memory/scope", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ memoryId, scope: newScope }),
+      });
+      if (response.ok) {
+        setAnalytics((prev) =>
+          prev
+            ? {
+                ...prev,
+                facts: prev.facts.map((f) =>
+                  f.id === memoryId ? { ...f, scope: newScope } : f
+                ),
+              }
+            : null
+        );
+      }
+    } catch (error) {
+      console.error("Error toggling scope:", error);
+    } finally {
+      setTogglingScope(null);
+    }
+  };
+
+  // Fetch integration status on mount
+  useEffect(() => {
+    const checkIntegrationStatus = async () => {
+      if (!userId) return;
+
+      try {
+        const [githubRes, trelloRes] = await Promise.all([
+          fetch("/api/integrations/github/status"),
+          fetch("/api/integrations/trello/status"),
+        ]);
+
+        if (githubRes.ok) {
+          const githubData = await githubRes.json();
+          setIntegrations((prev) =>
+            prev.map((int) =>
+              int.id === "github" ? { ...int, connected: githubData.connected } : int
+            )
+          );
+        }
+
+        if (trelloRes.ok) {
+          const trelloData = await trelloRes.json();
+          setIntegrations((prev) =>
+            prev.map((int) =>
+              int.id === "trello" ? { ...int, connected: trelloData.connected } : int
+            )
+          );
+        }
+      } catch (error) {
+        console.error("Error checking integration status:", error);
+      } finally {
+        setCheckingStatus(false);
+      }
+    };
+
+    checkIntegrationStatus();
+  }, [userId]);
 
   // Fetch memory analytics
   useEffect(() => {
@@ -115,8 +188,61 @@ const SettingsPage = () => {
     fetchAnalytics();
   }, [userId]);
 
+  // Handle OAuth callbacks
+  useEffect(() => {
+    const handleOAuthCallback = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const hash = window.location.hash;
+
+      // Handle GitHub callback
+      if (params.get("github") === "connected") {
+        setIntegrations((prev) =>
+          prev.map((int) =>
+            int.id === "github" ? { ...int, connected: true } : int
+          )
+        );
+        // Clean up URL
+        window.history.replaceState({}, "", "/settings");
+      }
+
+      // Handle Trello callback
+      if (params.get("trello") === "connect" && hash) {
+        const tokenMatch = hash.match(/token=([^&]+)/);
+        if (tokenMatch) {
+          const token = tokenMatch[1];
+          try {
+            const response = await fetch("/api/integrations/trello/connect", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token }),
+            });
+
+            if (response.ok) {
+              setIntegrations((prev) =>
+                prev.map((int) =>
+                  int.id === "trello" ? { ...int, connected: true } : int
+                )
+              );
+            }
+          } catch (error) {
+            console.error("Error connecting Trello:", error);
+          }
+          // Clean up URL
+          window.history.replaceState({}, "", "/settings");
+        }
+      }
+    };
+
+    handleOAuthCallback();
+  }, []);
+
   const onConnect = (integrationId: string) => {
-    console.log(`Connecting to ${integrationId}...`);
+    // Redirect to OAuth flow
+    if (integrationId === "github") {
+      window.location.href = "/api/integrations/github/auth";
+    } else if (integrationId === "trello") {
+      window.location.href = "/api/integrations/trello/auth";
+    }
   };
 
   const handleDeleteFact = async (factId: string) => {
@@ -189,6 +315,34 @@ const SettingsPage = () => {
     }
   };
 
+  const handleBackfill = async () => {
+    try {
+      setBackfilling(true);
+      const response = await fetch("/api/memory/backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`Backfill complete: ${data.memoriesCreated} memories created from ${data.conversationsProcessed} conversations`);
+
+        // Refresh analytics to show new memories
+        const analyticsResponse = await fetch("/api/memory/analytics");
+        if (analyticsResponse.ok) {
+          const analyticsData = await analyticsResponse.json();
+          setAnalytics(analyticsData);
+        }
+      }
+    } catch (error) {
+      console.error("Error backfilling memories:", error);
+    } finally {
+      setBackfilling(false);
+    }
+  };
+
+
   const getTypeIcon = (type: string) => {
     const icons: Record<string, any> = {
       decision: CheckCircle2,
@@ -243,9 +397,31 @@ const SettingsPage = () => {
         {/* Memory Bank Section */}
         {analytics && (
           <Card className="p-6 border-black/5">
-            <div className="flex items-center gap-2 mb-4">
-              <Brain className="w-5 h-5 text-purple-600" />
-              <h3 className="text-lg font-semibold">Your Memory Bank</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Brain className="w-5 h-5 text-purple-600" />
+                <h3 className="text-lg font-semibold">Your Memory Bank</h3>
+              </div>
+              {analytics.totalFacts === 0 && (
+                <Button
+                  onClick={handleBackfill}
+                  disabled={backfilling}
+                  size="sm"
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  {backfilling ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Import Existing Conversations
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
 
             {/* Memory Stats */}

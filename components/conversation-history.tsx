@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { MessageSquare, Trash2, Plus, Loader2, Calendar, MessageCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,16 +37,20 @@ interface Conversation {
 }
 
 export function ConversationHistory() {
+    const router = useRouter();
+    const pathname = usePathname();
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [loading, setLoading] = useState(true);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [creatingNew, setCreatingNew] = useState(false);
-    const [activeId, setActiveId] = useState<string>("");
+    const [activeId, setActiveId] = useState<string | null>(null);
 
     useEffect(() => {
         loadConversations();
-        setActiveId(getActiveConversationId());
-    }, []);
+        // Extract conversation ID from URL
+        const match = pathname?.match(/\/conversation\/([^/]+)/);
+        setActiveId(match ? match[1] : null);
+    }, [pathname]);
 
     const loadConversations = async () => {
         setLoading(true);
@@ -67,10 +72,10 @@ export function ConversationHistory() {
             const success = await deleteConversation(id);
             if (success) {
                 setConversations((prev) => prev.filter((c) => c.id !== id));
-                // If we're deleting the active conversation, clear local storage too
+                // If we're deleting the active conversation, redirect to new conversation
                 if (id === activeId) {
                     clearSessionMemoryStorage();
-                    setActiveId("merged");
+                    router.push('/conversation/new');
                 }
             }
         } catch (error) {
@@ -83,14 +88,9 @@ export function ConversationHistory() {
     const handleNewConversation = async () => {
         setCreatingNew(true);
         try {
-            const newConv = await createNewConversation();
-            if (newConv) {
-                clearSessionMemoryStorage();
-                setActiveId(newConv.id);
-                loadConversations();
-                // Redirect to conversation page
-                window.location.href = "/conversation";
-            }
+            clearSessionMemoryStorage();
+            // Navigate to the new conversation route which will create and redirect
+            router.push('/conversation/new');
         } catch (error) {
             console.error("Error creating conversation:", error);
         } finally {
@@ -105,8 +105,8 @@ export function ConversationHistory() {
             createdAt: conv.createdAt,
         });
         setActiveId(conv.id);
-        // Redirect to conversation page
-        window.location.href = "/conversation";
+        // Navigate to the specific conversation URL
+        router.push(`/conversation/${conv.id}`);
     };
 
     const formatDate = (timestamp: number) => {

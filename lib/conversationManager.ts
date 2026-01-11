@@ -48,11 +48,11 @@ export function getActiveConversation(): ActiveConversation | null {
 
 /**
  * Get the active conversation ID only
- * Returns "merged" as fallback for backward compatibility
+ * Returns null if no conversation is set (no fallback to "merged")
  */
-export function getActiveConversationId(): string {
+export function getActiveConversationId(): string | null {
     const active = getActiveConversation();
-    return active?.id || 'merged';
+    return active?.id || null;
 }
 
 /**
@@ -81,6 +81,7 @@ export async function createNewConversation(title?: string): Promise<ActiveConve
             headers: {
                 'Content-Type': 'application/json',
             },
+            credentials: 'include', // Include cookies for Clerk auth
             body: title ? JSON.stringify({ title }) : undefined,
         });
 
@@ -114,6 +115,7 @@ export async function deleteConversation(conversationId: string): Promise<boolea
     try {
         const response = await fetch(`/api/conversations/${conversationId}`, {
             method: 'DELETE',
+            credentials: 'include', // Include cookies for Clerk auth
         });
 
         if (!response.ok) {
@@ -150,7 +152,9 @@ export async function fetchConversations(): Promise<{
     total: number;
 } | null> {
     try {
-        const response = await fetch('/api/conversations');
+        const response = await fetch('/api/conversations', {
+            credentials: 'include', // Include cookies for Clerk auth
+        });
 
         if (!response.ok) {
             console.error('[ConversationManager] Failed to fetch conversations:', response.statusText);
@@ -175,7 +179,9 @@ export async function loadConversation(conversationId: string): Promise<{
     lastUpdated: number;
 } | null> {
     try {
-        const response = await fetch(`/api/conversations/${conversationId}`);
+        const response = await fetch(`/api/conversations/${conversationId}`, {
+            credentials: 'include', // Include cookies for Clerk auth
+        });
 
         if (!response.ok) {
             console.error('[ConversationManager] Failed to load conversation:', response.statusText);

@@ -32,34 +32,37 @@ export async function POST(req: Request) {
             // No body is fine, use default title
         }
 
-        // Generate unique conversation ID
-        const conversationId = `conv_${Date.now()}_${uuidv4().substring(0, 8)}`;
-        const now = new Date();
+        // Import Supabase client dynamically to avoid circular deps if any
+        const { supabase } = await import("@/lib/supabaseClient");
 
-        // Create the conversation document
-        const conversationRef = db
-            .collection("users")
-            .doc(userId)
-            .collection("conversations")
-            .doc(conversationId);
+        if (!supabase) {
+            console.error("Supabase client not initialized. Missing environment variables.");
+            return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
+        }
 
-        await conversationRef.set({
-            title: initialTitle,
-            messages: [],
-            createdAt: now,
-            lastUpdated: now,
-            isArchived: false,
-            createdBy: "user", // vs "system" for auto-created
-            version: 1,
-        });
+        const { data, error } = await supabase
+            .from("conversations")
+            .insert({
+                user_id: userId,
+                title: initialTitle,
+                is_deleted: false,
+                is_archived: false,
+            })
+            .select()
+            .single();
 
-        console.log(`[API:Conversation:New] Created conversation ${conversationId} for user ${userId.substring(0, 8)}`);
+        if (error) {
+            console.error("[API:Conversation:New] Supabase Error:", error);
+            throw new Error("Failed to create conversation");
+        }
+
+        console.log(`[API:Conversation:New] Created conversation ${data.id} for user ${userId.substring(0, 8)}`);
 
         return NextResponse.json({
             success: true,
-            conversationId,
-            title: initialTitle,
-            createdAt: now.getTime(),
+            conversationId: data.id,
+            title: data.title,
+            createdAt: new Date(data.created_at).getTime(),
         });
     } catch (error) {
         console.error("[API:Conversation:New] Error:", error);

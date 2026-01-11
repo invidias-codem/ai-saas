@@ -17,168 +17,175 @@ interface RouteParams {
     params: { id: string };
 }
 
+interface DbMessage {
+    id: string;
+    content: string;
+    role: string;
+    created_at: string;
+    conversation_id: string;
+    user_id: string;
+}
+
 /**
  * GET - Load full conversation with all messages
  */
+// GET - Load full conversation
 export async function GET(req: Request, { params }: RouteParams) {
     try {
         const { userId } = await auth();
-
-        if (!userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const { id } = params;
+        if (!id) return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
 
-        if (!id) {
-            return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
+        const { supabase } = await import("@/lib/supabaseClient");
+
+        if (!supabase) {
+            return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
         }
 
-        const conversationRef = db
-            .collection("users")
-            .doc(userId)
-            .collection("conversations")
-            .doc(id);
+        // Fetch conversation metadata
+        const { data: conv, error: convError } = await supabase
+            .from("conversations")
+            .select("*")
+            .eq("id", id)
+            .single();
 
-        const doc = await conversationRef.get();
-
-        if (!doc.exists) {
+        if (convError || !conv) {
             return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
         }
 
-        const data = doc.data();
+        // Check ownership (RLS handles this usually, but good to be explicit if using service key or just safe)
+        if (conv.user_id !== userId) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        }
+
+        // Soft delete check
+        if (conv.is_deleted) {
+            return NextResponse.json({ error: "Conversation not found (deleted)" }, { status: 404 });
+        }
+
+        // Fetch messages
+        const { data: messages, error: msgError } = await supabase
+            .from("messages")
+            .select("*")
+            .eq("conversation_id", id)
+            .order("created_at", { ascending: true });
+
+        if (msgError) {
+            console.error("Error fetching messages:", msgError);
+            // Return empty messages if error
+        }
 
         return NextResponse.json({
-            id: doc.id,
-            title: data?.title || "Untitled Conversation",
-            messages: data?.messages || [],
-            createdAt: data?.createdAt?.toMillis?.() || data?.createdAt || Date.now(),
-            lastUpdated: data?.lastUpdated?.toMillis?.() || data?.lastUpdated || Date.now(),
-            isArchived: data?.isArchived || false,
+            id: conv.id,
+            title: conv.title,
+            messages: messages?.map((m: DbMessage) => ({
+                text: m.content,
+                role: m.role,
+                timestamp: new Date(m.created_at).getTime()
+            })) || [],
+            createdAt: new Date(conv.created_at).getTime(),
+            lastUpdated: new Date(conv.updated_at).getTime(),
+            isArchived: conv.is_archived
         });
     } catch (error) {
         console.error("[API:Conversation:GET] Error:", error);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
 
 /**
  * DELETE - Delete a conversation
  */
+// DELETE - Soft delete a conversation
 export async function DELETE(req: Request, { params }: RouteParams) {
     try {
         const { userId } = await auth();
-
-        if (!userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const { id } = params;
+        if (!id) return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
 
-        if (!id) {
-            return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
-        }
-
-        // Don't allow deleting the "merged" fallback conversation
         if (id === "merged") {
-            return NextResponse.json(
-                { error: "Cannot delete the default conversation. Use 'Clear' instead." },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "Cannot delete default conversation" }, { status: 400 });
         }
 
-        const conversationRef = db
-            .collection("users")
-            .doc(userId)
-            .collection("conversations")
-            .doc(id);
+        const { supabase } = await import("@/lib/supabaseClient");
 
-        const doc = await conversationRef.get();
+        // Verify existence and ownership
+        const { data: conv, error: checkError } = await supabase
+            .from("conversations")
+            .select("user_id")
+            .eq("id", id)
+            .single();
 
-        if (!doc.exists) {
-            return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+        if (checkError || !conv) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+        if (conv.user_id !== userId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+
+        // Perform Soft Delete
+        const { error: updateError } = await supabase
+            .from("conversations")
+            .update({ is_deleted: true })
+            .eq("id", id);
+
+        if (updateError) {
+            console.error("Error deleting conversation:", updateError);
+            throw new Error("Failed to delete");
         }
 
-        // Delete the conversation
-        await conversationRef.delete();
+        console.log(`[API:Conversation:DELETE] Soft-deleted conversation ${id}`);
 
-        console.log(`[API:Conversation:DELETE] Deleted conversation ${id} for user ${userId.substring(0, 8)}`);
-
-        return NextResponse.json({
-            success: true,
-            deletedId: id,
-        });
+        return NextResponse.json({ success: true, deletedId: id });
     } catch (error) {
         console.error("[API:Conversation:DELETE] Error:", error);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
 
 /**
  * PATCH - Update conversation (title, archive status)
  */
+// PATCH - Update conversation
 export async function PATCH(req: Request, { params }: RouteParams) {
     try {
         const { userId } = await auth();
-
-        if (!userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
+        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const { id } = params;
-
-        if (!id) {
-            return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
-        }
+        if (!id) return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
 
         const body = await req.json();
         const { title, isArchived } = body;
+        const updates: any = {};
 
-        const conversationRef = db
-            .collection("users")
-            .doc(userId)
-            .collection("conversations")
-            .doc(id);
+        if (title !== undefined) updates.title = title.substring(0, 100);
+        if (isArchived !== undefined) updates.is_archived = isArchived;
 
-        const doc = await conversationRef.get();
-
-        if (!doc.exists) {
-            return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+        if (Object.keys(updates).length === 0) {
+            return NextResponse.json({ success: true, id }); // Nothing to update
         }
 
-        // Build update object
-        const updates: Record<string, any> = {
-            lastUpdated: new Date(),
-        };
+        const { supabase } = await import("@/lib/supabaseClient");
 
-        if (title !== undefined) {
-            updates.title = title.substring(0, 100); // Limit title length
+        // Verify ownership first (optional if using RLS, but standard practice in backend)
+        const { data: conv, error: checkError } = await supabase.from("conversations").select("user_id").eq("id", id).single();
+        if (checkError || !conv) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+        if (conv.user_id !== userId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+
+        const { error: updateError } = await supabase
+            .from("conversations")
+            .update(updates)
+            .eq("id", id);
+
+        if (updateError) {
+            console.error("Error updating conversation:", updateError);
+            throw new Error("Failed to update");
         }
 
-        if (isArchived !== undefined) {
-            updates.isArchived = Boolean(isArchived);
-        }
-
-        await conversationRef.update(updates);
-
-        console.log(`[API:Conversation:PATCH] Updated conversation ${id} for user ${userId.substring(0, 8)}`);
-
-        return NextResponse.json({
-            success: true,
-            id,
-            ...updates,
-        });
+        return NextResponse.json({ success: true, id, ...updates });
     } catch (error) {
         console.error("[API:Conversation:PATCH] Error:", error);
-        return NextResponse.json(
-            { error: "Internal server error" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }

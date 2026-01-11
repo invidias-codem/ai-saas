@@ -247,7 +247,7 @@ export default function CodePage() {
 
       {/* Main Chat Area */}
       <div ref={chatContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden w-full scroll-smooth">
-        <div className="max-w-3xl mx-auto w-full px-4 py-6 md:px-6">
+        <div className="max-w-3xl mx-auto w-full px-4 py-6 md:px-6 min-h-0">
 
           {/* Greeting */}
           {showGreeting && (
@@ -290,9 +290,9 @@ export default function CodePage() {
 
                 {/* Content Bubble */}
                 <div className={cn(
-                  "relative text-[15px] leading-7",
+                  "relative text-sm md:text-base leading-relaxed break-words",
                   msg.role === "user"
-                    ? "bg-secondary text-secondary-foreground rounded-[20px] rounded-tr-sm px-5 py-3 shadow-sm"
+                    ? "bg-secondary text-secondary-foreground rounded-[20px] rounded-tr-sm px-4 py-3 md:px-5 md:py-4 shadow-sm"
                     : "bg-transparent text-foreground px-0 py-0"
                 )}>
                   {msg.role === "bot" ? (

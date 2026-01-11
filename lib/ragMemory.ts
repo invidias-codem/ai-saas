@@ -5,6 +5,7 @@
 
 import axios from 'axios';
 import { Message } from './schemas';
+import { searchMemories, storeMemory, getMemoryStats } from '@/lib/memory/vectorStore';
 
 /**
  * Fetch relevant memories from Cloud Function and format for prompt injection
@@ -15,29 +16,15 @@ export async function getRAGMemoryContext(
   featureType?: string
 ): Promise<string> {
   try {
-    if (!process.env.NEXT_PUBLIC_RAG_ENABLED || !process.env.RAG_CLOUD_FUNCTION_URL) {
-      return '';
-    }
+    // Replaced Cloud Function with Supabase Vector Search
+    const memories = await searchMemories(userId, query, 5);
 
-    const response = await axios.post(
-      `${process.env.RAG_CLOUD_FUNCTION_URL}/retrieveMemories`,
-      {
-        userId,
-        query,
-        featureType,
-        limit: parseInt(process.env.RAG_RETRIEVAL_LIMIT || '5'),
-      },
-      {
-        timeout: 5000, // 5 second timeout for RAG retrieval
-      }
-    );
-
-    if (!response.data.memories || response.data.memories.length === 0) {
+    if (memories.length === 0) {
       return '';
     }
 
     // Format memories for prompt injection
-    return formatMemoriesForPrompt(response.data.memories);
+    return formatMemoriesForPrompt(memories);
   } catch (error) {
     console.error('Error retrieving RAG memory context:', error);
     return ''; // Fail gracefully - don't block main request
@@ -87,32 +74,20 @@ export async function captureMemory(
   metadata?: Record<string, any>
 ): Promise<{ success: boolean; memoryId?: string; error?: string }> {
   try {
-    if (!process.env.RAG_CLOUD_FUNCTION_URL) {
-      console.warn('RAG_CLOUD_FUNCTION_URL not configured - skipping memory capture');
-      return { success: false, error: 'RAG not configured' };
+    // Replaced Cloud Function with Supabase Store
+    const memoryId = await storeMemory(userId, summary, 'conversation_summary', {
+      title,
+      featureType,
+      tags,
+      ...metadata,
+      tokensUsed
+    });
+
+    if (memoryId) {
+      return { success: true, memoryId };
+    } else {
+      return { success: false, error: "Failed to store memory" };
     }
-
-    const response = await axios.post(
-      `${process.env.RAG_CLOUD_FUNCTION_URL}/captureConversationMemory`,
-      {
-        userId,
-        featureType,
-        title,
-        summary,
-        messages,
-        tokensUsed,
-        tags,
-        metadata,
-      },
-      {
-        timeout: 10000, // 10 second timeout
-      }
-    );
-
-    return {
-      success: response.data.success,
-      memoryId: response.data.memoryId,
-    };
   } catch (error) {
     console.error('Error capturing memory:', error);
     // Don't throw - memory capture failure shouldn't block API response
@@ -291,39 +266,16 @@ export async function getMemoryStatistics(userId: string): Promise<{
   topTags: string[];
 }> {
   try {
-    if (!process.env.RAG_CLOUD_FUNCTION_URL) {
-      return {
-        totalMemories: 0,
-        totalTokensUsed: 0,
-        topFeatures: [],
-        topTags: [],
-      };
-    }
-
-    const response = await axios.post(
-      `${process.env.RAG_CLOUD_FUNCTION_URL}/getMemoryStats`,
-      { userId },
-      { timeout: 5000 }
-    );
-
-    if (response.data.success) {
-      return {
-        totalMemories: response.data.totalMemories || 0,
-        totalTokensUsed: response.data.totalTokensUsed || 0,
-        lastInteractionDate: response.data.lastInteractionDate
-          ? new Date(response.data.lastInteractionDate)
-          : undefined,
-        topFeatures: response.data.topFeatures || [],
-        topTags: response.data.topTags || [],
-      };
-    }
+    const stats = await getMemoryStats(userId);
 
     return {
-      totalMemories: 0,
-      totalTokensUsed: 0,
-      topFeatures: [],
-      topTags: [],
+      totalMemories: stats.totalMemories,
+      totalTokensUsed: 0, // Not yet fully tracked in aggregate
+      lastInteractionDate: stats.lastInteractionDate,
+      topFeatures: [], // Not yet implemented
+      topTags: [], // Not yet implemented
     };
+
   } catch (error) {
     console.error('Error fetching memory statistics:', error);
     return {
@@ -523,7 +475,7 @@ export async function getHighConfidenceFactsDirectly(
   try {
     // Dynamic import to avoid issues in server context
     const admin = await import('firebase-admin');
-    
+
     // Initialize if needed
     if (!admin.default.apps.length) {
       admin.default.initializeApp();
@@ -534,7 +486,7 @@ export async function getHighConfidenceFactsDirectly(
 
     // Query facts collection for user
     const factsRef = db.collection('users').doc(userId).collection('facts');
-    
+
     // Get facts ordered by confidence and recency
     const snapshot = await factsRef
       .orderBy('confidence', 'desc')
@@ -543,15 +495,15 @@ export async function getHighConfidenceFactsDirectly(
       .get();
 
     const facts: any[] = [];
-    
+
     snapshot.docs.forEach((doc) => {
       const data = doc.data();
-      
+
       // Skip soft-deleted facts
       if (data.isDeleted === true) {
         return;
       }
-      
+
       // Skip expired conversation facts
       if (data.expiresAt && data.expiresAt < now) {
         return;

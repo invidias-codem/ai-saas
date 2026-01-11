@@ -22,6 +22,7 @@ export interface ConversationMeta {
     preview?: string; // First ~50 chars of last message
 }
 
+// GET - List all conversations
 export async function GET() {
     try {
         const { userId } = await auth();
@@ -30,64 +31,73 @@ export async function GET() {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const conversationsRef = db.collection("users").doc(userId).collection("conversations");
-        const snapshot = await conversationsRef
-            .orderBy("lastUpdated", "desc")
-            .limit(50) // Limit to last 50 conversations
-            .get();
+        const { supabase } = await import("@/lib/supabaseClient");
 
-        if (snapshot.empty) {
-            return NextResponse.json({
-                conversations: [],
-                total: 0,
-            });
+        if (!supabase) {
+            console.error("Supabase client not initialized. Missing environment variables.");
+            return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
         }
 
-        const conversations: ConversationMeta[] = [];
+        // Fetch conversations
+        // IMPORTANT: We need message count and preview.
+        // Supabase doesn't have a direct "include messages" count unless we use a view or a separate query.
+        // For efficiency, we can query conversations first, then maybe messages or rely on the UI to load details.
+        // However, the interface demands messageCount and preview.
+        // To do this efficiently in one go without a complex join might be tricky if we don't have a summary table.
+        // For now, let's just fetch conversations and maybe the last message.
+        // Or, we can do a robust query if we had a join.
+        // A simple approach is: Select conversations, order by updated_at.
+        // For preview/message counting, we might need a separate function store it on the conversation record itself during updates.
+        // BUT, adhering to the current schema (conversations + messages tables), we might have to do N+1 or a join.
+        // Let's try to grab conversations.
 
-        snapshot.docs.forEach((doc) => {
-            const data = doc.data();
-            const messages = data.messages || [];
+        const { data: conversations, error } = await supabase
+            .from("conversations")
+            .select(`
+                *,
+                messages (
+                    content,
+                    created_at,
+                    role
+                )
+            `)
+            .eq("user_id", userId)
+            .eq("is_deleted", false)
+            .order("updated_at", { ascending: false })
+            .limit(50);
 
-            // Generate title from first user message if not set
-            let title = data.title;
-            if (!title) {
-                const firstUserMessage = messages.find((m: any) => m.role === "user");
-                if (firstUserMessage) {
-                    title = firstUserMessage.text?.substring(0, 50) || "New Conversation";
-                    if (firstUserMessage.text?.length > 50) {
-                        title += "...";
-                    }
-                } else {
-                    title = "New Conversation";
-                }
-            }
+        if (error) {
+            console.error("[API:Conversations] Supabase Error:", error);
+            throw new Error("Failed to fetch conversations");
+        }
 
-            // Get preview from last message
-            let preview: string | undefined;
-            if (messages.length > 0) {
-                const lastMessage = messages[messages.length - 1];
-                preview = lastMessage.text?.substring(0, 100);
-                if (lastMessage.text?.length > 100) {
-                    preview += "...";
-                }
-            }
+        const mappedConversations: ConversationMeta[] = conversations.map((c: any) => {
+            // In Supabase, if we joined, messages might be an array.
+            // We need to sort them client-side or use a better query if possible.
+            // Default sort order in join: usually unspecified unless we add .order() to the join, which supabase-js supports.
+            // Let's assume we get them and sort them by created_at here to be safe for preview generation.
+            const msgs = (c.messages || []).sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-            conversations.push({
-                id: doc.id,
-                title,
-                messageCount: messages.length || 0,
-                createdAt: data.createdAt?.toMillis?.() || data.createdAt || Date.now(),
-                lastUpdated: data.lastUpdated?.toMillis?.() || data.lastUpdated || Date.now(),
-                isArchived: data.isArchived || false,
-                preview,
-            });
+            const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+            let preview = lastMsg?.content.substring(0, 100);
+            if (lastMsg?.content.length > 100) preview += "...";
+
+            return {
+                id: c.id,
+                title: c.title,
+                messageCount: msgs.length,
+                createdAt: new Date(c.created_at).getTime(),
+                lastUpdated: new Date(c.updated_at).getTime(),
+                isArchived: c.is_archived,
+                preview
+            };
         });
 
         return NextResponse.json({
-            conversations,
-            total: conversations.length,
+            conversations: mappedConversations,
+            total: mappedConversations.length,
         });
+
     } catch (error) {
         console.error("[API:Conversations] Error fetching conversations:", error);
         return NextResponse.json(
