@@ -170,7 +170,7 @@ const DashboardPage = () => {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold">Memory Bank</h2>
-                    <p className="text-sm text-muted-foreground">Your AI's knowledge about you</p>
+                    <p className="text-sm text-muted-foreground">Your AI&apos;s knowledge about you</p>
                   </div>
                 </div>
                 {analytics.totalFacts === 0 && (
