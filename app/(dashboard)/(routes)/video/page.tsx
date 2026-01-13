@@ -39,7 +39,7 @@ const VideoPage = () => {
     defaultValues: {
       prompt: '',
       aspectRatio: "16:9",
-      duration: "4", 
+      duration: "4",
       resolution: "720p",
     },
   });
@@ -67,7 +67,7 @@ const VideoPage = () => {
             form.reset(); // Reset form on success
             clearInterval(interval);
             break;
-          
+
           case "failed":
           case "canceled":
             setStatus("failed");
@@ -75,11 +75,11 @@ const VideoPage = () => {
             setPredictionId(null); // Clear ID to stop polling
             clearInterval(interval);
             break;
-          
+
           case "starting":
           case "processing":
             // Still generating, do nothing and let the interval continue
-            setStatus("generating"); 
+            setStatus("generating");
             break;
         }
       } catch (err: any) {
@@ -100,7 +100,7 @@ const VideoPage = () => {
   // ✅ Updated Form submission handler
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setError(null);
-    setVideoUrl(null); 
+    setVideoUrl(null);
     setStatus("generating");
     setPredictionId(null); // Clear any old prediction ID
 
@@ -108,12 +108,12 @@ const VideoPage = () => {
       // Call the API to *start* the prediction
       console.log("Sending data to /api/video:", values);
       // ✅ Expect the initial prediction object in response
-      const response = await axios.post<ReplicatePrediction>("/api/video", values); 
+      const response = await axios.post<ReplicatePrediction>("/api/video", values);
       const prediction = response.data;
 
       if (prediction && prediction.id) {
         // ✅ Set the prediction ID to start polling
-        setPredictionId(prediction.id); 
+        setPredictionId(prediction.id);
       } else {
         throw new Error("API response did not contain a prediction ID.");
       }
@@ -126,11 +126,11 @@ const VideoPage = () => {
     }
   };
 
-   // Helper function for status messages
-   const getStatusMessage = (): string => {
+  // Helper function for status messages
+  const getStatusMessage = (): string => {
     switch (status) {
       // ✅ Updated generating message
-      case "generating": return "Genie is creating your video... this may take a moment."; 
+      case "generating": return "Genie is creating your video... this may take a moment.";
       case "completed": return "Your video is ready!";
       case "failed": return "Video generation failed.";
       default: return "Generate a video based on your prompt.";
@@ -150,19 +150,20 @@ const VideoPage = () => {
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="rounded-lg border w-full p-4 px-3 md:px-6 focus-within:shadow-sm grid grid-cols-12 gap-2"
+            className="relative rounded-2xl border border-pink-700/20 bg-gradient-to-br from-background via-background to-pink-700/5 backdrop-blur-xl w-full p-6 shadow-2xl shadow-pink-700/10 hover:shadow-pink-700/20 transition-all duration-300 flex flex-col md:flex-row flex-wrap gap-4 items-end"
           >
+            <div className="absolute inset-0 bg-gradient-to-r from-pink-700/5 via-transparent to-rose-500/5 rounded-2xl pointer-events-none" />
             {/* --- PROMPT FIELD --- */}
             <FormField
               control={form.control}
               name="prompt"
               render={({ field }) => (
-                <FormItem className='col-span-12 lg:col-span-6'>
+                <FormItem className='w-full relative z-10'>
                   <FormControl className='m-0 p-0'>
                     <Input
-                      className='border-0 outline-none focus-visible:ring-0 focus-visible:ring-transparent'
+                      className='border-0 bg-background/50 backdrop-blur-sm outline-none focus-visible:ring-2 focus-visible:ring-pink-700/50 rounded-xl px-4 py-3 transition-all duration-200'
                       disabled={isLoading}
-                      placeholder="e.g., A drone flying over a futuristic city at sunset"
+                      placeholder="🎬 Describe your scene... (e.g., A drone flying over a futuristic city at sunset)"
                       {...field}
                     />
                   </FormControl>
@@ -175,7 +176,7 @@ const VideoPage = () => {
               control={form.control}
               name="aspectRatio"
               render={({ field }) => (
-                <FormItem className="col-span-6 md:col-span-3 lg:col-span-2">
+                <FormItem className="flex-1 min-w-[120px] relative z-10">
                   <Select
                     disabled={isLoading}
                     onValueChange={field.onChange}
@@ -183,13 +184,13 @@ const VideoPage = () => {
                     defaultValue={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-background/50 backdrop-blur-sm border-pink-700/20 rounded-xl hover:border-pink-700/40 transition-colors">
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent className="bg-background/95 backdrop-blur-xl border-pink-700/20">
                       {aspectRatioOptions.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
+                        <SelectItem key={opt.value} value={opt.value} className="hover:bg-pink-700/10">
                           {opt.label}
                         </SelectItem>
                       ))}
@@ -204,7 +205,7 @@ const VideoPage = () => {
               control={form.control}
               name="duration"
               render={({ field }) => (
-                <FormItem className="col-span-6 md:col-span-3 lg:col-span-2">
+                <FormItem className="flex-1 min-w-[120px] relative z-10">
                   <Select
                     disabled={isLoading}
                     onValueChange={field.onChange}
@@ -212,13 +213,13 @@ const VideoPage = () => {
                     defaultValue={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-background/50 backdrop-blur-sm border-pink-700/20 rounded-xl hover:border-pink-700/40 transition-colors">
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent className="bg-background/95 backdrop-blur-xl border-pink-700/20">
                       {durationOptions.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
+                        <SelectItem key={opt.value} value={opt.value} className="hover:bg-pink-700/10">
                           {opt.label}
                         </SelectItem>
                       ))}
@@ -230,41 +231,68 @@ const VideoPage = () => {
 
             {/* --- GENERATE BUTTON --- */}
             <Button
-              className="col-span-12 lg:col-span-2 w-full"
+              className="w-full md:w-auto min-w-[120px] relative z-10 bg-gradient-to-r from-pink-700 to-rose-600 hover:from-pink-600 hover:to-rose-500 text-white shadow-lg shadow-pink-700/30 hover:shadow-pink-700/50 transition-all duration-300 rounded-xl font-semibold"
               type="submit"
               disabled={isLoading}
             >
-              Generate
+              {isLoading ? (
+                <span className="flex items-center gap-2">
+                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Generating...
+                </span>
+              ) : (
+                "🎬 Generate"
+              )}
             </Button>
           </form>
         </Form>
       </div>
 
-      {/* --- RENDER AREA (This logic remains the same as it's driven by 'status') --- */}
-      <div className='space-y-4 mt-4 px-4 lg:px-8'>
+      {/* --- RENDER AREA --- */}
+      <div className='space-y-6 mt-8 px-4 lg:px-8'>
         {/* Loading/Status Message */}
         {isLoading && (
-           <div className="p-8 rounded-lg w-full flex items-center justify-center bg-muted">
-            <EmptyState label={getStatusMessage()} />
+          <div className="relative rounded-2xl border border-pink-700/20 bg-gradient-to-br from-background to-pink-700/5 p-16 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-pink-700/10 via-rose-500/10 to-pink-700/10 animate-pulse" />
+            <div className="relative flex flex-col items-center justify-center gap-4">
+              <div className="relative">
+                <div className="absolute inset-0 bg-pink-700/30 blur-xl rounded-full animate-pulse" />
+                <div className="relative h-16 w-16 border-4 border-pink-700/30 border-t-pink-700 rounded-full animate-spin" />
+              </div>
+              <div className="text-center space-y-2">
+                <p className="text-lg font-semibold bg-gradient-to-r from-pink-700 to-rose-600 bg-clip-text text-transparent">
+                  {getStatusMessage()}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Crafting your cinematic moment 🎬
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
         {/* Error State */}
-        {error && <p className="text-red-500 text-center p-4">{error}</p>}
+        {error && (
+          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-8">
+            <p className="text-red-500 text-center">{error}</p>
+          </div>
+        )}
 
         {/* Idle/Empty State */}
         {status === "idle" && !isLoading && !error && !videoUrl && (
-            <EmptyState label={getStatusMessage()}/>
+          <div className="rounded-2xl border border-pink-700/10 bg-gradient-to-br from-background to-pink-700/5 p-12">
+            <EmptyState label="Ready to create your video! 🎬" />
+          </div>
         )}
 
         {/* Completed State */}
         {status === "completed" && videoUrl && (
           <div className="flex flex-col items-center gap-6 mt-8">
-            <div className="w-full max-w-2xl">
+            <div className="w-full max-w-2xl rounded-2xl overflow-hidden border border-pink-700/20 bg-gradient-to-br from-background to-pink-700/5 p-4 shadow-2xl shadow-pink-700/10">
               <video
                 controls
                 controlsList="nodownload noremoteplayback"
-                className="w-full rounded-lg shadow-md mb-4"
+                className="w-full rounded-xl shadow-lg mb-4"
                 src={videoUrl}
               >
                 Your browser does not support the video tag.
@@ -275,7 +303,7 @@ const VideoPage = () => {
                   download={`genie-video-${Date.now()}.mp4`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                  className="flex-1 inline-flex items-center justify-center px-4 py-3 bg-gradient-to-r from-pink-700 to-rose-600 hover:from-pink-600 hover:to-rose-500 text-white shadow-lg shadow-pink-700/30 hover:shadow-pink-700/50 transition-all duration-300 rounded-xl font-semibold"
                 >
                   <DownloadIcon className="mr-2 h-4 w-4" /> Download Video
                 </a>
@@ -286,6 +314,7 @@ const VideoPage = () => {
                     url: videoUrl,
                   }}
                   variant="outline"
+                  className="bg-background/50 backdrop-blur-sm border-pink-700/20 hover:border-pink-700/40 rounded-xl"
                 />
               </div>
             </div>

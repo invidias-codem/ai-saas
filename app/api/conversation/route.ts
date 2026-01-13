@@ -95,7 +95,10 @@ export async function POST(req: Request) {
       messages: z.array(z.object({
         role: z.string(),
         text: z.string()
-      })).min(1, "Messages are required")
+      })).min(1, "Messages are required"),
+      fileData: z.string().optional(),
+      fileName: z.string().optional(),
+      mimeType: z.string().optional()
     });
 
     const validationResult = chatSchema.safeParse(body);
@@ -110,7 +113,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const { messages } = validationResult.data;
+    const { messages, fileData, mimeType } = validationResult.data;
 
     // ✅ Gather comprehensive user context
     const userContext = await gatherUserContext(userId, clerkUser);
@@ -212,7 +215,19 @@ export async function POST(req: Request) {
       },
     });
 
-    const result = await chat.sendMessage(enhancedPromptText);
+    // [NEW] Multimodal Support: Add file data if present
+    const promptParts: any[] = [enhancedPromptText];
+    if (fileData && mimeType) {
+      console.log(`[Multimodal] Attaching file (${mimeType}) of length ${fileData.length}`);
+      promptParts.push({
+        inlineData: {
+          data: fileData,
+          mimeType: mimeType
+        }
+      });
+    }
+
+    const result = await chat.sendMessage(promptParts);
     const responseText = result.response.text();
 
     // ✅ Capture this interaction for future context

@@ -369,35 +369,10 @@ export async function getHighConfidenceFacts(
   limit = 10
 ): Promise<any[]> {
   try {
-    // Try Cloud Function first if configured
-    if (process.env.NEXT_PUBLIC_RAG_ENABLED && process.env.RAG_CLOUD_FUNCTION_URL) {
-      try {
-        const response = await axios.post(
-          `${process.env.RAG_CLOUD_FUNCTION_URL}/retrieveFacts`,
-          {
-            userId,
-            limit,
-          },
-          {
-            timeout: 3000,
-          }
-        );
-
-        const facts = response.data.facts || [];
-        if (facts.length > 0) {
-          return facts;
-        }
-      } catch (cloudFunctionError) {
-        console.warn('Cloud Function retrieval failed, falling back to direct Firestore:', cloudFunctionError);
-        // Fall through to direct Firestore retrieval
-      }
-    }
-
-    // Fallback: Direct Firestore retrieval
-    console.log('Using direct Firestore retrieval for facts');
+    // Direct retrieval (Cloud Function deprecated)
     return await getHighConfidenceFactsDirectly(userId, limit);
   } catch (error) {
-    console.error('Error retrieving facts (all methods failed):', error);
+    console.error('Error retrieving facts:', error);
     return [];
   }
 }

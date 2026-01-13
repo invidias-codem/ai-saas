@@ -71,7 +71,7 @@ export async function searchWeb(query: string, limit: number = 3): Promise<Searc
             limit: limit
         }, {
             headers,
-            timeout: 30000 // 30 second timeout
+            timeout: 10000 // 10 second timeout for search
         });
 
         // Normalize response
@@ -135,7 +135,7 @@ export async function crawlUrl(url: string): Promise<CrawlResult | null> {
         console.log(`[AnyCrawl] Scraping: ${url}`);
         const response = await axios.post(`${ANYCRAWL_API_URL}/v1/scrape`, body, {
             headers,
-            timeout: 30000 // 30 second timeout
+            timeout: 15000 // 15 second timeout for scrape
         });
 
         console.log(`[AnyCrawl] Scrape response status:`, response.status);

@@ -27,7 +27,7 @@ export async function storeMemory(
         const embedding = await generateEmbedding(content);
 
         const { data, error } = await supabase
-            .from('memories')
+            .from('memory_bank')
             .insert({
                 user_id: userId,
                 content,
@@ -101,7 +101,7 @@ export async function getMemoryStats(userId: string): Promise<{
     try {
         // Get count
         const { count, error: countError } = await supabase
-            .from('memories')
+            .from('memory_bank')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', userId);
 
@@ -109,7 +109,7 @@ export async function getMemoryStats(userId: string): Promise<{
 
         // Get last interaction
         const { data: lastMemory, error: lastError } = await supabase
-            .from('memories')
+            .from('memory_bank')
             .select('created_at')
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
@@ -134,7 +134,7 @@ export async function getMemoryStats(userId: string): Promise<{
 export async function getMemoryCount(userId: string): Promise<number> {
     try {
         const { count, error } = await supabase
-            .from('memories')
+            .from('memory_bank')
             .select('*', { count: 'exact', head: true })
             .eq('user_id', userId);
 

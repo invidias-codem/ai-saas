@@ -7,6 +7,7 @@ import {
     isNewsQuery, getNews, formatNewsAsSearchResult,
     isStockQuery, getStockQuote, formatStockAsSearchResult
 } from '../integrations/fallbackApis';
+import { searchArxiv, analyzePaperWithGemini } from '../integrations/academic';
 import { env } from '@/lib/env';
 
 // Initialize a lightweight model for decision making
@@ -99,6 +100,44 @@ export async function performResearch(userQuery: string, conversationContext: st
                         url: 'https://www.alphavantage.co',
                         snippet: formatStockAsSearchResult(quote)
                     }]
+                };
+            }
+        }
+
+        // --- Academic Research (arXiv + Gemini Multimodal) ---
+        const academicCheck = isAcademicQuery(userQuery);
+        if (academicCheck.isAcademic && academicCheck.topic) {
+            console.log('[Researcher] Detected academic query, checking arXiv...');
+            const papers = await searchArxiv(academicCheck.topic);
+
+            if (papers.length > 0) {
+                // Check if user wants deep analysis (multimodal)
+                const wantsAnalysis = /analyze|explain|break down|deep dive|study/i.test(userQuery);
+
+                if (wantsAnalysis) {
+                    console.log('[Researcher] Performing deep multimodal analysis on top paper...');
+                    const topPaper = papers[0];
+                    const analysis = await analyzePaperWithGemini(topPaper.pdfUrl, userQuery);
+                    return {
+                        needsSearch: true,
+                        queries: [`analysis of ${topPaper.title}`],
+                        results: [{
+                            title: `Multimodal Analysis: ${topPaper.title}`,
+                            url: topPaper.pdfUrl,
+                            snippet: `## Deep Analysis (Gemini Vision)\n\n${analysis}\n\n### Source Abstract\n${topPaper.summary}`
+                        }]
+                    };
+                }
+
+                // Default: Return list of papers
+                return {
+                    needsSearch: true,
+                    queries: [`arxiv ${academicCheck.topic}`],
+                    results: papers.map(p => ({
+                        title: `[Paper] ${p.title}`,
+                        url: p.pdfUrl,
+                        snippet: `**Published**: ${p.publishedAt}\n**Authors**: ${p.authors.join(', ')}\n\n${p.summary}`
+                    }))
                 };
             }
         }
@@ -202,4 +241,34 @@ export function formatSearchResults(results: SearchResult[]): string {
 
     output += 'Use the above search results to provide an up-to-date and accurate answer.\n';
     return output;
+}
+
+/**
+ * Detects if a query is academic/research focused.
+ */
+function isAcademicQuery(query: string): { isAcademic: boolean; topic: string | null } {
+    const academicPatterns = [
+        /(?:latest\s+)?research\s+(?:papers?|about|on|for)\s+(.+)/i,
+        /(?:find|search|show)\s+(?:arxiv|scholar|academic)\s+(?:papers?\s+)?(?:about|on)\s+(.+)/i,
+        /analysis\s+of\s+(?:the\s+)?paper\s+(.+)/i,
+        /study\s+(?:about|on)\s+(.+)/i
+    ];
+
+    for (const pattern of academicPatterns) {
+        const match = query.match(pattern);
+        if (match && match[1]) {
+            // Clean up topic: remove leading prepositions and trailing punctuation
+            const cleanTopic = match[1].trim().replace(/^(on|about|for|in)\s+/i, '').replace(/[?!.]+$/, '');
+            return { isAcademic: true, topic: cleanTopic };
+        }
+    }
+
+    // Fallback: Check for specific keywords
+    if (/arxiv|scholar|research paper|bibliography/i.test(query)) {
+        // Simple extraction: remove keywords
+        const topic = query.replace(/arxiv|scholar|research paper|bibliography|find|search|show|me/gi, '').trim();
+        return { isAcademic: true, topic };
+    }
+
+    return { isAcademic: false, topic: null };
 }

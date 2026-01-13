@@ -118,7 +118,7 @@ const ImagePage = () => {
     try {
       // ✅ Corrected API endpoint to /api/image
       const response = await axios.post<ReplicatePrediction[]>("/api/image", values);
-      
+
       const ids = response.data.map(p => p.id);
       setPredictionIds(ids);
 
@@ -148,17 +148,18 @@ const ImagePage = () => {
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="rounded-lg border w-full p-4 px-3 md:px-6 focus-within:shadow-sm grid grid-cols-12 gap-2"
+            className="relative rounded-2xl border border-violet-500/20 bg-gradient-to-br from-background via-background to-violet-500/5 backdrop-blur-xl w-full p-6 shadow-2xl shadow-violet-500/10 hover:shadow-violet-500/20 transition-all duration-300 flex flex-col md:flex-row flex-wrap gap-4 items-end"
           >
+            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-purple-500/5 rounded-2xl pointer-events-none" />
             <FormField
               name="prompt"
               render={({ field }) => (
-                <FormItem className="col-span-12 lg:col-span-6">
+                <FormItem className="w-full lg:flex-1 relative z-10">
                   <FormControl className="m-0 p-0">
                     <Input
-                      className="border-0 outline-none focus-visible:ring-0 focus-visible:ring-transparent"
+                      className="border-0 bg-background/50 backdrop-blur-sm outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 rounded-xl px-4 py-3 transition-all duration-200"
                       disabled={isLoading}
-                      placeholder="Alpacas in the style of Picasso"
+                      placeholder="✨ Describe your vision... (e.g., Alpacas in the style of Picasso)"
                       {...field}
                     />
                   </FormControl>
@@ -169,7 +170,7 @@ const ImagePage = () => {
               control={form.control}
               name="amount"
               render={({ field }) => (
-                <FormItem className="col-span-12 lg:col-span-2">
+                <FormItem className="flex-1 lg:flex-none min-w-[120px] relative z-10">
                   <Select
                     disabled={isLoading}
                     onValueChange={field.onChange}
@@ -177,13 +178,13 @@ const ImagePage = () => {
                     defaultValue={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
                         <SelectValue defaultValue={field.value} />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
                       {amountOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
+                        <SelectItem key={option.value} value={option.value} className="hover:bg-violet-500/10">
                           {option.label}
                         </SelectItem>
                       ))}
@@ -196,7 +197,7 @@ const ImagePage = () => {
               control={form.control}
               name="resolution"
               render={({ field }) => (
-                <FormItem className="col-span-12 lg:col-span-2">
+                <FormItem className="flex-1 lg:flex-none min-w-[120px] relative z-10">
                   <Select
                     disabled={isLoading}
                     onValueChange={field.onChange}
@@ -204,13 +205,13 @@ const ImagePage = () => {
                     defaultValue={field.value}
                   >
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
                         <SelectValue defaultValue={field.value} />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
                       {resolutionOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
+                        <SelectItem key={option.value} value={option.value} className="hover:bg-violet-500/10">
                           {option.label}
                         </SelectItem>
                       ))}
@@ -220,57 +221,83 @@ const ImagePage = () => {
               )}
             />
             <Button
-              className="col-span-12 lg:col-span-2 w-full"
+              className="w-full md:w-auto min-w-[120px] relative z-10 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition-all duration-300 rounded-xl font-semibold"
               type="submit"
               disabled={isLoading}
             >
-              Generate
+              {isLoading ? (
+                <span className="flex items-center gap-2">
+                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Generating...
+                </span>
+              ) : (
+                "✨ Generate"
+              )}
             </Button>
           </form>
         </Form>
       </div>
 
       {/* Output Area */}
-      <div className="space-y-4 mt-4 px-4 lg:px-8">
+      <div className="space-y-6 mt-8 px-4 lg:px-8">
         {isLoading && (
-          <div className="p-20">
-            <div className="flex flex-col items-center justify-center">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-500" />
-              <p className="text-sm text-muted-foreground mt-2">
-                AI is thinking...
-              </p>
+          <div className="relative rounded-2xl border border-violet-500/20 bg-gradient-to-br from-background to-violet-500/5 p-16 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-violet-500/10 animate-pulse" />
+            <div className="relative flex flex-col items-center justify-center gap-4">
+              <div className="relative">
+                <div className="absolute inset-0 bg-violet-500/30 blur-xl rounded-full animate-pulse" />
+                <div className="relative h-16 w-16 border-4 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+              </div>
+              <div className="text-center space-y-2">
+                <p className="text-lg font-semibold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+                  Creating your masterpiece...
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  AI is painting your vision into reality ✨
+                </p>
+              </div>
             </div>
           </div>
         )}
         {error && !isLoading && (
-           <EmptyState label={error} />
+          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-8">
+            <EmptyState label={error} />
+          </div>
         )}
         {images.length === 0 && !isLoading && !error && (
-          <EmptyState label="No images generated yet." />
+          <div className="rounded-2xl border border-violet-500/10 bg-gradient-to-br from-background to-violet-500/5 p-12">
+            <EmptyState label="No images generated yet. Start creating! 🎨" />
+          </div>
         )}
         {images.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-8">
             {images.map((src, index) => (
-              <Card key={src} className="rounded-lg overflow-hidden group">
-                <div className="relative aspect-square">
-                  <Image alt="Generated Image" fill src={src} />
+              <Card key={src} className="group relative rounded-2xl overflow-hidden border border-violet-500/10 bg-gradient-to-br from-background to-violet-500/5 hover:border-violet-500/30 transition-all duration-500 hover:scale-[1.02] hover:shadow-2xl hover:shadow-violet-500/20">
+                <div className="relative aspect-square overflow-hidden">
+                  <Image
+                    alt="Generated Image"
+                    fill
+                    src={src}
+                    className="object-cover transition-transform duration-700 group-hover:scale-110"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   {/* Share button overlay - appears on hover */}
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
                     <ShareIconButton
                       content={{
                         title: "AI Generated Image by Genie",
                         text: `Check out this AI-generated image I created with Genie! 🎨`,
                         url: src,
                       }}
-                      className="bg-background/80 backdrop-blur-sm shadow-sm border"
+                      className="bg-background/90 backdrop-blur-md shadow-lg border-violet-500/20 hover:bg-background hover:scale-110 transition-all"
                     />
                   </div>
                 </div>
-                <CardFooter className="p-2 gap-2">
+                <CardFooter className="p-3 gap-2 bg-background/50 backdrop-blur-sm">
                   <Button
                     onClick={() => window.open(src)}
                     variant="secondary"
-                    className="flex-1"
+                    className="flex-1 bg-gradient-to-r from-violet-600/10 to-purple-600/10 hover:from-violet-600/20 hover:to-purple-600/20 border-violet-500/20 rounded-xl transition-all duration-300"
                   >
                     <DownloadIcon className="h-4 w-4 mr-2" />
                     Download
@@ -281,7 +308,7 @@ const ImagePage = () => {
                       text: `Check out this AI-generated image I created with Genie! 🎨`,
                       url: src,
                     }}
-                    className="md:hidden" // Show on mobile, hide on desktop (hover works there)
+                    className="md:hidden bg-background/90 backdrop-blur-md border-violet-500/20"
                   />
                 </CardFooter>
               </Card>

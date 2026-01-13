@@ -60,7 +60,7 @@ const MusicPage = () => {
             form.reset();
             clearInterval(interval);
             break;
-          
+
           case "failed":
           case "canceled":
             setError(prediction.error?.detail || "Music generation failed.");
@@ -89,7 +89,7 @@ const MusicPage = () => {
 
   // ✅ Updated handleSubmit to *start* the prediction
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
-    setError(null); 
+    setError(null);
     setMusicUrl(null);
     setIsLoading(true); // Start loading
     setPredictionId(null); // Clear old ID
@@ -126,19 +126,19 @@ const MusicPage = () => {
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(handleSubmit)}
-            className="rounded-lg border w-full p-4 px-3
-            md:px-6 focus-within:shadow-sm grid grid-cols-12 gap-2"
+            className="relative rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background via-background to-emerald-500/5 backdrop-blur-xl w-full p-6 shadow-2xl shadow-emerald-500/10 hover:shadow-emerald-500/20 transition-all duration-300 flex flex-col md:flex-row gap-4 items-center"
           >
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-transparent to-teal-500/5 rounded-2xl pointer-events-none" />
             <FormField
               control={form.control}
               name="prompt"
               render={({ field }) => (
-                <FormItem className='col-span-12 lg:col-span-10'>
+                <FormItem className='w-full relative z-10'>
                   <FormControl className='m-0 p-0'>
                     <Input
-                      className='border-0 outline-none focus-visible:ring-0 focus-visible:ring-transparent'
-                      disabled={isLoading} // ✅ Use loading state
-                      placeholder="Generate a relaxing lofi beat..."
+                      className='border-0 bg-background/50 backdrop-blur-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-xl px-4 py-3 transition-all duration-200'
+                      disabled={isLoading}
+                      placeholder="🎵 Describe your sound... (e.g., Generate a relaxing lofi beat...)"
                       {...field}
                     />
                   </FormControl>
@@ -146,37 +146,65 @@ const MusicPage = () => {
               )}
             />
             <Button
-              className="col-span-12 lg:col-span-2 w-full"
-              disabled={isLoading} // ✅ Use loading state
+              className="w-full md:w-auto min-w-[120px] relative z-10 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all duration-300 rounded-xl font-semibold"
+              disabled={isLoading}
             >
-              Generate
+              {isLoading ? (
+                <span className="flex items-center gap-2">
+                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Generating...
+                </span>
+              ) : (
+                "🎵 Generate"
+              )}
             </Button>
           </form>
         </Form>
       </div>
 
-      <div className='space-y-4 mt-4 px-4 lg:px-8'>
+      <div className='space-y-6 mt-8 px-4 lg:px-8'>
         {isLoading && (
-           <div className="p-8 rounded-lg w-full flex items-center justify-center bg-muted">
-            <EmptyState label={'Genie is composing your track...'} />
+          <div className="relative rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-16 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 animate-pulse" />
+            <div className="relative flex flex-col items-center justify-center gap-4">
+              <div className="relative">
+                <div className="absolute inset-0 bg-emerald-500/30 blur-xl rounded-full animate-pulse" />
+                <div className="relative h-16 w-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+              </div>
+              <div className="text-center space-y-2">
+                <p className="text-lg font-semibold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+                  Composing your track...
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  AI is crafting your musical masterpiece 🎵
+                </p>
+              </div>
+            </div>
           </div>
         )}
-        
-        {error && <p className="text-red-500 text-center p-4">{error}</p>}
+
+        {error && (
+          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-8">
+            <p className="text-red-500 text-center">{error}</p>
+          </div>
+        )}
 
         {!musicUrl && !isLoading && !error && (
-            <EmptyState label={'No music generated yet.'}/>
+          <div className="rounded-2xl border border-emerald-500/10 bg-gradient-to-br from-background to-emerald-500/5 p-12">
+            <EmptyState label={'No music generated yet. Start creating! 🎵'} />
+          </div>
         )}
         {musicUrl && (
-          <div className="mt-8 space-y-4">
-            <audio controls className='w-full'>
-              <source src={musicUrl} type="audio/mpeg" /> 
+          <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-6 shadow-2xl shadow-emerald-500/10">
+            <audio controls className='w-full rounded-xl mb-4 shadow-lg'>
+              <source src={musicUrl} type="audio/mpeg" />
               Your browser does not support the audio element.
             </audio>
             <div className="flex justify-center gap-2">
               <Button
                 onClick={() => window.open(musicUrl)}
                 variant="secondary"
+                className="bg-gradient-to-r from-emerald-600/10 to-teal-600/10 hover:from-emerald-600/20 hover:to-teal-600/20 border-emerald-500/20 rounded-xl transition-all duration-300"
               >
                 Download Track
               </Button>
@@ -187,6 +215,7 @@ const MusicPage = () => {
                   url: musicUrl,
                 }}
                 variant="outline"
+                className="bg-background/50 backdrop-blur-sm border-emerald-500/20 hover:border-emerald-500/40 rounded-xl"
               />
             </div>
           </div>

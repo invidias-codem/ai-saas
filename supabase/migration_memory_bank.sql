@@ -64,7 +64,7 @@ BEGIN
         mb.user_id,
         mb.content,
         mb.type,
-        mb.confidence,
+        mb.confidence::float,
         mb.scope,
         mb.source_conversation_id,
         1 - (mb.embedding <=> query_embedding) AS similarity
@@ -84,6 +84,7 @@ $$;
 ALTER TABLE memory_bank ENABLE ROW LEVEL SECURITY;
 
 -- Allow service role full access
+DROP POLICY IF EXISTS "Service role full access on memory_bank" ON memory_bank;
 CREATE POLICY "Service role full access on memory_bank" ON memory_bank
     FOR ALL
     TO service_role
@@ -91,6 +92,7 @@ CREATE POLICY "Service role full access on memory_bank" ON memory_bank
     WITH CHECK (true);
 
 -- Allow authenticated users to access their own memories
+DROP POLICY IF EXISTS "Users can access own memories" ON memory_bank;
 CREATE POLICY "Users can access own memories" ON memory_bank
     FOR ALL
     USING (true)

@@ -56,9 +56,25 @@ interface Message {
 
 // Selected file structure
 interface SelectedFile {
+  file: File;
+  preview: string;
   name: string;
   type: string;
+  base64Data?: string;
 }
+
+const readFileAsBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(",")[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
 
 // Chart rendering component
 const RenderTableAsChart = ({ node, ...props }: any) => {
@@ -74,8 +90,8 @@ const RenderTableAsChart = ({ node, ...props }: any) => {
 
       return (
         <div className="my-6 w-full overflow-hidden rounded-lg border bg-card p-4 shadow-sm">
-          <div className="overflow-x-auto w-full" style={{ minHeight: '300px' }}>
-            <ResponsiveContainer width="100%" height={300} minWidth={300}>
+          <div className="overflow-x-hidden w-full" style={{ minHeight: '300px' }}>
+            <ResponsiveContainer width="100%" height={300}>
               {data.length <= 5 ? (
                 <PieChart>
                   <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
@@ -320,7 +336,12 @@ export default function ConversationPage({ params }: { params: { id: string } })
     setMessages(newMessages); setUserInput(""); setSelectedFile(null);
 
     try {
-      const response = await axios.post("/api/conversation", { messages: newMessages.map(msg => ({ role: msg.role, text: msg.text })) });
+      const response = await axios.post("/api/conversation", {
+        messages: newMessages.map(msg => ({ role: msg.role, text: msg.text })),
+        fileData: selectedFile?.base64Data, // Send file data
+        fileName: selectedFile?.name,
+        mimeType: selectedFile?.type
+      });
       const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
       setMessages((prevMessages) => [...prevMessages, botMessage]);
 
@@ -353,9 +374,19 @@ export default function ConversationPage({ params }: { params: { id: string } })
 
   const handleAttachClick = () => { fileInputRef.current?.click(); };
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) { setSelectedFile({ name: file.name, type: file.type || 'unknown' }); }
+    if (file) {
+      const objectUrl = URL.createObjectURL(file);
+      const base64 = await readFileAsBase64(file);
+      setSelectedFile({
+        file,
+        preview: objectUrl,
+        name: file.name,
+        type: file.type,
+        base64Data: base64
+      });
+    }
     if (fileInputRef.current) { fileInputRef.current.value = ""; }
   };
 
@@ -597,7 +628,12 @@ export default function ConversationPage({ params }: { params: { id: string } })
                 <Paperclip className="h-3 w-3 text-indigo-500" />
                 <span className="max-w-[150px] truncate">{selectedFile.name}</span>
                 <button
-                  onClick={() => setSelectedFile(null)}
+                  onClick={() => {
+                    setSelectedFile(null);
+                    if (selectedFile.preview) {
+                      URL.revokeObjectURL(selectedFile.preview); // Clean up object URL
+                    }
+                  }}
                   className="text-muted-foreground hover:text-destructive transition-colors ml-1"
                 >
                   <X className="h-3 w-3" />

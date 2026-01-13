@@ -141,12 +141,12 @@ export const LandingChat = () => {
                         </p>
                         <div className="flex flex-col sm:flex-row gap-3 justify-center">
                             <Link href="/dashboard">
-                                <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-full px-8 py-5 font-semibold">
+                                <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-full px-8 py-5 font-semibold w-full sm:w-auto">
                                     Sign Up Free
                                 </Button>
                             </Link>
                             <Link href="/dashboard">
-                                <Button variant="outline" className="rounded-full px-8 py-5 border-white/20 text-white hover:bg-white/10">
+                                <Button variant="outline" className="rounded-full px-8 py-5 border-white/20 text-white hover:bg-white/10 w-full sm:w-auto">
                                     Log In
                                 </Button>
                             </Link>
