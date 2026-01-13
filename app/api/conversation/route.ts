@@ -128,7 +128,7 @@ export async function POST(req: Request) {
       userProfileMemories  // User-scoped memories (personality, personal facts)
     ] = await Promise.all([
       getHighConfidenceFacts(userId),
-      performResearch(userQuery, userContextPrompt, userId), // Web Search with Learning
+      performResearch(userQuery, userContextPrompt), // Web Search
       findRelatedEntities(userId, userQuery),         // Knowledge Graph
       getUserProfile(userId)                          // User profile (cross-conversation)
     ]);
