@@ -39,7 +39,7 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
         <article className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all duration-300">
           <div className="grid md:grid-cols-2 gap-6">
             {/* Image */}
-            <div className="relative aspect-video md:aspect-auto md:h-full min-h-[250px]">
+            <div className="relative aspect-video md:aspect-auto md:h-full">
               {imageError ? (
                 <ImagePlaceholder title={post.title} category={post.category} />
               ) : (

@@ -41,7 +41,7 @@ export default function BlogPage({ searchParams }: BlogPageProps) {
   const allPosts = getAllPosts();
   const featuredPosts = getFeaturedPosts(1);
   const featuredPost = featuredPosts[0];
-  
+
   // Filter posts based on search params
   let filteredPosts = allPosts;
   const activeCategory = searchParams.category as BlogCategory | undefined;
@@ -81,10 +81,10 @@ export default function BlogPage({ searchParams }: BlogPageProps) {
           <span className="text-xl sm:text-2xl font-bold text-white tracking-tight">Genie AI</span>
         </Link>
         <div className="flex items-center gap-x-1 sm:gap-x-2">
-          <Link href="/blog" className="hidden sm:block">
-            <Button variant="ghost" className="text-purple-400 hover:text-purple-300 hover:bg-white/10 rounded-full">
-              <BookOpen className="w-4 h-4 mr-2" />
-              Blog
+          <Link href="/blog">
+            <Button variant="ghost" className="text-purple-400 hover:text-purple-300 hover:bg-white/10 rounded-full px-2 sm:px-4">
+              <BookOpen className="w-5 h-5 sm:w-4 sm:h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Blog</span>
             </Button>
           </Link>
           <Link href="/dashboard" className="hidden sm:block">
