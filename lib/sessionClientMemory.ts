@@ -29,7 +29,7 @@ export interface SessionStorageData {
 
 // Storage configuration
 const STORAGE_CONFIG = {
-    SESSION_MEMORY_KEY: 'genie_session_memory', // Key for LocalStorage
+    SESSION_MEMORY_PREFIX: 'genie_session_', // Prefix for conversation-scoped storage
     SESSION_ID_COOKIE: 'genie_session_id',      // Key for Cookie (ID only)
     COOKIE_OPTIONS: {
         maxAge: 7 * 24 * 60 * 60, // 7 days
@@ -40,21 +40,31 @@ const STORAGE_CONFIG = {
 };
 
 /**
- * Get session memory from LocalStorage (client-side)
- * Returns parsed messages or [] if missing/invalid
+ * Get storage key for a specific conversation
  */
-export function getSessionMemoryFromStorage(): SessionMessage[] {
+function getStorageKey(conversationId: string): string {
+    return `${STORAGE_CONFIG.SESSION_MEMORY_PREFIX}${conversationId}`;
+}
+
+/**
+ * Get session memory from LocalStorage (client-side)
+ * Now conversation-scoped: only returns messages for the specified conversation
+ */
+export function getSessionMemoryFromStorage(conversationId?: string): SessionMessage[] {
     if (typeof window === 'undefined') return [];
+    if (!conversationId) return []; // No conversation ID = no messages (prevents bleed)
 
     try {
-        const storedValue = localStorage.getItem(STORAGE_CONFIG.SESSION_MEMORY_KEY);
+        const storageKey = getStorageKey(conversationId);
+        const storedValue = localStorage.getItem(storageKey);
 
         if (!storedValue) return [];
 
         const data: SessionStorageData = JSON.parse(storedValue);
 
-        // Validate structure
+        // Validate structure and conversation match
         if (!Array.isArray(data.messages)) return [];
+        if (data.activeConversationId && data.activeConversationId !== conversationId) return [];
 
         return data.messages;
     } catch (error) {
@@ -65,14 +75,16 @@ export function getSessionMemoryFromStorage(): SessionMessage[] {
 
 /**
  * Save session memory to LocalStorage (client-side)
- * Called after each message to persist conversation
+ * Now conversation-scoped: stores messages with conversation ID
  */
 export function saveSessionMemoryToStorage(
     messages: SessionMessage[],
     userId: string,
-    sessionId: string
+    sessionId: string,
+    conversationId?: string
 ): void {
     if (typeof window === 'undefined') return;
+    if (!conversationId) return; // Must have conversation ID
 
     try {
         const data: SessionStorageData = {
@@ -81,26 +93,42 @@ export function saveSessionMemoryToStorage(
             sessionId,
             userId,
             messageCount: messages.length,
+            activeConversationId: conversationId,
         };
 
-        localStorage.setItem(STORAGE_CONFIG.SESSION_MEMORY_KEY, JSON.stringify(data));
+        const storageKey = getStorageKey(conversationId);
+        localStorage.setItem(storageKey, JSON.stringify(data));
 
-        console.log(`[SessionStorage] Saved ${messages.length} messages to local storage`);
+        console.log(`[SessionStorage] Saved ${messages.length} messages for conversation ${conversationId.substring(0, 8)}`);
     } catch (error) {
         console.error('[SessionStorage] Failed to save session memory:', error);
     }
 }
 
 /**
- * Clear session memory
- * Called on logout or session restart
+ * Clear session memory for a specific conversation
+ * Pass conversationId to clear specific, or undefined to clear all
  */
-export function clearSessionMemoryStorage(): void {
+export function clearSessionMemoryStorage(conversationId?: string): void {
     if (typeof window === 'undefined') return;
 
     try {
-        localStorage.removeItem(STORAGE_CONFIG.SESSION_MEMORY_KEY);
-        console.log('[SessionStorage] Cleared session memory');
+        if (conversationId) {
+            const storageKey = getStorageKey(conversationId);
+            localStorage.removeItem(storageKey);
+            console.log(`[SessionStorage] Cleared session memory for ${conversationId.substring(0, 8)}`);
+        } else {
+            // Clear all conversation storage (for logout)
+            const keysToRemove: string[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key?.startsWith(STORAGE_CONFIG.SESSION_MEMORY_PREFIX)) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            console.log(`[SessionStorage] Cleared all session memory (${keysToRemove.length} conversations)`);
+        }
     } catch (error) {
         console.error('[SessionStorage] Failed to clear session memory:', error);
     }
@@ -149,8 +177,9 @@ function generateSessionId(): string {
 
 /**
  * Get session info (metadata only)
+ * Pass conversationId to get info for a specific conversation
  */
-export function getSessionInfo(): {
+export function getSessionInfo(conversationId?: string): {
     sessionId: string;
     messageCount: number;
     lastUpdated: number;
@@ -161,7 +190,8 @@ export function getSessionInfo(): {
     }
 
     try {
-        const storedValue = localStorage.getItem(STORAGE_CONFIG.SESSION_MEMORY_KEY);
+        const storageKey = conversationId ? getStorageKey(conversationId) : null;
+        const storedValue = storageKey ? localStorage.getItem(storageKey) : null;
 
         if (!storedValue) {
             return {
@@ -193,23 +223,24 @@ export function getSessionInfo(): {
 
 /**
  * Get memory stats for debugging
+ * Pass conversationId to get stats for a specific conversation
  */
-export function getMemoryStats(): {
+export function getMemoryStats(conversationId?: string): {
     totalMessages: number;
     userMessages: number;
     botMessages: number;
     sessionAgeMinutes: number;
     storageSize: string;
 } {
-    const messages = getSessionMemoryFromStorage();
-    const info = getSessionInfo();
+    const messages = getSessionMemoryFromStorage(conversationId);
+    const info = getSessionInfo(conversationId);
 
     const userCount = messages.filter(m => m.role === 'user').length;
     const botCount = messages.filter(m => m.role === 'bot').length;
 
     let storageSize = 'N/A';
-    if (typeof window !== 'undefined') {
-        const value = localStorage.getItem(STORAGE_CONFIG.SESSION_MEMORY_KEY) || '';
+    if (typeof window !== 'undefined' && conversationId) {
+        const value = localStorage.getItem(getStorageKey(conversationId)) || '';
         const bytes = new Blob([value]).size;
         storageSize = `${(bytes / 1024).toFixed(2)} KB`;
     }

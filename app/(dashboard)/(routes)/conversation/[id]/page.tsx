@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -192,7 +193,7 @@ export default function ConversationPage({ params }: { params: { id: string } })
         setSessionId(sid);
         const did = getOrCreateDeviceId();
         setDeviceId(did);
-        const savedMessages = getSessionMemoryFromStorage();
+        const savedMessages = getSessionMemoryFromStorage(conversationId); // Pass conversation ID
         if (savedMessages.length > 0) {
           const restoredMessages: Message[] = savedMessages.map(msg => ({
             text: msg.text, role: msg.role, timestamp: new Date(msg.timestamp),
@@ -217,43 +218,66 @@ export default function ConversationPage({ params }: { params: { id: string } })
   }, []);
 
   useEffect(() => {
-    if (sessionRestored && sessionId && messages.length > 0) {
+    if (sessionRestored && sessionId && messages.length > 0 && conversationId) {
       const sessionMessages: SessionMessage[] = messages.map(msg => ({
         text: msg.text, role: msg.role, timestamp: msg.timestamp.getTime(),
       }));
-      saveSessionMemoryToStorage(sessionMessages, 'current-user', sessionId);
+      saveSessionMemoryToStorage(sessionMessages, 'current-user', sessionId, conversationId); // Include conversationId
       if (deviceId) trackMessageSent(messages.length);
     }
-  }, [messages, sessionRestored, sessionId, deviceId]);
+  }, [messages, sessionRestored, sessionId, deviceId, conversationId]);
 
+  // Conversation-scoped cloud sync for multi-device support
   useEffect(() => {
-    if (!sessionRestored || !userId || !deviceId || messages.length === 0) return;
+    if (!sessionRestored || !userId || !deviceId || messages.length === 0 || !conversationId) return;
+
     const syncToCloud = async () => {
       try {
         const messagesToSync = messages.map(msg => ({ text: msg.text, role: msg.role, timestamp: msg.timestamp.getTime() }));
         const syncMessages = toSyncMessages(messagesToSync, deviceId);
+
+        // IMPORTANT: Pass conversationId to scope sync to THIS conversation only
         const response = await axios.post('/api/sync/conversation', {
-          deviceId, messages: syncMessages, isNewDevice: false, lastSyncTimestamp: Date.now(),
+          deviceId,
+          messages: syncMessages,
+          isNewDevice: false,
+          lastSyncTimestamp: Date.now(),
+          conversationId, // <-- Conversation-scoped sync!
         });
+
         if (response.data.merged) {
           const mergedMessages: Message[] = response.data.merged.map((m: any) => ({
             text: m.text, role: m.role, timestamp: new Date(m.timestamp),
           }));
+          // Only update if we got MORE messages (from another device)
           if (mergedMessages.length > messages.length) {
             setMessages(mergedMessages);
-            saveSessionMemoryToStorage(mergedMessages.map(msg => ({ text: msg.text, role: msg.role, timestamp: msg.timestamp.getTime() })), 'current-user', sessionId);
+            saveSessionMemoryToStorage(
+              mergedMessages.map(msg => ({ text: msg.text, role: msg.role, timestamp: msg.timestamp.getTime() })),
+              'current-user',
+              sessionId,
+              conversationId
+            );
           }
           if (response.data.deviceCount > 1) {
             setMultiDeviceStatus({ isMultiDevice: true, deviceCount: response.data.deviceCount });
           }
         }
-      } catch (err: any) { console.warn('[DeviceSync] Sync failed:', err); }
+      } catch (err: any) {
+        console.warn('[DeviceSync] Sync failed:', err);
+      }
     };
+
+    // Initial sync after 10 seconds, then every 5 minutes
     const initialTimeout = setTimeout(syncToCloud, 10000);
     const syncInterval = setInterval(syncToCloud, 5 * 60 * 1000);
     syncIntervalRef.current = syncInterval;
-    return () => { clearTimeout(initialTimeout); clearInterval(syncInterval); };
-  }, [sessionRestored, userId, deviceId, messages, sessionId]);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(syncInterval);
+    };
+  }, [sessionRestored, userId, deviceId, messages, sessionId, conversationId]);
 
   // Fetch Memory Count
   const fetchMemoryCount = async () => {
@@ -398,9 +422,9 @@ export default function ConversationPage({ params }: { params: { id: string } })
             onClick={async () => {
               const newConv = await createNewConversation();
               if (newConv) {
-                clearSessionMemoryStorage();
-                setMessages([]);
-                setShowGreeting(true);
+                clearSessionMemoryStorage(conversationId); // Clear current chat only
+                // Navigate to new conversation URL
+                window.location.href = `/conversation/${newConv.id}`;
               }
             }}
           >

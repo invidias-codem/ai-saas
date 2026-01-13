@@ -18,6 +18,11 @@ import {
 import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
 import { sanitizeHistory } from '@/lib/gemini';
 
+// New Integrations
+import { findRelatedEntities, formatGraphContext, addNode, addEdge } from '@/lib/memory/graphStore';
+import { performResearch, formatSearchResults } from '@/lib/agents/researcher';
+import { getUserProfile, getConversationMemories, formatUserProfileForPrompt } from '@/lib/memoryPromotion';
+
 const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
 
 const model = genAI.getGenerativeModel({
@@ -32,12 +37,16 @@ const model = genAI.getGenerativeModel({
 });
 
 // ✅ Add instruction for data formatting with RAG context notice
-const SYSTEM_INSTRUCTION = {
+// ✅ Add instruction for data formatting with RAG context notice
+const getSystemInstruction = () => ({
   role: "user", // System instructions often go under the 'user' role for initial setup
   parts: [{
-    text: "You are 'Genie', a helpful AI assistant. Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences."
+    text: `You are 'Genie', a helpful AI assistant. 
+Current Date: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
+
+Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences.`
   }],
-};
+});
 
 // Optional: Initial greeting from the model
 const GREETING = {
@@ -110,7 +119,23 @@ export async function POST(req: Request) {
     // ✅ Retrieve high-confidence facts with intelligent ranking
     // Uses context relevance and importance scoring for smarter retrieval
     const userQuery = messages[messages.length - 1]?.text || '';
-    const allFacts = await getHighConfidenceFacts(userId);
+
+    // [Step 1] Parallel Context Gathering (Tiered Memory)
+    const [
+      allFacts,
+      researchResult,
+      graphData,
+      userProfileMemories  // User-scoped memories (personality, personal facts)
+    ] = await Promise.all([
+      getHighConfidenceFacts(userId),
+      performResearch(userQuery, userContextPrompt, userId), // Web Search with Learning
+      findRelatedEntities(userId, userQuery),         // Knowledge Graph
+      getUserProfile(userId)                          // User profile (cross-conversation)
+    ]);
+
+    // Format new contexts
+    const searchContext = formatSearchResults(researchResult.results);
+    const graphContext = formatGraphContext(graphData);
 
     // Create mock vector similarities based on keyword matching
     const similarities = new Map<string, number>();
@@ -152,11 +177,20 @@ export async function POST(req: Request) {
       return new NextResponse("Invalid prompt", { status: 400 });
     }
 
-    // ✅ Inject user context + facts (HIGH PRIORITY) + memory context into the prompt
-    let enhancedPromptText = userContextPrompt + factContext + memoryContext + lastUserMessage.parts[0].text;
+    // ✅ Inject user context + profile + facts + graph + search + memory into the prompt
+    const userProfileContext = formatUserProfileForPrompt(userProfileMemories);
+
+    let enhancedPromptText =
+      userContextPrompt +
+      userProfileContext +    // [NEW] User personality profile (cross-conversation)
+      factContext +
+      graphContext +          // Knowledge Graph
+      searchContext +         // Web Search
+      memoryContext +
+      lastUserMessage.parts[0].text;
 
     // Construct preliminary history with system instruction and greeting
-    const fullHistory = [SYSTEM_INSTRUCTION, GREETING, ...history];
+    const fullHistory = [getSystemInstruction(), GREETING, ...history];
 
     // ✅ Sanitize History using helper
     const { sanitizedHistory, prependToPrompt } = sanitizeHistory(fullHistory);
@@ -210,6 +244,24 @@ export async function POST(req: Request) {
         interactionStyle: userContext.interactionStyle,
       }
     ).catch(err => console.error('Memory capture failed:', err));
+
+    // [New] Knowledge Graph Extraction (Async)
+    // We try to extract entities from the conversation and update the graph
+    // Note: In a production environment, this should be a background job (e.g. Inngest/BullMQ)
+    // For now, we fire and forget.
+    (async () => {
+      try {
+        // Simple heuristic extraction for now or use a small LLM call
+        // For demonstration, we assume if the user mentioned a "Project" in the query, we add it.
+        // A real implementation would parse the 'summary' or 'responseText' for entities.
+        if (tags.length > 0) {
+          // auto-add top tag as a concept
+          await addNode(userId, tags[0], 'concept', `Automatically extracted from conversation`);
+        }
+      } catch (e) {
+        console.error('Graph update failed', e);
+      }
+    })();
 
     // ✅ Log successful conversation
     console.log(`[CONVERSATION] User: ${userContext.fullName} (${userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);

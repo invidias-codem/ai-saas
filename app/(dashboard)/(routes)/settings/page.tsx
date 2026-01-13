@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { Heading } from "@/components/heading";
-import { Github, Slack, Trello, Brain, AlertCircle, CheckCircle2, Trash2, RotateCw, Settings, Loader2, RefreshCw } from "lucide-react";
+import { Github, Slack, Trello, Brain, AlertCircle, CheckCircle2, Trash2, RotateCw, Settings, Loader2, RefreshCw, Archive } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -97,7 +97,7 @@ const SettingsPage = () => {
     try {
       setTogglingScope(memoryId);
       const newScope = currentScope === 'persistent' ? 'conversation' : 'persistent';
-      
+
       const response = await fetch("/api/memory/scope", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -108,11 +108,11 @@ const SettingsPage = () => {
         setAnalytics((prev) =>
           prev
             ? {
-                ...prev,
-                facts: prev.facts.map((f) =>
-                  f.id === memoryId ? { ...f, scope: newScope } : f
-                ),
-              }
+              ...prev,
+              facts: prev.facts.map((f) =>
+                f.id === memoryId ? { ...f, scope: newScope } : f
+              ),
+            }
             : null
         );
       }
@@ -391,8 +391,28 @@ const SettingsPage = () => {
           </Suspense>
         )}
 
-        {/* Conversation History Section */}
-        <ConversationHistory />
+        {/* Vault - Conversation History Access */}
+        <Card className="p-6 border-black/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-600/10">
+                <Archive className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Vault</h3>
+                <p className="text-sm text-muted-foreground">
+                  Access all your conversations, archives, and deleted items
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => window.location.href = '/settings/vault'}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              Open Vault
+            </Button>
+          </div>
+        </Card>
 
         {/* Memory Bank Section */}
         {analytics && (

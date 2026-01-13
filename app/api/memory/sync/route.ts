@@ -103,12 +103,28 @@ async function processMemoriesInBackground(
             return;
         }
 
+        // Import promotion logic
+        const { shouldPromoteMemory, promoteToUserScope } = await import('@/lib/memoryPromotion');
+
         // Store memories in database
         for (const memory of memories) {
-            // Generate embedding (placeholder - you'll need to implement this)
+            // Generate embedding
             const embedding = await generateEmbedding(memory.content);
 
-            const { error } = await supabase
+            // Determine initial scope based on content
+            const memoryWithId = {
+                id: '',
+                content: memory.content,
+                type: memory.type || 'general',
+                confidence: memory.confidence || 0.8,
+                scope: 'conversation' as const,
+                source_conversation_id: conversationId
+            };
+
+            // Check if this should be user-scoped from the start (high-confidence personal info)
+            const initialScope = shouldPromoteMemory(memoryWithId) ? 'user' : 'conversation';
+
+            const { data, error } = await supabase
                 .from('memory_bank')
                 .insert({
                     user_id: userId,
@@ -117,15 +133,20 @@ async function processMemoriesInBackground(
                     embedding: embedding,
                     type: memory.type || 'general',
                     confidence: memory.confidence || 0.8,
-                    scope: 'conversation', // Changed from 'persistent' to isolate conversations
+                    scope: initialScope, // Tiered: 'conversation' (isolated) or 'user' (profile)
                     metadata: {
                         extractedFrom: 'conversation',
                         messageCount: messagesToProcess.length,
+                        autoPromoted: initialScope === 'user'
                     }
-                });
+                })
+                .select('id')
+                .single();
 
             if (error) {
                 console.error('[Memory:Sync] Error storing memory:', error);
+            } else if (initialScope === 'user') {
+                console.log(`[Memory:Sync] Auto-promoted memory to user profile: ${memory.content.substring(0, 50)}`);
             }
         }
 

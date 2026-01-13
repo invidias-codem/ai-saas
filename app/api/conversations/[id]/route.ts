@@ -123,10 +123,13 @@ export async function DELETE(req: Request, { params }: RouteParams) {
         if (checkError || !conv) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
         if (conv.user_id !== userId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
-        // Perform Soft Delete
+        // Perform Soft Delete with 30-day recovery window
         const { error: updateError } = await supabase
             .from("conversations")
-            .update({ is_deleted: true })
+            .update({
+                is_deleted: true,
+                deleted_at: new Date().toISOString() // Start 30-day countdown
+            })
             .eq("id", id);
 
         if (updateError) {
@@ -144,7 +147,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
 }
 
 /**
- * PATCH - Update conversation (title, archive status)
+ * PATCH - Update conversation (title, archive status, restore)
  */
 // PATCH - Update conversation
 export async function PATCH(req: Request, { params }: RouteParams) {
@@ -156,11 +159,17 @@ export async function PATCH(req: Request, { params }: RouteParams) {
         if (!id) return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
 
         const body = await req.json();
-        const { title, isArchived } = body;
+        const { title, isArchived, restore, permanentDelete } = body;
         const updates: any = {};
 
         if (title !== undefined) updates.title = title.substring(0, 100);
         if (isArchived !== undefined) updates.is_archived = isArchived;
+
+        // Restore a deleted conversation
+        if (restore === true) {
+            updates.is_deleted = false;
+            console.log(`[API:Conversation:PATCH] Restoring conversation ${id}`);
+        }
 
         if (Object.keys(updates).length === 0) {
             return NextResponse.json({ success: true, id }); // Nothing to update
