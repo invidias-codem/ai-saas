@@ -259,7 +259,11 @@ async function sendSlackMessage(
   const data = await response.json();
 
   if (!data.ok) {
-    console.error('[SLACK_EVENTS] Slack API error:', data.error);
+    if (data.error === 'channel_not_found') {
+      console.warn(`[SLACK_EVENTS] Failed to send message: ${data.error} (Bot may not be in channel)`);
+    } else {
+      console.error('[SLACK_EVENTS] Slack API error:', data.error);
+    }
     logDebug('Slack API Error in sendSlackMessage:', data.error);
   } else {
     logDebug('Slack Message Sent Successfully:', data.ts);

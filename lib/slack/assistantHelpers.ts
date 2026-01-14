@@ -146,6 +146,10 @@ export async function setAssistantStatus(
     const data = await response.json();
 
     if (!data.ok) {
+      // Ignore channel_not_found as it happens for DMs (which are not assistant threads)
+      if (data.error === 'channel_not_found') {
+        return { ok: false, error: 'channel_not_found' };
+      }
       console.error('[ASSISTANT] Failed to set status:', data.error);
     }
 
@@ -243,6 +247,10 @@ export async function setSuggestedPrompts(
     const data = await response.json();
 
     if (!data.ok) {
+      // Ignore channel_not_found
+      if (data.error === 'channel_not_found') {
+        return { ok: false, error: 'channel_not_found' };
+      }
       console.error('[ASSISTANT] Failed to set suggested prompts:', data.error);
     }
 
@@ -338,6 +346,10 @@ export async function setThreadTitle(
     const data = await response.json();
 
     if (!data.ok) {
+      // Ignore channel_not_found
+      if (data.error === 'channel_not_found') {
+        return { ok: false, error: 'channel_not_found' };
+      }
       console.error('[ASSISTANT] Failed to set thread title:', data.error);
     }
 
@@ -393,7 +405,11 @@ export async function startStream(
     const data = await response.json();
 
     if (!data.ok) {
-      console.error('[STREAM] Failed to start stream (postMessage):', data.error);
+      if (data.error === 'channel_not_found') {
+        console.warn(`[STREAM] Failed to start stream: ${data.error} (Bot may not be in channel)`);
+      } else {
+        console.error('[STREAM] Failed to start stream (postMessage):', data.error);
+      }
       return { ok: false, error: data.error };
     }
 
