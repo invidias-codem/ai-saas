@@ -210,7 +210,10 @@ async function uploadFileToSlack(
         formData.append('channels', channel);
         formData.append('title', title);
         formData.append('filename', filename);
-        formData.append('file', new Blob([fileBuffer]), filename);
+
+        // Convert Buffer to Uint8Array for Blob compatibility
+        const uint8Array = new Uint8Array(fileBuffer);
+        formData.append('file', new Blob([uint8Array]), filename);
 
         if (threadTs) {
             formData.append('thread_ts', threadTs);
