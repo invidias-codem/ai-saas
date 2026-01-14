@@ -288,7 +288,7 @@ const SlackLandingPage = () => {
                 className="bg-white hover:bg-gray-100 text-black rounded-xl text-lg px-12 py-8 shadow-2xl shadow-purple-500/30 font-semibold"
               >
                 <Slack className="w-6 h-6 mr-3" />
-                Add to Slack — It's Free
+                Add to Slack — It&apos;s Free
               </Button>
             </Link>
             <p className="text-gray-500 mt-6 text-sm">
