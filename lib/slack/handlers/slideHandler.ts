@@ -224,6 +224,8 @@ async function uploadFileToSlack(
 
         if (!uploadUrlData.ok) {
             console.error('[SLIDE_HANDLER] Failed to get upload URL:', uploadUrlData.error);
+            console.error('[SLIDE_HANDLER] Full response:', JSON.stringify(uploadUrlData));
+            console.error('[SLIDE_HANDLER] Request params:', { filename, length: fileBuffer.length });
             throw new Error(uploadUrlData.error);
         }
 
