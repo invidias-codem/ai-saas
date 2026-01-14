@@ -661,7 +661,7 @@ async function handleAssistantThreadContextChanged(config: SlackConfig, event: a
 }
 
 /**
- * Handle app_mention events with code detection
+ * Handle app_mention events with intent routing and code detection
  */
 async function handleAppMention(config: SlackConfig, event: any): Promise<void> {
   const { channel, text, ts, thread_ts, user } = event;
@@ -683,7 +683,7 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
     await sendSlackMessage(
       config.botToken,
       channel,
-      "Hi! How can I help you? Just mention me with your question. I can also help with code - try asking me to write, debug, or explain code!",
+      "Hi! How can I help you? Just mention me with your question. I can help with:\n• 🎨 Generating images\n• 📊 Creating slide decks\n• 📅 Scheduling meetings\n• 💻 Writing and debugging code\n• 💬 General questions",
       thread_ts || ts
     );
     return;
@@ -691,6 +691,20 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
 
   const threadTs = thread_ts || ts;
 
+  // STEP 1: Classify intent using Intent Router
+  const { classifyIntent, routeMessage } = await import('@/lib/slack/intentRouter');
+  const classification = await classifyIntent(cleanText);
+
+  console.log('[SLACK_EVENTS] Intent classification:', classification);
+
+  // STEP 2: Route to specialized handlers for IMAGE, SLIDES, or CALENDAR
+  if (classification.intent !== 'CHAT' && classification.confidence > 0.6) {
+    console.log(`[SLACK_EVENTS] Routing to ${classification.intent} handler`);
+    await routeMessage(classification.intent, cleanText, config, event);
+    return;
+  }
+
+  // STEP 3: Fallback to existing CHAT/CODE logic
   // Detect if this is a code-related request
   const isCode = isCodeRelated(cleanText);
   const language = isCode ? detectLanguage(cleanText) : null;

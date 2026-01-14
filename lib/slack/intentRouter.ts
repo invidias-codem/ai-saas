@@ -1,0 +1,117 @@
+/**
+ * Intent Router for Slack Messages
+ * Classifies user intent and routes to appropriate handler
+ */
+
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+export type UserIntent = 'IMAGE' | 'SLIDES' | 'CALENDAR' | 'CHAT';
+
+export interface IntentClassification {
+    intent: UserIntent;
+    confidence: number;
+    extractedInfo?: {
+        imagePrompt?: string;
+        slideTopic?: string;
+        meetingDetails?: {
+            title?: string;
+            attendees?: string[];
+            datetime?: string;
+            duration?: string;
+        };
+    };
+}
+
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
+
+const INTENT_CLASSIFIER_PROMPT = `You are an intent classifier for a Slack bot. Analyze the user's message and classify it into ONE of these intents:
+
+1. IMAGE - User wants to generate, create, or edit an image/picture/photo/drawing/logo/icon/GIF
+2. SLIDES - User wants to create a slide deck, presentation, PowerPoint, or PPTX
+3. CALENDAR - User wants to schedule a meeting, create an event, or set up a calendar invite
+4. CHAT - General conversation, questions, or requests that don't fit the above
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "intent": "IMAGE" | "SLIDES" | "CALENDAR" | "CHAT",
+  "confidence": 0.0-1.0,
+  "extractedInfo": {
+    // For IMAGE: include "imagePrompt"
+    // For SLIDES: include "slideTopic"
+    // For CALENDAR: include "meetingDetails" with title, attendees, datetime, duration
+  }
+}
+
+Examples:
+- "generate an image of a cat" -> {"intent": "IMAGE", "confidence": 0.95, "extractedInfo": {"imagePrompt": "a cat"}}
+- "make a slide deck about AI" -> {"intent": "SLIDES", "confidence": 0.9, "extractedInfo": {"slideTopic": "AI"}}
+- "schedule a meeting with john@example.com tomorrow at 2pm" -> {"intent": "CALENDAR", "confidence": 0.85, "extractedInfo": {"meetingDetails": {"attendees": ["john@example.com"], "datetime": "tomorrow at 2pm"}}}
+- "what is the weather?" -> {"intent": "CHAT", "confidence": 0.8}`;
+
+/**
+ * Classify user intent using Gemini
+ */
+export async function classifyIntent(userMessage: string): Promise<IntentClassification> {
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+
+        const result = await model.generateContent([
+            { text: INTENT_CLASSIFIER_PROMPT },
+            { text: `\n\nUser message: "${userMessage}"\n\nClassification:` }
+        ]);
+
+        const responseText = result.response.text().trim();
+
+        // Extract JSON from response (handle markdown code blocks)
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            console.warn('[INTENT_ROUTER] No JSON found in response:', responseText);
+            return { intent: 'CHAT', confidence: 0.5 };
+        }
+
+        const classification = JSON.parse(jsonMatch[0]) as IntentClassification;
+
+        console.log('[INTENT_ROUTER] Classification:', classification);
+        return classification;
+
+    } catch (error) {
+        console.error('[INTENT_ROUTER] Error classifying intent:', error);
+        // Default to CHAT on error
+        return { intent: 'CHAT', confidence: 0.5 };
+    }
+}
+
+/**
+ * Route message to appropriate handler based on intent
+ */
+export async function routeMessage(
+    intent: UserIntent,
+    userMessage: string,
+    config: any,
+    event: any
+): Promise<void> {
+    console.log(`[INTENT_ROUTER] Routing to ${intent} handler`);
+
+    switch (intent) {
+        case 'IMAGE':
+            const { handleImageGeneration } = await import('@/lib/slack/handlers/imageHandler');
+            await handleImageGeneration(config, event, userMessage);
+            break;
+
+        case 'SLIDES':
+            const { handleSlideCreation } = await import('@/lib/slack/handlers/slideHandler');
+            await handleSlideCreation(config, event, userMessage);
+            break;
+
+        case 'CALENDAR':
+            const { handleCalendarEvent } = await import('@/lib/slack/handlers/calendarHandler');
+            await handleCalendarEvent(config, event, userMessage);
+            break;
+
+        case 'CHAT':
+        default:
+            // Fallback to existing chat logic (handled by caller)
+            console.log('[INTENT_ROUTER] Using default CHAT handler');
+            break;
+    }
+}

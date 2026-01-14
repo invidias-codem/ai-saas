@@ -12,8 +12,8 @@ const replicate = new Replicate({
   auth: env.REPLICATE_API_TOKEN,
 });
 
-// Model identifier for nano-banana
-const NANO_BANANA_MODEL = "google/nano-banana";
+// Model identifier for Flux Schnell (faster, higher quality)
+const IMAGE_MODEL = "black-forest-labs/flux-schnell";
 
 // Define the allowed aspect ratios for the nano-banana model
 const allowedAspectRatios = z.enum([
@@ -59,13 +59,13 @@ export async function POST(req: Request) {
       aspect_ratio: aspect_ratio,
       output_format: "jpg", // Specify output format
     };
-    
-    console.log(`Starting ${amount} Replicate prediction(s) for ${NANO_BANANA_MODEL} with input:`, input);
 
-    // Since nano-banana generates one image per prediction, we create multiple predictions.
-    const predictionPromises = Array.from({ length: amount }, () => 
+    console.log(`Starting ${amount} Replicate prediction(s) for ${IMAGE_MODEL} with input:`, input);
+
+    // Since Flux generates one image per prediction, we create multiple predictions.
+    const predictionPromises = Array.from({ length: amount }, () =>
       replicate.predictions.create({
-        model: NANO_BANANA_MODEL,
+        model: IMAGE_MODEL,
         input: input,
       })
     );

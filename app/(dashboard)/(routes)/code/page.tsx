@@ -10,11 +10,12 @@ import { useClipboard } from "use-clipboard-copy";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, ArrowDown } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, ArrowDown, Github } from "lucide-react";
 import { CodeIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
 import { PersonIcon } from "@radix-ui/react-icons";
 import { ShareIconButton } from "@/components/share-button";
+import { GitHubConsentModal } from "@/components/github-consent-modal";
 
 // Define the message structure
 interface Message {
@@ -78,6 +79,24 @@ export default function CodePage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null); // Chat container for scroll
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [memoryCount, setMemoryCount] = useState<number>(0);
+  const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
+
+  // GitHub Consent State
+  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
+  const [gitHubAction, setGitHubAction] = useState<any>(null);
+
+  const handleGitHubConnect = () => {
+    window.location.href = "/api/integrations/github/auth"; // Trigger OAuth
+  };
+
+  const handleGitHubActionConfirm = async () => {
+    console.log("Executing GitHub action:", gitHubAction);
+    setIsGitHubModalOpen(false);
+    // Mock execution for UI demo
+    const botMessage: Message = { text: `✅ Successfully executed GitHub Action: ${gitHubAction?.type} on ${gitHubAction?.repo}`, role: "bot", timestamp: new Date() };
+    setMessages((prev) => [...prev, botMessage]);
+  };
 
   const GREETING_MESSAGE = "Ask me a coding question, debug code, or attach a file for analysis.";
 
@@ -107,6 +126,32 @@ export default function CodePage() {
 
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
+  }, [messages.length]);
+
+  // Fetch Memory Count
+  const fetchMemoryCount = async () => {
+    try {
+      const res = await axios.get("/api/memory/count");
+      if (res.data.count !== undefined) {
+        setMemoryCount(res.data.count);
+      }
+    } catch (err) {
+      console.error("Failed to fetch memory count:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchMemoryCount();
+  }, []);
+
+  // Trigger fetch on new message (bot response)
+  useEffect(() => {
+    if (messages.length > 0) {
+      fetchMemoryCount();
+      setIsMemoryPulsing(true);
+      const timer = setTimeout(() => setIsMemoryPulsing(false), 2000);
+      return () => clearTimeout(timer);
+    }
   }, [messages.length]);
 
   // Helper function to read file as Base64
@@ -230,12 +275,28 @@ export default function CodePage() {
           </div>
           <div>
             <h1 className="text-sm font-semibold leading-tight">Genie Code</h1>
-            <p className="text-[10px] text-muted-foreground">AI pair programmer</p>
+            <div className="flex items-center gap-2">
+              {/* Memory Counter */}
+              <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-green-500 font-bold scale-105")}>
+                <span className={cn("w-1.5 h-1.5 rounded-full bg-green-500", isMemoryPulsing && "animate-ping")} />
+                {memoryCount} memories
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Message count indicator */}
-        <div className="flex gap-2">
+        {/* Message count indicator and GitHub button */}
+        <div className="flex gap-2 items-center">
+          {/* GitHub Connect Button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={handleGitHubConnect}
+            title="Connect GitHub"
+          >
+            <Github className="h-4 w-4" />
+          </Button>
           {messages.length > 0 && (
             <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
               <AlertCircle className="h-3 w-3" />
@@ -271,7 +332,7 @@ export default function CodePage() {
               msg.role === "user" ? "justify-end" : "justify-start"
             )}>
               <div className={cn(
-                "flex max-w-[90%] md:max-w-[85%] gap-3",
+                "flex max-w-[90%] md:max-w-[85%] gap-3 min-w-0",
                 msg.role === "user" ? "flex-row-reverse" : "flex-row"
               )}>
                 {/* Avatars */}
@@ -290,7 +351,7 @@ export default function CodePage() {
 
                 {/* Content Bubble */}
                 <div className={cn(
-                  "relative text-sm md:text-base leading-relaxed break-words",
+                  "relative text-sm md:text-base leading-relaxed break-words flex-1 min-w-0 overflow-x-auto",
                   msg.role === "user"
                     ? "bg-secondary text-secondary-foreground rounded-[20px] rounded-tr-sm px-4 py-3 md:px-5 md:py-4 shadow-sm"
                     : "bg-transparent text-foreground px-0 py-0"
@@ -443,6 +504,14 @@ export default function CodePage() {
           </div>
         </div>
       </div>
+
+      {/* GitHub Consent Modal */}
+      <GitHubConsentModal
+        isOpen={isGitHubModalOpen}
+        onClose={() => setIsGitHubModalOpen(false)}
+        onConfirm={handleGitHubActionConfirm}
+        action={gitHubAction || { type: 'commit', repo: 'unknown', description: 'No action pending' }}
+      />
     </div>
   );
 }
