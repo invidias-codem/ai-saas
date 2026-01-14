@@ -193,7 +193,8 @@ async function createPresentation(structure: PresentationStructure): Promise<Buf
 }
 
 /**
- * Upload file to Slack
+ * Upload file to Slack using files.uploadV2 API
+ * The old files.upload method is deprecated
  */
 async function uploadFileToSlack(
     botToken: string,
@@ -203,38 +204,74 @@ async function uploadFileToSlack(
     title: string,
     threadTs?: string
 ): Promise<void> {
-    console.log('[SLIDE_HANDLER] Uploading file to Slack');
+    console.log('[SLIDE_HANDLER] Uploading file to Slack using files.uploadV2');
 
     try {
-        const formData = new FormData();
-        formData.append('channels', channel);
-        formData.append('title', title);
-        formData.append('filename', filename);
-
-        // Convert Buffer to Uint8Array for Blob compatibility
-        const uint8Array = new Uint8Array(fileBuffer);
-        formData.append('file', new Blob([uint8Array]), filename);
-
-        if (threadTs) {
-            formData.append('thread_ts', threadTs);
-        }
-
-        const response = await fetch(`${SLACK_API_BASE}/files.upload`, {
+        // Step 1: Get upload URL
+        const getUploadUrlResponse = await fetch(`${SLACK_API_BASE}/files.getUploadURLExternal`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${botToken}`,
+                'Content-Type': 'application/json',
             },
-            body: formData,
+            body: JSON.stringify({
+                filename: filename,
+                length: fileBuffer.length,
+            }),
         });
 
-        const data = await response.json();
+        const uploadUrlData = await getUploadUrlResponse.json();
 
-        if (!data.ok) {
-            console.error('[SLIDE_HANDLER] Failed to upload file:', data.error);
-            throw new Error(data.error);
+        if (!uploadUrlData.ok) {
+            console.error('[SLIDE_HANDLER] Failed to get upload URL:', uploadUrlData.error);
+            throw new Error(uploadUrlData.error);
         }
 
-        console.log('[SLIDE_HANDLER] File uploaded successfully');
+        const { upload_url, file_id } = uploadUrlData;
+
+        // Step 2: Upload file to the URL
+        const uploadResponse = await fetch(upload_url, {
+            method: 'POST',
+            body: fileBuffer,
+        });
+
+        if (!uploadResponse.ok) {
+            console.error('[SLIDE_HANDLER] Failed to upload file to URL');
+            throw new Error('File upload to URL failed');
+        }
+
+        // Step 3: Complete the upload
+        const completePayload: any = {
+            files: [
+                {
+                    id: file_id,
+                    title: title,
+                },
+            ],
+            channel_id: channel,
+        };
+
+        if (threadTs) {
+            completePayload.thread_ts = threadTs;
+        }
+
+        const completeResponse = await fetch(`${SLACK_API_BASE}/files.completeUploadExternal`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${botToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(completePayload),
+        });
+
+        const completeData = await completeResponse.json();
+
+        if (!completeData.ok) {
+            console.error('[SLIDE_HANDLER] Failed to complete upload:', completeData.error);
+            throw new Error(completeData.error);
+        }
+
+        console.log('[SLIDE_HANDLER] File uploaded successfully using files.uploadV2');
 
     } catch (error) {
         console.error('[SLIDE_HANDLER] Error uploading file:', error);
