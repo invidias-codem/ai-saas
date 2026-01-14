@@ -232,7 +232,7 @@ async function uploadFileToSlack(
         // Step 2: Upload file to the URL
         const uploadResponse = await fetch(upload_url, {
             method: 'POST',
-            body: fileBuffer,
+            body: fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength),
         });
 
         if (!uploadResponse.ok) {
