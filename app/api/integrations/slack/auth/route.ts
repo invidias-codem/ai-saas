@@ -12,7 +12,11 @@ export async function GET(req: Request) {
   try {
     const { userId } = auth();
     if (!userId) {
-      return new NextResponse('Unauthorized', { status: 401 });
+      // Redirect to sign-in if not authenticated, identifying the return URL
+      const currentUrl = new URL(req.url);
+      const signInUrl = new URL('/sign-in', currentUrl.origin);
+      signInUrl.searchParams.set('redirect_url', currentUrl.pathname);
+      return NextResponse.redirect(signInUrl.toString());
     }
 
     // Get Client ID from environment
@@ -31,7 +35,7 @@ export async function GET(req: Request) {
     // Construct redirect URI on the server side to ensure consistency
     // Use NEXT_PUBLIC_APP_URL if set, otherwise derive from request
     let baseUrl = process.env.NEXT_PUBLIC_APP_URL;
-    
+
     if (baseUrl) {
       // Remove trailing slash if present
       baseUrl = baseUrl.replace(/\/+$/, '');
@@ -40,7 +44,7 @@ export async function GET(req: Request) {
       const requestUrl = new URL(req.url);
       baseUrl = requestUrl.origin;
     }
-    
+
     const redirectUri = `${baseUrl}/api/integrations/slack/callback`;
 
     // Generate state for CSRF protection (includes userId and timestamp)
