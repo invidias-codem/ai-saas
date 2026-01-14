@@ -30,6 +30,29 @@ If you see this error when generating slides:
 
 ---
 
+## 🔧 Method Deprecated Error (Fixed)
+
+If you saw this error:
+```
+[SLIDE_HANDLER] Failed to upload file: method_deprecated
+```
+
+**Status**: ✅ **FIXED** in latest version (commit 0aa09729)
+
+**What happened**: Slack deprecated the `files.upload` API method.
+
+**Solution**: We've migrated to the new `files.uploadV2` API. Just pull the latest code:
+```bash
+git pull origin main
+```
+
+The new implementation uses a 3-step upload process:
+1. Get upload URL via `files.getUploadURLExternal`
+2. Upload file binary to URL
+3. Complete upload via `files.completeUploadExternal`
+
+---
+
 ## Required Scopes Checklist
 
 Make sure your Slack app has ALL of these:
