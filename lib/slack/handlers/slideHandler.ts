@@ -6,9 +6,67 @@
 import PptxGenJS from "pptxgenjs";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { SlackConfig } from '@/lib/slack';
+import { downloadSlackFile, extractFileContent, isSupportedFileType } from '@/lib/slack/fileHelpers';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
+
+// --- Theme Engine ---
+
+interface SlideTheme {
+    name: string;
+    colors: {
+        background: string;
+        text: string;
+        primary: string;
+        secondary: string;
+        accent: string;
+    };
+    fonts: {
+        header: string;
+        body: string;
+    };
+    layout: 'modern' | 'clean' | 'creative';
+}
+
+const THEMES: Record<string, SlideTheme> = {
+    modernDark: {
+        name: 'Modern Dark',
+        colors: {
+            background: '1A1A1A', // Dark Grey
+            text: 'FFFFFF',       // White
+            primary: '00D2FF',    // Cyan Neon
+            secondary: '3A7BD5',  // Blue
+            accent: 'FF0099',     // Pink Neon
+        },
+        fonts: { header: 'Arial', body: 'Arial' },
+        layout: 'modern'
+    },
+    corporateClean: {
+        name: 'Corporate Clean',
+        colors: {
+            background: 'FFFFFF', // White
+            text: '333333',       // Dark Grey
+            primary: '0056B3',    // Corporate Blue
+            secondary: '6C757D',  // Grey
+            accent: 'F8F9FA',     // Light Grey for sections
+        },
+        fonts: { header: 'Arial', body: 'Calibri' },
+        layout: 'clean'
+    },
+    creativeVibrant: {
+        name: 'Creative Vibrant',
+        colors: {
+            background: '2D0036', // Deep Purple
+            text: 'FFFFFF',
+            primary: 'FF4D4D',    // Red/Orange
+            secondary: 'C70039',  // Deep Red
+            accent: 'FFC300',     // Yellow
+        },
+        fonts: { header: 'Verdana', body: 'Verdana' },
+        layout: 'creative'
+    }
+};
 
 interface SlideContent {
     title: string;
@@ -26,14 +84,21 @@ interface PresentationStructure {
 /**
  * Generate presentation structure using Gemini
  */
-async function generatePresentationStructure(topic: string): Promise<PresentationStructure> {
+async function generatePresentationStructure(topic: string, fileContent?: string): Promise<PresentationStructure> {
     console.log('[SLIDE_HANDLER] Generating presentation structure for:', topic);
+    if (fileContent) {
+        console.log('[SLIDE_HANDLER] Using file content length:', fileContent.length);
+    }
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
 
-    const prompt = `Create a professional presentation outline about "${topic}".
-  
-Return ONLY valid JSON in this exact format:
+    let prompt = `Create a professional presentation outline about "${topic}".`;
+
+    if (fileContent) {
+        prompt += `\n\nBase the presentation SPECIFICALLY on the following content:\n\n${fileContent.substring(0, 30000)}\n\n(Content truncated if too long)`;
+    }
+
+    prompt += `\n\nReturn ONLY valid JSON in this exact format:
 {
   "title": "Main Title",
   "subtitle": "Optional Subtitle",
@@ -77,23 +142,29 @@ async function createPresentation(structure: PresentationStructure): Promise<Buf
 
     const pptx = new PptxGenJS();
 
+    // Select a random theme
+    const themeKeys = Object.keys(THEMES);
+    const randomThemeKey = themeKeys[Math.floor(Math.random() * themeKeys.length)];
+    const theme = THEMES[randomThemeKey];
+    console.log('[SLIDE_HANDLER] Using theme:', theme.name);
+
     // Set presentation properties
     pptx.author = 'Genie AI';
     pptx.title = structure.title;
     pptx.subject = structure.subtitle || structure.title;
-
-    // Define color scheme
-    const colors = {
-        primary: '4A90E2',
-        secondary: '7B68EE',
-        text: '333333',
-        lightText: '666666',
-        background: 'FFFFFF',
-    };
+    pptx.layout = 'LAYOUT_16x9';
 
     // Title Slide
     const titleSlide = pptx.addSlide();
-    titleSlide.background = { color: colors.primary };
+    titleSlide.background = { color: theme.colors.background };
+
+    // Add decorative element for title slide
+    if (theme.layout === 'modern' || theme.layout === 'creative') {
+        titleSlide.addShape(pptx.ShapeType.rect, {
+            x: 0, y: 0, w: '100%', h: 1.5,
+            fill: { color: theme.colors.primary, transparency: 80 }
+        });
+    }
 
     titleSlide.addText(structure.title, {
         x: 0.5,
@@ -102,84 +173,112 @@ async function createPresentation(structure: PresentationStructure): Promise<Buf
         h: 1.5,
         fontSize: 44,
         bold: true,
-        color: colors.background,
+        color: theme.colors.primary,
         align: 'center',
+        fontFace: theme.fonts.header
     });
 
     if (structure.subtitle) {
         titleSlide.addText(structure.subtitle, {
-            x: 0.5,
+            x: 1.0,
             y: 3.5,
-            w: 9.0,
+            w: 8.0,
             h: 0.8,
             fontSize: 24,
-            color: colors.background,
+            color: theme.colors.text,
             align: 'center',
+            fontFace: theme.fonts.body
         });
     }
 
     titleSlide.addText('Created by Genie AI', {
         x: 0.5,
-        y: 5.0,
+        y: 6.5,
         w: 9.0,
         h: 0.5,
         fontSize: 14,
-        color: colors.background,
+        color: theme.colors.secondary,
         align: 'center',
         italic: true,
+        fontFace: theme.fonts.body
     });
 
     // Content Slides
     for (const slideContent of structure.slides) {
         const slide = pptx.addSlide();
+        slide.background = { color: theme.colors.background };
+
+        // Footer
+        slide.addText(`Genie AI • ${structure.title}`, {
+            x: 0.5, y: 7.0, w: '90%', h: 0.3,
+            fontSize: 10, color: theme.colors.secondary,
+            align: 'right', fontFace: theme.fonts.body
+        });
 
         if (slideContent.layout === 'section') {
-            // Section slide (similar to title slide but different color)
-            slide.background = { color: colors.secondary };
+            // Section slide
+            slide.background = { color: theme.colors.primary };
+
+            // Decorative circle
+            slide.addShape(pptx.ShapeType.ellipse, {
+                x: 7.5, y: -1.5, w: 4.0, h: 4.0,
+                fill: { color: theme.colors.accent, transparency: 70 }
+            });
+
             slide.addText(slideContent.title, {
                 x: 0.5,
                 y: 2.5,
                 w: 9.0,
                 h: 1.5,
-                fontSize: 40,
+                fontSize: 48,
                 bold: true,
-                color: colors.background,
+                color: theme.colors.background, // Contrast
                 align: 'center',
+                fontFace: theme.fonts.header
             });
         } else {
             // Regular content slide
-            slide.background = { color: colors.background };
+
+            // Header bar (accent)
+            slide.addShape(pptx.ShapeType.rect, {
+                x: 0.5, y: 0.5, w: 0.15, h: 0.8,
+                fill: { color: theme.colors.accent }
+            });
 
             // Title
             slide.addText(slideContent.title, {
-                x: 0.5,
+                x: 0.8,
                 y: 0.5,
-                w: 9.0,
+                w: 8.5,
                 h: 0.8,
                 fontSize: 32,
                 bold: true,
-                color: colors.primary,
+                color: theme.colors.primary,
+                fontFace: theme.fonts.header
             });
 
             // Content
             if (slideContent.bullets && slideContent.bullets.length > 0) {
-                slide.addText(slideContent.bullets.map(b => ({ text: b, options: { bullet: true } })), {
+                slide.addText(slideContent.bullets.map(b => ({ text: b, options: { bullet: { type: 'bullet', color: theme.colors.accent } } })), {
                     x: 0.8,
-                    y: 1.5,
+                    y: 1.8,
                     w: 8.4,
-                    h: 4.0,
-                    fontSize: 18,
-                    color: colors.text,
-                    lineSpacing: 24,
+                    h: 4.5,
+                    fontSize: 20,
+                    color: theme.colors.text,
+                    lineSpacing: 28,
+                    fontFace: theme.fonts.body,
+                    paraSpaceBefore: 10
                 });
             } else if (slideContent.content) {
                 slide.addText(slideContent.content, {
                     x: 0.8,
-                    y: 1.5,
+                    y: 1.8,
                     w: 8.4,
-                    h: 4.0,
-                    fontSize: 18,
-                    color: colors.text,
+                    h: 4.5,
+                    fontSize: 20,
+                    color: theme.colors.text,
+                    fontFace: theme.fonts.body
                 });
             }
         }
@@ -328,27 +427,72 @@ export async function handleSlideCreation(
             config.botToken,
             channel,
             threadTs,
-            '📊 Creating your slide deck...'
+            '📊 Creating your presentation...'
         );
 
-        // Extract topic from user message
-        const topic = userMessage
+        // --- Handle File Attachments ---
+        let fileContext = '';
+        if (event.files && event.files.length > 0) {
+            console.log('[SLIDE_HANDLER] Found', event.files.length, 'attachments');
+            await setLoadingStatus(
+                config.botToken,
+                channel,
+                threadTs,
+                '📄 Reading attached files...'
+            );
+
+            for (const file of event.files) {
+                if (isSupportedFileType(file.filetype)) {
+                    console.log('[SLIDE_HANDLER] Processing file:', file.name);
+                    try {
+                        const buffer = await downloadSlackFile(file.url_private_download, config.botToken);
+                        const content = await extractFileContent(buffer, file.filetype, file.name);
+                        fileContext += `\n--- File: ${file.name} ---\n${content}\n`;
+                    } catch (err) {
+                        console.error('[SLIDE_HANDLER] Failed to read file:', file.name, err);
+                    }
+                }
+            }
+        }
+
+        // --- Extract Topic ---
+        let topic = userMessage
             .replace(/(create|make|generate|build)\s+(a\s+)?(slide\s+deck|presentation|powerpoint|pptx)\s+(about|on|for)?\s*/gi, '')
             .trim();
 
-        if (!topic) {
-            throw new Error('No presentation topic provided');
+        if (!topic && fileContext) {
+            topic = "the provided documents";
+            console.log('[SLIDE_HANDLER] Inferring topic from file content');
+        }
+
+        if (!topic && !fileContext) {
+            throw new Error('No presentation topic or file provided');
         }
 
         console.log('[SLIDE_HANDLER] Topic:', topic);
 
+        // Update status
+        await setLoadingStatus(
+            config.botToken,
+            channel,
+            threadTs,
+            '🎨 Designing slides...'
+        );
+
         // Generate presentation structure
-        const structure = await generatePresentationStructure(topic);
+        const structure = await generatePresentationStructure(topic, fileContext);
 
         // Create PowerPoint file
         const pptxBuffer = await createPresentation(structure);
 
         // Upload to Slack
+        await setLoadingStatus(
+            config.botToken,
+            channel,
+            threadTs,
+            '📤 Uploading presentation...'
+        );
+
         const filename = `${structure.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pptx`;
         await uploadFileToSlack(
             config.botToken,
