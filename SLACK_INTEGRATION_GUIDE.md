@@ -38,12 +38,15 @@ Navigate to **OAuth & Permissions** and add these Bot Token Scopes:
 app_mentions:read    - Read messages that mention the bot
 chat:write           - Send messages as the bot
 commands             - Add slash commands
+files:write          - Upload files (required for slide decks)
 im:history           - View messages in DMs
 im:read              - View basic DM info
 im:write             - Start DMs with users
 reactions:write      - Add reactions to messages
-users:read           - View user info
+users:read           - View user info (required for @mention resolution in calendar)
 ```
+
+> **Important**: The `files:write` scope is required for the slide deck feature. Without it, you'll get a `missing_scope` error when trying to generate presentations.
 
 ### 3. Enable Event Subscriptions
 
@@ -398,6 +401,82 @@ See `SLACK_MARKETPLACE_CHECKLIST.md` for the full submission checklist.
 - Single workspace support
 - Events API handler
 - Slash commands
+
+---
+
+## Troubleshooting
+
+### Common Errors
+
+#### `missing_scope` Error
+
+**Symptom**: Slide deck generation fails with error:
+```
+[SLIDE_HANDLER] Failed to upload file: missing_scope
+```
+
+**Cause**: The Slack app doesn't have the `files:write` scope.
+
+**Solution**:
+1. Go to your Slack App settings → **OAuth & Permissions**
+2. Add `files:write` to Bot Token Scopes
+3. **Reinstall the app** to your workspace (critical step!)
+4. The new scope will only take effect after reinstallation
+
+**Quick Fix**:
+```bash
+# Users need to reinstall via:
+https://your-domain.com/api/integrations/slack/auth
+```
+
+#### `user_not_found` Error (Calendar)
+
+**Symptom**: Calendar scheduling fails to resolve @mentions.
+
+**Cause**: The Slack app doesn't have `users:read` scope.
+
+**Solution**:
+1. Add `users:read` to Bot Token Scopes
+2. Reinstall the app
+
+#### `invalid_auth` Error
+
+**Symptom**: All Slack requests fail with authentication error.
+
+**Cause**: Bot token is invalid or expired.
+
+**Solution**:
+1. Check Firestore for correct token storage
+2. Verify `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET` env vars
+3. Reinstall the app to refresh token
+
+### Feature-Specific Requirements
+
+| Feature | Required Scopes | Notes |
+|---------|----------------|-------|
+| **Chat** | `chat:write`, `app_mentions:read` | Basic functionality |
+| **Image Generation** | `chat:write` | Uses chat.postMessage with image blocks |
+| **Slide Decks** | `chat:write`, `files:write` | Uploads .pptx files |
+| **Calendar** | `chat:write`, `users:read` | Resolves @mentions to emails |
+| **Code Assistant** | `chat:write` | No additional scopes |
+
+### Verifying Scopes
+
+To check if your app has all required scopes:
+
+1. Go to Slack App settings → **OAuth & Permissions**
+2. Under "Scopes" → "Bot Token Scopes", verify you have:
+   - ✅ `app_mentions:read`
+   - ✅ `chat:write`
+   - ✅ `commands`
+   - ✅ `files:write` ← **Required for slides**
+   - ✅ `im:history`
+   - ✅ `im:read`
+   - ✅ `im:write`
+   - ✅ `reactions:write`
+   - ✅ `users:read` ← **Required for calendar @mentions**
+
+3. If any are missing, add them and **reinstall the app**
 
 ---
 
