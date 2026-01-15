@@ -33,14 +33,15 @@ export async function POST(req: Request) {
         }
 
         // Import Supabase client dynamically to avoid circular deps if any
-        const { supabase } = await import("@/lib/supabaseClient");
+        // Use supabaseAdmin to bypass RLS since we manage auth with Clerk
+        const { supabaseAdmin } = await import("@/lib/supabaseClient");
 
-        if (!supabase) {
+        if (!supabaseAdmin) {
             console.error("Supabase client not initialized. Missing environment variables.");
             return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from("conversations")
             .insert({
                 user_id: userId,
