@@ -128,7 +128,7 @@ export default function DocsPage() {
                                 <div>
                                     <h3 className="text-xl font-semibold mb-3">RAG (Retrieval-Augmented Generation)</h3>
                                     <p className="text-gray-400 leading-relaxed">
-                                        Genie doesn't just guess. It retrieves relevant information from your stored documents and past conversations to provide grounded, factual answers.
+                                        Genie doesn&apos;t just guess. It retrieves relevant information from your stored documents and past conversations to provide grounded, factual answers.
                                     </p>
                                 </div>
                             </div>
@@ -157,7 +157,7 @@ export default function DocsPage() {
                                 <div className="absolute -left-[41px] w-6 h-6 rounded-full bg-blue-500 border-4 border-[#111827] z-10" />
                                 <h3 className="text-xl font-semibold mb-4">1. Create an Account</h3>
                                 <p className="text-gray-400 mb-4">
-                                    Sign up for a free account to get started. You'll get access to the dashboard where you can manage your settings and view your conversation history.
+                                    Sign up for a free account to get started. You&apos;ll get access to the dashboard where you can manage your settings and view your conversation history.
                                 </p>
                                 <Link href="/dashboard">
                                     <Button variant="outline" className="border-white/20 hover:bg-white/5">
