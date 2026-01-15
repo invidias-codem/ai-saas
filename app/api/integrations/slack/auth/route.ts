@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     slackAuthUrl.searchParams.append('client_id', clientId);
     slackAuthUrl.searchParams.append('redirect_uri', redirectUri);
     // Scopes needed for the requested bot functionality
-    slackAuthUrl.searchParams.append('scope', 'app_mentions:read,chat:write,commands,im:history,im:read,im:write,reactions:write,users:read');
+    slackAuthUrl.searchParams.append('scope', 'app_mentions:read,chat:write,commands,im:history,im:read,im:write,reactions:write,users:read,assistant:write');
     slackAuthUrl.searchParams.append('state', state);
 
     return NextResponse.redirect(slackAuthUrl.toString());
