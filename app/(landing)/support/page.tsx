@@ -6,18 +6,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import Image from "next/image";
-import { 
+import {
   EnvelopeClosedIcon,
   ChatBubbleIcon,
   QuestionMarkCircledIcon,
   CheckCircledIcon,
   ExclamationTriangleIcon,
 } from "@radix-ui/react-icons";
-import { 
-  Mail, 
-  MessageSquare, 
-  Clock, 
-  FileText, 
+import {
+  Mail,
+  MessageSquare,
+  Clock,
+  FileText,
   Slack,
   ChevronDown,
   ChevronUp,
@@ -40,7 +40,7 @@ const SupportPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
+
     // Simulate form submission
     // In production, this would send to your support system
     try {
@@ -56,7 +56,7 @@ const SupportPage = () => {
 
   return (
     <div className="bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
-      
+
       {/* Background Gradients */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl" />
@@ -67,7 +67,7 @@ const SupportPage = () => {
       <header className="relative z-10 py-6 px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
         <Link href="/" className="flex items-center gap-2">
           <div className="relative w-8 h-8">
-            <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" /> 
+            <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
           </div>
           <span className="text-2xl font-bold text-white tracking-tight">Genie AI</span>
         </Link>
@@ -98,13 +98,13 @@ const SupportPage = () => {
             <MessageSquare className="w-4 h-4 mr-2" />
             Support Center
           </div>
-          
+
           <h1 className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight leading-[1.1]">
             How Can We Help?
           </h1>
-          
+
           <p className="text-lg text-gray-400 max-w-2xl mx-auto">
-            We&apos;re here to help you get the most out of Genie AI. 
+            We&apos;re here to help you get the most out of Genie AI.
             Reach out and we&apos;ll respond within 2 business days.
           </p>
         </section>
@@ -113,7 +113,7 @@ const SupportPage = () => {
         <section className="px-4 pb-16 max-w-5xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {contactOptions.map((option, index) => (
-              <div 
+              <div
                 key={index}
                 className="p-6 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition text-center"
               >
@@ -147,7 +147,7 @@ const SupportPage = () => {
                 <p className="text-gray-400 mb-6">
                   Thank you for reaching out. We&apos;ll respond within 2 business days.
                 </p>
-                <Button 
+                <Button
                   onClick={() => setSubmitStatus("idle")}
                   variant="outline"
                   className="border-white/20 text-white hover:bg-white/10"
@@ -185,7 +185,7 @@ const SupportPage = () => {
                     />
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Subject
@@ -199,7 +199,7 @@ const SupportPage = () => {
                     placeholder="How can we help?"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Message
@@ -220,9 +220,9 @@ const SupportPage = () => {
                     <p className="text-red-400 text-sm">Something went wrong. Please try again.</p>
                   </div>
                 )}
-                
-                <Button 
-                  type="submit" 
+
+                <Button
+                  type="submit"
                   disabled={isSubmitting}
                   className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-6 rounded-xl text-lg"
                 >
@@ -253,7 +253,7 @@ const SupportPage = () => {
 
             <div className="space-y-4">
               {faqs.map((faq, index) => (
-                <div 
+                <div
                   key={index}
                   className="rounded-xl border border-white/10 bg-white/5 overflow-hidden"
                 >
@@ -285,7 +285,7 @@ const SupportPage = () => {
             <Clock className="w-10 h-10 text-blue-400 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-white mb-4">Our Response Commitment</h2>
             <p className="text-gray-400 max-w-2xl mx-auto">
-              We aim to respond to all support requests within <strong className="text-white">2 business days</strong>. 
+              We aim to respond to all support requests within <strong className="text-white">2 business days</strong>.
               For urgent issues, please include &quot;URGENT&quot; in your subject line.
             </p>
           </div>
@@ -298,11 +298,11 @@ const SupportPage = () => {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="relative w-6 h-6">
-                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" /> 
+                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
               </div>
               <span className="text-lg font-bold text-white">Genie AI</span>
             </div>
-            
+
             <div className="flex items-center gap-6 text-sm text-gray-400">
               <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
               <Link href="/slack" className="hover:text-white transition">Slack Integration</Link>
@@ -310,7 +310,7 @@ const SupportPage = () => {
               <Link href="/blog" className="hover:text-white transition">Blog</Link>
             </div>
           </div>
-          
+
           <div className="mt-8 pt-8 border-t border-white/10 text-center">
             <p className="text-gray-500 text-sm">
               © {new Date().getFullYear()} Genie AI. All rights reserved.
@@ -334,8 +334,8 @@ const contactOptions = [
     color: "text-blue-400",
     bgColor: "bg-blue-500/10",
     action: {
-      label: "support@genieai.app",
-      href: "mailto:support@genieai.app",
+      label: "jjmohamme14@gmail.com",
+      href: "mailto:jjmohamme14@gmail.com",
     },
   },
   {

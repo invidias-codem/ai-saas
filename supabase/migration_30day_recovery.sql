@@ -80,7 +80,7 @@ WHERE is_deleted = true;
 -- View for conversations with recovery info
 -- =============================================
 
-CREATE OR REPLACE VIEW conversations_with_recovery AS
+CREATE OR REPLACE VIEW conversations_with_recovery WITH (security_invoker = true) AS
 SELECT 
     *,
     CASE 
