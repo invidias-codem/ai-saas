@@ -35,8 +35,7 @@ export async function POST(req: Request) {
         // Use supabaseAdmin to bypass RLS since we manage auth with Clerk
         const { supabaseAdmin } = await import("@/lib/supabaseClient");
 
-        // Use supabaseAdmin to bypass RLS since we manage auth with Clerk
-        const { supabaseAdmin } = await import("@/lib/supabaseClient");
+
 
         if (!supabaseAdmin) {
             console.error("Supabase client not initialized. Missing environment variables.");
