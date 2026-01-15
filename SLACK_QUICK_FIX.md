@@ -30,26 +30,21 @@ If you see this error when generating slides:
 
 ---
 
-## 🔧 Method Deprecated Error (Fixed)
+#### `invalid_arguments` Error (Fixed)
 
-If you saw this error:
+**Symptom**:
 ```
-[SLIDE_HANDLER] Failed to upload file: method_deprecated
+[SLIDE_HANDLER] Failed to get upload URL: invalid_arguments
 ```
 
-**Status**: ✅ **FIXED** in latest version (commit 0aa09729)
+**Cause**: The `files.getUploadURLExternal` API requires `application/x-www-form-urlencoded` format, but JSON was sent (or vice versa depending on API version).
 
-**What happened**: Slack deprecated the `files.upload` API method.
+**Solution**:
+We updated the handler to use `URLSearchParams` for the request body. Ensure you are on the latest commit.
 
-**Solution**: We've migrated to the new `files.uploadV2` API. Just pull the latest code:
 ```bash
 git pull origin main
 ```
-
-The new implementation uses a 3-step upload process:
-1. Get upload URL via `files.getUploadURLExternal`
-2. Upload file binary to URL
-3. Complete upload via `files.completeUploadExternal`
 
 ---
 

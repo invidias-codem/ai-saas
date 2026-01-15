@@ -20,13 +20,7 @@ export {
   getSlackConfig,
   saveSlackInstallation,
   removeSlackInstallation,
-  getInstallationsForUser,
   hasInstallation,
-  getInstallation,
-  linkInstallationToUser,
-  logInstallationEvent,
-  getAllInstallations,
-  validateInstallation,
   type SlackConfig,
   type SlackInstallation,
 } from './tokenManager';

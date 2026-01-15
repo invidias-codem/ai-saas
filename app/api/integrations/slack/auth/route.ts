@@ -1,81 +1,79 @@
-/**
- * Slack OAuth Authentication Endpoint
- * Initiates OAuth 2.0 flow for Slack integration
- */
+import { NextRequest, NextResponse } from 'next/server';
 
-import { auth } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
+export const runtime = 'edge';
 
 const SLACK_AUTH_URL = 'https://slack.com/oauth/v2/authorize';
 
-export async function GET(req: Request) {
+/**
+ * Initiates the Slack OAuth 2.0 flow
+ */
+export async function GET(req: NextRequest) {
   try {
-    const { userId } = auth();
-    if (!userId) {
-      // Redirect to sign-in if not authenticated, identifying the return URL
-      const currentUrl = new URL(req.url);
-      const signInUrl = new URL('/sign-in', currentUrl.origin);
-      signInUrl.searchParams.set('redirect_url', currentUrl.pathname);
-      return NextResponse.redirect(signInUrl.toString());
-    }
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get('userId'); // Internal User ID passed from frontend
 
-    // Get Client ID from environment
     const clientId = process.env.SLACK_CLIENT_ID;
-    if (!clientId) {
-      console.error('[SLACK_AUTH] SLACK_CLIENT_ID not configured');
-      return new NextResponse(
-        JSON.stringify({
-          error: 'Slack integration not configured',
-          details: 'SLACK_CLIENT_ID environment variable is missing',
-        }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+    const clientSecret = process.env.SLACK_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      return NextResponse.json(
+        { error: 'Slack configuration missing' },
+        { status: 500 }
       );
     }
 
-    // Construct redirect URI on the server side to ensure consistency
-    // Use NEXT_PUBLIC_APP_URL if set, otherwise derive from request
-    let baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    // Determine Redirect URI
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin;
+    // Remove trailing slash if present
+    const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
+    const redirectUri = `${cleanBaseUrl}/api/integrations/slack/callback`;
 
-    if (baseUrl) {
-      // Remove trailing slash if present
-      baseUrl = baseUrl.replace(/\/+$/, '');
-    } else {
-      // Fallback to request origin
-      const requestUrl = new URL(req.url);
-      baseUrl = requestUrl.origin;
-    }
+    // ─────────────────────────────────────────────────────────────────
+    // Generate Stateless "State" Parameter
+    // ─────────────────────────────────────────────────────────────────
+    // We sign the state to prevent tampering. 
+    // Format: "userId:timestamp:signature"
+    const timestamp = Date.now().toString();
+    const dataToSign = `${userId || 'system'}:${timestamp}`;
 
-    const redirectUri = `${baseUrl}/api/integrations/slack/callback`;
+    // Create a signature using the Client Secret (or dedicated key)
+    // Using Web Crypto API for Edge compatibility
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(clientSecret);
+    const msgData = encoder.encode(dataToSign);
 
-    // Generate state for CSRF protection (includes userId and timestamp)
-    const state = Buffer.from(`${userId}:${Date.now()}`).toString('base64');
+    const key = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
 
-    // Build Slack OAuth URL
+    const signatureBuffer = await crypto.subtle.sign('HMAC', key, msgData);
+    const signature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+
+    // Final state string (url-safe usually preferred, but base64 is accepted by Slack usually if short enough)
+    // We replace characters to make it URL safe just in case
+    const safeSignature = signature.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const state = `${dataToSign}:${safeSignature}`;
+
+    // ─────────────────────────────────────────────────────────────────
+    // Build OAuth URL
+    // ─────────────────────────────────────────────────────────────────
     const slackAuthUrl = new URL(SLACK_AUTH_URL);
     slackAuthUrl.searchParams.append('client_id', clientId);
     slackAuthUrl.searchParams.append('redirect_uri', redirectUri);
-    slackAuthUrl.searchParams.append('response_type', 'code');
+    // Scopes needed for the requested bot functionality
+    slackAuthUrl.searchParams.append('scope', 'app_mentions:read,chat:write,commands,im:history,im:read,im:write,reactions:write,users:read');
     slackAuthUrl.searchParams.append('state', state);
-    slackAuthUrl.searchParams.append(
-      'scope',
-      'app_mentions:read,chat:write,commands,im:history,im:read,im:write,reactions:write,users:read'
-    );
-
-    console.log('[SLACK_AUTH] Initiating OAuth flow:', {
-      clientId: clientId.substring(0, 10) + '...',
-      redirectUri,
-      userId,
-    });
 
     return NextResponse.redirect(slackAuthUrl.toString());
   } catch (error: any) {
     console.error('[SLACK_AUTH_ERROR]', error);
-    return new NextResponse(
-      JSON.stringify({
-        error: 'Failed to initiate Slack authentication',
-        details: error.message,
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    return NextResponse.json(
+      { error: 'Failed to initiate Slack authentication' },
+      { status: 500 }
     );
   }
 }
