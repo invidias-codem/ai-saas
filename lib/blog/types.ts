@@ -27,11 +27,12 @@ export interface BlogPost {
   content: string;
 }
 
-export type BlogCategory = 
+export type BlogCategory =
   | 'ai-memory'
   | 'ai-productivity'
   | 'integrations'
-  | 'industry-insights';
+  | 'industry-insights'
+  | 'security';
 
 export interface BlogCategoryInfo {
   slug: BlogCategory;
@@ -89,5 +90,12 @@ export const BLOG_CATEGORIES: Record<BlogCategory, BlogCategoryInfo> = {
     description: 'Trends, comparisons, and research in the AI space',
     color: 'text-orange-400',
     bgColor: 'bg-orange-500/10',
+  },
+  'security': {
+    slug: 'security',
+    name: 'Security & Privacy',
+    description: 'Updates on how we protect your data, handle auth, and compliance.',
+    color: 'text-red-400',
+    bgColor: 'bg-red-500/10',
   },
 };

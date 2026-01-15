@@ -1,0 +1,61 @@
+---
+title: "Securing Your Data: Stateless OAuth and Encryption at Rest"
+description: "A detailed look at how we hardened our Slack integration using Supabase, Edge Runtime, and pgcrypto for military-grade security."
+publishedAt: "2026-01-14"
+author: "genie-team"
+category: "security"
+tags: ["supabase", "security", "encryption", "oauth", "edge-functions"]
+featured: true
+ogImage: "/blog/security-update-og.png"
+---
+
+# Securing Your Data: Stateless OAuth and Encryption at Rest
+
+Security isn't a feature; it's a foundation. As we continue to scale Genie, ensuring the privacy and integrity of your data is our top priority.
+
+Today, we're announcing a major overhaul of our authentication and data storage architecture, specifically focusing on our Slack integration. We've moved to a **stateless, multi-tenant** model powered by **Supabase** and the **Edge Runtime**.
+
+Here's what changed and why it matters to you.
+
+## 1. Stateless OAuth with HMAC Signatures
+
+In typical OAuth flows, servers often store a temporary "state" in a database to verify requests. While functional, this adds latency and stateful complexity.
+
+We've moved to a completely stateless approach.
+
+*   **How it works**: When you initiate a Slack connection, we generate a cryptographically signed `state` parameter using an **HMAC (Hash-Based Message Authentication Code)**.
+*   **The Benefit**: This allows us to verify the integrity of the request on our Edge network without hitting a database. It prevents CSRF (Cross-Site Request Forgery) attacks while keeping our API blazing fast.
+
+## 2. Encryption at Rest with pgcrypto
+
+Storing access tokens in plain text is a non-starter. We've upgraded our database layer to use **pgcrypto**, a robust cryptographic extension for PostgreSQL.
+
+### Atomic Encryption
+
+We introduced a secure Remote Procedure Call (RPC) called `upsert_slack_integration`. This function handles the entire storage process within the database engine itself:
+
+1.  **Input**: The plain text access token is sent securely to the database.
+2.  **Encryption**: Postgres encrypts the token using `pgp_sym_encrypt` *before* it is ever written to the disk.
+3.  **Storage**: Only the encrypted binary data (`bytea`) is stored in the `slack_integrations` table.
+
+This means that even if someone were to gain physical access to our database servers, your tokens would remain unreadable.
+
+## 3. Dedicated Security Schemas
+
+We've also reorganized our database to enforce stricter boundaries.
+
+*   **Extensions Schema**: We've moved powerful extensions like `vector` (used for AI memory) into a dedicated `extensions` schema.
+*   **Search Path Hardening**: We've explicitly defined `search_path` for all database functions. This mitigates "search path hijacking" attacks, where a malicious actor runs code by tricking the database into looking in the wrong schema.
+
+## 4. Multi-Tenancy & RLS
+
+Finally, we've audited and tightened our **Row Level Security (RLS)** policies.
+
+*   **Service Role Isolation**: We've restricted "superuser" policies to strictly the `service_role`.
+*   **User Ownership**: Every piece of data—from your chat history to your knowledge graph—is strictly bound to your `user_id`. You can only ever see what you own.
+
+## The Result
+
+These updates run silently in the background, but they represent a significant leap forward in our security posture. 
+
+We believe that building trust means being transparent about how we protect your data. If you have any questions or want to dive deeper into our security practices, check out our [Documentation](/docs) or reach out to us at [jjmohamme14@gmail.com](mailto:jjmohamme14@gmail.com).
