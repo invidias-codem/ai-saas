@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'edge';
 
 const SLACK_TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
 
 // Initialize Supabase Client for Edge
-// We need Service Role to manage integrations securely
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+// We use the centralized client from lib
 const encryptionKey = process.env.SLACK_TOKEN_ENCRYPTION_KEY || process.env.SLACK_CLIENT_SECRET!;
 
 export async function GET(req: NextRequest) {
@@ -84,13 +81,13 @@ export async function GET(req: NextRequest) {
     }
 
     // 4. Save to Supabase (Upsert via RPC)
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { supabaseAdmin } = await import('@/lib/supabaseClient');
 
     // "system" indicates a public install (no specific user logged in during auth start)
     // If userIdRaw is valid UUID, we link it.
     const userIdToLink = (userIdRaw && userIdRaw !== 'system' && userIdRaw !== 'undefined') ? userIdRaw : null;
 
-    const { error: rpcError } = await supabase.rpc('upsert_slack_integration', {
+    const { error: rpcError } = await supabaseAdmin.rpc('upsert_slack_integration', {
       p_slack_team_id: tokenData.team.id,
       p_slack_team_name: tokenData.team.name,
       p_access_token: tokenData.access_token,
