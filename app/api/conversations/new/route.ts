@@ -32,7 +32,9 @@ export async function POST(req: Request) {
             // No body is fine, use default title
         }
 
-        // Import Supabase client dynamically to avoid circular deps if any
+        // Use supabaseAdmin to bypass RLS since we manage auth with Clerk
+        const { supabaseAdmin } = await import("@/lib/supabaseClient");
+
         // Use supabaseAdmin to bypass RLS since we manage auth with Clerk
         const { supabaseAdmin } = await import("@/lib/supabaseClient");
 

@@ -38,14 +38,14 @@ export async function GET(req: Request, { params }: RouteParams) {
         const { id } = params;
         if (!id) return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
 
-        const { supabase } = await import("@/lib/supabaseClient");
+        const { supabaseAdmin } = await import("@/lib/supabaseClient");
 
-        if (!supabase) {
+        if (!supabaseAdmin) {
             return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
         }
 
         // Fetch conversation metadata
-        const { data: conv, error: convError } = await supabase
+        const { data: conv, error: convError } = await supabaseAdmin
             .from("conversations")
             .select("*")
             .eq("id", id)
@@ -66,7 +66,7 @@ export async function GET(req: Request, { params }: RouteParams) {
         }
 
         // Fetch messages
-        const { data: messages, error: msgError } = await supabase
+        const { data: messages, error: msgError } = await supabaseAdmin
             .from("messages")
             .select("*")
             .eq("conversation_id", id)
@@ -111,10 +111,10 @@ export async function DELETE(req: Request, { params }: RouteParams) {
             return NextResponse.json({ error: "Cannot delete default conversation" }, { status: 400 });
         }
 
-        const { supabase } = await import("@/lib/supabaseClient");
+        const { supabaseAdmin } = await import("@/lib/supabaseClient");
 
         // Verify existence and ownership
-        const { data: conv, error: checkError } = await supabase
+        const { data: conv, error: checkError } = await supabaseAdmin
             .from("conversations")
             .select("user_id")
             .eq("id", id)
@@ -124,7 +124,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
         if (conv.user_id !== userId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
         // Perform Soft Delete with 30-day recovery window
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
             .from("conversations")
             .update({
                 is_deleted: true,
@@ -175,14 +175,14 @@ export async function PATCH(req: Request, { params }: RouteParams) {
             return NextResponse.json({ success: true, id }); // Nothing to update
         }
 
-        const { supabase } = await import("@/lib/supabaseClient");
+        const { supabaseAdmin } = await import("@/lib/supabaseClient");
 
         // Verify ownership first (optional if using RLS, but standard practice in backend)
-        const { data: conv, error: checkError } = await supabase.from("conversations").select("user_id").eq("id", id).single();
+        const { data: conv, error: checkError } = await supabaseAdmin.from("conversations").select("user_id").eq("id", id).single();
         if (checkError || !conv) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
         if (conv.user_id !== userId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await supabaseAdmin
             .from("conversations")
             .update(updates)
             .eq("id", id);
