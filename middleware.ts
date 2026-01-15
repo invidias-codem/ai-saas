@@ -24,6 +24,7 @@ export default authMiddleware({
     "/api/integrations/slack/events",        // Slack Events API
     "/api/integrations/slack/command",       // Slack slash commands
     "/api/integrations/slack/interactivity", // Slack interactivity (buttons, modals)
+    "/api/integrations/slack/auth",          // 0Auth Init (handled manually for redirects)
   ],
 
   ignoredRoutes: [
