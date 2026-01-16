@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { PersonIcon } from "@radix-ui/react-icons";
 import { ShareIconButton } from "@/components/share-button";
 import { GitHubConsentModal } from "@/components/github-consent-modal";
+import { compressObject, decompress } from "@/lib/compression";
 
 // Define the message structure
 interface Message {
@@ -186,17 +187,36 @@ export default function CodePage() {
     setMessages(newMessages);
     setUserInput("");
 
-    const apiPayload = {
-      messages: newMessages.map(msg => ({ role: msg.role, text: msg.text })),
+    const messagesPayload = newMessages.map(msg => ({ role: msg.role, text: msg.text }));
+    const payloadString = JSON.stringify(messagesPayload);
+
+    let apiPayload: any = {
       currentUserPrompt: trimmedInput,
       fileData: selectedFile
     };
+
+    // Transit Compression: Compress if payload > 1KB
+    if (payloadString.length > 1000) {
+      apiPayload.compressedData = compressObject(messagesPayload);
+      apiPayload.isCompressed = true;
+    } else {
+      apiPayload.messages = messagesPayload;
+    }
 
     setSelectedFile(null);
 
     try {
       const response = await axios.post("/api/code", apiPayload);
-      const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
+
+      let botText = response.data.text;
+
+      // Handle compressed response
+      if (response.data.isCompressed && response.data.text) {
+        const decompressed = decompress(response.data.text);
+        if (decompressed) botText = decompressed;
+      }
+
+      const botMessage: Message = { text: botText, role: "bot", timestamp: new Date() };
       setMessages((prevMessages) => [...prevMessages, botMessage]);
     } catch (error: any) {
       console.error("[CODE_PAGE_ERROR]", error);

@@ -22,6 +22,7 @@ import { sanitizeHistory } from '@/lib/gemini';
 import { findRelatedEntities, formatGraphContext, addNode, addEdge } from '@/lib/memory/graphStore';
 import { performResearch, formatSearchResults } from '@/lib/agents/researcher';
 import { getUserProfile, getConversationMemories, formatUserProfileForPrompt } from '@/lib/memoryPromotion';
+import { decompressObject, compress } from '@/lib/compression';
 
 const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
 
@@ -103,17 +104,40 @@ export async function POST(req: Request) {
 
     const validationResult = chatSchema.safeParse(body);
 
-    if (!validationResult.success) {
-      return new NextResponse(JSON.stringify({
-        error: "Validation Error",
-        details: validationResult.error.flatten()
-      }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" }
-      });
+    // Check for compressed data if validation fails (likely because 'messages' is missing)
+    let finalMessages = null;
+    let finalFileData = null;
+    let finalMimeType = null;
+
+    if (validationResult.success) {
+      finalMessages = validationResult.data.messages;
+      finalFileData = validationResult.data.fileData;
+      finalMimeType = validationResult.data.mimeType;
+    } else {
+      // Handle Compressed Payload
+      if (body.isCompressed && body.compressedData) {
+        const decompressedMessages = decompressObject<any[]>(body.compressedData);
+        if (decompressedMessages && Array.isArray(decompressedMessages)) {
+          finalMessages = decompressedMessages;
+          finalFileData = body.fileData;
+          finalMimeType = body.mimeType;
+        } else {
+          return new NextResponse("Invalid compressed data", { status: 400 });
+        }
+      } else {
+        return new NextResponse(JSON.stringify({
+          error: "Validation Error",
+          details: validationResult.error.flatten()
+        }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
     }
 
-    const { messages, fileData, mimeType } = validationResult.data;
+    const messages = finalMessages;
+    const fileData = finalFileData;
+    const mimeType = finalMimeType;
 
     // ✅ Gather comprehensive user context
     const userContext = await gatherUserContext(userId, clerkUser);
@@ -280,6 +304,15 @@ export async function POST(req: Request) {
 
     // ✅ Log successful conversation
     console.log(`[CONVERSATION] User: ${userContext.fullName} (${userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
+
+    // Compress Response if Large (> 1KB)
+    if (responseText.length > 1000) {
+      const compressedResponse = compress(responseText);
+      return NextResponse.json({
+        text: compressedResponse,
+        isCompressed: true
+      });
+    }
 
     return NextResponse.json({ text: responseText });
 

@@ -124,12 +124,16 @@ async function processMemoriesInBackground(
             // Check if this should be user-scoped from the start (high-confidence personal info)
             const initialScope = shouldPromoteMemory(memoryWithId) ? 'user' : 'conversation';
 
+            // Compress content for efficient storage
+            const { compress } = await import('@/lib/compression');
+            const compressedContent = compress(memory.content);
+
             const { data, error } = await supabase
                 .from('memory_bank')
                 .insert({
                     user_id: userId,
                     source_conversation_id: conversationId,
-                    content: memory.content,
+                    content: compressedContent,
                     embedding: embedding,
                     type: memory.type || 'general',
                     confidence: memory.confidence || 0.8,

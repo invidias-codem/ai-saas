@@ -26,11 +26,15 @@ export async function storeMemory(
     try {
         const embedding = await generateEmbedding(content);
 
+        // Compress content for storage to save space
+        const { compress } = await import('@/lib/compression');
+        const compressedContent = compress(content);
+
         const { data, error } = await supabase
             .from('memory_bank')
             .insert({
                 user_id: userId,
-                content,
+                content: compressedContent,
                 embedding, // Supabase pgvector handles array -> vector conversion
                 type,
                 metadata
@@ -61,6 +65,7 @@ export async function searchMemories(
 ): Promise<Memory[]> {
     try {
         const queryEmbedding = await generateEmbedding(query);
+        const { decompress } = await import('@/lib/compression');
 
         const { data, error } = await supabase.rpc('match_memories', {
             query_embedding: queryEmbedding,
@@ -77,7 +82,7 @@ export async function searchMemories(
         return data.map((item: any) => ({
             id: item.id,
             userId: userId,
-            content: item.content,
+            content: decompress(item.content), // Decompress content (handles legacy safely)
             type: item.type,
             metadata: item.metadata,
             similarity: item.similarity,

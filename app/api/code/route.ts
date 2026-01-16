@@ -18,6 +18,7 @@ import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
 import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/graphStore';
 import { performResearch, formatSearchResults } from '@/lib/agents/researcher';
 import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotion';
+import { decompressObject, compress } from '@/lib/compression';
 
 const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
 
@@ -61,7 +62,19 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { messages, currentUserPrompt, fileData } = body;
+
+    // Handle compressed payload
+    let messages = body.messages;
+    if (body.isCompressed && body.compressedData) {
+      const decompressedMessages = decompressObject<any[]>(body.compressedData);
+      if (decompressedMessages && Array.isArray(decompressedMessages)) {
+        messages = decompressedMessages;
+      } else {
+        return new NextResponse("Invalid compressed data", { status: 400 });
+      }
+    }
+
+    const { currentUserPrompt, fileData } = body;
 
     if (!messages && (!currentUserPrompt && !fileData)) {
       return new NextResponse("Messages or prompt/file are required", { status: 400 });
@@ -241,6 +254,15 @@ export async function POST(req: Request) {
 
     // Log successful code interaction
     console.log(`[CODE] User: ${userContext.fullName} (${userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
+
+    // Compress Response if Large (> 1KB)
+    if (responseText.length > 1000) {
+      const compressedResponse = compress(responseText);
+      return NextResponse.json({
+        text: compressedResponse,
+        isCompressed: true
+      });
+    }
 
     return NextResponse.json({ text: responseText });
 
