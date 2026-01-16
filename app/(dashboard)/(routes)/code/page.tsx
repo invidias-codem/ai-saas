@@ -187,23 +187,6 @@ export default function CodePage() {
     setMessages(newMessages);
     setUserInput("");
 
-    const messagesPayload = newMessages.map(msg => ({ role: msg.role, text: msg.text }));
-    const payloadString = JSON.stringify(messagesPayload);
-
-    let apiPayload: any = {
-      currentUserPrompt: trimmedInput,
-      fileData: selectedFile
-    };
-
-    // Transit Compression: Compress if payload > 1KB
-    if (payloadString.length > 1000) {
-      apiPayload.compressedData = compressObject(messagesPayload);
-      apiPayload.isCompressed = true;
-    } else {
-      apiPayload.messages = messagesPayload;
-    }
-
-    setSelectedFile(null);
 
     setSelectedFile(null);
 
