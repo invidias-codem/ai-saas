@@ -11,7 +11,7 @@ const envSchema = z.object({
 
   // Clerk keys (server-side only)
   CLERK_SECRET_KEY: z.string().min(1, { message: "CLERK_SECRET_KEY is required" }),
-  
+
   // Server-side AI keys
   GOOGLE_API_KEY: z.string().min(1),
   REPLICATE_API_TOKEN: z.string().min(1),
@@ -43,6 +43,11 @@ const envSchema = z.object({
   SLACK_CLIENT_ID: z.string().optional(),
   SLACK_CLIENT_SECRET: z.string().optional(),
   NEXT_PUBLIC_SLACK_CLIENT_ID: z.string().optional(), // For client-side Add to Slack button
+
+  // Supabase
+  NEXT_PUBLIC_SUPABASE_URL: z.string().min(1, { message: "NEXT_PUBLIC_SUPABASE_URL is required" }),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, { message: "NEXT_PUBLIC_SUPABASE_ANON_KEY is required" }),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, { message: "SUPABASE_SERVICE_ROLE_KEY is required" }),
 });
 
 // Parse the environment variables and export the result
