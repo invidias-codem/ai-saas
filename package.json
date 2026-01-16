@@ -32,6 +32,7 @@
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.4",
     "@supabase/supabase-js": "^2.90.1",
+    "@vercel/analytics": "^1.6.1",
     "@vercel/functions": "^3.3.5",
     "axios": "^1.6.8",
     "cheerio": "^1.1.2",
