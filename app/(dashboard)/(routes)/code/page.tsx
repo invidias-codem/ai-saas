@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { PersonIcon } from "@radix-ui/react-icons";
 import { ShareIconButton } from "@/components/share-button";
 import { GitHubConsentModal } from "@/components/github-consent-modal";
-import { compressObject, decompress } from "@/lib/compression";
+// Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
 
 // Define the message structure
 interface Message {
@@ -205,18 +205,16 @@ export default function CodePage() {
 
     setSelectedFile(null);
 
+    setSelectedFile(null);
+
     try {
-      const response = await axios.post("/api/code", apiPayload);
+      const response = await axios.post("/api/code", {
+        messages: newMessages.map(msg => ({ role: msg.role, text: msg.text })),
+        currentUserPrompt: trimmedInput,
+        fileData: selectedFile
+      });
 
-      let botText = response.data.text;
-
-      // Handle compressed response
-      if (response.data.isCompressed && response.data.text) {
-        const decompressed = decompress(response.data.text);
-        if (decompressed) botText = decompressed;
-      }
-
-      const botMessage: Message = { text: botText, role: "bot", timestamp: new Date() };
+      const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
       setMessages((prevMessages) => [...prevMessages, botMessage]);
     } catch (error: any) {
       console.error("[CODE_PAGE_ERROR]", error);

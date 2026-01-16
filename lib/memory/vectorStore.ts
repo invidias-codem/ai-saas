@@ -65,7 +65,7 @@ export async function searchMemories(
 ): Promise<Memory[]> {
     try {
         const queryEmbedding = await generateEmbedding(query);
-        const { decompress } = await import('@/lib/compression');
+        const { safeDecompress } = await import('@/lib/compression');
 
         const { data, error } = await supabase.rpc('match_memories', {
             query_embedding: queryEmbedding,
@@ -82,7 +82,7 @@ export async function searchMemories(
         return data.map((item: any) => ({
             id: item.id,
             userId: userId,
-            content: decompress(item.content), // Decompress content (handles legacy safely)
+            content: safeDecompress(item.content), // Safely decompress (handles legacy data)
             type: item.type,
             metadata: item.metadata,
             similarity: item.similarity,

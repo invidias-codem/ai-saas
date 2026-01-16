@@ -46,7 +46,7 @@ import {
   getActiveConversationId,
   setActiveConversation,
 } from "@/lib/conversationManager";
-import { compressObject, decompress } from "@/lib/compression";
+// Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
 
 // Message structure
 interface Message {
@@ -337,34 +337,14 @@ export default function ConversationPage({ params }: { params: { id: string } })
     setMessages(newMessages); setUserInput(""); setSelectedFile(null);
 
     try {
-      const messagesPayload = newMessages.map(msg => ({ role: msg.role, text: msg.text }));
-      const payloadString = JSON.stringify(messagesPayload);
-
-      let requestBody: any = {
-        fileData: selectedFile?.base64Data, // Send file data
+      const response = await axios.post("/api/conversation", {
+        messages: newMessages.map(msg => ({ role: msg.role, text: msg.text })),
+        fileData: selectedFile?.base64Data,
         fileName: selectedFile?.name,
         mimeType: selectedFile?.type
-      };
+      });
 
-      // Transit Compression: Compress if payload > 1KB (approx 1000 chars)
-      if (payloadString.length > 1000) {
-        requestBody.compressedData = compressObject(messagesPayload);
-        requestBody.isCompressed = true;
-      } else {
-        requestBody.messages = messagesPayload;
-      }
-
-      const response = await axios.post("/api/conversation", requestBody);
-
-      let botText = response.data.text;
-
-      // Handle compressed response
-      if (response.data.isCompressed && response.data.text) {
-        const decompressed = decompress(response.data.text);
-        if (decompressed) botText = decompressed;
-      }
-
-      const botMessage: Message = { text: botText, role: "bot", timestamp: new Date() };
+      const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
       setMessages((prevMessages) => [...prevMessages, botMessage]);
 
       // Trigger background memory sync (fire-and-forget)
