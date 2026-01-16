@@ -113,6 +113,10 @@ export async function DELETE(req: Request, { params }: RouteParams) {
 
         const { supabaseAdmin } = await import("@/lib/supabaseClient");
 
+        if (!supabaseAdmin) {
+            return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
+        }
+
         // Verify existence and ownership
         const { data: conv, error: checkError } = await supabaseAdmin
             .from("conversations")
@@ -176,6 +180,10 @@ export async function PATCH(req: Request, { params }: RouteParams) {
         }
 
         const { supabaseAdmin } = await import("@/lib/supabaseClient");
+
+        if (!supabaseAdmin) {
+            return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
+        }
 
         // Verify ownership first (optional if using RLS, but standard practice in backend)
         const { data: conv, error: checkError } = await supabaseAdmin.from("conversations").select("user_id").eq("id", id).single();

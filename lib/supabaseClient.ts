@@ -35,6 +35,6 @@ export const supabase = (supabaseUrl && supabaseKey)
 // Explicit Admin Client (for clear usage in backend routes)
 export const supabaseAdmin = (supabaseUrl && supabaseServiceKey)
     ? createClient(supabaseUrl, supabaseServiceKey)
-    : supabase; // Fallback to safe client if secret missing
+    : null; // Do not fallback to anon client, as this hides configuration errors and causes RLS issues
 
 

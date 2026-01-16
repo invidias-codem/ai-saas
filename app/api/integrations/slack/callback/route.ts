@@ -83,6 +83,11 @@ export async function GET(req: NextRequest) {
     // 4. Save to Supabase (Upsert via RPC)
     const { supabaseAdmin } = await import('@/lib/supabaseClient');
 
+    if (!supabaseAdmin) {
+      console.error('[SLACK_CALLBACK] Supabase Admin client missing');
+      return NextResponse.redirect(`${cleanBaseUrl}/settings?slack_error=db_config_error`);
+    }
+
     // "system" indicates a public install (no specific user logged in during auth start)
     // If userIdRaw is valid UUID, we link it.
     const userIdToLink = (userIdRaw && userIdRaw !== 'system' && userIdRaw !== 'undefined') ? userIdRaw : null;

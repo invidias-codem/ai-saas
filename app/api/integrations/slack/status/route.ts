@@ -13,6 +13,11 @@ export async function GET(req: Request) {
     // Import centralized client
     const { supabaseAdmin } = await import('@/lib/supabaseClient');
 
+    if (!supabaseAdmin) {
+      console.error('[SLACK_STATUS] Supabase Admin client missing');
+      return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
+    }
+
     // Query for user's specific integration
     const { data: integration, error } = await supabaseAdmin
       .from('slack_integrations')

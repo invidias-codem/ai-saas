@@ -887,6 +887,24 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
   // Use thread_ts if available, otherwise use ts as the thread
   const threadTs = thread_ts || ts;
 
+  // STEP 1: Classify intent using Intent Router
+  const { classifyIntent, routeMessage } = await import('@/lib/slack/intentRouter');
+  // Remove bot mention if present (unlikely in DM but good practice)
+  const cleanText = text.replace(/<@[A-Z0-9]+(\|[^>]+)?>/g, '').trim();
+
+  // Only classify if there's text (if just file, we handle differently below)
+  if (cleanText) {
+    const classification = await classifyIntent(cleanText);
+    console.log('[SLACK_EVENTS] DM Intent classification:', classification);
+
+    // STEP 2: Route to specialized handlers for IMAGE, SLIDES, or CALENDAR
+    if (classification.intent !== 'CHAT' && classification.confidence > 0.6) {
+      console.log(`[SLACK_EVENTS] Routing DM to ${classification.intent} handler`);
+      await routeMessage(classification.intent, cleanText, config, event);
+      return;
+    }
+  }
+
   // Detect if this is a code-related request
   const isCode = isCodeRelated(text);
   const language = isCode ? detectLanguage(text) : null;

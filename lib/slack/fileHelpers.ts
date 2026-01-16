@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { extractText } from 'unpdf';
 
 /**
@@ -44,14 +43,33 @@ export async function downloadSlackFile(
     token: string
 ): Promise<Buffer> {
     try {
-        const response = await axios.get(url, {
+        console.log(`[FILE_HELPERS] Downloading file from ${url}`);
+
+        const response = await fetch(url, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
-            responseType: 'arraybuffer',
         });
 
-        return Buffer.from(response.data);
+        if (!response.ok) {
+            console.error(`[FILE_HELPERS] Download failed with status: ${response.status} ${response.statusText}`);
+            throw new Error(`Failed to download file: ${response.statusText}`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // Validation: Check if we got an HTML page instead of a binary file.
+        // This often happens if the token is invalid or missing 'files:read' scope.
+        const header = buffer.subarray(0, 20).toString('utf-8').toLowerCase();
+        if (header.includes('<!doctype html') || header.includes('<html')) {
+            console.error('[FILE_HELPERS] Downloaded received HTML instead of file content. This usually indicates an authentication failure (missing scopes or invalid token).');
+            // Log the beginning of the body to confirm
+            console.error('[FILE_HELPERS] HTML Body preview:', buffer.subarray(0, 200).toString('utf-8'));
+            throw new Error('Downloaded content is HTML, not a file. Check Slack App "files:read" scope.');
+        }
+
+        return buffer;
     } catch (error) {
         console.error('[FILE_HELPERS] Error downloading file:', error);
         throw new Error('Failed to download file from Slack');
