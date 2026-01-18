@@ -82,7 +82,8 @@ export async function generateImage(
     options: ImageGenerationOptions
 ): Promise<ImageGenerationResult> {
     const primaryModel = options.model || (process.env.IMAGE_MODEL_PRIMARY as ImageModel) || 'flux-schnell';
-    const fallbackModels: ImageModel[] = ['sdxl', 'playground-v2.5'].filter(m => m !== primaryModel);
+    const allModels: ImageModel[] = ['sdxl', 'playground-v2.5'];
+    const fallbackModels = allModels.filter(m => m !== primaryModel);
 
     // Try primary model
     try {
