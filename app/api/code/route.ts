@@ -2,7 +2,7 @@
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Part } from "@google/generative-ai";
-import { env } from '@/lib/env';
+import { requireEnv } from '@/lib/env';
 import {
   getRAGMemoryContext,
   captureMemory,
@@ -20,7 +20,7 @@ import { performResearch, formatSearchResults } from '@/lib/agents/researcher';
 import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotion';
 // Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
 
-const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
+const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
 
 const model = genAI.getGenerativeModel({
   model: "gemini-2.0-flash", // Model supports file input

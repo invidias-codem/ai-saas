@@ -3,7 +3,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { GoogleAIFileManager, FileState } from "@google/generative-ai/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { env } from "@/lib/env";
+import { requireEnv } from "@/lib/env";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -11,8 +11,8 @@ import os from "os";
 // Initialize Gemini components
 // Note: GoogleAIFileManager is part of @google/generative-ai/server in recent versions
 // If this import fails, ensures npm install @google/generative-ai@latest was run
-const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
-const fileManager = new GoogleAIFileManager(env.GOOGLE_API_KEY);
+const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
+const fileManager = new GoogleAIFileManager(requireEnv('GOOGLE_API_KEY'));
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
 export interface AcademicPaper {

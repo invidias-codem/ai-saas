@@ -4,9 +4,9 @@
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { env } from '@/lib/env';
+import { requireEnv } from '@/lib/env';
 
-const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
+const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 export interface ExtractedFact {

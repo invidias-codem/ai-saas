@@ -20,6 +20,7 @@ import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
 import EmptyState from "@/components/empty";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
+import { submitFeedback } from "@/lib/feedback/submitFeedback";
 import {
   getSessionMemoryFromStorage,
   saveSessionMemoryToStorage,
@@ -572,8 +573,8 @@ export default function ConversationPage({ params }: { params: { id: string } })
                         {msg.text}
                       </ReactMarkdown>
 
-                      {/* Action Bar (Copy/Share) - fades in */}
-                      <div className="mt-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      {/* Action Bar (Copy/Share + Feedback) - fades in */}
+                      <div className="mt-2 flex gap-2 items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <ShareIconButton
                           content={{
                             title: "Genie AI Response",
@@ -582,6 +583,49 @@ export default function ConversationPage({ params }: { params: { id: string } })
                           }}
                           className="h-8 w-8 bg-background border rounded-full hover:bg-muted text-muted-foreground"
                         />
+
+                        {index > 0 && messages[index - 1]?.role === "user" && (
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="h-8 px-3 rounded-full border bg-background text-xs text-muted-foreground hover:bg-muted"
+                              onClick={() =>
+                                submitFeedback({
+                                  source: "web",
+                                  conversationId,
+                                  messageId: `${conversationId}:${index}`,
+                                  input: messages[index - 1]?.text ?? "",
+                                  output: msg.text,
+                                  rating: 1,
+                                  labels: ["thumbs_up"],
+                                  promptVersion: "conversation-page",
+                                  model: "gemini-2.0-flash",
+                                })
+                              }
+                            >
+                              👍
+                            </button>
+                            <button
+                              type="button"
+                              className="h-8 px-3 rounded-full border bg-background text-xs text-muted-foreground hover:bg-muted"
+                              onClick={() =>
+                                submitFeedback({
+                                  source: "web",
+                                  conversationId,
+                                  messageId: `${conversationId}:${index}`,
+                                  input: messages[index - 1]?.text ?? "",
+                                  output: msg.text,
+                                  rating: -1,
+                                  labels: ["thumbs_down"],
+                                  promptVersion: "conversation-page",
+                                  model: "gemini-2.0-flash",
+                                })
+                              }
+                            >
+                              👎
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </>
                   ) : (

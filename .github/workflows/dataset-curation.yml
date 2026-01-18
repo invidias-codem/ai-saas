@@ -1,0 +1,48 @@
+name: Dataset Curation
+
+on:
+  schedule:
+    # Nightly at 03:30 UTC
+    - cron: "30 3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  curate:
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_VERSION: "20"
+      # Supabase
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Curate dataset (last 30 days, negative ratings)
+        run: |
+          npm run curate:dataset -- \
+            --since-days 30 \
+            --min-rating -1 \
+            --max-rating -1 \
+            --out datasets
+
+      - name: Upload dataset artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: curated-datasets
+          path: datasets/**
+          if-no-files-found: error

@@ -15,6 +15,37 @@ interface Message {
     text: string;
 }
 
+type FeedbackRating = 1 | -1;
+
+async function submitFeedback(params: {
+    input: string;
+    output: string;
+    rating: FeedbackRating;
+    source?: string;
+    labels?: string[];
+    metadata?: Record<string, any>;
+}) {
+    try {
+        await fetch("/api/feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                source: params.source ?? "web-guest",
+                promptVersion: "landing-chat",
+                model: "guest-chat",
+                input: params.input,
+                output: params.output,
+                rating: params.rating,
+                labels: params.labels ?? [],
+                metadata: params.metadata ?? {},
+            }),
+        });
+    } catch (e) {
+        // Best-effort feedback capture; never block UI.
+        console.warn("Failed to submit feedback", e);
+    }
+}
+
 const STORAGE_KEY = "genie_guest_count";
 
 export const LandingChat = () => {
@@ -242,6 +273,40 @@ export const LandingChat = () => {
                                             </ReactMarkdown>
                                         ) : (
                                             <p className="whitespace-pre-wrap">{msg.text}</p>
+                                        )}
+
+                                        {/* Feedback controls for bot messages */}
+                                        {msg.role === "bot" && idx > 0 && messages[idx - 1]?.role === "user" && (
+                                            <div className="mt-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    type="button"
+                                                    className="text-xs px-2 py-1 rounded-md border border-white/10 bg-white/5 text-gray-300 hover:bg-white/10"
+                                                    onClick={() =>
+                                                        submitFeedback({
+                                                            input: messages[idx - 1]?.text ?? "",
+                                                            output: msg.text,
+                                                            rating: 1,
+                                                            labels: ["thumbs_up"],
+                                                        })
+                                                    }
+                                                >
+                                                    👍
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="text-xs px-2 py-1 rounded-md border border-white/10 bg-white/5 text-gray-300 hover:bg-white/10"
+                                                    onClick={() =>
+                                                        submitFeedback({
+                                                            input: messages[idx - 1]?.text ?? "",
+                                                            output: msg.text,
+                                                            rating: -1,
+                                                            labels: ["thumbs_down"],
+                                                        })
+                                                    }
+                                                >
+                                                    👎
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

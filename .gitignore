@@ -9,6 +9,9 @@
 # testing
 /coverage
 
+# datasets (generated artifacts)
+/datasets/
+
 # next.js
 /.next/
 /out/

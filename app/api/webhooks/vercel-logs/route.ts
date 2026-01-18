@@ -1,12 +1,12 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { env } from "@/lib/env";
+import { requireEnv } from "@/lib/env";
 
 // Initialize Supabase Admin Client (bypasses RLS)
 const supabaseAdmin = createClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY
+  requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+  requireEnv("SUPABASE_SERVICE_ROLE_KEY")
 );
 
 export async function POST(req: Request) {

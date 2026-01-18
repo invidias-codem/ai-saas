@@ -38,6 +38,7 @@
   "exclude": [
     ".next",
     ".git",
-    "node_modules"
+    "node_modules",
+    "anycrawl"
   ]
 }

@@ -11,6 +11,7 @@ import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/ge
 import { getSlackConfig, SlackConfig, resolveSlackUser, saveChannelConfig, type ChannelConfig } from '@/lib/slack';
 import { db } from '@/lib/firebaseAdmin';
 import { createFeedbackBlocks, createStreamer } from '@/lib/slack/assistantHelpers';
+import { supabaseAdmin } from '@/lib/supabaseClient';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 
@@ -189,17 +190,51 @@ async function storeFeedback(
   userId: string,
   feedbackType: 'positive' | 'negative',
   responseId: string,
-  prompt?: string
+  prompt?: string,
+  responseText?: string
 ): Promise<void> {
   try {
+    // 1) Store in Firestore (existing behavior)
     await db.collection('slackFeedback').add({
       teamId,
       userId,
       feedbackType,
       responseId,
       prompt,
+      responseText,
       timestamp: Date.now(),
     });
+
+    // 2) Store in Supabase feedback_events (for Continuous Learning)
+    if (supabaseAdmin) {
+      const rating = feedbackType === 'positive' ? 1 : -1;
+
+      const { error } = await supabaseAdmin.from('feedback_events').insert({
+        user_id: null, // Slack user is not necessarily a Clerk user; keep null and track in metadata
+        source: 'slack',
+        conversation_id: null,
+        message_id: responseId,
+        prompt_version: process.env.GIT_SHA || null,
+        model: 'gemini-2.0-flash',
+        input: prompt ?? null,
+        output: responseText ?? null,
+        rating,
+        feedback_text: null,
+        labels: ['slack_feedback'],
+        metadata: {
+          teamId,
+          slackUserId: userId,
+          feedbackType,
+          responseId,
+        },
+        retrieval_context_ids: [],
+      });
+
+      if (error) {
+        console.error('[SLACK_INTERACTIVITY] Failed to store Supabase feedback_events:', error);
+      }
+    }
+
     console.log('[SLACK_INTERACTIVITY] Stored feedback:', { teamId, feedbackType, responseId });
   } catch (error) {
     console.error('[SLACK_INTERACTIVITY] Failed to store feedback:', error);
@@ -312,12 +347,22 @@ async function handleBlockActions(
     });
 
     if (action_id === 'feedback_helpful' || action_id === 'feedback_not_helpful') {
+      // Try to capture the AI response text from the Slack message so we can store it as `output`.
+      const responseText = message?.text ??
+        (Array.isArray(message?.blocks)
+          ? message.blocks
+              .filter((b: any) => b?.type === 'section' && b?.text?.type === 'mrkdwn')
+              .map((b: any) => b.text.text)
+              .join("\n\n")
+          : undefined);
+
       await storeFeedback(
         config.teamId,
         user.id,
         action_id === 'feedback_helpful' ? 'positive' : 'negative',
         message?.ts || '',
-        value
+        value,
+        responseText
       );
 
       if (response_url) {

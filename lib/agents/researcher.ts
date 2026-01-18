@@ -8,10 +8,10 @@ import {
     isStockQuery, getStockQuote, formatStockAsSearchResult
 } from '../integrations/fallbackApis';
 import { searchArxiv, analyzePaperWithGemini } from '../integrations/academic';
-import { env } from '@/lib/env';
+import { requireEnv } from '@/lib/env';
 
 // Initialize a lightweight model for decision making
-const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
+const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 interface ResearchResult {

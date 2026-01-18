@@ -20,6 +20,7 @@ export default authMiddleware({
     "/support",  // Support page - public
     "/slack",    // Slack integration landing page - public
     "/api/guest-chat",                        // Guest chat API - public for landing page
+    "/api/feedback",                          // Feedback ingestion (anonymous allowed)
     "/api/integrations/slack/callback",      // Slack OAuth callback
     "/api/integrations/slack/events",        // Slack Events API
     "/api/integrations/slack/command",       // Slack slash commands
@@ -30,6 +31,7 @@ export default authMiddleware({
   ignoredRoutes: [
     "/ws",
     "/api/guest-chat",                        // Guest chat - no auth needed
+    "/api/feedback",                          // Feedback ingestion (anonymous allowed)
     "/api/integrations/slack/callback",      // Also ignore for Slack redirects
     "/api/integrations/slack/events",        // Slack sends events without auth
     "/api/integrations/slack/command",       // Slack sends commands without auth
