@@ -22,8 +22,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardFooter } from "@/components/ui/card";
-import { amountOptions, resolutionOptions, formSchema } from "./constants";
+import { amountOptions, resolutionOptions, modelOptions, formSchema } from "./constants";
 import { ShareIconButton } from "@/components/share-button";
+import { useEffect } from "react";
 
 // Interface for a single Replicate prediction
 interface ReplicatePrediction {
@@ -41,7 +42,15 @@ const ImagePage = () => {
   const [images, setImages] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [predictionIds, setPredictionIds] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>("flux-schnell");
+
+  // Load saved model preference from localStorage
+  useEffect(() => {
+    const savedModel = localStorage.getItem("preferredImageModel");
+    if (savedModel) {
+      setSelectedModel(savedModel);
+    }
+  }, []);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -49,86 +58,40 @@ const ImagePage = () => {
       prompt: "",
       amount: "1",
       resolution: "1:1",
+      model: selectedModel,
     },
   });
 
-  // Polling effect for multiple predictions
+  // Update form when selected model changes
   useEffect(() => {
-    if (predictionIds.length === 0 || !isLoading) {
-      return;
-    }
-
-    const pollPredictions = async () => {
-      const newImages: string[] = [];
-      let allDone = true;
-      let pollError: string | null = null;
-
-      for (const id of predictionIds) {
-        try {
-          const response = await axios.get(`/api/image/predictions/${id}`);
-          const prediction: ReplicatePrediction = response.data;
-
-          if (prediction.status === "succeeded" && prediction.output) {
-            // ✅ Correctly handle array output from nano-bana
-            if (Array.isArray(prediction.output)) {
-              newImages.push(...prediction.output);
-            } else {
-              newImages.push(prediction.output);
-            }
-          } else if (prediction.status === "failed" || prediction.status === "canceled") {
-            pollError = prediction.error?.detail || "A prediction failed.";
-            allDone = true;
-            break;
-          } else {
-            allDone = false; // At least one is still processing
-          }
-        } catch (err: any) {
-          console.error(`Polling error for prediction ${id}:`, err);
-          pollError = err.response?.data?.error || "Failed to poll prediction status.";
-          allDone = true;
-          break;
-        }
-      }
-
-      if (pollError) {
-        setError(pollError);
-        setIsLoading(false);
-        setPredictionIds([]);
-      } else if (allDone) {
-        setImages(prev => [...prev, ...newImages].filter((url): url is string => !!url));
-        setIsLoading(false);
-        setPredictionIds([]);
-        form.reset();
-      } else {
-        // Continue polling
-        await sleep(3000);
-        pollPredictions();
-      }
-    };
-
-    pollPredictions();
-  }, [predictionIds, isLoading, form]);
+    form.setValue("model", selectedModel);
+  }, [selectedModel, form]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setError(null);
     setIsLoading(true);
     setImages([]);
-    setPredictionIds([]); // Clear previous IDs
 
     try {
-      // ✅ Corrected API endpoint to /api/image
-      const response = await axios.post<ReplicatePrediction[]>("/api/image", values);
+      // Save model preference
+      if (values.model) {
+        localStorage.setItem("preferredImageModel", values.model);
+      }
 
-      const ids = response.data.map(p => p.id);
-      setPredictionIds(ids);
+      // Call new API that returns images directly
+      const response = await axios.post<{ images: string[]; model: string }>("/api/image", values);
 
+      setImages(response.data.images);
+      console.log(`[IMAGE_PAGE] Generated ${response.data.images.length} images with ${response.data.model}`);
+
+      form.reset();
     } catch (error: any) {
       console.error("[IMAGE_PAGE_ERROR]", error);
-      // ✅ Handle complex error objects from the backend
+
+      // Handle errors
       if (error.response?.data?.details?.fieldErrors?.resolution) {
         setError(`Invalid resolution: ${error.response.data.details.fieldErrors.resolution[0]}`);
       } else {
-        // Check for specific permission/auth errors
         const backendError = error.response?.data?.error;
         const backendDetails = error.response?.data?.details;
 
@@ -137,9 +100,10 @@ const ImagePage = () => {
         } else if (backendDetails) {
           setError(`Error: ${backendDetails}`);
         } else {
-          setError(backendError || "Sorry, something went wrong starting the image generation.");
+          setError(backendError || "Sorry, something went wrong generating the image.");
         }
       }
+    } finally {
       setIsLoading(false);
     }
   };
@@ -222,6 +186,47 @@ const ImagePage = () => {
                       {resolutionOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value} className="hover:bg-violet-500/10">
                           {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="model"
+              render={({ field }) => (
+                <FormItem className="flex-1 lg:flex-none min-w-[180px] relative z-10">
+                  <Select
+                    disabled={isLoading}
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      setSelectedModel(value);
+                    }}
+                    value={field.value || selectedModel}
+                    defaultValue={field.value || selectedModel}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
+                        <SelectValue defaultValue={field.value || selectedModel} />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
+                      {modelOptions.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          className="hover:bg-violet-500/10"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span>{option.label}</span>
+                            {option.badge && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400">
+                                {option.badge}
+                              </span>
+                            )}
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
