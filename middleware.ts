@@ -4,13 +4,8 @@ import { NextResponse } from "next/server";
 
 export default authMiddleware({
   // ✅ 1. Manually pass all environment variables
-  // This bypasses the broken process.env access on the Edge.
-  publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
-  secretKey: process.env.CLERK_SECRET_KEY,
-  signInUrl: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL,
-  signUpUrl: process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL,
-  afterSignInUrl: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL,
-  afterSignUpUrl: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL, // Often the same as after-sign-in
+  // (Removed manual keys to rely on auto-detection and fix DEPRECATION/Encryption Key warnings)
+
 
   publicRoutes: [
     "/", // Landing page

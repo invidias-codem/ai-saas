@@ -23,6 +23,8 @@ import {
   ChevronUp,
   Send,
   Loader2,
+  ImageIcon,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -130,6 +132,104 @@ const SupportPage = () => {
               </div>
             ))}
           </div>
+        </section>
+
+        {/* Feature Walkthroughs */}
+        <section className="px-4 pb-16 max-w-5xl mx-auto space-y-12">
+
+          {/* Slack Integration */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <Slack className="w-8 h-8 text-white" />
+              <h2 className="text-2xl font-bold text-white">Getting Started with Slack</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-2">Talking to Genie</h3>
+                <p className="text-gray-400 text-sm mb-4">
+                  Genie lives in your Slack workspace. You can communicate in two ways:
+                </p>
+                <ul className="space-y-3 text-sm text-gray-300">
+                  <li className="flex items-start gap-2">
+                    <span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-xs mt-0.5">Channels</span>
+                    <span>Mention <code className="bg-white/10 px-1 rounded">@Genie</code> in any invited channel.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded text-xs mt-0.5">DMs</span>
+                    <span>Send a Direct Message for private assistance. No mention needed!</span>
+                  </li>
+                </ul>
+              </div>
+              <div className="bg-black/30 rounded-lg p-4 font-mono text-sm text-gray-300 border border-white/5">
+                <div className="mb-2 text-gray-500">{"// Example Channel Message"}</div>
+                <div className="flex gap-2 mb-4">
+                  <span className="text-blue-400">@Genie</span>
+                  <span>Summarize the last 50 messages in this channel.</span>
+                </div>
+                <div className="mb-2 text-gray-500">{"// Example DM"}</div>
+                <div>Draft a professional email to a client about a delay.</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Image Generation */}
+          <div className="bg-gradient-to-br from-pink-500/10 to-purple-500/10 border border-white/10 rounded-2xl p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <ImageIcon className="w-8 h-8 text-pink-400" />
+              <h2 className="text-2xl font-bold text-white">Image Generation</h2>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <p className="text-gray-300 mb-4">
+                  Create stunning AI images directly within Slack. Just ask Genie to &quot;generate&quot;, &quot;create&quot;, or &quot;draw&quot; something.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="bg-black/30 rounded-lg p-3 text-sm text-gray-300 border border-white/5 flex-1">
+                    &quot;Generate a cyberpunk city at night&quot;
+                  </div>
+                  <div className="bg-black/30 rounded-lg p-3 text-sm text-gray-300 border border-white/5 flex-1">
+                    &quot;Create a logo for a coffee shop&quot;
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-white/10 pt-6">
+                <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-yellow-400" />
+                  Advanced: Controlling Models
+                </h3>
+                <p className="text-gray-400 text-sm mb-4">
+                  You can control which AI engine the Slack bot uses by changing your settings here on the website.
+                  Your preference instantly syncs to Slack!
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                    <div className="text-white font-medium mb-1">Flux Schnell</div>
+                    <div className="text-xs text-gray-500">Default • Fast</div>
+                  </div>
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                    <div className="text-white font-medium mb-1">SDXL</div>
+                    <div className="text-xs text-gray-500">Detail • Creative</div>
+                  </div>
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/5">
+                    <div className="text-white font-medium mb-1">Playground v2.5</div>
+                    <div className="text-xs text-gray-500">Aesthetic • Vibrant</div>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <Link href="/image">
+                    <Button variant="outline" className="border-white/20 text-white hover:bg-white/10">
+                      Change Model Preference →
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </section>
 
         {/* Contact Form */}
