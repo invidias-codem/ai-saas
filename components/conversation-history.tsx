@@ -211,7 +211,7 @@ export function ConversationHistory() {
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Delete Conversation?</AlertDialogTitle>
                                         <AlertDialogDescription className="text-gray-400">
-                                            This will permanently delete "{conv.title}". This action cannot be undone.
+                                            This will permanently delete &quot;{conv.title}&quot;. This action cannot be undone.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
