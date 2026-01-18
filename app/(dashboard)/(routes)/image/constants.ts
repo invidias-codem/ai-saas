@@ -5,6 +5,7 @@ export const formSchema = z.object({
   }),
   amount: z.string().min(1),
   resolution: z.string().min(1),
+  model: z.string().optional(),
 });
 
 export const amountOptions = [
@@ -35,4 +36,25 @@ export const resolutionOptions = [
   { value: "3:4", label: "Tall (3:4)" },
   { value: "3:2", label: "Classic (3:2)" },
   { value: "2:3", label: "Classic Tall (2:3)" },
+];
+
+export const modelOptions = [
+  {
+    value: "flux-schnell",
+    label: "Flux Schnell",
+    description: "Fast, high quality (5-10s)",
+    badge: "Recommended"
+  },
+  {
+    value: "sdxl",
+    label: "Stable Diffusion XL",
+    description: "Detailed, reliable (10-20s)",
+    badge: null
+  },
+  {
+    value: "playground-v2.5",
+    label: "Playground v2.5",
+    description: "Very fast (3-5s)",
+    badge: "Fastest"
+  },
 ];

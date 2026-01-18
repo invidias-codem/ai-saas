@@ -252,7 +252,7 @@ export async function handleImageGeneration(
 
         // Handle 502/503 Bad Gateway (Replicate or Upstream issue)
         if (error.message && (error.message.includes('502') || error.message.includes('503'))) {
-            errorMessage = "⚠️ The image generation service is currently experiencing high support or a temporary glitch (502/503). Please try again in a few moments.";
+            errorMessage = "⚠️ The current image generation model is experiencing issues (502/503).\n\n💡 *Try this:* Visit https://gen1e.xyz/image to switch to a different model until this one is back online.";
         } else if (error instanceof Error) {
             errorMessage = `❌ Sorry, I encountered an error: ${error.message}`;
         }

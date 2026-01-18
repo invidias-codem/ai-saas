@@ -3,21 +3,12 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { env } from "@/lib/env";
-import Replicate from "replicate";
 import { z } from "zod";
+import { generateImage, ImageModel, getAvailableModels } from "@/lib/imageGeneration";
 
-// Initialize Replicate client
-const replicate = new Replicate({
-  auth: env.REPLICATE_API_TOKEN,
-});
-
-// Model identifier for Flux Schnell (faster, higher quality)
-const IMAGE_MODEL = "black-forest-labs/flux-schnell";
-
-// Define the allowed aspect ratios for the nano-banana model
+// Define the allowed aspect ratios
 const allowedAspectRatios = z.enum([
-  "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "match_input_image"
+  "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"
 ]);
 
 // Define the input schema for our API
@@ -25,6 +16,7 @@ const requestSchema = z.object({
   prompt: z.string().min(1, "Prompt is required."),
   amount: z.string().transform(s => parseInt(s, 10)).pipe(z.number().min(1).max(4)),
   resolution: allowedAspectRatios, // Corresponds to aspect_ratio
+  model: z.enum(['flux-schnell', 'sdxl', 'playground-v2.5']).optional(),
 });
 
 export async function POST(req: Request) {
@@ -53,31 +45,38 @@ export async function POST(req: Request) {
       });
     }
 
-    const { prompt, amount, resolution: aspect_ratio } = validation.data;
+    const { prompt, amount, resolution: aspectRatio, model } = validation.data;
 
-    // Prepare input for the nano-banana model
-    const input = {
-      prompt: prompt,
-      aspect_ratio: aspect_ratio,
-      output_format: "jpg", // Specify output format
-    };
+    console.log(`[IMAGE_API] Generating ${amount} image(s) with model: ${model || 'default'}`);
 
-    console.log(`Starting ${amount} Replicate prediction(s) for ${IMAGE_MODEL} with input:`, input);
-
-    // Since Flux generates one image per prediction, we create multiple predictions.
-    const predictionPromises = Array.from({ length: amount }, () =>
-      replicate.predictions.create({
-        model: IMAGE_MODEL,
-        input: input,
+    // Generate images using the unified service
+    const results = await Promise.all(
+      Array.from({ length: amount }, async () => {
+        const result = await generateImage({
+          prompt,
+          aspectRatio,
+          model: model as ImageModel | undefined,
+        });
+        return result;
       })
     );
 
-    const predictions = await Promise.all(predictionPromises);
+    // Check if any generation failed
+    const failedResults = results.filter(r => !r.success);
+    if (failedResults.length > 0) {
+      throw new Error(failedResults[0].error || "Image generation failed");
+    }
 
-    console.log(`Replicate jobs started. Sending ${predictions.length} prediction objects to client.`);
+    // Extract URLs and model info
+    const images = results.flatMap(r => r.urls);
+    const usedModel = results[0].model;
 
-    // Return the array of initial prediction objects
-    return NextResponse.json(predictions);
+    console.log(`[IMAGE_API] Successfully generated ${images.length} images with ${usedModel}`);
+
+    return NextResponse.json({
+      images,
+      model: usedModel,
+    });
 
   } catch (error: any) {
     console.error("[IMAGE_API_ERROR]", error);
@@ -85,6 +84,22 @@ export async function POST(req: Request) {
     return new NextResponse(JSON.stringify({
       error: "Internal Server Error",
       details: errorMessage
+    }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
+}
+
+// GET endpoint to fetch available models
+export async function GET() {
+  try {
+    const models = getAvailableModels();
+    return NextResponse.json({ models });
+  } catch (error: any) {
+    console.error("[IMAGE_API_ERROR]", error);
+    return new NextResponse(JSON.stringify({
+      error: "Failed to fetch models"
     }), {
       status: 500,
       headers: { "Content-Type": "application/json" }
