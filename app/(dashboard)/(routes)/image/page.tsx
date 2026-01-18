@@ -24,7 +24,6 @@ import {
 import { Card, CardFooter } from "@/components/ui/card";
 import { amountOptions, resolutionOptions, modelOptions, formSchema } from "./constants";
 import { ShareIconButton } from "@/components/share-button";
-import { useEffect } from "react";
 
 // Interface for a single Replicate prediction
 interface ReplicatePrediction {
