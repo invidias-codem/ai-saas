@@ -163,10 +163,16 @@ export async function handleImageGeneration(
         let prompt = extractedInfo?.imagePrompt || '';
 
         // 2. If no extracted prompt, try regex/parsing from the full message
+        // Only strip if the pattern is "generate/create/make [article] image OF/FOR/ABOUT something"
         if (!prompt) {
-            prompt = userMessage
-                .replace(/(generate|create|make|draw|design)\s+(an?\s+)?(image|picture|photo|drawing|logo|icon|gif)(\s+(of|for|about|showing))?\s*/gi, '')
-                .trim();
+            const match = userMessage.match(/(generate|create|make|draw|design)\s+(an?\s+)?(image|picture|photo|drawing|logo|icon|gif)\s+(of|for|about|showing|with)\s+(.+)/i);
+            if (match && match[5]) {
+                prompt = match[5].trim();
+            } else {
+                // If no match, the entire message might be the prompt (e.g., "a sunset over mountains")
+                // But we need to be careful not to use incomplete phrases
+                prompt = userMessage.trim();
+            }
         }
 
         console.log('[IMAGE_HANDLER] Raw extracted prompt:', prompt);
