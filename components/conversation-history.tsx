@@ -126,17 +126,17 @@ export function ConversationHistory() {
     };
 
     return (
-        <Card className="p-6 border-black/5">
+        <Card className="p-4 border-none bg-transparent shadow-none text-white">
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-sky-600" />
-                    <h3 className="text-lg font-semibold">Conversation History</h3>
+                    <MessageSquare className="w-4 h-4 text-sky-500" />
+                    <h3 className="text-sm font-semibold text-gray-200">History</h3>
                 </div>
                 <Button
                     onClick={handleNewConversation}
                     disabled={creatingNew}
                     size="sm"
-                    className="bg-sky-600 hover:bg-sky-700"
+                    className="bg-sky-600 hover:bg-sky-700 text-white"
                 >
                     {creatingNew ? (
                         <>
@@ -160,18 +160,15 @@ export function ConversationHistory() {
                 <div className="text-center py-8 text-gray-500">
                     <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-30" />
                     <p className="text-sm">No conversations yet.</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                        Start chatting with Genie to see your history here.
-                    </p>
                 </div>
             ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
+                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                     {conversations.map((conv) => (
                         <div
                             key={conv.id}
                             className={cn(
-                                "flex items-start gap-3 p-3 rounded-lg border transition cursor-pointer hover:bg-gray-50",
-                                conv.id === activeId && "border-sky-200 bg-sky-50"
+                                "flex items-start gap-3 p-3 rounded-lg border transition cursor-pointer hover:bg-white/10 border-white/5",
+                                conv.id === activeId ? "bg-white/10 border-sky-500/30" : "bg-transparent"
                             )}
                             onClick={() => handleSelectConversation(conv)}
                         >
@@ -179,17 +176,17 @@ export function ConversationHistory() {
                                 <MessageCircle
                                     className={cn(
                                         "w-4 h-4",
-                                        conv.id === activeId ? "text-sky-600" : "text-gray-400"
+                                        conv.id === activeId ? "text-sky-400" : "text-gray-400"
                                     )}
                                 />
                             </div>
 
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2">
-                                    <p className="text-sm font-medium text-gray-900 truncate">
+                                    <p className={cn("text-sm font-medium truncate", conv.id === activeId ? "text-white" : "text-gray-300")}>
                                         {conv.title}
                                     </p>
-                                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                                    <span className="text-[10px] text-gray-500 whitespace-nowrap">
                                         {formatDate(conv.lastUpdated)}
                                     </span>
                                 </div>
@@ -197,16 +194,6 @@ export function ConversationHistory() {
                                 {conv.preview && (
                                     <p className="text-xs text-gray-500 truncate mt-1">{conv.preview}</p>
                                 )}
-
-                                <div className="flex items-center gap-3 mt-2">
-                                    <span className="text-xs text-gray-400 flex items-center gap-1">
-                                        <MessageSquare className="w-3 h-3" />
-                                        {conv.messageCount} messages
-                                    </span>
-                                    {conv.id === activeId && (
-                                        <span className="text-xs text-sky-600 font-medium">Active</span>
-                                    )}
-                                </div>
                             </div>
 
                             <AlertDialog>
@@ -214,21 +201,21 @@ export function ConversationHistory() {
                                     <Button
                                         size="sm"
                                         variant="ghost"
-                                        className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50 flex-shrink-0"
+                                        className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 hover:bg-red-500/10 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                         onClick={(e) => e.stopPropagation()}
                                     >
-                                        <Trash2 className={cn("w-4 h-4", deletingId === conv.id && "opacity-50")} />
+                                        <Trash2 className={cn("w-3 h-3", deletingId === conv.id && "opacity-50")} />
                                     </Button>
                                 </AlertDialogTrigger>
-                                <AlertDialogContent>
+                                <AlertDialogContent className="bg-gray-900 border-gray-800 text-white">
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Delete Conversation?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                            This will permanently delete &quot;{conv.title}&quot; and all its messages. This action cannot be undone.
+                                        <AlertDialogDescription className="text-gray-400">
+                                            This will permanently delete "{conv.title}". This action cannot be undone.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogCancel className="bg-gray-800 hover:bg-gray-700 text-white border-gray-700">Cancel</AlertDialogCancel>
                                         <AlertDialogAction
                                             onClick={() => handleDelete(conv.id)}
                                             className="bg-red-600 hover:bg-red-700"

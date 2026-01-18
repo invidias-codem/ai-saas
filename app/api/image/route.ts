@@ -30,7 +30,9 @@ const requestSchema = z.object({
 export async function POST(req: Request) {
   try {
     const { userId } = auth();
+
     if (!userId) {
+      console.warn("[IMAGE_API] Unauthorized access attempt.");
       return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" }

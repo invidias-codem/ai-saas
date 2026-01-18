@@ -88,14 +88,15 @@ export async function routeMessage(
     intent: UserIntent,
     userMessage: string,
     config: any,
-    event: any
+    event: any,
+    extractedInfo?: IntentClassification['extractedInfo']
 ): Promise<void> {
     console.log(`[INTENT_ROUTER] Routing to ${intent} handler`);
 
     switch (intent) {
         case 'IMAGE':
             const { handleImageGeneration } = await import('@/lib/slack/handlers/imageHandler');
-            await handleImageGeneration(config, event, userMessage);
+            await handleImageGeneration(config, event, userMessage, extractedInfo);
             break;
 
         case 'SLIDES':

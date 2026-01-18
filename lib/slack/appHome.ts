@@ -15,6 +15,11 @@ const SLACK_API_BASE = 'https://slack.com/api';
  * @param teamId The Slack team ID.
  */
 export async function publishAppHome(userId: string, teamId: string): Promise<void> {
+  if (!teamId) {
+    console.warn(`[APP_HOME] Cannot publish App Home: Team ID is missing for user ${userId}`);
+    return;
+  }
+
   try {
     const config = await getSlackConfig(teamId);
     const view = await buildAppHomeView(userId, teamId);

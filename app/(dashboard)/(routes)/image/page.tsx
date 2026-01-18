@@ -128,8 +128,17 @@ const ImagePage = () => {
       if (error.response?.data?.details?.fieldErrors?.resolution) {
         setError(`Invalid resolution: ${error.response.data.details.fieldErrors.resolution[0]}`);
       } else {
-        const errorMessage = error.response?.data?.details || error.response?.data?.error || "Sorry, something went wrong starting the image generation.";
-        setError(errorMessage);
+        // Check for specific permission/auth errors
+        const backendError = error.response?.data?.error;
+        const backendDetails = error.response?.data?.details;
+
+        if (backendError === "Unauthorized") {
+          setError("You do not have permission to generate images. Please ensure you are logged in.");
+        } else if (backendDetails) {
+          setError(`Error: ${backendDetails}`);
+        } else {
+          setError(backendError || "Sorry, something went wrong starting the image generation.");
+        }
       }
       setIsLoading(false);
     }

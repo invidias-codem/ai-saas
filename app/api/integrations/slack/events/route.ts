@@ -704,7 +704,7 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
   // STEP 2: Route to specialized handlers for IMAGE, SLIDES, or CALENDAR
   if (classification.intent !== 'CHAT' && classification.confidence > 0.6) {
     console.log(`[SLACK_EVENTS] Routing to ${classification.intent} handler`);
-    await routeMessage(classification.intent, cleanText, config, event);
+    await routeMessage(classification.intent, cleanText, config, event, classification.extractedInfo);
     return;
   }
 

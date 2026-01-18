@@ -299,3 +299,878 @@
   "language": null,
   "intent": null
 }
+[2026-01-18T18:07:52.501Z] Received event body:
+{
+  "type": "url_verification",
+  "challenge": "test123"
+}
+[2026-01-18T18:17:55.314Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760273.911839",
+    "client_msg_id": "dafd1c16-be67-425d-95b7-b8d0703ce1d4",
+    "text": "Generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "hTSSV",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10315384404307.9793724330788.6122dea43547a26f039c23f737bdbc74"
+    },
+    "event_ts": "1768760273.911839",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9DMASV8E",
+  "event_time": 1768760273,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:17:55.979Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760273.911839",
+    "client_msg_id": "dafd1c16-be67-425d-95b7-b8d0703ce1d4",
+    "text": "Generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "hTSSV",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10315384404307.9793724330788.6122dea43547a26f039c23f737bdbc74"
+    },
+    "event_ts": "1768760273.911839",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9DMASV8E",
+  "event_time": 1768760273,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:18:51.745Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "app_home_opened",
+    "user": "U09UD3YN53K",
+    "channel": "D0A3A1G9HHR",
+    "event_ts": "1768760331.696113"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9FN6MJSW",
+  "event_time": 1768760331,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U0A2XN2H4TH",
+      "is_bot": true,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false
+}
+[2026-01-18T18:18:52.309Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "app_home_opened",
+    "user": "U09UD3YN53K",
+    "channel": "D0A3A1G9HHR",
+    "event_ts": "1768760331.696113"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9FN6MJSW",
+  "event_time": 1768760331,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U0A2XN2H4TH",
+      "is_bot": true,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false
+}
+[2026-01-18T18:18:56.899Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760273.911839",
+    "client_msg_id": "dafd1c16-be67-425d-95b7-b8d0703ce1d4",
+    "text": "Generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "hTSSV",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10315384404307.9793724330788.6122dea43547a26f039c23f737bdbc74"
+    },
+    "event_ts": "1768760273.911839",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9DMASV8E",
+  "event_time": 1768760273,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:19:07.449Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760346.491169",
+    "client_msg_id": "e4168d49-af7f-4bf9-ba93-891e9fcd315a",
+    "text": "Generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "hTSSV",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10350072683456.9793724330788.89cb9751ddf8b0451113d0904bd2328c"
+    },
+    "event_ts": "1768760346.491169",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A909DH9HV",
+  "event_time": 1768760346,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:19:07.743Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760346.491169",
+    "client_msg_id": "e4168d49-af7f-4bf9-ba93-891e9fcd315a",
+    "text": "Generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "hTSSV",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10350072683456.9793724330788.89cb9751ddf8b0451113d0904bd2328c"
+    },
+    "event_ts": "1768760346.491169",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A909DH9HV",
+  "event_time": 1768760346,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:19:53.739Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "app_home_opened",
+    "user": "U09UD3YN53K",
+    "channel": "D0A3A1G9HHR",
+    "event_ts": "1768760331.696113"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9FN6MJSW",
+  "event_time": 1768760331,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U0A2XN2H4TH",
+      "is_bot": true,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false
+}
+[2026-01-18T18:20:08.555Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760346.491169",
+    "client_msg_id": "e4168d49-af7f-4bf9-ba93-891e9fcd315a",
+    "text": "Generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "hTSSV",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10350072683456.9793724330788.89cb9751ddf8b0451113d0904bd2328c"
+    },
+    "event_ts": "1768760346.491169",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A909DH9HV",
+  "event_time": 1768760346,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:20:12.005Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760410.128449",
+    "client_msg_id": "acdc8a88-5bf7-4cce-b171-6f3bcdfab618",
+    "text": "Genie generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "1Z6HZ",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Genie generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10318340098549.9793724330788.8eb6a6b8a12d070870377c3c07c449e8"
+    },
+    "event_ts": "1768760410.128449",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9DMG3A14",
+  "event_time": 1768760410,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:20:12.716Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760410.128449",
+    "client_msg_id": "acdc8a88-5bf7-4cce-b171-6f3bcdfab618",
+    "text": "Genie generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "1Z6HZ",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Genie generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10318340098549.9793724330788.8eb6a6b8a12d070870377c3c07c449e8"
+    },
+    "event_ts": "1768760410.128449",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9DMG3A14",
+  "event_time": 1768760410,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:21:12.942Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760410.128449",
+    "client_msg_id": "acdc8a88-5bf7-4cce-b171-6f3bcdfab618",
+    "text": "Genie generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "1Z6HZ",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Genie generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10318340098549.9793724330788.8eb6a6b8a12d070870377c3c07c449e8"
+    },
+    "event_ts": "1768760410.128449",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9DMG3A14",
+  "event_time": 1768760410,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:22:30.963Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760549.768209",
+    "client_msg_id": "39d2502e-9489-4e9d-bda8-64be8a811922",
+    "text": "Can you generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "lkuVy",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Can you generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10334696710993.9793724330788.b52fbb78d539cbb986b4ce1046163fea"
+    },
+    "event_ts": "1768760549.768209",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9KAY9E2G",
+  "event_time": 1768760549,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:22:32.109Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760549.768209",
+    "client_msg_id": "39d2502e-9489-4e9d-bda8-64be8a811922",
+    "text": "Can you generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "lkuVy",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Can you generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10334696710993.9793724330788.b52fbb78d539cbb986b4ce1046163fea"
+    },
+    "event_ts": "1768760549.768209",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9KAY9E2G",
+  "event_time": 1768760549,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:23:33.550Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760549.768209",
+    "client_msg_id": "39d2502e-9489-4e9d-bda8-64be8a811922",
+    "text": "Can you generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "lkuVy",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Can you generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10334696710993.9793724330788.b52fbb78d539cbb986b4ce1046163fea"
+    },
+    "event_ts": "1768760549.768209",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9KAY9E2G",
+  "event_time": 1768760549,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:24:22.837Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760661.137379",
+    "client_msg_id": "65254144-bda5-4c5a-b184-4871f44b0abe",
+    "text": "Can you generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "lkuVy",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Can you generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10325376495108.9793724330788.1ee6ff8b191d3ec69e22883073bf38d8"
+    },
+    "event_ts": "1768760661.137379",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0AAA2GKJUQ",
+  "event_time": 1768760661,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}
+[2026-01-18T18:24:54.240Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "app_home_opened",
+    "user": "U09UD3YN53K",
+    "channel": "D0A3A1G9HHR",
+    "event_ts": "1768760331.696113"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A9FN6MJSW",
+  "event_time": 1768760331,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U0A2XN2H4TH",
+      "is_bot": true,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false
+}
+[2026-01-18T18:25:30.783Z] Received event body:
+{
+  "token": "TJ4WM6ncxlIjD6CYFrnw1rgK",
+  "team_id": "T09PBMA9QP6",
+  "context_team_id": "T09PBMA9QP6",
+  "context_enterprise_id": null,
+  "api_app_id": "A0A3B2C9QCW",
+  "event": {
+    "type": "message",
+    "user": "U09UD3YN53K",
+    "ts": "1768760728.105599",
+    "client_msg_id": "8e27bf08-d892-435d-aa7a-f3ee2123ae13",
+    "text": "Can you generate an image",
+    "team": "T09PBMA9QP6",
+    "thread_ts": "1768524259.428019",
+    "parent_user_id": "U0A2XN2H4TH",
+    "blocks": [
+      {
+        "type": "rich_text",
+        "block_id": "lkuVy",
+        "elements": [
+          {
+            "type": "rich_text_section",
+            "elements": [
+              {
+                "type": "text",
+                "text": "Can you generate an image"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "channel": "D0A3A1G9HHR",
+    "assistant_thread": {
+      "action_token": "10319741892518.9793724330788.0926ffb4e6e9134e823a05fc931b7430"
+    },
+    "event_ts": "1768760728.105599",
+    "channel_type": "im"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0A909TRT2B",
+  "event_time": 1768760728,
+  "authorizations": [
+    {
+      "enterprise_id": null,
+      "team_id": "T09PBMA9QP6",
+      "user_id": "U09UD3YN53K",
+      "is_bot": false,
+      "is_enterprise_install": false
+    }
+  ],
+  "is_ext_shared_channel": false,
+  "event_context": "4-eyJldCI6Im1lc3NhZ2UiLCJ0aWQiOiJUMDlQQk1BOVFQNiIsImFpZCI6IkEwQTNCMkM5UUNXIiwiY2lkIjoiRDBBM0ExRzlISFIifQ"
+}

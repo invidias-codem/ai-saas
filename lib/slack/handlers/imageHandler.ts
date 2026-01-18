@@ -142,7 +142,8 @@ async function setLoadingStatus(
 export async function handleImageGeneration(
     config: SlackConfig,
     event: any,
-    userMessage: string
+    userMessage: string,
+    extractedInfo?: { imagePrompt?: string }
 ): Promise<void> {
     const { channel, ts, thread_ts } = event;
     const threadTs = thread_ts || ts;
@@ -158,16 +159,66 @@ export async function handleImageGeneration(
             '🎨 Generating your image...'
         );
 
-        // Extract prompt from user message (remove common trigger words)
-        const prompt = userMessage
-            .replace(/(generate|create|make|draw|design)\s+(an?\s+)?(image|picture|photo|drawing|logo|icon|gif)\s+(of|for|about|showing)?\s*/gi, '')
-            .trim();
+        // 1. Try to use extracted prompt from intent classifier
+        let prompt = extractedInfo?.imagePrompt || '';
 
+        // 2. If no extracted prompt, try regex/parsing from the full message
         if (!prompt) {
-            throw new Error('No image prompt provided');
+            prompt = userMessage
+                .replace(/(generate|create|make|draw|design)\s+(an?\s+)?(image|picture|photo|drawing|logo|icon|gif)(\s+(of|for|about|showing))?\s*/gi, '')
+                .trim();
         }
 
-        console.log('[IMAGE_HANDLER] Extracted prompt:', prompt);
+        console.log('[IMAGE_HANDLER] Raw extracted prompt:', prompt);
+
+        // 3. Clean up prompt and check for generic/vague terms
+        // Apply cleaning to ALL prompts regardless of source
+        if (prompt) {
+            let cleanPrompt = prompt.toLowerCase();
+
+            // Strip leading/trailing quotes
+            cleanPrompt = cleanPrompt.replace(/^["']|["']$/g, '').trim();
+
+            // Strip verbs often extracted by mistake
+            cleanPrompt = cleanPrompt.replace(/^(generate|create|make|draw|design)\s+/, '').trim();
+
+            // Strip articles
+            cleanPrompt = cleanPrompt.replace(/^(an?|the)\s+/, '').trim();
+
+            const genericTerms = ['image', 'picture', 'photo', 'drawing', 'painting', 'art', 'logo', 'icon', 'gif', 'illustration'];
+
+            // Exact match check on cleaned prompt
+            if (genericTerms.includes(cleanPrompt) || cleanPrompt === '' || cleanPrompt.length < 3) {
+                console.log(`[IMAGE_HANDLER] Prompt '${prompt}' (cleaned: '${cleanPrompt}') is too generic or too short. Asking user.`);
+                prompt = ''; // Reset to trigger interactive question
+            } else {
+                // Use the cleaned prompt for generation
+                prompt = cleanPrompt;
+                console.log('[IMAGE_HANDLER] Using cleaned prompt:', prompt);
+            }
+        }
+
+        // 4. If still no valid prompt, ASK the user
+        if (!prompt) {
+            console.log('[IMAGE_HANDLER] No valid prompt. Asking user for clarification.');
+            await setLoadingStatus(config.botToken, channel, threadTs, ''); // Clear status
+
+            await fetch(`${SLACK_API_BASE}/chat.postMessage`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${config.botToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    channel,
+                    thread_ts: threadTs,
+                    text: "🎨 What should the image look like? Please give me a specific description (e.g., 'A cyberpunk city at sunset' rather than just 'an image').",
+                }),
+            });
+            return;
+        }
+
+        console.log('[IMAGE_HANDLER] Final prompt for generation:', prompt);
 
         // Generate image
         const imageUrls = await generateImage({ prompt });
@@ -188,8 +239,17 @@ export async function handleImageGeneration(
 
         console.log('[IMAGE_HANDLER] Image generation complete');
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('[IMAGE_HANDLER] Error in handleImageGeneration:', error);
+
+        let errorMessage = "Sorry, I encountered an error generating the image.";
+
+        // Handle 502/503 Bad Gateway (Replicate or Upstream issue)
+        if (error.message && (error.message.includes('502') || error.message.includes('503'))) {
+            errorMessage = "⚠️ The image generation service is currently experiencing high support or a temporary glitch (502/503). Please try again in a few moments.";
+        } else if (error instanceof Error) {
+            errorMessage = `❌ Sorry, I encountered an error: ${error.message}`;
+        }
 
         // Send error message
         await fetch(`${SLACK_API_BASE}/chat.postMessage`, {
@@ -201,7 +261,7 @@ export async function handleImageGeneration(
             body: JSON.stringify({
                 channel,
                 thread_ts: threadTs,
-                text: `❌ Sorry, I encountered an error generating the image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                text: errorMessage,
             }),
         });
 

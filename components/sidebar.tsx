@@ -7,6 +7,7 @@ import Image from "next/image";
 
 import { cn } from "@/lib/utils";
 import { routes } from "@/app/constants";
+import { ConversationHistory } from "@/components/conversation-history";
 
 const montserrat = Montserrat({
   weight: "600",
@@ -61,6 +62,11 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Conversation History Section */}
+        <div className="mt-6 border-t border-white/10 pt-4 px-2">
+          <ConversationHistory />
         </div>
       </div>
     </div>
