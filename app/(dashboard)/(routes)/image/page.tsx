@@ -43,12 +43,21 @@ const ImagePage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("flux-schnell");
 
-  // Load saved model preference from localStorage
+  // Load saved model preference from API (server-side settings)
   useEffect(() => {
-    const savedModel = localStorage.getItem("preferredImageModel");
-    if (savedModel) {
-      setSelectedModel(savedModel);
-    }
+    const fetchSettings = async () => {
+      try {
+        const response = await axios.get("/api/user/settings");
+        if (response.data?.preferred_image_model) {
+          setSelectedModel(response.data.preferred_image_model);
+        }
+      } catch (error) {
+        // Fallback to localStorage if API fails or offline
+        const localModel = localStorage.getItem("preferredImageModel");
+        if (localModel) setSelectedModel(localModel);
+      }
+    };
+    fetchSettings();
   }, []);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -72,9 +81,11 @@ const ImagePage = () => {
     setImages([]);
 
     try {
-      // Save model preference
+      // Save model preference to DB and LocalStorage
       if (values.model) {
         localStorage.setItem("preferredImageModel", values.model);
+        // Fire and forget setting update
+        axios.post("/api/user/settings", { preferred_image_model: values.model }).catch(err => console.error("Failed to save setting", err));
       }
 
       // Call new API that returns images directly

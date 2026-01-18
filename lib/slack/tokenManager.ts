@@ -22,6 +22,7 @@ export interface SlackConfig {
   botToken: string;
   botUserId: string;
   scopes: string[];
+  userId?: string; // Linked Supabase User ID (owner of the integration)
 }
 
 export interface SlackInstallation {
@@ -71,6 +72,7 @@ export async function getSlackConfig(teamId: string): Promise<SlackConfig> {
     botToken: data.access_token, // This is the decrypted token
     botUserId: data.bot_user_id,
     scopes: [], // We might store scopes in DB if needed, currently optional
+    userId: data.user_id, // Return the linked Supabase user ID
   };
 }
 

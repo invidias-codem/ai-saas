@@ -3,52 +3,12 @@
  * Uses Replicate (Flux) to generate images from text prompts
  */
 
-import Replicate from "replicate";
 import { SlackConfig } from '@/lib/slack';
+import { supabase } from '@/lib/supabaseClient';
+import { generateImage, ImageModel } from '@/lib/imageGeneration';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 
-// Initialize Replicate
-const replicate = new Replicate({
-    auth: process.env.REPLICATE_API_TOKEN || '',
-});
-
-// Use Flux for high-quality image generation
-const IMAGE_MODEL = "black-forest-labs/flux-schnell";
-
-interface ImageGenerationOptions {
-    prompt: string;
-    aspectRatio?: string;
-    numOutputs?: number;
-}
-
-/**
- * Generate image using Replicate Flux model
- */
-async function generateImage(options: ImageGenerationOptions): Promise<string[]> {
-    const { prompt, aspectRatio = "1:1", numOutputs = 1 } = options;
-
-    console.log('[IMAGE_HANDLER] Generating image with Flux:', { prompt, aspectRatio });
-
-    try {
-        const output = await replicate.run(IMAGE_MODEL, {
-            input: {
-                prompt,
-                aspect_ratio: aspectRatio,
-                num_outputs: numOutputs,
-                output_format: "jpg",
-                output_quality: 90,
-            },
-        }) as string[];
-
-        console.log('[IMAGE_HANDLER] Generated', output.length, 'images');
-        return Array.isArray(output) ? output : [output as any];
-
-    } catch (error) {
-        console.error('[IMAGE_HANDLER] Error generating image:', error);
-        throw error;
-    }
-}
 
 /**
  * Send image to Slack channel
@@ -226,8 +186,32 @@ export async function handleImageGeneration(
 
         console.log('[IMAGE_HANDLER] Final prompt for generation:', prompt);
 
-        // Generate image
-        const imageUrls = await generateImage({ prompt });
+        // Fetch user's preferred model
+        let preferredModel: ImageModel | undefined;
+        if (config.userId) {
+            try {
+                const { data } = await supabase
+                    .from('user_settings')
+                    .select('preferred_image_model')
+                    .eq('user_id', config.userId)
+                    .single();
+
+                if (data?.preferred_image_model) {
+                    preferredModel = data.preferred_image_model as ImageModel;
+                    console.log(`[IMAGE_HANDLER] Using user preference: ${preferredModel}`);
+                }
+            } catch (err) {
+                console.warn('[IMAGE_HANDLER] Failed to fetch user preference, using default.');
+            }
+        }
+
+        // Generate image using unified service (handles fallback automatically)
+        const result = await generateImage({
+            prompt,
+            model: preferredModel
+        });
+
+        const imageUrls = result.urls;
 
         // Send image to Slack
         for (const imageUrl of imageUrls) {
