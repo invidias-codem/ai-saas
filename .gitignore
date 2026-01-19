@@ -10,7 +10,8 @@
 /coverage
 
 # datasets (generated artifacts)
-/datasets/
+/datasets/*
+!/datasets/golden/
 
 # next.js
 /.next/
