@@ -18,6 +18,52 @@ interface MeetingDetails {
     description?: string;
 }
 
+interface GoogleCredentials {
+    client_email: string;
+    private_key: string;
+}
+
+/**
+ * Helper to retrieve Google Cloud Credentials
+ * Supports both individual env vars and JSON key
+ */
+function getGoogleCredentials(): GoogleCredentials {
+    // 1. Try individual variables first
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) {
+        return {
+            client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+            private_key: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        };
+    }
+
+    // 2. Try JSON key
+    const jsonKey = process.env.GCP_SERVICE_ACCOUNT_KEY_JSON;
+    if (jsonKey) {
+        try {
+            // Clean string to remove potential bad control characters (newlines)
+            let cleanedJson = jsonKey.replace(/[\n\r]+/g, '').trim();
+
+            // Remove wrapping quotes if present
+            if ((cleanedJson.startsWith("'") && cleanedJson.endsWith("'")) ||
+                (cleanedJson.startsWith('"') && cleanedJson.endsWith('"'))) {
+                cleanedJson = cleanedJson.slice(1, -1);
+            }
+
+            const parsed = JSON.parse(cleanedJson);
+            if (parsed.client_email && parsed.private_key) {
+                return {
+                    client_email: parsed.client_email,
+                    private_key: parsed.private_key.replace(/\\n/g, '\n'),
+                };
+            }
+        } catch (error) {
+            console.error('[CALENDAR_HANDLER] Failed to parse GCP_SERVICE_ACCOUNT_KEY_JSON:', error);
+        }
+    }
+
+    throw new Error('Google Calendar credentials not found. Please set GCP_SERVICE_ACCOUNT_KEY_JSON.');
+}
+
 /**
  * Extracts Slack user IDs from a given text string.
  * Slack user mentions can be in the format <@U123ABC> or <@U123ABC|john.doe>.
@@ -110,14 +156,10 @@ async function createCalendarEvent(details: MeetingDetails): Promise<string> {
 
     try {
         // Initialize Google Calendar API
-        // For now, we'll use a service account approach
-        // In production, you'd want to use user-specific OAuth tokens
+        const credentials = getGoogleCredentials();
 
         const auth = new google.auth.GoogleAuth({
-            credentials: {
-                client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-                private_key: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-            },
+            credentials,
             scopes: ['https://www.googleapis.com/auth/calendar'],
         });
 
@@ -218,14 +260,16 @@ export async function handleCalendarEvent(
     event: any,
     userMessage: string
 ): Promise<void> {
-    const { channel, ts, thread_ts } = event;
+    const { channel, ts, thread_ts, user } = event;
     const threadTs = thread_ts || ts;
 
     console.log('[CALENDAR_HANDLER] Handling calendar event request');
 
     try {
-        // Check if Google Calendar is configured
-        if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) {
+        // Validate credentials before doing work
+        try {
+            getGoogleCredentials();
+        } catch (e) {
             throw new Error('Google Calendar is not configured. Please contact your administrator.');
         }
 
@@ -241,9 +285,10 @@ export async function handleCalendarEvent(
         const details = await extractMeetingDetails(userMessage);
 
         // Resolve Slack user mentions to email addresses
-        if (details.attendees && details.attendees.length > 0) {
-            const resolvedAttendees: string[] = [];
+        const resolvedAttendees: Set<string> = new Set(); // Use Set to avoid duplicates
 
+        // 1. Resolve attendees mentioned in the message
+        if (details.attendees && details.attendees.length > 0) {
             for (const attendee of details.attendees) {
                 // Check if this is a Slack user mention
                 const slackUserIds = extractSlackUserIds(attendee);
@@ -253,20 +298,32 @@ export async function handleCalendarEvent(
                     for (const userId of slackUserIds) {
                         const email = await getSlackUserEmail(config.botToken, userId);
                         if (email) {
-                            resolvedAttendees.push(email);
+                            resolvedAttendees.add(email);
                         } else {
                             console.warn(`[CALENDAR_HANDLER] Could not resolve Slack user ${userId}, skipping`);
                         }
                     }
                 } else if (attendee.includes('@') && !attendee.includes('<')) {
                     // Already an email address
-                    resolvedAttendees.push(attendee);
+                    resolvedAttendees.add(attendee);
                 }
             }
-
-            details.attendees = resolvedAttendees;
-            console.log('[CALENDAR_HANDLER] Resolved attendees:', details.attendees);
         }
+
+        // 2. Automatically invite the sender
+        if (user) {
+            console.log(`[CALENDAR_HANDLER] Auto-inviting sender: ${user}`);
+            const senderEmail = await getSlackUserEmail(config.botToken, user);
+            if (senderEmail) {
+                resolvedAttendees.add(senderEmail);
+            } else {
+                console.warn(`[CALENDAR_HANDLER] Could not resolve email for sender ${user}`);
+            }
+        }
+
+        // Update details with resolved unique attendees
+        details.attendees = Array.from(resolvedAttendees);
+        console.log('[CALENDAR_HANDLER] Final attendee list:', details.attendees);
 
         // Create calendar event
         const eventLink = await createCalendarEvent(details);
