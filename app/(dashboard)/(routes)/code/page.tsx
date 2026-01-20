@@ -16,6 +16,13 @@ import { cn } from "@/lib/utils";
 import { PersonIcon } from "@radix-ui/react-icons";
 import { ShareIconButton } from "@/components/share-button";
 import { GitHubConsentModal } from "@/components/github-consent-modal";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  getSessionMemoryFromStorage,
+  saveSessionMemoryToStorage,
+  SessionMessage,
+} from "@/lib/sessionClientMemory";
 // Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
 
 // Define the message structure
@@ -23,6 +30,11 @@ interface Message {
   text: string;
   role: "user" | "bot";
   timestamp: Date;
+  fileData?: {
+    name: string;
+    type: string;
+    base64Data: string;
+  };
 }
 
 // Define state for the selected file
@@ -76,6 +88,7 @@ export default function CodePage() {
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
+  const [saveToMemory, setSaveToMemory] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null); // Chat container for scroll
@@ -129,6 +142,37 @@ export default function CodePage() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [messages.length]);
 
+  // Persistence for Code Session
+  const CODE_CONVERSATION_ID = 'local-code-session';
+
+  // Initialize session from storage
+  useEffect(() => {
+    const savedMessages = getSessionMemoryFromStorage(CODE_CONVERSATION_ID);
+    if (savedMessages.length > 0) {
+      const restoredMessages: Message[] = savedMessages.map(msg => ({
+        text: msg.text,
+        role: msg.role,
+        timestamp: new Date(msg.timestamp),
+        fileData: msg.fileData
+      }));
+      setMessages(restoredMessages);
+      setShowGreeting(false);
+    }
+  }, []);
+
+  // Save to storage on change
+  useEffect(() => {
+    if (messages.length > 0) {
+      const sessionMessages: SessionMessage[] = messages.map(msg => ({
+        text: msg.text,
+        role: msg.role,
+        timestamp: msg.timestamp.getTime(),
+        fileData: msg.fileData
+      }));
+      saveSessionMemoryToStorage(sessionMessages, 'current-user', 'code-session', CODE_CONVERSATION_ID);
+    }
+  }, [messages]);
+
   // Fetch Memory Count
   const fetchMemoryCount = async () => {
     try {
@@ -140,6 +184,7 @@ export default function CodePage() {
       console.error("Failed to fetch memory count:", err);
     }
   };
+
 
   useEffect(() => {
     fetchMemoryCount();
@@ -182,7 +227,16 @@ export default function CodePage() {
       messageText += `\n\n[Analysing File: ${selectedFile.name}]`;
     }
 
-    const userMessage: Message = { text: messageText, role: "user", timestamp: new Date() };
+    const userMessage: Message = {
+      text: messageText,
+      role: "user",
+      timestamp: new Date(),
+      fileData: selectedFile ? {
+        name: selectedFile.name,
+        type: selectedFile.type,
+        base64Data: selectedFile.base64Data
+      } : undefined
+    };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setUserInput("");
@@ -192,9 +246,14 @@ export default function CodePage() {
 
     try {
       const response = await axios.post("/api/code", {
-        messages: newMessages.map(msg => ({ role: msg.role, text: msg.text })),
+        messages: newMessages.map(msg => ({
+          role: msg.role,
+          text: msg.text,
+          fileData: msg.fileData // Pass stored file data for history reconstruction
+        })),
         currentUserPrompt: trimmedInput,
-        fileData: selectedFile
+        fileData: selectedFile,
+        saveToMemory: saveToMemory // Pass memory flag
       });
 
       const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
@@ -439,7 +498,7 @@ export default function CodePage() {
         <div className="max-w-3xl mx-auto relative">
           {/* File Preview Pill */}
           {selectedFile && (
-            <div className="absolute -top-10 left-0 animate-in slide-in-from-bottom-2 fade-in">
+            <div className="absolute -top-10 left-0 animate-in slide-in-from-bottom-2 fade-in flex items-center gap-4">
               <div className="flex items-center gap-2 bg-background border border-border shadow-sm px-3 py-1.5 rounded-full text-xs font-medium text-foreground">
                 <Paperclip className="h-3 w-3 text-green-500" />
                 <span className="max-w-[150px] truncate">{selectedFile.name}</span>
@@ -449,6 +508,19 @@ export default function CodePage() {
                 >
                   <X className="h-3 w-3" />
                 </button>
+              </div>
+
+              {/* Save to Memory Toggle */}
+              <div className="flex items-center gap-2 bg-background/80 backdrop-blur-sm border border-border/50 px-3 py-1.5 rounded-full shadow-sm">
+                <Switch
+                  id="save-memory"
+                  checked={saveToMemory}
+                  onCheckedChange={setSaveToMemory}
+                  className="h-4 w-7 data-[state=checked]:bg-green-500"
+                />
+                <Label htmlFor="save-memory" className="text-[10px] font-medium text-muted-foreground cursor-pointer select-none">
+                  Save to Knowledge Base
+                </Label>
               </div>
             </div>
           )}

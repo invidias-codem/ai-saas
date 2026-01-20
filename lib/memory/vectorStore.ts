@@ -61,7 +61,8 @@ export async function storeMemory(
 export async function searchMemories(
     userId: string,
     query: string,
-    limit: number = 5
+    limit: number = 5,
+    featureType?: string
 ): Promise<Memory[]> {
     try {
         const queryEmbedding = await generateEmbedding(query);
@@ -71,7 +72,8 @@ export async function searchMemories(
             query_embedding: queryEmbedding,
             match_threshold: 0.5, // Adjust threshold as needed
             match_count: limit,
-            p_user_id: userId
+            filter_user_id: userId,
+            filter_feature_type: featureType || null // Pass feature type filter
         });
 
         if (error) {

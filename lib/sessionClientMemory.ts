@@ -16,6 +16,11 @@ export interface SessionMessage {
     text: string;
     role: "user" | "bot";
     timestamp: number; // Unix timestamp
+    fileData?: {
+        name: string;
+        type: string;
+        base64Data: string;
+    };
 }
 
 export interface SessionStorageData {

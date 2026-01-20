@@ -17,7 +17,7 @@ export async function getRAGMemoryContext(
 ): Promise<string> {
   try {
     // Replaced Cloud Function with Supabase Vector Search
-    const memories = await searchMemories(userId, query, 5);
+    const memories = await searchMemories(userId, query, 5, featureType);
 
     if (memories.length === 0) {
       return '';

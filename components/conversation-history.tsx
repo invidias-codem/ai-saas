@@ -201,7 +201,7 @@ export function ConversationHistory() {
                                     <Button
                                         size="sm"
                                         variant="ghost"
-                                        className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 hover:bg-red-500/10 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 hover:bg-red-500/10 flex-shrink-0"
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         <Trash2 className={cn("w-3 h-3", deletingId === conv.id && "opacity-50")} />

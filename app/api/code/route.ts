@@ -18,6 +18,7 @@ import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
 import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/graphStore';
 import { performResearch, formatSearchResults } from '@/lib/agents/researcher';
 import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotion';
+import { storeMemory } from '@/lib/memory/vectorStore';
 // Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
 
 const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
@@ -48,6 +49,17 @@ const CODE_GREETING = {
   }]
 };
 
+export const maxDuration = 60; // Set max duration for long running RAG ops
+
+// Helper to chunk text
+function chunkText(text: string, size: number = 2000): string[] {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += size) {
+    chunks.push(text.slice(i, i + size));
+  }
+  return chunks;
+}
+
 export async function POST(req: Request) {
   try {
     const { userId } = auth();
@@ -69,11 +81,27 @@ export async function POST(req: Request) {
     }
 
     // Adapt history (strip file placeholders)
-    const history = (messages || []).slice(0, -1).map((msg: { role: string; text: string; }) => {
-      const textContent = String(msg.text || '');
+    // Adapt history (restore files from persistent history)
+    const history = (messages || []).slice(0, -1).map((msg: {
+      role: string;
+      text: string;
+      fileData?: { mimeType?: string; type?: string; base64Data: string; name: string }
+    }) => {
+      const parts: Part[] = [{ text: msg.text || '' }];
+
+      // Re-attach file if present in history
+      if (msg.fileData && msg.fileData.base64Data) {
+        parts.push({
+          inlineData: {
+            mimeType: msg.fileData.mimeType || msg.fileData.type || 'text/plain',
+            data: msg.fileData.base64Data
+          }
+        });
+      }
+
       return {
         role: msg.role === 'bot' ? 'model' : 'user',
-        parts: [{ text: textContent.replace(/\[(?:Attached|Analysing) File:.*?\]/g, '').trim() }],
+        parts: parts,
       };
     });
 
@@ -121,6 +149,7 @@ export async function POST(req: Request) {
     const factContext = formatFactsForPrompt(intelligentFacts);
 
     // Retrieve relevant memories for context
+    // Retrieve relevant memories for context with filtering
     const memoryContext = await getRAGMemoryContext(userId, userQuery, 'code');
 
     // Format user profile context
@@ -221,6 +250,51 @@ export async function POST(req: Request) {
         fileName: fileData?.name
       }
     ).catch(err => console.error('Memory capture failed:', err));
+
+    // [New] Code RAG Indexing (Explicit Save)
+    const { saveToMemory } = body;
+    if (saveToMemory && fileData && fileData.base64Data) {
+      (async () => {
+        try {
+          // Decode file
+          const decodedContent = Buffer.from(fileData.base64Data, 'base64').toString('utf-8');
+          const fileName = fileData.name || 'uploaded_file';
+
+          // Basic check to avoid indexing binary garbage if someone uploads an image as "code"
+          // Mime type check is good but not foolproof. Heuristic check:
+          if (/[\x00-\x08\x0E-\x1F]/.test(decodedContent.substring(0, 100))) {
+            console.warn(`[Code RAG] Skipping indexing for ${fileName} - appears binary.`);
+            return;
+          }
+
+          const chunks = chunkText(decodedContent, 3000); // ~750 tokens
+          console.log(`[Code RAG] Indexing ${fileName} into ${chunks.length} chunks...`);
+
+          let indexedCount = 0;
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const contextPrefix = `[File: ${fileName} | Part ${i + 1}/${chunks.length}]\n`;
+
+            await storeMemory(
+              userId,
+              contextPrefix + chunk,
+              'fact', // storing as 'fact' for now, or could use a new type if migration allowed
+              {
+                featureType: 'code', // CRITICAL: This enables the filtering we added
+                fileName: fileName,
+                chunkIndex: i,
+                totalChunks: chunks.length,
+                language: fileData.type
+              }
+            );
+            indexedCount++;
+          }
+          console.log(`[Code RAG] Successfully indexed ${indexedCount} chunks for ${fileName}`);
+        } catch (err) {
+          console.error('[Code RAG] Indexing failed:', err);
+        }
+      })();
+    }
 
     // [New] Knowledge Graph Extraction for Code (Async)
     // Extract programming languages, frameworks, and concepts
