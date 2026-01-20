@@ -2,6 +2,7 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { VertexAI } from '@google-cloud/vertexai';
 import * as snowflake from 'snowflake-sdk';
+import { PubSub } from '@google-cloud/pubsub';
 
 // Initialize Firebase Admin (if not already initialized in index.ts)
 // admin.initializeApp();
@@ -88,7 +89,7 @@ export const orchestrateGenieLoop = functions.https.onCall(async (data, context)
 
         // 3. Publish to Pub/Sub for Verification (Async)
         // This decouples the user response from the heavy verification logic
-        const pubSubClient = new functions.pubsub.PubSub();
+        const pubSubClient = new PubSub();
         const topicName = 'verify-reasoning-trajectory';
 
         const messageBuffer = Buffer.from(JSON.stringify({
