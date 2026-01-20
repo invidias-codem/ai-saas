@@ -1,4 +1,4 @@
-import LZString from 'lz-string';
+import * as LZString from 'lz-string';
 
 /**
  * Compression utility using lz-string for text optimization.

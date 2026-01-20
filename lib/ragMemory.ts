@@ -448,15 +448,9 @@ export async function getHighConfidenceFactsDirectly(
   limit = 10
 ): Promise<any[]> {
   try {
-    // Dynamic import to avoid issues in server context
-    const admin = await import('firebase-admin');
+    // Use centralized initialization to ensure credentials are loaded
+    const { db } = await import('@/lib/firebaseAdmin');
 
-    // Initialize if needed
-    if (!admin.default.apps.length) {
-      admin.default.initializeApp();
-    }
-
-    const db = admin.default.firestore();
     const now = Date.now();
 
     // Query facts collection for user

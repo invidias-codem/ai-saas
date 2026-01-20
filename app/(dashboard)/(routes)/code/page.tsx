@@ -531,14 +531,21 @@ export default function CodePage() {
               type="file"
               ref={fileInputRef}
               onChange={handleFileChange}
-              className="hidden"
+              style={{ display: 'none' }}
               accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.md,text/plain"
             />
 
             <Button
+              type="button"
               variant="ghost"
               size="icon"
-              onClick={handleAttachClick}
+              onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.click();
+                } else {
+                  console.error("File input ref is null");
+                }
+              }}
               disabled={loading}
               className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 shrink-0"
             >

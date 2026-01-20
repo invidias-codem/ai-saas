@@ -690,12 +690,13 @@ export default function ConversationPage({ params }: { params: { id: string } })
 
           {/* Input Container */}
           <div className="relative flex items-end gap-2 bg-muted/40 hover:bg-muted/60 focus-within:bg-background focus-within:ring-2 focus-within:ring-indigo-500/20 border border-border/50 rounded-[26px] p-2 transition-all duration-200 shadow-sm">
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} />
 
             <Button
+              type="button"
               variant="ghost"
               size="icon"
-              onClick={handleAttachClick}
+              onClick={() => fileInputRef.current?.click()}
               disabled={loading}
               className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 shrink-0"
             >
