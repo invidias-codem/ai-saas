@@ -13,10 +13,10 @@ interface BlogHeaderProps {
 }
 
 export function BlogHeader({ post }: BlogHeaderProps) {
-  const category = BLOG_CATEGORIES[post.category];
+  const category = BLOG_CATEGORIES[post.category] || BLOG_CATEGORIES['industry-insights'];
   const [copied, setCopied] = useState(false);
 
-  const shareUrl = typeof window !== 'undefined' 
+  const shareUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/blog/${post.slug}`
     : `/blog/${post.slug}`;
 
@@ -44,8 +44,8 @@ export function BlogHeader({ post }: BlogHeaderProps) {
   return (
     <header className="mb-10">
       {/* Back Link */}
-      <Link 
-        href="/blog" 
+      <Link
+        href="/blog"
         className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-8"
       >
         <ArrowLeft className="w-4 h-4" />
@@ -54,7 +54,7 @@ export function BlogHeader({ post }: BlogHeaderProps) {
 
       {/* Category */}
       <div className="mb-4">
-        <Link 
+        <Link
           href={`/blog?category=${post.category}`}
           className={cn(
             "inline-flex px-3 py-1 rounded-full text-sm font-medium transition-colors",
@@ -135,8 +135,8 @@ export function BlogHeader({ post }: BlogHeaderProps) {
             onClick={handleCopyLink}
             className={cn(
               "p-2 rounded-lg transition-colors",
-              copied 
-                ? "bg-green-500/20 text-green-400" 
+              copied
+                ? "bg-green-500/20 text-green-400"
                 : "bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white"
             )}
             aria-label="Copy link"
