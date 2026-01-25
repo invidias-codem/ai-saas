@@ -155,7 +155,7 @@ export default function BlogPage({ searchParams }: BlogPageProps) {
           {(activeCategory || activeTag) && (
             <div className="flex items-center justify-center gap-2 mt-4">
               <span className="text-gray-500 text-sm">Showing:</span>
-              {activeCategory && (
+              {activeCategory && BLOG_CATEGORIES[activeCategory] && (
                 <span className={cn(
                   "px-3 py-1 rounded-full text-sm",
                   BLOG_CATEGORIES[activeCategory].bgColor,
