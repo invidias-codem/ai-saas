@@ -233,7 +233,7 @@ export default function ConversationPage({ params }: { params: { id: string } })
       } catch (err) { console.error('[SessionMemory] Failed:', err); setSessionRestored(true); }
     };
     initializeSession();
-  }, []);
+  }, [conversationId]);
 
   useEffect(() => {
     if (sessionRestored && sessionId && messages.length > 0 && conversationId) {

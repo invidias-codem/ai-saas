@@ -13,7 +13,8 @@
     "test:slack-stress": "./scripts/run-slack-stress-tests.sh",
     "curate:dataset": "tsx scripts/curate_dataset.ts",
     "eval:run": "tsx scripts/eval/run_eval.ts",
-    "eval:compare": "tsx scripts/eval/compare_baseline.ts"
+    "eval:compare": "tsx scripts/eval/compare_baseline.ts",
+    "verify:import": "tsx scripts/verify_import_pipeline.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^5.0.1",

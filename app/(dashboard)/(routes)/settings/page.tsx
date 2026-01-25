@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import { Heading } from "@/components/heading";
-import { Github, Slack, Trello, Archive, Settings, Loader2 } from "lucide-react";
+import { Github, Slack, Trello, Archive, Settings, Loader2, Database } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ interface Integration {
 }
 
 const SettingsPage = () => {
+  const router = useRouter();
   const { userId } = useAuth();
   // Other integrations (Slack is handled separately above)
   const [integrations, setIntegrations] = useState<Integration[]>([
@@ -191,10 +193,33 @@ const SettingsPage = () => {
               </div>
             </div>
             <Button
-              onClick={() => window.location.href = '/settings/vault'}
+              onClick={() => router.push('/settings/vault')}
               className="bg-amber-600 hover:bg-amber-700"
             >
               Open Vault
+            </Button>
+          </div>
+        </Card>
+
+        {/* Data & Memory - Import/Export */}
+        <Card className="p-6 border-black/5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-pink-700/10">
+                <Database className="w-6 h-6 text-pink-700" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold">Data & Memory</h3>
+                <p className="text-sm text-muted-foreground">
+                  Import chat history, manage memory bank, and export your data
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => router.push('/settings/data')}
+              className="bg-pink-700 hover:bg-pink-800"
+            >
+              Manage Data
             </Button>
           </div>
         </Card>

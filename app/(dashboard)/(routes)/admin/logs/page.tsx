@@ -23,26 +23,26 @@ export default function LogsPage() {
     // const supabase = createClientComponentClient();
 
     // Initial Fetch
-    const fetchLogs = async () => {
-        setLoading(true);
-        let query = supabase
-            .from("logs")
-            .select("*")
-            .order("timestamp", { ascending: false })
-            .limit(100);
-
-        if (filterLevel !== "all") {
-            query = query.eq("level", filterLevel);
-        }
-
-        const { data, error } = await query;
-        if (!error && data) {
-            setLogs(data);
-        }
-        setLoading(false);
-    };
-
     useEffect(() => {
+        const fetchLogs = async () => {
+            setLoading(true);
+            let query = supabase
+                .from("logs")
+                .select("*")
+                .order("timestamp", { ascending: false })
+                .limit(100);
+
+            if (filterLevel !== "all") {
+                query = query.eq("level", filterLevel);
+            }
+
+            const { data, error } = await query;
+            if (!error && data) {
+                setLogs(data);
+            }
+            setLoading(false);
+        };
+
         fetchLogs();
     }, [filterLevel]);
 
@@ -71,7 +71,7 @@ export default function LogsPage() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [isLive, filterLevel, supabase]);
+    }, [isLive, filterLevel]);
 
     const exportLogs = (formatType: 'csv' | 'json' | 'md') => {
         const content = formatType === 'json'
