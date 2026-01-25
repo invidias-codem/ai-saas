@@ -226,7 +226,20 @@ export interface OAuthTokenResponse {
  */
 export function createOAuthState(userId: string, timestamp?: number): string {
   const ts = timestamp || Date.now();
-  return Buffer.from(`${userId}:${ts}`).toString('base64');
+  const secret = process.env.SLACK_CLIENT_SECRET || 'test-client-secret';
+
+  // Edge route expects: userId:timestamp:base64url(HMAC_SHA256(userId:timestamp, clientSecret))
+  const crypto = require('crypto');
+  const dataToVerify = `${userId}:${ts}`;
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(dataToVerify)
+    .digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  return `${userId}:${ts}:${signature}`;
 }
 
 /**
@@ -234,7 +247,7 @@ export function createOAuthState(userId: string, timestamp?: number): string {
  */
 export function createExpiredOAuthState(userId: string): string {
   const expiredTimestamp = Date.now() - 15 * 60 * 1000; // 15 minutes ago
-  return Buffer.from(`${userId}:${expiredTimestamp}`).toString('base64');
+  return createOAuthState(userId, expiredTimestamp);
 }
 
 /**

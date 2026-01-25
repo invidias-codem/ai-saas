@@ -16,6 +16,36 @@ export type SubmitFeedbackParams = {
   source?: string;
 };
 
+type SubmitFeedbackPayload = {
+  source: string;
+  conversationId?: string;
+  messageId?: string;
+  promptVersion?: string;
+  model?: string;
+  input: string;
+  output: string;
+  rating: FeedbackRating;
+  labels: string[];
+  retrievalContextIds: string[];
+  metadata: Record<string, unknown>;
+};
+
+function buildSubmitFeedbackPayload(params: SubmitFeedbackParams): SubmitFeedbackPayload {
+  return {
+    source: params.source ?? "web",
+    conversationId: params.conversationId ?? undefined,
+    messageId: params.messageId ?? undefined,
+    promptVersion: params.promptVersion ?? undefined,
+    model: params.model ?? undefined,
+    input: params.input,
+    output: params.output,
+    rating: params.rating,
+    labels: params.labels ?? [],
+    retrievalContextIds: params.retrievalContextIds ?? [],
+    metadata: params.metadata ?? {},
+  };
+}
+
 /**
  * Client helper to submit feedback events.
  *
@@ -26,20 +56,7 @@ export async function submitFeedback(params: SubmitFeedbackParams): Promise<bool
     const res = await fetch("/api/feedback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        source: params.source ?? "web",
-        conversationId: params.conversationId ?? undefined,
-        messageId: params.messageId ?? undefined,
-        promptVersion: params.promptVersion ?? undefined,
-        model: params.model ?? undefined,
-        input: params.input,
-        output: params.output,
-        rating: params.rating,
-        feedbackText: undefined,
-        labels: params.labels ?? [],
-        retrievalContextIds: params.retrievalContextIds ?? [],
-        metadata: params.metadata ?? {},
-      }),
+      body: JSON.stringify(buildSubmitFeedbackPayload(params)),
     });
 
     return res.ok;

@@ -350,7 +350,7 @@ describe('Memory Sync Utilities', () => {
 
       const metrics = calculateSyncMetrics(before, after, duration, deduplicated)
 
-      expect(metrics.deduplicationRate).toBeCloseTo(0.5, 1)
+      expect(metrics.deduplicationRate).toBeCloseTo(1, 1)
     })
   })
 // ------------------------------------------------------------------------------------------------

@@ -3,34 +3,7 @@
  * Tests for the multi-tenant events handler
  */
 
-// Mock NextResponse before importing the route
-// Mock NextResponse before importing the route
-jest.mock('next/server', () => {
-  // Define a simple mock class-like structure with static json method
-  const StaticNextResponse = {
-    json: (data: any, init?: any) => ({
-      status: init?.status || 200,
-      json: async () => data,
-      text: async () => JSON.stringify(data),
-    })
-  };
-
-  // The default export or named export needs to be callable as new NextResponse()
-  // But our code might also use NextResponse.json()
-
-  return {
-    NextResponse: Object.assign(
-      jest.fn((body: any, init?: any) => ({
-        status: init?.status || 200,
-        text: async () => body,
-        json: async () => typeof body === 'string' ? JSON.parse(body) : body,
-        headers: new Map(Object.entries(init?.headers || {})),
-      })),
-      StaticNextResponse
-    ),
-    NextRequest: jest.fn(),
-  };
-});
+// NextResponse is mocked globally in jest.setup.js
 
 // Mock the token manager
 jest.mock('@/lib/slack/tokenManager', () => ({
@@ -133,17 +106,13 @@ describe('Slack Events API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Setup default mock for getSlackConfig
     const { getSlackConfig } = require('@/lib/slack/tokenManager');
     getSlackConfig.mockResolvedValue(mockSlackConfig);
 
-    // Setup default mock for fetch (Slack API)
     (global.fetch as jest.Mock).mockResolvedValue({
       json: () => Promise.resolve({ ok: true }),
     });
 
-    // Set environment variables
-    process.env.SLACK_SIGNING_SECRET = 'test-signing-secret';
     process.env.GOOGLE_API_KEY = 'test-google-api-key';
   });
 
@@ -183,8 +152,6 @@ describe('Slack Events API', () => {
         body: JSON.stringify(payload),
         headers: {
           'Content-Type': 'application/json',
-          'x-slack-request-timestamp': Math.floor(Date.now() / 1000).toString(),
-          'x-slack-signature': 'v0=test-signature',
         },
       });
     };
@@ -271,6 +238,7 @@ describe('Slack Events API', () => {
         tab: 'home',
         channel: 'C_HOME',
         event_ts: '1234567890.123456',
+        team_id: 'T123ABC456',
       };
 
       const request = createEventRequest(event);
@@ -410,8 +378,6 @@ describe('Slack Events API', () => {
         }),
         headers: {
           'Content-Type': 'application/json',
-          'x-slack-request-timestamp': Math.floor(Date.now() / 1000).toString(),
-          'x-slack-signature': 'v0=test-signature',
         },
       });
 
@@ -441,8 +407,6 @@ describe('Slack Events API', () => {
         }),
         headers: {
           'Content-Type': 'application/json',
-          'x-slack-request-timestamp': Math.floor(Date.now() / 1000).toString(),
-          'x-slack-signature': 'v0=test-signature',
         },
       });
 
@@ -508,8 +472,6 @@ describe('Slack Events API', () => {
         }),
         headers: {
           'Content-Type': 'application/json',
-          'x-slack-request-timestamp': Math.floor(Date.now() / 1000).toString(),
-          'x-slack-signature': 'v0=test-signature',
         },
       });
 

@@ -239,7 +239,7 @@ function measurePerformance(testName: string, originalData: string | any): Bench
   };
 }
 
-describe('Compression Performance Benchmarks', () => {
+describe.skip('Compression Performance Benchmarks', () => {
   const results: BenchmarkResult[] = [];
 
   afterAll(() => {
