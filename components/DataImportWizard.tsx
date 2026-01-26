@@ -1,9 +1,10 @@
 "use client"
 
-import React, { useState, useCallback, useRef } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { Upload, FileType, Check, AlertCircle, Loader2, Shield, Lock, EyeOff } from "lucide-react"
 import { ImportPreview } from "@/components/ImportPreview"
 import { cn } from "@/lib/utils"
+import type { GenieUniversalImport } from "@/lib/types/imports"
 
 // --- Types ---
 
@@ -46,7 +47,19 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
         memoriesExtracted: 0
     })
 
-    const [parsedData, setParsedData] = useState<any>(null)
+    const [parsedData, setParsedData] = useState<GenieUniversalImport | null>(null)
+
+    // Interval ref for cleanup
+    const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+    // Cleanup interval on unmount
+    useEffect(() => {
+        return () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current)
+            }
+        }
+    }, [])
 
     // --- Handlers ---
 
@@ -113,12 +126,17 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
 
             // Client-side Preview/Validation Logic (JSON Only)
             if (json) {
-                // Dynamic Parser Loading
-                const { OpenAIParser } = await import('@/lib/import/parsers/openai')
-                const { AnthropicParser } = await import('@/lib/import/parsers/anthropic')
-                const { GeminiParser } = await import('@/lib/import/parsers/gemini')
-                const { PerplexityParser } = await import('@/lib/import/parsers/perplexity')
-                const { ManusParser } = await import('@/lib/import/parsers/manus')
+                // Dynamic Parser Loading with error handling
+                let OpenAIParser, AnthropicParser, GeminiParser, PerplexityParser, ManusParser;
+                try {
+                    ({ OpenAIParser } = await import('@/lib/import/parsers/openai'));
+                    ({ AnthropicParser } = await import('@/lib/import/parsers/anthropic'));
+                    ({ GeminiParser } = await import('@/lib/import/parsers/gemini'));
+                    ({ PerplexityParser } = await import('@/lib/import/parsers/perplexity'));
+                    ({ ManusParser } = await import('@/lib/import/parsers/manus'));
+                } catch (importError) {
+                    throw new Error('Failed to load import parsers. Please refresh and try again.');
+                }
 
                 const parsers = [
                     new OpenAIParser(),
@@ -246,9 +264,9 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
         ]
 
         let currentLog = 0
-        const interval = setInterval(() => {
+        intervalRef.current = setInterval(() => {
             if (currentLog >= logSteps.length) {
-                clearInterval(interval)
+                if (intervalRef.current) clearInterval(intervalRef.current)
                 setStage("complete")
                 setLogs(prev => [...prev, "Import Successfully Completed."])
                 return

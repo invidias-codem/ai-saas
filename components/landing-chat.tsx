@@ -196,7 +196,30 @@ export const LandingChat = () => {
                     <span className="text-lg">🎇</span>
                     <span className="text-white font-medium">New Year, New Project</span>
                 </div>
-                <p className="text-gray-400 text-sm">Ask Genie anything to get started</p>
+                <p className="text-gray-400 text-sm mb-6">Ask Genie anything to get started</p>
+
+                {messages.length === 0 && (
+                    <div className="flex flex-wrap justify-center gap-2 max-w-lg mx-auto mb-6">
+                        {[
+                            "Explain quantum computing",
+                            "Write a Python script for web scraping",
+                            "Draft an email to a client",
+                            "Generate a creative story about AI"
+                        ].map((prompt) => (
+                            <button
+                                key={prompt}
+                                onClick={() => {
+                                    setInput(prompt);
+                                    // Optional: auto-send
+                                    // handleSendMessage(); 
+                                }}
+                                className="text-xs px-3 py-1.5 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"
+                            >
+                                {prompt}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Chat Container */}

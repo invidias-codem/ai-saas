@@ -19,6 +19,10 @@ const config = {
 			}
 		},
 		extend: {
+			fontFamily: {
+				sans: ["var(--font-jakarta)", "sans-serif"],
+				heading: ["var(--font-outfit)", "sans-serif"],
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',

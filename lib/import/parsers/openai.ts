@@ -86,6 +86,18 @@ export class OpenAIParser implements PlatformParser {
     }
 
     private parseConversation(raw: OpenAIConversation): ImportedConversation {
+        // Handle missing or malformed conversation data
+        if (!raw.mapping || !raw.current_node) {
+            return {
+                externalId: raw.id,
+                title: raw.title || 'Untitled Conversation',
+                createdAt: raw.create_time ? new Date(raw.create_time * 1000).toISOString() : new Date().toISOString(),
+                updatedAt: raw.update_time ? new Date(raw.update_time * 1000).toISOString() : new Date().toISOString(),
+                messages: [],
+                metadata: {}
+            };
+        }
+
         const messages = this.traverseLineage(raw.mapping, raw.current_node);
 
         return {
@@ -138,10 +150,14 @@ export class OpenAIParser implements PlatformParser {
 
                         // Only add if there is actual content or attachments
                         if (content.trim() || attachments.length > 0) {
+                            // Handle invalid or missing timestamps
+                            const timestamp = msg.create_time && msg.create_time > 0
+                                ? new Date(msg.create_time * 1000).toISOString()
+                                : new Date().toISOString();
                             messages.unshift({
                                 role,
                                 content,
-                                timestamp: new Date(msg.create_time * 1000).toISOString(),
+                                timestamp,
                                 attachments: attachments.length > 0 ? attachments : undefined
                             });
                         }

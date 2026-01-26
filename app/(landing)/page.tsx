@@ -15,179 +15,124 @@ import {
   Cross2Icon
 } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
-import { LandingChat } from "@/components/landing-chat";
+import { HeroSection } from "@/components/landing/hero-section";
+import { FeatureCard } from "@/components/landing/feature-card";
+import { Testimonials } from "@/components/landing/testimonials";
 
 const LandingPage = () => {
   const [isPricingOpen, setIsPricingOpen] = useState(false);
 
   return (
-    <div className="bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
-
-      {/* Background Gradients */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl" />
-      </div>
+    <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative selection:bg-purple-500/30 selection:text-white">
 
       {/* Header */}
-      <header className="relative z-10 py-4 px-4 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
+      <header className="fixed top-0 left-0 right-0 z-50 py-4 px-4 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full transition-all duration-300 bg-background/50 backdrop-blur-lg border-b border-white/5">
         <div className="flex items-center gap-2">
           <div className="relative w-8 h-8">
             <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
           </div>
-          <span className="text-2xl font-bold text-white tracking-tight">Genie AI</span>
+          <span className="text-xl font-bold text-white tracking-tight font-heading">Genie AI</span>
         </div>
-        <div className="flex items-center gap-x-2">
-          {/* Pricing Trigger Button */}
+        <div className="flex items-center gap-x-4">
+          <div className="hidden md:flex items-center gap-4 mr-4 text-sm font-medium text-muted-foreground">
+            <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
+            <Link href="/slack" className="hover:text-white transition-colors">Slack</Link>
+            <Link href="/support" className="hover:text-white transition-colors">Support</Link>
+          </div>
           <Button
             onClick={() => setIsPricingOpen(true)}
             variant="ghost"
-            className="text-gray-300 hover:text-white hover:bg-white/10 rounded-full hidden sm:inline-flex"
+            className="text-muted-foreground hover:text-white hover:bg-white/5 rounded-full hidden sm:inline-flex"
           >
             Pricing
           </Button>
 
           <Link href="/dashboard">
-            <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10 rounded-full">
+            <Button variant="ghost" className="text-white hover:text-white hover:bg-white/5 rounded-full">
               Log in
             </Button>
           </Link>
           <Link href="/dashboard">
-            <Button className="bg-white text-black hover:bg-gray-200 rounded-full font-semibold">
+            <Button className="bg-white text-black hover:bg-gray-200 rounded-full font-semibold shadow-lg shadow-white/10 transition-transform hover:scale-105">
               Get Started
             </Button>
           </Link>
         </div>
       </header>
 
-      <main className="relative z-10 flex-grow">
-        {/* Hero Section - Compact to fit chat above the fold */}
-        <section className="pt-8 pb-8 px-4 text-center space-y-4 max-w-4xl mx-auto">
-          <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-white backdrop-blur-xl animate-fade-in">
-            <span className="flex h-2 w-2 rounded-full bg-sky-400 mr-2"></span>
-            The All-in-One AI Platform
-          </div>
+      <main className="relative z-10 flex-grow pt-16">
 
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight leading-[1.1]">
-            Unleash Your Potential with <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">Genie AI</span>
-          </h1>
-
-          <p className="text-base sm:text-lg text-gray-400 max-w-2xl mx-auto leading-relaxed">
-            Generate content, write code, compose music, and create videos in seconds.
-            Streamline your workflow with the smartest AI assistant.
-          </p>
-
-          {/* Interactive Genie Chat */}
-          <div className="pt-4">
-            <LandingChat />
-          </div>
-
-          {/* Fallback CTA for users who prefer to sign up directly */}
-          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-6">
-            <Link href="/dashboard" className="w-full sm:w-auto">
-              <Button size="lg" className="w-full sm:w-auto bg-white/10 hover:bg-white/20 text-white rounded-full text-sm px-6 py-4 border border-white/10">
-                Or skip to dashboard →
-              </Button>
-            </Link>
-            {/* Mobile Pricing Button */}
-            <Button
-              onClick={() => setIsPricingOpen(true)}
-              variant="outline"
-              size="lg"
-              className="w-full sm:w-auto sm:hidden rounded-full border-white/20 text-white hover:bg-white/10"
-            >
-              View Pricing
-            </Button>
-          </div>
-        </section>
+        <HeroSection />
 
         {/* Features Grid */}
-        <section className="px-4 pb-20 max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-white mb-4">Supercharge your creativity</h2>
-            <p className="text-gray-400">Five powerful tools in one dashboard.</p>
+        <section className="px-4 py-32 max-w-7xl mx-auto relative cursor-default">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px] -z-10" />
+
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-bold text-white mb-6 font-heading">Supercharge your creativity</h2>
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+              Five powerful tools in one dashboard. Generate content faster than ever before.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
-            {features.map((feature) => (
-              <div
+            {features.map((feature, i) => (
+              <FeatureCard
                 key={feature.label}
-                className="group p-6 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition duration-200 backdrop-blur-sm cursor-default"
-              >
-                <div className={cn("w-12 h-12 rounded-lg flex items-center justify-center mb-4 transition-transform group-hover:scale-110", feature.bgColor)}>
-                  <feature.icon className={cn("w-6 h-6", feature.color)} />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">{feature.label}</h3>
-                <p className="text-gray-400 text-sm leading-relaxed">
-                  {feature.description}
-                </p>
-              </div>
+                {...feature}
+                delay={i * 0.1}
+              />
             ))}
           </div>
         </section>
 
-        {/* Testimonials */}
-        <section className="py-20 border-t border-white/10 bg-black/20">
-          <div className="max-w-5xl mx-auto px-6 text-center">
-            <h2 className="text-3xl font-bold text-white mb-12">Trusted by Creators</h2>
-            <div className="grid md:grid-cols-3 gap-8">
-              {testimonials.map((item, i) => (
-                <div key={i} className="p-6 rounded-xl bg-[#192339] border border-white/5">
-                  {/* ✅ FIXED: Replaced raw quotes with &quot; */}
-                  <p className="text-gray-300 mb-4 italic">&quot;{item.quote}&quot;</p>
-                  <div className="flex items-center justify-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-blue-500" />
-                    <div className="text-left">
-                      <p className="text-sm font-semibold text-white">{item.name}</p>
-                      <p className="text-xs text-gray-500">{item.role}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+        <Testimonials />
+
+        {/* Bottom CTA */}
+        <section className="py-24 text-center px-4 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-purple-900/20 pointer-events-none" />
+          <div className="max-w-3xl mx-auto relative z-10 space-y-8">
+            <h2 className="text-4xl md:text-5xl font-bold text-white font-heading tracking-tight">
+              Ready to create the impossible?
+            </h2>
+            <p className="text-xl text-muted-foreground">
+              Join thousands of creators who are already pushing the boundaries of what's possible with AI.
+            </p>
+            <Link href="/dashboard">
+              <Button size="lg" className="rounded-full px-10 py-8 text-lg bg-white text-black hover:bg-gray-200 mt-4 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">
+                Start Generating For Free
+              </Button>
+            </Link>
           </div>
         </section>
       </main>
 
       {/* Footer */}
-      <footer className="py-10 border-t border-white/10 bg-[#111827]">
+      <footer className="py-12 border-t border-white/10 bg-background relative z-10">
         <div className="max-w-7xl mx-auto px-6">
-          {/* Links */}
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-12">
             <div className="flex items-center gap-2">
-              <div className="relative w-6 h-6">
+              <div className="relative w-8 h-8">
                 <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" sizes="(max-width: 768px) 32px, 32px" />
               </div>
-              <span className="text-lg font-bold text-white">Genie AI</span>
+              <span className="text-xl font-bold text-white font-heading">Genie AI</span>
             </div>
 
-            <div className="flex items-center gap-6 text-sm text-gray-400">
-              <Link href="/blog" className="hover:text-white transition">Blog</Link>
-              <Link href="/slack" className="hover:text-white transition">Slack Integration</Link>
-              <Link href="/support" className="hover:text-white transition">Support</Link>
-              <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
+            <div className="flex flex-wrap justify-center gap-8 text-sm text-gray-400">
+              <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
+              <Link href="/slack" className="hover:text-white transition-colors">Slack Integration</Link>
+              <Link href="/support" className="hover:text-white transition-colors">Support</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+            </div>
+
+            <div className="flex gap-4">
+              {/* Social icons placeholder */}
             </div>
           </div>
 
-          {/* Scout Forge Badge */}
-          <div className="mb-8 flex justify-center">
-            <a
-              href="https://scoutforge.net/reviews/genie-ai/"
-              title="Trusted and reviewed by Scout Forge"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:opacity-80 transition-opacity relative w-[400px] h-[86px] block"
-            >
-              <Image
-                src="/scoutforge-badge.png"
-                alt="Trusted and Reviewed by Scout Forge"
-                fill
-                className="object-contain"
-              />
-            </a>
-          </div>
 
-          <div className="pt-8 border-t border-white/10 text-center">
+
+          <div className="pt-8 border-t border-white/5 text-center">
             <p className="text-gray-500 text-sm">
               © {new Date().getFullYear()} Genie AI. All rights reserved.
             </p>
@@ -197,7 +142,7 @@ const LandingPage = () => {
 
       {/* Pricing Modal */}
       {isPricingOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
@@ -205,38 +150,38 @@ const LandingPage = () => {
           />
 
           {/* Modal Content */}
-          <div className="relative w-full max-w-lg bg-[#111827] border border-white/10 sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-10 fade-in duration-300">
+          <div className="relative w-full max-w-lg bg-[#0f1117] border border-white/10 sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-10 fade-in duration-300">
 
             {/* Modal Header */}
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-white">Flexible Pricing</h2>
+                <h2 className="text-xl font-bold text-white font-heading">Flexible Pricing</h2>
                 <p className="text-sm text-gray-400">Pay only for what you generate.</p>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsPricingOpen(false)}
-                className="text-gray-400 hover:text-white rounded-full"
+                className="text-gray-400 hover:text-white rounded-full hover:bg-white/10"
               >
                 <Cross2Icon className="w-5 h-5" />
               </Button>
             </div>
 
             {/* Modal Body (Scrollable) */}
-            <div className="p-6 overflow-y-auto space-y-4">
+            <div className="p-6 overflow-y-auto space-y-4 custom-scrollbar">
               {pricingTiers.map((tier, index) => (
                 <div
                   key={index}
                   className={cn(
-                    "relative p-4 rounded-xl border cursor-pointer transition-all",
+                    "relative p-4 rounded-xl border cursor-pointer transition-all duration-300",
                     tier.popular
                       ? "border-purple-500 bg-purple-500/10 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)]"
                       : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
                   )}
                 >
                   {tier.popular && (
-                    <div className="absolute -top-3 right-4 px-2 py-0.5 bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wide rounded-full">
+                    <div className="absolute -top-3 right-4 px-2 py-0.5 bg-purple-600 text-white text-[10px] font-bold uppercase tracking-wide rounded-full shadow-lg">
                       Most Popular
                     </div>
                   )}
@@ -263,7 +208,7 @@ const LandingPage = () => {
             {/* Modal Footer */}
             <div className="p-6 border-t border-white/10 bg-black/20 sm:rounded-b-2xl">
               <Link href="/dashboard" className="w-full">
-                <Button className="w-full bg-white text-black hover:bg-gray-200 font-semibold py-6 rounded-xl text-lg">
+                <Button className="w-full bg-white text-black hover:bg-gray-200 font-semibold py-6 rounded-xl text-lg shadow-lg">
                   Start Creating Now
                 </Button>
               </Link>
@@ -356,20 +301,4 @@ const features = [
   },
 ];
 
-const testimonials = [
-  {
-    quote: "Genie has completely transformed how I create content for my social media channels.",
-    name: "Alex R.",
-    role: "Content Creator"
-  },
-  {
-    quote: "The code generation tool saves me hours of debugging every single week. Highly recommend.",
-    name: "Sarah J.",
-    role: "Software Engineer"
-  },
-  {
-    quote: "I use the image generator for all my presentation decks. The quality is unmatched.",
-    name: "David K.",
-    role: "Product Manager"
-  }
-];
+

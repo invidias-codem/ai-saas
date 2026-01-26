@@ -50,6 +50,7 @@
     "dotenv": "^16.4.5",
     "esm": "^3.2.25",
     "firebase-functions": "^7.0.0",
+    "framer-motion": "^12.29.0",
     "googleapis": "^170.0.0",
     "gray-matter": "^4.0.3",
     "lucide-react": "^0.548.0",
