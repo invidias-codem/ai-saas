@@ -348,10 +348,11 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
             // Invoke callback
             timeoutRef.current = setTimeout(() => onComplete?.(), 0)
 
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const errorMessage = err instanceof Error ? err.message : "Failed to import data";
             console.error("Import error:", err);
-            setError(err.message || "Failed to import data");
-            setStage("upload");
+            setError(errorMessage);
+            setStage("upload"); 
         }
     }
 
@@ -361,7 +362,6 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
         setFileMeta(null)
         setLogs([])
         setError(null)
-        setParsedData(null)
         setParsedData(null)
         setStats({ conversationsFound: 0, messagesParsed: 0, memoriesExtracted: 0 })
         setExtractionStats(null)

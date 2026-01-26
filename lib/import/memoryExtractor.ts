@@ -20,7 +20,6 @@ export type ExtractedKnowledge = {
 };
 
 // Regex patterns for fact extraction
-// These are simple heuristics to catch obvious user statements
 const FACT_PATTERNS = {
     personal_info: [
         /my name is\s+([^,.]+)/i,
@@ -48,6 +47,13 @@ const FACT_PATTERNS = {
         /todo:\s*([^,.]+)/i,
     ],
 };
+
+// Pre-compile simple patterns if they were strings, but they are already RegExp objects in JS.
+// However, compiling this structure into a flat list helps iteration.
+const COMPILED_PATTERNS = Object.entries(FACT_PATTERNS).map(([type, patterns]) => ({
+    type: type as ExtractedFact['type'],
+    patterns
+}));
 
 // Main function to orchestrate knowledge extraction
 export async function extractKnowledgeFromImport(
@@ -102,19 +108,20 @@ export async function extractKnowledgeFromImport(
 
 function extractFactsFromText(text: string): Omit<ExtractedFact, 'extractedAt'>[] {
     const facts: Omit<ExtractedFact, 'extractedAt'>[] = [];
+    const seenContent = new Set<string>();
 
-    // Check each pattern type
-    for (const [type, patterns] of Object.entries(FACT_PATTERNS)) {
+    for (const { type, patterns } of COMPILED_PATTERNS) {
         for (const pattern of patterns) {
             const match = text.match(pattern);
             if (match && match[1]) {
-                // Heuristic: longer matches are usually more specific/better, but very long might be noise.
                 const content = match[1].trim();
-                if (content.length > 3 && content.length < 100) {
+                // Deduplicate within same message
+                if (content.length > 3 && content.length < 100 && !seenContent.has(content)) {
+                    seenContent.add(content);
                     facts.push({
-                        type: type as ExtractedFact['type'],
-                        content: `${type === 'personal_info' ? '' : ''}${content}`, // could format here
-                        confidence: 0.75 // Regex matches are fairly confident for simple statements
+                        type,
+                        content,
+                        confidence: 0.75
                     });
                 }
             }

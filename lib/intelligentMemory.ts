@@ -276,7 +276,7 @@ export async function buildUserPreferencesWithImport(
   const realtimePrefs = buildUserPreferences(conversationHistory, existingPreferences);
 
   try {
-    const { supabaseAdmin } = await import('@/lib/supabase');
+    const { supabase } = await import('@/lib/supabaseClient');
     // Fetch imported preferences if any (assuming stored in user_profiles or similar, or just re-calculated)
     // For simplicity, we might query the latest import job or a dedicated profile table.
     // As per plan, let's assume we fetch from 'user_profiles' or similar if implemented, 

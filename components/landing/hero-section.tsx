@@ -27,25 +27,14 @@ export const HeroSection = () => {
         <section className="relative pt-20 pb-32 overflow-hidden">
             {/* Background Gradients */}
             <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-500/20 rounded-full blur-[120px]" />
-                <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-500/20 rounded-full blur-[120px]" />
+                <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-primary/5 blur-[100px]" />
+                <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-purple-500/5 blur-[100px]" />
             </div>
 
-            <div className="container px-4 mx-auto relative z-10 text-center">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-white backdrop-blur-xl mb-6"
-                >
-                    <span className="flex h-2 w-2 rounded-full bg-sky-400 mr-2 shadow-[0_0_10px_rgba(56,189,248,0.5)]"></span>
-                    The Future of AI Creation
-                </motion.div>
-
+            <div className="container relative z-10 mx-auto px-4 text-center">
                 <motion.h1
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.1 }}
+                    {...animationProps}
+                    transition={{ duration: 0.5 }}
                     className="text-5xl md:text-7xl font-bold tracking-tight text-white mb-6 font-heading"
                 >
                     Unleash Your <br />

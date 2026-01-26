@@ -1,6 +1,5 @@
-
 import { ExtractedFact } from '@/lib/types/imports';
-import { supabaseAdmin } from '@/lib/supabase'; // Use admin client for high-privilege inserts if needed, or normal client
+import { supabase } from '@/lib/supabaseClient'; // Corrected import
 import { OpenAIEmbeddings } from "@langchain/openai";
 
 // Reuse existing mapping logic or define new
@@ -13,11 +12,7 @@ function mapFactTypeToMemoryType(type: ExtractedFact['type']): string {
     }
 }
 
-interface StoredMemory {
-    id: string;
-    content: string;
-    // ... other fields
-}
+
 
 export async function storeImportedMemories(
     userId: string,
@@ -54,7 +49,7 @@ export async function storeImportedMemories(
             created_at: new Date().toISOString()
         }));
 
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await supabase
             .from('memory_bank')
             .insert(records)
             .select('id');
@@ -71,13 +66,20 @@ export async function storeImportedMemories(
     return ids;
 }
 
+interface ImportJobMetadata {
+    fileName?: string;
+    originalFormat?: string;
+    importedAt?: string;
+    [key: string]: unknown;
+}
+
 export async function createImportJob(
     userId: string,
     sourcePlatform: string,
     totalConversations: number,
-    metadata: any = {}
+    metadata: ImportJobMetadata = {}
 ): Promise<string> {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabase
         .from('import_jobs')
         .insert({
             user_id: userId,
@@ -109,7 +111,7 @@ export async function updateImportJob(
         completed_at?: string;
     }
 ) {
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
         .from('import_jobs')
         .update(updates)
         .eq('id', jobId);

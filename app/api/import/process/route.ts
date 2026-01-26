@@ -19,6 +19,27 @@ export async function POST(req: Request) {
             return new NextResponse("Invalid import data", { status: 400 });
         }
 
+        // Add size validation
+        const MAX_CONVERSATIONS_PER_BATCH = 50;
+        const MAX_MESSAGES_PER_CONVERSATION = 500;
+
+        if (importData.conversations.length > MAX_CONVERSATIONS_PER_BATCH) {
+            return new NextResponse(
+                `Batch too large. Maximum ${MAX_CONVERSATIONS_PER_BATCH} conversations per request.`,
+                { status: 400 }
+            );
+        }
+
+        const hasOversizedConversation = importData.conversations.some(
+            (conv: any) => conv.messages?.length > MAX_MESSAGES_PER_CONVERSATION
+        );
+        if (hasOversizedConversation) {
+            return new NextResponse(
+                `Conversation too large. Maximum ${MAX_MESSAGES_PER_CONVERSATION} messages per conversation.`,
+                { status: 400 }
+            );
+        }
+
         let jobId = providedJobId;
 
         // Create job record only if not provided
