@@ -1,6 +1,7 @@
 import { ExtractedFact } from '@/lib/types/imports';
-import { supabase } from '@/lib/supabaseClient'; // Corrected import
-import { OpenAIEmbeddings } from "@langchain/openai";
+import { supabase } from '@/lib/supabaseClient';
+// Fallback to main package if @langchain/openai fails in build
+import { OpenAIEmbeddings } from "langchain/embeddings/openai";
 
 // Reuse existing mapping logic or define new
 function mapFactTypeToMemoryType(type: ExtractedFact['type']): string {
