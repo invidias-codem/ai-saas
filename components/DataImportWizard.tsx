@@ -23,7 +23,15 @@ interface FileMetadata {
     detectedPlatform?: Platform
 }
 
-type WizardStage = "upload" | "confirmation" | "processing" | "complete"
+interface ImportProcessResponse {
+    jobId: string;
+    stats: {
+        facts: number;
+        memories: number;
+    };
+}
+
+type WizardStage = "upload" | "confirmation" | "processing" | "extracting" | "complete"
 
 interface DataImportWizardProps {
     onComplete?: () => void
@@ -33,7 +41,7 @@ interface DataImportWizardProps {
 
 export function DataImportWizard({ onComplete }: DataImportWizardProps) {
     const [stage, setStage] = useState<WizardStage>("upload")
-    const [file, setFile] = useState<File | null>(null) // TODO: Used for backend upload in startImport()
+    const [_file, setFile] = useState<File | null>(null) // TODO: Used for backend upload in startImport()
     const [fileMeta, setFileMeta] = useState<FileMetadata | null>(null)
     const [isDragOver, setIsDragOver] = useState(false)
     const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -47,16 +55,27 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
         memoriesExtracted: 0
     })
 
+    // New state for extraction results
+    const [extractionStats, setExtractionStats] = useState<{
+        facts: number;
+        memories: number;
+        topics: number;
+    } | null>(null)
+
     const [parsedData, setParsedData] = useState<GenieUniversalImport | null>(null)
 
-    // Interval ref for cleanup
+    // Refs for cleanup
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
+    const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-    // Cleanup interval on unmount
+    // Cleanup interval and timeout on unmount
     useEffect(() => {
         return () => {
             if (intervalRef.current) {
                 clearInterval(intervalRef.current)
+            }
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current)
             }
         }
     }, [])
@@ -259,31 +278,81 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
 
     const startImport = async () => {
         setStage("processing")
+        setLogs(prev => [...prev, "Initiating secure chat import..."])
 
-        // In a real scenario, this is where we'd send 'parsedData' to the backend API
-        // For now, we simulate the upload/save delay
+        try {
+            if (!parsedData || !parsedData.conversations) throw new Error("No data to import");
 
-        const logSteps = [
-            "Initiating secure upload...",
-            `Processing ${stats.conversationsFound} conversations...`,
-            "Encrypting message data...",
-            "Indexing vector embeddings...",
-            "Syncing with database..."
-        ]
+            const BATCH_SIZE = 20; // Send 20 conversations at a time
+            const totalConversations = parsedData.conversations.length;
+            const batches = Math.ceil(totalConversations / BATCH_SIZE);
+            let jobId = null;
 
-        let currentLog = 0
-        intervalRef.current = setInterval(() => {
-            if (currentLog >= logSteps.length) {
-                if (intervalRef.current) clearInterval(intervalRef.current)
-                setStage("complete")
-                setLogs(prev => [...prev, "Import Successfully Completed."])
-                // Invoke callback after state update completes
-                setTimeout(() => onComplete?.(), 0)
-                return
+            let totalFacts = 0;
+            let totalMemories = 0;
+
+            for (let i = 0; i < batches; i++) {
+                const start = i * BATCH_SIZE;
+                const end = Math.min(start + BATCH_SIZE, totalConversations);
+                const batchConversations = parsedData.conversations.slice(start, end);
+
+                setLogs(prev => [...prev, `Processing batch ${i + 1}/${batches} (${start}-${end})...`])
+
+                // Construct partial import data
+                const batchImportData = {
+                    ...parsedData,
+                    conversations: batchConversations
+                };
+
+                // Call the import processing API
+                const response: Response = await fetch('/api/import/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        importData: batchImportData,
+                        jobId, // Pass previous jobId to append/link
+                        options: {
+                            fileName: fileMeta?.name || 'unknown-export',
+                            totalConversations
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json() as { error?: string };
+                    throw new Error(errorData.error || `Batch ${i + 1} failed`);
+                }
+
+                const result: ImportProcessResponse = await response.json();
+                jobId = result.jobId; // Capture ID from first batch
+
+                totalFacts += result.stats.facts;
+                totalMemories += result.stats.memories;
+
+                // Visual feedback speedup
+                await new Promise(r => setTimeout(r, 200));
             }
-            setLogs(prev => [...prev, logSteps[currentLog]])
-            currentLog++
-        }, 600)
+
+            setLogs(prev => [...prev, "Knowledge extraction complete."])
+            setLogs(prev => [...prev, `Stored ${totalMemories} new memories.`])
+
+            setExtractionStats({
+                facts: totalFacts,
+                memories: totalMemories,
+                topics: 0 // Topics aggregation is complex in batch, skip for now
+            });
+
+            setStage("complete")
+            setLogs(prev => [...prev, "Import Successfully Completed."])
+
+            // Invoke callback
+            timeoutRef.current = setTimeout(() => onComplete?.(), 0)
+
+        } catch (err: any) {
+            console.error("Import error:", err);
+            setError(err.message || "Failed to import data");
+            setStage("upload");
+        }
     }
 
     const reset = () => {
@@ -293,7 +362,9 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
         setLogs([])
         setError(null)
         setParsedData(null)
+        setParsedData(null)
         setStats({ conversationsFound: 0, messagesParsed: 0, memoriesExtracted: 0 })
+        setExtractionStats(null)
     }
 
     // --- Render Helpers ---
@@ -504,6 +575,16 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
                             </>
                         )}
                     </h2>
+                    {extractionStats && stage === 'complete' && (
+                        <div className="flex gap-4 mb-4 text-xs text-muted-foreground">
+                            <span className="bg-primary/10 text-primary px-2 py-1 rounded-md font-mono">
+                                +{extractionStats.facts} Facts
+                            </span>
+                            <span className="bg-purple-500/10 text-purple-500 px-2 py-1 rounded-md font-mono">
+                                +{extractionStats.memories} Memories
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Console Logs */}

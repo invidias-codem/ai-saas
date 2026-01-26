@@ -17,14 +17,23 @@ export async function getRAGMemoryContext(
 ): Promise<string> {
   try {
     // Replaced Cloud Function with Supabase Vector Search
-    const memories = await searchMemories(userId, query, 5, featureType);
+    const memories = await searchMemories(userId, query, 10, featureType); // Fetch more to filter
 
     if (memories.length === 0) {
       return '';
     }
 
+    // Filter or boost imported memories based on confidence/source
+    // Imported memories might be voluminous, so we slightly dampen their score to prioritize recent real interactions
+    const rankedMemories = memories.map((m: any) => ({
+      ...m,
+      score: (m.similarity || 0) * (m.metadata?.source === 'import' ? 0.85 : 1.0)
+    }))
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, 5); // Take top 5 after re-ranking
+
     // Format memories for prompt injection
-    return formatMemoriesForPrompt(memories);
+    return formatMemoriesForPrompt(rankedMemories);
   } catch (error) {
     console.error('Error retrieving RAG memory context:', error);
     return ''; // Fail gracefully - don't block main request

@@ -1,13 +1,13 @@
 "use client";
 
+import React from "react";
 import { motion } from "framer-motion";
-import { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FeatureCardProps {
     label: string;
     description: string;
-    icon: any; // Using any to accept both lucide-react and radix-ui icons
+    icon: React.ComponentType<{ className?: string }>;
     color: string;
     bgColor: string;
     delay?: number;

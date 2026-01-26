@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -7,6 +8,21 @@ import { ArrowRightIcon } from "@radix-ui/react-icons";
 import { LandingChat } from "@/components/landing-chat";
 
 export const HeroSection = () => {
+    const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+    useEffect(() => {
+        const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        setPrefersReducedMotion(mediaQuery.matches);
+
+        const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
+        mediaQuery.addEventListener('change', handler);
+        return () => mediaQuery.removeEventListener('change', handler);
+    }, []);
+
+    const animationProps = prefersReducedMotion
+        ? { initial: {}, animate: {}, transition: {} }
+        : { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } };
+
     return (
         <section className="relative pt-20 pb-32 overflow-hidden">
             {/* Background Gradients */}

@@ -8,6 +8,27 @@ export interface GenieUniversalImport {
     conversations: ImportedConversation[];
     memories?: ImportedMemory[];
     userPreferences?: ImportedPreferences[];
+    // Extracted knowledge from analysis
+    extractedFacts?: ExtractedFact[];
+    detectedTopics?: string[];
+    communicationProfile?: CommunicationProfile;
+}
+
+export interface ExtractedFact {
+    type: 'fact' | 'preference' | 'decision' | 'action_item' | 'personal_info';
+    content: string;
+    confidence: number;
+    sourceConversationId?: string;
+    sourceMessageIndex?: number;
+    extractedAt: string;
+}
+
+export interface CommunicationProfile {
+    style: 'casual' | 'professional' | 'technical' | 'balanced';
+    preferredDepth: 'brief' | 'balanced' | 'detailed';
+    avgMessageLength: number;
+    topTopics: string[];
+    sentimentTrend: number; // -1 to 1
 }
 
 export interface ImportedConversation {
@@ -84,5 +105,13 @@ export interface PreviewableParser extends PlatformParser {
             conversations: number;
             messages: number;
         };
+    };
+}
+
+export interface MemoryExtractableParser extends PlatformParser {
+    extractMemories(data: unknown): {
+        facts: ExtractedFact[];
+        preferences: ImportedPreferences;
+        profile: CommunicationProfile;
     };
 }

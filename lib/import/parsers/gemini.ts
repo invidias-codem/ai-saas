@@ -85,8 +85,8 @@ export class GeminiParser implements PlatformParser {
         return {
             role,
             content: msg.content || '',
-            timestamp: msg.timestamp || '',
-            ...(hasTimestamp ? {} : { metadata: { timestampUnknown: true } })
+            timestamp: msg.timestamp || new Date().toISOString(),
+            metadata: hasTimestamp ? undefined : { timestampUnknown: true }
         };
     }
 }
