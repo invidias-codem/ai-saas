@@ -1,6 +1,6 @@
 
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs';
+import { auth } from '@clerk/nextjs/server';
 import { extractKnowledgeFromImport } from '@/lib/import/memoryExtractor';
 import { storeImportedMemories, createImportJob, updateImportJob } from '@/lib/import/memoryStorage';
 
