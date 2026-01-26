@@ -13,7 +13,11 @@ interface BlogHeaderProps {
 }
 
 export function BlogHeader({ post }: BlogHeaderProps) {
-  const category = BLOG_CATEGORIES[post.category] || BLOG_CATEGORIES['industry-insights'];
+  const category = BLOG_CATEGORIES[post.category] ?? {
+    name: 'General',
+    bgColor: 'bg-gray-500/10',
+    color: 'text-gray-400'
+  };
   const [copied, setCopied] = useState(false);
 
   const shareUrl = typeof window !== 'undefined'

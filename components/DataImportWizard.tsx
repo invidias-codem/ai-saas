@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { Upload, FileType, Check, AlertCircle, Loader2, Shield, Lock, EyeOff } from "lucide-react"
 import { ImportPreview } from "@/components/ImportPreview"
 import { cn } from "@/lib/utils"
-import type { GenieUniversalImport } from "@/lib/types/imports"
+import type { GenieUniversalImport, PreviewableParser } from "@/lib/types/imports"
 
 // --- Types ---
 
@@ -33,7 +33,7 @@ interface DataImportWizardProps {
 
 export function DataImportWizard({ onComplete }: DataImportWizardProps) {
     const [stage, setStage] = useState<WizardStage>("upload")
-    const [file, setFile] = useState<File | null>(null)
+    const [file, setFile] = useState<File | null>(null) // TODO: Used for backend upload in startImport()
     const [fileMeta, setFileMeta] = useState<FileMetadata | null>(null)
     const [isDragOver, setIsDragOver] = useState(false)
     const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -135,6 +135,7 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
                     ({ PerplexityParser } = await import('@/lib/import/parsers/perplexity'));
                     ({ ManusParser } = await import('@/lib/import/parsers/manus'));
                 } catch (importError) {
+                    console.error('[DataImportWizard] Parser import failed:', importError);
                     throw new Error('Failed to load import parsers. Please refresh and try again.');
                 }
 
@@ -161,10 +162,13 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
 
                 if (detectedParser) {
                     // Use preview method if available (OpenAIParser)
-                    if (platform === 'openai' && 'preview' in detectedParser) {
+                    const isPreviewable = (parser: any): parser is PreviewableParser => {
+                        return 'preview' in parser && typeof parser.preview === 'function';
+                    };
+
+                    if (platform === 'openai' && isPreviewable(detectedParser)) {
                         // Cast to OpenAIParser or specific interface if we had one, but we know it has preview
-                        const openaiParser = detectedParser as any;
-                        const previewResult = openaiParser.preview(json);
+                        const previewResult = detectedParser.preview(json);
 
                         if (!previewResult.valid) {
                             throw new Error(`File does not match expected ${platform} format`)
@@ -224,6 +228,10 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
                     })
                 } else {
                     // Generic Zip
+                    throw new Error(
+                        'Unsupported ZIP format. Please upload a Gemini Takeout archive or OpenAI export. ' +
+                        'For other platforms, export as JSON if available.'
+                    );
                 }
             } else {
                 // Fallback for truly unknown JSON
@@ -269,6 +277,8 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
                 if (intervalRef.current) clearInterval(intervalRef.current)
                 setStage("complete")
                 setLogs(prev => [...prev, "Import Successfully Completed."])
+                // Invoke callback after state update completes
+                setTimeout(() => onComplete?.(), 0)
                 return
             }
             setLogs(prev => [...prev, logSteps[currentLog]])

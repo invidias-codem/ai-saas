@@ -236,13 +236,15 @@ export default function ConversationPage({ params }: { params: { id: string } })
   }, [conversationId]);
 
   useEffect(() => {
-    if (sessionRestored && sessionId && messages.length > 0 && conversationId) {
-      const sessionMessages: SessionMessage[] = messages.map(msg => ({
-        text: msg.text, role: msg.role, timestamp: msg.timestamp.getTime(),
-      }));
-      saveSessionMemoryToStorage(sessionMessages, 'current-user', sessionId, conversationId); // Include conversationId
-      if (deviceId) trackMessageSent(messages.length);
+    if (!sessionRestored || !sessionId || messages.length === 0 || !conversationId) {
+      return;
     }
+
+    const sessionMessages: SessionMessage[] = messages.map(msg => ({
+      text: msg.text, role: msg.role, timestamp: msg.timestamp.getTime(),
+    }));
+    saveSessionMemoryToStorage(sessionMessages, 'current-user', sessionId, conversationId); // Include conversationId
+    if (deviceId) trackMessageSent(messages.length);
   }, [messages, sessionRestored, sessionId, deviceId, conversationId]);
 
   // Conversation-scoped cloud sync for multi-device support

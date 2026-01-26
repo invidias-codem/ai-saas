@@ -52,7 +52,9 @@ interface OpenAIContentPart {
 
 // --- Parser Implementation ---
 
-export class OpenAIParser implements PlatformParser {
+import { PreviewableParser } from '@/lib/types/imports';
+
+export class OpenAIParser implements PreviewableParser {
     platform: SupportedPlatform = 'openai';
 
     validateFormat(data: unknown): boolean {

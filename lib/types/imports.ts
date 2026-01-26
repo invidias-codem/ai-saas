@@ -29,6 +29,10 @@ export interface ImportedMessage {
         content?: string;
         mimeType?: string;
     }[];
+    metadata?: {
+        timestampUnknown?: boolean;
+        [key: string]: any;
+    };
 }
 
 export interface ImportedMemory {
@@ -70,4 +74,15 @@ export interface PlatformParser {
      * Parse the platform-specific export data into the Genie Universal Import Format.
      */
     parse(data: unknown): GenieUniversalImport;
+}
+
+export interface PreviewableParser extends PlatformParser {
+    preview(data: unknown): {
+        valid: boolean;
+        platform: string;
+        counts: {
+            conversations: number;
+            messages: number;
+        };
+    };
 }

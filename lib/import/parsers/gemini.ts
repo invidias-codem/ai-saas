@@ -81,10 +81,12 @@ export class GeminiParser implements PlatformParser {
         let role: Role = 'user';
         if (msg.author === 'model' || msg.author === 'assistant') role = 'assistant';
 
+        const hasTimestamp = Boolean(msg.timestamp);
         return {
             role,
             content: msg.content || '',
-            timestamp: msg.timestamp || new Date().toISOString()
+            timestamp: msg.timestamp || '',
+            ...(hasTimestamp ? {} : { metadata: { timestampUnknown: true } })
         };
     }
 }
