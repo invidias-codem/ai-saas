@@ -21,6 +21,9 @@ const nextConfig = {
       },
     ],
   },
+  experimental: {
+    serverComponentsExternalPackages: ['@google-cloud/tasks'],
+  },
 };
 
 const withMDX = createMDX({
