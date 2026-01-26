@@ -96,7 +96,7 @@ const LandingPage = () => {
               Ready to create the impossible?
             </h2>
             <p className="text-xl text-muted-foreground">
-              Join thousands of creators who are already pushing the boundaries of what's possible with AI.
+              Join thousands of creators who are already pushing the boundaries of what&apos;s possible with AI.
             </p>
             <Link href="/dashboard">
               <Button size="lg" className="rounded-full px-10 py-8 text-lg bg-white text-black hover:bg-gray-200 mt-4 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">
