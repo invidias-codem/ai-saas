@@ -137,9 +137,68 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
                     throw new Error("Invalid JSON file")
                 }
             } else if (file.name.toLowerCase().endsWith('.zip')) {
-                // Binary file (zip), skip client-side parsing but proceed with detection
-                console.log("ZIP file detected, skipping client-side JSON preview")
+                setLogs(prev => [...prev, "Reading ZIP archive..."]);
+                try {
+                    const JSZip = (await import('jszip')).default;
+                    const zip = new JSZip();
+                    const contents = await zip.loadAsync(file);
+
+                    let targetFile: any = null;
+
+                    // Strategy 1: Look for specific known filenames
+                    const knownFiles = ['conversations.json', 'chat.json', 'history.json', 'data.json'];
+                    for (const name of knownFiles) {
+                        // Search recursively or just check root?
+                        // JSZip keys are full paths.
+                        const found = Object.keys(contents.files).find(path => path.toLowerCase().endsWith(name));
+                        if (found) {
+                            targetFile = contents.files[found];
+                            setLogs(prev => [...prev, `Found known import file: ${found}`]);
+                            break;
+                        }
+                    }
+
+                    // Strategy 2: If no known file, find the largest JSON file
+                    if (!targetFile) {
+                        setLogs(prev => [...prev, "Searching for usable JSON data..."]);
+                        let maxSize = 0;
+                        Object.keys(contents.files).forEach(path => {
+                            if (!path.startsWith('__MACOSX') && !contents.files[path].dir && path.toLowerCase().endsWith('.json')) {
+                                // JSZip doesn't give size easily without stat, but we can assume main file is relevant.
+                                // Actually _data is internal.
+                                // Let's just take the first json that looks "root" like or just any json.
+                                // Better: look for one containing "conversation" in name
+                                if (path.toLowerCase().includes('conversation') || path.toLowerCase().includes('chat')) {
+                                    targetFile = contents.files[path];
+                                }
+                            }
+                        });
+
+                        // Fallback: Just take the first JSON file found if still null
+                        if (!targetFile) {
+                            const firstJson = Object.keys(contents.files).find(path =>
+                                !path.startsWith('__MACOSX') && !contents.files[path].dir && path.toLowerCase().endsWith('.json')
+                            );
+                            if (firstJson) targetFile = contents.files[firstJson];
+                        }
+                    }
+
+                    if (targetFile) {
+                        setLogs(prev => [...prev, `Extracting ${targetFile.name}...`]);
+                        const text = await targetFile.async('text');
+                        json = JSON.parse(text);
+                        // Update detected platform hint based on internal file path if possible
+                        if (targetFile.name.includes('Takeout')) platform = 'gemini';
+                    } else {
+                        throw new Error("No valid JSON import file found inside the ZIP archive.");
+                    }
+
+                } catch (zipErr: any) {
+                    console.error("ZIP Error:", zipErr);
+                    throw new Error(`Failed to read ZIP file: ${zipErr.message || "Unknown error"}`);
+                }
             } else {
+                // Fallback for truly unknown JSON
                 throw new Error("Unsupported file format - Please upload .json or .zip")
             }
 
@@ -235,22 +294,6 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
                     }
                 } else {
                     throw new Error("Could not detect a supported platform format for this JSON file")
-                }
-            } else if (file.name.toLowerCase().endsWith('.zip')) {
-                // For ZIP files (Gemini/ChatGPT archives), we can't show granular preview yet
-                // But we can verify platform via filename
-                if (platform === 'gemini' || platform === 'openai') {
-                    setStats({
-                        conversationsFound: 0, // Unknown
-                        messagesParsed: 0,
-                        memoriesExtracted: 0
-                    })
-                } else {
-                    // Generic Zip
-                    throw new Error(
-                        'Unsupported ZIP format. Please upload a Gemini Takeout archive or OpenAI export. ' +
-                        'For other platforms, export as JSON if available.'
-                    );
                 }
             } else {
                 // Fallback for truly unknown JSON
@@ -352,7 +395,7 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
             const errorMessage = err instanceof Error ? err.message : "Failed to import data";
             console.error("Import error:", err);
             setError(errorMessage);
-            setStage("upload"); 
+            setStage("upload");
         }
     }
 
