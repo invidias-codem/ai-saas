@@ -10,7 +10,14 @@ let tasksClient: CloudTasksClient | null = null;
 function getTasksClient(): CloudTasksClient {
     if (!tasksClient) {
         try {
-            tasksClient = new CloudTasksClient();
+            const credentialsJson = process.env.GCP_SERVICE_ACCOUNT_KEY_JSON;
+            const options: any = {};
+
+            if (credentialsJson) {
+                options.credentials = JSON.parse(credentialsJson);
+            }
+
+            tasksClient = new CloudTasksClient(options);
         } catch (error) {
             console.error('Failed to initialize CloudTasksClient:', error);
             throw new Error('Cloud Tasks client initialization failed. Check GCP credentials.');
@@ -58,7 +65,7 @@ export async function POST(req: Request) {
                     .insert({
                         conversation_id: conversationId,
                         role: 'user',
-                        text: prompt,
+                        content: prompt,
                         user_id: userId,
                         metadata: fileData ? { fileData } : {} // Store file metadata
                     });
