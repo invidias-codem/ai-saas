@@ -499,7 +499,7 @@ export default function ConversationPage({ params }: { params: { id: string } })
 
   return (
     // 1. USE 100dvh (Dynamic Viewport Height) to fix mobile browser bar cutoffs
-    <div className="flex flex-col h-[100dvh] bg-background text-foreground relative overflow-hidden">
+    <div className="flex flex-col h-full bg-background text-foreground relative overflow-hidden">
 
       {/* Header - Compact and pinned top */}
       <header className="flex-none px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-md z-20 flex items-center justify-between sticky top-0">

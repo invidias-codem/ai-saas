@@ -28,8 +28,19 @@ const nextConfig = {
       '@google-cloud/vertexai',
       '@google-cloud/aiplatform',
       'google-gax',
-      'grpc' // Sometimes needed
+      'grpc'
     ],
+    outputFileTracingIncludes: {
+      '/api/**/*': ['node_modules/@google-cloud/tasks/build/esm/src/v2/*.json', 'node_modules/google-gax/build/src/v2/*.json']
+    },
+  },
+  webpack: (config) => {
+    config.resolve.extensionAlias = {
+      ".js": [".ts", ".tsx", ".js", ".jsx"],
+      ".mjs": [".mts", ".mjs"],
+      ".cjs": [".cts", ".cjs"],
+    };
+    return config;
   },
 };
 

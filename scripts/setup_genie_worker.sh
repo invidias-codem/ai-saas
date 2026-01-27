@@ -92,6 +92,15 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
     --member="serviceAccount:${COMPUTE_SA}" \
     --role="roles/aiplatform.user" || true
 
+# 8. Grant Storage Permissions to Vertex AI Service Agent (For Gemini File Reading)
+# The Service Agent needs to be able to read the files you pass to it from GCS
+VERTEX_SA="service-${PROJECT_NUMBER}@gcp-sa-aiplatform.iam.gserviceaccount.com"
+echo "Giving Storage Access to Vertex AI Service Agent: $VERTEX_SA"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${VERTEX_SA}" \
+    --role="roles/storage.objectViewer" || true
+
 echo "✅ Setup Complete!"
 echo "Service Account Email: $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com"
 echo "Doctor URL: $DOCTOR_URL"
