@@ -32,9 +32,8 @@ const nextConfig = {
     ],
     outputFileTracingIncludes: {
       '/api/**/*': [
-        'node_modules/@google-cloud/tasks/build/esm/src/v2/*.json',
-        'node_modules/@google-cloud/tasks/build/esm/src/v2beta2/*.json',
-        'node_modules/google-gax/build/src/v2/*.json'
+        'node_modules/@google-cloud/tasks/build/esm/src/**/*.json',
+        'node_modules/google-gax/build/src/**/*.json'
       ]
     },
   },
