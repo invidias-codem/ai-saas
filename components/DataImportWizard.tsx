@@ -158,10 +158,9 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
                         }
                     }
 
-                    // Strategy 2: If no known file, find the largest JSON file
+                    // Strategy 2: If no known file, find a relevant JSON file
                     if (!targetFile) {
                         setLogs(prev => [...prev, "Searching for usable JSON data..."]);
-                        let maxSize = 0;
                         Object.keys(contents.files).forEach(path => {
                             if (!path.startsWith('__MACOSX') && !contents.files[path].dir && path.toLowerCase().endsWith('.json')) {
                                 // JSZip doesn't give size easily without stat, but we can assume main file is relevant.

@@ -8,7 +8,12 @@ let tasksClient: CloudTasksClient | null = null;
 
 function getTasksClient(): CloudTasksClient {
     if (!tasksClient) {
-        tasksClient = new CloudTasksClient();
+        try {
+            tasksClient = new CloudTasksClient();
+        } catch (error) {
+            console.error('Failed to initialize CloudTasksClient:', error);
+            throw new Error('Cloud Tasks client initialization failed. Check GCP credentials.');
+        }
     }
     return tasksClient;
 }

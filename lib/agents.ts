@@ -33,9 +33,9 @@ export async function getPublicAgent(id: string): Promise<PublicAgent | null> {
         return null;
     }
 
-    // Fetch creator name separately (mocked mostly, or joined if you have a public profile table)
-    // For now, we'll assume a 'creator_name' column or anonymous
-    const creatorName = 'Genie Creator';
+    // TODO: Implement actual creator name lookup from profiles table
+    // For now, return a generic name to avoid exposing user_id
+    const creatorName = 'Community Creator';
 
     return {
         id: data.id,

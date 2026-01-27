@@ -138,12 +138,17 @@ export default function ConversationPage({ params }: { params: { id: string } })
   // We keep local 'messages' state for optimistic updates, but sync with Supabase
   const [messages, setMessages] = useState<Message[]>([]);
 
-  // Sync Supabase messages to local state
+  // Sync Supabase messages to local state with deduplication
   useEffect(() => {
     if (supabaseMessages && supabaseMessages.length > 0) {
-      // Deduplicate by timestamp or simple content check to avoid jitter
-      // For now, simple replacement or merge
-      setMessages(supabaseMessages);
+      setMessages(prev => {
+        // Merge: keep optimistic user messages not yet in Supabase
+        const supabaseTimestamps = new Set(supabaseMessages.map(m => m.timestamp.getTime()));
+        const pendingOptimistic = prev.filter(
+          m => m.role === 'user' && !supabaseTimestamps.has(m.timestamp.getTime())
+        );
+        return [...supabaseMessages, ...pendingOptimistic];
+      });
       setShowGreeting(false);
     }
   }, [supabaseMessages]);

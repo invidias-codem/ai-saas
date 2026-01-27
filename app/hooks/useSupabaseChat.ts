@@ -8,11 +8,13 @@ export interface Message {
     timestamp: Date;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function useSupabaseChat(conversationId: string) {
     const [messages, setMessages] = useState<Message[]>([]);
 
     useEffect(() => {
-        if (!conversationId) return;
+        if (!conversationId || !UUID_REGEX.test(conversationId)) return;
 
         // 1. Initial Fetch
         const fetchMessages = async () => {

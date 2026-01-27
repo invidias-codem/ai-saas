@@ -19,7 +19,16 @@ api_key = os.environ.get("GOOGLE_API_KEY")
 if not api_key:
     logger.warning("GOOGLE_API_KEY not set in environment or ../../.env.local. Brain will fail.")
 
-brain = EngagementBrain(api_key=api_key)
+# Lazy initialization to allow graceful degradation
+brain: EngagementBrain | None = None
+
+def get_brain() -> EngagementBrain:
+    global brain
+    if brain is None:
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY is required but not configured")
+        brain = EngagementBrain(api_key=api_key)
+    return brain
 
 @functions_framework.http
 def vector_agent(request):
@@ -42,7 +51,7 @@ def vector_agent(request):
                 # Stub data if none provided (for testing)
                 posts = ["AI is taking over the world!", "I love coding in Python.", "Genie is looking cool."]
             
-            analysis = brain.analyze_social_economy(posts)
+            analysis = get_brain().analyze_social_economy(posts)
             return jsonify({"status": "success", "analysis": analysis}), 200
 
         # 2. ENGAGEMENT MODE
@@ -54,7 +63,7 @@ def vector_agent(request):
             if not post_text:
                 return jsonify({"error": "Missing post_text"}), 400
 
-            decision = brain.decide_engagement(post_text, author, context)
+            decision = get_brain().decide_engagement(post_text, author, context)
             return jsonify({"status": "success", "decision": decision}), 200
 
         else:

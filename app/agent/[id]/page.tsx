@@ -38,11 +38,14 @@ export default async function AgentPage({ params }: Props) {
         notFound();
     }
 
+    // Sanitize user-controlled strings for JSON-LD
+    const sanitize = (str: string) => str.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+    
     const jsonLd = {
         '@context': 'https://schema.org',
         '@type': 'SoftwareApplication',
-        name: agent.name,
-        description: agent.description,
+        name: sanitize(agent.name),
+        description: sanitize(agent.description || ''),
         applicationCategory: 'BusinessApplication',
         operatingSystem: 'Web',
         offers: {

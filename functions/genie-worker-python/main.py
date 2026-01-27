@@ -125,12 +125,14 @@ def genie_worker(request):
 
         
         # 4. Write to Supabase (Realtime)
+        from datetime import datetime, timezone
+        
         message_payload = {
             "conversation_id": conversation_id,
             "user_id": user_id,
             "role": "bot",
             "text": ai_response_text,
-            "created_at": "now()" 
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
 
         try:
@@ -151,10 +153,17 @@ def genie_worker(request):
         # 🛑 FATAL: Call the Doctor, then kill the task (200 OK)
         logging.error(f"🚑 Fatal Error: {str(e)}. Calling Doctor...")
         
+        # Sanitize payload - remove sensitive data before sending to doctor
+        safe_payload = {
+            "conversationId": data.get('conversationId') if 'data' in locals() else None,
+            "userId": data.get('userId') if 'data' in locals() else None,
+            "hasFile": bool(data.get('fileData')) if 'data' in locals() else False,
+            # Exclude prompt and fileData to prevent PII leakage
+        }
         doctor_payload = {
             "error": str(e),
             "traceback": traceback.format_exc(),
-            "original_payload": data if 'data' in locals() else {},
+            "original_payload": safe_payload,
             "source": "genie-worker"
         }
         
