@@ -15,6 +15,8 @@ export interface DeviceInfo {
   firstSeen: number;        // Unix timestamp
 }
 
+import { safeLocalStorage } from './safeStorage';
+
 // localStorage key for device ID
 const DEVICE_ID_KEY = 'genie_device_id';
 const DEVICE_INFO_KEY = 'genie_device_info';
@@ -94,14 +96,13 @@ let internalDeviceInfo: DeviceInfo | null = null;
 export function getOrCreateDeviceId(): string {
   if (internalDeviceId) return internalDeviceId;
 
-  if (typeof localStorage === 'undefined') {
-    internalDeviceId = `device_${Date.now()}_${generateRandomSuffix()}`;
-    return internalDeviceId;
-  }
+  // Use safeStorage (handles Private Mode internally via memory fallback)
+  // We check for existing first
+
 
   try {
     // Check if device ID already exists
-    const existingId = localStorage.getItem(DEVICE_ID_KEY);
+    const existingId = safeLocalStorage.getItem(DEVICE_ID_KEY);
     if (existingId) {
       internalDeviceId = existingId;
       return existingId;
@@ -109,7 +110,7 @@ export function getOrCreateDeviceId(): string {
 
     // Generate new device ID
     const deviceId = `device_${Date.now()}_${generateRandomSuffix()}`;
-    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+    safeLocalStorage.setItem(DEVICE_ID_KEY, deviceId);
     internalDeviceId = deviceId;
 
     console.log('[DeviceID] Generated new device ID:', deviceId);
@@ -130,32 +131,23 @@ export function getOrCreateDeviceId(): string {
 export function getDeviceInfo(): DeviceInfo {
   if (internalDeviceInfo) return internalDeviceInfo;
 
-  if (typeof localStorage === 'undefined') {
-    return {
-      deviceId: `device_${Date.now()}_${generateRandomSuffix()}`,
-      platform: 'web',
-      browser: 'Unknown',
-      os: 'Unknown',
-      screenSize: '0x0',
-      lastSeen: Date.now(),
-      firstSeen: Date.now(),
-    };
-  }
+  // Implicitly safe due to safeLocalStorage fallback
+
 
   const deviceId = getOrCreateDeviceId();
 
   try {
     // Try to get cached info
-    const cached = localStorage.getItem(DEVICE_INFO_KEY);
+    const cached = safeLocalStorage.getItem(DEVICE_INFO_KEY);
     if (cached) {
       const info = JSON.parse(cached) as DeviceInfo;
       info.lastSeen = Date.now();
-      try { localStorage.setItem(DEVICE_INFO_KEY, JSON.stringify(info)); } catch (e) { } // Best effort update
+      try { safeLocalStorage.setItem(DEVICE_INFO_KEY, JSON.stringify(info)); } catch (e) { } // Best effort update
       internalDeviceInfo = info;
       return info;
     }
   } catch (e) {
-    console.warn('[DeviceInfo] LocalStorage read failed:', e);
+    console.warn('[DeviceInfo] SafeStorage read failed:', e);
   }
 
   // Create new device info
@@ -170,9 +162,9 @@ export function getDeviceInfo(): DeviceInfo {
   };
 
   try {
-    localStorage.setItem(DEVICE_INFO_KEY, JSON.stringify(info));
+    safeLocalStorage.setItem(DEVICE_INFO_KEY, JSON.stringify(info));
   } catch (e) {
-    console.warn('[DeviceInfo] LocalStorage write failed (using ephemeral info):', e);
+    console.warn('[DeviceInfo] SafeStorage write failed:', e);
   }
 
   internalDeviceInfo = info;
@@ -212,10 +204,8 @@ export function isSameDevice(deviceId: string): boolean {
  * Clear device ID (factory reset)
  */
 export function clearDeviceId(): void {
-  if (typeof localStorage === 'undefined') return;
-
-  localStorage.removeItem(DEVICE_ID_KEY);
-  localStorage.removeItem(DEVICE_INFO_KEY);
+  safeLocalStorage.removeItem(DEVICE_ID_KEY);
+  safeLocalStorage.removeItem(DEVICE_INFO_KEY);
   console.log('[DeviceID] Device ID cleared');
 }
 

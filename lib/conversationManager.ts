@@ -1,9 +1,4 @@
-/**
- * Conversation Manager
- * 
- * Client-side utilities for managing conversation state
- * Works alongside sessionClientMemory.ts
- */
+import { safeLocalStorage } from './safeStorage';
 
 const ACTIVE_CONVERSATION_KEY = 'genie_active_conversation';
 
@@ -18,10 +13,8 @@ export interface ActiveConversation {
  * Called when user switches or creates a new conversation
  */
 export function setActiveConversation(conversation: ActiveConversation): void {
-    if (typeof window === 'undefined') return;
-
     try {
-        localStorage.setItem(ACTIVE_CONVERSATION_KEY, JSON.stringify(conversation));
+        safeLocalStorage.setItem(ACTIVE_CONVERSATION_KEY, JSON.stringify(conversation));
         console.log(`[ConversationManager] Set active conversation: ${conversation.id}`);
     } catch (error) {
         console.error('[ConversationManager] Failed to set active conversation:', error);
@@ -33,10 +26,8 @@ export function setActiveConversation(conversation: ActiveConversation): void {
  * Returns null if no conversation is set (fallback to "merged")
  */
 export function getActiveConversation(): ActiveConversation | null {
-    if (typeof window === 'undefined') return null;
-
     try {
-        const stored = localStorage.getItem(ACTIVE_CONVERSATION_KEY);
+        const stored = safeLocalStorage.getItem(ACTIVE_CONVERSATION_KEY);
         if (!stored) return null;
 
         return JSON.parse(stored) as ActiveConversation;
@@ -60,10 +51,8 @@ export function getActiveConversationId(): string | null {
  * Called when starting fresh or switching to default
  */
 export function clearActiveConversation(): void {
-    if (typeof window === 'undefined') return;
-
     try {
-        localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
+        safeLocalStorage.removeItem(ACTIVE_CONVERSATION_KEY);
         console.log('[ConversationManager] Cleared active conversation');
     } catch (error) {
         console.error('[ConversationManager] Failed to clear active conversation:', error);
