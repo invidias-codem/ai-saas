@@ -146,9 +146,8 @@ def genie_worker(request):
         
         message_payload = {
             "conversation_id": conversation_id,
-            "user_id": user_id,
             "role": "bot",
-            "text": ai_response_text,
+            "content": ai_response_text,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
 
