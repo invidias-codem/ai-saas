@@ -22,7 +22,14 @@ const nextConfig = {
     ],
   },
   experimental: {
-    serverComponentsExternalPackages: ['@google-cloud/tasks'],
+    serverComponentsExternalPackages: [
+      '@google-cloud/tasks',
+      '@google-cloud/storage',
+      '@google-cloud/vertexai',
+      '@google-cloud/aiplatform',
+      'google-gax',
+      'grpc' // Sometimes needed
+    ],
   },
 };
 
