@@ -104,7 +104,18 @@ export async function POST(req: Request) {
 
         // 4. Dispatch and Forget (Async)
         // We await the *creation* of the task, not the *execution*
-        await client.createTask({ parent: parent, task });
+        console.log(`[Dispatcher] Creating task for conv ${conversationId}, queue: ${parent}`);
+        try {
+            const response = await client.createTask({ parent: parent, task });
+            console.log(`[Dispatcher] ✅ Task created successfully:`, response[0]?.name);
+        } catch (taskError: any) {
+            console.error(`[Dispatcher] ❌ Failed to create task:`, taskError.message, taskError.details);
+            // Return error to user instead of silently failing
+            return NextResponse.json({
+                error: 'Failed to queue AI request',
+                details: taskError.message
+            }, { status: 500 });
+        }
 
         // 5. Return Immediate UI Feedback
         return NextResponse.json({
