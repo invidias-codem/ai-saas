@@ -89,56 +89,44 @@ def genie_worker(request):
 
         # 3. RUN AGENT LOGIC (Gemini)
         client = get_genai_client()
-        model_id = "gemini-1.5-flash" # Using stable Flash model to avoid 429 errors
-
-        contents = []
-        
-        # Add Text Prompt
-        if prompt:
-             contents.append(prompt)
-
-        # Add File if present
-        if file_data:
-            try:
-                mime_type = file_data.get('type', 'application/octet-stream')
-                
-                if file_data.get('fileUri'):
-                    # GCS URI (Large File)
-                    file_uri = file_data['fileUri']
-                    file_part = types.Part.from_uri(file_uri=file_uri, mime_type=mime_type)
-                    contents.append(file_part)
-                    logging.info(f"📎 Attached GCS file: {file_data.get('name')} ({file_uri})")
-                
-                elif file_data.get('base64Data'):
-                    # Base64 (Small File)
-                    blob = base64.b64decode(file_data['base64Data'])
-                    file_part = types.Part.from_bytes(data=blob, mime_type=mime_type)
-                    contents.append(file_part)
-                    logging.info(f"📎 Attached Base64 file: {file_data.get('name')}")
-            except Exception as e:
-                logging.error(f"Failed to process file attachment: {e}")
-                # We continue without the file rather than crashing the whole request
-                contents.append(f"[System Error: Failed to attach file {file_data.get('name')}]")
-
-        generate_config = types.GenerateContentConfig(
-            temperature=0.7,
-            max_output_tokens=2048,
-        )
-
+        # Smart Fallback Logic
+        ai_response_text = ""
         try:
+            # 1. Try Experimental Model (Gemini 2.0)
+            model_id = "gemini-2.0-flash-exp"
             logging.info(f"🧠 Calling Gemini ({model_id})...")
+            
             response = client.models.generate_content(
                 model=model_id,
                 contents=contents,
                 config=generate_config
             )
             ai_response_text = response.text
-            logging.info("🧠 Gemini Response Received")
+            logging.info(f"🧠 Gemini Response Received ({model_id})")
 
-        except Exception as gemini_err:
-             logging.error(f"Gemini API Error: {gemini_err}")
-             # Raise specific error so we know if it's transient
-             raise FatalError(f"Gemini Inference Failed: {gemini_err}")
+        except Exception as e:
+            # 2. Check for Quota Error (429)
+            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                logging.warning(f"⚠️ Quota Exceeded for {model_id}. Falling back to Stable...")
+                
+                # 3. Fallback to Stable Model (Gemini 1.5)
+                model_id = "gemini-1.5-flash"
+                try:
+                    logging.info(f"🧠 Retry Gemini ({model_id})...")
+                    response = client.models.generate_content(
+                        model=model_id,
+                        contents=contents,
+                        config=generate_config
+                    )
+                    ai_response_text = response.text
+                    logging.info(f"🧠 Gemini Response Received ({model_id})")
+                except Exception as fallback_err:
+                     logging.error(f"Gemini Fallback Failed: {fallback_err}")
+                     raise FatalError(f"Gemini Inference Failed (Fallback): {fallback_err}")
+            else:
+                # Other errors (e.g. 400 Bad Request) -> Fail immediately
+                logging.error(f"Gemini API Error: {e}")
+                raise FatalError(f"Gemini Inference Failed: {e}")
 
         
         # 4. Write to Supabase (Realtime)
