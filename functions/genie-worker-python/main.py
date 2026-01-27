@@ -89,7 +89,7 @@ def genie_worker(request):
 
         # 3. RUN AGENT LOGIC (Gemini)
         client = get_genai_client()
-        model_id = "gemini-2.0-flash-exp" # Using Flash for speed
+        model_id = "gemini-1.5-flash" # Using stable Flash model to avoid 429 errors
 
         contents = []
         
