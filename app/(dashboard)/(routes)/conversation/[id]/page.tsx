@@ -79,6 +79,44 @@ const readFileAsBase64 = (file: File): Promise<string> => {
   });
 };
 
+// Safe Chart Component
+const SafeChart = ({ data }: { data: any[] }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return (
+    <div className="my-6 w-full overflow-hidden rounded-lg border bg-card p-4 shadow-sm">
+      <div className="overflow-x-hidden w-full" style={{ minHeight: '300px' }}>
+        <ResponsiveContainer width="100%" height={300}>
+          {data.length <= 5 ? (
+            <PieChart>
+              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
+                {data.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'][index % 5]} />)}
+              </Pie>
+              <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+              <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+            </PieChart>
+          ) : (
+            <BarChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+              <XAxis dataKey="name" angle={-30} textAnchor="end" height={60} interval={0} fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis fontSize={10} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+              <Legend wrapperStyle={{ fontSize: '12px' }} />
+              <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
 // Chart rendering component
 const RenderTableAsChart = ({ node, ...props }: any) => {
   try {
@@ -90,33 +128,7 @@ const RenderTableAsChart = ({ node, ...props }: any) => {
 
     if (headers.length === 2 && rows.length > 0 && !isNaN(parseFloat(rows[0][1]))) {
       const data = rows.map((row: any) => ({ name: row[0], value: parseFloat(row[1]) }));
-
-      return (
-        <div className="my-6 w-full overflow-hidden rounded-lg border bg-card p-4 shadow-sm">
-          <div className="overflow-x-hidden w-full" style={{ minHeight: '300px' }}>
-            <ResponsiveContainer width="100%" height={300}>
-              {data.length <= 5 ? (
-                <PieChart>
-                  <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
-                    {data.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'][index % 5]} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                  <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                </PieChart>
-              ) : (
-                <BarChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                  <XAxis dataKey="name" angle={-30} textAnchor="end" height={60} interval={0} fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis fontSize={10} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              )}
-            </ResponsiveContainer>
-          </div>
-        </div>
-      );
+      return <SafeChart data={data} />;
     }
   } catch (e) {
     console.error("Error parsing/rendering chart:", e);
