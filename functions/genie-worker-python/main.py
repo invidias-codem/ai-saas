@@ -166,16 +166,31 @@ def genie_worker(request):
             # Attempt to use conversation_id from earlier or data
             target_cid = locals().get('conversation_id') or (data.get('conversationId') if 'data' in locals() and data else None)
 
+        # 🚑 EMERGENCY: Write Friendly Error to Supabase
+        try:
+            # We re-fetch env vars to be safe
+            sb_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+            sb_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            
+            # Attempt to use conversation_id from earlier or data
+            target_cid = locals().get('conversation_id') or (data.get('conversationId') if 'data' in locals() and data else None)
+
             if sb_url and sb_key and target_cid:
                 err_client = create_client(sb_url, sb_key)
+                
+                # Determine friendly message
+                error_msg = "I apologize, but I encountered a temporary technical glitch. Please try asking me again."
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    error_msg = "I'm currently experiencing very high traffic. Please give me a moment to cool down and try again in about 30 seconds."
+                
                 err_payload = {
                     "conversation_id": target_cid,
-                    "role": "system", 
-                    "content": f"⚠️ System Error: {str(e)}",
+                    "role": "bot",  # Use 'bot' so it displays nicely in the UI
+                    "content": error_msg,
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
                 err_client.table("messages").insert(err_payload).execute()
-                logging.info(f"✅ Error reported to Supabase for conv {target_cid}")
+                logging.info(f"✅ Friendly error reported to Supabase for conv {target_cid}")
         except Exception as report_err:
             logging.error(f"Failed to report error to Supabase: {report_err}")
         
