@@ -89,6 +89,43 @@ def genie_worker(request):
 
         # 3. RUN AGENT LOGIC (Gemini)
         client = get_genai_client()
+        
+        # Build contents for Gemini API
+        contents = []
+        
+        # Handle file attachments if present
+        if file_data:
+            file_name = file_data.get('name', 'file')
+            file_type = file_data.get('type', '')
+            
+            # Check if we have base64 data (small files) or GCS URI (large files)
+            if file_data.get('base64Data'):
+                # Small file - inline base64
+                logging.info(f"📎 Processing inline file: {file_name}")
+                contents.append(types.Part.from_bytes(
+                    data=base64.b64decode(file_data['base64Data']),
+                    mime_type=file_type
+                ))
+            elif file_data.get('fileUri'):
+                # Large file - GCS URI
+                logging.info(f"📎 Processing GCS file: {file_data['fileUri']}")
+                contents.append(types.Part.from_uri(
+                    file_uri=file_data['fileUri'],
+                    mime_type=file_type
+                ))
+        
+        # Add the user's text prompt
+        contents.append(types.Part.from_text(prompt))
+        
+        # Configure generation parameters
+        generate_config = types.GenerateContentConfig(
+            temperature=0.7,
+            top_p=0.95,
+            top_k=40,
+            max_output_tokens=8192,
+            response_modalities=["TEXT"]
+        )
+        
         # Smart Fallback Logic
         ai_response_text = ""
         try:
@@ -156,15 +193,6 @@ def genie_worker(request):
     except Exception as e:
         # 🛑 FATAL: Call the Doctor, then kill the task (200 OK)
         logging.error(f"🚑 Fatal Error: {str(e)}. Calling Doctor...")
-
-        # 🚑 EMERGENCY: Write Error to Supabase so User sees it
-        try:
-            # We re-fetch env vars to be safe
-            sb_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
-            sb_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-            
-            # Attempt to use conversation_id from earlier or data
-            target_cid = locals().get('conversation_id') or (data.get('conversationId') if 'data' in locals() and data else None)
 
         # 🚑 EMERGENCY: Write Friendly Error to Supabase
         try:
