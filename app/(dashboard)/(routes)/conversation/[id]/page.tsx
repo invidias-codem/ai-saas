@@ -83,6 +83,7 @@ const readFileAsBase64 = (file: File): Promise<string> => {
 interface ChartDataPoint {
   name: string;
   value: number;
+  [key: string]: any;
 }
 
 const SafeChart = ({ data }: { data: ChartDataPoint[] }) => {
