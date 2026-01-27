@@ -65,9 +65,7 @@ export async function POST(req: Request) {
                     .insert({
                         conversation_id: conversationId,
                         role: 'user',
-                        content: prompt,
-                        user_id: userId,
-                        metadata: fileData ? { fileData } : {} // Store file metadata
+                        content: prompt
                     });
 
                 if (dbError) {
