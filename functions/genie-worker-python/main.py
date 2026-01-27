@@ -115,7 +115,7 @@ def genie_worker(request):
                 ))
         
         # Add the user's text prompt
-        contents.append(types.Part.from_text(prompt))
+        contents.append(types.Part.from_text(text=prompt))
         
         # Configure generation parameters
         generate_config = types.GenerateContentConfig(
