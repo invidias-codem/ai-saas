@@ -80,7 +80,12 @@ const readFileAsBase64 = (file: File): Promise<string> => {
 };
 
 // Safe Chart Component
-const SafeChart = ({ data }: { data: any[] }) => {
+interface ChartDataPoint {
+  name: string;
+  value: number;
+}
+
+const SafeChart = ({ data }: { data: ChartDataPoint[] }) => {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -96,7 +101,7 @@ const SafeChart = ({ data }: { data: any[] }) => {
           {data.length <= 5 ? (
             <PieChart>
               <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
-                {data.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'][index % 5]} />)}
+                {data.map((_entry, index: number) => <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'][index % 5]} />)}
               </Pie>
               <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
               <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
