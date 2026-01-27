@@ -1,6 +1,10 @@
 functions-framework==3.*
 flask==3.*
 google-cloud-firestore
-google-generativeai
+google-genai
 requests
+opik
+supabase
+
+
 

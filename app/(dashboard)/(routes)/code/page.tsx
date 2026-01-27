@@ -532,7 +532,7 @@ export default function CodePage() {
               ref={fileInputRef}
               onChange={handleFileChange}
               style={{ display: 'none' }}
-              accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.md,text/plain"
+              accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.yml,.md,.txt,.xml,.sql,.sh,.bash,.env,.config,text/plain,application/json,image/*"
             />
 
             <Button

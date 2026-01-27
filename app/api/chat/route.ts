@@ -1,23 +1,41 @@
 // app/api/chat/route.ts
 import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { CloudTasksClient } from '@google-cloud/tasks';
 
-// Initialize Client (Lazy load outside handler for performance)
-const tasksClient = new CloudTasksClient();
+// Lazy-initialized singleton
+let tasksClient: CloudTasksClient | null = null;
+
+function getTasksClient(): CloudTasksClient {
+    if (!tasksClient) {
+        tasksClient = new CloudTasksClient();
+    }
+    return tasksClient;
+}
 
 export async function POST(req: Request) {
     try {
-        // 1. Validate Input
+        // 1. Authenticate User
+        const { userId: authenticatedUserId } = auth();
+        if (!authenticatedUserId) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // 2. Validate Input
         const body = await req.json();
-        const { prompt, userId } = body;
+        const { prompt, conversationId, fileData } = body;
 
         if (!prompt) return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
 
-        // 2. Construct the Cloud Task
+        // Use authenticated userId instead of client-provided one
+        const userId = authenticatedUserId;
+
+        // 3. Construct the Cloud Task
         const project = process.env.GCP_PROJECT_ID;
-        const queue = 'genie-worker-queue';
-        const location = 'us-central1';
-        const url = 'https://us-central1-genie-ai-1ca85.cloudfunctions.net/genie-worker';
+        const queue = process.env.GCP_TASK_QUEUE || 'genie-worker-queue';
+        const location = process.env.GCP_REGION || 'us-central1';
+        const workerFunctionName = process.env.GCP_WORKER_FUNCTION || 'genie-worker';
+        const url = `https://${location}-${project}.cloudfunctions.net/${workerFunctionName}`;
         const serviceAccountEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
 
         // Check for critical variables
@@ -26,7 +44,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Configuration Error' }, { status: 500 });
         }
 
-        const parent = tasksClient.queuePath(project, location, queue);
+        const client = getTasksClient();
+        const parent = client.queuePath(project, location, queue);
 
         const task = {
             httpRequest: {
@@ -39,15 +58,20 @@ export async function POST(req: Request) {
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: Buffer.from(JSON.stringify({ prompt, userId })).toString('base64'),
+                body: Buffer.from(JSON.stringify({
+                    prompt,
+                    userId,
+                    conversationId,
+                    fileData // Forward file data (base64)
+                })).toString('base64'),
             },
         };
 
-        // 3. Dispatch and Forget (Async)
+        // 4. Dispatch and Forget (Async)
         // We await the *creation* of the task, not the *execution*
-        await tasksClient.createTask({ parent, task });
+        await client.createTask({ parent: parent, task });
 
-        // 4. Return Immediate UI Feedback
+        // 5. Return Immediate UI Feedback
         return NextResponse.json({
             status: 'queued',
             message: 'Agent is thinking...',

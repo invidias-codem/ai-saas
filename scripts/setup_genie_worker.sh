@@ -5,23 +5,52 @@ PROJECT_ID="genie-ai-1ca85" # REPLACE WITH YOUR PROJECT ID
 REGION="us-central1"
 QUEUE_NAME="genie-worker-queue"
 WORKER_NAME="genie-worker"
+DOCTOR_NAME="genie-doctor"
 SERVICE_ACCOUNT_NAME="genie-dispatcher-sa"
 
 echo "🚀 Setting up Cloud Tasks & Worker for Project: $PROJECT_ID"
+
+# Load env vars
+if [ -f .env.local ]; then
+    export $(cat .env.local | grep -v '#' | awk '/=/ {print $1}')
+fi
 
 # 1. Enable APIs
 gcloud services enable cloudtasks.googleapis.com cloudfunctions.googleapis.com run.googleapis.com --project=$PROJECT_ID
 
 # 2. Create Service Account for Next.js Dispatcher
 echo "Creating Service Account..."
-gcloud iam service-accounts create $SERVICE_ACCOUNT_NAME --display-name="Next.js Dispatcher SA" --project=$PROJECT_ID
+gcloud iam service-accounts create $SERVICE_ACCOUNT_NAME --display-name="Next.js Dispatcher SA" --project=$PROJECT_ID || true
 
 # 3. Create Cloud Task Queue
 echo "Creating Queue..."
-gcloud tasks queues create $QUEUE_NAME --location=$REGION --project=$PROJECT_ID
+gcloud tasks queues create $QUEUE_NAME --location=$REGION --project=$PROJECT_ID || true
 
-# 4. Deploy Python Worker (Cloud Function Gen 2)
-echo "Deploying Worker..."
+# ---------------------------------------------------------
+# 4. Deploy THE DOCTOR (First, so we have the URL)
+# ---------------------------------------------------------
+echo "👨‍⚕️ Deploying Genie Doctor..."
+cd functions/genie-doctor-python
+gcloud functions deploy $DOCTOR_NAME \
+    --gen2 \
+    --runtime=python311 \
+    --region=$REGION \
+    --source=. \
+    --entry-point=genie_doctor \
+    --trigger-http \
+    --allow-unauthenticated \
+    --set-env-vars OPIK_API_KEY="${OPIK_API_KEY}",OPIK_WORKSPACE="${OPIK_WORKSPACE}",SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL}" \
+    --project=$PROJECT_ID
+
+# Capture Doctor URL
+DOCTOR_URL=$(gcloud functions describe $DOCTOR_NAME --region=$REGION --format='value(serviceConfig.uri)' --project=$PROJECT_ID)
+echo "✅ Doctor is live at: $DOCTOR_URL"
+cd ../..
+
+# ---------------------------------------------------------
+# 5. Deploy THE WORKER (With Doctor's Phone Number)
+# ---------------------------------------------------------
+echo "👷 Deploying Genie Worker..."
 cd functions/genie-worker-python
 gcloud functions deploy $WORKER_NAME \
     --gen2 \
@@ -31,9 +60,11 @@ gcloud functions deploy $WORKER_NAME \
     --entry-point=genie_worker \
     --trigger-http \
     --allow-unauthenticated \
+    --set-env-vars OPIK_API_KEY="${OPIK_API_KEY}",OPIK_WORKSPACE="${OPIK_WORKSPACE}",SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL}",GENIE_DOCTOR_URL="${DOCTOR_URL}",ENABLE_CHAOS_TESTING="false",NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}",SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}",GOOGLE_API_KEY="${GOOGLE_API_KEY}" \
     --project=$PROJECT_ID
+cd ../..
 
-# 5. Grant Permissions
+# 6. Grant Permissions
 # Allow Next.js SA to enqueue tasks
 gcloud tasks queues add-iam-policy-binding $QUEUE_NAME \
     --location=$REGION \
@@ -50,4 +81,4 @@ gcloud functions add-iam-policy-binding $WORKER_NAME \
 
 echo "✅ Setup Complete!"
 echo "Service Account Email: $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com"
-echo "Update your .env.local with GCP_SERVICE_ACCOUNT_EMAIL"
+echo "Doctor URL: $DOCTOR_URL"

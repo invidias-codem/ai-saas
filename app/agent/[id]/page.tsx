@@ -14,13 +14,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const agent = await getPublicAgent(params.id);
     if (!agent) return {};
 
+    const displayName = agent.name?.trim() || 'Unnamed Agent';
+    const truncatedName = displayName.length > 100 ? displayName.substring(0, 100) + '...' : displayName;
+
     return {
-        title: `${agent.name} - AI Agent | Gen1e`,
-        description: agent.description,
+        title: `${displayName} - AI Agent | Gen1e`,
+        description: agent.description || 'An AI agent powered by Gen1e',
         openGraph: {
-            title: agent.name,
-            description: agent.description,
-            images: [{ url: `/api/og?title=${encodeURIComponent(agent.name)}` }],
+            title: displayName,
+            description: agent.description || 'An AI agent powered by Gen1e',
+            images: [{ url: `/api/og?title=${encodeURIComponent(truncatedName)}` }],
         },
         twitter: {
             card: 'summary_large_image',
@@ -47,11 +50,13 @@ export default async function AgentPage({ params }: Props) {
             price: '0',
             priceCurrency: 'USD',
         },
-        aggregateRating: {
-            '@type': 'AggregateRating',
-            ratingValue: '4.8',
-            ratingCount: agent.usage_count,
-        },
+        ...(agent.usage_count > 0 && {
+            aggregateRating: {
+                '@type': 'AggregateRating',
+                ratingValue: '4.8',
+                ratingCount: agent.usage_count,
+            },
+        }),
     };
 
     return (
@@ -95,10 +100,14 @@ export default async function AgentPage({ params }: Props) {
                         <div className="text-gray-500 text-sm uppercase tracking-wider">Creator</div>
                         <div className="text-3xl font-bold mt-2">{agent.creator_name}</div>
                     </div>
-                    <div className="p-6 bg-gray-900/50 border border-gray-800 rounded-2xl">
-                        <div className="text-gray-500 text-sm uppercase tracking-wider">Rating</div>
-                        <div className="text-3xl font-bold mt-2">4.8/5.0</div>
-                    </div>
+                    {agent.usage_count > 10 && (
+                        <div className="p-6 bg-gray-900/50 border border-gray-800 rounded-2xl">
+                            <div className="text-gray-500 text-sm uppercase tracking-wider">Popularity</div>
+                            <div className="text-3xl font-bold mt-2">
+                                {agent.usage_count > 1000 ? 'Very Popular' : agent.usage_count > 100 ? 'Popular' : 'Growing'}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Capabilities */}

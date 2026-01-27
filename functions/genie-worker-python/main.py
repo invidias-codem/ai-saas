@@ -4,6 +4,12 @@ import logging
 import os
 import requests
 import json
+import opik
+import traceback
+import base64
+from supabase import create_client, Client
+from google import genai
+from google.genai import types
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)
@@ -12,72 +18,150 @@ logging.basicConfig(level=logging.INFO)
 class TransientError(Exception): pass
 class FatalError(Exception): pass
 
+# Define Retryable Errors (Let Cloud Tasks handle these)
+RETRIABLE_ERRORS = (
+    ConnectionError, 
+    TimeoutError,
+    TransientError,
+    # Add specific Gemini RateLimitError if imported
+)
+
+# Doctor URL (Env Var)
+GENIE_DOCTOR_URL = os.environ.get("GENIE_DOCTOR_URL", "")
+
 # Slack Webhook URL (Env Var recommended)
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
 
-def send_slack_alert(message):
-    """Sends a critical alert to Slack"""
-    if not SLACK_WEBHOOK_URL:
-        logging.warning("⚠️ No SLACK_WEBHOOK_URL set. Skipping alert.")
-        return
-    
-    try:
-        payload = {"text": f"🚨 *Genie Worker Alert* 🚨\n{message}"}
-        requests.post(SLACK_WEBHOOK_URL, json=payload, timeout=5)
-    except Exception as e:
-        logging.error(f"Failed to send Slack alert: {e}")
+# Gemini Client (Lazy Init if needed, but function instances usually persist)
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+if not GOOGLE_API_KEY:
+    logging.warning("⚠️ GOOGLE_API_KEY not found. Gemini calls will fail.")
+
+def get_genai_client():
+    if not GOOGLE_API_KEY:
+        raise FatalError("Missing GOOGLE_API_KEY")
+    return genai.Client(api_key=GOOGLE_API_KEY)
 
 @functions_framework.http
+@opik.track(name="genie_worker_entrypoint")
 def genie_worker(request):
     try:
         data = request.get_json(silent=True)
         if not data:
             raise FatalError("Empty payload received")
 
-        logging.info(f"🚀 Worker started. Payload: {json.dumps(data)}")
-
-        # --- CHAOS TESTING START ---
-        if data.get("chaos") == "transient":
-            raise TransientError("Simulating Rate Limit (Chaos Test)")
-        if data.get("chaos") == "fatal":
-            raise FatalError("Simulating Corrupt Data (Chaos Test)")
-        # --- CHAOS TESTING END ---
-
         # 1. Extract inputs
-        prompt = data.get('prompt')
+        conversation_id = data.get('conversationId')
         user_id = data.get('userId')
+        prompt = data.get('prompt')
+        file_data = data.get('fileData') # { name, type, base64Data }
+        chaos = data.get("chaos")
+
+        logging.info(f"🚀 Worker started. User={user_id}, Conv={conversation_id}, HasFile={bool(file_data)}")
+
+        # Chaos testing
+        if os.environ.get("ENABLE_CHAOS_TESTING") == "true":
+            if chaos == "transient":
+                raise TransientError("Simulated Rate Limit (Chaos Test)")
+            if chaos == "fatal":
+                raise FatalError("Simulating Corrupt Data (Chaos Test)")
         
         if not prompt:
              raise FatalError("Missing 'prompt' in payload")
 
-        # 2. RUN AGENT LOGIC HERE (Stub)
-        # This is where we would call Gemini, Vector DB, etc.
-        # simulate_heavy_processing()
-        result = f"Processed: {prompt}"
+        # 2. Initialize Supabase
+        supabase_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+        supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+        if not supabase_url or not supabase_key:
+            raise FatalError("Missing Supabase Configuration")
+
+        supabase: Client = create_client(supabase_url, supabase_key)
+
+        # 3. RUN AGENT LOGIC (Gemini)
+        client = get_genai_client()
+        model_id = "gemini-2.0-flash-exp" # Using Flash for speed
+
+        contents = []
+        
+        # Add Text Prompt
+        if prompt:
+             contents.append(prompt)
+
+        # Add File if present
+        if file_data and file_data.get('base64Data'):
+            try:
+                mime_type = file_data.get('type', 'application/octet-stream')
+                blob = base64.b64decode(file_data['base64Data'])
+                
+                # Create Part from bytes
+                file_part = types.Part.from_bytes(data=blob, mime_type=mime_type)
+                contents.append(file_part)
+                logging.info(f"📎 Attached file: {file_data.get('name')} ({mime_type})")
+            except Exception as e:
+                logging.error(f"Failed to process file attachment: {e}")
+                # We continue without the file rather than crashing the whole request
+                contents.append(f"[System Error: Failed to attach file {file_data.get('name')}]")
+
+        generate_config = types.GenerateContentConfig(
+            temperature=0.7,
+            max_output_tokens=2048,
+        )
+
+        try:
+            logging.info(f"🧠 Calling Gemini ({model_id})...")
+            response = client.models.generate_content(
+                model=model_id,
+                contents=contents,
+                config=generate_config
+            )
+            ai_response_text = response.text
+            logging.info("🧠 Gemini Response Received")
+
+        except Exception as gemini_err:
+             logging.error(f"Gemini API Error: {gemini_err}")
+             # Raise specific error so we know if it's transient
+             raise FatalError(f"Gemini Inference Failed: {gemini_err}")
+
+        
+        # 4. Write to Supabase (Realtime)
+        message_payload = {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "role": "bot",
+            "text": ai_response_text,
+            "created_at": "now()" 
+        }
+
+        try:
+            db_res = supabase.table("messages").insert(message_payload).execute()
+            logging.info(f"✅ Response saved to Supabase")
+        except Exception as db_err:
+             raise FatalError(f"Database Write Failed: {db_err}")
         
         logging.info("✅ Worker finished successfully")
-        return jsonify({"status": "success", "result": result}), 200
+        return jsonify({"status": "success", "written_to_db": True}), 200
 
-    except TransientError as e:
-        # HTTP 500 tells Cloud Tasks: "Something broke, but might work later. Please retry."
-        logging.warning(f"⚠️ TRANSIENT ERROR: {str(e)}")
+    except RETRIABLE_ERRORS as e:
+        # ⚠️ CRITICAL: Raise 500 so Cloud Tasks retries automatically
+        logging.warning(f"🔄 Transient Error: {str(e)}")
         return jsonify({"error": str(e), "retry": True}), 500
 
-    except FatalError as e:
-        # HTTP 200 tells Cloud Tasks: "I processed this (by failing gracefully). Do NOT retry."
-        logging.error(f"🛑 FATAL ERROR: {str(e)}")
-        
-        # Alerting
-        try:
-            send_slack_alert(f"Fatal Error processing job: {str(e)}")
-        except Exception as alert_error:
-            logging.error(f"⚠️ Failed to send Slack alert: {alert_error}")
-        
-        # TODO: Update DB status to 'FAILED'
-        
-        return jsonify({"error": str(e), "retry": False}), 200
-
     except Exception as e:
-        # Catch-all for unexpected bugs -> Treat as Transient (safer)
-        logging.exception(f"🔥 UNEXPECTED ERROR: {str(e)}")
-        return jsonify({"error": "Internal Server Error"}), 500
+        # 🛑 FATAL: Call the Doctor, then kill the task (200 OK)
+        logging.error(f"🚑 Fatal Error: {str(e)}. Calling Doctor...")
+        
+        doctor_payload = {
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "original_payload": data if 'data' in locals() else {},
+            "source": "genie-worker"
+        }
+        
+        if GENIE_DOCTOR_URL:
+            try:
+                requests.post(GENIE_DOCTOR_URL, json=doctor_payload, timeout=5)
+            except Exception:
+                pass
+        
+        return jsonify({"status": "Handled by Doctor", "error": str(e)}), 200

@@ -15,6 +15,13 @@ export interface PublicAgent {
  * SECURITY: Prevents leaking system_prompt and api_keys.
  */
 export async function getPublicAgent(id: string): Promise<PublicAgent | null> {
+    // Validate ID format (assuming UUID)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!id || !uuidRegex.test(id)) {
+        console.error(`[AgentSecurity] Invalid agent ID format: ${id}`);
+        return null;
+    }
+
     const { data, error } = await supabase
         .from('agents')
         .select('id, name, description, usage_count, user_id, avatar_url, capabilities')

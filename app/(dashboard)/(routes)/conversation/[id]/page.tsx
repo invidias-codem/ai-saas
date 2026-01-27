@@ -47,6 +47,7 @@ import {
   getActiveConversationId,
   setActiveConversation,
 } from "@/lib/conversationManager";
+import { useSupabaseChat, Message as SupabaseMessage } from "@/app/hooks/useSupabaseChat";
 // Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
 
 // Message structure
@@ -133,7 +134,20 @@ const RenderTableAsChart = ({ node, ...props }: any) => {
 // Main Page Component
 export default function ConversationPage({ params }: { params: { id: string } }) {
   const conversationId = params.id;
+  const { messages: supabaseMessages } = useSupabaseChat(conversationId);
+  // We keep local 'messages' state for optimistic updates, but sync with Supabase
   const [messages, setMessages] = useState<Message[]>([]);
+
+  // Sync Supabase messages to local state
+  useEffect(() => {
+    if (supabaseMessages && supabaseMessages.length > 0) {
+      // Deduplicate by timestamp or simple content check to avoid jitter
+      // For now, simple replacement or merge
+      setMessages(supabaseMessages);
+      setShowGreeting(false);
+    }
+  }, [supabaseMessages]);
+
   const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -340,33 +354,17 @@ export default function ConversationPage({ params }: { params: { id: string } })
     setMessages(newMessages); setUserInput(""); setSelectedFile(null);
 
     try {
-      const response = await axios.post("/api/conversation", {
-        messages: newMessages.map(msg => ({ role: msg.role, text: msg.text })),
-        fileData: selectedFile?.base64Data,
-        fileName: selectedFile?.name,
-        mimeType: selectedFile?.type
+      // Dispatcher Call (Fire and Forget - 200 OK)
+      await axios.post("/api/chat", {
+        conversationId,
+        userId,
+        prompt: messageText,
+        fileData: selectedFile ? {
+          name: selectedFile.name,
+          type: selectedFile.type,
+          base64Data: selectedFile.base64Data
+        } : undefined
       });
-
-      const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
-      setMessages((prevMessages) => [...prevMessages, botMessage]);
-
-      // Trigger background memory sync (fire-and-forget)
-      // Use conversation ID from URL, not from storage
-      if (conversationId) {
-        fetch('/api/memory/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            conversationId,  // Use URL param
-            messages: [
-              { role: userMessage.role, content: userMessage.text },
-              { role: botMessage.role, content: botMessage.text }
-            ]
-          })
-        }).catch(err => console.error('Background memory sync failed:', err));
-      }
-
     } catch (error: any) {
       console.error("Error sending message:", error);
       if (error.response?.status === 401) {
