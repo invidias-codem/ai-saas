@@ -168,6 +168,30 @@ def genie_worker(request):
     except Exception as e:
         # 🛑 FATAL: Call the Doctor, then kill the task (200 OK)
         logging.error(f"🚑 Fatal Error: {str(e)}. Calling Doctor...")
+
+        # 🚑 EMERGENCY: Write Error to Supabase so User sees it
+        try:
+            # We re-fetch env vars to be safe
+            sb_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+            sb_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+            
+            # Attempt to use conversation_id from earlier or data
+            target_cid = locals().get('conversation_id') or (data.get('conversationId') if 'data' in locals() and data else None)
+
+            if sb_url and sb_key and target_cid:
+                err_client = create_client(sb_url, sb_key)
+                err_payload = {
+                    "conversation_id": target_cid,
+                    "role": "system", 
+                    "content": f"⚠️ System Error: {str(e)}",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                err_client.table("messages").insert(err_payload).execute()
+                logging.info(f"✅ Error reported to Supabase for conv {target_cid}")
+        except Exception as report_err:
+            logging.error(f"Failed to report error to Supabase: {report_err}")
+        
+        # Sanitize payload - remove sensitive data before sending to doctor
         
         # Sanitize payload - remove sensitive data before sending to doctor
         safe_payload = {
