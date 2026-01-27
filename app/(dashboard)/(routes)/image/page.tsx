@@ -10,6 +10,8 @@ import { DownloadIcon, ImageIcon } from "@radix-ui/react-icons";
 import Image from "next/image";
 
 import { Heading } from "@/components/heading";
+import { KoFiNudge } from "@/components/kofi-nudge";
+import { useSupportNudge } from "@/hooks/use-support-nudge";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -93,6 +95,7 @@ const ImagePage = () => {
 
       setImages(response.data.images);
       console.log(`[IMAGE_PAGE] Generated ${response.data.images.length} images with ${response.data.model}`);
+      trackActivity("image");
 
       form.reset();
     } catch (error: any) {
@@ -118,8 +121,12 @@ const ImagePage = () => {
     }
   };
 
+  // Nudge Integration
+  const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
+
   return (
     <div>
+      <KoFiNudge isOpen={showNudge} onClose={dismissNudge} />
       <Heading
         title="Image Capsule"
         description="Turn your prompt into an image with Seedream 4!"

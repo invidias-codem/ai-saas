@@ -20,7 +20,7 @@ const DashboardLayout = ({
                 <div className="flex-none">
                     <Navbar />
                 </div>
-                <div className="flex-1 overflow-hidden h-full relative">
+                <div className="flex-1 overflow-auto h-full relative">
                     {children}
                 </div>
             </main>

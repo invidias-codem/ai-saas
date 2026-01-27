@@ -7,6 +7,7 @@ import { Analytics } from "@vercel/analytics/react";
 
 // 1. Import the provider
 import { ThemeProvider } from "@/components/theme-provider";
+import { ModalProvider } from "@/components/modal-provider";
 
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta" });
@@ -35,8 +36,10 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            {children}
-            <Analytics />
+            <ModalProvider>
+              {children}
+              <Analytics />
+            </ModalProvider>
           </ThemeProvider>
         </body>
       </html>

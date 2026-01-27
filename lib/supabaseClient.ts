@@ -29,7 +29,11 @@ export const supabase = (supabaseUrl && supabaseKey)
             select: () => ({ eq: () => ({ single: () => ({ data: null, error: 'Supabase not configured' }), order: () => ({ limit: () => ({ single: () => ({ data: null }) }) }) }) }),
             insert: () => ({ select: () => ({ single: () => ({ data: null, error: 'Supabase not configured' }) }) }),
         }),
-        rpc: () => ({ data: [], error: 'Supabase not configured' })
+        rpc: () => ({ data: [], error: 'Supabase not configured' }),
+        channel: () => ({
+            on: () => ({ subscribe: () => { } }),
+            subscribe: () => { }
+        })
     } as any;
 
 // Explicit Admin Client (for clear usage in backend routes)

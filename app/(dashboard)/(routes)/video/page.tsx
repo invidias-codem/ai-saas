@@ -6,6 +6,8 @@ import { useState, useEffect } from "react";
 import { formSchema, resolutionOptions, durationOptions, aspectRatioOptions } from './constants';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Heading } from '@/components/heading';
+import { KoFiNudge } from "@/components/kofi-nudge";
+import { useSupportNudge } from "@/hooks/use-support-nudge";
 import { VideoIcon, DownloadIcon } from "@radix-ui/react-icons";
 import { Input } from "@/components/ui/input";
 import { Form, FormField, FormItem, FormControl } from '@/components/ui/form';
@@ -64,6 +66,7 @@ const VideoPage = () => {
             setStatus("completed");
             setVideoUrl(prediction.output || null); // Set the output URL
             setPredictionId(null); // Clear ID to stop polling
+            trackActivity("video");
             form.reset(); // Reset form on success
             clearInterval(interval);
             break;
@@ -137,8 +140,12 @@ const VideoPage = () => {
     }
   };
 
+  // Nudge Integration
+  const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
+
   return (
     <div>
+      <KoFiNudge isOpen={showNudge} onClose={dismissNudge} />
       <Heading
         title="Quick Clip"
         description="Generate videos with Replicate!"

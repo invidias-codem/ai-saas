@@ -7,6 +7,10 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useClipboard } from "use-clipboard-copy";
 
+
+
+import { KoFiNudge } from "@/components/kofi-nudge";
+import { useSupportNudge } from "@/hooks/use-support-nudge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -267,6 +271,7 @@ export default function CodePage() {
       setError(error.response?.data?.details || "Sorry, something went wrong processing your request.");
     } finally {
       setLoading(false);
+      trackActivity("message");
     }
   };
 
@@ -324,8 +329,12 @@ export default function CodePage() {
     );
   };
 
+  // Nudge Integration
+  const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
+
   return (
     <div className="flex flex-col h-[100dvh] bg-background text-foreground relative overflow-hidden">
+      <KoFiNudge isOpen={showNudge} onClose={dismissNudge} />
 
       {/* Header - Compact and pinned top */}
       <header className="flex-none px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-md z-20 flex items-center justify-between sticky top-0">

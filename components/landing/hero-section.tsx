@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ArrowRightIcon } from "@radix-ui/react-icons";
 import { LandingChat } from "@/components/landing-chat";
+import { useProModal } from "@/hooks/use-pro-modal";
 
 export const HeroSection = () => {
+    const proModal = useProModal();
     const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
     useEffect(() => {
@@ -65,11 +67,14 @@ export const HeroSection = () => {
                             <ArrowRightIcon className="ml-2 w-5 h-5" />
                         </Button>
                     </Link>
-                    <Link href="/dashboard">
-                        <Button variant="outline" size="lg" className="rounded-full px-8 py-6 text-base border-white/10 bg-white/5 hover:bg-white/10 backdrop-blur-sm">
-                            View Pricing
-                        </Button>
-                    </Link>
+                    <Button
+                        onClick={proModal.onOpen}
+                        variant="outline"
+                        size="lg"
+                        className="rounded-full px-8 py-6 text-base border-white/10 bg-white/5 hover:bg-white/10 backdrop-blur-sm"
+                    >
+                        Support Genie
+                    </Button>
                 </motion.div>
 
                 {/* Dashboard Mockup Halo Effect */}

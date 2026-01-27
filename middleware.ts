@@ -21,6 +21,8 @@ export default authMiddleware({
     "/api/integrations/slack/command",       // Slack slash commands
     "/api/integrations/slack/interactivity", // Slack interactivity (buttons, modals)
     "/api/integrations/slack/auth",          // 0Auth Init (handled manually for redirects)
+    "/api/webhooks/kofi",                    // Ko-fi Webhook
+    "/api/support/verify-donation",          // (Legacy/Optional)
   ],
 
   ignoredRoutes: [
@@ -31,6 +33,7 @@ export default authMiddleware({
     "/api/integrations/slack/events",        // Slack sends events without auth
     "/api/integrations/slack/command",       // Slack sends commands without auth
     "/api/integrations/slack/interactivity", // Slack sends interactions without auth
+    "/api/webhooks/kofi",                    // Ko-fi Webhook
   ],
 
   afterAuth(auth, req) {

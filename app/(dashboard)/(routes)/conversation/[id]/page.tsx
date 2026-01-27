@@ -7,6 +7,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
+import { KoFiNudge } from "@/components/kofi-nudge";
+import { useSupportNudge } from "@/hooks/use-support-nudge";
 import { Heading } from "@/components/heading";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -157,6 +159,9 @@ export default function ConversationPage({ params }: { params: { id: string } })
   const { messages: supabaseMessages } = useSupabaseChat(conversationId);
   // We keep local 'messages' state for optimistic updates, but sync with Supabase
   const [messages, setMessages] = useState<Message[]>([]);
+
+  // Nudge Integration
+  const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
 
   // Sync Supabase messages to local state with deduplication
   useEffect(() => {
@@ -408,7 +413,11 @@ export default function ConversationPage({ params }: { params: { id: string } })
         return;
       }
       setError(error.response?.data?.details || "Sorry, something went wrong.");
-    } finally { setLoading(false); }
+      setError(error.response?.data?.details || "Sorry, something went wrong.");
+    } finally {
+      setLoading(false);
+      trackActivity("message");
+    }
   };
 
   const handleAttachClick = () => { fileInputRef.current?.click(); };
@@ -500,6 +509,7 @@ export default function ConversationPage({ params }: { params: { id: string } })
   return (
     // 1. USE 100dvh (Dynamic Viewport Height) to fix mobile browser bar cutoffs
     <div className="flex flex-col h-full bg-background text-foreground relative overflow-hidden">
+      <KoFiNudge isOpen={showNudge} onClose={dismissNudge} />
 
       {/* Header - Compact and pinned top */}
       <header className="flex-none px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-md z-20 flex items-center justify-between sticky top-0">
