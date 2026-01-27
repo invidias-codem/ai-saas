@@ -60,7 +60,7 @@ gcloud functions deploy $WORKER_NAME \
     --entry-point=genie_worker \
     --trigger-http \
     --allow-unauthenticated \
-    --set-env-vars OPIK_API_KEY="${OPIK_API_KEY}",OPIK_WORKSPACE="${OPIK_WORKSPACE}",SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL}",GENIE_DOCTOR_URL="${DOCTOR_URL}",ENABLE_CHAOS_TESTING="false",NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}",SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}",GOOGLE_API_KEY="${GOOGLE_API_KEY}" \
+    --set-env-vars OPIK_API_KEY="${OPIK_API_KEY}",OPIK_WORKSPACE="${OPIK_WORKSPACE}",SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL}",GENIE_DOCTOR_URL="${DOCTOR_URL}",ENABLE_CHAOS_TESTING="false",NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}",SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}",GOOGLE_API_KEY="${GOOGLE_API_KEY}",GCP_PROJECT_ID="${PROJECT_ID}",GCP_REGION="${REGION}" \
     --project=$PROJECT_ID
 cd ../..
 
@@ -78,6 +78,19 @@ gcloud functions add-iam-policy-binding $WORKER_NAME \
     --member="serviceAccount:$SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
     --role="roles/run.invoker" \
     --project=$PROJECT_ID
+
+# 7. Grant Storage Permissions to Worker (Compute SA)
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+COMPUTE_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+echo "Giving Storage Access to: $COMPUTE_SA"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${COMPUTE_SA}" \
+    --role="roles/storage.objectViewer" || true
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${COMPUTE_SA}" \
+    --role="roles/aiplatform.user" || true
 
 echo "✅ Setup Complete!"
 echo "Service Account Email: $SERVICE_ACCOUNT_NAME@$PROJECT_ID.iam.gserviceaccount.com"

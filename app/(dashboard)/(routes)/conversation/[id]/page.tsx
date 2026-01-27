@@ -64,6 +64,8 @@ interface SelectedFile {
   name: string;
   type: string;
   base64Data?: string;
+  fileUri?: string; // GCS URI for large files
+  isUploading?: boolean;
 }
 
 const readFileAsBase64 = (file: File): Promise<string> => {
@@ -367,6 +369,11 @@ export default function ConversationPage({ params }: { params: { id: string } })
   const handleSendMessage = async () => {
     const trimmedInput = userInput.trim();
     if (!trimmedInput && !selectedFile) return;
+    if (selectedFile?.isUploading) {
+      setError("Please wait for file upload to complete.");
+      return;
+    }
+
     setLoading(true); setError(null); setShowGreeting(false);
 
     let messageText = trimmedInput;
@@ -374,7 +381,17 @@ export default function ConversationPage({ params }: { params: { id: string } })
 
     const userMessage: Message = { text: messageText, role: "user", timestamp: new Date() };
     const newMessages = [...messages, userMessage];
-    setMessages(newMessages); setUserInput(""); setSelectedFile(null);
+    setMessages(newMessages); setUserInput("");
+
+    // Capture file data before clearing state
+    const filePayload = selectedFile ? {
+      name: selectedFile.name,
+      type: selectedFile.type,
+      base64Data: selectedFile.base64Data, // Small files
+      fileUri: selectedFile.fileUri         // Large files (GCS)
+    } : undefined;
+
+    setSelectedFile(null);
 
     try {
       // Dispatcher Call (Fire and Forget - 200 OK)
@@ -382,11 +399,7 @@ export default function ConversationPage({ params }: { params: { id: string } })
         conversationId,
         userId,
         prompt: messageText,
-        fileData: selectedFile ? {
-          name: selectedFile.name,
-          type: selectedFile.type,
-          base64Data: selectedFile.base64Data
-        } : undefined
+        fileData: filePayload
       });
     } catch (error: any) {
       console.error("Error sending message:", error);
@@ -404,14 +417,58 @@ export default function ConversationPage({ params }: { params: { id: string } })
     const file = event.target.files?.[0];
     if (file) {
       const objectUrl = URL.createObjectURL(file);
-      const base64 = await readFileAsBase64(file);
-      setSelectedFile({
+      const isLargeFile = file.size > 4 * 1024 * 1024; // 4MB
+
+      const newFileState: SelectedFile = {
         file,
         preview: objectUrl,
         name: file.name,
         type: file.type,
-        base64Data: base64
-      });
+        isUploading: isLargeFile
+      };
+
+      setSelectedFile(newFileState);
+
+      if (isLargeFile) {
+        // Smart Upload: GCS Direct
+        try {
+          console.log(`[SmartUpload] File > 4MB (${(file.size / 1024 / 1024).toFixed(2)}MB). Using GCS Direct Upload.`);
+
+          // 1. Get Signed URL
+          const signRes = await axios.post('/api/storage/sign', {
+            filename: file.name,
+            contentType: file.type
+          });
+
+          const { uploadUrl, fileUri } = signRes.data;
+
+          // 2. Upload to GCS
+          const uploadRes = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file
+          });
+
+          if (!uploadRes.ok) {
+            throw new Error(`Upload failed: ${uploadRes.statusText}`);
+          }
+
+          console.log(`[SmartUpload] Success! URI: ${fileUri}`);
+
+          // 3. Update State
+          setSelectedFile(prev => prev ? { ...prev, fileUri, isUploading: false } : null);
+
+        } catch (err: any) {
+          console.error("Smart Upload Failed:", err);
+          setError("Failed to upload large file. Please try a smaller one.");
+          URL.revokeObjectURL(objectUrl); // Clean up memory
+          setSelectedFile(null);
+        }
+      } else {
+        // Standard Upload: Base64
+        const base64 = await readFileAsBase64(file);
+        setSelectedFile(prev => prev ? { ...prev, base64Data: base64 } : null);
+      }
     }
     if (fileInputRef.current) { fileInputRef.current.value = ""; }
   };

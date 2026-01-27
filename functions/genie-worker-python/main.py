@@ -38,8 +38,17 @@ if not GOOGLE_API_KEY:
     logging.warning("⚠️ GOOGLE_API_KEY not found. Gemini calls will fail.")
 
 def get_genai_client():
+    # Use Vertex AI for GCS support (Big Data)
+    project_id = os.environ.get("GCP_PROJECT_ID")
+    location = os.environ.get("GCP_REGION", "us-central1")
+    
+    if project_id:
+        logging.info(f"🔌 Initializing Vertex AI Client ({project_id})...")
+        return genai.Client(vertexai=True, project=project_id, location=location)
+    
+    # Fallback to AI Studio (Key-based) if no Project ID
     if not GOOGLE_API_KEY:
-        raise FatalError("Missing GOOGLE_API_KEY")
+        raise FatalError("Missing GOOGLE_API_KEY and GCP_PROJECT_ID")
     return genai.Client(api_key=GOOGLE_API_KEY)
 
 @functions_framework.http
@@ -89,15 +98,23 @@ def genie_worker(request):
              contents.append(prompt)
 
         # Add File if present
-        if file_data and file_data.get('base64Data'):
+        if file_data:
             try:
                 mime_type = file_data.get('type', 'application/octet-stream')
-                blob = base64.b64decode(file_data['base64Data'])
                 
-                # Create Part from bytes
-                file_part = types.Part.from_bytes(data=blob, mime_type=mime_type)
-                contents.append(file_part)
-                logging.info(f"📎 Attached file: {file_data.get('name')} ({mime_type})")
+                if file_data.get('fileUri'):
+                    # GCS URI (Large File)
+                    file_uri = file_data['fileUri']
+                    file_part = types.Part.from_uri(file_uri=file_uri, mime_type=mime_type)
+                    contents.append(file_part)
+                    logging.info(f"📎 Attached GCS file: {file_data.get('name')} ({file_uri})")
+                
+                elif file_data.get('base64Data'):
+                    # Base64 (Small File)
+                    blob = base64.b64decode(file_data['base64Data'])
+                    file_part = types.Part.from_bytes(data=blob, mime_type=mime_type)
+                    contents.append(file_part)
+                    logging.info(f"📎 Attached Base64 file: {file_data.get('name')}")
             except Exception as e:
                 logging.error(f"Failed to process file attachment: {e}")
                 # We continue without the file rather than crashing the whole request

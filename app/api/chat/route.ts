@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { CloudTasksClient } from '@google-cloud/tasks';
+import { supabaseAdmin } from '@/lib/supabaseClient';
 
 // Lazy-initialized singleton
 let tasksClient: CloudTasksClient | null = null;
@@ -47,6 +48,30 @@ export async function POST(req: Request) {
         if (!project || !serviceAccountEmail) {
             console.error("Missing GCP_PROJECT_ID or GCP_SERVICE_ACCOUNT_EMAIL");
             return NextResponse.json({ error: 'Configuration Error' }, { status: 500 });
+        }
+
+        // 2.5 Persist USER Message to Supabase (Prevent data loss)
+        if (conversationId && supabaseAdmin) {
+            try {
+                const { error: dbError } = await supabaseAdmin
+                    .from('messages')
+                    .insert({
+                        conversation_id: conversationId,
+                        role: 'user',
+                        text: prompt,
+                        user_id: userId,
+                        metadata: fileData ? { fileData } : {} // Store file metadata
+                    });
+
+                if (dbError) {
+                    console.error("Failed to persist user message:", dbError.message, dbError.details);
+                    // We continue anyway so the agent still runs, but warn.
+                } else {
+                    console.log(`[Dispatcher] Persisted user message for conv ${conversationId}`);
+                }
+            } catch (err) {
+                console.error("Dispatcher DB Write Error:", err);
+            }
         }
 
         const client = getTasksClient();
