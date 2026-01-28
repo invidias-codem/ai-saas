@@ -87,36 +87,32 @@ def genie_worker(request):
         # For now, just use text prompt (file handling can be added later)
         
         # Get configured genai library
-        client = get_genai_client()
+        genai = get_genai_client()
         
         ai_response_text = ""
         try:
-            # Use gemini-1.5-pro (Generative AI API model)
-            model_id = "gemini-1.5-pro"
+            # Use gemini-2.0-flash (Flash 2.0 is faster and smarter for this use case)
+            model_id = "gemini-2.0-flash"
             logging.info(f"🧠 Calling Gemini ({model_id})...")
             
-            model = client.GenerativeModel(model_id)
+            model = genai.GenerativeModel(model_id)
             response = model.generate_content(prompt)
             ai_response_text = response.text
             logging.info(f"🧠 Gemini Response Received ({model_id})")
 
         except Exception as e:
-            # Fallback to flash model if pro fails
-            logging.warning(f"⚠️ Primary model failed: {e}. Falling back to Flash...")
+            # Fallback to 1.5-flash if 2.0 fails
+            logging.warning(f"⚠️ Primary model failed: {e}. Falling back to 1.5 Flash...")
             try:
                 model_id = "gemini-1.5-flash"
                 logging.info(f"🧠 Retry Gemini ({model_id})...")
-                model = client.GenerativeModel(model_id)
+                model = genai.GenerativeModel(model_id)
                 response = model.generate_content(prompt)
                 ai_response_text = response.text
                 logging.info(f"🧠 Gemini Response Received ({model_id})")
             except Exception as fallback_err:
                  logging.error(f"Gemini Fallback Failed: {fallback_err}")
                  raise FatalError(f"Gemini Inference Failed (Fallback): {fallback_err}")
-            else:
-                # Other errors (e.g. 400 Bad Request) -> Fail immediately
-                logging.error(f"Gemini API Error: {e}")
-                raise FatalError(f"Gemini Inference Failed: {e}")
 
         
         # 4. Write to Supabase (Realtime)
