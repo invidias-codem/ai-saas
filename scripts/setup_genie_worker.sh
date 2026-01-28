@@ -10,9 +10,11 @@ SERVICE_ACCOUNT_NAME="genie-dispatcher-sa"
 
 echo "🚀 Setting up Cloud Tasks & Worker for Project: $PROJECT_ID"
 
-# Load env vars
+# Load env vars properly
 if [ -f .env.local ]; then
-    export $(cat .env.local | grep -v '#' | awk '/=/ {print $1}')
+    set -a  # automatically export all variables
+    source .env.local
+    set +a
 fi
 
 # 1. Enable APIs
