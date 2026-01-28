@@ -14,8 +14,8 @@ export async function generateEmbedding(text: string): Promise<number[]> {
             throw new Error('GOOGLE_API_KEY is not set');
         }
 
-        // For retrieval tasks, we use the embedding-001 model
-        const model = genAI.getGenerativeModel({ model: "embedding-001" });
+        // For retrieval tasks, we use the text-embedding-004 model
+        const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
 
         const result = await model.embedContent(text);
         const embedding = result.embedding;
