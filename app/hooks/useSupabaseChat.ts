@@ -29,7 +29,7 @@ export function useSupabaseChat(conversationId: string) {
             } else if (data) {
                 setMessages(data.map((msg: any) => ({
                     role: msg.role as 'user' | 'bot',
-                    text: msg.text,
+                    text: msg.content,
                     timestamp: new Date(msg.created_at)
                 })));
             }
@@ -54,7 +54,7 @@ export function useSupabaseChat(conversationId: string) {
                         ...prev,
                         {
                             role: newMsg.role as 'user' | 'bot',
-                            text: newMsg.text,
+                            text: newMsg.content,
                             timestamp: new Date(newMsg.created_at)
                         }
                     ]);

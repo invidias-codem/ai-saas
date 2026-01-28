@@ -399,20 +399,30 @@ export default function ConversationPage({ params }: { params: { id: string } })
     setSelectedFile(null);
 
     try {
-      // Dispatcher Call (Fire and Forget - 200 OK)
-      await axios.post("/api/chat", {
+      // Dispatcher Call
+      const response = await axios.post("/api/chat", {
         conversationId,
         userId,
         prompt: messageText,
-        fileData: filePayload
+        fileData: filePayload,
+        messages: newMessages.map(m => ({ role: m.role, text: m.text })) // Send history for context
       });
+
+      // Update state immediately with response (Code Page behavior)
+      if (response.data.text) {
+        setMessages((prev) => {
+          // Dedup check: if last message is already this bot message (from sync), don't add.
+          const last = prev[prev.length - 1];
+          if (last && last.role === 'bot' && last.text === response.data.text) return prev;
+          return [...prev, { text: response.data.text, role: "bot", timestamp: new Date() }];
+        });
+      }
     } catch (error: any) {
       console.error("Error sending message:", error);
       if (error.response?.status === 401) {
         window.location.href = "/sign-in?redirect_url=" + encodeURIComponent(window.location.pathname);
         return;
       }
-      setError(error.response?.data?.details || "Sorry, something went wrong.");
       setError(error.response?.data?.details || "Sorry, something went wrong.");
     } finally {
       setLoading(false);
