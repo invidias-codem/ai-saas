@@ -38,17 +38,11 @@ if not GOOGLE_API_KEY:
     logging.warning("⚠️ GOOGLE_API_KEY not found. Gemini calls will fail.")
 
 def get_genai_client():
-    # Use Vertex AI for GCS support (Big Data)
-    project_id = os.environ.get("GCP_PROJECT_ID")
-    location = os.environ.get("GCP_REGION", "us-central1")
-    
-    if project_id:
-        logging.info(f"🔌 Initializing Vertex AI Client ({project_id})...")
-        return genai.Client(vertexai=True, project=project_id, location=location)
-    
-    # Fallback to AI Studio (Key-based) if no Project ID
+    # Use Generative AI API (not Vertex AI) since project doesn't have Vertex AI access
     if not GOOGLE_API_KEY:
-        raise FatalError("Missing GOOGLE_API_KEY and GCP_PROJECT_ID")
+        raise FatalError("Missing GOOGLE_API_KEY")
+    
+    logging.info(f"🔌 Initializing Generative AI Client with API key...")
     return genai.Client(api_key=GOOGLE_API_KEY)
 
 @functions_framework.http
@@ -126,11 +120,13 @@ def genie_worker(request):
             response_modalities=["TEXT"]
         )
         
-        # Smart Fallback Logic
+        # Initialize Gemini client (using Generative AI API, not Vertex AI)
+        client = genai.Client(api_key=GOOGLE_API_KEY)
+        
         ai_response_text = ""
         try:
-            # 1. Try Experimental Model (Gemini 2.0)
-            model_id = "gemini-1.5-pro-002"  # Use stable pro model instead of experimental
+            # Use gemini-1.5-pro (Generative AI API model)
+            model_id = "gemini-1.5-pro"
             logging.info(f"🧠 Calling Gemini ({model_id})...")
             
             response = client.models.generate_content(
@@ -142,21 +138,18 @@ def genie_worker(request):
             logging.info(f"🧠 Gemini Response Received ({model_id})")
 
         except Exception as e:
-            # 2. Check for Quota Error (429)
-            if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                logging.warning(f"⚠️ Quota Exceeded for {model_id}. Falling back to Stable...")
-                
-                # 3. Fallback to Stable Model (Gemini 1.5)
-                model_id = "gemini-1.5-flash-002" # Correct stable flash model name
-                try:
-                    logging.info(f"🧠 Retry Gemini ({model_id})...")
-                    response = client.models.generate_content(
-                        model=model_id,
-                        contents=contents,
-                        config=generate_config
-                    )
-                    ai_response_text = response.text
-                    logging.info(f"🧠 Gemini Response Received ({model_id})")
+            # Fallback to flash model if pro fails
+            logging.warning(f"⚠️ Primary model failed: {e}. Falling back to Flash...")
+            try:
+                model_id = "gemini-1.5-flash"
+                logging.info(f"🧠 Retry Gemini ({model_id})...")
+                response = client.models.generate_content(
+                    model=model_id,
+                    contents=contents,
+                    config=generate_config
+                )
+                ai_response_text = response.text
+                logging.info(f"🧠 Gemini Response Received ({model_id})")
                 except Exception as fallback_err:
                      logging.error(f"Gemini Fallback Failed: {fallback_err}")
                      raise FatalError(f"Gemini Inference Failed (Fallback): {fallback_err}")
