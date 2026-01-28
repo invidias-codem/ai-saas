@@ -38,12 +38,14 @@ if not GOOGLE_API_KEY:
     logging.warning("⚠️ GOOGLE_API_KEY not found. Gemini calls will fail.")
 
 def get_genai_client():
-    # Use Generative AI API (not Vertex AI) since project doesn't have Vertex AI access
+    # Use google.generativeai library directly (v1 API, not v1beta)
     if not GOOGLE_API_KEY:
         raise FatalError("Missing GOOGLE_API_KEY")
     
-    logging.info(f"🔌 Initializing Generative AI Client with API key...")
-    return genai.Client(api_key=GOOGLE_API_KEY)
+    import google.generativeai as genai
+    genai.configure(api_key=GOOGLE_API_KEY)
+    logging.info(f"🔌 Configured Generative AI with API key...")
+    return genai
 
 @functions_framework.http
 @opik.track(name="genie_worker_entrypoint")
@@ -82,58 +84,19 @@ def genie_worker(request):
         supabase: Client = create_client(supabase_url, supabase_key)
 
         # 3. RUN AGENT LOGIC (Gemini)
+        # For now, just use text prompt (file handling can be added later)
+        
+        # Get configured genai library
         client = get_genai_client()
-        
-        # Build contents for Gemini API
-        contents = []
-        
-        # Handle file attachments if present
-        if file_data:
-            file_name = file_data.get('name', 'file')
-            file_type = file_data.get('type', '')
-            
-            # Check if we have base64 data (small files) or GCS URI (large files)
-            if file_data.get('base64Data'):
-                # Small file - inline base64
-                logging.info(f"📎 Processing inline file: {file_name}")
-                contents.append(types.Part.from_bytes(
-                    data=base64.b64decode(file_data['base64Data']),
-                    mime_type=file_type
-                ))
-            elif file_data.get('fileUri'):
-                # Large file - GCS URI
-                logging.info(f"📎 Processing GCS file: {file_data['fileUri']}")
-                contents.append(types.Part.from_uri(
-                    file_uri=file_data['fileUri'],
-                    mime_type=file_type
-                ))
-        
-        # Add the user's text prompt
-        contents.append(types.Part.from_text(text=prompt))
-        
-        # Configure generation parameters
-        generate_config = types.GenerateContentConfig(
-            temperature=0.7,
-            top_p=0.95,
-            top_k=40,
-            max_output_tokens=8192,
-            response_modalities=["TEXT"]
-        )
-        
-        # Initialize Gemini client (using Generative AI API, not Vertex AI)
-        client = genai.Client(api_key=GOOGLE_API_KEY)
         
         ai_response_text = ""
         try:
-            # Use gemini-1.5-pro-latest (Generative AI API model)
-            model_id = "gemini-1.5-pro-latest"
+            # Use gemini-1.5-pro (Generative AI API model)
+            model_id = "gemini-1.5-pro"
             logging.info(f"🧠 Calling Gemini ({model_id})...")
             
-            response = client.models.generate_content(
-                model=model_id,
-                contents=contents,
-                config=generate_config
-            )
+            model = client.GenerativeModel(model_id)
+            response = model.generate_content(prompt)
             ai_response_text = response.text
             logging.info(f"🧠 Gemini Response Received ({model_id})")
 
@@ -141,13 +104,10 @@ def genie_worker(request):
             # Fallback to flash model if pro fails
             logging.warning(f"⚠️ Primary model failed: {e}. Falling back to Flash...")
             try:
-                model_id = "gemini-1.5-flash-latest"
+                model_id = "gemini-1.5-flash"
                 logging.info(f"🧠 Retry Gemini ({model_id})...")
-                response = client.models.generate_content(
-                    model=model_id,
-                    contents=contents,
-                    config=generate_config
-                )
+                model = client.GenerativeModel(model_id)
+                response = model.generate_content(prompt)
                 ai_response_text = response.text
                 logging.info(f"🧠 Gemini Response Received ({model_id})")
             except Exception as fallback_err:
