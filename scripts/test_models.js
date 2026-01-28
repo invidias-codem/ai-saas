@@ -1,3 +1,4 @@
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const dotenv = require("dotenv");
 const path = require("path");
 
@@ -23,15 +24,20 @@ async function listModels() {
             data.models.forEach(m => {
                 if (m.name.includes("embedding")) {
                     console.log(`- ${m.name}`);
-                    console.log(`  Methods: ${JSON.stringify(m.supportedGenerationMethods)}`);
                 }
             });
-        } else {
-            console.log("No models found or error:", JSON.stringify(data, null, 2));
         }
 
+        // specific test for dimensions
+        console.log("\nTesting embedding dimension for models/gemini-embedding-001...");
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "models/gemini-embedding-001" });
+        const result = await model.embedContent("Hello world test");
+        const dim = result.embedding.values.length;
+        console.log(`✅ Generated embedding. Dimension: ${dim}`);
+
     } catch (error) {
-        console.error("❌ Error listing models:", error);
+        console.error("❌ Error:", error);
     }
 }
 

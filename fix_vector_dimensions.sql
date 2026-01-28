@@ -1,29 +1,68 @@
--- FIX VECTOR DIMENSIONS (AMBIGUITY FIX)
--- We need to drop the specific signatures of the functions to avoid "not unique" errors.
+-- FIX VECTOR DIMENSIONS (ROBUST INDEX CLEANUP)
+-- PROBLEM: Tables have hidden/named indexes (hnsw/ivfflat) that enforce <2000 dims.
+-- SOLUTION: Dynamic script to find and drop ALL indexes on the 'embedding' column.
 
--- 1. Alter memory_bank table (Forces validation of 768 dimensions)
+-- 1. Dynamic Index Drop Block
+DO $$ 
+DECLARE 
+    r RECORD;
+BEGIN 
+    -- Find and drop all indexes on memory_bank.embedding
+    FOR r IN 
+        SELECT i.relname as index_name
+        FROM pg_class t, pg_class i, pg_index ix, pg_attribute a
+        WHERE t.oid = ix.indrelid 
+          AND i.oid = ix.indexrelid 
+          AND a.attrelid = t.oid 
+          AND a.attnum = ANY(ix.indkey) 
+          AND t.relname = 'memory_bank' 
+          AND a.attname = 'embedding'
+    LOOP 
+        RAISE NOTICE 'Dropping index: %', r.index_name;
+        EXECUTE 'DROP INDEX IF EXISTS public.' || quote_ident(r.index_name); 
+    END LOOP;
+
+    -- Find and drop all indexes on graph_nodes.embedding
+    FOR r IN 
+        SELECT i.relname as index_name
+        FROM pg_class t, pg_class i, pg_index ix, pg_attribute a
+        WHERE t.oid = ix.indrelid 
+          AND i.oid = ix.indexrelid 
+          AND a.attrelid = t.oid 
+          AND a.attnum = ANY(ix.indkey) 
+          AND t.relname = 'graph_nodes' 
+          AND a.attname = 'embedding'
+    LOOP 
+        RAISE NOTICE 'Dropping index: %', r.index_name;
+        EXECUTE 'DROP INDEX IF EXISTS public.' || quote_ident(r.index_name); 
+    END LOOP;
+END $$;
+
+-- 2. Truncate tables to remove mismatched data
+TRUNCATE TABLE public.memory_bank CASCADE;
+
+-- 3. Alter memory_bank table (Now safe as no indexes exist)
 ALTER TABLE public.memory_bank 
-ALTER COLUMN embedding TYPE vector(768);
+ALTER COLUMN embedding TYPE vector(3072);
 
--- 2. Alter graph_nodes table (if it exists)
+-- 4. Alter graph_nodes table (if it exists)
 DO $$
 BEGIN
     IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'graph_nodes') THEN
-        ALTER TABLE public.graph_nodes ALTER COLUMN embedding TYPE vector(768);
+        DELETE FROM public.graph_nodes; 
+        ALTER TABLE public.graph_nodes ALTER COLUMN embedding TYPE vector(3072);
     END IF;
 END $$;
 
--- 3. Drop ALL potential variations of match_memories explicitly
--- Dropping by signature is safer than generic name
-DROP FUNCTION IF EXISTS match_memories(vector(3072), float, int, text);
+-- 5. Cleanup functions (Remove all signature variations)
 DROP FUNCTION IF EXISTS match_memories(vector(768), float, int, text);
+DROP FUNCTION IF EXISTS match_memories(vector(3072), float, int, text);
 DROP FUNCTION IF EXISTS match_memories(vector, float, int, text);
--- Also drop the one with extra feature_type arg if it exists from a partial run
-DROP FUNCTION IF EXISTS match_memories(vector(768), float, int, text, text);
+DROP FUNCTION IF EXISTS match_memories(vector(3072), float, int, text, text);
 
--- 4. Re-create match_memories function (768 dims)
+-- 6. Re-create match_memories function (3072 dims)
 CREATE OR REPLACE FUNCTION match_memories(
-    query_embedding VECTOR(768),
+    query_embedding VECTOR(3072),
     match_threshold FLOAT,
     match_count INT,
     filter_user_id TEXT,
@@ -58,14 +97,14 @@ BEGIN
 END;
 $$;
 
--- 5. Drop ALL potential variations of match_nodes
-DROP FUNCTION IF EXISTS match_nodes(vector(3072), float, int, text);
+-- 7. Cleanup graph functions
 DROP FUNCTION IF EXISTS match_nodes(vector(768), float, int, text);
+DROP FUNCTION IF EXISTS match_nodes(vector(3072), float, int, text);
 DROP FUNCTION IF EXISTS match_nodes(vector, float, int, text);
 
--- 6. Re-create match_nodes function (768 dims)
+-- 8. Re-create match_nodes function (3072 dims)
 CREATE OR REPLACE FUNCTION match_nodes(
-    query_embedding VECTOR(768),
+    query_embedding VECTOR(3072),
     match_threshold FLOAT,
     match_count INT,
     p_user_id TEXT
