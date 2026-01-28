@@ -12,10 +12,16 @@ echo "🚀 Setting up Cloud Tasks & Worker for Project: $PROJECT_ID"
 
 # Load env vars properly
 if [ -f .env.local ]; then
-    set -a  # automatically export all variables
+    set -a
     source .env.local
     set +a
+else
+    echo "❌ .env.local not found! Cannot deploy."
+    exit 1
 fi
+
+echo "DEBUG: GOOGLE_API_KEY is ${GOOGLE_API_KEY:0:5}..."
+echo "DEBUG: SUPABASE_URL is $NEXT_PUBLIC_SUPABASE_URL"
 
 # 1. Enable APIs
 gcloud services enable cloudtasks.googleapis.com cloudfunctions.googleapis.com run.googleapis.com --project=$PROJECT_ID

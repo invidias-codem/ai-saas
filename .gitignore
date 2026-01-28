@@ -42,3 +42,7 @@ next-env.d.ts
 
 
 keys/genie-ai-1ca85-a79dca93b5cd.json
+
+# python
+__pycache__/
+*.pyc
