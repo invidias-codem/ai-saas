@@ -125,8 +125,8 @@ def genie_worker(request):
         
         ai_response_text = ""
         try:
-            # Use gemini-1.5-pro (Generative AI API model)
-            model_id = "gemini-1.5-pro"
+            # Use gemini-1.5-pro-latest (Generative AI API model)
+            model_id = "gemini-1.5-pro-latest"
             logging.info(f"🧠 Calling Gemini ({model_id})...")
             
             response = client.models.generate_content(
@@ -141,7 +141,7 @@ def genie_worker(request):
             # Fallback to flash model if pro fails
             logging.warning(f"⚠️ Primary model failed: {e}. Falling back to Flash...")
             try:
-                model_id = "gemini-1.5-flash"
+                model_id = "gemini-1.5-flash-latest"
                 logging.info(f"🧠 Retry Gemini ({model_id})...")
                 response = client.models.generate_content(
                     model=model_id,
