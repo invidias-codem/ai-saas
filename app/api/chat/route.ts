@@ -1,135 +1,196 @@
 // app/api/chat/route.ts
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { CloudTasksClient } from '@google-cloud/tasks';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Part } from "@google/generative-ai";
+import { requireEnv } from '@/lib/env';
+import {
+    captureMemory,
+    extractTags,
+    generateSummary,
+    estimateTokenCount,
+    gatherUserContext,
+    formatUserContextForPrompt,
+    getHighConfidenceFacts,
+    formatFactsForPrompt,
+    getRAGMemoryContext
+} from '@/lib/ragMemory';
+import { performResearch, formatSearchResults } from '@/lib/agents/researcher';
+import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotion';
+import { findRelatedEntities, formatGraphContext } from '@/lib/memory/graphStore';
 
-// Lazy-initialized singleton
-let tasksClient: CloudTasksClient | null = null;
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
+const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    ],
+});
 
-function getTasksClient(): CloudTasksClient {
-    if (!tasksClient) {
-        try {
-            const credentialsJson = process.env.GCP_SERVICE_ACCOUNT_KEY_JSON;
-            const options: any = {};
-
-            if (credentialsJson) {
-                options.credentials = JSON.parse(credentialsJson);
-            }
-
-            tasksClient = new CloudTasksClient(options);
-        } catch (error) {
-            console.error('Failed to initialize CloudTasksClient:', error);
-            throw new Error('Cloud Tasks client initialization failed. Check GCP credentials.');
-        }
-    }
-    return tasksClient;
-}
+const SYSTEM_INSTRUCTION = {
+    role: "user",
+    parts: [{
+        text: "You are 'Genie', a highly intelligent and helpful AI assistant. You have access to the user's personal context, facts, and memories. Use this information to provide personalized and accurate responses. If files are attached, analyze them thoroughly."
+    }],
+};
 
 export async function POST(req: Request) {
     try {
         // 1. Authenticate User
-        const { userId: authenticatedUserId } = auth();
-        if (!authenticatedUserId) {
+        const { userId } = auth();
+        const clerkUser = await currentUser();
+
+        if (!userId || !clerkUser) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         // 2. Validate Input
         const body = await req.json();
-        const { prompt, conversationId, fileData } = body;
+        const { prompt, conversationId, fileData, messages } = body;
 
         if (!prompt) return NextResponse.json({ error: 'Missing prompt' }, { status: 400 });
 
-        // Use authenticated userId instead of client-provided one
-        const userId = authenticatedUserId;
-
-        // 3. Construct the Cloud Task
-        const project = process.env.GCP_PROJECT_ID;
-        const queue = process.env.GCP_TASK_QUEUE || 'genie-worker-queue';
-        const location = process.env.GCP_REGION || 'us-central1';
-        const workerFunctionName = process.env.GCP_WORKER_FUNCTION || 'genie-worker';
-        const url = `https://${location}-${project}.cloudfunctions.net/${workerFunctionName}`;
-        const serviceAccountEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
-
-        // Check for critical variables
-        if (!project || !serviceAccountEmail) {
-            console.error("Missing GCP_PROJECT_ID or GCP_SERVICE_ACCOUNT_EMAIL");
-            return NextResponse.json({ error: 'Configuration Error' }, { status: 500 });
+        // 3. Persist USER Message to Supabase (Immediate UI feedback handled by frontend usually, but we ensure DB consistency)
+        if (conversationId && supabaseAdmin) {
+            const { error: dbError } = await supabaseAdmin
+                .from('messages')
+                .insert({
+                    conversation_id: conversationId,
+                    role: 'user',
+                    content: prompt
+                });
+            if (dbError) console.error("Failed to persist user message:", dbError);
         }
 
-        // 2.5 Persist USER Message to Supabase (Prevent data loss)
-        if (conversationId && supabaseAdmin) {
-            try {
-                const { error: dbError } = await supabaseAdmin
-                    .from('messages')
-                    .insert({
-                        conversation_id: conversationId,
-                        role: 'user',
-                        content: prompt
-                    });
+        // 4. Gather RAG Context (Parallel)
+        const userQuery = prompt;
+        const [
+            userContext,
+            allFacts,
+            researchResult,
+            graphData,
+            userProfileMemories,
+            ragMemory
+        ] = await Promise.all([
+            gatherUserContext(userId, clerkUser),
+            getHighConfidenceFacts(userId),
+            performResearch(userQuery), // Light web search
+            findRelatedEntities(userId, userQuery),
+            getUserProfile(userId),
+            getRAGMemoryContext(userId, userQuery, 'conversation')
+        ]);
 
-                if (dbError) {
-                    console.error("Failed to persist user message:", dbError.message, dbError.details);
-                    // We continue anyway so the agent still runs, but warn.
-                } else {
-                    console.log(`[Dispatcher] Persisted user message for conv ${conversationId}`);
+        // Format Contexts
+        const userContextPrompt = formatUserContextForPrompt(userContext);
+        const factContext = formatFactsForPrompt(allFacts); // We can add intelligent ranking later if needed
+        const searchContext = formatSearchResults(researchResult.results);
+        const graphContext = formatGraphContext(graphData);
+        const profileContext = formatUserProfileForPrompt(userProfileMemories);
+
+        // 5. Construct Prompt
+        const currentUserParts: Part[] = [];
+
+        const enhancedPromptText =
+            userContextPrompt +
+            profileContext +
+            factContext +
+            graphContext +
+            searchContext +
+            ragMemory +
+            `\nUser Query: ${prompt}`;
+
+        currentUserParts.push({ text: enhancedPromptText });
+
+        // Attach File if present
+        if (fileData && fileData.base64Data && fileData.type) {
+            console.log(`Attaching file ${fileData.name} (${fileData.type})`);
+            currentUserParts.push({
+                inlineData: {
+                    mimeType: fileData.type,
+                    data: fileData.base64Data
                 }
-            } catch (err) {
-                console.error("Dispatcher DB Write Error:", err);
+            });
+        }
+
+        // 6. Call Gemini
+        console.log(`[Genie] Sending request to Gemini 2.0 Flash for user ${userId}...`);
+
+        // Adapt history if provided
+        const adaptedHistory = (messages || []).slice(0, -1).map((msg: any) => ({
+            role: msg.role === 'bot' ? 'model' : 'user',
+            parts: [{ text: msg.text || '' }]
+        }));
+
+        const chat = model.startChat({
+            history: [SYSTEM_INSTRUCTION, ...adaptedHistory],
+            generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 4096,
+            }
+        });
+
+        const result = await chat.sendMessage(currentUserParts);
+        const responseText = result.response.text();
+
+        console.log(`[Genie] Response received (${responseText.length} chars).`);
+
+        // 7. Persist BOT Response to Supabase (CRITICAL for frontend to see it)
+        if (conversationId && supabaseAdmin) {
+            const { error: botDbError } = await supabaseAdmin
+                .from('messages')
+                .insert({
+                    conversation_id: conversationId,
+                    role: 'bot', // Frontend likely expects 'bot' or 'assistant'
+                    content: responseText
+                });
+
+            if (botDbError) {
+                console.error("Failed to persist bot response:", botDbError);
+                throw new Error("Database Write Failed");
             }
         }
 
-        const client = getTasksClient();
-        const parent = client.queuePath(project, location, queue);
+        // 8. Capture Memory (Async)
+        const summary = generateSummary([
+            { role: 'user', content: prompt },
+            { role: 'assistant', content: responseText }
+        ]);
 
-        const task = {
-            httpRequest: {
-                httpMethod: 'POST' as const,
-                url,
-                // OIDC Token ensures only YOUR Next.js app can trigger this function
-                oidcToken: {
-                    serviceAccountEmail,
-                },
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: Buffer.from(JSON.stringify({
-                    prompt,
-                    userId,
-                    conversationId,
-                    fileData // Forward file data (base64)
-                })).toString('base64'),
-            },
-        };
+        captureMemory(
+            userId,
+            'conversation',
+            prompt.substring(0, 50),
+            summary,
+            [
+                { role: 'user', content: prompt },
+                { role: 'assistant', content: responseText }
+            ],
+            estimateTokenCount(prompt + responseText),
+            extractTags(prompt),
+            {
+                userName: userContext.fullName,
+                hasFileAttachment: !!fileData
+            }
+        ).catch(err => console.error("Memory capture failed:", err));
 
-        // 4. Dispatch and Forget (Async)
-        // We await the *creation* of the task, not the *execution*
-        console.log(`[Dispatcher] Creating task for conv ${conversationId}, queue: ${parent}`);
-        console.log(`[Dispatcher] Worker URL: ${url}`);
-        console.log(`[Dispatcher] Service Account: ${serviceAccountEmail}`);
-
-        const response = await client.createTask({ parent: parent, task });
-        console.log(`[Dispatcher] ✅ Task created successfully:`, response[0]?.name);
-
-        // 5. Return Immediate UI Feedback
+        // 9. Return Success
         return NextResponse.json({
-            status: 'queued',
-            message: 'Agent is thinking...',
-            timestamp: new Date().toISOString()
+            success: true,
+            message: "Response generated and saved.",
+            // We can optionally return text here if we update frontend later
+            text: responseText
         });
 
     } catch (error: any) {
-        console.error('Dispatcher Error:', error);
-        console.error('Error details:', {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            stack: error.stack
-        });
+        console.error('Genie API Error:', error);
         return NextResponse.json({
             error: 'Internal Server Error',
-            message: error.message,
-            code: error.code
+            details: error.message
         }, { status: 500 });
     }
 }
+
