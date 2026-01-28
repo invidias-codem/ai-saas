@@ -130,7 +130,7 @@ def genie_worker(request):
         ai_response_text = ""
         try:
             # 1. Try Experimental Model (Gemini 2.0)
-            model_id = "gemini-2.0-flash-exp"
+            model_id = "gemini-1.5-pro-002"  # Use stable pro model instead of experimental
             logging.info(f"🧠 Calling Gemini ({model_id})...")
             
             response = client.models.generate_content(
@@ -147,7 +147,7 @@ def genie_worker(request):
                 logging.warning(f"⚠️ Quota Exceeded for {model_id}. Falling back to Stable...")
                 
                 # 3. Fallback to Stable Model (Gemini 1.5)
-                model_id = "gemini-1.5-flash"
+                model_id = "gemini-1.5-flash-002" # Correct stable flash model name
                 try:
                     logging.info(f"🧠 Retry Gemini ({model_id})...")
                     response = client.models.generate_content(
