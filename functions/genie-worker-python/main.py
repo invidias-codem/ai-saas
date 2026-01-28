@@ -150,9 +150,9 @@ def genie_worker(request):
                 )
                 ai_response_text = response.text
                 logging.info(f"🧠 Gemini Response Received ({model_id})")
-                except Exception as fallback_err:
-                     logging.error(f"Gemini Fallback Failed: {fallback_err}")
-                     raise FatalError(f"Gemini Inference Failed (Fallback): {fallback_err}")
+            except Exception as fallback_err:
+                 logging.error(f"Gemini Fallback Failed: {fallback_err}")
+                 raise FatalError(f"Gemini Inference Failed (Fallback): {fallback_err}")
             else:
                 # Other errors (e.g. 400 Bad Request) -> Fail immediately
                 logging.error(f"Gemini API Error: {e}")
