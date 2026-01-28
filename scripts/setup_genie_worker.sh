@@ -61,6 +61,7 @@ gcloud functions deploy $WORKER_NAME \
     --source=. \
     --entry-point=genie_worker \
     --trigger-http \
+    --memory=1024MB \
     --allow-unauthenticated \
     --set-env-vars OPIK_API_KEY="${OPIK_API_KEY}",OPIK_WORKSPACE="${OPIK_WORKSPACE}",SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL}",GENIE_DOCTOR_URL="${DOCTOR_URL}",ENABLE_CHAOS_TESTING="false",NEXT_PUBLIC_SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL}",SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY}",GOOGLE_API_KEY="${GOOGLE_API_KEY}",GCP_PROJECT_ID="${PROJECT_ID}",GCP_REGION="${REGION}" \
     --project=$PROJECT_ID
