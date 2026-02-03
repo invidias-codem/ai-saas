@@ -52,6 +52,9 @@ jobs:
           HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
           PR_NUMBER=$(gh pr list --head "$HEAD_BRANCH" --json number -q '.[0].number')
           
+          # Sanitize PR_NUMBER to ensure it only contains digits (strip newlines/whitespace)
+          PR_NUMBER=$(echo "$PR_NUMBER" | tr -cd '0-9')
+          
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" == "null" ]; then
             echo "Could not find open PR for branch $HEAD_BRANCH"
             exit 0
