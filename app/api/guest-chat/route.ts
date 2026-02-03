@@ -4,17 +4,19 @@ import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/ge
 import { requireEnv } from '@/lib/env';
 import { z } from "zod";
 
-const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
-
-const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
-    safetySettings: [
-        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-    ],
-});
+// Lazy initialize
+function getModel() {
+    const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
+    return genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        ],
+    });
+}
 
 // Guest-specific system instruction
 const GUEST_SYSTEM_INSTRUCTION = {
@@ -117,7 +119,7 @@ export async function POST(req: Request) {
             });
         }
 
-        const chat = model.startChat({
+        const chat = getModel().startChat({
             history: sanitizedHistory,
             generationConfig: {
                 temperature: 0.9,

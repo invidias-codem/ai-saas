@@ -6,8 +6,11 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { requireEnv } from '@/lib/env';
 
-const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+// Lazy initialize
+function getModel() {
+    const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
+    return genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+}
 
 export interface ExtractedFact {
     topic: string;
@@ -164,7 +167,7 @@ ${content.substring(0, 2000)}
 
 JSON:`;
 
-        const result = await model.generateContent(prompt);
+        const result = await getModel().generateContent(prompt);
         const response = result.response.text();
 
         // Parse JSON from response
