@@ -152,8 +152,8 @@ export async function getUserProfile(userId: string): Promise<PromotableMemory[]
 /**
  * Format user profile for prompt injection
  */
-export function formatUserProfileForPrompt(memories: PromotableMemory[]): string {
-    if (memories.length === 0) return '';
+export function formatUserProfileForPrompt(memories: PromotableMemory[] | null): string {
+    if (!memories || memories.length === 0) return '';
 
     let result = '\n## About This User (Personality Profile)\n';
     result += 'The following facts have been learned from past conversations:\n\n';

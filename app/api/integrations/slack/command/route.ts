@@ -53,6 +53,10 @@ const generalModel = genAI.getGenerativeModel({
   ],
 });
 
+// Import execSync for engineer command
+import { execSync } from 'child_process';
+import path from 'path';
+
 // Code-specific model
 const codeModel = genAI.getGenerativeModel({
   model: "gemini-2.0-flash",
@@ -420,6 +424,15 @@ async function buildResponse(
       emoji = '🧪';
       break;
 
+    case 'engineer':
+      if (!args) {
+        return {
+          response_type: 'ephemeral',
+          text: '🦞 Please describe the engineering task.\n\n*Example:*\n`/genie engineer Add a health check endpoint at /api/health`',
+        };
+      }
+      return await dispatchEngineerPlanning(args, userId);
+
     case 'optimize':
       if (!args) {
         return {
@@ -585,7 +598,7 @@ export async function POST(req: Request) {
 
     // Determine loading message
     let loadingMessage: string;
-    const codeCommands = ['code', 'debug', 'review', 'test', 'optimize'];
+    const codeCommands = ['code', 'debug', 'review', 'test', 'optimize', 'engineer'];
 
     if (codeCommands.includes(command.toLowerCase())) {
       const intentMap: Record<string, CodeIntent> = {
@@ -594,8 +607,11 @@ export async function POST(req: Request) {
         review: 'review',
         test: 'testing',
         optimize: 'optimization',
+        engineer: 'generation', // Treat engineer as generation or add new intent
       };
-      loadingMessage = getCodeLoadingMessage(intentMap[command.toLowerCase()]);
+      loadingMessage = command === 'engineer'
+        ? '🦞 Planning engineering task...'
+        : getCodeLoadingMessage(intentMap[command.toLowerCase()]);
     } else if (isCodeRelated(text)) {
       const intent = detectCodeIntent(text);
       loadingMessage = getCodeLoadingMessage(intent);
@@ -634,6 +650,69 @@ export async function POST(req: Request) {
       response_type: 'ephemeral',
       text: '❌ An error occurred. Please try again.',
     });
+  }
+}
+
+/**
+ * Dispatch planning to engineer script
+ */
+async function dispatchEngineerPlanning(task: string, userId: string): Promise<Record<string, any>> {
+  try {
+    const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
+    const output = execSync(`node ${scriptPath} "${task}" --plan-only`, {
+      encoding: 'utf-8',
+      env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
+    });
+
+    const jsonMatch = output.match(/---JSON_START---([\s\S]*?)---JSON_END---/);
+    if (!jsonMatch) throw new Error('Failed to parse engineer plan output');
+
+    const plan = JSON.parse(jsonMatch[1]);
+
+    return {
+      response_type: 'in_channel',
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `🦞 *GenieBot Engineering Plan*\n\n*Task:* ${task}\n\n*Proposed Plan:* ${plan.plan}`
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*Steps to Execute:*\n${plan.steps.map((s: any, i: number) => `${i + 1}. \`${s.type}\`: ${s.path || s.command}`).join('\n')}`
+          }
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: '✅ Approve & Execute', emoji: true },
+              action_id: 'engineer_approve',
+              style: 'primary',
+              value: JSON.stringify({ task, plan })
+            },
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: '❌ Cancel', emoji: true },
+              action_id: 'engineer_cancel',
+              style: 'danger',
+              value: task
+            }
+          ]
+        }
+      ]
+    };
+  } catch (error: any) {
+    console.error('[SLACK_COMMAND] Engineer dispatch error:', error.message);
+    return {
+      response_type: 'ephemeral',
+      text: `❌ Failed to dispatch engineering task: ${error.message}`
+    };
   }
 }
 

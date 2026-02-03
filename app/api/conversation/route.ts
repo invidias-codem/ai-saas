@@ -50,7 +50,13 @@ export async function POST(req: Request) {
       }
     );
 
-    return NextResponse.json({ text: result.text });
+    // Return the stream directly
+    return new NextResponse(result.stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Debug-Model": result.debug?.model || "unknown",
+      },
+    });
   } catch (error: any) {
     console.error("[CONVERSATION_API_ERROR]", error);
     const errorMessage = error.message || "An unknown error occurred";

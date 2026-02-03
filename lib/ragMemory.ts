@@ -34,10 +34,15 @@ export async function getRAGMemoryContext(
 
     // Format memories for prompt injection
     return formatMemoriesForPrompt(rankedMemories);
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.status === 429 || error?.toString().includes("429")) {
+      console.warn('RAG Context Rate Limited (429). Proceeding without memory.');
+      return '';
+    }
     console.error('Error retrieving RAG memory context:', error);
     return ''; // Fail gracefully - don't block main request
   }
+
 }
 
 /**
@@ -97,7 +102,11 @@ export async function captureMemory(
     } else {
       return { success: false, error: "Failed to store memory" };
     }
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.status === 429 || error?.toString().includes("429")) {
+      console.warn('Memory Capture Rate Limited (429). Skipping capture.');
+      return { success: false, error: 'Rate limit' };
+    }
     console.error('Error capturing memory:', error);
     // Don't throw - memory capture failure shouldn't block API response
     return {
@@ -251,8 +260,12 @@ export async function gatherUserContext(
     };
 
     return userContext;
-  } catch (error) {
-    console.error('Error gathering user context:', error);
+  } catch (error: any) {
+    if (error?.status === 429 || error?.toString().includes("429")) {
+      console.warn('User Context Rate Limited (429). Returning minimal context.');
+    } else {
+      console.error('Error gathering user context:', error);
+    }
     // Return minimal context on error
     return {
       userId,

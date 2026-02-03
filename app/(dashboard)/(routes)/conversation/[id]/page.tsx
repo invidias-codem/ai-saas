@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 // but keeping the import if you use it elsewhere.
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Paperclip, AlertCircle, SendHorizontal, X, Plus, ArrowDown, Github } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Plus, ArrowDown, Github, Code, Sparkles } from "lucide-react";
 import { GitHubConsentModal } from "@/components/github-consent-modal";
 import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
@@ -50,6 +50,11 @@ import {
   setActiveConversation,
 } from "@/lib/conversationManager";
 import { useSupabaseChat, Message as SupabaseMessage } from "@/app/hooks/useSupabaseChat";
+
+// New Agentic Integration
+import { ModelProvider, useModel } from "@/contexts/ModelContext";
+import { ModelToggle } from "@/components/chat/ModelToggle";
+
 // Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
 
 // Message structure
@@ -153,11 +158,19 @@ const RenderTableAsChart = ({ node, ...props }: any) => {
   );
 };
 
-// Main Page Component
-export default function ConversationPage({ params }: { params: { id: string } }) {
+function ConversationPageGlobalWrapper({ params }: { params: { id: string } }) {
+  return (
+    <ModelProvider>
+      <ConversationPage params={params} />
+    </ModelProvider>
+  )
+}
+
+// Internal Page Component
+function ConversationPage({ params }: { params: { id: string } }) {
   const conversationId = params.id;
   const { messages: supabaseMessages } = useSupabaseChat(conversationId);
-  // We keep local 'messages' state for optimistic updates, but sync with Supabase
+  const { agentMode } = useModel(); // Use Agentic Mode Context
   const [messages, setMessages] = useState<Message[]>([]);
 
   // Nudge Integration
@@ -180,6 +193,8 @@ export default function ConversationPage({ params }: { params: { id: string } })
 
   const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
@@ -387,6 +402,8 @@ export default function ConversationPage({ params }: { params: { id: string } })
     const userMessage: Message = { text: messageText, role: "user", timestamp: new Date() };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages); setUserInput("");
+    setStreaming(true);
+    setStreamingContent("");
 
     // Capture file data before clearing state
     const filePayload = selectedFile ? {
@@ -399,31 +416,56 @@ export default function ConversationPage({ params }: { params: { id: string } })
     setSelectedFile(null);
 
     try {
-      // Dispatcher Call
-      const response = await axios.post("/api/chat", {
-        conversationId,
-        userId,
-        prompt: messageText,
-        fileData: filePayload,
-        messages: newMessages.map(m => ({ role: m.role, text: m.text })) // Send history for context
+      // Dispatcher Call (Fetch with Streaming)
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversationId,
+          userId,
+          prompt: messageText,
+          fileData: filePayload,
+          messages: newMessages.map(m => ({ role: m.role, text: m.text })), // Send history for context
+          mode: agentMode, // Pass the active agent mode
+        })
       });
 
-      // Update state immediately with response (Code Page behavior)
-      if (response.data.text) {
-        setMessages((prev) => {
-          // Dedup check: if last message is already this bot message (from sync), don't add.
-          const last = prev[prev.length - 1];
-          if (last && last.role === 'bot' && last.text === response.data.text) return prev;
-          return [...prev, { text: response.data.text, role: "bot", timestamp: new Date() }];
-        });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let accum = "";
+
+      if (reader) {
+        while (!done) {
+          const { value, done: doneReading } = await reader.read();
+          done = doneReading;
+          if (value) {
+            const chunk = decoder.decode(value, { stream: true });
+            accum += chunk;
+            setStreamingContent(prev => prev + chunk);
+          }
+        }
+      }
+
+      // Finalize message
+      setMessages(prev => [...prev, { text: accum, role: "bot", timestamp: new Date() }]);
+      setStreamingContent("");
+      setStreaming(false);
+
     } catch (error: any) {
       console.error("Error sending message:", error);
-      if (error.response?.status === 401) {
+      if (error?.status === 401 || (error.response && error.response.status === 401)) {
         window.location.href = "/sign-in?redirect_url=" + encodeURIComponent(window.location.pathname);
         return;
       }
-      setError(error.response?.data?.details || "Sorry, something went wrong.");
+      setError(error.message || "Sorry, something went wrong.");
+      setStreaming(false);
     } finally {
       setLoading(false);
       trackActivity("message");
@@ -501,6 +543,21 @@ export default function ConversationPage({ params }: { params: { id: string } })
 
   // Modern Typing Indicator (Gemini Sparkle style)
   const TypingIndicator = () => {
+    // Show 'Thinking' state for Agentic mode? or just standard dots
+    if (agentMode === 'agentic-preview') {
+      return (
+        <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
+          <Avatar className="h-8 w-8 ring-1 ring-border/50">
+            <AvatarImage src="/Genie.png" />
+            <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
+          </Avatar>
+          <div className="flex items-center space-x-2 text-indigo-500 text-sm font-medium animate-pulse">
+            <Sparkles className="w-4 h-4" />
+            <span>Thinking & Executing Code...</span>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
         <Avatar className="h-8 w-8 ring-1 ring-border/50">
@@ -529,25 +586,22 @@ export default function ConversationPage({ params }: { params: { id: string } })
           </div>
           <div>
             <h1 className="text-sm font-semibold leading-tight">Genie</h1>
-            <div className="flex items-center gap-2">
-              {/* Memory Counter */}
-              <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-indigo-500 font-bold scale-105")}>
-                <span className={cn("w-1.5 h-1.5 rounded-full bg-indigo-500", isMemoryPulsing && "animate-ping")} />
-                {memoryCount} memories
-              </div>
-
-              {multiDeviceStatus?.isMultiDevice && (
-                <div className="text-[10px] text-green-600 flex items-center gap-1 border-l border-border/50 pl-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                  Sync active
-                </div>
-              )}
+            {/* Added Model Toggle here */}
+            <div className="mt-1">
+              <ModelToggle disabled={loading || streaming} />
             </div>
           </div>
         </div>
 
         {/* Indicators and Actions */}
         <div className="flex gap-2 items-center">
+          <div className="hidden sm:flex items-center gap-2">
+            <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-indigo-500 font-bold scale-105")}>
+              <span className={cn("w-1.5 h-1.5 rounded-full bg-indigo-500", isMemoryPulsing && "animate-ping")} />
+              {memoryCount} memories
+            </div>
+          </div>
+
           {/* New Chat Button */}
           <Button
             variant="outline"
@@ -576,12 +630,6 @@ export default function ConversationPage({ params }: { params: { id: string } })
           >
             <Github className="h-4 w-4" />
           </Button>
-          {sessionRestored && messages.length > 0 && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
-              <AlertCircle className="h-3 w-3" />
-              {messages.length} msgs
-            </div>
-          )}
         </div>
       </header>
 
@@ -736,7 +784,24 @@ export default function ConversationPage({ params }: { params: { id: string } })
             </div>
           ))}
 
-          {loading && <TypingIndicator />}
+          {/* Streaming Message - Current chunk */}
+          {streaming && streamingContent && (
+            <div className="group w-full mb-6 flex justify-start">
+              <div className="flex max-w-[90%] md:max-w-[85%] gap-3 flex-row">
+                <div className="flex-shrink-0 mt-1">
+                  <Avatar className="h-8 w-8 ring-1 ring-border/50 bg-background">
+                    <AvatarImage src="/Genie.png" />
+                    <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
+                  </Avatar>
+                </div>
+                <div className="relative text-sm md:text-base leading-relaxed break-words bg-transparent text-foreground px-0 py-0 animate-pulse">
+                  <p className="whitespace-pre-wrap">{streamingContent}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {loading && !streamingContent && <TypingIndicator />}
 
           {/* Error Message */}
           {error && (
@@ -798,51 +863,46 @@ export default function ConversationPage({ params }: { params: { id: string } })
               size="icon"
               onClick={() => fileInputRef.current?.click()}
               disabled={loading}
-              className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 shrink-0"
+              className="rounded-full h-9 w-9 text-muted-foreground hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
             >
               <Paperclip className="h-5 w-5" />
             </Button>
 
             <Textarea
-              rows={1}
-              placeholder="Message Genie..."
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              disabled={loading}
-              className="flex-1 min-h-[44px] max-h-32 py-3 bg-transparent border-0 focus-visible:ring-0 resize-none text-base leading-relaxed placeholder:text-muted-foreground/70"
+              placeholder={agentMode === 'agentic-preview' ? "Agentic Mode (Reasoning & Code)..." : "Message Genie..."}
+              className="flex-1 min-h-[44px] max-h-[200px] border-0 focus-visible:ring-0 resize-none py-3 px-2 bg-transparent text-[15px] placeholder:text-muted-foreground/70"
+              rows={1}
             />
 
             <Button
               onClick={handleSendMessage}
               disabled={loading || (!userInput.trim() && !selectedFile)}
-              size="icon"
               className={cn(
-                "h-10 w-10 rounded-full shrink-0 transition-all duration-200",
+                "rounded-full h-9 w-9 transition-all duration-300 shadow-sm",
                 (userInput.trim() || selectedFile)
-                  ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transform active:scale-95"
-                  : "bg-transparent text-muted-foreground hover:bg-muted/50"
+                  ? "bg-indigo-600 hover:bg-indigo-700 text-white scale-100"
+                  : "bg-muted text-muted-foreground opacity-50 scale-95 pointer-events-none"
               )}
             >
-              <SendHorizontal className="h-5 w-5" />
+              {loading ? (
+                <div className="h-4 w-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+              ) : (
+                <SendHorizontal className="h-5 w-5 ml-0.5" />
+              )}
             </Button>
           </div>
-
           <div className="text-center mt-2">
-            <p className="text-[10px] text-muted-foreground/60 font-medium">
-              Genie can make mistakes. Check important info.
+            <p className="text-[10px] text-muted-foreground/60">
+              AI can make mistakes. Check important info.
             </p>
           </div>
         </div>
       </div>
-
-      {/* Consent Modal */}
-      <GitHubConsentModal
-        isOpen={isGitHubModalOpen}
-        onClose={() => setIsGitHubModalOpen(false)}
-        onConfirm={handleGitHubActionConfirm}
-        action={gitHubAction || { type: 'commit', repo: 'unknown', description: 'No action pending' }}
-      />
     </div>
   );
 }
+
+export default ConversationPageGlobalWrapper;

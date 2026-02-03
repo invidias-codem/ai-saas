@@ -23,6 +23,7 @@ export default authMiddleware({
     "/api/integrations/slack/auth",          // 0Auth Init (handled manually for redirects)
     "/api/webhooks/kofi",                    // Ko-fi Webhook
     "/api/support/verify-donation",          // (Legacy/Optional)
+    "/api/integrations/telegram/webhook",  // Telegram Webhook
   ],
 
   ignoredRoutes: [
@@ -34,6 +35,7 @@ export default authMiddleware({
     "/api/integrations/slack/command",       // Slack sends commands without auth
     "/api/integrations/slack/interactivity", // Slack sends interactions without auth
     "/api/webhooks/kofi",                    // Ko-fi Webhook
+    "/api/integrations/telegram/webhook",  // Telegram sends without auth
   ],
 
   afterAuth(auth, req) {

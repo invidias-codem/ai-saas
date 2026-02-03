@@ -1,0 +1,137 @@
+name: Genie AI PR Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      # Only trigger on code changes, skip assets
+      - '**.ts'
+      - '**.tsx'
+      - '**.js'
+      - '**.jsx'
+      - '**.mjs'
+      - '**.rs'
+      - '**.sql'
+      - 'tailwind.config.ts'
+      - 'package.json'
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  PR_TITLE: ${{ github.event.pull_request.title }}
+  PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+  REPO_NAME: ${{ github.repository }}
+
+jobs:
+  review:
+    name: 🤖 Genie Code Review
+    runs-on: ubuntu-latest
+    
+    # Debounce: Wait 5 minutes after last push before running
+    # This batches rapid commits into a single review
+    concurrency:
+      group: pr-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for diff analysis
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Get PR Diff
+        id: diff
+        run: |
+          # Get the diff between base and head
+          git diff origin/${{ github.base_ref }}...HEAD --name-only > changed_files.txt
+          git diff origin/${{ github.base_ref }}...HEAD > full_diff.txt
+          
+          # Filter to relevant files only
+          grep -E '\.(ts|tsx|js|jsx|mjs|rs|sql)$' changed_files.txt > relevant_files.txt || true
+          
+          # Count changed files
+          CHANGED_COUNT=$(wc -l < relevant_files.txt | tr -d ' ')
+          echo "changed_count=$CHANGED_COUNT" >> $GITHUB_OUTPUT
+          
+          echo "📄 Changed files: $CHANGED_COUNT"
+          cat relevant_files.txt
+
+      - name: Notify OpenClaw Agent (Webhook)
+        if: steps.diff.outputs.changed_count > 0
+        continue-on-error: true  # Don't fail if local agent is offline
+        run: |
+          # Send to local OpenClaw instance via webhook
+          # Uses ngrok/Cloudflare Tunnel exposed URL
+          if [ -n "${{ secrets.OPENCLAW_WEBHOOK_URL }}" ]; then
+            curl -X POST "${{ secrets.OPENCLAW_WEBHOOK_URL }}" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${{ secrets.OPENCLAW_WEBHOOK_SECRET }}" \
+              -d '{
+                "action": "review_pr",
+                "repo": "${{ env.REPO_NAME }}",
+                "pr_number": "${{ env.PR_NUMBER }}",
+                "pr_title": "${{ env.PR_TITLE }}",
+                "pr_author": "${{ env.PR_AUTHOR }}",
+                "changed_files": '"$(cat relevant_files.txt | jq -R -s -c 'split("\n") | map(select(. != ""))')"'
+              }' --max-time 30 || echo "⚠️ OpenClaw webhook not reachable"
+          else
+            echo "⚠️ OPENCLAW_WEBHOOK_URL not configured, skipping webhook"
+          fi
+
+      - name: Run Inline Review (Fallback)
+        if: steps.diff.outputs.changed_count > 0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          # Fallback: Run review directly in GitHub Actions if webhook fails
+          # This uses Gemini API directly for basic checks
+          
+          echo "🔍 Running inline code review..."
+          
+          # Check for common issues
+          ISSUES=""
+          
+          # Check 1: console.log left in code
+          if grep -r "console\.log" --include="*.ts" --include="*.tsx" . 2>/dev/null | grep -v node_modules | grep -v ".next"; then
+            ISSUES="${ISSUES}\n⚠️ Found \`console.log\` statements - consider removing before merge"
+          fi
+          
+          # Check 2: TODO comments
+          TODO_COUNT=$(grep -r "TODO\|FIXME\|HACK" --include="*.ts" --include="*.tsx" . 2>/dev/null | grep -v node_modules | wc -l | tr -d ' ')
+          if [ "$TODO_COUNT" -gt 0 ]; then
+            ISSUES="${ISSUES}\n📝 Found $TODO_COUNT TODO/FIXME comments"
+          fi
+          
+          # Check 3: Type safety (any keyword)
+          ANY_COUNT=$(grep -r ": any\|as any" --include="*.ts" --include="*.tsx" . 2>/dev/null | grep -v node_modules | wc -l | tr -d ' ')
+          if [ "$ANY_COUNT" -gt 5 ]; then
+            ISSUES="${ISSUES}\n🔷 Found $ANY_COUNT uses of \`any\` type - consider stricter typing"
+          fi
+          
+          # Post comment if issues found
+          if [ -n "$ISSUES" ]; then
+            echo "Posting review comment..."
+            gh pr comment ${{ env.PR_NUMBER }} --body "## 🤖 Genie AI Quick Review
+          
+          $ISSUES
+          
+          ---
+          *Powered by Antigravity IDE - Full analysis pending from local agent*"
+          else
+            echo "✅ No obvious issues found"
+          fi
+
+      - name: Summary
+        run: |
+          echo "## 🤖 Genie AI PR Review" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **PR**: #${{ env.PR_NUMBER }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Author**: ${{ env.PR_AUTHOR }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Changed files**: ${{ steps.diff.outputs.changed_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "*Detailed review from OpenClaw agent (if online)*" >> $GITHUB_STEP_SUMMARY

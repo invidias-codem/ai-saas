@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { z } from "zod";
+import { waitUntil } from "@vercel/functions";
 
 import { env } from "@/lib/env";
 import {
@@ -29,9 +30,12 @@ export const ConversationRequestSchema = z.object({
   fileData: z.string().optional(),
   fileName: z.string().optional(),
   mimeType: z.string().optional(),
+  mode: z.enum(['standard', 'agentic-preview']).optional(),
 });
 
 export type ConversationRequest = z.infer<typeof ConversationRequestSchema>;
+
+export type AgentMode = 'standard' | 'agentic-preview';
 
 export type ConversationEngineOptions = {
   /**
@@ -48,10 +52,13 @@ export type ConversationEngineOptions = {
 
   /** Override model id (defaults to gemini-2.0-flash). */
   model?: string;
+
+  /** Operating mode for the agent */
+  mode?: AgentMode;
 };
 
 export type ConversationEngineResult = {
-  text: string;
+  stream: ReadableStream;
   debug?: {
     promptVersion?: string | null;
     model?: string;
@@ -79,6 +86,7 @@ function getGenAI() {
 }
 
 const DEFAULT_MODEL = "gemini-2.0-flash";
+const AGENTIC_MODEL = "gemini-3-flash-preview";
 
 const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -86,6 +94,24 @@ const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
+
+function getGenerativeModel(mode: AgentMode) {
+  const genAI = getGenAI();
+
+  if (mode === 'agentic-preview') {
+    return genAI.getGenerativeModel({
+      model: AGENTIC_MODEL,
+      safetySettings,
+      tools: [{ codeExecution: {} }],
+      // Optional: Add explicit system instruction if needed for agentic behavior
+    });
+  }
+
+  return genAI.getGenerativeModel({
+    model: DEFAULT_MODEL,
+    safetySettings,
+  });
+}
 
 function getSystemInstruction() {
   return {
@@ -132,12 +158,11 @@ export async function generateConversationReply(
 ): Promise<ConversationEngineResult> {
   const { userId, clerkUser, request } = args;
   const parsed = ConversationRequestSchema.parse(request);
+  const agentMode = parsed.mode || options.mode || 'standard';
 
-  const modelId = options.model ?? DEFAULT_MODEL;
-  const model = getGenAI().getGenerativeModel({
-    model: modelId,
-    safetySettings,
-  });
+  const model = getGenerativeModel(agentMode);
+  // Track actual model ID for debug (model.model is presumably available or we use our constants)
+  const actualModelId = agentMode === 'agentic-preview' ? AGENTIC_MODEL : DEFAULT_MODEL;
 
   const { messages, fileData, mimeType } = parsed;
 
@@ -153,13 +178,21 @@ export async function generateConversationReply(
   let graphData: any = [];
   let userProfileMemories: any = null;
 
-  if (!options.disableExternalContext) {
+  // Check if heavy context gathering is enabled (to avoid rate limits on free tier)
+  const enableHeavyContext = process.env.ENABLE_HEAVY_CONTEXT === 'true';
+
+  if (!options.disableExternalContext && enableHeavyContext) {
+    // Full context gathering (requires higher API quotas)
     [allFacts, researchResult, graphData, userProfileMemories] = await Promise.all([
       getHighConfidenceFacts(userId),
       performResearch(userQuery, userContextPrompt),
       findRelatedEntities(userId, userQuery),
       getUserProfile(userId),
     ]);
+  } else if (!options.disableExternalContext) {
+    // Lightweight mode: only fetch facts (no embeddings needed for this)
+    allFacts = await getHighConfidenceFacts(userId);
+    console.log('[ConversationEngine] Running in lightweight mode (ENABLE_HEAVY_CONTEXT=false)');
   }
 
   const searchContext = options.disableExternalContext ? "" : formatSearchResults(researchResult.results);
@@ -178,7 +211,10 @@ export async function generateConversationReply(
   const intelligentFacts = rankMemoriesIntelligently(allFacts, similarities, userQuery);
   const factContext = options.disableExternalContext ? "" : formatFactsForPrompt(intelligentFacts);
 
-  const memoryContext = options.disableExternalContext ? "" : await getRAGMemoryContext(userId, userQuery, "conversation");
+  // Only call RAG if heavy context is enabled
+  const memoryContext = (!options.disableExternalContext && enableHeavyContext)
+    ? await getRAGMemoryContext(userId, userQuery, "conversation")
+    : "";
 
   // History for GenAI
   let history = messages.map((msg) => ({
@@ -215,7 +251,7 @@ export async function generateConversationReply(
       temperature: 0.9,
       topK: 40,
       topP: 0.7,
-      maxOutputTokens: 2048,
+      maxOutputTokens: agentMode === 'agentic-preview' ? 4096 : 2048, // Higher tokens for agentic thought process
     },
   });
 
@@ -229,55 +265,94 @@ export async function generateConversationReply(
     });
   }
 
-  const result = await chat.sendMessage(promptParts);
-  const responseText = result.response.text();
+  const result = await chat.sendMessageStream(promptParts);
+  const textEncoder = new TextEncoder();
 
-  if (!options.disableSideEffects) {
-    // Capture interaction for future context
-    const tokensUsed = estimateTokenCount(userQuery + responseText);
-    const tags = extractTags(userQuery);
-    const summary = generateSummary([
-      { role: "user", content: userQuery },
-      { role: "assistant", content: responseText },
-    ]);
+  const stream = new ReadableStream({
+    async start(controller) {
+      let fullText = "";
 
-    const formattedMessages = messages.map((msg) => ({
-      role: (msg.role === "bot" ? "assistant" : "user") as "user" | "assistant" | "system",
-      content: msg.text,
-    }));
-
-    captureMemory(
-      userId,
-      "conversation",
-      userQuery.substring(0, 50) || "Conversation",
-      summary,
-      formattedMessages,
-      tokensUsed,
-      tags,
-      {
-        userName: userContext.fullName,
-        userEmail: userContext.email,
-        responseLength: responseText.length,
-        interactionStyle: userContext.interactionStyle,
-      }
-    ).catch((err) => console.error("Memory capture failed:", err));
-
-    // Knowledge graph update (best-effort)
-    (async () => {
       try {
-        if (tags.length > 0) {
-          await addNode(userId, tags[0], "concept", `Automatically extracted from conversation`);
+        for await (const chunk of result.stream) {
+          let chunkText = "";
+          try {
+            chunkText = chunk.text();
+          } catch (e) {
+            // Function call or other non-text chunk
+            // We could inspect chunk.functionCalls() or chunk.executableCode if we want to emit debug info
+            // For now, ignore text extraction errors in chunks
+          }
+
+          if (chunkText) {
+            fullText += chunkText;
+            controller.enqueue(textEncoder.encode(chunkText));
+          }
         }
-      } catch (e) {
-        console.error("Graph update failed", e);
+      } catch (err: any) {
+        if (err?.status === 429 || err?.toString().includes('429')) {
+          console.warn("Genie Model Rate Limit (429).");
+          // Enqueue a friendly message to the user if possible, or just close
+          if (!fullText) {
+            controller.enqueue(textEncoder.encode("\n\n(Note: Agent is currently experiencing high load. Please try again or switch to standard mode.)"));
+          }
+        } else {
+          console.error("Stream error:", err);
+          controller.error(err);
+        }
+      } finally {
+        controller.close();
+
+        // Side Effects (After stream closes)
+        if (!options.disableSideEffects && fullText) {
+          waitUntil((async () => {
+            try {
+              // Capture interaction for future context
+              const tokensUsed = estimateTokenCount(userQuery + fullText);
+              const tags = extractTags(userQuery);
+              const summary = generateSummary([
+                { role: "user", content: userQuery },
+                { role: "assistant", content: fullText },
+              ]);
+
+              const formattedMessages = messages.map((msg) => ({
+                role: (msg.role === "bot" ? "assistant" : "user") as "user" | "assistant" | "system",
+                content: msg.text,
+              }));
+
+              await captureMemory(
+                userId,
+                "conversation",
+                userQuery.substring(0, 50) || "Conversation",
+                summary,
+                formattedMessages,
+                tokensUsed,
+                tags,
+                {
+                  userName: userContext.fullName,
+                  userEmail: userContext.email,
+                  responseLength: fullText.length,
+                  interactionStyle: userContext.interactionStyle,
+                  agentMode,
+                }
+              );
+
+              // Knowledge graph update (best-effort)
+              if (tags.length > 0) {
+                await addNode(userId, tags[0], "concept", `Automatically extracted from conversation`);
+              }
+            } catch (e) {
+              console.error("Side effect processing failed", e);
+            }
+          })());
+        }
       }
-    })();
-  }
+    }
+  });
 
   return {
-    text: responseText,
+    stream,
     debug: {
-      model: modelId,
+      model: actualModelId,
       userQuery,
       context: {
         factsCount: intelligentFacts.length,

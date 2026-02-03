@@ -12,6 +12,8 @@ import { getSlackConfig, SlackConfig, resolveSlackUser, saveChannelConfig, type 
 import { db } from '@/lib/firebaseAdmin';
 import { createFeedbackBlocks, createStreamer } from '@/lib/slack/assistantHelpers';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { execSync } from 'child_process';
+import path from 'path';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 
@@ -351,9 +353,9 @@ async function handleBlockActions(
       const responseText = message?.text ??
         (Array.isArray(message?.blocks)
           ? message.blocks
-              .filter((b: any) => b?.type === 'section' && b?.text?.type === 'mrkdwn')
-              .map((b: any) => b.text.text)
-              .join("\n\n")
+            .filter((b: any) => b?.type === 'section' && b?.text?.type === 'mrkdwn')
+            .map((b: any) => b.text.text)
+            .join("\n\n")
           : undefined);
 
       await storeFeedback(
@@ -674,6 +676,79 @@ async function handleBlockActions(
             }
           ],
           response_type: 'ephemeral',
+        });
+      }
+      continue;
+    }
+
+    if (action_id === 'engineer_approve') {
+      if (response_url && value) {
+        const { task, plan } = JSON.parse(value);
+
+        await updateMessageViaResponseUrl(response_url, {
+          text: '🚀 *Execution approved!* GenieBot is now working on the codebase...',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `🚀 *Approved!* GenieBot is executing the plan for: "${task}"`
+              }
+            }
+          ],
+          replace_original: true,
+        });
+
+        // Run execution in the background
+        waitUntil((async () => {
+          try {
+            const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
+            const sanitizedPlan = JSON.stringify(plan).replace(/'/g, "'\\''");
+
+            execSync(`node ${scriptPath} "${task}" --execute-plan '${sanitizedPlan}'`, {
+              cwd: process.cwd(),
+              env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
+            });
+
+            await updateMessageViaResponseUrl(response_url, {
+              text: `✅ *Task Completed!* GenieBot has finished: "${task}"`,
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `✅ *Engineering Task Completed!*\n\n*Task:* ${task}\n\nGenieBot has successfully modified the codebase and verified the changes.`
+                  }
+                }
+              ],
+              replace_original: true
+            });
+          } catch (error: any) {
+            console.error('[SLACK_INTERACTIVITY] Engineering execution failed:', error.message);
+            await updateMessageViaResponseUrl(response_url, {
+              text: `❌ *Execution Failed:* ${error.message}`,
+              replace_original: false // Don't replace the status message, just add an error
+            });
+          }
+        })());
+      }
+      continue;
+    }
+
+    if (action_id === 'engineer_cancel') {
+      if (response_url && value) {
+        await updateMessageViaResponseUrl(response_url, {
+          text: `❌ *Task Cancelled:* "${value}"`,
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `❌ *Engineering Task Cancelled*\n\nTask: "${value}"\nNo changes were made to the codebase.`
+              }
+            }
+          ],
+          replace_original: true
         });
       }
       continue;
