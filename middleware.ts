@@ -31,9 +31,9 @@ export default clerkMiddleware(async (auth, req) => {
 
   // For API routes, protect and return 401 if not authenticated
   // For page routes, protect redirects to sign-in automatically
-  try {
-    (await auth()).protect();
-  } catch (err) {
+  const { userId, redirectToSignIn } = await auth();
+
+  if (!userId) {
     // For API routes that aren't public, return 401
     if (req.nextUrl.pathname.startsWith('/api')) {
       return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
@@ -41,8 +41,8 @@ export default clerkMiddleware(async (auth, req) => {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-    // For page routes, the error will trigger redirect to sign-in
-    throw err;
+    // For page routes, redirect to sign-in
+    return redirectToSignIn();
   }
 });
 
