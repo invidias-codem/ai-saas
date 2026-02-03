@@ -10,7 +10,7 @@ const storage = new Storage({ projectId });
 export async function POST(req: Request) {
     try {
         // 1. Auth Check
-        const { userId } = auth();
+        const { userId } = await auth();
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }

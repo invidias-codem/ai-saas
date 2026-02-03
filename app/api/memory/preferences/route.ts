@@ -37,7 +37,7 @@ export interface UserPreferences {
  */
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return new NextResponse(
         JSON.stringify({ error: 'Unauthorized' }),
@@ -123,7 +123,7 @@ export async function POST(req: Request) {
  */
 export async function GET(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return new NextResponse(
         JSON.stringify({ error: 'Unauthorized' }),
@@ -184,7 +184,7 @@ export async function GET(req: Request) {
  */
 export async function DELETE(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return new NextResponse(
         JSON.stringify({ error: 'Unauthorized' }),

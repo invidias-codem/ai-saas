@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
   try {
     // 4. Clerk Authentication
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       console.warn("Unauthorized access attempt to /api/music");
       return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
@@ -56,16 +56,16 @@ export async function POST(req: Request) {
 
     const input = validation.data;
     // ✅ Assign prompt value after successful validation
-    prompt = input.prompt; 
+    prompt = input.prompt;
 
     console.log(`Sending request to Replicate MusicGen model with input:`, input);
 
     // 6. Call Replicate's create prediction API (asynchronous)
     const prediction = await replicate.predictions.create({
-        version: MUSICGEN_VERSION,
-        input: input,
+      version: MUSICGEN_VERSION,
+      input: input,
     });
-    
+
     console.log("Replicate job started. Sending prediction object to client:", prediction.id);
 
     // 7. Return the initial prediction object
@@ -95,19 +95,18 @@ export async function POST(req: Request) {
 
 
 
-  
-  
-
-
-  
-  
-      
-  
 
 
 
 
 
 
-  
-  
+
+
+
+
+
+
+
+
+

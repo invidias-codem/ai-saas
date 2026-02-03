@@ -10,7 +10,7 @@ const SLACK_AUTH_URL = 'https://slack.com/oauth/v2/authorize';
  */
 export async function GET(req: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     if (!userId) {
       const signInUrl = new URL('/sign-in', req.url);

@@ -21,7 +21,7 @@ const requestSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     if (!userId) {
       console.warn("[IMAGE_API] Unauthorized access attempt.");

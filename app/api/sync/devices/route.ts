@@ -31,7 +31,7 @@ interface DeviceInfo {
 
 export async function GET() {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -45,7 +45,7 @@ export async function GET() {
     const devices: DeviceInfo[] = snapshot.docs.map(doc => {
       const data = doc.data();
       const lastSeenTime = (data.lastSeen?.toDate?.()?.getTime?.() || data.lastSeen || 0);
-      
+
       return {
         id: doc.id,
         lastSeen: lastSeenTime,
@@ -90,7 +90,7 @@ export async function GET() {
 
 export async function DELETE(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -117,12 +117,12 @@ export async function DELETE(req: Request) {
       .collection('users')
       .doc(userId)
       .collection('devicePreferences');
-    
+
     await devicePrefsRef.doc(deviceId).delete();
 
     const remainingPrefs = await devicePrefsRef.get();
     const prefMap = new Map();
-    
+
     remainingPrefs.docs.forEach(doc => {
       prefMap.set(doc.id, doc.data());
     });

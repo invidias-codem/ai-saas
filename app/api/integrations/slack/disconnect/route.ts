@@ -10,7 +10,7 @@ const SLACK_REVOKE_URL = 'https://slack.com/api/auth.revoke';
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     }
 
     const botToken = process.env.SLACK_BOT_TOKEN;
-    
+
     if (!botToken) {
       console.log('[SLACK_DISCONNECT] No bot token configured, nothing to revoke');
       return NextResponse.json({
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       });
 
       const revokeData = await revokeResponse.json();
-      
+
       console.log('[SLACK_DISCONNECT] Revoke response:', {
         ok: revokeData.ok,
         error: revokeData.error,
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
         // 1. Remove the token from your database
         // 2. Clear any cached Slack data for this user
         // 3. Update user preferences in Firestore
-        
+
         return NextResponse.json({
           success: true,
           message: 'Successfully disconnected from Slack. The bot has been removed from your workspace.',
@@ -96,8 +96,8 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error('[SLACK_DISCONNECT_ERROR]', error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Failed to disconnect Slack',
         details: error.message,
       },

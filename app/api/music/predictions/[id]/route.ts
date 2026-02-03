@@ -19,7 +19,7 @@ export async function GET(
 ) {
   try {
     // 1. Clerk Authentication
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,

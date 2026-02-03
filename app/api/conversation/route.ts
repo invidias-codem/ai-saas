@@ -10,7 +10,7 @@ import {
 export async function POST(req: Request) {
   try {
     // ✅ Get authenticated user from Clerk
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return new NextResponse("Unauthorized", { status: 401 });
     }

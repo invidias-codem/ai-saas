@@ -20,7 +20,7 @@ export async function GET(
   try {
     // 1. Clerk Authentication (optional but recommended)
     // You should secure this endpoint to prevent others from polling your job statuses.
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,

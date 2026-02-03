@@ -11,7 +11,7 @@ import {
 export async function POST(req: Request) {
     try {
         // 1. Authenticate User
-        const { userId } = auth();
+        const { userId } = await auth();
         const clerkUser = await currentUser();
 
         if (!userId || !clerkUser) {
