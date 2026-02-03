@@ -99,7 +99,7 @@ jobs:
           echo "🧠 Enriching PR context with Genie RAG..."
           
           # Install dependencies if needed
-          npm ci --prefer-offline --no-audit 2>/dev/null || true
+          npm install --legacy-peer-deps --no-audit 2>/dev/null || true
           
           # Run RAG enrichment
           npx tsx scripts/pr-rag-enrichment.ts \

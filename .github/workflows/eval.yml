@@ -46,7 +46,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       # Option 1: download curated dataset artifact from nightly workflow.
       # For now we re-run curation in the PR job for determinism.
