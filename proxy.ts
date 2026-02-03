@@ -23,57 +23,27 @@ const isPublicRoute = createRouteMatcher([
   '/api/integrations/telegram/webhook',       // Telegram Webhook
 ]);
 
-// Define ignored routes (skip auth processing entirely)
-const isIgnoredRoute = createRouteMatcher([
-  '/ws',
-  '/api/guest-chat',
-  '/api/feedback',
-  '/api/integrations/slack/callback',
-  '/api/integrations/slack/events',
-  '/api/integrations/slack/command',
-  '/api/integrations/slack/interactivity',
-  '/api/webhooks/kofi',
-  '/api/integrations/telegram/webhook',
-]);
-
 export default clerkMiddleware(async (auth, req) => {
-  // Skip ignored routes entirely
-  if (isIgnoredRoute(req)) {
-    return NextResponse.next();
-  }
-
   // Allow public routes without auth check
   if (isPublicRoute(req)) {
-    return NextResponse.next();
+    return;  // Continue without auth
   }
 
-  // For protected routes, check authentication
-  const { userId } = await auth();
-
-  if (userId) {
-    return NextResponse.next();
+  // For API routes, protect and return 401 if not authenticated
+  // For page routes, protect redirects to sign-in automatically
+  try {
+    await auth.protect();
+  } catch {
+    // For API routes that aren't public, return 401
+    if (req.nextUrl.pathname.startsWith('/api')) {
+      return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    // For page routes, the error will trigger redirect to sign-in
+    throw;
   }
-
-  // User is NOT authenticated and is on a PROTECTED route
-  const isApiRoute = req.nextUrl.pathname.startsWith('/api');
-
-  if (isApiRoute) {
-    return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  // For all other protected pages, redirect to sign-in
-  const signInUrl = new URL('/sign-in', req.url);
-  signInUrl.searchParams.set('redirect_url', req.url);
-
-  // Add a friendly indicator for blog pages
-  if (req.nextUrl.pathname.startsWith('/blog')) {
-    signInUrl.searchParams.set('from', 'blog');
-  }
-
-  return NextResponse.redirect(signInUrl);
 });
 
 export const config = {
