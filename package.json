@@ -57,6 +57,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
     "esm": "^3.2.25",
+    "firebase-admin": "^13.6.0",
     "firebase-functions": "^7.0.0",
     "framer-motion": "^12.29.0",
     "googleapis": "^170.0.0",
