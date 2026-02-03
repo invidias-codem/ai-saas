@@ -32,7 +32,7 @@ export default clerkMiddleware(async (auth, req) => {
   // For API routes, protect and return 401 if not authenticated
   // For page routes, protect redirects to sign-in automatically
   try {
-    auth().protect();
+    (await auth()).protect();
   } catch (err) {
     // For API routes that aren't public, return 401
     if (req.nextUrl.pathname.startsWith('/api')) {
