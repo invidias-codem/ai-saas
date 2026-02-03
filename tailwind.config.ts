@@ -20,8 +20,8 @@ const config = {
 		},
 		extend: {
 			fontFamily: {
-				sans: ["var(--font-jakarta)", "sans-serif"],
-				heading: ["var(--font-outfit)", "sans-serif"],
+				sans: ["var(--font-inter)", "system-ui", "-apple-system", "sans-serif"],
+				heading: ["var(--font-inter)", "system-ui", "-apple-system", "sans-serif"],
 			},
 			colors: {
 				border: 'hsl(var(--border))',

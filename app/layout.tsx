@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { env } from "@/lib/env";
@@ -9,8 +9,12 @@ import { Analytics } from "@vercel/analytics/react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ModalProvider } from "@/components/modal-provider";
 
-const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
-const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta" });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Genie",
@@ -28,7 +32,7 @@ export default function RootLayout({
     >
       {/* 2. Add suppressHydrationWarning to html */}
       <html lang="en" suppressHydrationWarning>
-        <body className={`${outfit.variable} ${jakarta.variable} font-sans`}>
+        <body className={`${inter.variable} font-sans`}>
           {/* 3. Wrap children with ThemeProvider */}
           <ThemeProvider
             attribute="class"

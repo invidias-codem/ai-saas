@@ -31,24 +31,24 @@ const LandingPage = () => {
           <div className="relative w-8 h-8">
             <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
           </div>
-          <span className="text-xl font-bold text-white tracking-tight font-heading">Genie AI</span>
+          <span className="text-xl font-bold text-foreground tracking-tight font-heading">Genie AI</span>
         </div>
         <div className="flex items-center gap-x-4">
           <div className="hidden md:flex items-center gap-4 mr-4 text-sm font-medium text-muted-foreground">
-            <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
-            <Link href="/slack" className="hover:text-white transition-colors">Slack</Link>
-            <Link href="/support" className="hover:text-white transition-colors">Support</Link>
+            <Link href="/blog" className="hover:text-foreground dark:hover:text-white transition-colors">Blog</Link>
+            <Link href="/slack" className="hover:text-foreground dark:hover:text-white transition-colors">Slack</Link>
+            <Link href="/support" className="hover:text-foreground dark:hover:text-white transition-colors">Support</Link>
           </div>
           <Button
             onClick={() => setIsPricingOpen(true)}
             variant="ghost"
-            className="text-muted-foreground hover:text-white hover:bg-white/5 rounded-full hidden sm:inline-flex"
+            className="text-muted-foreground hover:text-foreground dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded-full hidden sm:inline-flex"
           >
             Pricing
           </Button>
 
           <Link href="/dashboard">
-            <Button variant="ghost" className="text-white hover:text-white hover:bg-white/5 rounded-full">
+            <Button variant="ghost" className="text-foreground dark:text-white hover:text-foreground dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 rounded-full">
               Log in
             </Button>
           </Link>
@@ -115,14 +115,14 @@ const LandingPage = () => {
               <div className="relative w-8 h-8">
                 <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" sizes="(max-width: 768px) 32px, 32px" />
               </div>
-              <span className="text-xl font-bold text-white font-heading">Genie AI</span>
+              <span className="text-xl font-bold text-foreground font-heading">Genie AI</span>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-8 text-sm text-gray-400">
-              <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
-              <Link href="/slack" className="hover:text-white transition-colors">Slack Integration</Link>
-              <Link href="/support" className="hover:text-white transition-colors">Support</Link>
-              <Link href="/privacy" className="hover:text-white transition-colors">Privacy Policy</Link>
+            <div className="flex flex-wrap justify-center gap-8 text-sm text-muted-foreground">
+              <Link href="/blog" className="hover:text-foreground dark:hover:text-white transition-colors">Blog</Link>
+              <Link href="/slack" className="hover:text-foreground dark:hover:text-white transition-colors">Slack Integration</Link>
+              <Link href="/support" className="hover:text-foreground dark:hover:text-white transition-colors">Support</Link>
+              <Link href="/privacy" className="hover:text-foreground dark:hover:text-white transition-colors">Privacy Policy</Link>
             </div>
 
             <div className="flex gap-4">
