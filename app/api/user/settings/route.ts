@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Initialize Supabase Admin Client (to bypass RLS for now if needed, or use service role)
-// Ideally we use a user-scoped client if we have the token, but for settings update 
-// using the service role with explicit user_id check is safe enough if verified by Clerk auth.
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Lazy initialize Supabase client
+function getSupabaseClient() {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 export async function GET() {
     try {
@@ -17,6 +17,7 @@ export async function GET() {
             return new NextResponse("Unauthorized", { status: 401 });
         }
 
+        const supabase = getSupabaseClient();
         const { data, error } = await supabase
             .from('user_settings')
             .select('*')
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
             return new NextResponse("Unauthorized", { status: 401 });
         }
 
+        const supabase = getSupabaseClient();
         // Upsert settings
         const { data, error } = await supabase
             .from('user_settings')
