@@ -10,7 +10,7 @@ const PrivacyPolicyPage = () => {
 
   return (
     <div className="bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
-      
+
       {/* Background Gradients */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-3xl" />
@@ -21,7 +21,7 @@ const PrivacyPolicyPage = () => {
       <header className="relative z-10 py-6 px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
         <Link href="/" className="flex items-center gap-2">
           <div className="relative w-8 h-8">
-            <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" /> 
+            <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
           </div>
           <span className="text-2xl font-bold text-white tracking-tight">Genie AI</span>
         </Link>
@@ -51,15 +51,15 @@ const PrivacyPolicyPage = () => {
             <Shield className="w-4 h-4 mr-2" />
             Privacy Policy
           </div>
-          
+
           <h1 className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight leading-[1.1]">
             Your Privacy Matters
           </h1>
-          
+
           <p className="text-lg text-gray-400 max-w-2xl mx-auto">
             We are committed to protecting your privacy and being transparent about how we handle your data.
           </p>
-          
+
           <p className="text-sm text-gray-500">
             Last updated: {lastUpdated}
           </p>
@@ -69,7 +69,7 @@ const PrivacyPolicyPage = () => {
         <section className="px-4 pb-16 max-w-5xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {privacyHighlights.map((item, index) => (
-              <div 
+              <div
                 key={index}
                 className="p-6 rounded-2xl border border-white/10 bg-white/5 text-center"
               >
@@ -86,7 +86,7 @@ const PrivacyPolicyPage = () => {
         {/* Policy Content */}
         <section className="py-16 px-4 border-t border-white/10 bg-black/20">
           <div className="max-w-3xl mx-auto prose prose-invert">
-            
+
             {/* Section 1 */}
             <div className="mb-12">
               <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
@@ -290,6 +290,15 @@ const PrivacyPolicyPage = () => {
                       Support Center
                     </Link>
                   </p>
+                  <p className="flex items-center gap-3">
+                    <div className="w-5 h-5 flex items-center justify-center">
+                      {/* Using simple SVG for plane/send since Send import might be missing/aliased */}
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </div>
+                    <a href="https://t.me/Genie_Support_Bot" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300">
+                      Chat on Telegram
+                    </a>
+                  </p>
                 </div>
               </div>
             </div>
@@ -303,7 +312,7 @@ const PrivacyPolicyPage = () => {
             <div className="p-6 rounded-2xl border border-blue-500/30 bg-blue-500/10">
               <h3 className="text-xl font-bold text-white mb-4">For EU/EEA and California Residents</h3>
               <p className="text-gray-300 mb-4">
-                If you are located in the European Union, European Economic Area, or California, 
+                If you are located in the European Union, European Economic Area, or California,
                 you have additional rights under GDPR and CCPA respectively. These include:
               </p>
               <ul className="list-disc list-inside space-y-2 text-gray-400">
@@ -329,11 +338,11 @@ const PrivacyPolicyPage = () => {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="relative w-6 h-6">
-                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" /> 
+                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
               </div>
               <span className="text-lg font-bold text-white">Genie AI</span>
             </div>
-            
+
             <div className="flex items-center gap-6 text-sm text-gray-400">
               <Link href="/support" className="hover:text-white transition">Support</Link>
               <Link href="/slack" className="hover:text-white transition">Slack Integration</Link>
@@ -341,7 +350,7 @@ const PrivacyPolicyPage = () => {
               <Link href="/blog" className="hover:text-white transition">Blog</Link>
             </div>
           </div>
-          
+
           <div className="mt-8 pt-8 border-t border-white/10 text-center">
             <p className="text-gray-500 text-sm">
               © {new Date().getFullYear()} Genie AI. All rights reserved.

@@ -140,21 +140,44 @@ export async function POST(req: Request) {
                 return NextResponse.json({ ok: true });
             }
 
-            // --- SECURITY GATE ---
-            // If we haven't set the Admin Chat ID yet, only allow Contact requests.
+            // --- SECURITY & SUPPORT GATE ---
             const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID;
 
+            // If user is NOT admin
             if (!ADMIN_CHAT_ID || String(chatId) !== ADMIN_CHAT_ID) {
-                await sendMessage(chatId, "👋 **Welcome into the Genie Command Center!**\n\nI need to verify your identity. Please tap the button below to share your contact.", {
-                    keyboard: [[{ text: "📱 Verify Phone Number", request_contact: true }]],
-                    one_time_keyboard: true,
-                    resize_keyboard: true
-                });
+                // If they are trying to verify, let them (handled above in 'contact')
+
+                // Otherwise, treat as SUPPORT TICKET
+                if (ADMIN_CHAT_ID) {
+                    // Forward to Admin
+                    const sender = update.message!.from;
+                    const senderName = sender.first_name + (sender.username ? ` (@${sender.username})` : '');
+                    const ticketMsg = `📩 **New Support Ticket**\nFrom: ${senderName} \`[${chatId}]\`\n\n"${text}"\n\nTo reply: \`/reply ${chatId} <message>\``;
+                    await sendMessage(parseInt(ADMIN_CHAT_ID), ticketMsg);
+
+                    // Reply to User
+                    await sendMessage(chatId, "Thank you for your message! 📨\nOur support team has received your inquiry and will respond shortly via this chat.");
+                } else {
+                    await sendMessage(chatId, "System Log: Bot is not fully configured (Missing Admin ID).");
+                }
                 return NextResponse.json({ ok: true });
             }
 
-            // --- COMMANDS ---
-            if (text.startsWith('/engineer')) {
+            // --- ADMIN COMMANDS ---
+            if (text.startsWith('/reply ')) {
+                // Format: /reply <chatId> <message>
+                const parts = text.split(' ');
+                if (parts.length < 3) {
+                    await sendMessage(chatId, "Usage: `/reply <userId> <message>`");
+                    return NextResponse.json({ ok: true });
+                }
+                const targetId = parts[1];
+                const replyText = parts.slice(2).join(' ');
+
+                await sendMessage(parseInt(targetId), `👨‍💻 **Support:**\n${replyText}`);
+                await sendMessage(chatId, `✅ Reply sent to ${targetId}.`);
+
+            } else if (text.startsWith('/engineer')) {
                 const task = text.replace('/engineer', '').trim();
                 if (!task) {
                     await sendMessage(chatId, "🦞 **Genie Engineer**\n\nPlease describe a task: `/engineer Update the readme`");
@@ -186,17 +209,12 @@ export async function POST(req: Request) {
                     await sendMessage(chatId, summary, {
                         inline_keyboard: [
                             [
-                                { text: "✅ Approve & Execute", callback_data: `APPROVE_PLAN` }, // In real app, store Plan ID state. Here we might need to verify "Task" again? 
-                                // Stateless limitation: Callback buttons usually need state.
-                                // Hack: We can't pass the whole plan in callback_data (64 bytes limit).
-                                // Solution for Stateless:
-                                // Just re-run the plan execution assuming deterministic? No.
-                                // We need to store the plan temporarily?
-                                // Or... we just ask user to reply "YES"?
-                                // Let's try to leverage a temporary file "current_plan.json" in /tmp?
-                                // Simple and cost effective.
+                                { text: "✅ Approve & Push", callback_data: `APPROVE_PLAN` }
                             ],
-                            [{ text: "❌ Cancel", callback_data: "CANCEL" }]
+                            [
+                                { text: "🔄 Retry (Edit)", callback_data: "RETRY_PLAN" },
+                                { text: "❌ Cancel", callback_data: "CANCEL" }
+                            ]
                         ]
                     });
 
@@ -209,7 +227,7 @@ export async function POST(req: Request) {
                     await sendMessage(chatId, `❌ **Error:** ${e.message}`);
                 }
             } else {
-                await sendMessage(chatId, `🤖 I didn't understand that.\nTry: \`/engineer [task]\``);
+                await sendMessage(chatId, `🤖 I didn't understand that.\nCommands:\n\`/engineer <task>\`\n\`/reply <id> <msg>\``);
             }
         }
 

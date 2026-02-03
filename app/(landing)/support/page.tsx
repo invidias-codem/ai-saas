@@ -471,6 +471,17 @@ const contactOptions = [
       href: "/slack",
     },
   },
+  {
+    title: "Live Chat",
+    description: "Chat with our support bot on Telegram for instant help.",
+    icon: Send,
+    color: "text-blue-400",
+    bgColor: "bg-blue-500/10",
+    action: {
+      label: "Start Chat",
+      href: "https://t.me/Genie_Support_Bot", // Update with your actual Bot Username
+    },
+  },
 ];
 
 const faqs = [
