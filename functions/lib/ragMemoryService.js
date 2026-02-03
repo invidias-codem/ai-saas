@@ -46,11 +46,11 @@ const admin = __importStar(require("firebase-admin"));
 const vertexai_1 = require("@google-cloud/vertexai");
 // Initialize Vertex AI
 const vertexAI = new vertexai_1.VertexAI({
-    project: process.env.GOOGLE_CLOUD_PROJECT || 'genie-ai-1ca85',
-    location: process.env.VERTEX_AI_LOCATION || 'us-central1',
+    project: process.env.GOOGLE_CLOUD_PROJECT || "genie-ai-1ca85",
+    location: process.env.VERTEX_AI_LOCATION || "us-central1",
 });
 const embeddingModel = vertexAI.getGenerativeModel({
-    model: 'text-embedding-004',
+    model: "text-embedding-004",
 });
 /**
  * Generate embedding vector for text using Vertex AI
@@ -58,7 +58,7 @@ const embeddingModel = vertexAI.getGenerativeModel({
 async function generateEmbedding(text) {
     try {
         if (!text || text.trim().length === 0) {
-            console.warn('[generateEmbedding] Empty text provided, returning empty embedding');
+            console.warn("[generateEmbedding] Empty text provided, returning empty embedding");
             return [];
         }
         // embedContent is not defined on the GenerativeModel type in the SDK typings,
@@ -66,19 +66,19 @@ async function generateEmbedding(text) {
         const modelAny = embeddingModel;
         // Try common embed APIs (embedContent or embed) and normalize the response.
         let response;
-        if (typeof modelAny.embedContent === 'function') {
+        if (typeof modelAny.embedContent === "function") {
             response = await modelAny.embedContent({
                 content: {
-                    role: 'user',
+                    role: "user",
                     parts: [{ text }],
                 },
             });
         }
-        else if (typeof modelAny.embed === 'function') {
+        else if (typeof modelAny.embed === "function") {
             response = await modelAny.embed({ input: text });
         }
         else {
-            console.error('[generateEmbedding] No embed method available on model');
+            console.error("[generateEmbedding] No embed method available on model");
             return [];
         }
         // Normalize common response shapes from Vertex AI clients
@@ -87,15 +87,15 @@ async function generateEmbedding(text) {
             response?.embeddings?.[0]?.values ||
             response?.embeddings ||
             [];
-        console.log('[generateEmbedding] Generated embedding with', embedding?.length || 0, 'dimensions');
+        console.log("[generateEmbedding] Generated embedding with", embedding?.length || 0, "dimensions");
         if (!embedding || embedding.length === 0) {
-            console.warn('[generateEmbedding] No embedding returned from API for text:', text.substring(0, 50));
+            console.warn("[generateEmbedding] No embedding returned from API for text:", text.substring(0, 50));
             return [];
         }
         return embedding;
     }
     catch (error) {
-        console.error('Error generating embedding:', error);
+        console.error("Error generating embedding:", error);
         throw new Error(`Failed to generate embedding: ${error}`);
     }
 }
@@ -118,33 +118,33 @@ async function storeUserMemory(userId, memory) {
         const db = admin.firestore();
         // Generate summary for embedding
         const summaryText = memory.summary || memory.title;
-        console.log('[storeUserMemory] Generating embedding for:', summaryText.substring(0, 50));
+        console.log("[storeUserMemory] Generating embedding for:", summaryText.substring(0, 50));
         const embedding = await generateEmbedding(summaryText);
-        console.log('[storeUserMemory] Embedding generated, dimensions:', embedding?.length || 0);
+        console.log("[storeUserMemory] Embedding generated, dimensions:", embedding?.length || 0);
         // Create memory document
         const memoryData = {
             ...memory,
-            id: db.collection('users').doc(userId).collection('memories').doc().id,
+            id: db.collection("users").doc(userId).collection("memories").doc().id,
             embedding,
         };
         // Filter out undefined values for Firestore compatibility
         const cleanedData = Object.fromEntries(Object.entries(memoryData).filter(([_, value]) => value !== undefined));
-        console.log('[storeUserMemory] Cleaned data keys:', Object.keys(cleanedData));
-        console.log('[storeUserMemory] Has embedding:', 'embedding' in cleanedData);
+        console.log("[storeUserMemory] Cleaned data keys:", Object.keys(cleanedData));
+        console.log("[storeUserMemory] Has embedding:", "embedding" in cleanedData);
         // Store in Firestore
         const memoryRef = db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('memories')
+            .collection("memories")
             .doc(memoryData.id);
         await memoryRef.set(cleanedData);
-        console.log('[storeUserMemory] Memory stored successfully:', memoryData.id);
+        console.log("[storeUserMemory] Memory stored successfully:", memoryData.id);
         // Also add to RAG index for faster semantic search
         await indexMemoryForRAG(userId, memoryData);
         return memoryData;
     }
     catch (error) {
-        console.error('Error storing user memory:', error);
+        console.error("Error storing user memory:", error);
         throw error;
     }
 }
@@ -164,14 +164,14 @@ async function indexMemoryForRAG(userId, memory) {
             createdAt: Date.now(),
         };
         await db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('ragIndex')
+            .collection("ragIndex")
             .doc(ragIndex.id)
             .set(ragIndex);
     }
     catch (error) {
-        console.error('Error indexing memory for RAG:', error);
+        console.error("Error indexing memory for RAG:", error);
         // Don't throw - RAG indexing failure shouldn't block memory storage
     }
 }
@@ -182,30 +182,30 @@ async function retrieveRelevantMemories(userId, query, featureType, limit = 5) {
     try {
         const db = admin.firestore();
         // Generate embedding for query
-        console.log('[retrieveRelevantMemories] Generating embedding for query:', query.substring(0, 50));
+        console.log("[retrieveRelevantMemories] Generating embedding for query:", query.substring(0, 50));
         const queryEmbedding = await generateEmbedding(query);
-        console.log('[retrieveRelevantMemories] Query embedding dimensions:', queryEmbedding?.length || 0);
+        console.log("[retrieveRelevantMemories] Query embedding dimensions:", queryEmbedding?.length || 0);
         // Fetch all memories for user (Firestore doesn't have native vector search yet)
         let memoryQuery = db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('memories');
+            .collection("memories");
         if (featureType) {
-            memoryQuery = memoryQuery.where('featureType', '==', featureType);
+            memoryQuery = memoryQuery.where("featureType", "==", featureType);
         }
         const snapshot = await memoryQuery.get();
-        console.log('[retrieveRelevantMemories] Found', snapshot.size, 'total memories for user');
+        console.log("[retrieveRelevantMemories] Found", snapshot.size, "total memories for user");
         const memories = [];
-        const threshold = parseFloat(process.env.RAG_SIMILARITY_THRESHOLD || '0.3');
+        const threshold = parseFloat(process.env.RAG_SIMILARITY_THRESHOLD || "0.3");
         const useEmbeddings = queryEmbedding && queryEmbedding.length > 0;
         snapshot.forEach((doc) => {
             const memory = doc.data();
             let similarity = 0;
-            let matchMethod = 'none';
+            let matchMethod = "none";
             // Method 1: Vector similarity (if embeddings available)
             if (useEmbeddings && memory.embedding && memory.embedding.length > 0) {
                 similarity = cosineSimilarity(queryEmbedding, memory.embedding);
-                matchMethod = 'embedding';
+                matchMethod = "embedding";
             }
             // Method 2: Fallback to keyword matching
             else {
@@ -214,7 +214,7 @@ async function retrieveRelevantMemories(userId, query, featureType, limit = 5) {
                 const summaryMatch = memory.summary.toLowerCase().includes(queryLower) ? 0.7 : 0;
                 const tagsMatch = memory.tags?.some(tag => queryLower.includes(tag.toLowerCase())) ? 0.6 : 0;
                 similarity = Math.max(titleMatch, summaryMatch, tagsMatch);
-                matchMethod = 'keyword';
+                matchMethod = "keyword";
             }
             console.log(`[retrieveRelevantMemories] Memory: "${memory.title}" | Similarity: ${similarity.toFixed(4)} | Method: ${matchMethod} | Threshold: ${threshold}`);
             if (similarity >= threshold) {
@@ -225,14 +225,14 @@ async function retrieveRelevantMemories(userId, query, featureType, limit = 5) {
                 });
             }
         });
-        console.log('[retrieveRelevantMemories] Memories passing threshold:', memories.length);
+        console.log("[retrieveRelevantMemories] Memories passing threshold:", memories.length);
         // Sort by similarity and return top results
         return memories
             .sort((a, b) => b.similarity - a.similarity)
             .slice(0, limit);
     }
     catch (error) {
-        console.error('Error retrieving relevant memories:', error);
+        console.error("Error retrieving relevant memories:", error);
         return []; // Return empty array if retrieval fails
     }
 }
@@ -241,14 +241,14 @@ async function retrieveRelevantMemories(userId, query, featureType, limit = 5) {
  */
 function formatMemoriesForContext(memories) {
     if (memories.length === 0) {
-        return '';
+        return "";
     }
     const formattedMemories = memories
         .map((memory) => `**Previous Context** (${memory.featureType}):
 Title: ${memory.title}
 Summary: ${memory.summary}
-Key Points: ${memory.tags?.join(', ') || 'N/A'}`)
-        .join('\n\n');
+Key Points: ${memory.tags?.join(", ") || "N/A"}`)
+        .join("\n\n");
     return `\n\n## User's Previous Interactions\n${formattedMemories}\n---\n`;
 }
 /**
@@ -257,13 +257,13 @@ Key Points: ${memory.tags?.join(', ') || 'N/A'}`)
 async function cleanupOldMemories(userId) {
     try {
         const db = admin.firestore();
-        const retentionDays = parseInt(process.env.RAG_MEMORY_RETENTION_DAYS || '90');
+        const retentionDays = parseInt(process.env.RAG_MEMORY_RETENTION_DAYS || "90");
         const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
         const oldMemories = await db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('memories')
-            .where('createdAt', '<', cutoffTime)
+            .collection("memories")
+            .where("createdAt", "<", cutoffTime)
             .get();
         let deletedCount = 0;
         const batch = db.batch();
@@ -275,7 +275,7 @@ async function cleanupOldMemories(userId) {
         return deletedCount;
     }
     catch (error) {
-        console.error('Error cleaning up old memories:', error);
+        console.error("Error cleaning up old memories:", error);
         return 0;
     }
 }

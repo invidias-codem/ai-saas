@@ -53,14 +53,14 @@ const factExtractor_1 = require("./factExtractor");
  */
 exports.captureConversationMemory = functions.https.onRequest(async (req, res) => {
     try {
-        if (req.method !== 'POST') {
-            res.status(405).json({ error: 'Method not allowed' });
+        if (req.method !== "POST") {
+            res.status(405).json({ error: "Method not allowed" });
             return;
         }
         const { userId, featureType, title, summary, messages, tags, metadata, tokensUsed, } = req.body;
         if (!userId || !featureType || !summary) {
             res.status(400).json({
-                error: 'Missing required fields: userId, featureType, summary',
+                error: "Missing required fields: userId, featureType, summary",
             });
             return;
         }
@@ -99,7 +99,7 @@ exports.captureConversationMemory = functions.https.onRequest(async (req, res) =
             await (0, factExtractor_1.cleanupExpiredFacts)(userId);
         }
         catch (error) {
-            functions.logger.warn('Error extracting facts:', error);
+            functions.logger.warn("Error extracting facts:", error);
             // Don't fail the entire capture if fact extraction fails
         }
         // Update user context
@@ -116,11 +116,11 @@ exports.captureConversationMemory = functions.https.onRequest(async (req, res) =
         res.status(200).json({
             success: true,
             memoryId: memory.id,
-            message: 'Memory captured successfully',
+            message: "Memory captured successfully",
         });
     }
     catch (error) {
-        console.error('Error capturing conversation memory:', error);
+        console.error("Error capturing conversation memory:", error);
         res.status(500).json({
             error: `Failed to capture memory: ${error}`,
         });
@@ -134,9 +134,9 @@ async function handleMemoryUpdate(userId, memoryId, updates) {
         const db = admin.firestore();
         // Update memory document
         await db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('memories')
+            .collection("memories")
             .doc(memoryId)
             .update({
             ...updates,
@@ -145,7 +145,7 @@ async function handleMemoryUpdate(userId, memoryId, updates) {
         console.log(`Memory ${memoryId} updated for user ${userId}`);
     }
     catch (error) {
-        console.error('Error updating memory:', error);
+        console.error("Error updating memory:", error);
         throw error;
     }
 }
@@ -159,7 +159,7 @@ async function logInteractionEvent(userId, featureType, data) {
             id: `event-${Date.now()}`,
             userId,
             featureType: featureType,
-            action: 'create',
+            action: "create",
             inputLength: data.inputLength,
             outputLength: data.outputLength,
             tokensUsed: data.tokensUsed,
@@ -170,14 +170,14 @@ async function logInteractionEvent(userId, featureType, data) {
             createdAt: Date.now(),
         };
         await db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('interactions')
+            .collection("interactions")
             .doc(event.id)
             .set(event);
     }
     catch (error) {
-        console.error('Error logging interaction event:', error);
+        console.error("Error logging interaction event:", error);
         // Don't throw - analytics failure shouldn't block operations
     }
 }
@@ -195,20 +195,20 @@ async function triggerMemoryIntegrations(userId, memory) {
             timestamp: memory.createdAt,
         };
         // Trigger Zapier
-        await (0, zapierIntegration_1.triggerZapierWebhook)(userId, 'memory.created', eventData);
+        await (0, zapierIntegration_1.triggerZapierWebhook)(userId, "memory.created", eventData);
         // Send Slack notification
         await (0, slackIntegration_1.sendSlackNotification)(userId, `New memory saved: ${memory.title}`, [
             {
-                type: 'section',
+                type: "section",
                 text: {
-                    type: 'mrkdwn',
+                    type: "mrkdwn",
                     text: `*${memory.title}*\n${memory.summary}\n\n📌 Feature: \`${memory.featureType}\``,
                 },
             },
         ]);
     }
     catch (error) {
-        console.error('Error triggering memory integrations:', error);
+        console.error("Error triggering memory integrations:", error);
         // Don't throw - integration failure shouldn't block main operations
     }
 }
@@ -218,19 +218,19 @@ async function triggerMemoryIntegrations(userId, memory) {
  */
 exports.retrieveMemories = functions.https.onRequest(async (req, res) => {
     try {
-        if (req.method !== 'POST') {
-            res.status(405).json({ error: 'Method not allowed' });
+        if (req.method !== "POST") {
+            res.status(405).json({ error: "Method not allowed" });
             return;
         }
         const { userId, query, featureType, limit } = req.body;
         if (!userId || !query) {
             res.status(400).json({
-                error: 'Missing required fields: userId, query',
+                error: "Missing required fields: userId, query",
             });
             return;
         }
         // Import inside function to avoid circular dependencies
-        const { retrieveRelevantMemories } = await Promise.resolve().then(() => __importStar(require('./ragMemoryService')));
+        const { retrieveRelevantMemories } = await Promise.resolve().then(() => __importStar(require("./ragMemoryService")));
         const memories = await retrieveRelevantMemories(userId, query, featureType, limit || 5);
         res.status(200).json({
             success: true,
@@ -239,9 +239,9 @@ exports.retrieveMemories = functions.https.onRequest(async (req, res) => {
         });
     }
     catch (error) {
-        console.error('[RETRIEVE_MEMORIES_ERROR]', error);
+        console.error("[RETRIEVE_MEMORIES_ERROR]", error);
         res.status(500).json({
-            error: 'Failed to retrieve memories',
+            error: "Failed to retrieve memories",
             details: error.message,
         });
     }
@@ -254,11 +254,11 @@ async function getMemoryContextForApi(userId, query, featureType) {
     try {
         // This would call into ragMemoryService
         // For now, return empty string - implementation in next section
-        return '';
+        return "";
     }
     catch (error) {
-        console.error('Error getting memory context:', error);
-        return '';
+        console.error("Error getting memory context:", error);
+        return "";
     }
 }
 /**
@@ -267,21 +267,21 @@ async function getMemoryContextForApi(userId, query, featureType) {
  */
 exports.getMemoryStats = functions.https.onRequest(async (req, res) => {
     try {
-        if (req.method !== 'POST') {
-            res.status(405).json({ error: 'Method not allowed' });
+        if (req.method !== "POST") {
+            res.status(405).json({ error: "Method not allowed" });
             return;
         }
         const { userId } = req.body;
         if (!userId) {
-            res.status(400).json({ error: 'Missing userId' });
+            res.status(400).json({ error: "Missing userId" });
             return;
         }
         const db = admin.firestore();
         // Get all memories for user
         const memoriesSnapshot = await db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('memories')
+            .collection("memories")
             .get();
         const memories = memoriesSnapshot.docs.map((doc) => doc.data());
         // Calculate statistics
@@ -296,7 +296,7 @@ exports.getMemoryStats = functions.https.onRequest(async (req, res) => {
             }
             // Get latest interaction time
             if (memory.createdAt) {
-                const createdTime = typeof memory.createdAt === 'number'
+                const createdTime = typeof memory.createdAt === "number"
                     ? memory.createdAt
                     : Date.parse(String(memory.createdAt));
                 if (!lastInteractionDate || createdTime > lastInteractionDate) {
@@ -335,7 +335,7 @@ exports.getMemoryStats = functions.https.onRequest(async (req, res) => {
         });
     }
     catch (error) {
-        console.error('Error getting memory stats:', error);
+        console.error("Error getting memory stats:", error);
         res.status(500).json({
             error: `Failed to get memory stats: ${error}`,
         });
