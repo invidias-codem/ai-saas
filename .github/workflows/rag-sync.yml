@@ -1,0 +1,141 @@
+name: RAG Knowledge Sync
+
+on:
+  schedule:
+    # Run daily at 3 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: 'Number of days to sync'
+        default: '7'
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sync:
+    name: 🔄 Sync PR Insights to RAG
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Check RAG Budget
+        id: budget
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          result=$(npx tsx scripts/check-rag-budget.ts 2>&1)
+          echo "$result"
+          if echo "$result" | grep -q "Budget OK"; then
+            echo "budget_ok=true" >> $GITHUB_OUTPUT
+          else
+            echo "budget_ok=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fetch Recent PRs
+        if: steps.budget.outputs.budget_ok == 'true'
+        id: fetch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DAYS_BACK=${{ inputs.days_back || '7' }}
+          SINCE=$(date -d "-${DAYS_BACK} days" +%Y-%m-%d)
+          
+          echo "Fetching PRs since $SINCE..."
+          
+          gh pr list \
+            --state merged \
+            --json number,title,author,body,mergedAt,reviews \
+            --limit 50 \
+            -q ".[] | select(.mergedAt >= \"${SINCE}\")" > prs.json
+          
+          PR_COUNT=$(jq length prs.json)
+          echo "Found $PR_COUNT PRs to sync"
+          echo "pr_count=$PR_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Extract and Sync Insights
+        if: steps.fetch.outputs.pr_count > 0
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          npx tsx -e "
+            import fs from 'fs';
+            import { batchSyncPRInsights, PRInsight } from './lib/rag/knowledgeSync';
+            
+            async function main() {
+              const prs = JSON.parse(fs.readFileSync('prs.json', 'utf-8'));
+              
+              const insights: PRInsight[] = prs.map((pr: any) => ({
+                prNumber: pr.number,
+                prTitle: pr.title,
+                author: pr.author?.login || 'unknown',
+                insights: [],
+                patterns: extractPatterns(pr.body || ''),
+                issues: extractIssues(pr.reviews || []),
+                suggestions: [],
+                timestamp: pr.mergedAt
+              }));
+              
+              console.log('Syncing', insights.length, 'PR insights...');
+              const result = await batchSyncPRInsights(insights);
+              
+              console.log('Sync complete:');
+              console.log('  Memories:', result.memoriesStored);
+              console.log('  Nodes:', result.nodesCreated);
+              console.log('  Edges:', result.edgesCreated);
+              
+              if (result.errors.length > 0) {
+                console.log('Errors:', result.errors);
+              }
+            }
+            
+            function extractPatterns(body: string): string[] {
+              // Extract patterns from PR description
+              const patterns: string[] = [];
+              const lines = body.split('\\n');
+              
+              for (const line of lines) {
+                if (line.includes('pattern') || line.includes('refactor')) {
+                  patterns.push(line.trim());
+                }
+              }
+              
+              return patterns.slice(0, 5);
+            }
+            
+            function extractIssues(reviews: any[]): string[] {
+              const issues: string[] = [];
+              
+              for (const review of reviews) {
+                if (review.state === 'CHANGES_REQUESTED') {
+                  issues.push(review.body?.substring(0, 100) || 'Changes requested');
+                }
+              }
+              
+              return issues;
+            }
+            
+            main();
+          "
+
+      - name: Log Sync Summary
+        run: |
+          echo "✅ RAG Knowledge Sync complete"
+          echo "PRs processed: ${{ steps.fetch.outputs.pr_count || 0 }}"

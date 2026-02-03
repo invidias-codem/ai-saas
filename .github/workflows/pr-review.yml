@@ -88,7 +88,33 @@ jobs:
             echo "⚠️ OPENCLAW_WEBHOOK_URL not configured, skipping webhook"
           fi
 
+      - name: Enrich PR Context with Genie RAG
+        if: steps.diff.outputs.changed_count > 0
+        continue-on-error: true
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          echo "🧠 Enriching PR context with Genie RAG..."
+          
+          # Install dependencies if needed
+          npm ci --prefer-offline --no-audit 2>/dev/null || true
+          
+          # Run RAG enrichment
+          npx tsx scripts/pr-rag-enrichment.ts \
+            --pr-number=${{ env.PR_NUMBER }} \
+            --diff-file=full_diff.txt \
+            --title="${{ env.PR_TITLE }}" \
+            --output=rag_context.json || echo "⚠️ RAG enrichment failed"
+          
+          # Post RAG context as PR comment if available
+          if [ -f "rag_context.md" ]; then
+            gh pr comment ${{ env.PR_NUMBER }} --body-file rag_context.md || true
+          fi
+
       - name: Run Inline Review (Fallback)
+
         if: steps.diff.outputs.changed_count > 0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

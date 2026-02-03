@@ -21,22 +21,21 @@ const nextConfig = {
       },
     ],
   },
-  experimental: {
-    serverComponentsExternalPackages: [
-      '@google-cloud/tasks',
-      '@google-cloud/storage',
-      '@google-cloud/vertexai',
-      '@google-cloud/aiplatform',
-      'google-gax',
-      'grpc'
-    ],
-    outputFileTracingIncludes: {
-      '/api/**/*': [
-        'node_modules/@google-cloud/tasks/build/esm/src/**/*.json',
-        'node_modules/google-gax/build/src/**/*.json'
-      ]
-    },
+  serverExternalPackages: [
+    '@google-cloud/tasks',
+    '@google-cloud/storage',
+    '@google-cloud/vertexai',
+    '@google-cloud/aiplatform',
+    'google-gax',
+    'grpc'
+  ],
+  outputFileTracingIncludes: {
+    '/api/**/*': [
+      'node_modules/@google-cloud/tasks/build/esm/src/**/*.json',
+      'node_modules/google-gax/build/src/**/*.json'
+    ]
   },
+  experimental: {},
   webpack: (config) => {
     config.resolve.extensionAlias = {
       ".js": [".ts", ".tsx", ".js", ".jsx"],
