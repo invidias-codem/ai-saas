@@ -3,14 +3,14 @@
  * Mirrors the main app schemas for type safety
  */
 export interface Message {
-    role: 'user' | 'assistant' | 'system';
+    role: "user" | "assistant" | "system";
     content: string;
     timestamp?: number;
 }
 export interface UserMemory {
     id: string;
     userId: string;
-    featureType: 'conversation' | 'code' | 'image' | 'music' | 'video';
+    featureType: "conversation" | "code" | "image" | "music" | "video";
     title: string;
     summary: string;
     messages: Message[];
@@ -50,8 +50,8 @@ export interface RAGIndex {
 export interface InteractionEvent {
     id: string;
     userId: string;
-    featureType: 'conversation' | 'code' | 'image' | 'music' | 'video';
-    action: 'create' | 'retrieve' | 'search' | 'share';
+    featureType: "conversation" | "code" | "image" | "music" | "video";
+    action: "create" | "retrieve" | "search" | "share";
     inputLength: number;
     outputLength: number;
     tokensUsed: number;
@@ -84,13 +84,13 @@ export interface SlackIntegration {
 }
 export interface ExtractedFact {
     id?: string;
-    type: 'decision' | 'action_item' | 'blocker' | 'project' | 'verification';
+    type: "decision" | "action_item" | "blocker" | "project" | "verification";
     content: string;
     confidence: number;
     extractedAt: number;
     expiresAt?: number;
     conversationId?: string;
-    scope: 'conversation' | 'user';
+    scope: "conversation" | "user";
     createdAt?: number;
 }
 //# sourceMappingURL=schemas.d.ts.map

@@ -1,6 +1,6 @@
-import * as functions from 'firebase-functions';
-export type FactType = 'decision' | 'action_item' | 'blocker' | 'project' | 'verification';
-export type FactScope = 'conversation' | 'user';
+import * as functions from "firebase-functions";
+export type FactType = "decision" | "action_item" | "blocker" | "project" | "verification";
+export type FactScope = "conversation" | "user";
 export interface ExtractedFact {
     type: FactType;
     content: string;

@@ -42,7 +42,7 @@ exports.cleanupExpiredFacts = cleanupExpiredFacts;
 const admin = __importStar(require("firebase-admin"));
 const functions = __importStar(require("firebase-functions"));
 const generative_ai_1 = require("@google/generative-ai");
-const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
+const genAI = new generative_ai_1.GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
 const db = admin.firestore();
 /**
  * Extract critical facts from conversation messages
@@ -55,7 +55,7 @@ async function extractFactsFromConversation(messages, assistantResponse) {
     const fullConversation = [
         ...messages.map((m) => `${m.role}: ${m.content}`),
         `assistant: ${assistantResponse}`,
-    ].join('\n');
+    ].join("\n");
     // Stage 1: Keyword-based extraction (fast, high precision)
     const keywordFacts = extractKeywordFacts(fullConversation);
     facts.push(...keywordFacts);
@@ -69,7 +69,7 @@ async function extractFactsFromConversation(messages, assistantResponse) {
         };
     }
     catch (error) {
-        functions.logger.warn('Gemini scoring failed, using keyword confidence:', error);
+        functions.logger.warn("Gemini scoring failed, using keyword confidence:", error);
         // Fallback: use conservative confidence scores from keyword extraction
         return {
             facts: facts.filter((f) => f.confidence >= 0.80),
@@ -96,12 +96,12 @@ function extractKeywordFacts(content) {
             const decision = match[1].trim().slice(0, 200);
             if (decision.length > 10 && !isHypothetical(decision)) {
                 facts.push({
-                    type: 'decision',
+                    type: "decision",
                     content: decision,
                     confidence: 0.90, // High confidence for explicit decision markers
                     extractedAt: now,
                     expiresAt: now + ninetyDaysMs, // Expire after 90 days
-                    scope: 'conversation',
+                    scope: "conversation",
                 });
             }
         }
@@ -118,12 +118,12 @@ function extractKeywordFacts(content) {
             const action = match[1].trim().slice(0, 200);
             if (action.length > 5 && !isHypothetical(action)) {
                 facts.push({
-                    type: 'action_item',
+                    type: "action_item",
                     content: action,
                     confidence: 0.85, // High confidence for explicit action markers
                     extractedAt: now,
                     expiresAt: now + ninetyDaysMs, // Expire after 90 days
-                    scope: 'conversation',
+                    scope: "conversation",
                 });
             }
         }
@@ -140,12 +140,12 @@ function extractKeywordFacts(content) {
             const blocker = match[1].trim().slice(0, 200);
             if (blocker.length > 5) {
                 facts.push({
-                    type: 'blocker',
+                    type: "blocker",
                     content: blocker,
                     confidence: 0.88, // High confidence for explicit blocker markers
                     extractedAt: now,
                     expiresAt: now + ninetyDaysMs, // Expire after 90 days
-                    scope: 'conversation',
+                    scope: "conversation",
                 });
             }
         }
@@ -161,12 +161,12 @@ function extractKeywordFacts(content) {
             const project = match[1].trim().slice(0, 200);
             if (project.length > 3 && !isHypothetical(project)) {
                 facts.push({
-                    type: 'project',
+                    type: "project",
                     content: project,
                     confidence: 0.80, // Moderate confidence for project mentions
                     extractedAt: now,
                     // User-level facts DO NOT expire (removed expiresAt)
-                    scope: 'user',
+                    scope: "user",
                 });
             }
         }
@@ -182,11 +182,11 @@ function extractKeywordFacts(content) {
             const verification = match[match.length - 1].trim().slice(0, 200);
             if (verification.length > 5) {
                 facts.push({
-                    type: 'verification',
+                    type: "verification",
                     content: verification,
                     confidence: 0.95, // Very high confidence for explicit verifications
                     extractedAt: now,
-                    scope: 'user',
+                    scope: "user",
                 });
             }
         }
@@ -245,7 +245,7 @@ function analyzeSentiment(text) {
     let keywordCount = 0;
     // Score positive keywords
     for (const [keyword, value] of Object.entries(positiveKeywords)) {
-        const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+        const regex = new RegExp(`\\b${keyword}\\b`, "gi");
         const matches = lowerText.match(regex);
         if (matches) {
             score += value * matches.length;
@@ -254,7 +254,7 @@ function analyzeSentiment(text) {
     }
     // Score negative keywords
     for (const [keyword, value] of Object.entries(negativeKeywords)) {
-        const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
+        const regex = new RegExp(`\\b${keyword}\\b`, "gi");
         const matches = lowerText.match(regex);
         if (matches) {
             score += value * matches.length;
@@ -276,8 +276,8 @@ async function scoreFactsWithGemini(facts, context) {
     if (facts.length === 0)
         return facts;
     try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const factsToScore = facts.map((f, i) => `${i + 1}. [${f.type}] "${f.content}"`).join('\n');
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const factsToScore = facts.map((f, i) => `${i + 1}. [${f.type}] "${f.content}"`).join("\n");
         const prompt = `Given the conversation context below, score the confidence level (0.0-1.0) for each extracted fact.
 Score based on:
 - Is the fact stated explicitly and clearly? (0.85-1.0)
@@ -297,7 +297,7 @@ Include only facts with confidence >= 0.60.`;
         // Parse JSON response
         const jsonMatch = responseText.match(/\[[\s\S]*\]/);
         if (!jsonMatch) {
-            functions.logger.warn('No JSON found in Gemini response');
+            functions.logger.warn("No JSON found in Gemini response");
             return facts;
         }
         const scores = JSON.parse(jsonMatch[0]);
@@ -312,7 +312,7 @@ Include only facts with confidence >= 0.60.`;
         });
     }
     catch (error) {
-        functions.logger.error('Error scoring facts with Gemini:', error);
+        functions.logger.error("Error scoring facts with Gemini:", error);
         // Return facts with sentiment analysis even if Gemini scoring fails
         return facts.map((fact) => ({
             ...fact,
@@ -325,22 +325,22 @@ Include only facts with confidence >= 0.60.`;
  */
 function isHypothetical(text) {
     const hypotheticalKeywords = [
-        'if we',
-        'if we had',
-        'could be',
-        'might be',
-        'should be',
-        'could use',
-        'might use',
-        'wish we',
-        'hope to',
-        'perhaps',
-        'maybe',
-        'supposedly',
-        'arguably',
-        'in theory',
-        'would be',
-        'would use',
+        "if we",
+        "if we had",
+        "could be",
+        "might be",
+        "should be",
+        "could use",
+        "might use",
+        "wish we",
+        "hope to",
+        "perhaps",
+        "maybe",
+        "supposedly",
+        "arguably",
+        "in theory",
+        "would be",
+        "would use",
     ];
     const lowerText = text.toLowerCase();
     return hypotheticalKeywords.some((keyword) => lowerText.includes(keyword));
@@ -351,15 +351,15 @@ function isHypothetical(text) {
 async function storeExtractedFacts(userId, facts) {
     if (facts.length === 0)
         return 0;
-    const factsRef = db.collection('users').doc(userId).collection('facts');
+    const factsRef = db.collection("users").doc(userId).collection("facts");
     let storedCount = 0;
     for (const fact of facts) {
         try {
             // Check for duplicates: same type + similar content (substring match)
             const existingQuery = await factsRef
-                .where('type', '==', fact.type)
-                .where('confidence', '>=', 0.75)
-                .orderBy('confidence', 'desc')
+                .where("type", "==", fact.type)
+                .where("confidence", ">=", 0.75)
+                .orderBy("confidence", "desc")
                 .limit(10)
                 .get();
             const similar = existingQuery.docs.find((doc) => {
@@ -399,13 +399,13 @@ async function storeExtractedFacts(userId, facts) {
  */
 async function getHighConfidenceFacts(userId, scope, limit = 10) {
     try {
-        const factsRef = db.collection('users').doc(userId).collection('facts');
-        let query = factsRef.where('confidence', '>=', 0.80).where('scope', '==', scope);
+        const factsRef = db.collection("users").doc(userId).collection("facts");
+        let query = factsRef.where("confidence", ">=", 0.80).where("scope", "==", scope);
         // Add expiration check for conversation-level facts
-        if (scope === 'conversation') {
-            query = query.where('expiresAt', '>', Date.now());
+        if (scope === "conversation") {
+            query = query.where("expiresAt", ">", Date.now());
         }
-        const snapshot = await query.orderBy('confidence', 'desc').orderBy('extractedAt', 'desc').limit(limit).get();
+        const snapshot = await query.orderBy("confidence", "desc").orderBy("extractedAt", "desc").limit(limit).get();
         return snapshot.docs.map((doc) => doc.data());
     }
     catch (error) {
@@ -418,7 +418,7 @@ async function getHighConfidenceFacts(userId, scope, limit = 10) {
  */
 function formatFactsForPrompt(facts) {
     if (facts.length === 0)
-        return '';
+        return "";
     const grouped = new Map();
     facts.forEach((fact) => {
         if (!grouped.has(fact.type)) {
@@ -426,43 +426,43 @@ function formatFactsForPrompt(facts) {
         }
         grouped.get(fact.type).push(fact);
     });
-    let prompt = '\n## Critical Context (Verified Facts)\n';
+    let prompt = "\n## Critical Context (Verified Facts)\n";
     // Decisions
-    if (grouped.has('decision')) {
-        prompt += '\n**Decisions Made:**\n';
-        grouped.get('decision').forEach((f) => {
+    if (grouped.has("decision")) {
+        prompt += "\n**Decisions Made:**\n";
+        grouped.get("decision").forEach((f) => {
             prompt += `- ${f.content}\n`;
         });
     }
     // Action Items
-    if (grouped.has('action_item')) {
-        prompt += '\n**Action Items:**\n';
-        grouped.get('action_item').forEach((f) => {
+    if (grouped.has("action_item")) {
+        prompt += "\n**Action Items:**\n";
+        grouped.get("action_item").forEach((f) => {
             prompt += `- ${f.content}\n`;
         });
     }
     // Blockers
-    if (grouped.has('blocker')) {
-        prompt += '\n**Current Blockers:**\n';
-        grouped.get('blocker').forEach((f) => {
+    if (grouped.has("blocker")) {
+        prompt += "\n**Current Blockers:**\n";
+        grouped.get("blocker").forEach((f) => {
             prompt += `- ${f.content}\n`;
         });
     }
     // Projects
-    if (grouped.has('project')) {
-        prompt += '\n**Active Projects:**\n';
-        grouped.get('project').forEach((f) => {
+    if (grouped.has("project")) {
+        prompt += "\n**Active Projects:**\n";
+        grouped.get("project").forEach((f) => {
             prompt += `- ${f.content}\n`;
         });
     }
     // Verifications
-    if (grouped.has('verification')) {
-        prompt += '\n**Verified Information:**\n';
-        grouped.get('verification').forEach((f) => {
+    if (grouped.has("verification")) {
+        prompt += "\n**Verified Information:**\n";
+        grouped.get("verification").forEach((f) => {
             prompt += `- ${f.content}\n`;
         });
     }
-    prompt += '\nUse the above facts to ensure accuracy in your response.\n';
+    prompt += "\nUse the above facts to ensure accuracy in your response.\n";
     return prompt;
 }
 /**
@@ -515,10 +515,10 @@ function getEditDistance(longer, shorter) {
  */
 async function cleanupExpiredFacts(userId) {
     try {
-        const factsRef = db.collection('users').doc(userId).collection('facts');
+        const factsRef = db.collection("users").doc(userId).collection("facts");
         const expiredSnapshot = await factsRef
-            .where('expiresAt', '<=', Date.now())
-            .where('scope', '==', 'conversation')
+            .where("expiresAt", "<=", Date.now())
+            .where("scope", "==", "conversation")
             .get();
         let deletedCount = 0;
         const batch = db.batch();
@@ -533,7 +533,7 @@ async function cleanupExpiredFacts(userId) {
         return deletedCount;
     }
     catch (error) {
-        functions.logger.error(`Error cleaning up expired facts:`, error);
+        functions.logger.error("Error cleaning up expired facts:", error);
         return 0;
     }
 }
@@ -543,18 +543,18 @@ async function cleanupExpiredFacts(userId) {
  */
 exports.retrieveFactsForUser = functions.https.onRequest(async (req, res) => {
     try {
-        if (req.method !== 'POST') {
-            res.status(405).json({ error: 'Method not allowed' });
+        if (req.method !== "POST") {
+            res.status(405).json({ error: "Method not allowed" });
             return;
         }
         const { userId, limit = 10 } = req.body;
         if (!userId) {
-            res.status(400).json({ error: 'Missing userId' });
+            res.status(400).json({ error: "Missing userId" });
             return;
         }
         // Retrieve high-confidence facts for both scopes
-        const conversationFacts = await getHighConfidenceFacts(userId, 'conversation', limit / 2);
-        const userFacts = await getHighConfidenceFacts(userId, 'user', limit / 2);
+        const conversationFacts = await getHighConfidenceFacts(userId, "conversation", limit / 2);
+        const userFacts = await getHighConfidenceFacts(userId, "user", limit / 2);
         const allFacts = [...conversationFacts, ...userFacts]
             .sort((a, b) => b.confidence - a.confidence)
             .slice(0, limit);
@@ -565,7 +565,7 @@ exports.retrieveFactsForUser = functions.https.onRequest(async (req, res) => {
         });
     }
     catch (error) {
-        functions.logger.error('Error retrieving facts:', error);
+        functions.logger.error("Error retrieving facts:", error);
         res.status(500).json({
             error: `Failed to retrieve facts: ${error}`,
         });

@@ -43,24 +43,24 @@ const db = admin.firestore();
  * Removes facts where expiresAt < now() and scope = "conversation"
  */
 exports.scheduleFactCleanup = functions.pubsub
-    .schedule('0 0 * * *') // Daily at midnight UTC
-    .timeZone('UTC')
+    .schedule("0 0 * * *") // Daily at midnight UTC
+    .timeZone("UTC")
     .onRun(async () => {
     try {
         const now = Date.now();
         let totalCleaned = 0;
         // Get all users with facts
-        const usersSnapshot = await db.collection('users').get();
+        const usersSnapshot = await db.collection("users").get();
         for (const userDoc of usersSnapshot.docs) {
             const userId = userDoc.id;
             const factsRef = db
-                .collection('users')
+                .collection("users")
                 .doc(userId)
-                .collection('facts');
+                .collection("facts");
             // Find all conversation-level facts that have expired
             const expiredSnapshot = await factsRef
-                .where('expiresAt', '<=', now)
-                .where('scope', '==', 'conversation')
+                .where("expiresAt", "<=", now)
+                .where("scope", "==", "conversation")
                 .get();
             if (expiredSnapshot.empty) {
                 continue;
@@ -87,7 +87,7 @@ exports.scheduleFactCleanup = functions.pubsub
         return { success: true, cleanedCount: totalCleaned };
     }
     catch (error) {
-        functions.logger.error('Error during scheduled fact cleanup:', error);
+        functions.logger.error("Error during scheduled fact cleanup:", error);
         throw error;
     }
 });
