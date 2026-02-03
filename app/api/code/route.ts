@@ -21,17 +21,19 @@ import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotio
 import { storeMemory } from '@/lib/memory/vectorStore';
 // Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
 
-const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
-
-const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash", // Model supports file input
-  safetySettings: [
-    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-  ],
-});
+// Initialize lazily
+function getModel() {
+  const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
+  return genAI.getGenerativeModel({
+    model: "gemini-2.0-flash", // Model supports file input
+    safetySettings: [
+      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    ],
+  });
+}
 
 // System instruction - slightly refined to emphasize using provided content
 const CODE_SYSTEM_INSTRUCTION = {
@@ -196,7 +198,7 @@ export async function POST(req: Request) {
     console.log("Sending to Gemini - Current Turn Parts:", JSON.stringify(currentUserParts.map(p => p.text ? `Text: ${p.text.substring(0, 50)}...` : `File: ${p.inlineData?.mimeType}`))); // Log structure summary
 
 
-    const chat = model.startChat({
+    const chat = getModel().startChat({
       history: [CODE_SYSTEM_INSTRUCTION, CODE_GREETING, ...history],
       generationConfig: {
         temperature: 0.7,
