@@ -295,7 +295,7 @@ const PrivacyPolicyPage = () => {
                       {/* Using simple SVG for plane/send since Send import might be missing/aliased */}
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-400"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                     </div>
-                    <a href="https://t.me/Genie_Support_Bot" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300">
+                    <a href="https://t.me/Gen1eBot" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300">
                       Chat on Telegram
                     </a>
                   </p>

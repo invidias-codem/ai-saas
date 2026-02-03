@@ -479,7 +479,7 @@ const contactOptions = [
     bgColor: "bg-blue-500/10",
     action: {
       label: "Start Chat",
-      href: "https://t.me/Genie_Support_Bot", // Update with your actual Bot Username
+      href: "https://t.me/Gen1eBot",
     },
   },
 ];
