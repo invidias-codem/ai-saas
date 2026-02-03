@@ -48,11 +48,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get PR number from workflow run
-          PR_NUMBER=$(gh run view ${{ github.event.workflow_run.id }} --json headBranch -q '.headBranch' | grep -oP '\d+' || echo "")
+          # Get PR number from workflow run using the branch name
+          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          PR_NUMBER=$(gh pr list --head "$HEAD_BRANCH" --json number -q '.[0].number')
           
-          if [ -z "$PR_NUMBER" ]; then
-            echo "Could not determine PR number"
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" == "null" ]; then
+            echo "Could not find open PR for branch $HEAD_BRANCH"
             exit 0
           fi
           
