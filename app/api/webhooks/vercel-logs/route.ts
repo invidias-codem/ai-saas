@@ -3,11 +3,13 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireEnv } from "@/lib/env";
 
-// Initialize Supabase Admin Client (bypasses RLS)
-const supabaseAdmin = createClient(
-  requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-  requireEnv("SUPABASE_SERVICE_ROLE_KEY")
-);
+// Lazy initialize Supabase Admin Client
+function getSupabaseAdmin() {
+    return createClient(
+        requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
+        requireEnv("SUPABASE_SERVICE_ROLE_KEY")
+    );
+}
 
 export async function POST(req: Request) {
     try {
@@ -32,6 +34,7 @@ export async function POST(req: Request) {
             metadata: log, // Store raw log as metadata
         }));
 
+        const supabaseAdmin = getSupabaseAdmin();
         const { error } = await supabaseAdmin
             .from("logs")
             .insert(formattedLogs);
