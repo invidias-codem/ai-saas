@@ -10,9 +10,11 @@ import {
 import { searchArxiv, analyzePaperWithGemini } from '../integrations/academic';
 import { requireEnv } from '@/lib/env';
 
-// Initialize a lightweight model for decision making
-const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+// Initialize lazily
+function getModel() {
+    const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
+    return genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+}
 
 interface ResearchResult {
     needsSearch: boolean;
@@ -192,7 +194,7 @@ async function shouldSearch(query: string): Promise<boolean> {
   `;
 
     try {
-        const result = await model.generateContent(prompt);
+        const result = await getModel().generateContent(prompt);
         const response = result.response.text().trim().toUpperCase();
         console.log('[Researcher] shouldSearch LLM response:', response);
         return response.includes('YES');
@@ -217,7 +219,7 @@ async function generateSearchQueries(query: string, context: string): Promise<st
   `;
 
     try {
-        const result = await model.generateContent(prompt);
+        const result = await getModel().generateContent(prompt);
         const searchQuery = result.response.text().trim();
         return [searchQuery];
     } catch (e) {

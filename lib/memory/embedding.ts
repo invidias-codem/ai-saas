@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Initialize Gemini API
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
+// Initialize Gemini API lazily
+// const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
 
 // In-memory cache for embeddings (simple LRU-like cache)
 const embeddingCache = new Map<string, { embedding: number[]; timestamp: number }>();
@@ -29,6 +29,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         }
 
         // For retrieval tasks, we use the available model
+        const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
         const model = genAI.getGenerativeModel({ model: "gemini-embedding-001" });
 
         const result = await model.embedContent(text);
