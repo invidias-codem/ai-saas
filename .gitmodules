@@ -1,0 +1,3 @@
+[submodule "anycrawl"]
+	path = anycrawl
+	url = https://github.com/any4ai/AnyCrawl.git
