@@ -134,13 +134,27 @@ async function main() {
       }
     );
 
-    const score = simpleSimilarityPass(ex.output, reply.text);
+    // Collect stream text
+    let candidateText = "";
+    // Cast to any or ReadableStream to avoid ts error about getReader if environment types are mixed
+    const reader = (reply.stream as any).getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        candidateText += new TextDecoder().decode(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    const score = simpleSimilarityPass(ex.output, candidateText);
 
     results.push({
       id: ex.id,
       input: ex.input,
       expected: ex.output,
-      candidate: reply.text,
+      candidate: candidateText,
       pass: score.pass,
       notes: score.notes.length ? score.notes : undefined,
     });
