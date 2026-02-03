@@ -198,8 +198,12 @@ const requestHandler = async (req, res) => {
 
                         try {
                             const task = `Write a high-quality blog post about "${topic}" in content/blog/. Use the existing MDX files as a reference for frontmatter and style. Create a new file with a kebab-case filename. Ensure the content is engaging and technical.`;
+
+                            // Sanitize task for shell execution
+                            const safeTask = task.replace(/"/g, '\\"').replace(/\n/g, ' ');
+
                             const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
-                            const output = execSync(`node ${scriptPath} "${task}" --plan-only`, {
+                            const output = execSync(`node ${scriptPath} "${safeTask}" --plan-only`, {
                                 encoding: 'utf-8',
                                 env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
                             });
