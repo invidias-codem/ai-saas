@@ -85,9 +85,11 @@ Rules:
 }
 2. For "write" steps, provide the COMPLETE new content of the file.
 3. For "command" steps, assume you are in the project root.
-4. **ALWAYS** include a final step to commit AND PUSH the changes:
-   { "type": "command", "command": "git add . && git commit -m 'feat: [Task Summary]' && git push" }
-5. Do not wrap the JSON in markdown blocks.`;
+4. **ALWAYS** start with a command to create a logical branch name:
+   { "type": "command", "command": "git checkout -b genie/task-slug || git checkout genie/task-slug" }
+5. **ALWAYS** include a final step to commit the changes (BUT DO NOT PUSH):
+   { "type": "command", "command": "git add . && git commit -m 'feat: [Task Summary]'" }
+6. Do not wrap the JSON in markdown blocks.`;
 
     const userPrompt = `Task: ${task}`;
 

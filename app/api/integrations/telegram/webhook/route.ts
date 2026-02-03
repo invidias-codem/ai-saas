@@ -205,14 +205,14 @@ export async function POST(req: Request) {
 
                     const summary = `**Plan Proposed:**\n${planDesc}\n\n**Steps:**\n` + steps.map((s: any, i: number) => `${i + 1}. ${s.type === 'write' ? '📝 Write' : '💻 Run'} \`${s.path || s.command}\``).join('\n');
 
-                    // Send Approval UI
+                    // Send Approval UI (Local Only)
                     await sendMessage(chatId, summary, {
                         inline_keyboard: [
                             [
-                                { text: "✅ Approve & Push", callback_data: `APPROVE_PLAN` }
+                                { text: "✅ Approve (Run Locally)", callback_data: `APPROVE_PLAN` }
                             ],
                             [
-                                { text: "🔄 Retry (Edit)", callback_data: "RETRY_PLAN" },
+                                { text: "🔄 Retry", callback_data: "RETRY_PLAN" },
                                 { text: "❌ Cancel", callback_data: "CANCEL" }
                             ]
                         ]
@@ -239,7 +239,7 @@ export async function POST(req: Request) {
             if (data === 'CANCEL') {
                 await sendMessage(chatId, "🚫 **Task Cancelled.**");
             } else if (data === 'APPROVE_PLAN') {
-                await sendMessage(chatId, "🚀 **Executing Plan...** (This may take a moment)");
+                await sendMessage(chatId, "🛠️ **Executing Plan Locally...**");
                 await sendChatAction(chatId, 'typing');
 
                 // Retrieve state
@@ -257,12 +257,35 @@ export async function POST(req: Request) {
                             env: { ...process.env }
                         });
 
-                        await sendMessage(chatId, "✅ **Execution Complete!**\nSystem updated.");
+                        // Execution Success - Now Ask to Push
+                        // Get current branch name
+                        const branchName = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+
+                        await sendMessage(chatId, `✅ **Local Execution Complete!**\nBranch: \`${branchName}\`\n\nReady to push to GitHub?`, {
+                            inline_keyboard: [[{ text: "🚀 Push & Open PR", callback_data: "PUSH_PR" }]]
+                        });
+
                     } catch (e: any) {
                         await sendMessage(chatId, `❌ **Execution Failed:** ${e.message}`);
                     }
                 } else {
-                    await sendMessage(chatId, "⚠️ Plan expired or not found. Please run /engineer again.");
+                    await sendMessage(chatId, "⚠️ Plan expired. Run /engineer again.");
+                }
+            } else if (data === 'PUSH_PR') {
+                await sendMessage(chatId, "🚀 **Pushing to GitHub...**");
+
+                try {
+                    const branchName = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+                    execSync(`git push -u origin ${branchName}`, { encoding: 'utf-8' });
+
+                    const prUrl = `https://github.com/invidias-codem/ai-saas/compare/main...${branchName}?expand=1`;
+
+                    await sendMessage(chatId, `✅ **Pushed Successfully!**\n\nClick below to open PR (Reviews will start automatically):\n\n[🔗 Create Pull Request](${prUrl})`, {
+                        disable_web_page_preview: true
+                    });
+
+                } catch (e: any) {
+                    await sendMessage(chatId, `❌ **Push Failed:** ${e.message}`);
                 }
             }
         }
