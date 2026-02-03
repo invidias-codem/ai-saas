@@ -9,6 +9,8 @@ on:
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for creating tags
     steps:
       - uses: actions/checkout@v4
       - name: Build Next.js app
