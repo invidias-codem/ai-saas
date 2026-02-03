@@ -1,21 +1,22 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
-if (!process.env.RESEND_API_KEY) {
-    console.warn('RESEND_API_KEY is not set. Support emails will fail.');
-}
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-const escapeHtml = (str: string) =>
-    str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-
 export async function POST(req: Request) {
+    if (!process.env.RESEND_API_KEY) {
+        console.error('RESEND_API_KEY is not set. Support emails will fail.');
+        return NextResponse.json({ error: 'Configuration Error' }, { status: 500 });
+    }
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
+    const escapeHtml = (str: string) =>
+        str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+
     try {
         const body = await req.json();
         const { name, email, subject, message } = body;
