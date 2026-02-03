@@ -11,8 +11,14 @@ on:
       - '**.mjs'
       - '**.rs'
       - '**.sql'
+      - '**.md'
       - 'tailwind.config.ts'
       - 'package.json'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
 
 env:
   PR_NUMBER: ${{ github.event.pull_request.number }}
