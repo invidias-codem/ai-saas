@@ -116,5 +116,8 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "overrides": {
+    "fast-xml-parser": "5.3.4"
+  }
 }
