@@ -197,7 +197,8 @@ const requestHandler = async (req, res) => {
                         await sendChatAction(chatId, 'typing');
 
                         try {
-                            const task = `Write a high-quality blog post about "${topic}" in content/blog/. Use the existing MDX files as a reference for frontmatter and style. Create a new file with a kebab-case filename. Ensure the content is engaging and technical.`;
+                            const today = new Date().toISOString().split('T')[0]; // "2026-02-03"
+                            const task = `Write a high-quality blog post about "${topic}" in content/blog/. IMPORTANT: Use this exact date in the frontmatter: date: "${today}". Use the existing MDX files as a reference for frontmatter and style. Create a new file with a kebab-case filename. Ensure the content is engaging and technical.`;
 
                             // Sanitize task for shell execution
                             const safeTask = task.replace(/"/g, '\\"').replace(/\n/g, ' ');
