@@ -18,6 +18,7 @@ import {
 import { BookOpen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkUnwrapImages from "remark-unwrap-images";
 import rehypeSlug from "rehype-slug";
 
 interface BlogPostPageProps {
@@ -178,7 +179,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 {/* MDX Content */}
                 <div className="prose prose-invert max-w-none">
                   <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
+                    remarkPlugins={[remarkGfm, remarkUnwrapImages]}
                     rehypePlugins={[rehypeSlug]}
                     components={mdxComponents}
                   >
