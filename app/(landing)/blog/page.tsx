@@ -33,6 +33,9 @@ export const metadata: Metadata = {
   },
 };
 
+// Revalidate blog index every 60 seconds for ISR
+export const revalidate = 60;
+
 interface BlogPageProps {
   searchParams: { category?: string; tag?: string };
 }

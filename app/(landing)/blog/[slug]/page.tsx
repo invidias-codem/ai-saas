@@ -9,11 +9,11 @@ import { TableOfContents, MobileTableOfContents } from "@/components/blog/table-
 import { RelatedPosts } from "@/components/blog/related-posts";
 import { NewsletterCTA } from "@/components/blog/newsletter-cta";
 import { mdxComponents } from "@/components/blog/mdx-components";
-import { 
-  getPostBySlug, 
-  getAllPostSlugs, 
-  getRelatedPosts, 
-  extractTableOfContents 
+import {
+  getPostBySlug,
+  getAllPostSlugs,
+  getRelatedPosts,
+  extractTableOfContents
 } from "@/lib/blog/mdx";
 import { BookOpen } from "lucide-react";
 import { MDXRemote } from "next-mdx-remote/rsc";
@@ -29,6 +29,12 @@ export async function generateStaticParams() {
   const slugs = getAllPostSlugs();
   return slugs.map((slug) => ({ slug }));
 }
+
+// Allow on-demand generation of blog posts not in the initial build
+export const dynamicParams = true;
+
+// Revalidate blog posts every 60 seconds for ISR
+export const revalidate = 60;
 
 // Generate metadata for each post
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
