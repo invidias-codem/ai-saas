@@ -62,7 +62,7 @@ jobs:
             --state merged \
             --json number,title,author,body,mergedAt,reviews \
             --limit 50 \
-            -q ".[] | select(.mergedAt >= \"${SINCE}\")" > prs.json
+            -q "[.[] | select(.mergedAt >= \"${SINCE}\")]" > prs.json
           
           PR_COUNT=$(jq length prs.json)
           echo "Found $PR_COUNT PRs to sync"
