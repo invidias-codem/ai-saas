@@ -16,12 +16,12 @@ import {
   extractTableOfContents
 } from "@/lib/blog/mdx";
 import { BookOpen } from "lucide-react";
-import { MDXRemote } from "next-mdx-remote/rsc";
+import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 
 interface BlogPostPageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 // Generate static params for all blog posts
@@ -38,7 +38,8 @@ export const revalidate = 60;
 
 // Generate metadata for each post
 export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
-  const post = getPostBySlug(params.slug);
+  const { slug } = await params;
+  const post = getPostBySlug(slug);
 
   if (!post) {
     return {
@@ -84,13 +85,14 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 }
 
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
-  const post = getPostBySlug(params.slug);
+  const { slug } = await params;
+  const post = getPostBySlug(slug);
 
   if (!post) {
     notFound();
   }
 
-  const relatedPosts = getRelatedPosts(params.slug, 3);
+  const relatedPosts = getRelatedPosts(slug, 3);
   const tableOfContents = extractTableOfContents(post.content);
 
   // JSON-LD structured data
@@ -175,16 +177,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
                 {/* MDX Content */}
                 <div className="prose prose-invert max-w-none">
-                  <MDXRemote
-                    source={post.content}
-                    components={mdxComponents}
-                    options={{
-                      mdxOptions: {
-                        remarkPlugins: [remarkGfm],
-                        rehypePlugins: [rehypeSlug],
-                      },
-                    }}
-                  />
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeSlug]}
+                  >
+                    {post.content}
+                  </ReactMarkdown>
                 </div>
 
                 {/* Author Card */}

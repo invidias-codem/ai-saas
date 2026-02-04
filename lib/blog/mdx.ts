@@ -20,7 +20,7 @@ export function getAllPosts(): BlogPost[] {
   }
 
   const files = fs.readdirSync(BLOG_DIR);
-  
+
   const posts = files
     .filter((file) => file.endsWith('.mdx'))
     .map((file) => {
@@ -28,10 +28,10 @@ export function getAllPosts(): BlogPost[] {
       return getPostBySlug(slug);
     })
     .filter((post): post is BlogPost => post !== null)
-    .sort((a, b) => 
+    .sort((a, b) =>
       new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
     );
-  
+
   return posts;
 }
 
@@ -41,18 +41,21 @@ export function getAllPosts(): BlogPost[] {
 export function getPostBySlug(slug: string): BlogPost | null {
   try {
     const filePath = path.join(BLOG_DIR, `${slug}.mdx`);
-    
+
+    console.log(`[BLOG] getPostBySlug: slug="${slug}", BLOG_DIR="${BLOG_DIR}", exists=${fs.existsSync(filePath)}`);
+
     if (!fs.existsSync(filePath)) {
+      console.log(`[BLOG] File not found: ${filePath}`);
       return null;
     }
-    
+
     const fileContent = fs.readFileSync(filePath, 'utf-8');
     const { data, content } = matter(fileContent);
     const meta = data as BlogPostMeta;
-    
+
     // Calculate reading time
     const stats = readingTime(content);
-    
+
     return {
       slug,
       title: meta.title,
@@ -69,7 +72,7 @@ export function getPostBySlug(slug: string): BlogPost | null {
       content,
     };
   } catch (error) {
-    console.error(`Error reading post ${slug}:`, error);
+    console.error(`[BLOG] Error reading post ${slug}:`, error);
     return null;
   }
 }
@@ -93,7 +96,7 @@ export function getFeaturedPosts(limit?: number): BlogPost[] {
  * Get posts by tag
  */
 export function getPostsByTag(tag: string): BlogPost[] {
-  return getAllPosts().filter((post) => 
+  return getAllPosts().filter((post) =>
     post.tags.map(t => t.toLowerCase()).includes(tag.toLowerCase())
   );
 }
@@ -106,22 +109,22 @@ export function getRelatedPosts(currentSlug: string, limit: number = 3): BlogPos
   if (!currentPost) return [];
 
   const allPosts = getAllPosts().filter((post) => post.slug !== currentSlug);
-  
+
   // Score posts by relevance
   const scoredPosts = allPosts.map((post) => {
     let score = 0;
-    
+
     // Same category = +3
     if (post.category === currentPost.category) {
       score += 3;
     }
-    
+
     // Shared tags = +1 each
-    const sharedTags = post.tags.filter((tag) => 
+    const sharedTags = post.tags.filter((tag) =>
       currentPost.tags.includes(tag)
     );
     score += sharedTags.length;
-    
+
     return { post, score };
   });
 
@@ -138,11 +141,11 @@ export function getRelatedPosts(currentSlug: string, limit: number = 3): BlogPos
 export function getAllTags(): string[] {
   const posts = getAllPosts();
   const tagSet = new Set<string>();
-  
+
   posts.forEach((post) => {
     post.tags.forEach((tag) => tagSet.add(tag));
   });
-  
+
   return Array.from(tagSet).sort();
 }
 
@@ -165,7 +168,7 @@ export function getAllPostSlugs(): string[] {
 export function extractTableOfContents(content: string): { id: string; title: string; level: number }[] {
   const headingRegex = /^(#{2,3})\s+(.+)$/gm;
   const toc: { id: string; title: string; level: number }[] = [];
-  
+
   let match;
   while ((match = headingRegex.exec(content)) !== null) {
     const level = match[1].length;
@@ -174,10 +177,10 @@ export function extractTableOfContents(content: string): { id: string; title: st
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '');
-    
+
     toc.push({ id, title, level });
   }
-  
+
   return toc;
 }
 
