@@ -180,6 +180,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     rehypePlugins={[rehypeSlug]}
+                    components={mdxComponents}
                   >
                     {post.content}
                   </ReactMarkdown>
