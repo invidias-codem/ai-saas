@@ -198,7 +198,7 @@ const requestHandler = async (req, res) => {
 
                         try {
                             const today = new Date().toISOString().split('T')[0]; // "2026-02-03"
-                            const task = `Write a high-quality blog post about "${topic}" in content/blog/. IMPORTANT: Use this exact date in the frontmatter: date: "${today}". Use the existing MDX files as a reference for frontmatter and style. Create a new file with a kebab-case filename. Ensure the content is engaging and technical.`;
+                            const task = `Write a high-quality blog post about "${topic}" in content/blog/. IMPORTANT: Use this exact frontmatter with publishedAt: "${today}", author: "genie-team", and category: "engineering". Quote any title/description values that contain colons. Use the existing MDX files as a reference for style. Create a new file with a kebab-case filename. Ensure the content is engaging and technical.`;
 
                             // Sanitize task for shell execution
                             const safeTask = task.replace(/"/g, '\\"').replace(/\n/g, ' ');
