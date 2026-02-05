@@ -21,6 +21,8 @@ const nextConfig = {
       },
     ],
   },
+  // Required for Turbopack to properly resolve recharts dependencies
+  transpilePackages: ['recharts', 'react-is'],
   serverExternalPackages: [
     '@google-cloud/tasks',
     '@google-cloud/storage',
