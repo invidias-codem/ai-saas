@@ -7,15 +7,19 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
     try {
-        const { userId } = await auth();
+        const user = await requireAuth();
+        const ip = getClientIP(req);
 
-        if (!userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const rateLimit = await limitApiEndpoint(user.userId, ip, 'mutation');
+        if (!rateLimit.success) {
+            return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
         }
 
         const { supabase } = await import("@/lib/supabaseClient");
@@ -28,7 +32,7 @@ export async function POST(req: Request) {
         const { data: conversations, error: convError } = await supabase
             .from('conversations')
             .select('id')
-            .eq('user_id', userId)
+            .eq('user_id', user.userId)
             .eq('is_deleted', false);
 
         if (convError) {
@@ -70,7 +74,7 @@ export async function POST(req: Request) {
                 const { error: insertError } = await supabase
                     .from('memory_bank')
                     .insert({
-                        user_id: userId,
+                        user_id: user.userId,
                         source_conversation_id: conversation.id,
                         content: memory.content,
                         embedding: embedding,
@@ -89,7 +93,7 @@ export async function POST(req: Request) {
             }
         }
 
-        console.log(`[Memory:Backfill] Processed ${conversations.length} conversations, created ${totalMemoriesCreated} memories for user ${userId.substring(0, 8)}`);
+        console.log(`[Memory:Backfill] Processed ${conversations.length} conversations, created ${totalMemoriesCreated} memories for user ${user.userId.substring(0, 8)}`);
 
         return NextResponse.json({
             success: true,

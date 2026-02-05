@@ -19,6 +19,9 @@ import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/g
 import { performResearch, formatSearchResults } from '@/lib/agents/researcher';
 import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotion';
 import { storeMemory } from '@/lib/memory/vectorStore';
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
 // Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
 
 // Initialize lazily
@@ -64,22 +67,58 @@ function chunkText(text: string, size: number = 2000): string[] {
 
 export async function POST(req: Request) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    // Get full Clerk user object for context
+    // 1. Authentication
+    const user = await requireAuth();
     const clerkUser = await currentUser();
+    const ip = getClientIP(req);
+
     if (!clerkUser) {
-      return new NextResponse("User not found", { status: 401 });
+      return new NextResponse("User profile not found", { status: 401 });
     }
 
+    // 2. Rate Limiting (AI endpoint - strict limits)
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'ai');
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: 'Too many requests', message: 'Code generation rate limit exceeded' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
+            'X-RateLimit-Remaining': String(rateLimit.remaining)
+          }
+        }
+      );
+    }
+
+    // 3. Validate Request Size
     const body = await req.json();
+    validateRequestSize(body, 10 * 1024 * 1024); // 10MB for code files
+
     const { messages, currentUserPrompt, fileData } = body;
 
+    // 4. Input Validation
     if (!messages && (!currentUserPrompt && !fileData)) {
       return new NextResponse("Messages or prompt/file are required", { status: 400 });
+    }
+
+    // Validate file if provided
+    if (fileData) {
+      const fileValidation = fileUploadSchema.safeParse(fileData);
+      if (!fileValidation.success) {
+        return NextResponse.json(
+          { error: 'Invalid file data', details: fileValidation.error.flatten() },
+          { status: 400 }
+        );
+      }
+      // Size check for base64 data (rough estimate: base64 is ~1.33x original)
+      const estimatedSize = fileData.base64Data.length * 0.75;
+      if (estimatedSize > 5 * 1024 * 1024) { // 5MB file limit
+        return NextResponse.json(
+          { error: 'File too large', details: 'Maximum file size is 5MB' },
+          { status: 400 }
+        );
+      }
     }
 
     // Adapt history (strip file placeholders)
@@ -107,8 +146,8 @@ export async function POST(req: Request) {
       };
     });
 
-    // Gather comprehensive user context
-    const userContext = await gatherUserContext(userId, clerkUser);
+    // 5. Gather comprehensive user context
+    const userContext = await gatherUserContext(user.userId, clerkUser);
     const userContextPrompt = formatUserContextForPrompt(userContext);
 
     // Get current user query for context retrieval
@@ -121,10 +160,10 @@ export async function POST(req: Request) {
       graphData,
       userProfileMemories  // User-scoped memories (coding preferences, patterns)
     ] = await Promise.all([
-      getHighConfidenceFacts(userId),
+      getHighConfidenceFacts(user.userId),
       performResearch(userQuery, userContextPrompt), // Web Search for latest docs/libraries
-      findRelatedEntities(userId, userQuery),         // Knowledge Graph (projects, technologies)
-      getUserProfile(userId)                          // User profile (coding style, preferences)
+      findRelatedEntities(user.userId, userQuery),         // Knowledge Graph (projects, technologies)
+      getUserProfile(user.userId)                          // User profile (coding style, preferences)
     ]);
 
     // Format new contexts
@@ -147,12 +186,12 @@ export async function POST(req: Request) {
       userQuery
     );
 
-    console.log(`[Code Memory Intelligence] Retrieved ${intelligentFacts.length} intelligently ranked facts for user ${userId}`);
+    console.log(`[Code Memory Intelligence] Retrieved ${intelligentFacts.length} intelligently ranked facts for user ${user.userId}`);
     const factContext = formatFactsForPrompt(intelligentFacts);
 
     // Retrieve relevant memories for context
     // Retrieve relevant memories for context with filtering
-    const memoryContext = await getRAGMemoryContext(userId, userQuery, 'code');
+    const memoryContext = await getRAGMemoryContext(user.userId, userQuery, 'code');
 
     // Format user profile context
     const userProfileContext = formatUserProfileForPrompt(userProfileMemories);
@@ -236,7 +275,7 @@ export async function POST(req: Request) {
 
     // Send to memory capture (async, fire-and-forget)
     captureMemory(
-      userId,
+      user.userId,
       'code',
       userQuery.substring(0, 50) || 'Code Assistance',
       summary,
@@ -278,7 +317,7 @@ export async function POST(req: Request) {
             const contextPrefix = `[File: ${fileName} | Part ${i + 1}/${chunks.length}]\n`;
 
             await storeMemory(
-              userId,
+              user.userId,
               contextPrefix + chunk,
               'fact', // storing as 'fact' for now, or could use a new type if migration allowed
               {
@@ -308,7 +347,7 @@ export async function POST(req: Request) {
             /react|node|python|javascript|typescript|java|api|database|framework|library/i.test(tag)
           );
           if (codeRelatedTags.length > 0) {
-            await addNode(userId, codeRelatedTags[0], 'technology', `Extracted from code session: ${userQuery.substring(0, 30)}`);
+            await addNode(user.userId, codeRelatedTags[0], 'technology', `Extracted from code session: ${userQuery.substring(0, 30)}`);
           }
         }
       } catch (e) {
@@ -317,12 +356,24 @@ export async function POST(req: Request) {
     })();
 
     // Log successful code interaction
-    console.log(`[CODE] User: ${userContext.fullName} (${userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
+    console.log(`[CODE] User: ${userContext.fullName} (${user.userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
 
     return NextResponse.json({ text: responseText });
 
   } catch (error: any) {
     console.error("[CODE_API_ERROR]", error);
+
+    // Handle auth/validation errors
+    const authResponse = handleAuthError(error);
+    if (authResponse) return authResponse;
+
+    if (error instanceof ValidationError) {
+      return NextResponse.json({
+        error: 'Validation Error',
+        details: error.message
+      }, { status: 400 });
+    }
+
     if (error.response?.data?.error) {
       console.error("Gemini API Error:", error.response.data.error);
     }

@@ -7,22 +7,65 @@ import {
     generateConversationReply,
     ConversationRequestSchema
 } from '@/lib/llm/conversationEngine';
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { promptSchema, messageSchema, validateRequestSize, ValidationError } from '@/lib/security/inputValidation';
 
 export async function POST(req: Request) {
     try {
         // 1. Authenticate User
-        const { userId } = await auth();
+        const user = await requireAuth();
         const clerkUser = await currentUser();
+        const ip = getClientIP(req);
 
-        if (!userId || !clerkUser) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        if (!clerkUser) {
+            return NextResponse.json({ error: 'User profile not found' }, { status: 401 });
         }
 
-        // 2. Validate Input
+        // 2. Rate Limiting (AI endpoints are expensive - strict limits)
+        const rateLimit = await limitApiEndpoint(user.userId, ip, 'ai');
+        if (!rateLimit.success) {
+            return NextResponse.json(
+                { error: 'Too many requests', message: 'AI generation rate limit exceeded. Please wait before trying again.' },
+                {
+                    status: 429,
+                    headers: {
+                        'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
+                        'X-RateLimit-Limit': String(rateLimit.limit),
+                        'X-RateLimit-Remaining': String(rateLimit.remaining),
+                        'X-RateLimit-Reset': String(rateLimit.reset)
+                    }
+                }
+            );
+        }
+
+        // 3. Validate Request Size (prevent DoS)
         const body = await req.json();
+        validateRequestSize(body, 5 * 1024 * 1024); // 5MB max
+
         const { prompt, conversationId, fileData, messages, mode } = body;
 
-        // Ensure payload matches schema (adapter)
+        // 4. Validate Input
+        // Validate prompt
+        const promptValidation = promptSchema.safeParse(prompt);
+        if (!promptValidation.success) {
+            return NextResponse.json(
+                { error: 'Validation Error', details: 'Prompt must be between 1 and 50,000 characters' },
+                { status: 400 }
+            );
+        }
+
+        // Validate messages if provided
+        if (messages && Array.isArray(messages)) {
+            if (messages.length > 100) {
+                return NextResponse.json(
+                    { error: 'Validation Error', details: 'Maximum 100 messages allowed in history' },
+                    { status: 400 }
+                );
+            }
+        }
+
+        // 5. Prepare Request Payload
         const requestPayload = {
             messages: [...(messages || []), { role: 'user', text: prompt }],
             fileData: fileData?.base64Data, // conversationEngine expects base64 string
@@ -47,10 +90,10 @@ export async function POST(req: Request) {
             if (dbError) console.error("Failed to persist user message:", dbError);
         }
 
-        // 4. Generate Reply (Stream)
+        // 6. Generate Reply (Stream)
         const result = await generateConversationReply(
             {
-                userId,
+                userId: user.userId,
                 clerkUser,
                 request: validationResult.data
             },
@@ -103,6 +146,17 @@ export async function POST(req: Request) {
 
     } catch (error: any) {
         console.error('Genie API Error:', error);
+
+        // Handle auth/validation errors
+        const authResponse = handleAuthError(error);
+        if (authResponse) return authResponse;
+
+        if (error instanceof ValidationError) {
+            return NextResponse.json({
+                error: 'Validation Error',
+                details: error.message
+            }, { status: 400 });
+        }
 
         // Handle Rate Limits gracefully
         if (error?.status === 429 || error?.toString().includes('429')) {

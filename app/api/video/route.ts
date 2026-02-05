@@ -6,6 +6,9 @@ import { auth } from '@clerk/nextjs/server';
 import { env } from '@/lib/env'; // Your environment variables
 import Replicate from 'replicate'; // Import the Replicate library
 import { z } from 'zod'; // For input validation
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { videoGenerationSchema, ValidationError } from '@/lib/security/inputValidation';
 
 // Initialize the Replicate client using the API token from your environment
 const replicate = new Replicate({
@@ -28,18 +31,28 @@ const requestSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    // 1. Clerk Authentication
-    const { userId } = await auth();
-    if (!userId) {
-      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" }
-      });
+    // 1. Authentication
+    const user = await requireAuth();
+    const ip = getClientIP(request);
+
+    // 2. Rate Limiting (Video generation - VERY expensive, very strict limits)
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'ai');
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: 'Too many requests', message: 'Video generation rate limit exceeded' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
+            'X-RateLimit-Remaining': String(rateLimit.remaining)
+          }
+        }
+      );
     }
 
-    // 2. Input Validation
+    // 3. Input Validation
     const body = await request.json();
-    const validation = requestSchema.safeParse(body);
+    const validation = videoGenerationSchema.safeParse(body);
 
     if (!validation.success) {
       console.warn("Invalid request body for /api/video:", validation.error.flatten());
@@ -73,6 +86,14 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error('[REPLICATE_VIDEO_API_ERROR]', error);
+
+    const authResponse = handleAuthError(error);
+    if (authResponse) return authResponse;
+
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: 'Validation Error', details: error.message }, { status: 400 });
+    }
+
     const details = error.message || "Failed to start video generation via Replicate.";
     return new NextResponse(JSON.stringify({
       error: "Internal Server Error",

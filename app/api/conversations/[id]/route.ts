@@ -9,6 +9,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
+import { requireAuth, requireOwnership, handleAuthError, getClientIP } from "@/lib/security/apiAuth";
+import { limitApiEndpoint } from "@/lib/security/rateLimit";
+import { conversationIdSchema, ValidationError } from "@/lib/security/inputValidation";
 
 // Force dynamic rendering since this route uses Clerk auth
 export const dynamic = 'force-dynamic';
@@ -32,11 +35,25 @@ interface DbMessage {
 // GET - Load full conversation
 export async function GET(req: Request, { params }: RouteParams) {
     try {
-        const { userId } = await auth();
-        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        // Authentication
+        const user = await requireAuth();
+        const ip = getClientIP(req);
 
-        const { id } = params;
-        if (!id) return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
+        // Rate limiting
+        const rateLimit = await limitApiEndpoint(user.userId, ip, 'query');
+        if (!rateLimit.success) {
+            return NextResponse.json(
+                { error: 'Too many requests', retryAfter: Math.ceil((rateLimit.reset - Date.now()) / 1000) },
+                { status: 429, headers: { 'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)) } }
+            );
+        }
+
+        // Input validation
+        const validationResult = conversationIdSchema.safeParse(params.id);
+        if (!validationResult.success) {
+            return NextResponse.json({ error: "Invalid conversation ID format" }, { status: 400 });
+        }
+        const id = validationResult.data;
 
         const { supabaseAdmin } = await import("@/lib/supabaseClient");
 
@@ -55,10 +72,8 @@ export async function GET(req: Request, { params }: RouteParams) {
             return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
         }
 
-        // Check ownership (RLS handles this usually, but good to be explicit if using service key or just safe)
-        if (conv.user_id !== userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-        }
+        // Check ownership using centralized utility
+        await requireOwnership(user.userId, id, 'conversations');
 
         // Soft delete check
         if (conv.is_deleted) {
@@ -91,6 +106,11 @@ export async function GET(req: Request, { params }: RouteParams) {
         });
     } catch (error) {
         console.error("[API:Conversation:GET] Error:", error);
+
+        // Handle auth errors with centralized handler
+        const authResponse = handleAuthError(error);
+        if (authResponse) return authResponse;
+
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
@@ -101,11 +121,23 @@ export async function GET(req: Request, { params }: RouteParams) {
 // DELETE - Soft delete a conversation
 export async function DELETE(req: Request, { params }: RouteParams) {
     try {
-        const { userId } = await auth();
-        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        // Authentication & rate limiting
+        const user = await requireAuth();
+        const ip = getClientIP(req);
+        const rateLimit = await limitApiEndpoint(user.userId, ip, 'mutation');
+        if (!rateLimit.success) {
+            return NextResponse.json(
+                { error: 'Too many requests' },
+                { status: 429 }
+            );
+        }
 
-        const { id } = params;
-        if (!id) return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
+        // Input validation
+        const validationResult = conversationIdSchema.safeParse(params.id);
+        if (!validationResult.success) {
+            return NextResponse.json({ error: "Invalid conversation ID format" }, { status: 400 });
+        }
+        const id = validationResult.data;
 
         if (id === "merged") {
             return NextResponse.json({ error: "Cannot delete default conversation" }, { status: 400 });
@@ -125,7 +157,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
             .single();
 
         if (checkError || !conv) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
-        if (conv.user_id !== userId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        await requireOwnership(user.userId, id, 'conversations');
 
         // Perform Soft Delete with 30-day recovery window
         const { error: updateError } = await supabaseAdmin
@@ -146,6 +178,8 @@ export async function DELETE(req: Request, { params }: RouteParams) {
         return NextResponse.json({ success: true, deletedId: id });
     } catch (error) {
         console.error("[API:Conversation:DELETE] Error:", error);
+        const authResponse = handleAuthError(error);
+        if (authResponse) return authResponse;
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
@@ -156,11 +190,20 @@ export async function DELETE(req: Request, { params }: RouteParams) {
 // PATCH - Update conversation
 export async function PATCH(req: Request, { params }: RouteParams) {
     try {
-        const { userId } = await auth();
-        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        // Authentication & rate limiting
+        const user = await requireAuth();
+        const ip = getClientIP(req);
+        const rateLimit = await limitApiEndpoint(user.userId, ip, 'mutation');
+        if (!rateLimit.success) {
+            return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+        }
 
-        const { id } = params;
-        if (!id) return NextResponse.json({ error: "Conversation ID required" }, { status: 400 });
+        // Input validation
+        const validationResult = conversationIdSchema.safeParse(params.id);
+        if (!validationResult.success) {
+            return NextResponse.json({ error: "Invalid conversation ID format" }, { status: 400 });
+        }
+        const id = validationResult.data;
 
         const body = await req.json();
         const { title, isArchived, restore, permanentDelete } = body;
@@ -188,7 +231,7 @@ export async function PATCH(req: Request, { params }: RouteParams) {
         // Verify ownership first (optional if using RLS, but standard practice in backend)
         const { data: conv, error: checkError } = await supabaseAdmin.from("conversations").select("user_id").eq("id", id).single();
         if (checkError || !conv) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
-        if (conv.user_id !== userId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+        await requireOwnership(user.userId, id, 'conversations');
 
         const { error: updateError } = await supabaseAdmin
             .from("conversations")
@@ -203,6 +246,8 @@ export async function PATCH(req: Request, { params }: RouteParams) {
         return NextResponse.json({ success: true, id, ...updates });
     } catch (error) {
         console.error("[API:Conversation:PATCH] Error:", error);
+        const authResponse = handleAuthError(error);
+        if (authResponse) return authResponse;
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }

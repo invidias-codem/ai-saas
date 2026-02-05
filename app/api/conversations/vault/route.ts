@@ -7,6 +7,9 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,13 +28,23 @@ export interface VaultConversation {
 
 export async function GET(req: Request) {
     try {
-        const { userId } = await auth();
-        if (!userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const user = await requireAuth();
+        const ip = getClientIP(req);
+
+        const rateLimit = await limitApiEndpoint(user.userId, ip, 'query');
+        if (!rateLimit.success) {
+            return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
         }
 
         const { searchParams } = new URL(req.url);
         const filter = searchParams.get('filter') || 'all';
+
+        // Validate filter parameter
+        const filterSchema = z.enum(['all', 'active', 'archived', 'deleted']);
+        const filterValidation = filterSchema.safeParse(filter);
+        if (!filterValidation.success) {
+            return NextResponse.json({ error: 'Invalid filter parameter' }, { status: 400 });
+        }
 
         const { supabase } = await import("@/lib/supabaseClient");
 
@@ -50,7 +63,7 @@ export async function GET(req: Request) {
                     role
                 )
             `)
-            .eq("user_id", userId)
+            .eq("user_id", user.userId)
             .order("updated_at", { ascending: false });
 
         // Apply filter
@@ -144,6 +157,10 @@ export async function GET(req: Request) {
 
     } catch (error) {
         console.error("[API:Vault] Error:", error);
+
+        const authResponse = handleAuthError(error);
+        if (authResponse) return authResponse;
+
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }

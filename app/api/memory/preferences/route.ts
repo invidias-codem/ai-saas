@@ -2,6 +2,9 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import axios from 'axios';
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { validateRequestSize, ValidationError } from '@/lib/security/inputValidation';
 
 export interface UserPreferences {
   communicationStyle?: 'casual' | 'professional' | 'technical' | 'balanced';
@@ -37,15 +40,19 @@ export interface UserPreferences {
  */
 export async function POST(req: Request) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+    // 1. Authentication
+    const user = await requireAuth();
+    const ip = getClientIP(req);
+
+    // 2. Rate Limiting
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'mutation');
+    if (!rateLimit.success) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
+    // 3. Parse and validate request size
     const body = await req.json();
+    validateRequestSize(body, 1024 * 1024); // 1MB max
     const preferences: UserPreferences = body;
 
     // Validate preferences if provided
@@ -74,7 +81,7 @@ export async function POST(req: Request) {
     const response = await axios.post(
       `${process.env.PREFERENCES_CLOUD_FUNCTION_URL}/savePreferences`,
       {
-        userId,
+        userId: user.userId,
         preferences,
         updatedAt: new Date().toISOString(),
       },
@@ -86,7 +93,7 @@ export async function POST(req: Request) {
 
     const result = response.data;
 
-    console.log(`[MEMORY_PREFERENCES] User ${userId} updated preferences:`, Object.keys(preferences).join(', '));
+    console.log(`[MEMORY_PREFERENCES] User ${user.userId} updated preferences:`, Object.keys(preferences).join(', '));
 
     return NextResponse.json({
       success: true,
@@ -123,12 +130,12 @@ export async function POST(req: Request) {
  */
 export async function GET(req: Request) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+    const user = await requireAuth();
+    const ip = getClientIP(req);
+
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'query');
+    if (!rateLimit.success) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
     // Call Cloud Function to get preferences
@@ -143,7 +150,7 @@ export async function GET(req: Request) {
     }
 
     const response = await axios.get(
-      `${process.env.PREFERENCES_CLOUD_FUNCTION_URL}/getPreferences?userId=${userId}`,
+      `${process.env.PREFERENCES_CLOUD_FUNCTION_URL}/getPreferences?userId=${user.userId}`,
       {
         timeout: 10000,
         headers: { 'Content-Type': 'application/json' },
@@ -184,12 +191,12 @@ export async function GET(req: Request) {
  */
 export async function DELETE(req: Request) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+    const user = await requireAuth();
+    const ip = getClientIP(req);
+
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'mutation');
+    if (!rateLimit.success) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
     if (!process.env.PREFERENCES_CLOUD_FUNCTION_URL) {
@@ -200,14 +207,14 @@ export async function DELETE(req: Request) {
     }
 
     await axios.delete(
-      `${process.env.PREFERENCES_CLOUD_FUNCTION_URL}/resetPreferences?userId=${userId}`,
+      `${process.env.PREFERENCES_CLOUD_FUNCTION_URL}/resetPreferences?userId=${user.userId}`,
       {
         timeout: 10000,
         headers: { 'Content-Type': 'application/json' },
       }
     );
 
-    console.log(`[MEMORY_PREFERENCES] User ${userId} reset preferences to defaults`);
+    console.log(`[MEMORY_PREFERENCES] User ${user.userId} reset preferences to defaults`);
 
     return NextResponse.json({
       success: true,
