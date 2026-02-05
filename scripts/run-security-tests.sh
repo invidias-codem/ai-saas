@@ -50,19 +50,19 @@ passed_suites=0
 failed_suites=0
 
 # Run unit tests
-((total_suites++))
+total_suites=$((total_suites + 1))
 if run_test_suite "Unit Tests (Security Utilities)" "__tests__/security/security-utils.test.ts"; then
-    ((passed_suites++))
+    passed_suites=$((passed_suites + 1))
 else
-    ((failed_suites++))
+    failed_suites=$((failed_suites + 1))
 fi
 
 # Run integration tests
-((total_suites++))
+total_suites=$((total_suites + 1))
 if run_test_suite "Integration Tests (API Endpoints)" "__tests__/security/api-security.integration.test.ts"; then
-    ((passed_suites++))
+    passed_suites=$((passed_suites + 1))
 else
-    ((failed_suites++))
+    failed_suites=$((failed_suites + 1))
 fi
 
 # Check if E2E tests should run
@@ -70,11 +70,11 @@ if [ -n "$TEST_AUTH_TOKEN" ]; then
     echo -e "${BLUE}Found TEST_AUTH_TOKEN - running E2E tests...${NC}"
     echo ""
     
-    ((total_suites++))
+    total_suites=$((total_suites + 1))
     if run_test_suite "E2E Tests (Security Flows)" "__tests__/security/security-e2e.test.ts"; then
-        ((passed_suites++))
+        passed_suites=$((passed_suites + 1))
     else
-        ((failed_suites++))
+        failed_suites=$((failed_suites + 1))
     fi
 else
     echo -e "${YELLOW}⚠ Skipping E2E tests (TEST_AUTH_TOKEN not set)${NC}"
