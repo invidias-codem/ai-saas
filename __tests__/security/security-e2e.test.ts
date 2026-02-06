@@ -10,7 +10,7 @@ describe('Security - E2E Tests', () => {
     let authToken: string;
     let testUserId: string;
     let ownedConversationId: string;
-    let otherUserConversation Id: string;
+    let otherUserConversationId: string;
 
     beforeAll(async () => {
         // Setup: Get auth token for testing
