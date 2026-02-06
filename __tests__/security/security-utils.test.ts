@@ -19,7 +19,7 @@ mockFrom.mockReturnValue({ select: mockSelect });
 
 // Mock modules
 jest.mock('@clerk/nextjs/server', () => ({
-    auth: jest.fn().mockName('auth')
+    auth: jest.fn()
 }));
 
 jest.mock('@/lib/supabaseClient', () => ({
