@@ -39,6 +39,7 @@
     ".next",
     ".git",
     "node_modules",
-    "anycrawl"
+    "anycrawl",
+    "functions"
   ]
 }
