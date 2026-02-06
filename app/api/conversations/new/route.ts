@@ -36,8 +36,11 @@ export async function POST(req: Request) {
                 const validatedTitle = titleSchema.parse(body.title);
                 initialTitle = validatedTitle;
             }
-        } catch {
-            // No body is fine, use default title
+        } catch (error) {
+            if (error instanceof z.ZodError) {
+                return NextResponse.json({ error: "Invalid title length" }, { status: 400 });
+            }
+            // No body or invalid JSON is fine, use default title
         }
 
         // Use supabaseAdmin to bypass RLS since we manage auth with Clerk

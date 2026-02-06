@@ -128,6 +128,10 @@ export function handleAuthError(error: unknown): NextResponse {
  * Handles various proxy headers (Vercel, Cloudflare, etc.)
  */
 export function getClientIP(req: Request): string {
+    if (!req || !req.headers || typeof req.headers.get !== 'function') {
+        return 'unknown';
+    }
+
     const forwardedFor = req.headers.get('x-forwarded-for');
     if (forwardedFor) {
         return forwardedFor.split(',')[0].trim();

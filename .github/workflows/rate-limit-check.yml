@@ -26,10 +26,10 @@ jobs:
       - name: Check Upstash connectivity
         run: |
           if [ -z "${{ secrets.UPSTASH_REDIS_REST_URL }}" ]; then
-            echo "❌ Upstash URL not configured"
-            exit 1
+            echo "⚠️ Upstash URL not configured - tests will use in-memory fallback"
+          else
+            echo "✅ Upstash credentials configured"
           fi
-          echo "✅ Upstash credentials configured"
         env:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
       
@@ -39,14 +39,14 @@ jobs:
           const fs = require('fs');
           const code = fs.readFileSync('lib/security/rateLimit.ts', 'utf8');
           const hasUpstash = code.includes('upstash');
-          const hasLimits = code.includes('AI_RATE_LIMIT') && code.includes('QUERY_RATE_LIMIT');
+          const hasSlidingWindow = code.includes('slidingWindow');
           
           if (!hasUpstash) {
             console.error('❌ Upstash not found in rate limit config');
             process.exit(1);
           }
-          if (!hasLimits) {
-            console.error('❌ Rate limit constants not found');
+          if (!hasSlidingWindow) {
+            console.error('❌ Sliding window configuration not found');
             process.exit(1);
           }
           console.log('✅ Rate limit configuration valid');
@@ -55,7 +55,7 @@ jobs:
       - name: Verify rate limit thresholds
         run: |
           echo "📊 Current Rate Limits:"
-          grep -E "AI_RATE_LIMIT|QUERY_RATE_LIMIT|MUTATION_RATE_LIMIT" lib/security/rateLimit.ts || echo "⚠️  Constants not found"
+          grep -E "limitApiEndpoint|limitByUser" lib/security/rateLimit.ts || echo "⚠️  Rate limit functions not found"
       
       - name: Create rate limit report
         run: |

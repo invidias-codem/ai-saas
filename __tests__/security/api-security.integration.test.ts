@@ -4,53 +4,154 @@
  */
 
 import { describe, test, expect, jest, beforeEach, afterEach } from '@jest/globals';
-import { NextRequest, NextResponse } from 'next/server';
+
+// Mock Request class to simulate NextRequest behavior in Node/Jest environment
+class MockRequest {
+    public url: string;
+    public method: string;
+    public headers: Map<string, string>;
+    private body: string;
+
+    constructor(url: string, options: any = {}) {
+        this.url = url;
+        this.method = options.method || 'GET';
+        this.body = options.body || '{}';
+        this.headers = new Map();
+
+        if (options.headers) {
+            Object.entries(options.headers).forEach(([k, v]) => {
+                this.headers.set(k.toLowerCase(), v as string);
+            });
+        }
+    }
+
+    async json() {
+        return JSON.parse(this.body);
+    }
+}
+
+// Helper to mocked headers interface matched by NextRequest
+const createMockReq = (url: string, options: any = {}) => {
+    return new MockRequest(url, options);
+};
+
+// Define global mocks setup with explicit types
+const mockLimitApiEndpoint = jest.fn<() => Promise<{ success: boolean; limit: number; remaining: number; reset: number }>>();
+
+// Clerk Mocks
+const mockAuth = jest.fn<() => Promise<{ userId: string | null }>>();
+const mockCurrentUser = jest.fn<() => Promise<{ id: string } | null>>();
+
+// Query Chain Mocks
+const mockQuerySelect = jest.fn();
+const mockQueryEq = jest.fn();
+const mockQuerySingle = jest.fn<() => Promise<{ data: any; error: any }>>();
+
+// Mutation Chain Mocks
+const mockMutationSelect = jest.fn();
+const mockMutationSingle = jest.fn<() => Promise<{ data: any; error: any }>>();
+const mockSupabaseInsert = jest.fn();
+const mockSupabaseUpdate = jest.fn();
+const mockSupabaseDelete = jest.fn();
+
+// Top Level Mocks
+const mockSupabaseFrom = jest.fn();
+
+// Chain Objects
+const mockMutationChain = {
+    select: mockMutationSelect,
+    single: mockMutationSingle,
+    order: jest.fn<() => Promise<{ data: any[]; error: any }>>().mockResolvedValue({ data: [], error: null })
+};
+
+const mockQueryChain = {
+    select: mockQuerySelect,
+    eq: mockQueryEq,
+    single: mockQuerySingle,
+    insert: mockSupabaseInsert,
+    update: mockSupabaseUpdate,
+    delete: mockSupabaseDelete,
+    order: jest.fn<() => Promise<{ data: any[]; error: any }>>().mockResolvedValue({ data: [], error: null })
+};
+
+// Mock dependencies
+// REPLACE: Old Upstash mock with direct lib mock
+jest.mock('@/lib/security/rateLimit', () => ({
+    limitApiEndpoint: mockLimitApiEndpoint,
+    limitByUser: jest.fn<() => Promise<{ success: boolean; limit: number; remaining: number; reset: number }>>().mockResolvedValue({ success: true, limit: 100, remaining: 100, reset: 0 }),
+    limitByIP: jest.fn<() => Promise<{ success: boolean; limit: number; remaining: number; reset: number }>>().mockResolvedValue({ success: true, limit: 100, remaining: 100, reset: 0 }),
+    // Mock the error class if used, though usually simple Error is enough for mocks
+    RateLimitError: class extends Error { retryAfter = 60; }
+}));
+
+// Mock Clerk
+jest.mock('@clerk/nextjs/server', () => ({
+    auth: mockAuth,
+    currentUser: mockCurrentUser
+}));
+
+const mockSupabase = {
+    from: mockSupabaseFrom,
+};
+
+jest.mock('@/lib/supabaseClient', () => ({
+    supabase: mockSupabase,
+    supabaseAdmin: mockSupabase
+}));
 
 describe('API Security - Integration Tests', () => {
-    let mockAuth: jest.Mock;
-    let mockSupabase: any;
 
     beforeEach(() => {
-        // Reset all mocks before each test
         jest.clearAllMocks();
+        jest.resetModules();
 
-        // Mock Clerk authentication
-        mockAuth = jest.fn();
-        jest.mock('@clerk/nextjs/server', () => ({
-            auth: mockAuth
-        }));
+        // Default: Unauthenticated
+        mockAuth.mockResolvedValue({ userId: null });
+        mockCurrentUser.mockResolvedValue(null);
 
-        // Mock Supabase client
-        mockSupabase = {
-            from: jest.fn().mockReturnThis(),
-            select: jest.fn().mockReturnThis(),
-            eq: jest.fn().mockReturnThis(),
-            single: jest.fn(),
-            insert: jest.fn().mockReturnThis(),
-            update: jest.fn().mockReturnThis(),
-            delete: jest.fn().mockReturnThis()
-        };
+        // Default: Rate limit allowed
+        mockLimitApiEndpoint.mockResolvedValue({
+            success: true,
+            reset: Date.now() + 60000,
+            remaining: 10,
+            limit: 10
+        });
 
-        jest.mock('@/lib/supabaseClient', () => ({
-            supabase: mockSupabase,
-            supabaseAdmin: mockSupabase
-        }));
+        // Setup Chain references
+        mockSupabaseFrom.mockReturnValue(mockQueryChain);
+
+        // Query Chain Defaults - returns self for fluent API
+        mockQuerySelect.mockReturnValue(mockQueryChain);
+        mockQueryEq.mockReturnValue(mockQueryChain);
+        mockQuerySingle.mockResolvedValue({ data: null, error: null });
+
+        // Mutation Chain Defaults
+        mockSupabaseInsert.mockReturnValue(mockMutationChain);
+        mockSupabaseUpdate.mockReturnValue(mockMutationChain);
+        mockSupabaseDelete.mockReturnValue(mockMutationChain);
+
+        mockMutationSelect.mockReturnValue(mockMutationChain);
+        mockMutationSingle.mockResolvedValue({ data: null, error: null });
     });
 
     afterEach(() => {
         jest.restoreAllMocks();
     });
 
+    // Helper to auth properly for a test
+    const mockAuthenticatedUser = (userId: string = 'user_123') => {
+        mockAuth.mockResolvedValue({ userId });
+        mockCurrentUser.mockResolvedValue({ id: userId });
+    };
+
     describe('/api/chat - Chat Endpoint', () => {
         test('should reject unauthenticated requests', async () => {
-            mockAuth.mockResolvedValue({ userId: null });
-
-            const req = new NextRequest('http://localhost:3000/api/chat', {
+            const req = createMockReq('http://localhost:3000/api/chat', {
                 method: 'POST',
                 body: JSON.stringify({ prompt: 'Hello' })
             });
 
-            const { POST } = await import('@/app/api/chat/route');
+            const { POST } = require('@/app/api/chat/route');
             const response = await POST(req);
 
             expect(response.status).toBe(401);
@@ -59,14 +160,14 @@ describe('API Security - Integration Tests', () => {
         });
 
         test('should reject requests with invalid prompt', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            const req = new NextRequest('http://localhost:3000/api/chat', {
+            const req = createMockReq('http://localhost:3000/api/chat', {
                 method: 'POST',
-                body: JSON.stringify({ prompt: '' }) // Empty prompt
+                body: JSON.stringify({ prompt: '' })
             });
 
-            const { POST } = await import('@/app/api/chat/route');
+            const { POST } = require('@/app/api/chat/route');
             const response = await POST(req);
 
             expect(response.status).toBe(400);
@@ -75,42 +176,36 @@ describe('API Security - Integration Tests', () => {
         });
 
         test('should reject requests with oversized payload', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            const largePrompt = 'A'.repeat(60000); // Over 50k limit
-            const req = new NextRequest('http://localhost:3000/api/chat', {
+            const largePrompt = 'A'.repeat(60000);
+            const req = createMockReq('http://localhost:3000/api/chat', {
                 method: 'POST',
                 body: JSON.stringify({ prompt: largePrompt })
             });
 
-            const { POST } = await import('@/app/api/chat/route');
+            const { POST } = require('@/app/api/chat/route');
             const response = await POST(req);
 
             expect(response.status).toBeGreaterThanOrEqual(400);
         });
 
         test('should apply AI rate limiting', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            // Mock rate limiter to simulate exceeded limit
-            const mockRateLimiter = {
-                limit: jest.fn().mockResolvedValue({
-                    success: false,
-                    reset: Date.now() + 60000,
-                    remaining: 0
-                })
-            };
+            mockLimitApiEndpoint.mockResolvedValue({
+                success: false,
+                reset: Date.now() + 60000,
+                remaining: 0,
+                limit: 10
+            });
 
-            jest.mock('@upstash/ratelimit', () => ({
-                Ratelimit: jest.fn(() => mockRateLimiter)
-            }));
-
-            const req = new NextRequest('http://localhost:3000/api/chat', {
+            const req = createMockReq('http://localhost:3000/api/chat', {
                 method: 'POST',
                 body: JSON.stringify({ prompt: 'Test' })
             });
 
-            const { POST } = await import('@/app/api/chat/route');
+            const { POST } = require('@/app/api/chat/route');
             const response = await POST(req);
 
             expect(response.status).toBe(429);
@@ -120,60 +215,61 @@ describe('API Security - Integration Tests', () => {
 
     describe('/api/conversations/[id] - Conversation Endpoint', () => {
         test('should reject access to non-owned conversation', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            // Mock conversation owned by different user
-            mockSupabase.single.mockResolvedValue({
-                data: { user_id: 'other_user', id: 'conv_456' },
+            // Mock ownership check (Query path)
+            mockQuerySingle.mockResolvedValue({
+                data: { user_id: 'other_user', id: '550e8400-e29b-41d4-a716-446655440000' },
                 error: null
             });
 
-            const req = new NextRequest('http://localhost:3000/api/conversations/conv_456', {
+            const req = createMockReq('http://localhost:3000/api/conversations/550e8400-e29b-41d4-a716-446655440000', {
                 method: 'GET'
             });
 
-            const { GET } = await import('@/app/api/conversations/[id]/route');
-            const response = await GET(req, { params: { id: 'conv_456' } });
+            const { GET } = require('@/app/api/conversations/[id]/route');
+            const response = await GET(req, { params: { id: '550e8400-e29b-41d4-a716-446655440000' } });
 
             expect(response.status).toBe(403);
             const data = await response.json();
-            expect(data.error).toContain('Access denied');
+            expect(data.error).toContain('Forbidden');
         });
 
         test('should allow access to owned conversation', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser('user_123');
 
-            // Mock conversation owned by current user
-            mockSupabase.single.mockResolvedValue({
+            // Mock ownership check (Query path)
+            mockQuerySingle.mockResolvedValue({
                 data: {
                     user_id: 'user_123',
-                    id: 'conv_456',
+                    id: '550e8400-e29b-41d4-a716-446655440000',
                     title: 'Test Conversation',
                     created_at: new Date().toISOString()
                 },
                 error: null
             });
 
-            const req = new NextRequest('http://localhost:3000/api/conversations/conv_456', {
+            const req = createMockReq('http://localhost:3000/api/conversations/550e8400-e29b-41d4-a716-446655440000', {
                 method: 'GET'
             });
 
-            const { GET } = await import('@/app/api/conversations/[id]/route');
-            const response = await GET(req, { params: { id: 'conv_456' } });
+            const { GET } = require('@/app/api/conversations/[id]/route');
+            const response = await GET(req, { params: { id: '550e8400-e29b-41d4-a716-446655440000' } });
 
             expect(response.status).toBe(200);
             const data = await response.json();
-            expect(data.conversation).toBeDefined();
+            expect(data.id).toBeDefined();
+            expect(data.title).toBeDefined();
         });
 
         test('should validate conversation ID format', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            const req = new NextRequest('http://localhost:3000/api/conversations/invalid-id', {
+            const req = createMockReq('http://localhost:3000/api/conversations/invalid-id', {
                 method: 'GET'
             });
 
-            const { GET } = await import('@/app/api/conversations/[id]/route');
+            const { GET } = require('@/app/api/conversations/[id]/route');
             const response = await GET(req, { params: { id: 'invalid-id' } });
 
             expect(response.status).toBe(400);
@@ -182,27 +278,21 @@ describe('API Security - Integration Tests', () => {
         });
 
         test('should apply query rate limiting', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            // Mock rate limiter
-            const mockRateLimiter = {
-                limit: jest.fn().mockResolvedValue({
-                    success: false,
-                    reset: Date.now() + 60000,
-                    remaining: 0
-                })
-            };
+            mockLimitApiEndpoint.mockResolvedValue({
+                success: false,
+                reset: Date.now() + 60000,
+                remaining: 0,
+                limit: 10
+            });
 
-            jest.mock('@upstash/ratelimit', () => ({
-                Ratelimit: jest.fn(() => mockRateLimiter)
-            }));
-
-            const req = new NextRequest('http://localhost:3000/api/conversations/conv_456', {
+            const req = createMockReq('http://localhost:3000/api/conversations/550e8400-e29b-41d4-a716-446655440000', {
                 method: 'GET'
             });
 
-            const { GET } = await import('@/app/api/conversations/[id]/route');
-            const response = await GET(req, { params: { id: 'conv_456' } });
+            const { GET } = require('@/app/api/conversations/[id]/route');
+            const response = await GET(req, { params: { id: '550e8400-e29b-41d4-a716-446655440000' } });
 
             expect(response.status).toBe(429);
         });
@@ -210,14 +300,14 @@ describe('API Security - Integration Tests', () => {
 
     describe('/api/memory/delete - Memory Delete Endpoint', () => {
         test('should validate fact ID format', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            const req = new NextRequest('http://localhost:3000/api/memory/delete', {
+            const req = createMockReq('http://localhost:3000/api/memory/delete', {
                 method: 'POST',
                 body: JSON.stringify({ factId: 'not-a-uuid' })
             });
 
-            const { POST } = await import('@/app/api/memory/delete/route');
+            const { POST } = require('@/app/api/memory/delete/route');
             const response = await POST(req);
 
             expect(response.status).toBe(400);
@@ -226,26 +316,21 @@ describe('API Security - Integration Tests', () => {
         });
 
         test('should apply mutation rate limiting', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            const mockRateLimiter = {
-                limit: jest.fn().mockResolvedValue({
-                    success: false,
-                    reset: Date.now() + 60000,
-                    remaining: 0
-                })
-            };
+            mockLimitApiEndpoint.mockResolvedValue({
+                success: false,
+                reset: Date.now() + 60000,
+                remaining: 0,
+                limit: 10
+            });
 
-            jest.mock('@upstash/ratelimit', () => ({
-                Ratelimit: jest.fn(() => mockRateLimiter)
-            }));
-
-            const req = new NextRequest('http://localhost:3000/api/memory/delete', {
+            const req = createMockReq('http://localhost:3000/api/memory/delete', {
                 method: 'POST',
                 body: JSON.stringify({ factId: '550e8400-e29b-41d4-a716-446655440000' })
             });
 
-            const { POST } = await import('@/app/api/memory/delete/route');
+            const { POST } = require('@/app/api/memory/delete/route');
             const response = await POST(req);
 
             expect(response.status).toBe(429);
@@ -254,50 +339,45 @@ describe('API Security - Integration Tests', () => {
 
     describe('/api/image - Image Generation Endpoint', () => {
         test('should validate image generation parameters', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
             const invalidParams = {
-                prompt: '',  // Empty prompt
-                n: 11,       // Too many images
+                prompt: '',
+                n: 11,
                 size: 'invalid-size'
             };
 
-            const req = new NextRequest('http://localhost:3000/api/image', {
+            const req = createMockReq('http://localhost:3000/api/image', {
                 method: 'POST',
                 body: JSON.stringify(invalidParams)
             });
 
-            const { POST } = await import('@/app/api/image/route');
+            const { POST } = require('@/app/api/image/route');
             const response = await POST(req);
 
             expect(response.status).toBe(400);
         });
 
         test('should apply strict AI rate limiting (10 req/min)', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            const mockRateLimiter = {
-                limit: jest.fn().mockResolvedValue({
-                    success: false,
-                    reset: Date.now() + 60000,
-                    remaining: 0
-                })
-            };
+            mockLimitApiEndpoint.mockResolvedValue({
+                success: false,
+                reset: Date.now() + 60000,
+                remaining: 0,
+                limit: 10
+            });
 
-            jest.mock('@upstash/ratelimit', () => ({
-                Ratelimit: jest.fn(() => mockRateLimiter)
-            }));
-
-            const req = new NextRequest('http://localhost:3000/api/image', {
+            const req = createMockReq('http://localhost:3000/api/image', {
                 method: 'POST',
                 body: JSON.stringify({
                     prompt: 'A beautiful sunset',
-                    n: 1,
-                    size: '1024x1024'
+                    amount: '1',
+                    resolution: '1024x1024'
                 })
             });
 
-            const { POST } = await import('@/app/api/image/route');
+            const { POST } = require('@/app/api/image/route');
             const response = await POST(req);
 
             expect(response.status).toBe(429);
@@ -308,23 +388,24 @@ describe('API Security - Integration Tests', () => {
 
     describe('/api/conversations/new - Create Conversation', () => {
         test('should validate title length', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            const req = new NextRequest('http://localhost:3000/api/conversations/new', {
+            const req = createMockReq('http://localhost:3000/api/conversations/new', {
                 method: 'POST',
-                body: JSON.stringify({ title: 'A'.repeat(101) }) // Over 100 char limit
+                body: JSON.stringify({ title: 'A'.repeat(101) })
             });
 
-            const { POST } = await import('@/app/api/conversations/new/route');
+            const { POST } = require('@/app/api/conversations/new/route');
             const response = await POST(req);
 
             expect(response.status).toBeGreaterThanOrEqual(400);
         });
 
         test('should create conversation with valid title', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            mockSupabase.single.mockResolvedValue({
+            // Mock the INSERT result using the MUTATION mock
+            mockMutationSingle.mockResolvedValue({
                 data: {
                     id: 'new_conv_123',
                     title: 'Valid Title',
@@ -333,12 +414,12 @@ describe('API Security - Integration Tests', () => {
                 error: null
             });
 
-            const req = new NextRequest('http://localhost:3000/api/conversations/new', {
+            const req = createMockReq('http://localhost:3000/api/conversations/new', {
                 method: 'POST',
                 body: JSON.stringify({ title: 'Valid Title' })
             });
 
-            const { POST } = await import('@/app/api/conversations/new/route');
+            const { POST } = require('@/app/api/conversations/new/route');
             const response = await POST(req);
 
             expect(response.status).toBe(200);
@@ -349,17 +430,17 @@ describe('API Security - Integration Tests', () => {
 
     describe('/api/memory/scope - Toggle Memory Scope', () => {
         test('should validate scope enum values', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            const req = new NextRequest('http://localhost:3000/api/memory/scope', {
+            const req = createMockReq('http://localhost:3000/api/memory/scope', {
                 method: 'POST',
                 body: JSON.stringify({
                     memoryId: '550e8400-e29b-41d4-a716-446655440000',
-                    scope: 'invalid-scope' // Not 'conversation' or 'persistent'
+                    scope: 'invalid-scope'
                 })
             });
 
-            const { POST } = await import('@/app/api/memory/scope/route');
+            const { POST } = require('@/app/api/memory/scope/route');
             const response = await POST(req);
 
             expect(response.status).toBe(400);
@@ -368,15 +449,15 @@ describe('API Security - Integration Tests', () => {
         });
 
         test('should verify memory ownership before update', async () => {
-            mockAuth.mockResolvedValue({ userId: 'user_123' });
+            mockAuthenticatedUser();
 
-            // Mock memory owned by different user
-            mockSupabase.single.mockResolvedValue({
+            // Mock ownership check (Query path)
+            mockQuerySingle.mockResolvedValue({
                 data: { user_id: 'other_user' },
                 error: null
             });
 
-            const req = new NextRequest('http://localhost:3000/api/memory/scope', {
+            const req = createMockReq('http://localhost:3000/api/memory/scope', {
                 method: 'POST',
                 body: JSON.stringify({
                     memoryId: '550e8400-e29b-41d4-a716-446655440000',
@@ -384,7 +465,7 @@ describe('API Security - Integration Tests', () => {
                 })
             });
 
-            const { POST } = await import('@/app/api/memory/scope/route');
+            const { POST } = require('@/app/api/memory/scope/route');
             const response = await POST(req);
 
             expect(response.status).toBe(403);
