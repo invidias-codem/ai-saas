@@ -40,7 +40,8 @@ describe('Security Utilities - Unit Tests', () => {
 
         describe('requireAuth', () => {
             test('should return user when authenticated', async () => {
-                mockAuth.mockResolvedValue({ userId: 'user_123' });
+                const { auth } = require('@clerk/nextjs/server');
+                auth.mockResolvedValue({ userId: 'user_123' });
 
                 const { requireAuth } = await import('@/lib/security/apiAuth');
                 const user = await requireAuth();
@@ -49,7 +50,8 @@ describe('Security Utilities - Unit Tests', () => {
             });
 
             test('should throw AuthenticationError when not authenticated', async () => {
-                mockAuth.mockResolvedValue({ userId: null });
+                const { auth } = require('@clerk/nextjs/server');
+                auth.mockResolvedValue({ userId: null });
 
                 const { requireAuth } = await import('@/lib/security/apiAuth');
 
