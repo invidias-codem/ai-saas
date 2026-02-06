@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button';
 export const revalidate = 3600; // Revalidate every hour
 
 interface Props {
-    params: { id: string }
+    params: Promise<{ id: string }>
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-    const agent = await getPublicAgent(params.id);
+    const { id } = await params;
+    const agent = await getPublicAgent(id);
     if (!agent) return {};
 
     const displayName = agent.name?.trim() || 'Unnamed Agent';
@@ -32,7 +33,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function AgentPage({ params }: Props) {
-    const agent = await getPublicAgent(params.id);
+    const { id } = await params;
+    const agent = await getPublicAgent(id);
 
     if (!agent) {
         notFound();
@@ -40,7 +42,7 @@ export default async function AgentPage({ params }: Props) {
 
     // Sanitize user-controlled strings for JSON-LD
     const sanitize = (str: string) => str.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
-    
+
     const jsonLd = {
         '@context': 'https://schema.org',
         '@type': 'SoftwareApplication',

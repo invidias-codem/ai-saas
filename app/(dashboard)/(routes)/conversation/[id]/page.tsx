@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
+import React, { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
@@ -106,8 +106,8 @@ const SafeChart = ({ data }: { data: ChartDataPoint[] }) => {
 
   return (
     <div className="my-6 w-full overflow-hidden rounded-lg border bg-card p-4 shadow-sm">
-      <div className="overflow-x-hidden w-full" style={{ minHeight: '300px' }}>
-        <ResponsiveContainer width="100%" height={300}>
+      <div className="overflow-x-auto w-full" style={{ minHeight: '300px' }}>
+        <ResponsiveContainer width="100%" height={300} minWidth={300}>
           {data.length <= 5 ? (
             <PieChart>
               <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
@@ -150,7 +150,7 @@ const RenderTableAsChart = ({ node, ...props }: any) => {
   }
 
   return (
-    <div className="my-4 w-full overflow-y-auto">
+    <div className="my-4 w-full overflow-x-auto">
       <table className="w-full" {...props}>
         {props.children}
       </table>
@@ -158,7 +158,7 @@ const RenderTableAsChart = ({ node, ...props }: any) => {
   );
 };
 
-function ConversationPageGlobalWrapper({ params }: { params: { id: string } }) {
+function ConversationPageGlobalWrapper({ params }: { params: Promise<{ id: string }> }) {
   return (
     <ModelProvider>
       <ConversationPage params={params} />
@@ -167,8 +167,8 @@ function ConversationPageGlobalWrapper({ params }: { params: { id: string } }) {
 }
 
 // Internal Page Component
-function ConversationPage({ params }: { params: { id: string } }) {
-  const conversationId = params.id;
+function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: conversationId } = React.use(params);
   const { messages: supabaseMessages } = useSupabaseChat(conversationId);
   const { agentMode } = useModel(); // Use Agentic Mode Context
   const [messages, setMessages] = useState<Message[]>([]);
@@ -678,7 +678,7 @@ function ConversationPage({ params }: { params: { id: string } }) {
 
                 {/* Content Bubble */}
                 <div className={cn(
-                  "relative text-sm md:text-base leading-relaxed break-words",
+                  "relative text-sm md:text-base leading-relaxed break-words min-w-0",
                   msg.role === "user"
                     ? "bg-secondary text-secondary-foreground rounded-[20px] rounded-tr-sm px-4 py-3 md:px-5 md:py-4 shadow-sm" // Claude-style user bubble
                     : "bg-transparent text-foreground px-0 py-0" // Gemini/Claude-style bot (no bubble)

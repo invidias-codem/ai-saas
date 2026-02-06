@@ -449,6 +449,13 @@ export default function CodePage() {
                           h3: ({ node, ...props }) => <h3 {...props} className="text-lg font-medium mb-2 mt-4" />,
                           blockquote: ({ node, ...props }) => <blockquote {...props} className="border-l-4 border-green-500/40 pl-4 italic text-muted-foreground my-4" />,
                           a: ({ node, ...props }) => <a {...props} className="text-green-500 hover:text-green-600 font-medium underline underline-offset-4 transition-colors" target="_blank" rel="noreferrer" />,
+                          table: ({ node, ...props }) => (
+                            <div className="my-4 w-full overflow-x-auto">
+                              <table className="w-full" {...props} />
+                            </div>
+                          ),
+                          th: ({ node, ...props }) => <th {...props} className="border-b border-border px-4 py-2 text-left font-semibold bg-muted/30" />,
+                          td: ({ node, ...props }) => <td {...props} className="border-b border-border px-4 py-2" />,
                         }}
                       >
                         {msg.text}
