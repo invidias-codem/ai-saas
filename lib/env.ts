@@ -10,7 +10,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_CLERK_AFTER_SIGN_OUT_URL: z.string().min(1).optional(),
 
   // Clerk keys (server-side only)
-  CLERK_SECRET_KEY: z.string().min(1, { message: "CLERK_SECRET_KEY is required" }).optional(),
+  CLERK_SECRET_KEY: z.string().min(1, { message: "CLERK_SECRET_KEY is required" }).or(z.literal('')).optional(),
 
   // Server-side AI keys
   // NOTE: These can be optional for offline scripts (dataset curation/eval harness).
