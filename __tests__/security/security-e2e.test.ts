@@ -7,10 +7,10 @@ import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
 
 describe('Security - E2E Tests', () => {
     const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    let authToken: string;
-    let testUserId: string;
-    let ownedConversationId: string;
-    let otherUserConversationId: string;
+    let authToken: string = '';
+    let testUserId: string = '';
+    let ownedConversationId: string = '';
+    let otherUserConversationId: string = '';
 
     beforeAll(async () => {
         // Setup: Get auth token for testing
