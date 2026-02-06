@@ -61,7 +61,7 @@ describe('Security Utilities - Unit Tests', () => {
 
         describe('requireOwnership', () => {
             test('should pass when user owns resource', async () => {
-                mockSingle.mockResolvedValue({
+                (mockSingle as any).mockResolvedValue({
                     data: { user_id: 'user_123' },
                     error: null
                 });
@@ -74,7 +74,7 @@ describe('Security Utilities - Unit Tests', () => {
             });
 
             test('should throw AuthorizationError when user does not own resource', async () => {
-                mockSingle.mockResolvedValue({
+                (mockSingle as any).mockResolvedValue({
                     data: { user_id: 'other_user' },
                     error: null
                 });
@@ -87,7 +87,7 @@ describe('Security Utilities - Unit Tests', () => {
             });
 
             test('should throw AuthorizationError when resource does not exist', async () => {
-                mockSingle.mockResolvedValue({
+                (mockSingle as any).mockResolvedValue({
                     data: null,
                     error: { code: 'PGRST116' }
                 });
