@@ -6,11 +6,11 @@
 import { describe, test, expect, jest, beforeEach } from '@jest/globals';
 
 // Define mocks outside describe to be accessible
-const mockAuth = jest.fn();
-const mockSingle = jest.fn();
-const mockEq = jest.fn();
-const mockSelect = jest.fn();
-const mockFrom = jest.fn();
+const mockAuth = jest.fn() as any;
+const mockSingle = jest.fn() as any;
+const mockEq = jest.fn() as any;
+const mockSelect = jest.fn() as any;
+const mockFrom = jest.fn() as any;
 
 // Setup mock chain
 mockEq.mockReturnValue({ single: mockSingle });
@@ -61,7 +61,7 @@ describe('Security Utilities - Unit Tests', () => {
 
         describe('requireOwnership', () => {
             test('should pass when user owns resource', async () => {
-                (mockSingle as any).mockResolvedValue({
+                mockSingle.mockResolvedValue({
                     data: { user_id: 'user_123' },
                     error: null
                 });
@@ -74,7 +74,7 @@ describe('Security Utilities - Unit Tests', () => {
             });
 
             test('should throw AuthorizationError when user does not own resource', async () => {
-                (mockSingle as any).mockResolvedValue({
+                mockSingle.mockResolvedValue({
                     data: { user_id: 'other_user' },
                     error: null
                 });
@@ -87,7 +87,7 @@ describe('Security Utilities - Unit Tests', () => {
             });
 
             test('should throw AuthorizationError when resource does not exist', async () => {
-                (mockSingle as any).mockResolvedValue({
+                mockSingle.mockResolvedValue({
                     data: null,
                     error: { code: 'PGRST116' }
                 });
