@@ -2,7 +2,7 @@ import { Firestore } from 'firebase-admin/firestore';
 
 export interface ExtractedFact {
   id?: string;
-  type: 'conversation' | 'user' | 'preference';
+  type: 'conversation' | 'user' | 'preference' | 'code';
   content: string;
   confidence: number;
   sentiment?: number; // -1.0 (negative) to 1.0 (positive)

@@ -183,7 +183,7 @@ export async function getGitHubContext(userId: string, query: string, repo: stri
     const facts = repoMemories.map((m: any) => ({
       id: m.id,
       content: m.content,
-      type: 'code',
+      type: 'code' as any,
       confidence: 1.0, // Assumed high for code
       extractedAt: new Date(m.createdAt),
       metadata: m.metadata
