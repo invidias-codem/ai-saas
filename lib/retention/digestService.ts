@@ -1,7 +1,7 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getHighConfidenceFacts } from "@/lib/ragMemory";
-import { Resend } from 'resend';
+// import { Resend } from 'resend'; // Converted to dynamic import
 import { DailyBriefingEmail } from "@/components/email-templates/DailyBriefing";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 
@@ -94,6 +94,7 @@ export async function generateDailyDigest(userId: string, userEmail: string, use
             return;
         }
 
+        const { Resend } = await import('resend');
         const resend = new Resend(apiKey);
 
         const { data, error } = await resend.emails.send({
