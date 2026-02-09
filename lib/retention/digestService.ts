@@ -6,7 +6,7 @@ import { DailyBriefingEmail } from "@/components/email-templates/DailyBriefing";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Resend initialized lazily to avoid build-time errors if key is missing
 
 interface DigestContent {
     highlights: string[];
@@ -87,6 +87,14 @@ export async function generateDailyDigest(userId: string, userEmail: string, use
             console.error(`[DigestService] No email for user ${userId}`);
             return;
         }
+
+        const apiKey = process.env.RESEND_API_KEY;
+        if (!apiKey) {
+            console.warn('[DigestService] RESEND_API_KEY is missing. Skipping email send.');
+            return;
+        }
+
+        const resend = new Resend(apiKey);
 
         const { data, error } = await resend.emails.send({
             from: 'Genie <digest@gen1e.xyz>', // Update with verified domain
