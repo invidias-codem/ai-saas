@@ -29,7 +29,7 @@
     "rag:test": "tsx scripts/test-rag-integration.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.72.1",
+    "@anthropic-ai/sdk": "^0.74.0",
     "@clerk/nextjs": "^6.37.1",
     "@google-cloud/aiplatform": "^5.11.0",
     "@google-cloud/storage": "^7.17.2",
