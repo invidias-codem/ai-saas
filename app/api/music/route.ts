@@ -9,6 +9,7 @@ import { z } from "zod";
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { musicGenerationSchema, ValidationError } from '@/lib/security/inputValidation';
+import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
 
 // 1. Initialize Replicate client
 const replicate = new Replicate({
@@ -69,13 +70,37 @@ export async function POST(req: Request) {
     // ✅ Assign prompt value after successful validation
     prompt = input.prompt;
 
+    // 4. Rate/Credit Check (Atomic)
+    const cost = CREDIT_COSTS.MUSIC_GENERATION;
+    const idempotencyKey = req.headers.get('idempotency-key') || `music-${user.userId}-${Date.now()}`;
+
+    const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Music generation");
+
+    if (!spendResult.success && !spendResult.duplicate) {
+      return NextResponse.json(
+        { error: 'Insufficient credits', message: `You need ${cost} credits for this request.`, remaining: spendResult.remaining },
+        { status: 402 }
+      );
+    }
+
     console.log(`Sending request to Replicate MusicGen model with input:`, input);
 
     // 6. Call Replicate's create prediction API (asynchronous)
-    const prediction = await replicate.predictions.create({
-      version: MUSICGEN_VERSION,
-      input: input,
-    });
+    let prediction;
+    try {
+      prediction = await replicate.predictions.create({
+        version: MUSICGEN_VERSION,
+        input: input,
+      });
+    } catch (error) {
+      if (!spendResult.duplicate) {
+        await refundCredits(user.userId, cost, "Refund for failed music generation start");
+      }
+      throw error;
+    }
+
+    // Deduct credits handled atomically upfront
+    // await deductCredits(user.userId, cost, "Music generation");
 
     console.log("Replicate job started. Sending prediction object to client:", prediction.id);
 

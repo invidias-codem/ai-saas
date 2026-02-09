@@ -31,6 +31,18 @@ interface ImportProcessResponse {
     };
 }
 
+interface InsightsReport {
+    topTopics: string[];
+    userPreferences: string[];
+    actionItems: string[];
+    suggestedAutomations: {
+        title: string;
+        description: string;
+        trigger: string;
+    }[];
+    generatedAt: string;
+}
+
 type WizardStage = "upload" | "confirmation" | "processing" | "extracting" | "complete"
 
 interface DataImportWizardProps {
@@ -63,6 +75,7 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
     } | null>(null)
 
     const [parsedData, setParsedData] = useState<GenieUniversalImport | null>(null)
+    const [insights, setInsights] = useState<InsightsReport | null>(null)
 
     // Refs for cleanup
     const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -384,6 +397,22 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
                 topics: 0 // Topics aggregation is complex in batch, skip for now
             });
 
+            // --- Generate Insights ---
+            setLogs(prev => [...prev, "Generating your personal insights report..."])
+            try {
+                const insightsResponse = await fetch('/api/import/insights', { method: 'POST' });
+                if (insightsResponse.ok) {
+                    const { report } = await insightsResponse.json();
+                    setInsights(report);
+                    setLogs(prev => [...prev, "Insights generated successfully."]);
+                } else {
+                    console.warn("Failed to generate insights");
+                    setLogs(prev => [...prev, "Skipping insights generation (service busy)."]);
+                }
+            } catch (e) {
+                console.error("Insights error", e);
+            }
+
             setStage("complete")
             setLogs(prev => [...prev, "Import Successfully Completed."])
 
@@ -407,6 +436,7 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
         setParsedData(null)
         setStats({ conversationsFound: 0, messagesParsed: 0, memoriesExtracted: 0 })
         setExtractionStats(null)
+        setInsights(null)
     }
 
     // --- Render Helpers ---
@@ -661,6 +691,72 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
                         >
                             Finish
                         </button>
+                    </div>
+                )}
+
+                {stage === "complete" && insights && (
+                    <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        <div className="bg-gradient-to-br from-primary/5 to-purple-500/5 border border-primary/20 rounded-xl p-6">
+                            <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                                <span className="text-xl">✨</span>
+                                Day 1 Insights
+                            </h3>
+
+                            <div className="space-y-6">
+                                {/* Topics & Preferences */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="bg-card/50 p-4 rounded-lg border border-border/50">
+                                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Top Topics</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {insights.topTopics.map((topic, i) => (
+                                                <span key={i} className="bg-primary/10 text-primary text-xs px-2 py-1 rounded-full">{topic}</span>
+                                            ))}
+                                            {insights.topTopics.length === 0 && <span className="text-xs text-muted-foreground">None detected</span>}
+                                        </div>
+                                    </div>
+                                    <div className="bg-card/50 p-4 rounded-lg border border-border/50">
+                                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Detected Preferences</h4>
+                                        <ul className="text-sm space-y-1 text-foreground/80 list-disc list-inside">
+                                            {insights.userPreferences.map((pref, i) => (
+                                                <li key={i}>{pref}</li>
+                                            ))}
+                                            {insights.userPreferences.length === 0 && <li className="text-xs text-muted-foreground list-none">None detected</li>}
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                {/* Action Items */}
+                                {insights.actionItems.length > 0 && (
+                                    <div>
+                                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Open Action Items</h4>
+                                        <div className="space-y-2">
+                                            {insights.actionItems.map((item, i) => (
+                                                <div key={i} className="flex items-start gap-2 text-sm bg-card/80 p-2 rounded border border-border/50">
+                                                    <div className="mt-1 w-2 h-2 rounded-full bg-orange-400 shrink-0" />
+                                                    <span>{item}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Automations */}
+                                {insights.suggestedAutomations.length > 0 && (
+                                    <div>
+                                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Suggested Automations</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {insights.suggestedAutomations.map((auto, i) => (
+                                                <div key={i} className="bg-card/80 p-3 rounded border border-border/50 hover:border-primary/50 transition-colors cursor-pointer group">
+                                                    <div className="font-semibold text-sm mb-1 group-hover:text-primary transition-colors">{auto.title}</div>
+                                                    <div className="text-xs text-muted-foreground mb-2">{auto.description}</div>
+                                                    <div className="text-[10px] bg-muted inline-block px-1.5 py-0.5 rounded text-muted-foreground font-mono">Trigger: {auto.trigger}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>

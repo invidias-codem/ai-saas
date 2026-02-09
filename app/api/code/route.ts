@@ -12,7 +12,8 @@ import {
   gatherUserContext,
   formatUserContextForPrompt,
   getHighConfidenceFacts,
-  formatFactsForPrompt
+  formatFactsForPrompt,
+  getGitHubContext
 } from '@/lib/ragMemory';
 import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
 import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/graphStore';
@@ -22,13 +23,19 @@ import { storeMemory } from '@/lib/memory/vectorStore';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
-// Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
+import { CODE_MODELS } from '@/lib/llm/codeModels';
+import { ClaudeProvider } from '@/lib/llm/providers/claude';
+import { ChatMessage } from '@/lib/llm/types';
+import { checkCredits, deductCredits, spendCreditsAtomic, CREDIT_COSTS } from "@/lib/credits";
+import { logger } from "@/lib/logger";
+
+export const runtime = 'nodejs';
 
 // Initialize lazily
-function getModel() {
+function getGeminiModel(modelId: string) {
   const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
   return genAI.getGenerativeModel({
-    model: "gemini-2.0-flash", // Model supports file input
+    model: modelId, // Use the passed model ID
     safetySettings: [
       { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
       { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -39,10 +46,12 @@ function getModel() {
 }
 
 // System instruction - slightly refined to emphasize using provided content
+const CODE_SYSTEM_INSTRUCTION_TEXT = "You are 'Genie Code', an expert coding assistant. Analyze provided code snippets or file content, explain concepts, generate code, and answer questions related to programming. **If file content data is provided along with a text prompt, focus your analysis on the file data based on the instructions in the text prompt.** Use markdown code blocks with language identifiers. For non-coding questions, politely decline.";
+
 const CODE_SYSTEM_INSTRUCTION = {
   role: "user",
   parts: [{
-    text: "You are 'Genie Code', an expert coding assistant. Analyze provided code snippets or file content, explain concepts, generate code, and answer questions related to programming. **If file content data is provided along with a text prompt, focus your analysis on the file data based on the instructions in the text prompt.** Use markdown code blocks with language identifiers. For non-coding questions, politely decline."
+    text: CODE_SYSTEM_INSTRUCTION_TEXT
   }],
 };
 
@@ -95,7 +104,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     validateRequestSize(body, 10 * 1024 * 1024); // 10MB for code files
 
-    const { messages, currentUserPrompt, fileData } = body;
+    const { messages, currentUserPrompt, fileData, model = 'fast', activeRepo } = body;
+    const modelConfig = CODE_MODELS[model] || CODE_MODELS.fast;
 
     // 4. Input Validation
     if (!messages && (!currentUserPrompt && !fileData)) {
@@ -190,12 +200,21 @@ export async function POST(req: Request) {
     const factContext = formatFactsForPrompt(intelligentFacts);
 
     // Retrieve relevant memories for context
-    // Retrieve relevant memories for context with filtering
-    const memoryContext = await getRAGMemoryContext(user.userId, userQuery, 'code');
+    const memoryContext = (await getRAGMemoryContext(user.userId, userQuery, 'code')).contextString;
+
+    // GitHub Context
+    let githubContext = '';
+    if (activeRepo) {
+      try {
+        logger.debug(`[Code API] Fetching GitHub context for ${activeRepo}`);
+        githubContext = await getGitHubContext(user.userId, userQuery, activeRepo);
+      } catch (err) {
+        logger.error("[Code API] Failed to fetch GitHub context:", err);
+      }
+    }
 
     // Format user profile context
     const userProfileContext = formatUserProfileForPrompt(userProfileMemories);
-
 
     // Construct the current user message parts
     const currentUserParts: Part[] = [];
@@ -213,6 +232,7 @@ export async function POST(req: Request) {
       graphContext +          // Knowledge Graph (projects, technologies)
       searchContext +         // Web Search (latest docs/libraries)
       memoryContext +         // RAG memories from past code sessions
+      githubContext +         // GitHub repository context
       baseInstruction;
 
     currentUserParts.push({ text: enhancedPromptText });
@@ -233,25 +253,103 @@ export async function POST(req: Request) {
       return new NextResponse("Invalid prompt or file data", { status: 400 });
     }
 
-    console.log("Sending to Gemini - History:", JSON.stringify(history.map((h: { parts: { text: any; }[]; }) => h.parts[0].text))); // Log history text only for brevity
-    console.log("Sending to Gemini - Current Turn Parts:", JSON.stringify(currentUserParts.map(p => p.text ? `Text: ${p.text.substring(0, 50)}...` : `File: ${p.inlineData?.mimeType}`))); // Log structure summary
+    // 4. Rate/Credit Check (Atomic)
+    const cost = CREDIT_COSTS.CODE_GENERATION;
+    const idempotencyKey = req.headers.get('idempotency-key') || `code-${user.userId}-${Date.now()}`;
 
+    const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Code generation", { model: modelConfig.modelId, activeRepo });
 
-    const chat = getModel().startChat({
-      history: [CODE_SYSTEM_INSTRUCTION, CODE_GREETING, ...history],
-      generationConfig: {
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.7,
-        maxOutputTokens: 4096,
-      },
-    });
-
-    const result = await chat.sendMessage(currentUserParts);
-    if (!result.response) {
-      throw new Error("No response received from the model.");
+    if (!spendResult.success && !spendResult.duplicate) {
+      return NextResponse.json(
+        { error: 'Insufficient credits', message: `You need ${cost} credits for this request.`, remaining: spendResult.remaining },
+        { status: 402 }
+      );
     }
-    const responseText = result.response.text();
+
+    logger.debug("Sending to Gemini - History:", JSON.stringify(history.map((h: { parts: { text: any; }[]; }) => h.parts[0].text))); // Log history text only for brevity
+    logger.debug("Sending to Gemini - Current Turn Parts:", JSON.stringify(currentUserParts.map(p => p.text ? `Text: ${p.text.substring(0, 50)}...` : `File: ${p.inlineData?.mimeType}`))); // Log structure summary
+
+    // ... generation logic ...
+
+    let responseText = "";
+
+    // --- Provider Dispatch ---
+
+    if (modelConfig.provider === 'claude') {
+      // Claude Provider Logic
+      const provider = new ClaudeProvider();
+
+      // Prepare History
+      const chatHistory: ChatMessage[] = (messages || []).map((msg: any) => ({
+        role: msg.role === 'bot' ? 'assistant' : 'user',
+        text: msg.text
+      }));
+
+      // Append current turn
+      let currentText = enhancedPromptText;
+      if (fileData && fileData.base64Data) {
+        // Decode and append file content for Claude (since provider is text-only)
+        try {
+          const decoded = Buffer.from(fileData.base64Data, 'base64').toString('utf-8');
+          // Naive check for binary vs text
+          if (!/[\x00-\x08\x0E-\x1F]/.test(decoded.substring(0, 100))) {
+            currentText += `\n\n[Attached File: ${fileData.name}]\n\`\`\`${fileData.type || ''}\n${decoded}\n\`\`\``;
+          } else {
+            currentText += `\n\n[Attached File: ${fileData.name}] (Binary file attached, content omitted for text model)`;
+          }
+        } catch (e) {
+          console.error("Failed to decode file for Claude:", e);
+        }
+      }
+
+      chatHistory.push({ role: 'user', text: currentText });
+
+      const streamResult = await provider.generateStream(chatHistory, CODE_SYSTEM_INSTRUCTION_TEXT, {
+        model: modelConfig.modelId,
+        maxTokens: modelConfig.maxTokens,
+        temperature: 0.7
+      });
+
+      // Consume stream
+      const textDecoder = new TextDecoder();
+      const reader = streamResult.stream.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          responseText += textDecoder.decode(value, { stream: true });
+        }
+        responseText += textDecoder.decode(); // flush
+      } catch (streamError) {
+        console.error('[Code API] Stream read error:', streamError);
+        if (!responseText) {
+          throw new Error('Failed to read response from Claude');
+        }
+        // If we have partial content, continue with what we have
+      } finally {
+        reader.releaseLock();
+      }
+
+    } else {
+      // Gemini Logic (Existing robust implementation)
+      // Re-use current logic but with getGeminiModel(modelConfig.modelId)
+
+      const chat = getGeminiModel(modelConfig.modelId).startChat({
+        history: [CODE_SYSTEM_INSTRUCTION, CODE_GREETING, ...history],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.7,
+          maxOutputTokens: modelConfig.maxTokens,
+        },
+      });
+
+      const result = await chat.sendMessage(currentUserParts);
+      if (!result.response) {
+        throw new Error("No response received from the model.");
+      }
+      responseText = result.response.text();
+    }
 
     // Capture this interaction for future context
     const tokensUsed = estimateTokenCount(userQuery + responseText);
@@ -358,6 +456,9 @@ export async function POST(req: Request) {
     // Log successful code interaction
     console.log(`[CODE] User: ${userContext.fullName} (${user.userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
 
+    // Deduct credits handled atomically at start
+    // await deductCredits(user.userId, CREDIT_COSTS.CODE_GENERATION, "Code generation");
+
     return NextResponse.json({ text: responseText });
 
   } catch (error: any) {
@@ -375,7 +476,7 @@ export async function POST(req: Request) {
     }
 
     if (error.response?.data?.error) {
-      console.error("Gemini API Error:", error.response.data.error);
+      logger.error("Gemini API Error:", error.response.data.error);
     }
     const errorMessage = error.response?.data?.error?.message || error.message || "An unknown error occurred";
     return new NextResponse(JSON.stringify({

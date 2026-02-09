@@ -17,7 +17,7 @@ import { conversationIdSchema, ValidationError } from "@/lib/security/inputValid
 export const dynamic = 'force-dynamic';
 
 interface RouteParams {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 }
 
 interface DbMessage {
@@ -29,12 +29,9 @@ interface DbMessage {
     user_id: string;
 }
 
-/**
- * GET - Load full conversation with all messages
- */
-// GET - Load full conversation
 export async function GET(req: Request, { params }: RouteParams) {
     try {
+        const { id: paramId } = await params;
         // Authentication
         const user = await requireAuth();
         const ip = getClientIP(req);
@@ -49,11 +46,14 @@ export async function GET(req: Request, { params }: RouteParams) {
         }
 
         // Input validation
-        const validationResult = conversationIdSchema.safeParse(params.id);
+        const validationResult = conversationIdSchema.safeParse(paramId);
         if (!validationResult.success) {
             return NextResponse.json({ error: "Invalid conversation ID format" }, { status: 400 });
         }
         const id = validationResult.data;
+
+        // ... rest of function ...
+
 
         const { supabaseAdmin } = await import("@/lib/supabaseClient");
 
@@ -121,6 +121,7 @@ export async function GET(req: Request, { params }: RouteParams) {
 // DELETE - Soft delete a conversation
 export async function DELETE(req: Request, { params }: RouteParams) {
     try {
+        const { id: paramId } = await params;
         // Authentication & rate limiting
         const user = await requireAuth();
         const ip = getClientIP(req);
@@ -133,7 +134,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
         }
 
         // Input validation
-        const validationResult = conversationIdSchema.safeParse(params.id);
+        const validationResult = conversationIdSchema.safeParse(paramId);
         if (!validationResult.success) {
             return NextResponse.json({ error: "Invalid conversation ID format" }, { status: 400 });
         }
@@ -190,6 +191,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
 // PATCH - Update conversation
 export async function PATCH(req: Request, { params }: RouteParams) {
     try {
+        const { id: paramId } = await params;
         // Authentication & rate limiting
         const user = await requireAuth();
         const ip = getClientIP(req);
@@ -199,7 +201,7 @@ export async function PATCH(req: Request, { params }: RouteParams) {
         }
 
         // Input validation
-        const validationResult = conversationIdSchema.safeParse(params.id);
+        const validationResult = conversationIdSchema.safeParse(paramId);
         if (!validationResult.success) {
             return NextResponse.json({ error: "Invalid conversation ID format" }, { status: 400 });
         }

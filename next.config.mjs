@@ -1,4 +1,5 @@
 import createMDX from '@next/mdx';
+import createNextIntlPlugin from 'next-intl/plugin';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -56,8 +57,10 @@ const withMDX = createMDX({
   },
 });
 
+const withNextIntl = createNextIntlPlugin('./i18n.ts');
+
 // Merge MDX config with Next.js config
-export default withMDX({
+export default withMDX(withNextIntl({
   ...nextConfig,
   async headers() {
     return [
@@ -96,5 +99,5 @@ export default withMDX({
       }
     ];
   },
-});
+}));
 

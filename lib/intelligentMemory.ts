@@ -114,9 +114,9 @@ export function analyzeSentiment(text: string): number {
  * Formula: confidence (50%) + usage (25%) + impact (15%) + user feedback (10%)
  */
 export function calculateImportance(fact: ExtractedFact): number {
-  const confidenceScore = (fact.confidence || 0.75) * 0.5; // 50% weight
+  const confidenceScore = (fact.confidence ?? 0.75) * 0.5; // 50% weight
   const usageScore = Math.min(1, (fact.usageCount || 0) / 10) * 0.25; // 25% weight, normalize to 10 uses = max
-  const impactScore = (fact.impactScore || 0.5) * 0.15; // 15% weight
+  const impactScore = (fact.impactScore ?? 0.5) * 0.15; // 15% weight
   const userRatingScore = Math.min(1, (fact.userRating || 0) / 5) * 0.1; // 10% weight, normalize to 5-star scale
 
   return Math.min(1, confidenceScore + usageScore + impactScore + userRatingScore);

@@ -8,6 +8,7 @@ import { generateImage, ImageModel, getAvailableModels } from "@/lib/imageGenera
 import { requireAuth, handleAuthError, getClientIP } from "@/lib/security/apiAuth";
 import { limitApiEndpoint } from "@/lib/security/rateLimit";
 import { imageGenerationSchema, ValidationError } from "@/lib/security/inputValidation";
+import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
 
 // Define the allowed aspect ratios
 const allowedAspectRatios = z.enum([
@@ -60,25 +61,57 @@ export async function POST(req: Request) {
 
     const { prompt, amount, resolution: aspectRatio, model } = validation.data;
 
+    // 4. Rate/Credit Check (Atomic)
+    const costPerImage = CREDIT_COSTS.IMAGE_GENERATION;
+    const totalCost = amount * costPerImage;
+    const idempotencyKey = req.headers.get('idempotency-key') || `image-${user.userId}-${Date.now()}`;
+
+    const spendResult = await spendCreditsAtomic(user.userId, totalCost, idempotencyKey, `Generated ${amount} images`);
+
+    if (!spendResult.success && !spendResult.duplicate) {
+      return NextResponse.json(
+        { error: 'Insufficient credits', message: `You need ${totalCost} credits for this request.`, remaining: spendResult.remaining },
+        { status: 402 }
+      );
+    }
+
     console.log(`[IMAGE_API] Generating ${amount} image(s) with model: ${model || 'default'}`);
 
     // Generate images using the unified service
-    const results = await Promise.all(
-      Array.from({ length: amount }, async () => {
-        const result = await generateImage({
-          prompt,
-          aspectRatio,
-          model: model as ImageModel | undefined,
-        });
-        return result;
-      })
-    );
+    let results;
+    try {
+      results = await Promise.all(
+        Array.from({ length: amount }, async () => {
+          const result = await generateImage({
+            prompt,
+            aspectRatio,
+            model: model as ImageModel | undefined,
+          });
+          return result;
+        })
+      );
+    } catch (error) {
+      if (!spendResult.duplicate) {
+        console.log(`[IMAGE_API] Generation failed, refunding ${totalCost} credits`);
+        await refundCredits(user.userId, totalCost, "Refund for failed image generation");
+      }
+      throw error;
+    }
 
     // Check if any generation failed
     const failedResults = results.filter(r => !r.success);
     if (failedResults.length > 0) {
+      // If mixed failure/success, we ideally refund partial. 
+      // Current logic throws on ANY failure.
+      if (!spendResult.duplicate) {
+        console.log(`[IMAGE_API] Generation failed (partial/full), refunding ${totalCost} credits`);
+        await refundCredits(user.userId, totalCost, "Refund for failed image generation");
+      }
       throw new Error(failedResults[0].error || "Image generation failed");
     }
+
+    // Deduct credits handled atomically upfront
+    // await deductCredits(user.userId, totalCost, `Generated ${amount} images`);
 
     // Extract URLs and model info
     const images = results.flatMap(r => r.urls);

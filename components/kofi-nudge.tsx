@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 interface KoFiNudgeProps {
     isOpen: boolean;
@@ -19,6 +20,8 @@ export const KoFiNudge = ({ isOpen, onClose }: KoFiNudgeProps) => {
             return () => clearTimeout(timer);
         }
     }, [isOpen]);
+
+    const t = useTranslations("KoFiNudge");
 
     if (!isVisible && !isOpen) return null;
 
@@ -51,10 +54,10 @@ export const KoFiNudge = ({ isOpen, onClose }: KoFiNudgeProps) => {
                 {/* Text & Action */}
                 <div className="flex flex-col gap-1">
                     <p className="text-sm font-medium text-foreground">
-                        Enjoying Genie?
+                        {t('enjoyingGenie')}
                     </p>
                     <p className="text-xs text-muted-foreground mb-1">
-                        Support the project & keep servers running!
+                        {t('supportProject')}
                     </p>
                     <a
                         href="https://ko-fi.com/P5P61T3JJA"
@@ -63,7 +66,7 @@ export const KoFiNudge = ({ isOpen, onClose }: KoFiNudgeProps) => {
                         className="inline-flex items-center justify-center px-4 py-1.5 bg-[#FF5E5B] hover:bg-[#FF5E5B]/90 text-white text-xs font-bold rounded-full shadow-md hover:shadow-lg transition-all transform hover:scale-105"
                     >
                         <span>☕</span>
-                        <span className="ml-1">Support on Ko-fi</span>
+                        <span className="ml-1">{t('supportOnKoFi')}</span>
                     </a>
                 </div>
             </div>

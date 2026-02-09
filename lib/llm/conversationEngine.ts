@@ -1,8 +1,10 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { z } from "zod";
 import { waitUntil } from "@vercel/functions";
 
 import { env } from "@/lib/env";
+import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
+import { GeminiProvider } from "./providers/gemini";
+import { ClaudeProvider } from "./providers/claude";
 import {
   gatherUserContext,
   formatUserContextForPrompt,
@@ -15,15 +17,12 @@ import {
   estimateTokenCount,
 } from "@/lib/ragMemory";
 import { rankMemoriesIntelligently } from "@/lib/intelligentMemory";
-import { sanitizeHistory } from "@/lib/gemini";
+// import { sanitizeHistory } from "@/lib/gemini"; // Moved to provider
 import { findRelatedEntities, formatGraphContext, addNode } from "@/lib/memory/graphStore";
 import { performResearch, formatSearchResults } from "@/lib/agents/researcher";
 import { getUserProfile, formatUserProfileForPrompt } from "@/lib/memoryPromotion";
 
-export const ChatMessageSchema = z.object({
-  role: z.string(),
-  text: z.string(),
-});
+// ChatMessageSchema imported from types
 
 export const ConversationRequestSchema = z.object({
   messages: z.array(ChatMessageSchema).min(1),
@@ -35,7 +34,7 @@ export const ConversationRequestSchema = z.object({
 
 export type ConversationRequest = z.infer<typeof ConversationRequestSchema>;
 
-export type AgentMode = 'standard' | 'agentic-preview';
+
 
 export type ConversationEngineOptions = {
   /**
@@ -59,6 +58,7 @@ export type ConversationEngineOptions = {
 
 export type ConversationEngineResult = {
   stream: ReadableStream;
+  sources?: any[];
   debug?: {
     promptVersion?: string | null;
     model?: string;
@@ -81,65 +81,43 @@ function getGoogleApiKey(): string {
   return key;
 }
 
-function getGenAI() {
-  return new GoogleGenerativeAI(getGoogleApiKey());
-}
-
 const DEFAULT_MODEL = "gemini-2.0-flash";
-const AGENTIC_MODEL = "gemini-3-flash-preview";
+const AGENTIC_MODEL = "gemini-1.5-pro-preview-0409";
+const QUALITY_MODEL = "claude-3-5-sonnet-20240620";
 
-const safetySettings = [
-  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-];
-
-function getGenerativeModel(mode: AgentMode) {
-  const genAI = getGenAI();
-
-  if (mode === 'agentic-preview') {
-    return genAI.getGenerativeModel({
-      model: AGENTIC_MODEL,
-      safetySettings,
-      tools: [{ codeExecution: {} }],
-      // Optional: Add explicit system instruction if needed for agentic behavior
-    });
+function getProviderForMode(mode: AgentMode): { provider: LLMProvider, modelId: string } {
+  if (mode === 'quality') {
+    return {
+      provider: new ClaudeProvider(),
+      modelId: QUALITY_MODEL
+    };
+  } else if (mode === 'agentic-preview') {
+    return {
+      provider: new GeminiProvider(),
+      modelId: AGENTIC_MODEL
+    };
+  } else {
+    // Default / Fast
+    return {
+      provider: new GeminiProvider(),
+      modelId: DEFAULT_MODEL
+    };
   }
-
-  return genAI.getGenerativeModel({
-    model: DEFAULT_MODEL,
-    safetySettings,
-  });
 }
 
 function getSystemInstruction() {
-  return {
-    role: "user",
-    parts: [
-      {
-        text: `You are 'Genie', a helpful AI assistant. 
+  return `You are 'Genie', a helpful AI assistant. 
 Current Date: ${new Date().toLocaleDateString("en-US", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })}.
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })}.
 
-Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences.`,
-      },
-    ],
-  };
+Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences.`;
 }
 
-const GREETING = {
-  role: "model",
-  parts: [
-    {
-      text: "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights.",
-    },
-  ],
-};
+const GREETING = "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights.";
 
 /**
  * Core conversation generation engine.
@@ -160,9 +138,7 @@ export async function generateConversationReply(
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'standard';
 
-  const model = getGenerativeModel(agentMode);
-  // Track actual model ID for debug (model.model is presumably available or we use our constants)
-  const actualModelId = agentMode === 'agentic-preview' ? AGENTIC_MODEL : DEFAULT_MODEL;
+  const { provider, modelId: actualModelId } = getProviderForMode(agentMode);
 
   const { messages, fileData, mimeType } = parsed;
 
@@ -212,145 +188,117 @@ export async function generateConversationReply(
   const factContext = options.disableExternalContext ? "" : formatFactsForPrompt(intelligentFacts);
 
   // Only call RAG if heavy context is enabled
-  const memoryContext = (!options.disableExternalContext && enableHeavyContext)
+  const ragResult = (!options.disableExternalContext && enableHeavyContext)
     ? await getRAGMemoryContext(userId, userQuery, "conversation")
-    : "";
+    : { contextString: "", sources: [] };
 
-  // History for GenAI
-  let history = messages.map((msg) => ({
-    role: msg.role === "bot" ? "model" : "user",
-    parts: [{ text: msg.text }],
-  }));
-
-  const lastUserMessage = history.pop();
-  if (!lastUserMessage || lastUserMessage.role !== "user") {
-    throw new Error("Invalid prompt: last message must be user");
-  }
+  const memoryContext = ragResult.contextString;
+  const memorySources = ragResult.sources;
 
   const userProfileContext = options.disableExternalContext ? "" : formatUserProfileForPrompt(userProfileMemories);
 
-  let enhancedPromptText =
-    userContextPrompt +
+  const enhancedSystemInstruction = getSystemInstruction() +
+    "\n\n" + userContextPrompt +
     userProfileContext +
     factContext +
     graphContext +
     searchContext +
-    memoryContext +
-    lastUserMessage.parts[0].text;
+    memoryContext;
 
-  const fullHistory = [getSystemInstruction(), GREETING, ...history];
-  const { sanitizedHistory, prependToPrompt } = sanitizeHistory(fullHistory);
+  // Format history for provider
+  const history: ChatMessage[] = [
+    { role: "assistant", text: GREETING },
+    ...messages.map(msg => ({
+      role: msg.role === "bot" ? "assistant" : "user",
+      text: msg.text
+    } as ChatMessage))
+  ];
 
-  if (prependToPrompt) {
-    enhancedPromptText = prependToPrompt + "\n\n" + enhancedPromptText;
+  // Attach file to the last message if present
+  if (fileData && mimeType) {
+    const lastMsg = history[history.length - 1];
+    if (lastMsg && lastMsg.role === 'user') {
+      lastMsg.attachments = [{
+        name: parsed.fileName || 'attached_file',
+        mimeType: mimeType,
+        base64Data: fileData
+      }];
+    }
   }
 
-  const chat = model.startChat({
-    history: sanitizedHistory,
-    generationConfig: {
-      temperature: 0.9,
-      topK: 40,
-      topP: 0.7,
-      maxOutputTokens: agentMode === 'agentic-preview' ? 4096 : 2048, // Higher tokens for agentic thought process
-    },
+  const streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
+    model: actualModelId,
+    temperature: 0.9,
+    maxTokens: agentMode === 'agentic-preview' ? 4096 : 2048
   });
 
-  const promptParts: any[] = [enhancedPromptText];
-  if (fileData && mimeType) {
-    promptParts.push({
-      inlineData: {
-        data: fileData,
-        mimeType,
-      },
-    });
-  }
+  const { stream: originalStream } = streamResult;
 
-  const result = await chat.sendMessageStream(promptParts);
+  // Wrap stream to capture full text for side effects
   const textEncoder = new TextEncoder();
+  const textDecoder = new TextDecoder();
+  let fullText = '';
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      let fullText = "";
-
-      try {
-        for await (const chunk of result.stream) {
-          let chunkText = "";
+  const transformedStream = new TransformStream({
+    transform(chunk, controller) {
+      const text = textDecoder.decode(chunk, { stream: true });
+      fullText += text;
+      controller.enqueue(chunk);
+    },
+    flush() {
+      // Side effects after stream completes
+      if (!options.disableSideEffects && fullText) {
+        waitUntil((async () => {
           try {
-            chunkText = chunk.text();
-          } catch (e) {
-            // Function call or other non-text chunk
-            // We could inspect chunk.functionCalls() or chunk.executableCode if we want to emit debug info
-            // For now, ignore text extraction errors in chunks
-          }
+            const tokensUsed = estimateTokenCount(userQuery + fullText);
+            const tags = extractTags(userQuery);
+            const summary = generateSummary([
+              { role: 'user', content: userQuery },
+              { role: 'assistant', content: fullText },
+            ]);
 
-          if (chunkText) {
-            fullText += chunkText;
-            controller.enqueue(textEncoder.encode(chunkText));
-          }
-        }
-      } catch (err: any) {
-        if (err?.status === 429 || err?.toString().includes('429')) {
-          console.warn("Genie Model Rate Limit (429).");
-          // Enqueue a friendly message to the user if possible, or just close
-          if (!fullText) {
-            controller.enqueue(textEncoder.encode("\n\n(Note: Agent is currently experiencing high load. Please try again or switch to standard mode.)"));
-          }
-        } else {
-          console.error("Stream error:", err);
-          controller.error(err);
-        }
-      } finally {
-        controller.close();
+            const formattedMessages = messages.map((msg) => ({
+              role: (msg.role === 'bot' ? 'assistant' : 'user') as 'user' | 'assistant' | 'system',
+              content: msg.text,
+            }));
 
-        // Side Effects (After stream closes)
-        if (!options.disableSideEffects && fullText) {
-          waitUntil((async () => {
-            try {
-              // Capture interaction for future context
-              const tokensUsed = estimateTokenCount(userQuery + fullText);
-              const tags = extractTags(userQuery);
-              const summary = generateSummary([
-                { role: "user", content: userQuery },
-                { role: "assistant", content: fullText },
-              ]);
-
-              const formattedMessages = messages.map((msg) => ({
-                role: (msg.role === "bot" ? "assistant" : "user") as "user" | "assistant" | "system",
-                content: msg.text,
-              }));
-
-              await captureMemory(
-                userId,
-                "conversation",
-                userQuery.substring(0, 50) || "Conversation",
-                summary,
-                formattedMessages,
-                tokensUsed,
-                tags,
-                {
-                  userName: userContext.fullName,
-                  userEmail: userContext.email,
-                  responseLength: fullText.length,
-                  interactionStyle: userContext.interactionStyle,
-                  agentMode,
-                }
-              );
-
-              // Knowledge graph update (best-effort)
-              if (tags.length > 0) {
-                await addNode(userId, tags[0], "concept", `Automatically extracted from conversation`);
+            await captureMemory(
+              userId,
+              'conversation',
+              userQuery.substring(0, 50) || 'Conversation',
+              summary,
+              formattedMessages,
+              tokensUsed,
+              tags,
+              {
+                userName: userContext.fullName,
+                userEmail: userContext.email,
+                responseLength: fullText.length,
+                interactionStyle: userContext.interactionStyle,
+                agentMode,
               }
-            } catch (e) {
-              console.error("Side effect processing failed", e);
+            );
+
+            // Knowledge graph update (best-effort)
+            if (tags.length > 0) {
+              await addNode(userId, tags[0], 'concept', `Automatically extracted from conversation`);
             }
-          })());
-        }
+          } catch (e) {
+            console.error('Side effect processing failed', e);
+          }
+        })());
       }
     }
   });
 
+  const stream = originalStream.pipeThrough(transformedStream);
+
   return {
     stream,
+    sources: [
+      ...intelligentFacts.map(f => ({ id: f.id, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
+      ...(memorySources || [])
+    ],
     debug: {
       model: actualModelId,
       userQuery,

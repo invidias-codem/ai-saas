@@ -4,8 +4,23 @@
  */
 
 import axios from 'axios';
+import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
+import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/graphStore';
 import { Message } from './schemas';
 import { searchMemories, storeMemory, getMemoryStats } from '@/lib/memory/vectorStore';
+
+export interface Source {
+  id: string;
+  title: string; // or summary
+  type: string;
+  similarity?: number;
+  content?: string;
+}
+
+export interface RAGContext {
+  contextString: string;
+  sources: Source[];
+}
 
 /**
  * Fetch relevant memories from Cloud Function and format for prompt injection
@@ -14,33 +29,62 @@ export async function getRAGMemoryContext(
   userId: string,
   query: string,
   featureType?: string
-): Promise<string> {
+): Promise<RAGContext> {
   try {
     // Replaced Cloud Function with Supabase Vector Search
     const memories = await searchMemories(userId, query, 10, featureType); // Fetch more to filter
 
     if (memories.length === 0) {
-      return '';
+      return { contextString: '', sources: [] };
     }
 
-    // Filter or boost imported memories based on confidence/source
-    // Imported memories might be voluminous, so we slightly dampen their score to prioritize recent real interactions
-    const rankedMemories = memories.map((m: any) => ({
-      ...m,
-      score: (m.similarity || 0) * (m.metadata?.source === 'import' ? 0.85 : 1.0)
-    }))
-      .sort((a: any, b: any) => b.score - a.score)
-      .slice(0, 5); // Take top 5 after re-ranking
+    // Create vector similarities map
+    const similarities = new Map<string, number>();
+    memories.forEach((m: any) => {
+      similarities.set(m.id, m.similarity || 0);
+    });
+
+    // Map to ExtractedFact format
+    const facts = memories.map((m: any) => ({
+      id: m.id,
+      content: m.content, // Use full content or summary? summary is usually what we want for context
+      type: m.type,
+      confidence: 0.8,
+      extractedAt: new Date(m.createdAt),
+      metadata: m.metadata
+    }));
+
+    const ranked = rankMemoriesIntelligently(facts, similarities, query);
+    const rankedMemories = ranked.slice(0, 5);
 
     // Format memories for prompt injection
-    return formatMemoriesForPrompt(rankedMemories);
+    const contextString = formatMemoriesForPrompt(rankedMemories);
+
+    // Extract sources
+    const sources: Source[] = rankedMemories.map((m: any) => ({
+      id: m.id,
+      title: m.metadata?.title || m.content.substring(0, 50) + '...',
+      type: m.type || 'memory',
+      similarity: m.contextRelevance,
+      content: m.content
+    }));
+
+    return { contextString, sources };
+
   } catch (error: any) {
-    if (error?.status === 429 || error?.toString().includes("429")) {
-      console.warn('RAG Context Rate Limited (429). Proceeding without memory.');
-      return '';
+    const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    const isRateLimit = error?.status === 429 || errorMessage.includes('429');
+
+    if (isRateLimit) {
+      console.warn(`[RAG] Rate limited for user ${userId}, query: "${query.substring(0, 50)}..."`);
+    } else {
+      console.error(`[RAG] Error retrieving context for user ${userId}:`, {
+        query: query.substring(0, 100),
+        featureType,
+        error: errorMessage
+      });
     }
-    console.error('Error retrieving RAG memory context:', error);
-    return ''; // Fail gracefully - don't block main request
+    return { contextString: '', sources: [] }; // Fail gracefully - don't block main request
   }
 
 }
@@ -113,6 +157,60 @@ export async function captureMemory(
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
+  }
+}
+
+/**
+ * Retrieve GitHub context for a specific repo
+ */
+export async function getGitHubContext(userId: string, query: string, repo: string): Promise<string> {
+  try {
+    // Search specifically for GitHub code chunks
+    const memories = await searchMemories(userId, query, 15, 'github');
+
+    // Filter by repo if multiple are indexed (though usually we index one at a time for context)
+    const repoMemories = memories.filter((m: any) => m.metadata?.repo === repo);
+
+    if (repoMemories.length === 0) return '';
+
+    // Create vector similarities map
+    const similarities = new Map<string, number>();
+    repoMemories.forEach((m: any) => {
+      similarities.set(m.id, m.similarity || 0);
+    });
+
+    // Map to ExtractedFact format for ranking
+    const facts = repoMemories.map((m: any) => ({
+      id: m.id,
+      content: m.content,
+      type: 'code',
+      confidence: 1.0, // Assumed high for code
+      extractedAt: new Date(m.createdAt),
+      metadata: m.metadata
+    }));
+
+    // Rank intelligently
+    // We pass 'query' as context for keyword overlap check
+    const ranked = rankMemoriesIntelligently(facts, similarities, query);
+    const topChunks = ranked.slice(0, 5);
+
+    return `
+## GitHub Repository Context (${repo})
+The following code snippets from the user's repository are relevant to the query:
+
+${topChunks.map((chunk: any) => `
+**File: ${chunk.metadata?.filePath || 'unknown'}** (Relevance: ${Math.round((chunk.contextRelevance || 0) * 100)}%)
+\`\`\`${chunk.metadata?.language || ''}
+${chunk.content.substring(0, 1500)}
+\`\`\`
+`).join('\n')}
+
+---
+`;
+
+  } catch (error) {
+    console.error('Error retrieving GitHub context:', error);
+    return '';
   }
 }
 
