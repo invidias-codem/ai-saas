@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload eval artifacts
         if: always() && (steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: eval-artifacts
           path: |
