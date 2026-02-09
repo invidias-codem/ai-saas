@@ -48,7 +48,7 @@ export async function getRAGMemoryContext(
     const facts = memories.map((m: any) => ({
       id: m.id,
       content: m.content, // Use full content or summary? summary is usually what we want for context
-      type: m.type,
+      type: m.type as any,
       confidence: 0.8,
       extractedAt: new Date(m.createdAt),
       metadata: m.metadata
