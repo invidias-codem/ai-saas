@@ -1,0 +1,230 @@
+---
+title: Proxy Configuration
+description: Configure URL-based proxy routing for AnyCrawl
+icon: Waypoints
+---
+
+# Proxy Configuration
+
+AnyCrawl supports flexible proxy routing based on URL patterns. You can configure different proxies for different websites or API endpoints.
+
+## Configuration Methods
+
+### Method 1: Simple Proxy Configuration (ANYCRAWL_PROXY_URL)
+
+For simple use cases where you want to use the same proxy for all requests, set the `ANYCRAWL_PROXY_URL` environment variable:
+
+```bash
+# Single proxy
+export ANYCRAWL_PROXY_URL=http://username:password@proxy.example.com:8080
+
+# Multiple proxies (tiered mode)
+export ANYCRAWL_PROXY_URL=http://proxy1:8080,http://proxy2:8080,http://proxy3:8080
+```
+
+When multiple proxies are provided (comma-separated), AnyCrawl uses a **tiered proxy** strategy:
+
+- All requests start with the first proxy (tier 0)
+- If a proxy fails for a domain, AnyCrawl automatically switches to the next tier for that domain
+- This provides intelligent failover and optimal proxy usage
+
+This is the simplest way to configure proxies when you don't need URL-based routing.
+
+### Method 2: Advanced Configuration File (ANYCRAWL_PROXY_CONFIG)
+
+For URL-based proxy routing, create a JSON configuration file (e.g., `proxy-config.json`) and set the `ANYCRAWL_PROXY_CONFIG` environment variable to its path:
+
+```bash
+ANYCRAWL_PROXY_CONFIG=/path/to/proxy-config.json
+```
+
+**Note**: If both `ANYCRAWL_PROXY_URL` and `ANYCRAWL_PROXY_CONFIG` are set, the configuration file rules take precedence, and `ANYCRAWL_PROXY_URL` serves as a fallback for URLs that don't match any rules.
+
+## Rule Types
+
+AnyCrawl supports three types of proxy rules, applied in priority order:
+
+### 1. URL Rules (Highest Priority)
+
+Exact URL matching. Use this when you need a specific proxy for a specific endpoint.
+
+```json
+{
+    "url": "https://api.example.com/v1/data",
+    "proxy": "http://username:password@proxy1.example.com:8080"
+}
+```
+
+### 2. Pattern Rules (Medium Priority)
+
+Full URL pattern matching with wildcards. Useful for matching URLs with specific paths or protocols.
+
+```json
+{
+    "pattern": "https://*.github.com/api/*",
+    "proxy": "http://username:password@proxy2.example.com:8080"
+}
+```
+
+### 3. Domain Rules (Lowest Priority)
+
+Domain-only pattern matching. Routes all requests to a domain through a specific proxy.
+
+```json
+{
+    "domain": "*.gov.au",
+    "proxy": "http://username:password@proxy3.example.com:8080"
+}
+```
+
+## Wildcard Patterns
+
+- `*` - Matches any number of characters
+- `?` - Matches exactly one character
+- Patterns are case-insensitive
+
+### Examples
+
+- `*.example.com` - Matches `api.example.com`, `www.example.com`, `test.example.com`
+- `api-?.example.com` - Matches `api-1.example.com`, `api-2.example.com`, but not `api-10.example.com`
+- `https://*.example.com/api/*` - Matches any HTTPS URL on any subdomain of example.com with /api/ path
+
+## Complete Configuration Example
+
+```json
+{
+    "rules": [
+        {
+            "url": "https://api.example.com/v1/users",
+            "proxy": "http://premium-proxy.example.com:8080"
+        },
+        {
+            "pattern": "https://api.github.com/*",
+            "proxy": "http://github-proxy.example.com:8080"
+        },
+        {
+            "domain": "*.gov.au",
+            "proxy": "http://au-proxy.example.com:8080"
+        }
+    ]
+}
+```
+
+## Proxy URL Formats
+
+AnyCrawl supports various proxy URL formats:
+
+- HTTP: `http://username:password@proxy.example.com:8080`
+- HTTPS: `https://username:password@proxy.example.com:8443`
+
+## Debugging
+
+You'll see messages like:
+
+```
+Using proxy from request userData: http://custom-proxy:8080
+Found proxy for URL https://example.com: http://proxy.example.com:8080 By matching a rule.
+Proxy matched by domain pattern: *.gov.au → http://proxy.example.com:8080
+Using tiered proxy: http://default-proxy:8080
+```
+
+## Priority Example
+
+Given the URL `https://api.github.com/repos/owner/repo`, the following rules would be checked in order:
+
+1. **URL match**: `"url": "https://api.github.com/repos/owner/repo"`
+2. **Pattern match**: `"pattern": "https://api.github.com/*"`
+3. **Domain match**: `"domain": "*.github.com"`
+
+The first matching rule wins.
+
+## Best Practices
+
+1. **Use domain rules** for broad proxy requirements (e.g., all requests to a country's government sites)
+2. **Use pattern rules** when you need to match specific paths or protocols
+3. **Use URL rules** for exact endpoints that need special handling
+4. **Order doesn't matter** in the configuration file - priority is determined by rule type
+5. **Test your patterns** using the debug logging to ensure they match as expected
+
+## Tiered Proxy System
+
+When using multiple proxies with `ANYCRAWL_PROXY_URL`, AnyCrawl employs an intelligent tiered proxy system:
+
+### How It Works
+
+1. **Initial State**: All domains start using the first proxy (tier 0)
+2. **Error Detection**: When a proxy fails for a specific domain, that domain is promoted to the next tier
+3. **Domain-Specific**: Each domain maintains its own tier level independently
+
+### Example Scenario
+
+```bash
+export ANYCRAWL_PROXY_URL=http://fast-proxy:8080,http://stable-proxy:8080,http://backup-proxy:8080
+```
+
+- Initial requests to `example.com` → Use `fast-proxy:8080` (tier 0)
+- If `fast-proxy` fails for `example.com` → Switch to `stable-proxy:8080` (tier 1)
+- Meanwhile, `github.com` might still use `fast-proxy:8080` if it's working fine
+- System will periodically retry `fast-proxy` for `example.com` to check if it's recovered
+
+### Benefits
+
+- **Automatic Failover**: No manual intervention needed when proxies fail
+- **Domain Optimization**: Each domain uses the best available proxy
+- **Resource Efficiency**: Failed proxies aren't completely abandoned
+- **Self-Healing**: Automatically returns to optimal proxies when they recover
+
+## Complete Example: Using Both Methods
+
+Here's an example setup that uses both configuration methods:
+
+```bash
+# Set a default proxy for general use
+export ANYCRAWL_PROXY_URL=http://default-proxy:8080
+
+# Set up URL-based routing for specific sites
+export ANYCRAWL_PROXY_CONFIG=/path/to/proxy-config.json
+```
+
+With this proxy-config.json:
+
+```json
+{
+    "rules": [
+        {
+            "domain": "*.gov.au",
+            "proxy": "http://au-residential-proxy:8080"
+        },
+        {
+            "pattern": "https://api.*.com/*",
+            "proxy": "http://api-optimized-proxy:3128"
+        }
+    ]
+}
+```
+
+Result:
+
+- `https://www.homeaffairs.gov.au/` → Uses `au-residential-proxy:8080` (domain rule match)
+- `https://api.github.com/repos` → Uses `api-optimized-proxy:3128` (pattern rule match)
+- `https://example.com/` → Uses `default-proxy:8080` (fallback to ANYCRAWL_PROXY_URL)
+
+## Environment Variables Summary
+
+| Variable                | Purpose                                         | Example                                                |
+| ----------------------- | ----------------------------------------------- | ------------------------------------------------------ |
+| `ANYCRAWL_PROXY_URL`    | Tiered proxy configuration (single or multiple) | `http://proxy:8080` or `http://p1:8080,http://p2:8080` |
+| `ANYCRAWL_PROXY_CONFIG` | Path to JSON config file for URL-based routing  | `/path/to/proxy-config.json`                           |
+
+### Priority Order
+
+1. **Highest**: Proxy specified in request options (user-provided in API request)
+    ```json
+    {
+        "url": "https://example.com",
+        "engine": "cheerio",
+        "proxy": "http://custom-proxy:8080"
+    }
+    ```
+2. **High**: URL-based rules from `ANYCRAWL_PROXY_CONFIG`
+3. **Low**: Tiered proxies from `ANYCRAWL_PROXY_URL` (fallback)
