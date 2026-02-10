@@ -29,6 +29,7 @@ export const ConversationRequestSchema = z.object({
   fileData: z.string().optional(),
   fileName: z.string().optional(),
   mimeType: z.string().optional(),
+  fileUri: z.string().optional(),
   mode: z.enum(['standard', 'agentic-preview']).optional(),
 });
 
@@ -138,6 +139,74 @@ export async function generateConversationReply(
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'standard';
 
+  // ---------------------------------------------------------
+  // SPRINT 3: Agentic Integration
+  // ---------------------------------------------------------
+  if (agentMode === 'agentic-preview') {
+    const { runReActLoop } = await import('@/lib/agents/core/reactLoop');
+    const { ToolRegistry } = await import('@/lib/agents/core/registry');
+    const { dealSentinelTool } = await import('@/lib/agents/tools/dealSentinel');
+
+    // 1. Initialize Registry
+    const registry = new ToolRegistry();
+    registry.register(dealSentinelTool);
+
+    // 2. Construct Prompt (Multimodal support)
+    const userQuery = parsed.messages[parsed.messages.length - 1]?.text || "";
+    let promptInput: string | any[] = userQuery;
+
+    if (parsed.fileData && parsed.mimeType) {
+      promptInput = [
+        { text: userQuery },
+        {
+          inlineData: {
+            mimeType: parsed.mimeType,
+            data: parsed.fileData // Base64
+          }
+        }
+      ];
+    } else if (parsed.fileUri && parsed.mimeType) {
+      promptInput = [
+        { text: userQuery },
+        {
+          fileData: {
+            mimeType: parsed.mimeType,
+            fileUri: parsed.fileUri
+          }
+        }
+      ];
+    }
+
+    // 3. Execute ReAct Loop (Non-streaming for now, wrapped in stream)
+    // Note: ReAct loop takes time. We will await it and then stream the result all at once.
+    // Future optimization: Stream individual thought steps.
+    const agentResult = await runReActLoop(promptInput, {
+      userId,
+      sessionId: 'session-' + Date.now(), // specific session tracking if needed
+      history: [], // We could map `parsed.messages` to history if desired
+      enableTelemetry: true
+    }, registry);
+
+    // 4. Wrap result in ReadableStream to match expected output
+    const textEncoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(textEncoder.encode(agentResult.answer));
+        controller.close();
+      }
+    });
+
+    return {
+      stream,
+      sources: [], // We could populate this from agentResult.trajectory if we parsed it
+      debug: {
+        model: 'gemini-2.0-flash-agentic',
+        userQuery
+      }
+    };
+  }
+  // ---------------------------------------------------------
+
   const { provider, modelId: actualModelId } = getProviderForMode(agentMode);
 
   const { messages, fileData, mimeType } = parsed;
@@ -229,7 +298,7 @@ export async function generateConversationReply(
   const streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
     model: actualModelId,
     temperature: 0.9,
-    maxTokens: agentMode === 'agentic-preview' ? 4096 : 2048
+    maxTokens: 2048
   });
 
   const { stream: originalStream } = streamResult;

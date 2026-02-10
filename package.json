@@ -102,6 +102,7 @@
     "zod": "^3.22.5"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.160",
     "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^18.3.3",

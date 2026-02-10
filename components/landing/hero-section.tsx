@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRightIcon } from "@radix-ui/react-icons";
 
 import { Button } from "@/components/ui/button";
-import { LandingChat } from "@/components/landing-chat";
+import { AgentShowcase } from "@/components/landing/agent-showcase";
 import { useProModal } from "@/hooks/use-pro-modal";
 
 const capabilities = [
@@ -124,11 +124,11 @@ export const HeroSection = () => {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.8, delay: 0.5 }}
-                    className="mt-20 relative mx-auto max-w-5xl rounded-xl border border-white/10 bg-black/40 backdrop-blur-md shadow-2xl p-2 md:p-4"
+                    className="mt-20 relative mx-auto w-full max-w-6xl rounded-xl border border-white/10 bg-black/40 backdrop-blur-md shadow-2xl p-2 md:p-4"
                 >
                     <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl blur opacity-20" />
-                    <div className="relative rounded-lg overflow-hidden bg-[#0f1117]/50 flex items-center justify-center border border-white/5 p-1">
-                        <LandingChat />
+                    <div className="relative rounded-lg overflow-hidden bg-[#0f1117]/50 border border-white/5 p-1">
+                        <AgentShowcase />
                     </div>
                 </motion.div>
             </div>

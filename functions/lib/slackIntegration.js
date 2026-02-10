@@ -1,0 +1,535 @@
+"use strict";
+/**
+ * Slack Integration - Bot commands and notifications
+ */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.handleSlackInteractivity = exports.handleSlackCommand = void 0;
+exports.sendSlackNotification = sendSlackNotification;
+const functions = __importStar(require("firebase-functions"));
+const admin = __importStar(require("firebase-admin"));
+const axios_1 = __importDefault(require("axios"));
+const SLACK_API_BASE = 'https://slack.com/api';
+/**
+ * HTTP Cloud Function - Handle Slack Commands (/genie)
+ */
+exports.handleSlackCommand = functions.https.onRequest(async (req, res) => {
+    try {
+        // Verify Slack signature
+        if (!verifySlackSignature(req)) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+        const { user_id, channel_id, text, response_url, team_id } = req.body;
+        if (!user_id || !channel_id) {
+            res.status(400).json({ error: 'Missing required Slack fields' });
+            return;
+        }
+        // Acknowledge command immediately
+        res.status(200).json({
+            response_type: 'in_channel',
+            text: `Processing your request: "${text}"`,
+        });
+        // Process command asynchronously
+        await processSlackCommand(user_id, channel_id, text, response_url, team_id, req.body);
+    }
+    catch (error) {
+        console.error('Error handling Slack command:', error);
+        res.status(500).json({ error: `Failed to process command: ${error}` });
+    }
+});
+/**
+ * HTTP Cloud Function - Handle Slack Interactivity (buttons, etc.)
+ */
+exports.handleSlackInteractivity = functions.https.onRequest(async (req, res) => {
+    try {
+        // Verify Slack signature
+        if (!verifySlackSignature(req)) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
+        const payload = JSON.parse(req.body.payload || '{}');
+        const { type, user, trigger_id, response_url } = payload;
+        res.status(200).json({ ok: true });
+        // Process interaction asynchronously
+        if (type === 'block_actions') {
+            await handleBlockActions(payload);
+        }
+    }
+    catch (error) {
+        console.error('Error handling Slack interactivity:', error);
+        res.status(500).json({ error: `Failed to handle interaction: ${error}` });
+    }
+});
+/**
+ * Resolve Slack User to Internal User
+ */
+async function resolveSlackUser(teamId, slackUserId) {
+    try {
+        const db = admin.firestore();
+        const mappingDoc = await db.collection('slackUserMappings').doc(`${teamId}:${slackUserId}`).get();
+        if (mappingDoc.exists) {
+            return mappingDoc.data()?.userId || slackUserId;
+        }
+    }
+    catch (error) {
+        console.warn('Error resolving slack user:', error);
+    }
+    return slackUserId;
+}
+/**
+ * Process Slack command
+ */
+async function processSlackCommand(slackUserId, channelId, text, responseUrl, teamId, reqBody) {
+    try {
+        const db = admin.firestore();
+        // Resolve to internal User ID if linked
+        const userId = await resolveSlackUser(teamId, slackUserId);
+        // Parse command: /genie [action] [args...]
+        const parts = text.trim().split(/\s+/);
+        const action = parts[0] || 'help';
+        const args = parts.slice(1).join(' ');
+        let response;
+        switch (action.toLowerCase()) {
+            case 'help':
+                response = getHelpMessage();
+                break;
+            case 'memory':
+                response = await getMemorySummary(userId);
+                break;
+            case 'remember':
+                if (!args) {
+                    response = { text: 'Please provide something to remember. Usage: `/genie remember [text]`' };
+                }
+                else {
+                    await db
+                        .collection('users')
+                        .doc(userId)
+                        .collection('memories')
+                        .add({
+                        userId,
+                        featureType: 'slack',
+                        title: `Memory: ${args.substring(0, 30)}...`,
+                        summary: args,
+                        messages: [],
+                        tags: ['slack', 'command'],
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                    });
+                    response = {
+                        response_type: 'ephemeral',
+                        text: '🧠 Memory stored successfully!'
+                    };
+                }
+                break;
+            case 'stats':
+                response = await getUserStats(userId);
+                break;
+            case 'notify':
+                response = await configureNotifications(userId, channelId, teamId);
+                break;
+            case 'configure':
+                // Open configuration modal
+                const triggerId = reqBody.trigger_id;
+                if (!triggerId) {
+                    response = { text: 'Error: No trigger_id found.' };
+                }
+                else {
+                    await openConfigurationModal(triggerId, channelId, teamId);
+                    // Slash commands require immediate 200, so we return empty/200 OK 
+                    // but here we are returning a response object that gets sent to axios.post(responseUrl).
+                    // Actually, for opening modals, we usually ack immediately (done in handler) and then call views.open.
+                    // But processSlackCommand is async *after* ack.
+                    // So we just return nothing or a temp message.
+                    response = { text: '', response_type: 'ephemeral', delete_original: true }; // Dummy
+                }
+                break;
+            default:
+                response = {
+                    text: `Unknown command: ${action}. Type \`/genie help\` for available commands.`,
+                };
+        }
+        // Send response to Slack
+        await axios_1.default.post(responseUrl, response);
+    }
+    catch (error) {
+        console.error('Error processing Slack command:', error);
+        // Send error message
+        try {
+            await axios_1.default.post(responseUrl, {
+                text: `Error processing command: ${error}`,
+            });
+        }
+        catch (err) {
+            console.error('Failed to send error message to Slack:', err);
+        }
+    }
+}
+/**
+ * Handle Slack block actions (button clicks, etc.)
+ */
+async function handleBlockActions(payload) {
+    const { actions, user, trigger_id } = payload;
+    for (const action of actions) {
+        const { action_id, value } = action;
+        if (action_id === 'view_memory') {
+            // TODO: Send modal with memory details
+            console.log(`User ${user.id} requested to view memory: ${value}`);
+        }
+        else if (action_id === 'enable_notifications') {
+            // TODO: Enable notifications
+            console.log(`User ${user.id} enabled notifications`);
+        }
+    }
+}
+/**
+ * Get help message
+ */
+function getHelpMessage() {
+    return {
+        response_type: 'ephemeral',
+        blocks: [
+            {
+                type: 'section',
+                text: {
+                    type: 'mrkdwn',
+                    text: '*Genie AI Slack Commands*\n\n`/genie help` - Show this help message\n`/genie memory` - View your memory summary\n`/genie stats` - Get your usage statistics\n`/genie notify` - Configure notifications',
+                },
+            },
+        ],
+    };
+}
+/**
+ * Get user memory summary
+ */
+async function getMemorySummary(userId) {
+    try {
+        const db = admin.firestore();
+        const memories = await db
+            .collection('users')
+            .doc(userId)
+            .collection('memories')
+            .orderBy('createdAt', 'desc')
+            .limit(5)
+            .get();
+        if (memories.empty) {
+            return {
+                response_type: 'ephemeral',
+                text: 'No memories found. Start using Genie to build your knowledge base!',
+            };
+        }
+        const memoryList = memories.docs
+            .map((doc) => {
+            const memory = doc.data();
+            return `• *${memory.title}* (${memory.featureType})\n  ${memory.summary}`;
+        })
+            .join('\n');
+        return {
+            response_type: 'ephemeral',
+            blocks: [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*Your Recent Memories*\n\n${memoryList}`,
+                    },
+                },
+            ],
+        };
+    }
+    catch (error) {
+        console.error('Error getting memory summary:', error);
+        return {
+            text: 'Error retrieving memories',
+        };
+    }
+}
+/**
+ * Get user statistics
+ */
+async function getUserStats(userId) {
+    try {
+        const db = admin.firestore();
+        const context = await db
+            .collection('users')
+            .doc(userId)
+            .collection('context')
+            .doc('profile')
+            .get();
+        if (!context.exists) {
+            return { text: 'No usage data found' };
+        }
+        const data = context.data();
+        const totalInteractions = data?.totalInteractions || 0;
+        const totalTokens = data?.totalTokensUsed || 0;
+        return {
+            response_type: 'ephemeral',
+            blocks: [
+                {
+                    type: 'section',
+                    text: {
+                        type: 'mrkdwn',
+                        text: `*Your Genie Stats*\n\n📊 Total Interactions: ${totalInteractions}\n🔤 Total Tokens Used: ${totalTokens}\n⏰ Member Since: ${new Date(data?.createdAt).toLocaleDateString()}`,
+                    },
+                },
+            ],
+        };
+    }
+    catch (error) {
+        console.error('Error getting user stats:', error);
+        return { text: 'Error retrieving statistics' };
+    }
+}
+/**
+ * Configure notifications
+ */
+async function configureNotifications(userId, channelId, teamId) {
+    try {
+        const db = admin.firestore();
+        // Update user context
+        await db
+            .collection('users')
+            .doc(userId)
+            .collection('context')
+            .doc('profile')
+            .update({
+            'integrations.slackEnabled': true,
+            'integrations.slackChannelId': channelId,
+            'integrations.slackUserId': userId,
+            'integrations.slackTeamId': teamId,
+        });
+        return {
+            response_type: 'ephemeral',
+            text: '✅ Notifications enabled! You will receive updates in this channel.',
+        };
+    }
+    catch (error) {
+        console.error('Error configuring notifications:', error);
+        return { text: 'Error configuring notifications' };
+    }
+}
+/**
+ * Send Slack notification
+ */
+async function sendSlackNotification(userId, message, blocks) {
+    try {
+        const db = admin.firestore();
+        // Get Slack configuration
+        const context = await db
+            .collection('users')
+            .doc(userId)
+            .collection('context')
+            .doc('profile')
+            .get();
+        const slackConfig = context.data()?.integrations;
+        if (!slackConfig?.slackEnabled || !slackConfig?.slackChannelId) {
+            console.log(`Slack notifications not configured for user ${userId}`);
+            return;
+        }
+        const botToken = process.env.SLACK_BOT_TOKEN;
+        if (!botToken) {
+            throw new Error('SLACK_BOT_TOKEN not configured');
+        }
+        // Send message via Slack API
+        const payload = {
+            channel: slackConfig.slackChannelId,
+            text: message,
+        };
+        if (blocks) {
+            payload.blocks = blocks;
+        }
+        await axios_1.default.post(`${SLACK_API_BASE}/chat.postMessage`, payload, {
+            headers: {
+                Authorization: `Bearer ${botToken}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        console.log(`Slack notification sent to user ${userId}`);
+    }
+    catch (error) {
+        console.error(`Error sending Slack notification: ${error}`);
+        // Don't throw - notification failure shouldn't block operations
+    }
+}
+/**
+ * Open configuration modal
+ */
+async function openConfigurationModal(triggerId, channelId, teamId) {
+    try {
+        const db = admin.firestore();
+        // Get existing config
+        let currentConfig = {
+            persona: 'default',
+            responseStyle: 'concise',
+            proactiveEnabled: false
+        };
+        try {
+            const configDoc = await db.collection('slack_channel_configs').doc(`${teamId}_${channelId}`).get();
+            if (configDoc.exists) {
+                currentConfig = { ...currentConfig, ...configDoc.data() };
+            }
+        }
+        catch (e) {
+            console.warn('Error fetching config for modal:', e);
+        }
+        const botToken = process.env.SLACK_BOT_TOKEN;
+        if (!botToken)
+            throw new Error('SLACK_BOT_TOKEN missing');
+        await axios_1.default.post(`${SLACK_API_BASE}/views.open`, {
+            trigger_id: triggerId,
+            view: {
+                type: 'modal',
+                callback_id: 'configure_channel_submission',
+                private_metadata: JSON.stringify({ channelId, teamId }),
+                title: {
+                    type: 'plain_text',
+                    text: 'Channel Settings'
+                },
+                submit: {
+                    type: 'plain_text',
+                    text: 'Save'
+                },
+                blocks: [
+                    {
+                        type: 'section',
+                        text: {
+                            type: 'mrkdwn',
+                            text: `Configure Genie behavior for <#${channelId}>`
+                        }
+                    },
+                    {
+                        type: 'input',
+                        block_id: 'persona_block',
+                        label: {
+                            type: 'plain_text',
+                            text: 'Bot Persona'
+                        },
+                        element: {
+                            type: 'static_select',
+                            action_id: 'persona_selection',
+                            initial_option: {
+                                text: { type: 'plain_text', text: currentConfig.persona.charAt(0).toUpperCase() + currentConfig.persona.slice(1) },
+                                value: currentConfig.persona
+                            },
+                            options: [
+                                { text: { type: 'plain_text', text: 'Default' }, value: 'default' },
+                                { text: { type: 'plain_text', text: 'Developer' }, value: 'developer' },
+                                { text: { type: 'plain_text', text: 'Pirate' }, value: 'pirate' },
+                                { text: { type: 'plain_text', text: 'Executive' }, value: 'executive' }
+                            ]
+                        }
+                    },
+                    {
+                        type: 'input',
+                        block_id: 'style_block',
+                        label: {
+                            type: 'plain_text',
+                            text: 'Response Style'
+                        },
+                        element: {
+                            type: 'static_select',
+                            action_id: 'style_selection',
+                            initial_option: {
+                                text: { type: 'plain_text', text: currentConfig.responseStyle.charAt(0).toUpperCase() + currentConfig.responseStyle.slice(1) },
+                                value: currentConfig.responseStyle
+                            },
+                            options: [
+                                { text: { type: 'plain_text', text: 'Concise' }, value: 'concise' },
+                                { text: { type: 'plain_text', text: 'Detailed' }, value: 'detailed' },
+                                { text: { type: 'plain_text', text: 'Bullet Points' }, value: 'bullet-points' }
+                            ]
+                        }
+                    },
+                    {
+                        type: 'section',
+                        block_id: 'proactive_block',
+                        text: {
+                            type: 'mrkdwn',
+                            text: '*Daily Summaries*\nEnable daily proactive summaries for this channel?'
+                        },
+                        accessory: {
+                            type: 'checkboxes',
+                            action_id: 'proactive_checkbox',
+                            initial_options: currentConfig.proactiveEnabled ? [{ value: 'enabled', text: { type: 'plain_text', text: 'Enable' } }] : [],
+                            options: [
+                                {
+                                    text: { type: 'plain_text', text: 'Enable' },
+                                    value: 'enabled'
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }, {
+            headers: { 'Authorization': `Bearer ${botToken}` }
+        });
+    }
+    catch (error) {
+        console.error('Error opening config modal:', error);
+    }
+}
+/**
+ * Verify Slack request signature
+ */
+function verifySlackSignature(req) {
+    try {
+        const crypto = require('crypto');
+        const signingSecret = process.env.SLACK_SIGNING_SECRET || '';
+        const timestamp = req.headers['x-slack-request-timestamp'];
+        const signature = req.headers['x-slack-signature'];
+        // Check timestamp is recent (within 5 minutes)
+        const currentTime = Math.floor(Date.now() / 1000);
+        if (Math.abs(currentTime - parseInt(timestamp)) > 300) {
+            return false;
+        }
+        // Verify signature
+        const baseString = `v0:${timestamp}:${JSON.stringify(req.body)}`;
+        const hmac = crypto
+            .createHmac('sha256', signingSecret)
+            .update(baseString)
+            .digest('hex');
+        const expectedSignature = `v0=${hmac}`;
+        return signature === expectedSignature;
+    }
+    catch (error) {
+        console.error('Error verifying Slack signature:', error);
+        return false;
+    }
+}
+//# sourceMappingURL=slackIntegration.js.map
