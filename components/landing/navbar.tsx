@@ -10,7 +10,8 @@ import { motion, AnimatePresence, Variants } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
-import { CheckIcon, Cross2Icon } from "@radix-ui/react-icons";
+import { CheckIcon, Cross2Icon, FileTextIcon, QuestionMarkCircledIcon, StarFilledIcon, EnterIcon, RocketIcon } from "@radix-ui/react-icons";
+import { Slack } from "lucide-react";
 
 export const LandingNavbar = () => {
     const t = useTranslations("Landing");
@@ -49,9 +50,9 @@ export const LandingNavbar = () => {
     ];
 
     const navLinks = [
-        { href: "/blog", label: "Blog" },
-        { href: "/slack", label: "Slack" },
-        { href: "/support", label: "Support" },
+        { href: "/blog", label: "Blog", icon: FileTextIcon },
+        { href: "/slack", label: "Slack", icon: Slack },
+        { href: "/support", label: "Support", icon: QuestionMarkCircledIcon },
     ];
 
     const [mounted, setMounted] = useState(false);
@@ -236,35 +237,57 @@ export const LandingNavbar = () => {
                                 <Sparkles />
                             </div>
 
-                            <div className="absolute inset-0 flex flex-col items-center pt-32 w-full max-w-sm mx-auto z-50 pointer-events-auto">
+                            <div className="absolute inset-0 flex flex-col items-center pt-24 w-full max-w-sm mx-auto z-50 pointer-events-auto">
                                 <motion.div
                                     variants={{
                                         closed: {},
                                         open: {
-                                            transition: { staggerChildren: 0.1 }
+                                            transition: {
+                                                staggerChildren: 0.08,
+                                                delayChildren: 0.05
+                                            }
                                         }
                                     }}
                                     initial="closed"
                                     animate="open"
-                                    className="flex flex-col items-center w-full space-y-8"
+                                    className="flex flex-col items-center w-full space-y-3"
                                 >
-                                    {navLinks.map((link) => (
-                                        <motion.div key={link.href} variants={itemVariants} className="w-full">
-                                            <Link
-                                                href={link.href}
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    setIsOpen(false);
-                                                    router.push(link.href);
-                                                }}
-                                                className="block text-center text-2xl font-medium text-white hover:text-purple-400 transition-colors py-2 drop-shadow-md"
-                                            >
-                                                {link.label}
-                                            </Link>
-                                        </motion.div>
-                                    ))}
+                                    {navLinks.map((link) => {
+                                        const Icon = link.icon;
+                                        return (
+                                            <motion.div key={link.href} variants={itemVariants} className="w-full">
+                                                <Link
+                                                    href={link.href}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setIsOpen(false);
+                                                        router.push(link.href);
+                                                    }}
+                                                    className="group relative block w-full"
+                                                >
+                                                    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl p-4 transition-all duration-300 hover:border-purple-500/50 hover:bg-white/10 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.5)] hover:scale-[1.02] active:scale-[0.98]">
+                                                        {/* Gradient overlay on hover */}
+                                                        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/10 to-pink-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
-                                    <motion.div variants={itemVariants} className="w-full h-px bg-white/10 my-2" />
+                                                        {/* Content */}
+                                                        <div className="relative flex items-center justify-center gap-3">
+                                                            <Icon className="w-6 h-6 text-purple-400 group-hover:text-pink-400 transition-colors duration-300" />
+                                                            <span className="text-2xl font-semibold text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-pink-400 transition-all duration-300">
+                                                                {link.label}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Shimmer effect */}
+                                                        <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                                                    </div>
+                                                </Link>
+                                            </motion.div>
+                                        );
+                                    })}
+
+                                    <motion.div variants={itemVariants} className="w-full flex items-center justify-center my-2">
+                                        <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent w-full" />
+                                    </motion.div>
 
                                     <motion.div variants={itemVariants} className="w-full">
                                         <button
@@ -272,9 +295,20 @@ export const LandingNavbar = () => {
                                                 setIsOpen(false);
                                                 setIsPricingOpen(true);
                                             }}
-                                            className="block w-full text-center text-2xl font-medium text-white hover:text-purple-400 transition-colors py-2 drop-shadow-md"
+                                            className="group relative block w-full"
                                         >
-                                            Pricing
+                                            <div className="relative overflow-hidden rounded-2xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-xl p-4 transition-all duration-300 hover:border-purple-500 hover:shadow-[0_0_40px_-5px_rgba(168,85,247,0.6)] hover:scale-[1.02] active:scale-[0.98]">
+                                                <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                                                <div className="relative flex items-center justify-center gap-3">
+                                                    <StarFilledIcon className="w-6 h-6 text-purple-400 group-hover:text-pink-400 transition-colors" />
+                                                    <span className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
+                                                        Pricing
+                                                    </span>
+                                                </div>
+
+                                                <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                                            </div>
                                         </button>
                                     </motion.div>
 
@@ -286,9 +320,16 @@ export const LandingNavbar = () => {
                                                 setIsOpen(false);
                                                 router.push("/dashboard");
                                             }}
-                                            className="block text-center text-2xl font-medium text-white hover:text-purple-400 transition-colors py-2 drop-shadow-md"
+                                            className="group relative block w-full"
                                         >
-                                            {tHero("login")}
+                                            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 transition-all duration-300 hover:border-white/30 hover:bg-white/10 hover:shadow-[0_0_25px_-5px_rgba(255,255,255,0.3)] hover:scale-[1.02] active:scale-[0.98]">
+                                                <div className="relative flex items-center justify-center gap-3">
+                                                    <EnterIcon className="w-6 h-6 text-gray-300 group-hover:text-white transition-colors" />
+                                                    <span className="text-2xl font-semibold text-gray-100 group-hover:text-white transition-colors">
+                                                        {tHero("login")}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </Link>
                                     </motion.div>
 
@@ -301,8 +342,17 @@ export const LandingNavbar = () => {
                                                 router.push("/dashboard");
                                             }}
                                         >
-                                            <Button className="w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white border-0 hover:scale-[1.02] active:scale-[0.98] transition-transform h-14 rounded-2xl text-lg font-bold shadow-2xl shadow-purple-500/40">
-                                                {tHero("cta")}
+                                            <Button className="group relative w-full overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white border-0 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-14 rounded-2xl text-lg font-bold shadow-2xl shadow-purple-500/40 hover:shadow-purple-500/60">
+                                                {/* Animated gradient overlay */}
+                                                <div className="absolute inset-0 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                                                <span className="relative flex items-center justify-center gap-2">
+                                                    <RocketIcon className="w-5 h-5" />
+                                                    {tHero("cta")}
+                                                </span>
+
+                                                {/* Shimmer effect */}
+                                                <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-[2000ms] bg-gradient-to-r from-transparent via-white/30 to-transparent" />
                                             </Button>
                                         </Link>
                                     </motion.div>

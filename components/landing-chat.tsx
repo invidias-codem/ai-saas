@@ -189,7 +189,7 @@ export const LandingChat = () => {
     }
 
     return (
-        <div className="w-full max-w-2xl mx-auto">
+        <div className="w-full max-w-2xl mx-auto px-4 md:px-6">
             {/* New Year CTA Header */}
             <div className="text-center mb-4">
                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 mb-3">
@@ -213,7 +213,7 @@ export const LandingChat = () => {
                                     // Optional: auto-send
                                     // handleSendMessage(); 
                                 }}
-                                className="text-xs px-3 py-1.5 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"
+                                className="text-sm px-4 py-2.5 rounded-full border border-white/10 bg-white/5 hover:bg-white/10 active:bg-white/15 text-gray-300 transition-colors min-h-[44px] flex items-center justify-center"
                             >
                                 {prompt}
                             </button>
@@ -226,12 +226,12 @@ export const LandingChat = () => {
             <div className="relative rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl overflow-hidden">
                 {/* Messages Area - Matching conversation page styling */}
                 {messages.length > 0 && (
-                    <div ref={chatContainerRef} className="max-h-[300px] overflow-y-auto p-4 scroll-smooth">
+                    <div ref={chatContainerRef} className="max-h-[400px] md:max-h-[500px] overflow-y-auto p-6 md:p-8 scroll-smooth">
                         {messages.map((msg, idx) => (
                             <div
                                 key={idx}
                                 className={cn(
-                                    "group w-full mb-6 flex",
+                                    "group w-full mb-8 md:mb-10 flex",
                                     msg.role === "user" ? "justify-end" : "justify-start"
                                 )}
                             >
@@ -255,7 +255,7 @@ export const LandingChat = () => {
 
                                     {/* Content Bubble - matching conversation page */}
                                     <div className={cn(
-                                        "relative text-[15px] leading-7",
+                                        "relative text-[15px] md:text-[16px] leading-relaxed md:leading-loose",
                                         msg.role === "user"
                                             ? "bg-white/10 text-white rounded-[20px] rounded-tr-sm px-5 py-3" // User bubble
                                             : "bg-transparent text-gray-200 px-0 py-0" // Bot - no bubble (Gemini style)
@@ -280,7 +280,7 @@ export const LandingChat = () => {
                                                             <code className="bg-white/10 px-1.5 py-0.5 rounded-md font-mono text-[13px] text-pink-400" {...props}>{children}</code>
                                                         );
                                                     },
-                                                    p: ({ node, ...props }) => <p {...props} className="mb-4 last:mb-0" />,
+                                                    p: ({ node, ...props }) => <p {...props} className="mb-5 md:mb-6 last:mb-0 leading-relaxed" />,
                                                     ul: ({ node, ...props }) => <ul {...props} className="list-disc list-outside ml-4 mb-4 space-y-2 marker:text-gray-500" />,
                                                     ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-outside ml-4 mb-4 space-y-2 marker:text-gray-500" />,
                                                     li: ({ node, ...props }) => <li {...props} className="pl-1" />,
@@ -300,7 +300,7 @@ export const LandingChat = () => {
 
                                         {/* Feedback controls for bot messages */}
                                         {msg.role === "bot" && idx > 0 && messages[idx - 1]?.role === "user" && (
-                                            <div className="mt-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="mt-3 flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                                 <button
                                                     type="button"
                                                     className="text-xs px-2 py-1 rounded-md border border-white/10 bg-white/5 text-gray-300 hover:bg-white/10"
@@ -351,7 +351,7 @@ export const LandingChat = () => {
                             placeholder="Ask Genie anything..."
                             disabled={isLoading}
                             rows={1}
-                            className="flex-1 resize-none bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 disabled:opacity-50"
+                            className="flex-1 resize-none bg-white/10 border-2 border-white/20 rounded-xl px-4 py-3 text-white placeholder:text-gray-400 focus:outline-none focus:border-purple-500 focus:bg-white/15 disabled:opacity-50 transition-all duration-200"
                         />
                         <Button
                             onClick={handleSendMessage}
@@ -368,7 +368,7 @@ export const LandingChat = () => {
 
                     {/* Interaction Counter */}
                     <div className="mt-3 flex justify-between items-center text-xs">
-                        <span className="text-gray-500">
+                        <span className="text-sm md:text-xs text-gray-400 font-medium">
                             {10 - interactionCount} of 10 free messages remaining
                         </span>
                         {interactionCount >= 8 && (
