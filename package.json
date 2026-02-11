@@ -54,6 +54,7 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/supabase-js": "^2.90.1",
+    "@tailwindcss/postcss": "^4.1.18",
     "@upstash/ratelimit": "^2.0.6",
     "@upstash/redis": "^1.35.3",
     "@vercel/analytics": "^1.6.1",
