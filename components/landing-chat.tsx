@@ -341,7 +341,7 @@ export const LandingChat = () => {
                 )}
 
                 {/* Input Area */}
-                <div className="p-4 border-t border-white/5">
+                <div className="p-5 border-t border-white/10 bg-white/[0.02]">
                     <div className="flex items-end gap-2">
                         <textarea
                             ref={inputRef}
