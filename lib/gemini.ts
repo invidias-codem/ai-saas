@@ -39,12 +39,24 @@ export function sanitizeHistory(history: HistoryItem[]): {
         }
     }
 
-    // 2. Ensure strict alternation for the final step
+    // 2. Ensure history starts with 'user' role (Gemini requirement)
+    // If the first message is 'model', strip it and fold its text into prependToPrompt context.
+    while (sanitizedHistory.length > 0 && sanitizedHistory[0].role === 'model') {
+        const removed = sanitizedHistory.shift();
+        if (removed) {
+            const prefix = `[Previous assistant context]: ${removed.parts[0].text}`;
+            prependToPrompt = prependToPrompt ? prefix + "\n\n" + prependToPrompt : prefix;
+        }
+    }
+
+    // 3. Ensure strict alternation for the final step
     // The history passed to startChat MUST end with a MODEL message if we are sending a USER message.
     if (sanitizedHistory.length > 0 && sanitizedHistory[sanitizedHistory.length - 1].role === 'user') {
         const lastHistoryMsg = sanitizedHistory.pop();
         if (lastHistoryMsg) {
-            prependToPrompt = lastHistoryMsg.parts[0].text;
+            prependToPrompt = prependToPrompt
+                ? prependToPrompt + "\n\n" + lastHistoryMsg.parts[0].text
+                : lastHistoryMsg.parts[0].text;
         }
     }
 
