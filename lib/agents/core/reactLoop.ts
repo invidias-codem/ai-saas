@@ -28,7 +28,19 @@ export async function runReActLoop(
     const project = process.env.GCP_PROJECT || 'genie-ai-1ca85';
     const location = process.env.GCP_LOCATION || 'us-central1';
 
-    const vertexAI = new VertexAI({ project, location });
+    // Parse credentials from env if available
+    const keyJson = process.env.GCP_SERVICE_ACCOUNT_KEY_JSON;
+    let googleAuthOptions;
+    if (keyJson) {
+        try {
+            const credentials = JSON.parse(keyJson);
+            googleAuthOptions = { credentials };
+        } catch (e) {
+            console.error("Failed to parse GCP_SERVICE_ACCOUNT_KEY_JSON for Vertex AI auth", e);
+        }
+    }
+
+    const vertexAI = new VertexAI({ project, location, googleAuthOptions });
     const model = vertexAI.getGenerativeModel({ model: modelName });
 
     const trajectory: TrajectoryStep[] = [];

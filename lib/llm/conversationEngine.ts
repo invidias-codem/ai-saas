@@ -84,7 +84,7 @@ function getGoogleApiKey(): string {
 
 const DEFAULT_MODEL = "gemini-2.0-flash";
 const AGENTIC_MODEL = "gemini-1.5-pro-preview-0409";
-const QUALITY_MODEL = "claude-3-5-sonnet-20240620";
+const QUALITY_MODEL = "claude-sonnet-4-5-20250929";
 
 function getProviderForMode(mode: AgentMode): { provider: LLMProvider, modelId: string } {
   if (mode === 'quality') {
