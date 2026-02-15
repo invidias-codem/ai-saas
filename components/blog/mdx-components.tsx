@@ -168,7 +168,7 @@ export const mdxComponents = {
   },
 
   // Images - simplified to avoid hydration errors
-  img: ({ src, alt, ...props }: ComponentProps<"img">) => (
+  img: ({ src, alt, width, height, ...props }: ComponentProps<"img">) => (
     <div className="relative w-full h-auto my-6">
       <Image
         src={src || ""}
