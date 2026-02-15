@@ -76,7 +76,7 @@ export default async function LocaleLayout({
         <html lang={locale} suppressHydrationWarning={true}>
             <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
                 <ClerkProvider
-                    publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+                    publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20"}
                 >
                     <NextIntlClientProvider messages={messages}>
                         <ThemeProvider
