@@ -104,6 +104,7 @@ jobs:
             git commit -m "🤖 Auto-implement: $file" -m "Applied safe suggestion from PR review"
           done
           
+          git pull --rebase origin HEAD
           git push origin HEAD
 
       - name: Post Summary Comment
