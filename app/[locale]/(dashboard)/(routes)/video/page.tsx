@@ -97,7 +97,7 @@ const VideoPage = () => {
     // Cleanup function to clear the interval
     return () => clearInterval(interval);
 
-  }, [predictionId, status, form]); // Dependencies for the hook
+  }, [predictionId, status, form, trackActivity]); // Dependencies for the hook
 
 
   // ✅ Updated Form submission handler

@@ -55,7 +55,7 @@ const API_URL = __ENV.API_URL || 'https://api.anycrawl.dev/v1/scrape';
 const AUTH_TOKEN = __ENV.AUTH_TOKEN || 'your-token-here';
 const TARGET_URL = __ENV.TARGET_URL || 'https://example.com/';
 
-export default function () {
+export default function main() {
     // Build request
     const payload = JSON.stringify({
         url: TARGET_URL,

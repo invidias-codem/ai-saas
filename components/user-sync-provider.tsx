@@ -20,7 +20,7 @@ export const UserSyncProvider = ({ children }: { children: React.ReactNode }) =>
                 })
                 .catch((err) => console.error("User sync exception:", err));
         }
-    }, [isLoaded, isSignedIn, user?.id]); // specific dependency on user.id to avoid loop
+    }, [isLoaded, isSignedIn, user]); // specific dependency on user.id to avoid loop
 
     return <>{children}</>;
 };
