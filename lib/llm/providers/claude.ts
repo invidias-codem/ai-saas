@@ -28,7 +28,7 @@ export class ClaudeProvider implements LLMProvider {
         // Convert to Anthropic format
         // Anthropic expects roles: 'user' | 'assistant'
         const anthropicMessages = messages.map(msg => {
-            const content: any[] = [{ type: 'text', text: msg.text }];
+            const content: Anthropic.ContentBlockParam[] = [{ type: 'text', text: msg.text }];
             if (msg.attachments) {
                 msg.attachments.forEach((att: { mimeType: string; base64Data: string; name?: string; }) => {
                     if (att.mimeType.startsWith('image/')) {
@@ -36,7 +36,7 @@ export class ClaudeProvider implements LLMProvider {
                             type: 'image',
                             source: {
                                 type: 'base64',
-                                media_type: att.mimeType as any,
+                                media_type: att.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
                                 data: att.base64Data
                             }
                         });

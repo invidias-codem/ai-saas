@@ -118,7 +118,7 @@ export async function runReActLoop(
             const toolName = func.name;
             const toolArgs = func.args;
 
-            console.log(`[ReActLoop] Tool Call: ${toolName}`, JSON.stringify(toolArgs).substring(0, 100));
+            // console.log(`[ReActLoop] Tool Call: ${toolName}`, JSON.stringify(toolArgs).substring(0, 100));
 
             const execResult = await registry.executeTool(toolName, toolArgs, context);
 

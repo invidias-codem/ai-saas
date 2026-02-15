@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { waitUntil } from "@vercel/functions";
 
+import { ExtractedFact } from '../intelligentMemory';
+import { SearchResult } from '../integrations/anyCrawl';
+import { GraphNode } from '../memory/graphStore';
+import { PromotableMemory } from '../memoryPromotion';
+import { Source } from '../ragMemory';
 import { env } from "@/lib/env";
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
 import { GeminiProvider } from "./providers/gemini";
@@ -59,7 +64,7 @@ export type ConversationEngineOptions = {
 
 export type ConversationEngineResult = {
   stream: ReadableStream;
-  sources?: any[];
+  sources?: Source[];
   debug?: {
     promptVersion?: string | null;
     model?: string;
@@ -130,7 +135,7 @@ const GREETING = "Hi there! How can I assist you today? Feel free to ask me anyt
 export async function generateConversationReply(
   args: {
     userId: string;
-    clerkUser: any;
+    clerkUser: Record<string, unknown>;
     request: ConversationRequest;
   },
   options: ConversationEngineOptions = {}
@@ -218,10 +223,10 @@ export async function generateConversationReply(
   const userQuery = messages[messages.length - 1]?.text || "";
 
   // Tiered context gathering
-  let allFacts: any[] = [];
-  let researchResult: any = { results: [] };
-  let graphData: any = [];
-  let userProfileMemories: any = null;
+  let allFacts: ExtractedFact[] = [];
+  let researchResult: { results: SearchResult[] } = { results: [] };
+  let graphData: { centralNode: GraphNode | null; relatedNodes: any[] } = { centralNode: null, relatedNodes: [] }; // relatedNodes uses complex structure, keeping any for now/TODO
+  let userProfileMemories: PromotableMemory[] | null = null;
 
   // Check if heavy context gathering is enabled (to avoid rate limits on free tier)
   const enableHeavyContext = process.env.ENABLE_HEAVY_CONTEXT === 'true';
@@ -365,7 +370,7 @@ export async function generateConversationReply(
   return {
     stream,
     sources: [
-      ...intelligentFacts.map(f => ({ id: f.id, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
+      ...intelligentFacts.map(f => ({ id: f.id || `fact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
       ...(memorySources || [])
     ],
     debug: {
