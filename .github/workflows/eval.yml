@@ -39,7 +39,7 @@ jobs:
 
       - name: Setup Node
         if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
