@@ -36,6 +36,9 @@ const VideoPage = () => {
   // ✅ Added state to hold the prediction ID
   const [predictionId, setPredictionId] = useState<string | null>(null);
 
+  // Nudge Integration
+  const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -97,7 +100,7 @@ const VideoPage = () => {
     // Cleanup function to clear the interval
     return () => clearInterval(interval);
 
-  }, [predictionId, status, form]); // Dependencies for the hook
+  }, [predictionId, status, form, trackActivity]); // Dependencies for the hook
 
 
   // ✅ Updated Form submission handler
@@ -141,7 +144,7 @@ const VideoPage = () => {
   };
 
   // Nudge Integration
-  const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
+
 
   return (
     <div>

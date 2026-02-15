@@ -168,13 +168,18 @@ export const mdxComponents = {
   },
 
   // Images - simplified to avoid hydration errors
-  img: ({ src, alt, ...props }: ComponentProps<"img">) => (
-    <img
-      src={src}
-      alt={alt}
-      className="rounded-xl my-6 w-full border border-white/10"
-      {...props}
-    />
+  img: ({ src, alt, width, height, ...props }: ComponentProps<"img">) => (
+    <div className="relative w-full h-auto my-6">
+      <Image
+        src={src || ""}
+        alt={alt || ""}
+        className="rounded-xl border border-white/10"
+        width={800}
+        height={450}
+        style={{ width: '100%', height: 'auto' }}
+        {...props}
+      />
+    </div>
   ),
 
   // Tables

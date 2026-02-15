@@ -1,0 +1,75 @@
+FROM apify/actor-node-puppeteer-chrome AS base
+
+LABEL org.opencontainers.image.source=https://github.com/any4ai/AnyCrawl
+LABEL org.opencontainers.image.description="AnyCrawl Scrape Puppeteer Worker"
+LABEL org.opencontainers.image.licenses=MIT
+
+USER root
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+ENV NODE_ENV=production
+RUN corepack enable pnpm
+
+# Build toolchain for native modules (e.g., better-sqlite3)
+USER root
+RUN apt-get update && apt-get install -y \
+    build-essential python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM base AS build
+WORKDIR /usr/src/app
+RUN chown myuser:myuser /usr/src/app
+COPY --chown=myuser:myuser package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY --chown=myuser:myuser packages/libs/package.json ./packages/libs/package.json
+COPY --chown=myuser:myuser packages/scrape/package.json ./packages/scrape/package.json
+COPY --chown=myuser:myuser packages/db/package.json ./packages/db/package.json
+COPY --chown=myuser:myuser packages/ai/package.json ./packages/ai/package.json
+COPY --chown=myuser:myuser packages/template-client/package.json ./packages/template-client/package.json
+COPY --chown=myuser:myuser packages/typescript-config/package.json ./packages/typescript-config/package.json
+USER myuser
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --prod=false
+COPY --chown=myuser:myuser . .
+RUN pnpm build --filter=@anycrawl/libs --filter=@anycrawl/db --filter=@anycrawl/template-client --filter=@anycrawl/ai --filter=@anycrawl/scrape
+RUN rm -rf node_modules
+
+FROM base AS scrape-puppeteer
+
+WORKDIR /usr/src/app/packages/scrape
+RUN chown -R myuser:myuser /usr/src/app
+
+# 1. copy packages and root
+COPY --chown=myuser:myuser --from=build /usr/src/app/pnpm-lock.yaml /usr/src/app/pnpm-lock.yaml
+COPY --chown=myuser:myuser --from=build /usr/src/app/pnpm-workspace.yaml /usr/src/app/pnpm-workspace.yaml
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/eslint-config/package.json /usr/src/app/packages/eslint-config/package.json
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/search/package.json /usr/src/app/packages/search/package.json
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/typescript-config/package.json /usr/src/app/packages/typescript-config/package.json
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/template-client/package.json /usr/src/app/packages/template-client/package.json
+
+# 2. copy which packages are needed to be built
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/scrape/dist /usr/src/app/packages/scrape/dist
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/libs/dist /usr/src/app/packages/libs/dist
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/db/dist /usr/src/app/packages/db/dist
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/ai/dist /usr/src/app/packages/ai/dist
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/template-client/dist /usr/src/app/packages/template-client/dist
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/scrape/package.json /usr/src/app/packages/scrape/package.json
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/libs/package.json /usr/src/app/packages/libs/package.json
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/db/package.json /usr/src/app/packages/db/package.json
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/ai/package.json /usr/src/app/packages/ai/package.json
+COPY --chown=myuser:myuser --from=build /usr/src/app/packages/template-client/package.json /usr/src/app/packages/template-client/package.json
+
+USER myuser
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --prod --frozen-lockfile
+# Ensure native modules rebuilt for current platform
+RUN pnpm rebuild better-sqlite3
+
+# Ensure puppeteer browsers are properly installed
+RUN npx puppeteer browsers install chrome
+
+# Set puppeteer environment variables
+ENV PUPPETEER_CACHE_DIR=/home/myuser/.cache/puppeteer
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=false
+ENV ANYCRAWL_AVAILABLE_ENGINES=puppeteer
+
+CMD [ "node", "dist/Worker.js" ]
+

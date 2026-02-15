@@ -2,6 +2,7 @@
 
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -46,8 +47,8 @@ export default function AdminLayout({
                     <p className="text-sm text-gray-400">Genie Monitoring</p>
                 </div>
                 <nav className="space-y-2">
-                    <a href="/admin/logs" className="block px-4 py-2 hover:bg-gray-800 rounded">Logs</a>
-                    <a href="/dashboard" className="block px-4 py-2 hover:bg-gray-800 rounded text-gray-400">Back to App</a>
+                    <Link href="/admin/logs" className="block px-4 py-2 hover:bg-gray-800 rounded">Logs</Link>
+                    <Link href="/dashboard" className="block px-4 py-2 hover:bg-gray-800 rounded text-gray-400">Back to App</Link>
                 </nav>
             </div>
             <main className="md:pl-72 h-full">

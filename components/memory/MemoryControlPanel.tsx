@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Loader2, Trash2, Edit2, Save, X, Search, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +24,7 @@ export function MemoryControlPanel() {
     const LIMIT = 20;
     const [hasMore, setHasMore] = useState(true);
 
-    const fetchMemories = async (reset = false) => {
+    const fetchMemories = useCallback(async (reset = false) => {
         setIsLoading(true);
         try {
             const currentOffset = reset ? 0 : offset;
@@ -45,11 +45,11 @@ export function MemoryControlPanel() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [LIMIT, offset]);
 
     useEffect(() => {
         fetchMemories(true);
-    }, []);
+    }, [fetchMemories]);
 
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure you want to forget this memory?")) return;

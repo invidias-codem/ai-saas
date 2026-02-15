@@ -1,0 +1,414 @@
+---
+title: Crawl
+description: Crawl an entire website, and turn it to LLM-ready structured data.
+icon: Bug
+---
+
+## Introduction
+
+AnyCrawl crawl API discovers and processes multiple pages from a seed URL, applying the same per-page extraction pipeline as `/v1/scrape`. It is asynchronous: you receive a `job_id` immediately, then poll status and fetch results in pages.
+
+**Key Features**
+
+- **Asynchronous jobs**: Queue a crawl and fetch results later
+- **Multi-Engine Support**: `cheerio`, `playwright`, `puppeteer`
+- **Flexible scope control**: `strategy`, `max_depth`, `include_paths`, `exclude_paths`
+- **Per-page options**: Reuse `/v1/scrape` options under `scrape_options`
+- **Pagination**: Stream results via `skip` to control payload size
+
+### API Endpoints
+
+```
+POST    https://api.anycrawl.dev/v1/crawl
+GET     https://api.anycrawl.dev/v1/crawl/{jobId}/status
+GET     https://api.anycrawl.dev/v1/crawl/{jobId}?skip=0
+DELETE  https://api.anycrawl.dev/v1/crawl/{jobId}
+```
+
+## Usage Examples
+
+### Create a crawl job
+
+```bash tab="cURL"
+curl -X POST "https://api.anycrawl.dev/v1/crawl" \
+  -H "Authorization: Bearer <YOUR_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://anycrawl.dev",
+    "engine": "cheerio",
+    "strategy": "same-domain",
+    "max_depth": 5,
+    "limit": 100,
+    "exclude_paths": ["/blog/*"],
+    "scrape_options": {
+      "formats": ["markdown"],
+      "timeout": 60000
+    }
+  }'
+```
+
+### Selective scraping with scrape_paths
+
+Use `scrape_paths` to visit pages for link discovery without extracting content. This reduces costs and storage:
+
+```bash tab="cURL"
+curl -X POST "https://api.anycrawl.dev/v1/crawl" \
+  -H "Authorization: Bearer <YOUR_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://shop.example.com",
+    "engine": "cheerio",
+    "strategy": "same-domain",
+    "max_depth": 5,
+    "limit": 200,
+    "include_paths": ["/*"],
+    "scrape_paths": ["/products/*/details", "/products/*/reviews"],
+    "scrape_options": {
+      "formats": ["markdown", "json"]
+    }
+  }'
+```
+
+In this example:
+
+- All pages matching `/*` will be **visited** to discover links
+- Only pages matching `/products/*/details` or `/products/*/reviews` will have **content extracted and saved**
+- Category pages, navigation pages, etc. are crawled but not scraped, saving credits and storage
+
+```javascript tab="JavaScript"
+const start = await fetch("https://api.anycrawl.dev/v1/crawl", {
+    method: "POST",
+    headers: {
+        Authorization: "Bearer YOUR_API_KEY",
+        "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+        url: "https://anycrawl.dev",
+        engine: "cheerio",
+        strategy: "same-domain",
+        max_depth: 5,
+        limit: 100,
+        exclude_paths: ["/blog/*"],
+        scrape_options: { formats: ["markdown"], timeout: 60000 },
+    }),
+});
+const startResult = await start.json();
+const jobId = startResult.data.job_id;
+```
+
+```python tab="Python"
+import requests
+resp = requests.post(
+    'https://api.anycrawl.dev/v1/crawl',
+    headers={
+        'Authorization': 'Bearer YOUR_API_KEY',
+        'Content-Type': 'application/json'
+    },
+    json={
+        'url': 'https://anycrawl.dev',
+        'engine': 'cheerio',
+        'strategy': 'same-domain',
+        'max_depth': 5,
+        'limit': 100,
+        'exclude_paths': ['/blog/*'],
+    'scrape_options': { 'formats': ['markdown'], 'timeout': 60000 }
+    }
+)
+start = resp.json()
+job_id = start['data']['job_id']
+```
+
+### Poll status
+
+```bash tab="cURL"
+curl -H "Authorization: Bearer <YOUR_API_KEY>" \
+  "https://api.anycrawl.dev/v1/crawl/7a2e165d-8f81-4be6-9ef7-23222330a396/status"
+```
+
+```javascript tab="JavaScript"
+const statusRes = await fetch(`https://api.anycrawl.dev/v1/crawl/${jobId}/status`, {
+    headers: { Authorization: "Bearer YOUR_API_KEY" },
+});
+const status = await statusRes.json();
+```
+
+### Fetch results (paginated)
+
+```bash tab="cURL"
+curl -H "Authorization: Bearer <YOUR_API_KEY>" \
+  "https://api.anycrawl.dev/v1/crawl/7a2e165d-8f81-4be6-9ef7-23222330a396?skip=0"
+```
+
+```javascript tab="JavaScript"
+let skip = 0;
+while (true) {
+    const res = await fetch(`https://api.anycrawl.dev/v1/crawl/${jobId}?skip=${skip}`, {
+        headers: { Authorization: "Bearer YOUR_API_KEY" },
+    });
+    const page = await res.json();
+    // process page.data
+    if (!page.next) break;
+    const nextUrl = new URL(page.next);
+    skip = Number(nextUrl.searchParams.get("skip") || 0);
+}
+```
+
+### Cancel a job
+
+```bash tab="cURL"
+curl -X DELETE -H "Authorization: Bearer <YOUR_API_KEY>" \
+  "https://api.anycrawl.dev/v1/crawl/7a2e165d-8f81-4be6-9ef7-23222330a396"
+```
+
+## Request Parameters
+
+| Parameter        | Type            | Required | Default       | Description                                                                                                              |
+| ---------------- | --------------- | -------- | ------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `url`            | string          | Yes      | -             | Seed URL to start crawling                                                                                               |
+| `engine`         | enum            | No       | `cheerio`     | Per-page scraping engine: `cheerio`, `playwright`, `puppeteer`                                                           |
+| `exclude_paths`  | array of string | No       | -             | Path rules to exclude (glob-like), e.g. `/blog/*`                                                                        |
+| `include_paths`  | array of string | No       | -             | Path rules to include for crawling (applied after exclusion)                                                             |
+| `scrape_paths`   | array of string | No       | -             | Path rules for content extraction. Only matching URLs will have content saved. If not set, all included URLs are scraped |
+| `max_depth`      | number          | No       | `10`          | Max depth from the seed URL                                                                                              |
+| `strategy`       | enum            | No       | `same-domain` | Crawl scope: `all`, `same-domain`, `same-hostname`, `same-origin`                                                        |
+| `limit`          | number          | No       | `100`         | Maximum number of pages to crawl                                                                                         |
+| `scrape_options` | object          | No       | -             | Per-page scrape options (same fields as `/v1/scrape` excluding top-level `url`/`engine`)                                 |
+
+### `scrape_options` fields
+
+| Field               | Type                     | Default        | Notes                                                                                                                                       |
+| ------------------- | ------------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `formats`           | array of enum            | `["markdown"]` | Output formats: `markdown`, `html`, `text`, `screenshot`, `screenshot@fullPage`, `rawHtml`, `json`                                          |
+| `timeout`           | number                   | `60000`        | Per-request timeout (ms)                                                                                                                    |
+| `retry`             | boolean                  | `false`        | Whether to retry on failure                                                                                                                 |
+| `wait_for`          | number                   | -              | Delay before extraction (ms); browser engines only; lower priority than `wait_for_selector`                                                 |
+| `wait_for_selector` | string, object, or array | -              | Wait for one or multiple selectors (browser engines only). Accepts a CSS selector string, an object `{ selector: string, state?: "attached" | "visible" | "hidden" | "detached", timeout?: number }`, or an array mixing strings/objects. Each entry is awaited sequentially. Takes priority over `wait_for`. |
+| `include_tags`      | array of string          | -              | Only include elements that match CSS selectors                                                                                              |
+| `exclude_tags`      | array of string          | -              | Exclude elements that match CSS selectors                                                                                                   |
+| `proxy`             | string (URI)             | -              | Optional proxy URL                                                                                                                          |
+| `json_options`      | object                   | -              | Options for structured JSON extraction (schema, user_prompt, schema_name, schema_description)                                               |
+| `extract_source`    | enum                     | `markdown`     | Source to extract JSON from: `markdown` (default) or `html`                                                                                 |
+
+## Response Format
+
+### 1) Create (HTTP 200)
+
+```json
+{
+    "success": true,
+    "data": {
+        "job_id": "7a2e165d-8f81-4be6-9ef7-23222330a396",
+        "status": "created",
+        "message": "Crawl job has been queued for processing"
+    }
+}
+```
+
+#### Possible Errors
+
+- 400 Validation Error
+
+```json
+{
+    "success": false,
+    "error": "Validation error",
+    "message": "Invalid enum value...",
+    "data": {
+        "type": "validation_error",
+        "issues": [
+            { "field": "engine", "message": "Invalid enum value", "code": "invalid_enum_value" }
+        ],
+        "status": "failed"
+    }
+}
+```
+
+- 401 Authentication Error
+
+```json
+{ "success": false, "error": "Invalid API key" }
+```
+
+### 2) Status (HTTP 200)
+
+```json
+{
+    "success": true,
+    "message": "Job status retrieved successfully",
+    "data": {
+        "job_id": "7a2e165d-8f81-4be6-9ef7-23222330a396",
+        "status": "completed",
+        "start_time": "2025-05-25T07:56:44.162Z",
+        "expires_at": "2025-05-26T07:56:44.162Z",
+        "credits_used": 0,
+        "total": 120,
+        "completed": 30,
+        "failed": 2
+    }
+}
+```
+
+### 3) Results page (HTTP 200)
+
+```json
+{
+    "success": true,
+    "status": "pending",
+    "total": 120,
+    "completed": 30,
+    "creditsUsed": 12,
+    "next": "https://api.anycrawl.dev/v1/crawl/7a2e165d-8f81-4be6-9ef7-23222330a396?skip=100",
+    "data": [
+        {
+            "url": "https://anycrawl.dev/",
+            "title": "AnyCrawl",
+            "markdown": "# AnyCrawl...",
+            "timestamp": "2025-05-25T07:56:44.162Z"
+        }
+    ]
+}
+```
+
+#### Possible Errors
+
+- 400 Invalid job id / Not found
+
+```json
+{ "success": false, "error": "Invalid job ID", "message": "Job ID must be a valid UUID" }
+```
+
+### 4) Cancel (HTTP 200)
+
+```json
+{
+    "success": true,
+    "message": "Job cancelled successfully",
+    "data": { "job_id": "7a2e165d-8f81-4be6-9ef7-23222330a396", "status": "cancelled" }
+}
+```
+
+#### Possible Errors
+
+- 404 Not found
+- 409 Job already finished
+
+```json
+{
+    "success": false,
+    "error": "Job already finished",
+    "message": "Finished jobs cannot be cancelled"
+}
+```
+
+## Best Practices
+
+- Use `/v1/scrape` for single pages to minimize cost; use `/v1/crawl` for site-wide data.
+- Tune `strategy`, `max_depth`, and path rules to control scope and cost.
+- Use `scrape_paths` to reduce costs: crawl navigation/category pages for links, but only scrape content pages.
+- Use `formats` to limit output size to what you actually need.
+- Page through results via `skip` to avoid very large responses.
+
+### Cost Optimization with scrape_paths
+
+The `scrape_paths` parameter allows you to optimize crawling costs:
+
+**Without `scrape_paths` (default)**:
+
+- All included pages → visited + content extracted + saved
+
+**With `scrape_paths`**:
+
+- Pages in `include_paths` but NOT in `scrape_paths` → visited only (for link discovery)
+- Pages in BOTH `include_paths` AND `scrape_paths` → visited + content extracted + saved
+
+Example use cases:
+
+- E-commerce: Crawl all category pages, but only scrape product detail pages
+- Documentation: Visit all navigation pages, but only extract article content
+- News sites: Browse all sections, but only save full article pages
+
+## Error Handling Example
+
+```javascript
+async function fetchAllResults(jobId) {
+    let skip = 0;
+    while (true) {
+        const res = await fetch(`https://api.anycrawl.dev/v1/crawl/${jobId}?skip=${skip}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.message || `HTTP ${res.status}`);
+        }
+        const page = await res.json();
+        // handle page.data here
+        if (!page.next) break;
+        const next = new URL(page.next);
+        skip = Number(next.searchParams.get("skip") || 0);
+    }
+}
+```
+
+## High Concurrency Usage
+
+The crawl queue supports concurrent jobs. Submit multiple crawl jobs and poll independently:
+
+```javascript
+const seeds = ["https://site-a.com", "https://site-b.com", "https://site-c.com"];
+const jobs = await Promise.all(
+    seeds.map((url) =>
+        fetch("https://api.anycrawl.dev/v1/crawl", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url, engine: "cheerio" }),
+        }).then((r) => r.json())
+    )
+);
+```
+
+## FAQ
+
+### How is `/v1/crawl` different from `/v1/scrape`?
+
+`/v1/scrape` fetches a single URL synchronously and returns content immediately. `/v1/crawl` discovers multiple pages from a seed URL and runs asynchronously.
+
+### How do I limit crawl scope and cost?
+
+Use `strategy`, `max_depth`, `limit`, and path rules (`include_paths`, `exclude_paths`, `scrape_paths`).
+
+### What's the difference between `include_paths` and `scrape_paths`?
+
+- `include_paths`: Controls which URLs are **visited** (for link discovery)
+- `scrape_paths`: Controls which URLs have **content extracted and saved**
+
+If `scrape_paths` is not set, all included URLs will be scraped (backward compatible behavior).
+
+### How can I reduce crawling costs?
+
+Use `scrape_paths` to visit navigation/category pages for link discovery without saving their content. Only extract and save content from pages that match your `scrape_paths` patterns.
+
+### How do I paginate results?
+
+Use the `skip` query parameter. If the response includes `next`, follow it to fetch the next page.
+
+### Why do some jobs not return `html`/`markdown`?
+
+Ensure the desired formats are included in `scrape_options.formats` and that your chosen engine supports them.
+
+## Status values
+
+Job `status` follows the values defined in the job model:
+
+| Status      | Meaning                                               |
+| ----------- | ----------------------------------------------------- |
+| `pending`   | Job is queued or in progress (not finished yet)       |
+| `completed` | Job finished successfully                             |
+| `failed`    | Job ended with an error                               |
+| `cancelled` | Job was cancelled; no further processing will be done |
+
+## OpenAPI (auto-generated)
+
+See the API Reference for the auto-generated docs:
+
+- `POST /v1/crawl`
+- `GET /v1/crawl/{jobId}/status`
+- `GET /v1/crawl/{jobId}`
+- `DELETE /v1/crawl/{jobId}`

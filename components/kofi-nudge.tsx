@@ -3,6 +3,7 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import Image from "next/image";
 
 interface KoFiNudgeProps {
     isOpen: boolean;
@@ -43,10 +44,12 @@ export const KoFiNudge = ({ isOpen, onClose }: KoFiNudgeProps) => {
 
                 {/* Ko-fi Icon/Image */}
                 <div className="flex-shrink-0 w-12 h-12 bg-[#F5F5F5] rounded-full flex items-center justify-center overflow-hidden border">
-                    <img
+                    <Image
                         src="https://storage.ko-fi.com/cdn/cup-border.png"
                         alt="Ko-fi"
-                        className="w-8 h-8 object-contain animate-bounce"
+                        width={32}
+                        height={32}
+                        className="object-contain animate-bounce"
                         style={{ animationDuration: '2s' }}
                     />
                 </div>

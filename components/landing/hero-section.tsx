@@ -124,10 +124,10 @@ export const HeroSection = () => {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.8, delay: 0.5 }}
-                    className="mt-20 relative mx-auto max-w-5xl rounded-xl border border-white/10 bg-black/40 backdrop-blur-md shadow-2xl p-2 md:p-4"
+                    className="mt-20 relative mx-auto w-full max-w-6xl rounded-xl border border-white/10 bg-black/40 backdrop-blur-md shadow-2xl p-3 md:p-6"
                 >
                     <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl blur opacity-20" />
-                    <div className="relative rounded-lg overflow-hidden bg-[#0f1117]/50 flex items-center justify-center border border-white/5 p-1">
+                    <div className="relative rounded-lg overflow-hidden bg-[#0f1117]/50 border border-white/5 p-1">
                         <LandingChat />
                     </div>
                 </motion.div>

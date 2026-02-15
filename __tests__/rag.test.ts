@@ -20,9 +20,9 @@ describe('Rate Limiter', () => {
     let COST_ESTIMATES: any;
 
     beforeAll(async () => {
-        const module = await import('../lib/rag/rateLimiter');
-        RateLimiter = module.RateLimiter;
-        COST_ESTIMATES = module.COST_ESTIMATES;
+        const importedModule = await import('../lib/rag/rateLimiter');
+        RateLimiter = importedModule.RateLimiter;
+        COST_ESTIMATES = importedModule.COST_ESTIMATES;
     });
 
     it('should have correct cost estimates', () => {
@@ -58,9 +58,9 @@ describe('Verification Layer', () => {
     let SAFETY_RULES: any;
 
     beforeAll(async () => {
-        const module = await import('../lib/rag/verificationLayer');
-        classifySuggestions = module.classifySuggestions;
-        SAFETY_RULES = module.SAFETY_RULES;
+        const importedModule = await import('../lib/rag/verificationLayer');
+        classifySuggestions = importedModule.classifySuggestions;
+        SAFETY_RULES = importedModule.SAFETY_RULES;
     });
 
     it('should classify formatting suggestions as safe', () => {
@@ -127,8 +127,8 @@ describe('Codebase Indexer', () => {
     let CodebaseIndexer: any;
 
     beforeAll(async () => {
-        const module = await import('../lib/rag/codebaseIndexer');
-        CodebaseIndexer = module.CodebaseIndexer;
+        const importedModule = await import('../lib/rag/codebaseIndexer');
+        CodebaseIndexer = importedModule.CodebaseIndexer;
     });
 
     it('should create indexer with default options', () => {
@@ -156,8 +156,8 @@ describe('PR Context Enricher', () => {
     let enrichPRContext: any;
 
     beforeAll(async () => {
-        const module = await import('../lib/rag/prContextEnricher');
-        enrichPRContext = module.enrichPRContext;
+        const importedModule = await import('../lib/rag/prContextEnricher');
+        enrichPRContext = importedModule.enrichPRContext;
     });
 
     it('should return context object', async () => {
@@ -180,8 +180,8 @@ describe('Knowledge Sync', () => {
     let syncPRInsightsToMemory: any;
 
     beforeAll(async () => {
-        const module = await import('../lib/rag/knowledgeSync');
-        syncPRInsightsToMemory = module.syncPRInsightsToMemory;
+        const importedModule = await import('../lib/rag/knowledgeSync');
+        syncPRInsightsToMemory = importedModule.syncPRInsightsToMemory;
     });
 
     it('should return sync result', async () => {

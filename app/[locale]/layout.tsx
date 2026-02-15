@@ -73,12 +73,11 @@ export default async function LocaleLayout({
     const messages = await getMessages();
 
     return (
-        <ClerkProvider
-            publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_dmFzdC1sYWR5YmlyZC02OC5jbGVyay5hY2NvdW50cy5kZXYk"}
-            localization={undefined} // Clerk handles its own localization, or we can pass proper clerk localization object if available. For now undefined.
-        >
-            <html lang={locale} suppressHydrationWarning>
-                <body className={`${inter.variable} font-sans`} suppressHydrationWarning>
+        <html lang={locale} suppressHydrationWarning={true}>
+            <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
+                <ClerkProvider
+                    publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}
+                >
                     <NextIntlClientProvider messages={messages}>
                         <ThemeProvider
                             attribute="class"
@@ -94,8 +93,8 @@ export default async function LocaleLayout({
                             </ModalProvider>
                         </ThemeProvider>
                     </NextIntlClientProvider>
-                </body>
-            </html>
-        </ClerkProvider>
+                </ClerkProvider>
+            </body>
+        </html>
     );
 }

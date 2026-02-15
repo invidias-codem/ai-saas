@@ -3,7 +3,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import matter from 'gray-matter';
+import yaml from 'js-yaml';
 import readingTime from 'reading-time';
 import { BlogPost, BlogCategory, BlogPostMeta } from './types';
 import { getAuthor } from './authors';
@@ -50,7 +50,33 @@ export function getPostBySlug(slug: string): BlogPost | null {
     }
 
     const fileContent = fs.readFileSync(filePath, 'utf-8');
-    const { data, content } = matter(fileContent);
+
+    // Manual frontmatter parsing using js-yaml to avoid gray-matter/js-yaml v4 conflict
+    let data = {};
+    let content = fileContent;
+    // Regex to match --- ... --- delimiters
+    const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
+    const match = fileContent.match(frontmatterRegex);
+
+    if (match) {
+      try {
+        data = yaml.load(match[1]) as any;
+        content = match[2];
+      } catch (e) {
+        console.error(`[BLOG] Invalid YAML frontmatter in ${slug}`, e);
+      }
+    } else {
+      // Fallback: splitting by --- if regex fails
+      const parts = fileContent.split('---');
+      if (parts.length >= 3) {
+        const yamlContent = parts[1];
+        try {
+          data = yaml.load(yamlContent) as any;
+          content = parts.slice(2).join('---').trim();
+        } catch (e) { }
+      }
+    }
+
     const meta = data as BlogPostMeta;
 
     // Calculate reading time

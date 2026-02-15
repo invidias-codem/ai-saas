@@ -84,6 +84,7 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
     // Cleanup interval and timeout on unmount
     useEffect(() => {
         return () => {
+            // eslint-disable-next-line react-hooks/exhaustive-deps
             if (intervalRef.current) {
                 clearInterval(intervalRef.current)
             }
@@ -91,6 +92,7 @@ export function DataImportWizard({ onComplete }: DataImportWizardProps) {
                 clearTimeout(timeoutRef.current)
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     // --- Handlers ---
