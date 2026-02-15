@@ -30,7 +30,7 @@
         "zod": "^3.25.76"
     },
     "devDependencies": {
-        "@anycrawl/js-sdk": "^0.0.1",
+        "@anycrawl/js-sdk": "workspace:*",
         "@anycrawl/typescript-config": "workspace:*",
         "@dotenv-run/cli": "^1.3.6",
         "@jest/globals": "^29.7.0",
