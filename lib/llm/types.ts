@@ -19,7 +19,7 @@ export const ChatMessageSchema = z.object({
 
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
-export type AgentMode = 'standard' | 'quality' | 'agentic-preview';
+export type AgentMode = 'standard' | 'quality' | 'agentic-preview' | 'reasoning';
 
 export type CodeAgentMode = 'fast' | 'quality' | 'agentic';
 

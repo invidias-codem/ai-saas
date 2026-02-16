@@ -1,4 +1,5 @@
 import { Firestore } from 'firebase-admin/firestore';
+import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 
 export interface ExtractedFact {
   id?: string;
@@ -431,4 +432,66 @@ export async function saveUserPreferences(
     },
     { merge: true }
   );
+}
+
+/**
+ * Uses DeepSeek-R1 to synthesize a coherent context from scattered facts,
+ * resolving conflicts and filtering noise.
+ */
+export async function synthesizeContextWithReasoning(
+  facts: ExtractedFact[],
+  query: string
+): Promise<string> {
+  if (facts.length === 0) return "";
+
+  const deepseek = new DeepSeekProvider();
+
+  // Format retrieved facts for the reasoning model
+  const factsList = facts.map((f, i) => `[Fact ${i + 1}] (${f.confidence * 100}% confidence): ${f.content}`).join('\n');
+
+  const prompt = `
+You are an advanced reasoning engine. Your task is to analyze the following retrieved memory fragments and the user's current query.
+Goal: Synthesize a coherent "Mental Model" of the context that is most relevant to the query.
+- Resolve any conflicts between facts (prioritize higher confidence or more recent facts).
+- Filter out irrelevant noise.
+- Connect related concepts.
+
+User Query: "${query}"
+
+Retrieved Facts:
+${factsList}
+
+Output ONLY the synthesized context summary in a clear, concise paragraph. Do not output your internal reasoning traces in the final response (DeepSeek will output them separately, we want the final answer here).
+`;
+
+  try {
+    const result = await deepseek.generateStream([
+      { role: 'user', text: prompt }
+    ], undefined, { maxTokens: 1024, temperature: 0.3 });
+
+    // Collect the stream
+    const reader = result.stream.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      fullText += decoder.decode(value, { stream: true });
+    }
+
+    // Clean up thought tags
+    const cleanText = fullText.replace(/<thought>[\s\S]*?<\/thought>/g, '').trim();
+
+    if (!cleanText) {
+      throw new Error("Empty response from reasoning model");
+    }
+
+    return cleanText;
+
+  } catch (error) {
+    console.error("DeepSeek context synthesis failed:", error);
+    // Fallback to naive concatenation
+    return facts.map(f => f.content).join('\n');
+  }
 }

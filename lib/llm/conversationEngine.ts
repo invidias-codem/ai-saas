@@ -10,6 +10,7 @@ import { env } from "@/lib/env";
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
 import { GeminiProvider } from "./providers/gemini";
 import { ClaudeProvider } from "./providers/claude";
+import { DeepSeekProvider } from "./providers/deepseek";
 import {
   gatherUserContext,
   formatUserContextForPrompt,
@@ -21,11 +22,12 @@ import {
   generateSummary,
   estimateTokenCount,
 } from "@/lib/ragMemory";
-import { rankMemoriesIntelligently } from "@/lib/intelligentMemory";
+import { rankMemoriesIntelligently, synthesizeContextWithReasoning } from "@/lib/intelligentMemory";
 // import { sanitizeHistory } from "@/lib/gemini"; // Moved to provider
 import { findRelatedEntities, formatGraphContext, addNode } from "@/lib/memory/graphStore";
 import { performResearch, formatSearchResults } from "@/lib/agents/researcher";
 import { getUserProfile, formatUserProfileForPrompt } from "@/lib/memoryPromotion";
+import { SecurityAgent } from "@/lib/security/securityAgent";
 
 // ChatMessageSchema imported from types
 
@@ -90,6 +92,7 @@ function getGoogleApiKey(): string {
 const DEFAULT_MODEL = "gemini-2.0-flash";
 const AGENTIC_MODEL = "gemini-1.5-pro-preview-0409";
 const QUALITY_MODEL = "claude-sonnet-4-5-20250929";
+const REASONING_MODEL = "deepseek-r1";
 
 function getProviderForMode(mode: AgentMode): { provider: LLMProvider, modelId: string } {
   if (mode === 'quality') {
@@ -101,6 +104,11 @@ function getProviderForMode(mode: AgentMode): { provider: LLMProvider, modelId: 
     return {
       provider: new GeminiProvider(),
       modelId: AGENTIC_MODEL
+    };
+  } else if (mode === 'reasoning') {
+    return {
+      provider: new DeepSeekProvider(),
+      modelId: REASONING_MODEL
     };
   } else {
     // Default / Fast
@@ -248,6 +256,42 @@ export async function generateConversationReply(
   const searchContext = options.disableExternalContext ? "" : formatSearchResults(researchResult.results);
   const graphContext = options.disableExternalContext ? "" : formatGraphContext(graphData);
 
+
+  // ---------------------------------------------------------
+  // SPRINT 4: Security & Reasoning Integration
+  // ---------------------------------------------------------
+
+  // 1. Security Audit (Firewall)
+  // Only run if not disabled and for standard/reasoning modes
+  if (!options.disableExternalContext && (agentMode === 'standard' || agentMode === 'reasoning')) {
+    const securityAgent = new SecurityAgent();
+    const audit = await securityAgent.auditPrompt(userQuery, userId);
+
+    if (!audit.safe) {
+      console.warn(`[Security] Blocked unsafe prompt from user ${userId}: ${audit.reason}`);
+
+      // Return a canned rejection response stream
+      const textEncoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          const message = `I cannot fulfill this request. \n\n**Security Alert**: ${audit.reason}`;
+          controller.enqueue(textEncoder.encode(message));
+          controller.close();
+        }
+      });
+
+      return {
+        stream,
+        sources: [],
+        debug: {
+          model: 'security-agent',
+          userQuery,
+          context: { factsCount: 0 }
+        }
+      };
+    }
+  }
+
   // Create mock vector similarities based on keyword matching (same as route)
   const similarities = new Map<string, number>();
   const queryWords = userQuery.toLowerCase().split(/\s+/);
@@ -258,8 +302,22 @@ export async function generateConversationReply(
     similarities.set(fact.id || "", Math.min(1, similarity * 1.5));
   }
 
-  const intelligentFacts = rankMemoriesIntelligently(allFacts, similarities, userQuery);
-  const factContext = options.disableExternalContext ? "" : formatFactsForPrompt(intelligentFacts);
+  // 2. Context Synthesis
+  let factContext = "";
+  let intelligentFacts = rankMemoriesIntelligently(allFacts, similarities, userQuery);
+
+  if (agentMode === 'reasoning' && !options.disableExternalContext) {
+    // Use DeepSeek to synthesize context
+    factContext = await synthesizeContextWithReasoning(intelligentFacts.slice(0, 15), userQuery);
+    // Prepend header as synthesizeContextWithReasoning returns raw summary
+    if (factContext) {
+      factContext = `\n## Synthesized Context (DeepSeek-R1)\n${factContext}\n`;
+    }
+  } else {
+    // Standard ranking
+    factContext = options.disableExternalContext ? "" : formatFactsForPrompt(intelligentFacts);
+  }
+
 
   // Only call RAG if heavy context is enabled
   const ragResult = (!options.disableExternalContext && enableHeavyContext)
