@@ -9,6 +9,15 @@ import { EventEmitter } from 'events';
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+// Mock Google Auth
+jest.mock('google-auth-library', () => ({
+    GoogleAuth: jest.fn().mockImplementation(() => ({
+        getClient: jest.fn().mockResolvedValue({
+            getAccessToken: jest.fn().mockResolvedValue({ token: 'mock-token' })
+        })
+    }))
+}));
+
 describe('DeepSeek Integration Tests', () => {
 
     beforeEach(() => {

@@ -49,12 +49,16 @@ export class DeepSeekProvider implements LLMProvider {
         };
 
         try {
-            // We need a way to get a valid access token. 
-            // Since we don't have the GoogleAuth lib imported here yet, we'll assume an env var or implement a simple fetch if possible.
-            // For this implementation plan, we'll wrap the axios call.
+            const { GoogleAuth } = await import('google-auth-library');
+            const auth = new GoogleAuth({
+                scopes: 'https://www.googleapis.com/auth/cloud-platform'
+            });
+            const client = await auth.getClient();
+            const accessToken = (await client.getAccessToken()).token;
 
-            // NOTE: In production, use GoogleAuth to fetch the token dynamically.
-            const accessToken = this.getAuthToken();
+            if (!accessToken) {
+                throw new Error("Failed to obtain GCP access token.");
+            }
 
             const response = await axios.post(
                 this.getEndpoint(project, location),
@@ -68,49 +72,52 @@ export class DeepSeekProvider implements LLMProvider {
                 }
             );
 
-            const stream = new ReadableStream({
-                async start(controller) {
-                    const textEncoder = new TextEncoder();
+            return {
+                stream: new ReadableStream({
+                    start(controller) {
+                        const encoder = new TextEncoder(); // Define encoder here
+                        response.data.on('data', (chunk: Buffer) => {
+                            const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+                            for (const line of lines) {
+                                if (line.includes('[DONE]')) {
+                                    controller.close();
+                                    return;
+                                }
+                                if (line.startsWith('data: ')) {
+                                    const jsonStr = line.replace('data: ', '');
+                                    try {
+                                        const data = JSON.parse(jsonStr);
+                                        const delta = data.choices[0].delta;
 
-                    response.data.on('data', (chunk: Buffer) => {
-                        const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
-                        for (const line of lines) {
-                            if (line.includes('[DONE]')) return;
-                            if (line.startsWith('data: ')) {
-                                try {
-                                    const data = JSON.parse(line.slice(6));
-                                    const content = data.choices[0]?.delta?.content || '';
-                                    const reasoning = data.choices[0]?.delta?.reasoning_content || ''; // DeepSeek specific field?
+                                        // Handle reasoning content
+                                        if (delta.reasoning_content) {
+                                            controller.enqueue(encoder.encode(`<thought>${delta.reasoning_content}</thought>`));
+                                        }
 
-                                    // DeepSeek R1 often puts reasoning in the content wrapped in tags, or separate field.
-                                    // If it's separate, we append it. If it's in content, we just pass typical content.
-                                    // We'll pass both if present.
-
-                                    if (reasoning) {
-                                        controller.enqueue(textEncoder.encode(`<thought>${reasoning}</thought>`));
+                                        // Handle regular content
+                                        if (delta.content) {
+                                            controller.enqueue(encoder.encode(delta.content));
+                                        }
+                                    } catch (e) {
+                                        // Ignore parse errors for partial chunks
                                     }
-                                    if (content) {
-                                        controller.enqueue(textEncoder.encode(content));
-                                    }
-                                } catch (e) {
-                                    // Ignore parse errors for partial chunks
                                 }
                             }
-                        }
-                    });
+                        });
 
-                    response.data.on('end', () => {
-                        controller.close();
-                    });
+                        response.data.on('end', () => {
+                            try {
+                                controller.close();
+                            } catch (e) {
+                                // Controller might already be closed
+                            }
+                        });
 
-                    response.data.on('error', (err: any) => {
-                        controller.error(err);
-                    });
-                }
-            });
-
-            return {
-                stream,
+                        response.data.on('error', (err: any) => {
+                            controller.error(err);
+                        });
+                    }
+                }),
                 debug: { model: DEEPSEEK_MODEL_ID }
             };
 

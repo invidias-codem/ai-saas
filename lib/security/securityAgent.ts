@@ -63,13 +63,17 @@ Output your analysis in the following JSON format ONLY:
             const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
 
             if (jsonMatch) {
-                const audit = JSON.parse(jsonMatch[0]);
-                return {
-                    safe: audit.safe,
-                    score: audit.score,
-                    reason: audit.reason,
-                    category: audit.category
-                };
+                try {
+                    const audit = JSON.parse(jsonMatch[0]);
+                    return {
+                        safe: audit.safe,
+                        score: audit.score,
+                        reason: audit.reason,
+                        category: audit.category
+                    };
+                } catch (e) {
+                    console.warn(`[SecurityAgent] Failed to parse JSON from audit response: ${jsonMatch[0]}`);
+                }
             }
 
             // Fallback if JSON parsing fails - assume safe but warn

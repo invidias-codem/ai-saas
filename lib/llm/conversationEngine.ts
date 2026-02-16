@@ -428,7 +428,7 @@ export async function generateConversationReply(
   return {
     stream,
     sources: [
-      ...intelligentFacts.map(f => ({ id: f.id || `fact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
+      ...intelligentFacts.map((f, index) => ({ id: f.id || `fact-${index}`, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
       ...(memorySources || [])
     ],
     debug: {
