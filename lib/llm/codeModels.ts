@@ -26,4 +26,12 @@ export const CODE_MODELS: Record<string, CodeModelConfig> = {
         maxTokens: 8192,
         supportsCodeExecution: true,
     },
+    reasoning: {
+        id: 'reasoning',
+        name: 'Reasoning',
+        provider: 'deepseek',
+        modelId: 'deepseek-r1',
+        description: 'Advanced reasoning for complex problems',
+        maxTokens: 32768,
+    },
 };

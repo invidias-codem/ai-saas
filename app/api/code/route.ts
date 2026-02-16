@@ -25,6 +25,7 @@ import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
 import { CODE_MODELS } from '@/lib/llm/codeModels';
 import { ClaudeProvider } from '@/lib/llm/providers/claude';
+import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { ChatMessage } from '@/lib/llm/types';
 import { checkCredits, deductCredits, spendCreditsAtomic, CREDIT_COSTS } from "@/lib/credits";
 import { logger } from "@/lib/logger";
@@ -171,7 +172,7 @@ export async function POST(req: Request) {
       userProfileMemories  // User-scoped memories (coding preferences, patterns)
     ] = await Promise.all([
       getHighConfidenceFacts(user.userId),
-      performResearch(userQuery, userContextPrompt), // Web Search for latest docs/libraries
+      performResearch(userQuery, userContextPrompt, { hasFileAttachment: !!(fileData && fileData.base64Data) }), // Web Search for latest docs/libraries
       findRelatedEntities(user.userId, userQuery),         // Knowledge Graph (projects, technologies)
       getUserProfile(user.userId)                          // User profile (coding style, preferences)
     ]);
@@ -326,6 +327,55 @@ export async function POST(req: Request) {
           throw new Error('Failed to read response from Claude');
         }
         // If we have partial content, continue with what we have
+      } finally {
+        reader.releaseLock();
+      }
+
+    } else if (modelConfig.provider === 'deepseek') {
+      // DeepSeek Provider Logic (Reasoning)
+      const provider = new DeepSeekProvider();
+
+      // Prepare History
+      const chatHistory: ChatMessage[] = (messages || []).map((msg: any) => ({
+        role: msg.role === 'bot' ? 'assistant' : 'user',
+        text: msg.text
+      }));
+
+      // Append current turn
+      let currentText = enhancedPromptText;
+      if (fileData && fileData.base64Data) {
+        // For DeepSeek (text-only reasoning), append file content as text block
+        try {
+          const decoded = Buffer.from(fileData.base64Data, 'base64').toString('utf-8');
+          // Limit file size for context window if needed, but R1 has 64k/128k context
+          if (!/[\x00-\x08\x0E-\x1F]/.test(decoded.substring(0, 100))) {
+            currentText += `\n\n[Attached File: ${fileData.name}]\n\`\`\`${fileData.type || ''}\n${decoded}\n\`\`\``;
+          } else {
+            currentText += `\n\n[Attached File: ${fileData.name}] (Binary file attached, content omitted)`;
+          }
+        } catch (e) {
+          console.error("Failed to decode file for DeepSeek:", e);
+        }
+      }
+
+      chatHistory.push({ role: 'user', text: currentText });
+
+      const streamResult = await provider.generateStream(chatHistory, CODE_SYSTEM_INSTRUCTION_TEXT, {
+        model: modelConfig.modelId,
+        maxTokens: modelConfig.maxTokens,
+        temperature: 0.6 // Slightly lower for reasoning
+      });
+
+      // Consume stream
+      const textDecoder = new TextDecoder();
+      const reader = streamResult.stream.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          responseText += textDecoder.decode(value, { stream: true });
+        }
+        responseText += textDecoder.decode(); // flush
       } finally {
         reader.releaseLock();
       }
