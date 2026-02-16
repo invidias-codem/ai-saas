@@ -135,7 +135,7 @@ const GREETING = "Hi there! How can I assist you today? Feel free to ask me anyt
 export async function generateConversationReply(
   args: {
     userId: string;
-    clerkUser: Record<string, unknown>;
+    clerkUser: any;
     request: ConversationRequest;
   },
   options: ConversationEngineOptions = {}
