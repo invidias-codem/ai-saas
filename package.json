@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
-    "@clerk/nextjs": "^6.37.1",
+    "@clerk/nextjs": "^6.37.4",
     "@google-cloud/aiplatform": "^5.11.0",
     "@google-cloud/storage": "^7.17.2",
     "@google-cloud/tasks": "^6.2.1",
