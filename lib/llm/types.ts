@@ -26,7 +26,7 @@ export type CodeAgentMode = 'fast' | 'quality' | 'agentic';
 export interface CodeModelConfig {
     id: string;
     name: string;
-    provider: 'gemini' | 'claude';
+    provider: 'gemini' | 'claude' | 'deepseek';
     modelId: string;
     description: string;
     maxTokens: number;
