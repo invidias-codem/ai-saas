@@ -69,8 +69,8 @@ export async function requireOwnership(
     userIdColumn: string = 'user_id'
 ): Promise<void> {
     if (!supabaseAdmin) {
-        console.error('[AUTH] Supabase not configured - skipping ownership check');
-        return; // Fail open in development
+        console.error('[AUTH] Supabase not configured - cannot verify ownership');
+        throw new AuthorizationError('Authorization service unavailable');
     }
 
     const { data, error } = await supabaseAdmin

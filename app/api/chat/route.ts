@@ -168,7 +168,7 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             error: 'Internal Server Error',
-            details: error.message
+            details: process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : error.message
         }, { status: 500 });
     }
 }

@@ -117,7 +117,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Validation Error', details: error.message }, { status: 400 });
     }
 
-    const details = error.message || "An unknown error occurred";
+    const details = process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : (error.message || "An unknown error occurred");
 
     return new NextResponse(JSON.stringify({
       error: "Internal Server Error",

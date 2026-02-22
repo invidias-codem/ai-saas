@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Validation Error', details: error.message }, { status: 400 });
     }
 
-    const details = error.message || "Failed to start video generation via Replicate.";
+    const details = process.env.NODE_ENV === 'production' ? 'An unexpected error occurred' : (error.message || "Failed to start video generation via Replicate.");
     return new NextResponse(JSON.stringify({
       error: "Internal Server Error",
       details: details
