@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get unique user IDs
-    const uniqueUserIds: string[] = [...new Set(activeUsers.map((u: { user_id: string }) => u.user_id))];
+    const uniqueUserIds: string[] = [...new Set<string>(activeUsers.map((u: { user_id: string }) => u.user_id))];
     console.log(`[ProfileBuilder Cron] Found ${uniqueUserIds.length} unique active users`);
 
     // Filter out users whose profiles were updated recently (last 3 days)
