@@ -15,12 +15,28 @@ import { runBatchResolution } from '@/lib/ucol/agents/errorResolutionAgent';
 export const maxDuration = 300; // 5 min (Vercel Pro max for cron)
 
 export async function GET(req: NextRequest) {
-  // Validate cron secret
-  const authHeader = req.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // Accept secret via Authorization header (Vercel cron) OR ?secret= query param (manual testing)
+  const authHeader = req.headers.get('authorization');
+  const querySecret = req.nextUrl.searchParams.get('secret');
+  const provided = authHeader?.replace('Bearer ', '').trim() ?? querySecret ?? '';
+
+  if (cronSecret) {
+    if (provided !== cronSecret.trim()) {
+      return NextResponse.json({
+        error: 'Unauthorized',
+        debug: {
+          cronSecretSet: true,
+          providedViaHeader: !!authHeader,
+          providedViaQuery: !!querySecret,
+          hint: 'Pass ?secret=<CRON_SECRET> in the URL or Authorization: Bearer <secret> header',
+        },
+      }, { status: 401 });
+    }
+  } else {
+    // CRON_SECRET not configured — warn but allow through so we can verify the agent works
+    console.warn('[ErrorResolutionCron] CRON_SECRET is not set — endpoint is unprotected');
   }
 
   const startTime = Date.now();
