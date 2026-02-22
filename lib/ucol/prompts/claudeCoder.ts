@@ -1,17 +1,19 @@
 // lib/ucol/prompts/claudeCoder.ts
 // Claude code generation — generates component files from a plan + context.
-// Supports iterative refinement with full feedback history from Gemini reviewer.
+// Supports iterative refinement, discovered patterns from earlier components,
+// and creativity constraints for low-originality revisions.
 
 import Anthropic from '@anthropic-ai/sdk';
-import type { ContextPackage, GeneratedFile, RefinementContext, ReviewFeedback } from '../types';
+import type { ContextPackage, GeneratedFile, RefinementContext, DiscoveredPattern } from '../types';
 
-const CODER_SYSTEM_PROMPT = `You are an expert React/Next.js developer. You receive a component specification from a planning agent and generate production-quality code.
+const CODER_SYSTEM_PROMPT = `You are an expert React/Next.js developer who writes code that goes BEYOND the spec.
 
 You will receive:
 - The component spec (name, props, description, file path)
 - The full project plan (for context on the overall app)
 - Already-generated dependency files (so you can import correctly)
 - The tech stack
+- Possibly: novel patterns discovered in earlier components — reuse and build on them
 
 RULES:
 - Generate ONLY the code for the requested component.
@@ -19,9 +21,23 @@ RULES:
 - Use Tailwind CSS for styling (utility-first).
 - Import dependencies using relative paths based on the file structure.
 - Include proper React imports ("use client" directive where needed).
-- Write clean, readable, production-quality code.
 - If the component is a page, export it as default.
 - If the component is a reusable UI element, use named exports.
+
+CRITICAL — GO BEYOND THE SPEC (BUT BE PRAGMATIC):
+- Handle edge cases the spec DIDN'T mention (empty states, loading, errors, overflow).
+- Extract reusable logic into custom hooks when it makes the code cleaner.
+- Use defensive coding: type guards, null checks, fallback values.
+- Choose non-obvious patterns ONLY when they genuinely improve the code.
+- Name things to reveal intent, not just function ("handleProductCreation" not "handleSubmit").
+
+WARNING — AVOID OVER-ENGINEERING (PRAGMATISM AXIS):
+- Do NOT build massive enterprise architectures for simple UI components.
+- Do NOT use \`useReducer\` for simple toggles.
+- Do NOT build "exponential backoff retry hooks" for a basic submit button unless strictly necessary.
+- Your code is evaluated on Correctness (1-10), Originality (1-10), AND Pragmatism (1-10). If you over-engineer and bloat the code, you will be rejected on the Pragmatism axis. Keep it elegant, readable, and appropriately scoped.
+
+Your code is reviewed by a Lead QA Engineer. Tutorial-level code gets sent back for low Originality. Over-engineered code gets sent back for low Pragmatism.
 
 OUTPUT FORMAT:
 Return a JSON array of file objects. Each object has:
@@ -35,7 +51,13 @@ const REFINEMENT_ADDENDUM = `
 
 ## ⚠️ REVISION REQUIRED
 
-You are pair programming with a Lead QA Engineer who reviewed your previous code and found issues. You must fix every flagged issue immediately without arguing or over-explaining. The reviewer's feedback is below. Fix the problems, output the corrected JSON, and nothing else.`;
+A Lead QA Engineer reviewed your previous code. You must fix every flagged issue immediately without arguing or over-explaining. Fix the problems, output the corrected JSON, and nothing else.`;
+
+const CONSTRAINT_ADDENDUM = `
+
+## 🎯 CREATIVITY CONSTRAINT
+
+Your previous implementation was scored low on originality. You MUST now rewrite the component while satisfying the constraint below. This is non-negotiable — standard tutorial-level code will be rejected again.`;
 
 function getAnthropicClient(): Anthropic {
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -47,7 +69,8 @@ function getAnthropicClient(): Anthropic {
 
 export async function generateComponent(
     contextPackage: ContextPackage,
-    refinement?: RefinementContext
+    refinement?: RefinementContext,
+    discoveredPatterns?: DiscoveredPattern[]
 ): Promise<GeneratedFile[]> {
     const { component, fullPlan, existingFiles, techStack } = contextPackage.payload.content;
 
@@ -65,17 +88,32 @@ ${(existingFiles || []).map((f: GeneratedFile) => `### ${f.path}\n\`\`\`${f.lang
 ## Tech Stack
 ${(techStack || []).join(', ')}`;
 
+    // Inject discovered patterns from earlier components
+    if (discoveredPatterns && discoveredPatterns.length > 0) {
+        userPrompt += `\n\n## 💡 Novel Patterns Discovered by Your Team
+The following patterns were introduced in earlier components and scored highly for originality. Reuse or build on them where appropriate:
+
+${discoveredPatterns.map((p, i) => `${i + 1}. **${p.component}** — ${p.pattern} (originality: ${p.originalityScore}/10)\n   Example: ${p.example}`).join('\n\n')}`;
+    }
+
     // If this is a refinement, append the full feedback chain
     if (refinement && refinement.feedbackHistory.length > 0) {
         userPrompt += `\n\n---\n## REVISION ATTEMPT ${refinement.attempt}\n`;
         userPrompt += `\n### Your Previous Code\n\`\`\`\n${refinement.previousCode}\n\`\`\`\n`;
 
-        // Include the FULL feedback history — not just the latest
+        // If there's a creativity constraint, highlight it
+        if (refinement.constraint) {
+            userPrompt += `\n### 🎯 CREATIVITY CONSTRAINT\n**${refinement.constraint}**\n\nYou MUST satisfy this constraint in your revision.\n`;
+        }
+
         userPrompt += `\n### Review Feedback History (ALL rounds)\n`;
         for (let i = 0; i < refinement.feedbackHistory.length; i++) {
             const fb = refinement.feedbackHistory[i];
-            userPrompt += `\n**Round ${i + 1}** (Score: ${fb.score}/10, ${fb.approved ? 'Approved' : 'Rejected'})\n`;
+            userPrompt += `\n**Round ${i + 1}** (Correctness: ${fb.score}/10, Originality: ${fb.originalityScore}/10, Pragmatism: ${fb.pragmatismScore}/10, ${fb.approved ? 'Approved' : 'Rejected'})\n`;
             userPrompt += `- Critique: ${fb.critique}\n`;
+            if (fb.originalityNotes) {
+                userPrompt += `- Originality notes: ${fb.originalityNotes}\n`;
+            }
             if (fb.suggestions.length > 0) {
                 userPrompt += `- Fix instructions:\n${fb.suggestions.map(s => `  - ${s}`).join('\n')}\n`;
             }
@@ -89,45 +127,36 @@ ${(techStack || []).join(', ')}`;
         userPrompt += `\n\nGenerate the code files for "${component.name}". Remember: output ONLY a JSON array.`;
     }
 
-    const systemPrompt = refinement && refinement.feedbackHistory.length > 0
-        ? CODER_SYSTEM_PROMPT + REFINEMENT_ADDENDUM
-        : CODER_SYSTEM_PROMPT;
+    // Select the right system prompt
+    let systemPrompt = CODER_SYSTEM_PROMPT;
+    if (refinement?.constraint) {
+        systemPrompt += CONSTRAINT_ADDENDUM;
+    } else if (refinement && refinement.feedbackHistory.length > 0) {
+        systemPrompt += REFINEMENT_ADDENDUM;
+    }
 
     const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
+        max_tokens: 8192,
         system: systemPrompt,
         messages: [
-            {
-                role: 'user',
-                content: userPrompt,
-            },
+            { role: 'user', content: userPrompt },
         ],
     });
 
-    // Extract JSON from response
     const responseText = response.content
         .filter((block): block is Anthropic.TextBlock => block.type === 'text')
         .map(block => block.text)
         .join('');
 
-    const files = parseGeneratedFiles(responseText, component.name);
-    return files;
+    return parseGeneratedFiles(responseText, component.name);
 }
 
-/**
- * Parse Claude's response into GeneratedFile[].
- * Handles both clean JSON and JSON wrapped in markdown fences.
- */
 function parseGeneratedFiles(text: string, componentName: string): GeneratedFile[] {
-    // Try direct JSON parse first
     let jsonStr = text.trim();
 
-    // Strip markdown code fences if present
     const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    if (fenceMatch) {
-        jsonStr = fenceMatch[1].trim();
-    }
+    if (fenceMatch) jsonStr = fenceMatch[1].trim();
 
     try {
         const parsed = JSON.parse(jsonStr);
@@ -141,7 +170,6 @@ function parseGeneratedFiles(text: string, componentName: string): GeneratedFile
         return files;
     } catch (parseError: any) {
         console.error('[UCOL:Claude] Failed to parse code JSON:', text.substring(0, 500));
-        // Fallback: treat entire response as a single file
         return [{
             path: `components/${componentName}.tsx`,
             content: text,

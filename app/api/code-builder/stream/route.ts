@@ -78,6 +78,8 @@ export async function GET(req: Request) {
                     files: [],
                     contextFlow: [],
                     reviewRounds: 0,
+                    constraintRounds: 0,
+                    discoveredPatterns: [],
                 };
 
                 // Per-request router (no singleton — prevents cross-contamination)
@@ -172,6 +174,8 @@ export async function GET(req: Request) {
                         componentCount: plan.components.length,
                         appName: plan.appName,
                         reviewRounds: session.reviewRounds,
+                        constraintRounds: session.constraintRounds,
+                        discoveredPatterns: session.discoveredPatterns,
                     });
                 } catch (err: any) {
                     console.error('[UCOL:Stream] Build error:', err);

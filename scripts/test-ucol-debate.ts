@@ -95,6 +95,8 @@ async function runTest() {
         files: [],
         contextFlow: [],
         reviewRounds: 0,
+        constraintRounds: 0,
+        discoveredPatterns: [],
     };
 
     const router = new ContextRouter({
@@ -104,7 +106,7 @@ async function runTest() {
         },
     });
 
-    const prompt = 'Build an e-commerce product dashboard with a product list table, add product form with validation, product detail modal with image gallery, shopping cart sidebar with quantity controls, and a stats overview showing total products, revenue, and top sellers';
+    const prompt = 'Build a comprehensive RBAC (Role-Based Access Control) Admin Panel for a B2B SaaS platform. It needs a main dashboard layout, a user management table with inline role editing, a complex permissions matrix grid where admins can toggle specific granular permissions (like `view_billing`, `edit_users`, `delete_workspaces`) for different custom roles, an invite user modal that supports bulk CSV invites, and an audit log activity feed showing who changed what permission. Ensure components handle complex state (e.g., preventing a user from removing their own admin access) and clearly delineate component boundaries.';
 
     // ── Phase 1: Planning ──
     console.log(`${C.bold}── Phase 1: Gemini Planning ──${C.reset}`);
@@ -152,112 +154,120 @@ async function runTest() {
     console.log(`${C.bold}Output:${C.reset}`);
     console.log(`  Files generated: ${files.length}`);
     console.log(`  Total review rounds: ${session.reviewRounds}`);
+    console.log(`  Constraint rounds: ${session.constraintRounds}`);
     console.log(`  Components: ${plan.components.length}\n`);
 
-    // ── Debate Analysis: Was the review substantive? ──
-    const approvals = allEvents.filter(e => e.action.includes('approved'));
+    // ── Debate Analysis ──
+    const approvals = allEvents.filter(e => e.action.includes('✓'));
     const rejections = allEvents.filter(e => e.action.includes('Rejected'));
     const autoApprovals = allEvents.filter(e => e.action.includes('Auto-approved'));
     const forceAccepts = allEvents.filter(e => e.action.includes('Force-accepted'));
-    const revisions = allEvents.filter(e => e.action.includes('Revising'));
+    const constraintEvents = allEvents.filter(e => e.action.includes('🎯'));
+    const noveltyEvents = allEvents.filter(e => e.action.includes('💡'));
 
     console.log(`${C.bold}Debate Loop Statistics:${C.reset}`);
-    console.log(`  ${C.green}✓ Approvals (first try):${C.reset} ${approvals.length - autoApprovals.length}`);
+    console.log(`  ${C.green}✓ Approvals:${C.reset} ${approvals.length}`);
     console.log(`  ${C.red}✗ Rejections:${C.reset} ${rejections.length}`);
-    console.log(`  ${C.yellow}↻ Revisions triggered:${C.reset} ${revisions.length}`);
     console.log(`  ${C.cyan}⚡ Auto-approvals (similarity escape):${C.reset} ${autoApprovals.length}`);
-    console.log(`  ${C.yellow}⚠ Force-accepts (max attempts):${C.reset} ${forceAccepts.length}\n`);
+    console.log(`  ${C.yellow}⚠ Force-accepts (max attempts):${C.reset} ${forceAccepts.length}`);
+    console.log(`  ${C.magenta}🎯 Creativity constraints imposed:${C.reset} ${constraintEvents.length}`);
+    console.log(`  ${C.green}💡 Novel patterns discovered:${C.reset} ${noveltyEvents.length}\n`);
 
-    // ── Quality of Reviews ──
-    console.log(`${C.bold}Review Quality Analysis:${C.reset}`);
-
-    // Check if rejections had substantive reasons
-    const substantiveRejections = rejections.filter(e =>
-        e.reasoning.length > 20 &&
-        !e.reasoning.toLowerCase().includes('style') &&
-        (e.reasoning.toLowerCase().includes('import') ||
-            e.reasoning.toLowerCase().includes('type') ||
-            e.reasoning.toLowerCase().includes('error') ||
-            e.reasoning.toLowerCase().includes('missing') ||
-            e.reasoning.toLowerCase().includes('undefined') ||
-            e.reasoning.toLowerCase().includes('prop') ||
-            e.reasoning.toLowerCase().includes('compil'))
-    );
-
-    if (rejections.length === 0) {
-        console.log(`  ${C.yellow}⚠ No rejections occurred — Gemini approved everything on first try.${C.reset}`);
-        console.log(`  ${C.dim}This either means Claude's code was perfect, or the reviewer is too lenient.${C.reset}`);
-        console.log(`  ${C.dim}For a simple counter app, first-pass approval is plausible.${C.reset}`);
-    } else {
-        console.log(`  Substantive rejections (citing real issues): ${substantiveRejections.length}/${rejections.length}`);
-        const ratio = substantiveRejections.length / rejections.length;
-        if (ratio >= 0.7) {
-            console.log(`  ${C.green}✓ Review quality is HIGH — Gemini is catching real issues${C.reset}`);
-        } else if (ratio >= 0.3) {
-            console.log(`  ${C.yellow}⚠ Review quality is MIXED — some rejections may be superficial${C.reset}`);
-        } else {
-            console.log(`  ${C.red}✗ Review quality is LOW — Gemini may be rubber-stamping rejections${C.reset}`);
-        }
-
-        // Print rejection details
-        console.log(`\n${C.bold}Rejection Details:${C.reset}`);
-        for (const rej of rejections) {
-            const scoreMatch = rej.action.match(/score: (\d+)/);
-            const score = scoreMatch ? scoreMatch[1] : '?';
-            console.log(`  ${C.red}✗${C.reset} ${rej.action}`);
-            console.log(`    ${C.dim}Reason: ${rej.reasoning.substring(0, 200)}${C.reset}`);
-            console.log();
-        }
-    }
-
-    // ── Were revisions actually different? ──
-    if (revisions.length > 0) {
-        console.log(`${C.bold}Revision Analysis:${C.reset}`);
-        console.log(`  ${C.dim}Claude was asked to revise ${revisions.length} time(s).${C.reset}`);
-        if (autoApprovals.length > 0) {
-            console.log(`  ${C.yellow}⚡ ${autoApprovals.length} revision(s) triggered the similarity escape hatch.${C.reset}`);
-            console.log(`  ${C.dim}This means Claude disagreed with Gemini's critique and kept its code.${C.reset}`);
-        }
-    }
-
-    // ── Score summary ──
-    const scoreEvents = allEvents.filter(e => e.action.match(/score: \d+/));
+    // ── 3-axis score analysis ──
+    const scoreEvents = allEvents.filter(e => e.action.match(/correct: \d+\/10, original: \d+\/10, pragmatism: \d+\/10/));
     if (scoreEvents.length > 0) {
-        const scores = scoreEvents.map(e => {
-            const match = e.action.match(/score: (\d+)/);
-            return match ? parseInt(match[1]) : 0;
-        }).filter(s => s > 0);
+        const parsed = scoreEvents.map(e => {
+            const cMatch = e.action.match(/correct: (\d+)/);
+            const oMatch = e.action.match(/original: (\d+)/);
+            const pMatch = e.action.match(/pragmatism: (\d+)/);
+            return {
+                action: e.action,
+                correct: cMatch ? parseInt(cMatch[1]) : 0,
+                original: oMatch ? parseInt(oMatch[1]) : 0,
+                pragmatism: pMatch ? parseInt(pMatch[1]) : 0,
+            };
+        });
 
-        if (scores.length > 0) {
-            const avgScore = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
-            const minScore = Math.min(...scores);
-            const maxScore = Math.max(...scores);
-            console.log(`\n${C.bold}Score Summary:${C.reset}`);
-            console.log(`  Average: ${avgScore}/10`);
-            console.log(`  Range: ${minScore}-${maxScore}`);
-            console.log(`  Scores: [${scores.join(', ')}]`);
+        const avgCorrect = (parsed.reduce((a, b) => a + b.correct, 0) / parsed.length).toFixed(1);
+        const avgOriginal = (parsed.reduce((a, b) => a + b.original, 0) / parsed.length).toFixed(1);
+        const avgPragmatism = (parsed.reduce((a, b) => a + b.pragmatism, 0) / parsed.length).toFixed(1);
+
+        console.log(`${C.bold}3-Axis Score Summary:${C.reset}`);
+        console.log(`  ${C.blue}Correctness avg:${C.reset}  ${avgCorrect}/10`);
+        console.log(`  ${C.magenta}Originality avg:${C.reset}  ${avgOriginal}/10`);
+        console.log(`  ${C.yellow}Pragmatism avg:${C.reset}   ${avgPragmatism}/10`);
+        console.log();
+        console.log(`  ${C.bold}Per-component:${C.reset}`);
+        for (const p of parsed) {
+            const origColor = p.original >= 7 ? C.green : p.original >= 4 ? C.yellow : C.red;
+            const pragColor = p.pragmatism >= 7 ? C.green : p.pragmatism >= 5 ? C.yellow : C.red;
+            console.log(`    ${p.action.match(/[^✓✗⚠]+/)?.[0]?.trim() || ''}: correct ${p.correct}/10, ${origColor}original ${p.original}/10${C.reset}, ${pragColor}pragmatism ${p.pragmatism}/10${C.reset}`);
+        }
+        console.log();
+    }
+
+    // ── Discovered Patterns ──
+    if (session.discoveredPatterns.length > 0) {
+        console.log(`${C.bold}Discovered Patterns (cross-component evolution):${C.reset}`);
+        for (const dp of session.discoveredPatterns) {
+            console.log(`  ${C.green}💡${C.reset} ${C.bold}${dp.component}${C.reset}: ${dp.pattern} ${C.dim}(originality: ${dp.originalityScore}/10)${C.reset}`);
+        }
+        console.log();
+    }
+
+    // ── Rejection Details ──
+    if (rejections.length > 0) {
+        console.log(`${C.bold}Rejection Details:${C.reset}`);
+        for (const rej of rejections) {
+            console.log(`  ${C.red}✗${C.reset} ${rej.action}`);
+            console.log(`    ${C.dim}${rej.reasoning.substring(0, 200)}${C.reset}\n`);
+        }
+    }
+
+    // ── Constraint Details ──
+    if (constraintEvents.length > 0) {
+        console.log(`${C.bold}Constraint Details:${C.reset}`);
+        for (const ce of constraintEvents) {
+            console.log(`  ${C.magenta}🎯${C.reset} ${ce.action}`);
+            console.log(`    ${C.dim}${ce.reasoning}${C.reset}\n`);
         }
     }
 
     // ── Verdict ──
-    console.log(`\n${C.bold}═══════════════════════════════════════════════${C.reset}`);
-    const debateHappened = rejections.length > 0 || autoApprovals.length > 0;
-    if (debateHappened) {
+    console.log(`${C.bold}═══════════════════════════════════════════════${C.reset}`);
+    const evolutionHappened = session.discoveredPatterns.length > 0;
+    const debateHappened = rejections.length > 0 || constraintEvents.length > 0;
+    if (evolutionHappened) {
+        console.log(`${C.green}${C.bold}  ✓ PATTERN EVOLUTION IS ACTIVE${C.reset}`);
+        console.log(`${C.dim}  ${session.discoveredPatterns.length} pattern(s) discovered and propagated to later components.${C.reset}`);
+    } else if (debateHappened) {
         console.log(`${C.green}${C.bold}  ✓ DEBATE LOOP IS ACTIVE${C.reset}`);
-        console.log(`${C.dim}  Models are genuinely collaborating through the review cycle.${C.reset}`);
+        console.log(`${C.dim}  Models debated but no novel patterns were discovered.${C.reset}`);
     } else {
         console.log(`${C.yellow}${C.bold}  ⚠ NO DEBATE OCCURRED${C.reset}`);
-        console.log(`${C.dim}  All components passed first review. Try a more complex prompt${C.reset}`);
-        console.log(`${C.dim}  to trigger rejections (e.g., "Build a full e-commerce app").${C.reset}`);
+        console.log(`${C.dim}  All components passed first review. Try a complex prompt to trigger debates.${C.reset}`);
     }
     console.log(`${C.bold}═══════════════════════════════════════════════${C.reset}\n`);
 
-    // ── Dump all generated file paths ──
+    // ── File list ──
     console.log(`${C.bold}Generated Files:${C.reset}`);
     for (const file of files) {
         console.log(`  ${file.model === 'claude' ? C.magenta : C.dim}${file.path}${C.reset} (${file.language}, ${file.content.length} chars)`);
     }
     console.log();
+
+    // ── Write files to disk for ground-truth compilation check ──
+    const fs = await import('fs');
+    const path = await import('path');
+    const outDir = path.default.join(process.cwd(), 'generated', 'rbac-admin');
+    fs.default.mkdirSync(outDir, { recursive: true });
+
+    for (const file of files) {
+        const filePath = path.default.join(outDir, file.path);
+        fs.default.mkdirSync(path.default.dirname(filePath), { recursive: true });
+        fs.default.writeFileSync(filePath, file.content);
+    }
+    console.log(`${C.green}✓ Files written to ${outDir}${C.reset}\n`);
 }
 
 runTest().catch(err => {

@@ -1,7 +1,12 @@
 // lib/ucol/contextRouter.ts
-// Core UCOL Context Router — orchestrates context flow between Gemini (planner),
-// Claude (coder), and Gemini (reviewer) in a debate loop.
-// Instantiated per-request to prevent cross-contamination of session state.
+// Core UCOL Context Router — orchestrates the debate loop between:
+//   Gemini (planner) → Claude (coder) → Gemini (reviewer)
+// With pattern evolution: novel patterns discovered in earlier components
+// are injected into later components. Low-originality code gets
+// constraint-forced revisions.
+
+import * as fs from 'fs';
+import * as path from 'path';
 
 import { generatePlan } from './prompts/geminiPlanner';
 import { generateComponent } from './prompts/claudeCoder';
@@ -16,6 +21,7 @@ import type {
     BuildSession,
     ReviewFeedback,
     RefinementContext,
+    DiscoveredPattern,
 } from './types';
 
 type ContextFlowCallback = (entry: ContextFlowEntry) => void;
@@ -25,19 +31,57 @@ interface ContextRouterOptions {
 }
 
 const MAX_REVIEW_ATTEMPTS = 3;
-const SIMILARITY_THRESHOLD = 0.95; // If code is >95% similar, auto-approve (coder disagrees)
+const SIMILARITY_THRESHOLD = 0.95;
+const ORIGINALITY_THRESHOLD = 4; // Score below this triggers a creativity constraint
+const PRAGMATISM_THRESHOLD = 5;  // Score below this triggers a simplicity constraint
+
+// Creativity constraints — one is chosen randomly when originality is low
+const CREATIVITY_CONSTRAINTS = [
+    'Extract at least one reusable custom hook that encapsulates the core logic of this component',
+    'Handle at least 3 edge cases NOT mentioned in the spec (empty state, error state, loading, overflow, accessibility, etc.)',
+    'Use useReducer instead of useState for the primary state management — model the state transitions explicitly',
+    'Implement the component using a compound pattern (Provider + sub-components) instead of monolithic props',
+    'Add at least 2 defensive type guards and make all external data access null-safe',
+    'Extract a utility or helper module that this component uses — it should be independently testable',
+];
+
+// Simplicity constraints — one is chosen when pragmatism is low (over-engineered)
+const SIMPLICITY_CONSTRAINTS = [
+    'REMOVE over-engineered abstractions. Do NOT use useReducer or compound components for this simple UI element.',
+    'Simplify the state management. Remove unnecessary useMemo/useCallback hooks and consolidate state.',
+    'Reduce the code footprint. This component is bloated. Implement only what is necessary for the spec.',
+    'Remove "enterprisey" patterns like exponential backoff or overly generic type factories for this basic component.',
+];
 
 export class ContextRouter {
     private onContextFlow: ContextFlowCallback;
+    private installedDependencies: string[];
 
     constructor(options: ContextRouterOptions) {
         this.onContextFlow = options.onContextFlow;
+        this.installedDependencies = this.getInstalledDependencies();
+    }
+
+    // ─── Read installed dependencies from package.json ───
+
+    private getInstalledDependencies(): string[] {
+        try {
+            // Walk up from cwd to find the nearest package.json
+            const pkgPath = path.resolve(process.cwd(), 'package.json');
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+            return [
+                ...Object.keys(pkg.dependencies || {}),
+                ...Object.keys(pkg.devDependencies || {}),
+            ];
+        } catch {
+            console.warn('[UCOL] Could not read package.json — dependency constraints disabled');
+            return [];
+        }
     }
 
     // ─── Phase 1: Route user prompt → Gemini for planning ───
 
     async planProject(prompt: string, session: BuildSession): Promise<ProjectPlan> {
-        // Emit: user → gemini routing
         this.emitContextFlow({
             id: crypto.randomUUID(),
             timestamp: Date.now(),
@@ -53,7 +97,11 @@ export class ContextRouter {
             target: 'gemini',
             payload: {
                 type: 'plan',
-                content: { prompt, userId: session.userId },
+                content: {
+                    prompt,
+                    userId: session.userId,
+                    availableDependencies: this.installedDependencies,
+                },
                 reasoning: 'User requested new app — routing to Gemini for architectural planning',
                 relevanceScore: 1.0,
             },
@@ -63,7 +111,6 @@ export class ContextRouter {
 
         const plan = await generatePlan(contextPackage);
 
-        // Emit: planning complete
         this.emitContextFlow({
             id: crypto.randomUUID(),
             timestamp: Date.now(),
@@ -77,23 +124,19 @@ export class ContextRouter {
         return plan;
     }
 
-    // ─── Phase 2: Route plan → Claude for code generation with Gemini review loop ───
+    // ─── Phase 2: Route plan → Claude for code generation with review loop ───
 
     async generateCode(plan: ProjectPlan, session: BuildSession): Promise<GeneratedFile[]> {
         const files: GeneratedFile[] = [];
         const buildOrder = this.resolveBuildOrder(plan.components);
 
         for (const component of buildOrder) {
-            // Gather already-generated dependency files
             const dependencies = files.filter(f =>
                 component.dependencies.includes(f.component)
             );
 
             const componentFiles = await this.generateAndReviewComponent(
-                component,
-                plan,
-                dependencies,
-                session
+                component, plan, dependencies, session
             );
 
             files.push(...componentFiles);
@@ -102,7 +145,7 @@ export class ContextRouter {
         return files;
     }
 
-    // ─── The Debate Loop: Claude writes → Gemini reviews → repeat until approved ───
+    // ─── The Debate Loop with Originality Pressure ───
 
     private async generateAndReviewComponent(
         component: ComponentSpec,
@@ -114,22 +157,27 @@ export class ContextRouter {
         let feedbackHistory: ReviewFeedback[] = [];
         let previousCode = '';
         let latestFiles: GeneratedFile[] = [];
+        let activeConstraint: string | undefined;
 
         while (attempt < MAX_REVIEW_ATTEMPTS) {
             attempt++;
 
-            // ── Step 1: Claude generates code ──
+            // ── Step 1: Generate code ──
             this.emitContextFlow({
                 id: crypto.randomUUID(),
                 timestamp: Date.now(),
-                source: attempt === 1 ? 'gemini' : 'gemini',
+                source: 'gemini',
                 target: 'claude',
                 action: attempt === 1
                     ? `Generating ${component.name}...`
-                    : `Revising ${component.name} (attempt ${attempt})...`,
+                    : activeConstraint
+                        ? `🎯 Revising ${component.name} with constraint (attempt ${attempt})...`
+                        : `Revising ${component.name} (attempt ${attempt})...`,
                 reasoning: attempt === 1
                     ? `Building ${component.name} — depends on [${component.dependencies.join(', ') || 'none'}]`
-                    : `Gemini rejected: ${feedbackHistory[feedbackHistory.length - 1]?.critique.substring(0, 80) || 'unknown'}`,
+                    : activeConstraint
+                        ? `Constraint: ${activeConstraint}`
+                        : `Gemini rejected: ${feedbackHistory[feedbackHistory.length - 1]?.critique.substring(0, 80) || 'unknown'}`,
                 status: 'active',
             });
 
@@ -143,6 +191,7 @@ export class ContextRouter {
                         fullPlan: plan,
                         existingFiles: dependencies,
                         techStack: plan.techStack,
+                        availableDependencies: this.installedDependencies,
                     },
                     reasoning: `Building ${component.name} — attempt ${attempt}/${MAX_REVIEW_ATTEMPTS}`,
                     relevanceScore: 1.0,
@@ -151,19 +200,21 @@ export class ContextRouter {
                 sessionId: session.id,
             };
 
-            // Build refinement context for attempts > 1
             const refinement: RefinementContext | undefined = attempt > 1
                 ? {
                     attempt,
                     previousCode,
-                    feedbackHistory, // FULL chain, not just latest
+                    feedbackHistory,
                     component,
+                    constraint: activeConstraint,
                 }
                 : undefined;
 
-            // Try Claude first, fall back to Gemini on failure
+            // Try Claude first, fall back to Gemini
             try {
-                latestFiles = await generateComponent(contextPackage, refinement);
+                latestFiles = await generateComponent(
+                    contextPackage, refinement, session.discoveredPatterns
+                );
             } catch (claudeErr: any) {
                 console.warn(`[UCOL] Claude failed: ${claudeErr.message} — falling back to Gemini coder`);
                 this.emitContextFlow({
@@ -175,12 +226,14 @@ export class ContextRouter {
                     reasoning: claudeErr.message?.substring(0, 100) || 'Unknown error',
                     status: 'active',
                 });
-                latestFiles = await generateComponentGemini(contextPackage, refinement);
+                latestFiles = await generateComponentGemini(
+                    contextPackage, refinement, session.discoveredPatterns
+                );
             }
+
             const currentCode = latestFiles.map(f => f.content).join('\n---\n');
 
             // ── Similarity escape hatch ──
-            // If Claude's revision is >95% similar to previous, it's saying "I disagree, this is correct"
             if (attempt > 1 && previousCode) {
                 const similarity = this.computeSimilarity(previousCode, currentCode);
                 if (similarity >= SIMILARITY_THRESHOLD) {
@@ -190,7 +243,7 @@ export class ContextRouter {
                         source: 'system',
                         target: 'user',
                         action: `⚡ Auto-approved ${component.name} (code unchanged — coder stands by it)`,
-                        reasoning: `Similarity ${(similarity * 100).toFixed(0)}% ≥ ${(SIMILARITY_THRESHOLD * 100).toFixed(0)}% — forcing approval`,
+                        reasoning: `Similarity ${(similarity * 100).toFixed(0)}% ≥ ${(SIMILARITY_THRESHOLD * 100).toFixed(0)}%`,
                         status: 'complete',
                     });
                     return latestFiles;
@@ -199,50 +252,111 @@ export class ContextRouter {
 
             previousCode = currentCode;
 
-            // ── Step 2: Gemini reviews Claude's code ──
+            // ── Step 2: Gemini reviews (3-axis) ──
             this.emitContextFlow({
                 id: crypto.randomUUID(),
                 timestamp: Date.now(),
                 source: 'claude',
                 target: 'gemini',
                 action: `Reviewing ${component.name}...`,
-                reasoning: `Code generated for ${component.name} — routing to Gemini QA reviewer`,
+                reasoning: `Evaluating correctness, originality, AND pragmatism`,
                 status: 'active',
             });
 
             session.reviewRounds++;
-
             const review = await reviewCode(latestFiles, component, plan);
 
-            // ── Step 3: Decision ──
-            if (review.approved) {
-                // ✓ Approved
+            // ── Step 3: Extract novel patterns (if high originality) ──
+            if (review.originalityScore >= 7 && review.novelPatterns.length > 0) {
+                for (const pattern of review.novelPatterns) {
+                    session.discoveredPatterns.push({
+                        component: component.name,
+                        pattern,
+                        example: pattern, // The pattern description itself serves as the example
+                        originalityScore: review.originalityScore,
+                    });
+                }
+
                 this.emitContextFlow({
                     id: crypto.randomUUID(),
                     timestamp: Date.now(),
                     source: 'gemini',
                     target: 'user',
-                    action: `✓ ${component.name} approved (score: ${review.score}/10)`,
-                    reasoning: review.critique || 'Code meets all quality criteria',
+                    action: `💡 Novel pattern${review.novelPatterns.length > 1 ? 's' : ''} discovered in ${component.name}`,
+                    reasoning: review.novelPatterns.join(' | '),
+                    status: 'complete',
+                });
+            }
+
+            // ── Step 4: Decision ──
+
+            // It only passes if Correctness >= 8 AND Pragmatism >= 5
+            const isOriginalityIssue = review.score >= 7 && review.originalityScore < ORIGINALITY_THRESHOLD;
+            const isPragmatismIssue = review.score >= 7 && review.pragmatismScore < PRAGMATISM_THRESHOLD;
+
+            if (review.approved && !isPragmatismIssue) {
+                // Check if originality is too low — impose constraint for next time
+                // (but still accept this component since correctness/pragmatism passed)
+                this.emitContextFlow({
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    source: 'gemini',
+                    target: 'user',
+                    action: `✓ ${component.name} (correct: ${review.score}/10, original: ${review.originalityScore}/10, pragmatism: ${review.pragmatismScore}/10)`,
+                    reasoning: review.originalityNotes || review.critique || 'Meets quality criteria',
                     status: 'complete',
                 });
                 return latestFiles;
             }
 
-            // ✗ Rejected — add to feedback history  
+            // ✗ Rejected
             feedbackHistory.push(review);
 
-            this.emitContextFlow({
-                id: crypto.randomUUID(),
-                timestamp: Date.now(),
-                source: 'gemini',
-                target: 'claude',
-                action: `✗ Rejected ${component.name} (score: ${review.score}/10, attempt ${attempt}/${MAX_REVIEW_ATTEMPTS})`,
-                reasoning: review.critique,
-                status: attempt < MAX_REVIEW_ATTEMPTS ? 'active' : 'error',
-            });
+            if (isPragmatismIssue && !activeConstraint) {
+                // Correctness is fine but it's OVER-ENGINEERED. Force a rewrite.
+                activeConstraint = SIMPLICITY_CONSTRAINTS[
+                    Math.floor(Math.random() * SIMPLICITY_CONSTRAINTS.length)
+                ];
+                session.constraintRounds++;
 
-            // If this was the last attempt, force-accept
+                this.emitContextFlow({
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    source: 'gemini',
+                    target: 'claude',
+                    action: `🎯 Simplicity constraint for ${component.name} (pragmatism: ${review.pragmatismScore}/10)`,
+                    reasoning: `Over-engineered! ${activeConstraint}`,
+                    status: 'active',
+                });
+            } else if (isOriginalityIssue && !activeConstraint) {
+                // Correctness is fine but originality is low — impose a creativity constraint
+                activeConstraint = CREATIVITY_CONSTRAINTS[
+                    Math.floor(Math.random() * CREATIVITY_CONSTRAINTS.length)
+                ];
+                session.constraintRounds++;
+
+                this.emitContextFlow({
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    source: 'gemini',
+                    target: 'claude',
+                    action: `🎯 Creativity constraint for ${component.name} (original: ${review.originalityScore}/10)`,
+                    reasoning: activeConstraint,
+                    status: 'active',
+                });
+            } else {
+                this.emitContextFlow({
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    source: 'gemini',
+                    target: 'claude',
+                    action: `✗ Rejected ${component.name} (correct: ${review.score}/10, original: ${review.originalityScore}/10, pragmatism: ${review.pragmatismScore}/10, attempt ${attempt}/${MAX_REVIEW_ATTEMPTS})`,
+                    reasoning: review.critique,
+                    status: attempt < MAX_REVIEW_ATTEMPTS ? 'active' : 'error',
+                });
+            }
+
+            // Force-accept on max attempts
             if (attempt >= MAX_REVIEW_ATTEMPTS) {
                 this.emitContextFlow({
                     id: crypto.randomUUID(),
@@ -250,19 +364,17 @@ export class ContextRouter {
                     source: 'system',
                     target: 'user',
                     action: `⚠ Force-accepted ${component.name} after ${MAX_REVIEW_ATTEMPTS} attempts`,
-                    reasoning: `Max review attempts reached. Last score: ${review.score}/10. Issues: ${review.failedCriteria.join(', ') || 'none flagged'}`,
+                    reasoning: `Last scores: correct ${review.score}/10, original ${review.originalityScore}/10, pragmatism ${review.pragmatismScore}/10`,
                     status: 'complete',
                 });
                 return latestFiles;
             }
         }
 
-        // Fallback (shouldn't reach here, but TypeScript needs it)
         return latestFiles;
     }
 
-    // ─── Similarity Detection ───
-    // Simple Jaccard similarity on lines — good enough to catch "identical code" cases
+    // ─── Similarity Detection (Jaccard on lines) ───
 
     private computeSimilarity(a: string, b: string): number {
         const linesA = new Set(a.split('\n').map(l => l.trim()).filter(l => l.length > 0));
@@ -280,19 +392,16 @@ export class ContextRouter {
         return union === 0 ? 0 : intersection / union;
     }
 
-    // ─── Dependency Resolution (Topological Sort — Kahn's Algorithm) ───
+    // ─── Dependency Resolution (Topological Sort) ───
 
     resolveBuildOrder(components: ComponentSpec[]): ComponentSpec[] {
         const componentMap = new Map(components.map(c => [c.name, c]));
         const inDegree = new Map<string, number>();
         const adjList = new Map<string, string[]>();
 
-        // Initialize
         for (const comp of components) {
-            // Only count dependencies that actually exist in our component list
             const validDeps = comp.dependencies.filter(d => componentMap.has(d));
             inDegree.set(comp.name, validDeps.length);
-
             for (const dep of validDeps) {
                 if (!adjList.has(dep)) adjList.set(dep, []);
                 adjList.get(dep)!.push(comp.name);
@@ -305,7 +414,6 @@ export class ContextRouter {
         while (queue.length > 0) {
             const current = queue.shift()!;
             result.push(current);
-
             for (const neighbor of adjList.get(current.name) || []) {
                 const newDegree = (inDegree.get(neighbor) ?? 1) - 1;
                 inDegree.set(neighbor, newDegree);
@@ -316,7 +424,6 @@ export class ContextRouter {
             }
         }
 
-        // If topological sort didn't include everything (cycle), append remaining
         if (result.length < components.length) {
             const sorted = new Set(result.map(r => r.name));
             for (const comp of components) {
@@ -326,8 +433,6 @@ export class ContextRouter {
 
         return result;
     }
-
-    // ─── Internal ───
 
     private emitContextFlow(entry: ContextFlowEntry) {
         this.onContextFlow(entry);

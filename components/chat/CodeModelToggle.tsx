@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Zap, Brain, Bot } from "lucide-react";
+import { Zap, Brain, Bot, Lightbulb } from "lucide-react";
 import { useCodeModel } from "@/contexts/CodeModelContext";
 import { CODE_MODELS } from "@/lib/llm/codeModels";
 import { cn } from "@/lib/utils";
@@ -16,12 +16,14 @@ const MODE_ICONS = {
     fast: Zap,
     quality: Brain,
     agentic: Bot,
+    reasoning: Lightbulb,
 };
 
 const MODE_COLORS = {
     fast: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300',
     quality: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300',
     agentic: 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300',
+    reasoning: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300',
 };
 
 export function CodeModelToggle({ disabled }: { disabled?: boolean }) {

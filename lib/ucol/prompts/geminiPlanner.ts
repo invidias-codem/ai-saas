@@ -27,11 +27,12 @@ CRITICAL RULES:
 - Be specific enough that each component can be built independently given its dependencies.
 - Generate a COMPLETE app. Include layout, pages, and all UI components.
 - For props, use TypeScript type syntax (e.g., "string", "number", "() => void", "Todo[]").
+- For techStack, ONLY list packages that are in the AVAILABLE DEPENDENCIES provided below. Do NOT add packages that aren't installed.
 
 Output a single JSON object (NOT an array). No markdown fences, no explanation text.`;
 
 export async function generatePlan(contextPackage: ContextPackage): Promise<ProjectPlan> {
-    const { prompt, userId } = contextPackage.payload.content;
+    const { prompt, userId, availableDependencies } = contextPackage.payload.content;
 
     const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
     const model = genAI.getGenerativeModel({
@@ -42,11 +43,18 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
         },
     });
 
+    let userPrompt = `Build this app: ${prompt}`;
+
+    // Inject available dependencies so technStack is constrained
+    if (availableDependencies && availableDependencies.length > 0) {
+        userPrompt += `\n\n## AVAILABLE DEPENDENCIES (from package.json)\nYou MUST constrain your techStack to ONLY these installed packages:\n${availableDependencies.join(', ')}\n\nDo NOT add any packages that are not in this list.`;
+    }
+
     const result = await model.generateContent({
         contents: [
             {
                 role: 'user',
-                parts: [{ text: `Build this app: ${prompt}` }],
+                parts: [{ text: userPrompt }],
             },
         ],
         generationConfig: {

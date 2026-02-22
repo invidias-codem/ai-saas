@@ -89,10 +89,16 @@ export interface ContextFlowEntry {
 
 export interface ReviewFeedback {
     approved: boolean;
-    score: number;         // 1-10 quality score
-    critique: string;      // specific issues found
-    suggestions: string[]; // actionable fix suggestions
-    failedCriteria: string[]; // which rubric items failed
+    score: number;              // 1-10 correctness score
+    critique: string;           // specific issues found
+    suggestions: string[];      // actionable fix suggestions
+    failedCriteria: string[];   // which correctness criteria failed
+    // ─── Originality Axis ───
+    originalityScore: number;   // 1-10 novelty/creativity score
+    novelPatterns: string[];    // non-obvious patterns the coder introduced
+    originalityNotes: string;   // explanation of what was novel or derivative
+    // ─── Pragmatism Axis ───
+    pragmatismScore: number;    // 1-10 pragmatism/simplicity score
 }
 
 export interface RefinementContext {
@@ -100,6 +106,16 @@ export interface RefinementContext {
     previousCode: string;
     feedbackHistory: ReviewFeedback[]; // ALL prior critiques, not just latest
     component: ComponentSpec;
+    constraint?: string; // creativity constraint imposed for low-originality revisions
+}
+
+// ─── Cross-Component Pattern Discovery ───
+
+export interface DiscoveredPattern {
+    component: string;     // which component introduced this pattern
+    pattern: string;       // description of the novel approach
+    example: string;       // short code snippet or technique name
+    originalityScore: number; // how the reviewer scored it
 }
 
 // ─── Build Request / Response ───
@@ -125,6 +141,8 @@ export interface BuildSession {
     plan?: ProjectPlan;
     files: GeneratedFile[];
     contextFlow: ContextFlowEntry[];
-    reviewRounds: number; // total review iterations across all components
+    reviewRounds: number;       // total review iterations across all components
+    constraintRounds: number;   // how many times a creativity constraint was imposed
+    discoveredPatterns: DiscoveredPattern[]; // novel patterns found during this build
 }
 

@@ -4,7 +4,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { requireEnv } from '@/lib/env';
-import type { ContextPackage, GeneratedFile, RefinementContext } from '../types';
+import type { ContextPackage, GeneratedFile, RefinementContext, DiscoveredPattern } from '../types';
 
 const CODER_SYSTEM_PROMPT = `You are an expert React/Next.js developer. You receive a component specification from a planning agent and generate production-quality code.
 
@@ -14,15 +14,18 @@ You will receive:
 - Already-generated dependency files (so you can import correctly)
 - The tech stack
 
-RULES:
-- Generate ONLY the code for the requested component.
-- Use TypeScript with proper type annotations.
-- Use Tailwind CSS for styling (utility-first).
-- Import dependencies using relative paths based on the file structure.
-- Include proper React imports ("use client" directive where needed).
-- Write clean, readable, production-quality code.
-- If the component is a page, export it as default.
-- If the component is a reusable UI element, use named exports.
+CRITICAL — GO BEYOND THE SPEC (BUT BE PRAGMATIC):
+- Handle edge cases the spec DIDN'T mention (empty states, loading, errors, overflow).
+- Extract reusable logic into custom hooks when it makes the code cleaner.
+- Use defensive coding: type guards, null checks, fallback values.
+- Choose non-obvious patterns ONLY when they genuinely improve the code.
+- Name things to reveal intent, not just function ("handleProductCreation" not "handleSubmit").
+
+WARNING — AVOID OVER-ENGINEERING (PRAGMATISM AXIS):
+- Do NOT build massive enterprise architectures for simple UI components.
+- Do NOT use \`useReducer\` for simple toggles.
+- Do NOT build exponential backoff retry hooks for a basic submit button unless strictly necessary.
+- Your code is evaluated on Correctness (1-10), Originality (1-10), AND Pragmatism (1-10). If you over-engineer and bloat the code, you will be rejected on the Pragmatism axis. Keep it elegant, readable, and appropriately scoped.
 
 OUTPUT FORMAT:
 Return a JSON array of file objects. Each object has:
@@ -40,7 +43,8 @@ A Lead QA Engineer reviewed your previous code and found issues. Fix every flagg
 
 export async function generateComponentGemini(
     contextPackage: ContextPackage,
-    refinement?: RefinementContext
+    refinement?: RefinementContext,
+    discoveredPatterns?: DiscoveredPattern[]
 ): Promise<GeneratedFile[]> {
     const { component, fullPlan, existingFiles, techStack } = contextPackage.payload.content;
 
@@ -67,20 +71,25 @@ ${(existingFiles || []).map((f: GeneratedFile) => `### ${f.path}\n\`\`\`${f.lang
 ## Tech Stack
 ${(techStack || []).join(', ')}`;
 
+    // Inject discovered patterns from earlier components
+    if (discoveredPatterns && discoveredPatterns.length > 0) {
+        userPrompt += `\n\n## 💡 Novel Patterns Discovered by Your Team\n${discoveredPatterns.map((p, i) => `${i + 1}. **${p.component}** — ${p.pattern} (originality: ${p.originalityScore}/10)`).join('\n')}`;
+    }
+
     // Append feedback chain for revisions
     if (refinement && refinement.feedbackHistory.length > 0) {
         userPrompt += `\n\n---\n## REVISION ATTEMPT ${refinement.attempt}\n`;
         userPrompt += `\n### Your Previous Code\n\`\`\`\n${refinement.previousCode}\n\`\`\`\n`;
+        if (refinement.constraint) {
+            userPrompt += `\n### 🎯 CREATIVITY CONSTRAINT\n**${refinement.constraint}**\n`;
+        }
         userPrompt += `\n### Review Feedback History (ALL rounds)\n`;
         for (let i = 0; i < refinement.feedbackHistory.length; i++) {
             const fb = refinement.feedbackHistory[i];
-            userPrompt += `\n**Round ${i + 1}** (Score: ${fb.score}/10, ${fb.approved ? 'Approved' : 'Rejected'})\n`;
+            userPrompt += `\n**Round ${i + 1}** (Correctness: ${fb.score}/10, Originality: ${fb.originalityScore}/10, Pragmatism: ${fb.pragmatismScore}/10, ${fb.approved ? 'Approved' : 'Rejected'})\n`;
             userPrompt += `- Critique: ${fb.critique}\n`;
             if (fb.suggestions.length > 0) {
                 userPrompt += `- Fix instructions:\n${fb.suggestions.map(s => `  - ${s}`).join('\n')}\n`;
-            }
-            if (fb.failedCriteria.length > 0) {
-                userPrompt += `- Failed criteria: ${fb.failedCriteria.join(', ')}\n`;
             }
         }
         userPrompt += `\nFix ALL flagged issues. Output the corrected JSON array.`;
