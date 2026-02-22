@@ -50,6 +50,16 @@ const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().min(1, { message: "NEXT_PUBLIC_SUPABASE_URL is required" }).optional(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, { message: "NEXT_PUBLIC_SUPABASE_ANON_KEY is required" }).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, { message: "SUPABASE_SERVICE_ROLE_KEY is required" }).optional(),
+
+  // UCOL Error Resolution Agent — GitHub bot token (PAT with repo scope)
+  // Used by the autonomous error resolution agent to search code, create branches, and open PRs.
+  // Generate at: https://github.com/settings/tokens → "repo" scope
+  GITHUB_AGENT_TOKEN: z.string().optional(),
+  GITHUB_REPO_OWNER: z.string().optional(),
+  GITHUB_REPO_NAME: z.string().optional(),
+  GITHUB_DEFAULT_BRANCH: z.string().optional().default('main'),
+  VERCEL_LOG_WEBHOOK_SECRET: z.string().optional(),
+  CRON_SECRET: z.string().optional(),
 });
 
 // Parse the environment variables and export the result
