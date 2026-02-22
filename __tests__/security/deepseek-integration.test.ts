@@ -12,8 +12,8 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 // Mock Google Auth
 jest.mock('google-auth-library', () => ({
     GoogleAuth: jest.fn().mockImplementation(() => ({
-        getClient: jest.fn().mockResolvedValue({
-            getAccessToken: jest.fn().mockResolvedValue({ token: 'mock-token' } as any)
+        getClient: jest.fn<() => Promise<{ getAccessToken: () => Promise<{ token: string }> }>>().mockResolvedValue({
+            getAccessToken: jest.fn<() => Promise<{ token: string }>>().mockResolvedValue({ token: 'mock-token' })
         })
     }))
 }));
