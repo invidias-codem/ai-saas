@@ -24,7 +24,8 @@ import {
 } from "@/lib/ragMemory";
 import { rankMemoriesIntelligently, synthesizeContextWithReasoning } from "@/lib/intelligentMemory";
 // import { sanitizeHistory } from "@/lib/gemini"; // Moved to provider
-import { findRelatedEntities, formatGraphContext, addNode } from "@/lib/memory/graphStore";
+import { findRelatedEntities, formatGraphContext, addNode, addEdge } from "@/lib/memory/graphStore";
+import { generateEmbedding } from "@/lib/memory/embedding";
 import { performResearch, formatSearchResults } from "@/lib/agents/researcher";
 import { getUserProfile, formatUserProfileForPrompt } from "@/lib/memoryPromotion";
 import { SecurityAgent } from "@/lib/security/securityAgent";
@@ -236,21 +237,28 @@ export async function generateConversationReply(
   let graphData: { centralNode: GraphNode | null; relatedNodes: any[] } = { centralNode: null, relatedNodes: [] }; // relatedNodes uses complex structure, keeping any for now/TODO
   let userProfileMemories: PromotableMemory[] | null = null;
 
-  // Check if heavy context gathering is enabled (to avoid rate limits on free tier)
-  const enableHeavyContext = process.env.ENABLE_HEAVY_CONTEXT === 'true';
-
-  if (!options.disableExternalContext && enableHeavyContext) {
-    // Full context gathering (requires higher API quotas)
-    [allFacts, researchResult, graphData, userProfileMemories] = await Promise.all([
+  // Full context gathering — all sources in parallel with graceful degradation.
+  // Individual failures are caught so one slow/broken source doesn't block the rest.
+  if (!options.disableExternalContext) {
+    const results = await Promise.allSettled([
       getHighConfidenceFacts(userId),
       performResearch(userQuery, userContextPrompt),
       findRelatedEntities(userId, userQuery),
       getUserProfile(userId),
     ]);
-  } else if (!options.disableExternalContext) {
-    // Lightweight mode: only fetch facts (no embeddings needed for this)
-    allFacts = await getHighConfidenceFacts(userId);
-    console.log('[ConversationEngine] Running in lightweight mode (ENABLE_HEAVY_CONTEXT=false)');
+
+    allFacts = results[0].status === 'fulfilled' ? results[0].value : [];
+    researchResult = results[1].status === 'fulfilled' ? results[1].value : { results: [] };
+    graphData = results[2].status === 'fulfilled' ? results[2].value : { centralNode: null, relatedNodes: [] };
+    userProfileMemories = results[3].status === 'fulfilled' ? results[3].value : null;
+
+    // Log any failures for debugging (non-blocking)
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        const labels = ['facts', 'research', 'graph', 'userProfile'];
+        console.warn(`[ConversationEngine] Context source "${labels[i]}" failed:`, r.reason?.message || r.reason);
+      }
+    });
   }
 
   const searchContext = options.disableExternalContext ? "" : formatSearchResults(researchResult.results);
@@ -292,14 +300,48 @@ export async function generateConversationReply(
     }
   }
 
-  // Create mock vector similarities based on keyword matching (same as route)
+  // Semantic similarity using embeddings — falls back to keyword matching if embedding fails
   const similarities = new Map<string, number>();
-  const queryWords = userQuery.toLowerCase().split(/\s+/);
-  for (const fact of allFacts) {
-    const factWords = (fact.content ?? "").toLowerCase().split(/\s+/);
-    const overlap = factWords.filter((w: string) => queryWords.includes(w)).length;
-    const similarity = overlap / Math.max(factWords.length, queryWords.length, 1);
-    similarities.set(fact.id || "", Math.min(1, similarity * 1.5));
+  let queryEmbedding: number[] | null = null;
+
+  if (!options.disableExternalContext && allFacts.length > 0) {
+    try {
+      queryEmbedding = await generateEmbedding(userQuery);
+    } catch (e: any) {
+      console.warn('[ConversationEngine] Query embedding failed, falling back to keyword matching:', e.message);
+    }
+  }
+
+  if (queryEmbedding && queryEmbedding.some(v => v !== 0)) {
+    // Semantic ranking: compute cosine similarity against fact embeddings
+    for (const fact of allFacts) {
+      try {
+        const factEmbedding = await generateEmbedding(fact.content ?? "");
+        if (factEmbedding.some(v => v !== 0)) {
+          // Cosine similarity
+          let dotProduct = 0, normA = 0, normB = 0;
+          for (let i = 0; i < queryEmbedding.length; i++) {
+            dotProduct += queryEmbedding[i] * (factEmbedding[i] || 0);
+            normA += queryEmbedding[i] * queryEmbedding[i];
+            normB += (factEmbedding[i] || 0) * (factEmbedding[i] || 0);
+          }
+          const cosineSim = normA && normB ? dotProduct / (Math.sqrt(normA) * Math.sqrt(normB)) : 0;
+          similarities.set(fact.id || "", Math.max(0, cosineSim));
+        }
+      } catch {
+        // Individual fact embedding failed — skip it
+        similarities.set(fact.id || "", 0);
+      }
+    }
+  } else {
+    // Fallback: keyword overlap (original behavior)
+    const queryWords = userQuery.toLowerCase().split(/\s+/);
+    for (const fact of allFacts) {
+      const factWords = (fact.content ?? "").toLowerCase().split(/\s+/);
+      const overlap = factWords.filter((w: string) => queryWords.includes(w)).length;
+      const similarity = overlap / Math.max(factWords.length, queryWords.length, 1);
+      similarities.set(fact.id || "", Math.min(1, similarity * 1.5));
+    }
   }
 
   // 2. Context Synthesis
@@ -319,10 +361,15 @@ export async function generateConversationReply(
   }
 
 
-  // Only call RAG if heavy context is enabled
-  const ragResult = (!options.disableExternalContext && enableHeavyContext)
-    ? await getRAGMemoryContext(userId, userQuery, "conversation")
-    : { contextString: "", sources: [] };
+  // RAG memory context — always attempt, graceful fallback on failure
+  let ragResult: { contextString: string; sources: Source[] } = { contextString: "", sources: [] };
+  if (!options.disableExternalContext) {
+    try {
+      ragResult = await getRAGMemoryContext(userId, userQuery, "conversation");
+    } catch (e: any) {
+      console.warn('[ConversationEngine] RAG context failed:', e.message || e);
+    }
+  }
 
   const memoryContext = ragResult.contextString;
   const memorySources = ragResult.sources;
@@ -411,9 +458,27 @@ export async function generateConversationReply(
               }
             );
 
-            // Knowledge graph update (best-effort)
+            // Knowledge graph update — extract ALL tags and link co-occurring concepts
             if (tags.length > 0) {
-              await addNode(userId, tags[0], 'concept', `Automatically extracted from conversation`);
+              const nodeIds: (string | null)[] = await Promise.all(
+                tags.slice(0, 10).map(tag =>
+                  addNode(userId, tag, 'concept', `Extracted from conversation: "${userQuery.substring(0, 80)}"`)
+                )
+              );
+
+              // Create edges between co-occurring concepts (they appeared in the same conversation)
+              const validNodes = nodeIds.filter((id): id is string => id !== null);
+              if (validNodes.length > 1) {
+                const edgePromises: Promise<string | null>[] = [];
+                for (let i = 0; i < validNodes.length; i++) {
+                  for (let j = i + 1; j < validNodes.length; j++) {
+                    edgePromises.push(
+                      addEdge(userId, validNodes[i], validNodes[j], 'co-occurred', 1.0)
+                    );
+                  }
+                }
+                await Promise.allSettled(edgePromises);
+              }
             }
           } catch (e) {
             console.error('Side effect processing failed', e);
@@ -428,7 +493,7 @@ export async function generateConversationReply(
   return {
     stream,
     sources: [
-      ...intelligentFacts.map((f, index) => ({ id: f.id || `fact-${index}`, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
+      ...intelligentFacts.map(f => ({ id: f.id || `fact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
       ...(memorySources || [])
     ],
     debug: {
