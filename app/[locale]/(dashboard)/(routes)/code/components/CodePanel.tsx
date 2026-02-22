@@ -3,8 +3,8 @@
 // CodePanel — displays Claude's generated code files with a file tree + code viewer.
 
 import { useState } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { useClipboard } from 'use-clipboard-copy';
 import type { GeneratedFile } from '@/lib/ucol/types';
 import { Loader2, FileCode, FolderOpen, Copy, Check, Download } from 'lucide-react';
