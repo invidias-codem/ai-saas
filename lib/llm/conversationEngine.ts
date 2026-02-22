@@ -24,7 +24,8 @@ import {
 } from "@/lib/ragMemory";
 import { rankMemoriesIntelligently, synthesizeContextWithReasoning } from "@/lib/intelligentMemory";
 // import { sanitizeHistory } from "@/lib/gemini"; // Moved to provider
-import { findRelatedEntities, formatGraphContext, addNode, addEdge } from "@/lib/memory/graphStore";
+import { findRelatedEntities, formatGraphContext, addNode, addEdge, strengthenEdge } from "@/lib/memory/graphStore";
+import { extractFactsFromConversation } from "@/lib/agents/factExtractor";
 import { generateEmbedding } from "@/lib/memory/embedding";
 import { performResearch, formatSearchResults } from "@/lib/agents/researcher";
 import { getUserProfile, formatUserProfileForPrompt } from "@/lib/memoryPromotion";
@@ -458,6 +459,14 @@ export async function generateConversationReply(
               }
             );
 
+            // LLM-powered fact extraction (replaces shallow tag-only approach)
+            try {
+              const extractedFacts = await extractFactsFromConversation(userQuery, fullText);
+              console.log(`[ConversationEngine] Extracted ${extractedFacts.length} structured facts`);
+            } catch (factErr) {
+              console.warn('[ConversationEngine] Fact extraction failed (non-blocking):', factErr);
+            }
+
             // Knowledge graph update — extract ALL tags and link co-occurring concepts
             if (tags.length > 0) {
               const nodeIds: (string | null)[] = await Promise.all(
@@ -466,14 +475,14 @@ export async function generateConversationReply(
                 )
               );
 
-              // Create edges between co-occurring concepts (they appeared in the same conversation)
+              // Strengthen edges between co-occurring concepts (weight increases with repetition)
               const validNodes = nodeIds.filter((id): id is string => id !== null);
               if (validNodes.length > 1) {
                 const edgePromises: Promise<string | null>[] = [];
                 for (let i = 0; i < validNodes.length; i++) {
                   for (let j = i + 1; j < validNodes.length; j++) {
                     edgePromises.push(
-                      addEdge(userId, validNodes[i], validNodes[j], 'co-occurred', 1.0)
+                      strengthenEdge(userId, validNodes[i], validNodes[j], 'co-occurred')
                     );
                   }
                 }
