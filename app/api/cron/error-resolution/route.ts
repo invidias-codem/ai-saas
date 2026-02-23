@@ -6,7 +6,8 @@
  *
  * Schedule: every 30 minutes
  * vercel.json:
- *   { "crons": [{ "path": "/api/cron/error-resolution", "schedule": "*/30 * * * *" }] }
+ *   { "crons": [{ "path": "/api/cron/error-resolution", "schedule": "* /30 * * * *" }] }
+ *   (note: remove the space in the schedule — JSDoc parser limitation)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
