@@ -90,6 +90,10 @@ export async function POST(req: Request) {
                     // The knowledge graph + stored facts we push via memory-push
                     // should be the authoritative source — not general web search.
                     skipWebResearch: true,
+                    // Disable side-effect memory capture so conversation responses
+                    // don't pollute the knowledge graph — we manage memory explicitly
+                    // via the memory-push action only.
+                    disableSideEffects: true,
                 }
             );
 
