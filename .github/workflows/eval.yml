@@ -124,7 +124,7 @@ jobs:
 
       - name: Comment PR summary
         if: always() && github.event_name == 'pull_request' && (steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true')
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
