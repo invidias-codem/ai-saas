@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
+import { getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
 
 export async function POST(req: Request) {
     if (!process.env.RESEND_API_KEY) {
         console.error('RESEND_API_KEY is not set. Support emails will fail.');
         return NextResponse.json({ error: 'Configuration Error' }, { status: 500 });
+    }
+
+    const ip = getClientIP(req);
+    const rateLimit = await limitApiEndpoint(null, ip, 'mutation');
+    if (!rateLimit.success) {
+        return NextResponse.json(
+            { error: 'Too many requests' },
+            { status: 429, headers: { 'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)) } }
+        );
     }
 
     const resend = new Resend(process.env.RESEND_API_KEY);

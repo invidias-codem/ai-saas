@@ -8,6 +8,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
 
 // Force dynamic rendering since this route uses Clerk auth
 export const dynamic = 'force-dynamic';
@@ -23,12 +25,15 @@ export interface ConversationMeta {
 }
 
 // GET - List all conversations
-export async function GET() {
+export async function GET(req: Request) {
     try {
-        const { userId } = await auth();
+        const user = await requireAuth();
+        const ip = getClientIP(req);
 
-        if (!userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        // Rate limiting
+        const rateLimit = await limitApiEndpoint(user.userId, ip, 'query');
+        if (!rateLimit.success) {
+            return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
         }
 
         const { supabase } = await import("@/lib/supabaseClient");
@@ -61,7 +66,7 @@ export async function GET() {
                     role
                 )
             `)
-            .eq("user_id", userId)
+            .eq("user_id", user.userId)
             .eq("is_deleted", false)
             .order("updated_at", { ascending: false })
             .limit(50);
@@ -100,6 +105,10 @@ export async function GET() {
 
     } catch (error) {
         console.error("[API:Conversations] Error fetching conversations:", error);
+
+        const authResponse = handleAuthError(error);
+        if (authResponse) return authResponse;
+
         return NextResponse.json(
             { error: "Internal server error" },
             { status: 500 }

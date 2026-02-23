@@ -1,31 +1,29 @@
 import { MetadataRoute } from 'next';
-import { getTopPublicAgents } from '@/lib/agents';
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://gen1e.xyz';
+export default function sitemap(): MetadataRoute.Sitemap {
+    const baseUrl = 'https://genie-ai.com'; // Replace with actual domain
+    const locales = ['en', 'th', 'vi'];
+    const routes = ['', '/dashboard', '/blog', '/pricing', '/support'];
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-    let agents: Awaited<ReturnType<typeof getTopPublicAgents>> = [];
+    const sitemap: MetadataRoute.Sitemap = [];
 
-    try {
-        agents = await getTopPublicAgents(100);
-    } catch (error) {
-        console.error('[Sitemap] Failed to fetch agents:', error);
+    for (const locale of locales) {
+        for (const route of routes) {
+            sitemap.push({
+                url: `${baseUrl}/${locale}${route}`,
+                lastModified: new Date(),
+                changeFrequency: 'daily',
+                priority: route === '' ? 1 : 0.8,
+                alternates: {
+                    languages: {
+                        en: `${baseUrl}/en${route}`,
+                        th: `${baseUrl}/th${route}`,
+                        vi: `${baseUrl}/vi${route}`,
+                    }
+                }
+            });
+        }
     }
 
-    const agentUrls = agents.map((agent: any) => ({
-        url: `${BASE_URL}/agent/${agent.id}`,
-        lastModified: new Date(agent.updated_at || new Date()),
-        changeFrequency: 'weekly' as const,
-        priority: 0.8,
-    }));
-
-    return [
-        {
-            url: BASE_URL,
-            lastModified: new Date(),
-            changeFrequency: 'daily',
-            priority: 1,
-        },
-        ...agentUrls,
-    ];
+    return sitemap;
 }

@@ -18,13 +18,13 @@ export async function POST(req: Request) {
       );
     }
 
-    // Verify webhook signature if available
-    const signature = req.headers.get('x-zapier-signature');
-    if (signature && !verifyWebhookSignature(req, signature)) {
-      return NextResponse.json(
-        { error: 'Invalid signature' },
-        { status: 401 }
-      );
+    // Verify webhook signature when secret is configured
+    const webhookSecret = process.env.ZAPIER_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const signature = req.headers.get('x-zapier-signature');
+      if (!signature || !verifyWebhookSignature(req, signature)) {
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
     }
 
     // Handle different Zapier actions

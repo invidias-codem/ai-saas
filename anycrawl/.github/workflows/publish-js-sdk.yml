@@ -1,0 +1,38 @@
+name: Publish JS SDK
+
+on:
+    push:
+        branches:
+            - main
+        paths:
+            - packages/js-sdk/package.json
+    workflow_dispatch: {}
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10.12.4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  registry-url: https://registry.npmjs.org/
+                  cache: pnpm
+
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm -C packages/js-sdk build
+            - run: pnpm -C packages/js-sdk test
+
+            - name: Verify package is publishable
+              run: node -e "const p=require('./packages/js-sdk/package.json'); if(p.private){console.error('packages/js-sdk is private=true. Cannot publish.'); process.exit(1)}"
+
+            - name: Publish to npm
+              run: |
+                  cd packages/js-sdk
+                  npm publish --access public
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

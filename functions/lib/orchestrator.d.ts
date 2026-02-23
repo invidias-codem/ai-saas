@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import * as functions from 'firebase-functions';
 /**
  * 1. INFERENCE FUNCTION
  * Orchestrates the Reasoning Loop:

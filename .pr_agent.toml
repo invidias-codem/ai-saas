@@ -1,0 +1,48 @@
+[config]
+model = "gpt-4o"
+fallback_models = ["gpt-4o-mini"]
+
+[rag_arguments]
+enable_rag = true
+# Repositories to index for RAG context
+rag_repos = ['invidias-codem/ai-saas']
+# Exclude patterns to reduce indexing cost and noise
+exclude_patterns = [
+  'node_modules/**',
+  'functions/node_modules/**',
+  '.next/**',
+  '__tests__/**',
+  '*.test.ts',
+  '*.test.tsx',
+  'test/fixtures/**',
+  '.git/**',
+  'dist/**',
+  'build/**'
+]
+
+[pr_description]
+publish_description_as_comment = true
+enable_semantic_files_types = true
+collapsible_file_list = true
+
+[pr_reviewer]
+require_focused_review = true
+require_score_review = true
+require_tests_review = true
+require_security_review = true
+# Enable RAG-powered insights
+enable_review_labels_effort = true
+enable_review_labels_security = true
+
+[pr_code_suggestions]
+num_code_suggestions = 5
+# Use RAG to find similar patterns
+enable_help_text = true
+
+[compliance]
+# Enable codebase duplication detection via RAG
+enable_custom_compliance = true
+
+[ask]
+# Enable broader repository context for /ask commands
+enable_rag_context = true

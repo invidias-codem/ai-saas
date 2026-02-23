@@ -226,8 +226,62 @@ export async function POST(req: Request) {
                 } catch (e: any) {
                     await sendMessage(chatId, `❌ **Error:** ${e.message}`);
                 }
+
+            } else if (text.startsWith('/blog')) {
+                const topic = text.replace('/blog', '').trim();
+                if (!topic) {
+                    await sendMessage(chatId, "✍️ **Genie Blogger**\n\nPlease provide a topic: `/blog The Future of AI`");
+                    return NextResponse.json({ ok: true });
+                }
+
+                await sendMessage(chatId, "✍️ **Drafting blog post...**");
+                await sendChatAction(chatId, 'typing');
+
+                try {
+                    // Construct a specific engineering task for blogging
+                    const today = new Date().toISOString().split('T')[0]; // "2026-02-03"
+                    const task = `Write a high-quality blog post about "${topic}" in content/blog/. IMPORTANT: Use this exact frontmatter with publishedAt: "${today}", author: "genie-team", and category: "engineering". Quote any title/description values that contain colons. Use the existing MDX files as a reference for style. Create a new file with a kebab-case filename. Ensure the content is engaging and technical.`;
+
+                    const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
+                    // Run plan using the SAME engineer logic
+                    const output = execSync(`node ${scriptPath} "${task}" --plan-only`, {
+                        encoding: 'utf-8',
+                        env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
+                    });
+
+                    // Extract JSON
+                    const jsonMatch = output.match(/---JSON_START---([\s\S]*?)---JSON_END---/);
+                    if (!jsonMatch) throw new Error("Could not parse blog plan.");
+
+                    const plan = JSON.parse(jsonMatch[1]);
+                    const planDesc = plan.plan || "Complexity unknown";
+                    const steps = plan.steps || [];
+
+                    const summary = `**Blog Draft Ready:**\n${planDesc}\n\n**Steps:**\n` + steps.map((s: any, i: number) => `${i + 1}. ${s.type === 'write' ? '📝 Create' : '💻 Run'} \`${s.path || s.command}\``).join('\n');
+
+                    // Send Approval UI (Same callback logic works because it uses latest_plan.json)
+                    await sendMessage(chatId, summary, {
+                        inline_keyboard: [
+                            [
+                                { text: "✅ Publish (Commit & Push)", callback_data: `APPROVE_PLAN` }
+                            ],
+                            [
+                                { text: "🔄 Retry", callback_data: "RETRY_PLAN" },
+                                { text: "❌ Cancel", callback_data: "CANCEL" }
+                            ]
+                        ]
+                    });
+
+                    // Save plan to loose temp file for stateless approval
+                    const fs = require('fs');
+                    const tmpPath = path.join(process.cwd(), '.next/cache/latest_plan.json');
+                    fs.writeFileSync(tmpPath, JSON.stringify({ task, plan }));
+
+                } catch (e: any) {
+                    await sendMessage(chatId, `❌ **Error:** ${e.message}`);
+                }
             } else {
-                await sendMessage(chatId, `🤖 I didn't understand that.\nCommands:\n\`/engineer <task>\`\n\`/reply <id> <msg>\``);
+                await sendMessage(chatId, `🤖 I didn't understand that.\nCommands:\n\`/engineer <task>\` - Autonomous coding\n\`/blog <topic>\` - Write a blog post\n\`/reply <id> <msg>\` - Reply to support`);
             }
         }
 

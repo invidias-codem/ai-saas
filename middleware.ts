@@ -1,80 +1,80 @@
-// proxy.ts
-import { authMiddleware } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import createMiddleware from 'next-intl/middleware';
+import { NextResponse } from 'next/server';
 
-export default authMiddleware({
-  // ✅ 1. Manually pass all environment variables
-  // (Removed manual keys to rely on auto-detection and fix DEPRECATION/Encryption Key warnings)
+const intlMiddleware = createMiddleware({
+    locales: ['en', 'th', 'vi'],
+    defaultLocale: 'en',
+    localePrefix: 'always'
+});
 
+// Define public routes that don't require authentication
+const isPublicRoute = createRouteMatcher([
+    '/',                                        // Landing page
+    '/:locale',                                 // Localized landing page
+    '/:locale/sign-in(.*)',
+    '/:locale/sign-up(.*)',
+    '/sign-in(.*)',
+    '/sign-up(.*)',
+    '/privacy',                                 // Privacy policy page
+    '/:locale/privacy',
+    '/support',                                 // Support page
+    '/:locale/support',
+    '/slack',                                   // Slack integration
+    '/:locale/slack',
+    '/blog(.*)',                                // Blog pages
+    '/:locale/blog(.*)',
+    '/api/guest-chat',                          // Guest chat API
+    '/api/feedback',                            // Feedback ingestion
+    '/api/integrations/slack/callback',         // Slack OAuth callback
+    '/api/integrations/slack/events',           // Slack Events API
+    '/api/integrations/slack/command',          // Slack slash commands
+    '/api/integrations/slack/interactivity',    // Slack interactivity
+    '/api/integrations/slack/auth',             // OAuth Init
+    '/api/webhooks/kofi',                       // Ko-fi Webhook
+    '/api/support/verify-donation',             // (Legacy/Optional)
+    '/api/integrations/telegram/webhook',       // Telegram Webhook
+    '/api/internal/jklaw',                     // JKlaw internal bridge (key-auth, not Clerk)
+    '/api/internal/route-to-jklaw',           // UCOL agent router (key-auth, not Clerk)
+]);
 
-  publicRoutes: [
-    "/", // Landing page
-    "/sign-in",
-    "/sign-up",
-    "/privacy",  // Privacy policy page - public
-    "/support",  // Support page - public
-    "/slack",    // Slack integration landing page - public
-    "/api/guest-chat",                        // Guest chat API - public for landing page
-    "/api/feedback",                          // Feedback ingestion (anonymous allowed)
-    "/api/integrations/slack/callback",      // Slack OAuth callback
-    "/api/integrations/slack/events",        // Slack Events API
-    "/api/integrations/slack/command",       // Slack slash commands
-    "/api/integrations/slack/interactivity", // Slack interactivity (buttons, modals)
-    "/api/integrations/slack/auth",          // 0Auth Init (handled manually for redirects)
-    "/api/webhooks/kofi",                    // Ko-fi Webhook
-    "/api/support/verify-donation",          // (Legacy/Optional)
-    "/api/integrations/telegram/webhook",  // Telegram Webhook
-  ],
+export default clerkMiddleware(async (auth, req) => {
+    const isApi = req.nextUrl.pathname.startsWith('/api') || req.nextUrl.pathname.startsWith('/trpc');
 
-  ignoredRoutes: [
-    "/ws",
-    "/api/guest-chat",                        // Guest chat - no auth needed
-    "/api/feedback",                          // Feedback ingestion (anonymous allowed)
-    "/api/integrations/slack/callback",      // Also ignore for Slack redirects
-    "/api/integrations/slack/events",        // Slack sends events without auth
-    "/api/integrations/slack/command",       // Slack sends commands without auth
-    "/api/integrations/slack/interactivity", // Slack sends interactions without auth
-    "/api/webhooks/kofi",                    // Ko-fi Webhook
-    "/api/integrations/telegram/webhook",  // Telegram sends without auth
-  ],
-
-  afterAuth(auth, req) {
-    // Handle public routes
-    if (auth.isPublicRoute) {
-      return NextResponse.next();
+    // Handle API routes (skip intl)
+    if (isApi) {
+        if (isPublicRoute(req)) {
+            return;
+        }
+        const { userId } = await auth();
+        if (!userId) {
+            return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        }
+        return;
     }
 
-    // Handle authenticated users
-    if (auth.userId) {
-      return NextResponse.next();
+    // Handle Page routes (use intl)
+    if (isPublicRoute(req)) {
+        return intlMiddleware(req);
     }
 
-    // ---
-    // User is NOT authenticated and is on a PROTECTED route.
-    // ---
-    const isApiRoute = req.nextUrl.pathname.startsWith("/api");
+    const { userId, redirectToSignIn } = await auth();
 
-    if (isApiRoute) {
-      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!userId) {
+        return redirectToSignIn();
     }
 
-    // For all other protected pages, redirect to sign-in.
-    const signInUrl = new URL("/sign-in", req.url);
-    signInUrl.searchParams.set("redirect_url", req.url);
-
-    // Add a friendly indicator for blog pages so we can show a custom message
-    const isBlogRoute = req.nextUrl.pathname.startsWith("/blog");
-    if (isBlogRoute) {
-      signInUrl.searchParams.set("from", "blog");
-    }
-
-    return NextResponse.redirect(signInUrl);
-  },
+    return intlMiddleware(req);
 });
 
 export const config = {
-  matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
+    matcher: [
+        // Skip Next.js internals and all static files
+        '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+        // Always run for API routes
+        '/(api|trpc)(.*)',
+    ],
 };

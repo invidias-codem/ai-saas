@@ -9,7 +9,7 @@ export const ProModal = () => {
 
     return (
         <Dialog open={proModal.isOpen} onOpenChange={proModal.onClose}>
-            <DialogContent className="sm:max-w-md overflow-y-auto max-h-[90vh]">
+            <DialogContent className="sm:max-w-2xl overflow-y-auto max-h-[90vh]">
                 <DialogHeader className="hidden">
                     <DialogTitle>Support Genie</DialogTitle>
                     <DialogDescription>

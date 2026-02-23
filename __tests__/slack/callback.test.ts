@@ -3,19 +3,25 @@
  * Tests for the multi-tenant OAuth flow
  */
 
+import type { NextRequest } from 'next/server';
+
 // Mock NextResponse before importing the route
-jest.mock('next/server', () => ({
-  NextResponse: {
-    redirect: jest.fn((url: string) => ({
-      status: 307,
-      headers: new Map([['location', url]]),
-    })),
-    json: jest.fn((data: any, init?: any) => ({
-      status: init?.status || 200,
-      json: () => Promise.resolve(data),
-    })),
-  },
-}));
+jest.mock('next/server', () => {
+  const actual = jest.requireActual('next/server');
+  return {
+    ...actual,
+    NextResponse: {
+      redirect: jest.fn((url: string) => ({
+        status: 307,
+        headers: new Map([['location', url]]),
+      })),
+      json: jest.fn((data: any, init?: any) => ({
+        status: init?.status || 200,
+        json: () => Promise.resolve(data),
+      })),
+    },
+  };
+});
 
 // Mock the token manager
 jest.mock('@/lib/slack/tokenManager', () => ({
@@ -99,7 +105,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -129,7 +135,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         'https://app.example.com/api/integrations/slack/callback?code=test-code',
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -155,7 +161,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         'https://app.example.com/api/integrations/slack/callback?code=test-code',
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -173,7 +179,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         'https://app.example.com/api/integrations/slack/callback?code=test-code',
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -190,7 +196,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         'https://app.example.com/api/integrations/slack/callback?error=access_denied',
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -203,7 +209,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         'https://app.example.com/api/integrations/slack/callback',
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -220,7 +226,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -233,11 +239,11 @@ describe('Slack OAuth Callback', () => {
       // Use a state that will fail timestamp parsing (no colon separator)
       // The route will proceed but without a valid user ID
       const invalidState = Buffer.from('no_colon_here').toString('base64');
-      
+
       const request = new Request(
         `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${invalidState}`,
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -256,7 +262,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         'https://app.example.com/api/integrations/slack/callback?code=invalid-code',
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -278,7 +284,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         'https://app.example.com/api/integrations/slack/callback?code=test-code',
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -293,7 +299,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         'https://app.example.com/api/integrations/slack/callback?code=test-code',
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -308,7 +314,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         'https://app.example.com/api/integrations/slack/callback?code=test-code',
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 
@@ -328,7 +334,7 @@ describe('Slack OAuth Callback', () => {
       const request = new Request(
         `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
         { method: 'GET' }
-      );
+      ) as unknown as NextRequest;
 
       await GET(request);
 

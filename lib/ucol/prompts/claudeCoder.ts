@@ -1,0 +1,181 @@
+// lib/ucol/prompts/claudeCoder.ts
+// Claude code generation — generates component files from a plan + context.
+// Supports iterative refinement, discovered patterns from earlier components,
+// and creativity constraints for low-originality revisions.
+
+import Anthropic from '@anthropic-ai/sdk';
+import type { ContextPackage, GeneratedFile, RefinementContext, DiscoveredPattern } from '../types';
+
+const CODER_SYSTEM_PROMPT = `You are an expert React/Next.js developer who writes code that goes BEYOND the spec.
+
+You will receive:
+- The component spec (name, props, description, file path)
+- The full project plan (for context on the overall app)
+- Already-generated dependency files (so you can import correctly)
+- The tech stack
+- Possibly: novel patterns discovered in earlier components — reuse and build on them
+
+RULES:
+- Generate ONLY the code for the requested component.
+- Use TypeScript with proper type annotations.
+- Use Tailwind CSS for styling (utility-first).
+- Import dependencies using relative paths based on the file structure.
+- Include proper React imports ("use client" directive where needed).
+- If the component is a page, export it as default.
+- If the component is a reusable UI element, use named exports.
+
+CRITICAL — GO BEYOND THE SPEC (BUT BE PRAGMATIC):
+- Handle edge cases the spec DIDN'T mention (empty states, loading, errors, overflow).
+- Extract reusable logic into custom hooks when it makes the code cleaner.
+- Use defensive coding: type guards, null checks, fallback values.
+- Choose non-obvious patterns ONLY when they genuinely improve the code.
+- Name things to reveal intent, not just function ("handleProductCreation" not "handleSubmit").
+
+WARNING — AVOID OVER-ENGINEERING (PRAGMATISM AXIS):
+- Do NOT build massive enterprise architectures for simple UI components.
+- Do NOT use \`useReducer\` for simple toggles.
+- Do NOT build "exponential backoff retry hooks" for a basic submit button unless strictly necessary.
+- Your code is evaluated on Correctness (1-10), Originality (1-10), AND Pragmatism (1-10). If you over-engineer and bloat the code, you will be rejected on the Pragmatism axis. Keep it elegant, readable, and appropriately scoped.
+
+Your code is reviewed by a Lead QA Engineer. Tutorial-level code gets sent back for low Originality. Over-engineered code gets sent back for low Pragmatism.
+
+OUTPUT FORMAT:
+Return a JSON array of file objects. Each object has:
+- "path": string (e.g., "components/TodoList.tsx")  
+- "content": string (the full file source code)
+- "language": string (e.g., "tsx", "ts")
+
+Output ONLY valid JSON. No markdown fences, no explanation text.`;
+
+const REFINEMENT_ADDENDUM = `
+
+## ⚠️ REVISION REQUIRED
+
+A Lead QA Engineer reviewed your previous code. You must fix every flagged issue immediately without arguing or over-explaining. Fix the problems, output the corrected JSON, and nothing else.`;
+
+const CONSTRAINT_ADDENDUM = `
+
+## 🎯 CREATIVITY CONSTRAINT
+
+Your previous implementation was scored low on originality. You MUST now rewrite the component while satisfying the constraint below. This is non-negotiable — standard tutorial-level code will be rejected again.`;
+
+function getAnthropicClient(): Anthropic {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+        throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+    }
+    return new Anthropic({ apiKey });
+}
+
+export async function generateComponent(
+    contextPackage: ContextPackage,
+    refinement?: RefinementContext,
+    discoveredPatterns?: DiscoveredPattern[]
+): Promise<GeneratedFile[]> {
+    const { component, fullPlan, existingFiles, techStack } = contextPackage.payload.content;
+
+    const anthropic = getAnthropicClient();
+
+    let userPrompt = `## Project Plan
+${JSON.stringify(fullPlan, null, 2)}
+
+## Component to Build
+${JSON.stringify(component, null, 2)}
+
+## Already Built Dependencies
+${(existingFiles || []).map((f: GeneratedFile) => `### ${f.path}\n\`\`\`${f.language}\n${f.content}\n\`\`\``).join('\n\n') || '(none — this is a leaf component)'}
+
+## Tech Stack
+${(techStack || []).join(', ')}`;
+
+    // Inject discovered patterns from earlier components
+    if (discoveredPatterns && discoveredPatterns.length > 0) {
+        userPrompt += `\n\n## 💡 Novel Patterns Discovered by Your Team
+The following patterns were introduced in earlier components and scored highly for originality. Reuse or build on them where appropriate:
+
+${discoveredPatterns.map((p, i) => `${i + 1}. **${p.component}** — ${p.pattern} (originality: ${p.originalityScore}/10)\n   Example: ${p.example}`).join('\n\n')}`;
+    }
+
+    // If this is a refinement, append the full feedback chain
+    if (refinement && refinement.feedbackHistory.length > 0) {
+        userPrompt += `\n\n---\n## REVISION ATTEMPT ${refinement.attempt}\n`;
+        userPrompt += `\n### Your Previous Code\n\`\`\`\n${refinement.previousCode}\n\`\`\`\n`;
+
+        // If there's a creativity constraint, highlight it
+        if (refinement.constraint) {
+            userPrompt += `\n### 🎯 CREATIVITY CONSTRAINT\n**${refinement.constraint}**\n\nYou MUST satisfy this constraint in your revision.\n`;
+        }
+
+        userPrompt += `\n### Review Feedback History (ALL rounds)\n`;
+        for (let i = 0; i < refinement.feedbackHistory.length; i++) {
+            const fb = refinement.feedbackHistory[i];
+            userPrompt += `\n**Round ${i + 1}** (Correctness: ${fb.score}/10, Originality: ${fb.originalityScore}/10, Pragmatism: ${fb.pragmatismScore}/10, ${fb.approved ? 'Approved' : 'Rejected'})\n`;
+            userPrompt += `- Critique: ${fb.critique}\n`;
+            if (fb.originalityNotes) {
+                userPrompt += `- Originality notes: ${fb.originalityNotes}\n`;
+            }
+            if (fb.suggestions.length > 0) {
+                userPrompt += `- Fix instructions:\n${fb.suggestions.map(s => `  - ${s}`).join('\n')}\n`;
+            }
+            if (fb.failedCriteria.length > 0) {
+                userPrompt += `- Failed criteria: ${fb.failedCriteria.join(', ')}\n`;
+            }
+        }
+
+        userPrompt += `\nFix ALL flagged issues. Output the corrected JSON array.`;
+    } else {
+        userPrompt += `\n\nGenerate the code files for "${component.name}". Remember: output ONLY a JSON array.`;
+    }
+
+    // Select the right system prompt
+    let systemPrompt = CODER_SYSTEM_PROMPT;
+    if (refinement?.constraint) {
+        systemPrompt += CONSTRAINT_ADDENDUM;
+    } else if (refinement && refinement.feedbackHistory.length > 0) {
+        systemPrompt += REFINEMENT_ADDENDUM;
+    }
+
+    const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 8192,
+        system: systemPrompt,
+        messages: [
+            { role: 'user', content: userPrompt },
+        ],
+    });
+
+    const responseText = response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+        .map(block => block.text)
+        .join('');
+
+    return parseGeneratedFiles(responseText, component.name);
+}
+
+function parseGeneratedFiles(text: string, componentName: string): GeneratedFile[] {
+    let jsonStr = text.trim();
+
+    const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (fenceMatch) jsonStr = fenceMatch[1].trim();
+
+    try {
+        const parsed = JSON.parse(jsonStr);
+        const files: GeneratedFile[] = (Array.isArray(parsed) ? parsed : [parsed]).map(f => ({
+            path: f.path || f.filePath || `${componentName}.tsx`,
+            content: f.content || f.code || '',
+            language: f.language || 'tsx',
+            component: componentName,
+            model: 'claude',
+        }));
+        return files;
+    } catch (parseError: any) {
+        console.error('[UCOL:Claude] Failed to parse code JSON:', text.substring(0, 500));
+        return [{
+            path: `components/${componentName}.tsx`,
+            content: text,
+            language: 'tsx',
+            component: componentName,
+            model: 'claude',
+        }];
+    }
+}

@@ -12,7 +12,7 @@ const ZAPIER_TOKEN_URL = 'https://zapier.com/oauth/token';
 
 export async function GET(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
@@ -69,9 +69,9 @@ export async function GET(req: Request) {
         message: 'Zapier integration configured successfully',
         // Don't expose tokens in response
       }),
-      { 
-        status: 200, 
-        headers: { 'Content-Type': 'application/json' } 
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
       }
     );
   } catch (error: any) {

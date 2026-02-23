@@ -2,6 +2,10 @@
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import axios from 'axios';
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { uuidSchema } from '@/lib/security/inputValidation';
+import { z } from 'zod';
 
 /**
  * POST /api/memory/feedback
@@ -30,26 +34,37 @@ import axios from 'axios';
  */
 export async function POST(req: Request) {
   try {
-    // Authenticate user
-    const { userId } = auth();
-    if (!userId) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+    const user = await requireAuth();
+    const ip = getClientIP(req);
+
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'mutation');
+    if (!rateLimit.success) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
     const body = await req.json();
     const { factId, helpful, rating, feedback } = body;
 
-    // Validate input
-    if (!factId || typeof helpful !== 'boolean' || !rating || rating < 1 || rating > 5) {
-      return new NextResponse(
-        JSON.stringify({
-          error: 'Invalid input',
-          details: 'Required: factId (string), helpful (boolean), rating (1-5 number)',
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+    // Validate input with Zod
+    const factIdValidation = uuidSchema.safeParse(factId);
+    if (!factIdValidation.success) {
+      return NextResponse.json(
+        { error: 'Invalid fact ID format' },
+        { status: 400 }
+      );
+    }
+
+    const feedbackSchema = z.object({
+      helpful: z.boolean(),
+      rating: z.number().int().min(1).max(5),
+      feedback: z.string().optional()
+    });
+
+    const validationResult = feedbackSchema.safeParse({ helpful, rating, feedback });
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: validationResult.error.flatten() },
+        { status: 400 }
       );
     }
 
@@ -66,7 +81,7 @@ export async function POST(req: Request) {
     const response = await axios.post(
       `${process.env.FEEDBACK_CLOUD_FUNCTION_URL}/recordFeedback`,
       {
-        userId,
+        userId: user.userId,
         factId,
         helpful,
         rating,
@@ -81,7 +96,7 @@ export async function POST(req: Request) {
 
     const result = response.data;
 
-    console.log(`[MEMORY_FEEDBACK] User ${userId} rated fact ${factId}: helpful=${helpful}, rating=${rating}`);
+    console.log(`[MEMORY_FEEDBACK] User ${user.userId} rated fact ${factId}: helpful=${helpful}, rating=${rating}`);
 
     return NextResponse.json({
       success: true,
@@ -124,12 +139,12 @@ export async function POST(req: Request) {
  */
 export async function GET(req: Request) {
   try {
-    const { userId } = auth();
-    if (!userId) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
+    const user = await requireAuth();
+    const ip = getClientIP(req);
+
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'query');
+    if (!rateLimit.success) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
     // Call Cloud Function to get feedback history
@@ -143,7 +158,7 @@ export async function GET(req: Request) {
     }
 
     const response = await axios.get(
-      `${process.env.FEEDBACK_CLOUD_FUNCTION_URL}/getFeedback?userId=${userId}`,
+      `${process.env.FEEDBACK_CLOUD_FUNCTION_URL}/getFeedback?userId=${user.userId}`,
       {
         timeout: 10000,
         headers: { 'Content-Type': 'application/json' },

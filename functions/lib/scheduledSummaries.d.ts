@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import * as functions from 'firebase-functions';
 /**
  * Scheduled Function: Send Daily Summaries
  * Runs every day at 9:00 AM

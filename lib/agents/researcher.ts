@@ -29,7 +29,7 @@ interface ResearchResult {
  * 3. Query Formulation: Create effective search queries.
  * 4. Execution: Run search via AnyCrawl (if available).
  */
-export async function performResearch(userQuery: string, conversationContext: string = ''): Promise<ResearchResult> {
+export async function performResearch(userQuery: string, conversationContext: string = '', options?: { hasFileAttachment?: boolean }): Promise<ResearchResult> {
     console.log('[Researcher] Starting research for query:', userQuery.substring(0, 50));
     try {
         // 1. Check specialized APIs in order of priority
@@ -145,6 +145,16 @@ export async function performResearch(userQuery: string, conversationContext: st
         }
 
         // 2. Decision Step - should we do a general web search?
+        // If a file is attached, we bias heavily AGAINST searching unless explicitly asked to look external
+        if (options?.hasFileAttachment) {
+            console.log('[Researcher] File attached - modifying search probability');
+            // Strict check: if the user asks to "analyze this file", do NOT search
+            if (/analyze|explain|this file|attached|code/i.test(userQuery) && !/web|search|internet|lookup/i.test(userQuery)) {
+                console.log('[Researcher] Skipping search - User wants file analysis');
+                return { needsSearch: false, queries: [], results: [] };
+            }
+        }
+
         const needsSearch = await shouldSearch(userQuery);
         console.log('[Researcher] Needs search?', needsSearch);
 

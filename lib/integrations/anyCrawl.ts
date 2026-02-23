@@ -50,6 +50,8 @@ export interface CrawlResult {
  * We will implement `searchWeb` to attempts to crawl a DuckDuckGo result page as a fallback 
  * if no direct search API is provided by AnyCrawl.
  */
+const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
+
 /**
  * Searches the web using AnyCrawl's native /v1/search endpoint.
  */
@@ -71,7 +73,7 @@ export async function searchWeb(query: string, limit: number = 3): Promise<Searc
             limit: limit
         }, {
             headers,
-            timeout: 10000 // 10 second timeout for search
+            timeout: 5000 // Short timeout for local, fail fast to fallback
         });
 
         // Normalize response
@@ -96,7 +98,41 @@ export async function searchWeb(query: string, limit: number = 3): Promise<Searc
     } catch (error: any) {
         console.warn('[AnyCrawl] Native search failed:', error?.message || error);
 
-        // Fallback: Try to crawl DuckDuckGo directly
+        // Fallback 1: Tavily (Preferred)
+        if (TAVILY_API_KEY) {
+            console.log('[AnyCrawl] Falling back to Tavily API...');
+            try {
+                const response = await axios.post('https://api.tavily.com/search', {
+                    api_key: TAVILY_API_KEY,
+                    query: query,
+                    max_results: limit,
+                    search_depth: 'basic'
+                }, {
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                // Tavily accepts key in body often, but let's double check standard usage. 
+                // Usually POST body: { api_key: "...", query: "...", ... }
+                // Let's retry with api_key in body if needed, but for now assuming standard POST.
+
+                // Official Tavily API structure:
+                // POST https://api.tavily.com/search
+                // { api_key: "...", query: "...", ... }
+
+                const tavilyData = response.data;
+                if (tavilyData.results) {
+                    return tavilyData.results.map((r: any) => ({
+                        title: r.title,
+                        url: r.url,
+                        snippet: r.content
+                    }));
+                }
+            } catch (tavilyError) {
+                console.error('[AnyCrawl] Tavily fallback failed:', tavilyError);
+            }
+        }
+
+        // Fallback 2: Try to crawl DuckDuckGo directly
         console.log('[AnyCrawl] Falling back to DuckDuckGo scrape...');
         const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
         const crawlResult = await crawlUrl(searchUrl);

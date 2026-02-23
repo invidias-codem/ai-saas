@@ -2,7 +2,14 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-export type AgentMode = "standard" | "agentic-preview";
+import { AgentMode } from "@/lib/llm/types";
+
+// Valid agent modes - keep in sync with AgentMode type
+const VALID_AGENT_MODES: AgentMode[] = ['standard', 'quality', 'agentic-preview'];
+
+function isValidAgentMode(value: string): value is AgentMode {
+    return VALID_AGENT_MODES.includes(value as AgentMode);
+}
 
 interface ModelContextType {
     agentMode: AgentMode;
@@ -16,8 +23,8 @@ export function ModelProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         // Load from localStorage on mount
-        const saved = localStorage.getItem("agentMode") as AgentMode;
-        if (saved === "standard" || saved === "agentic-preview") {
+        const saved = localStorage.getItem("agentMode");
+        if (saved && isValidAgentMode(saved)) {
             setAgentModeState(saved);
         }
     }, []);

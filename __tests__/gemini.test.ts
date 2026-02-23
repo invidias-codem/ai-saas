@@ -67,4 +67,35 @@ describe('sanitizeHistory', () => {
         // Popped and merged Three + Four
         expect(prependToPrompt).toBe('Three\n\nFour');
     });
+
+    it('should strip leading model messages (Gemini requires first content to be user)', () => {
+        const history: HistoryItem[] = [
+            { role: 'model', parts: [{ text: 'Welcome!' }] },
+            { role: 'user', parts: [{ text: 'Hi' }] },
+            { role: 'model', parts: [{ text: 'How can I help?' }] }
+        ];
+
+        const { sanitizedHistory, prependToPrompt } = sanitizeHistory(history);
+
+        // The leading model message should be stripped
+        expect(sanitizedHistory).toHaveLength(2);
+        expect(sanitizedHistory[0].role).toBe('user');
+        expect(sanitizedHistory[1].role).toBe('model');
+        // The stripped model greeting should appear in prependToPrompt
+        expect(prependToPrompt).toContain('Welcome!');
+    });
+
+    it('should handle greeting-only history (model + single user message)', () => {
+        // This is the exact scenario that caused the production error
+        const history: HistoryItem[] = [
+            { role: 'model', parts: [{ text: 'Hi! How can I help?' }] }
+        ];
+
+        const { sanitizedHistory, prependToPrompt } = sanitizeHistory(history);
+
+        // History should be empty (model greeting stripped)
+        expect(sanitizedHistory).toHaveLength(0);
+        // The greeting should be folded into prepend
+        expect(prependToPrompt).toContain('Hi! How can I help?');
+    });
 });

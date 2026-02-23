@@ -41,23 +41,23 @@ const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const axios_1 = __importDefault(require("axios"));
 const vertexai_1 = require("@google-cloud/vertexai");
-const SLACK_API_BASE = "https://slack.com/api";
+const SLACK_API_BASE = 'https://slack.com/api';
 // Initialize Vertex AI
-const vertexAI = new vertexai_1.VertexAI({ project: process.env.GCLOUD_PROJECT || "ai-nexus-saas", location: "us-central1" });
-const model = vertexAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
+const vertexAI = new vertexai_1.VertexAI({ project: process.env.GCLOUD_PROJECT || 'ai-nexus-saas', location: 'us-central1' });
+const model = vertexAI.getGenerativeModel({ model: 'gemini-1.5-flash-001' });
 /**
  * Scheduled Function: Send Daily Summaries
  * Runs every day at 9:00 AM
  */
-exports.sendDailySummaries = functions.pubsub.schedule("every 24 hours").onRun(async (context) => {
+exports.sendDailySummaries = functions.pubsub.schedule('every 24 hours').onRun(async (context) => {
     const db = admin.firestore();
-    console.log("[DAILY_SUMMARY] Starting daily summary generation...");
+    console.log('[DAILY_SUMMARY] Starting daily summary generation...');
     try {
         // 1. Find users with enabled Slack notifications
         // Use collection group query on 'profile' documents
-        const profilesSnapshot = await db.collectionGroup("profile")
-            .where("integrations.slackEnabled", "==", true)
-            .where("integrations.slackTeamId", ">=", "") // Ensure teamId exists
+        const profilesSnapshot = await db.collectionGroup('profile')
+            .where('integrations.slackEnabled', '==', true)
+            .where('integrations.slackTeamId', '>=', '') // Ensure teamId exists
             .get();
         console.log(`[DAILY_SUMMARY] Found ${profilesSnapshot.size} profiles with Slack enabled`);
         const processedChannels = new Set();
@@ -80,13 +80,13 @@ exports.sendDailySummaries = functions.pubsub.schedule("every 24 hours").onRun(a
         }
     }
     catch (error) {
-        console.error("[DAILY_SUMMARY] Fatal error:", error);
+        console.error('[DAILY_SUMMARY] Fatal error:', error);
     }
 });
 async function generateAndSendSummary(teamId, channelId) {
     const db = admin.firestore();
     // 2. Get Bot Token
-    const installationDoc = await db.collection("slack_installations").doc(teamId).get();
+    const installationDoc = await db.collection('slack_installations').doc(teamId).get();
     if (!installationDoc.exists) {
         console.warn(`[DAILY_SUMMARY] No installation found for team ${teamId}`);
         return;
@@ -105,8 +105,8 @@ async function generateAndSendSummary(teamId, channelId) {
         limit: 100
     }, {
         headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
         }
     });
     if (!historyResponse.data.ok) {
@@ -118,14 +118,14 @@ async function generateAndSendSummary(teamId, channelId) {
         return;
     }
     // Filter out bot messages to focus on human activity
-    const humanMessages = messages.filter((m) => !m.bot_id && m.type === "message").reverse();
+    const humanMessages = messages.filter((m) => !m.bot_id && m.type === 'message').reverse();
     if (humanMessages.length === 0) {
         return;
     }
     const conversationText = humanMessages.map((m) => {
-        const user = m.user || "Unknown";
+        const user = m.user || 'Unknown';
         return `${user}: ${m.text}`;
-    }).join("\n");
+    }).join('\n');
     // 4. Generate Summary
     const prompt = `
 Summarize the following Slack conversation from the last 24 hours. 
@@ -173,8 +173,8 @@ ${conversationText}
         ]
     }, {
         headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
         }
     });
     console.log(`[DAILY_SUMMARY] Sent summary to channel ${channelId}`);

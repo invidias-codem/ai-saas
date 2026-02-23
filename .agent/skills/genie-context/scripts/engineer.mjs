@@ -135,7 +135,8 @@ async function executePlan(plan) {
 }
 
 // Main execution
-const task = process.argv[2];
+const rawTask = process.argv[2];
+const task = rawTask ? rawTask.replace(/"/g, '\\"').replace(/\n/g, ' ') : '';
 const isPlanOnly = process.argv.includes('--plan-only');
 const planArgIndex = process.argv.indexOf('--execute-plan');
 const planFileIndex = process.argv.indexOf('--plan-file');

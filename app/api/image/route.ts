@@ -5,6 +5,10 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
 import { generateImage, ImageModel, getAvailableModels } from "@/lib/imageGeneration";
+import { requireAuth, handleAuthError, getClientIP } from "@/lib/security/apiAuth";
+import { limitApiEndpoint } from "@/lib/security/rateLimit";
+import { imageGenerationSchema, ValidationError } from "@/lib/security/inputValidation";
+import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
 
 // Define the allowed aspect ratios
 const allowedAspectRatios = z.enum([
@@ -21,18 +25,28 @@ const requestSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
+    // 1. Authentication
+    const user = await requireAuth();
+    const ip = getClientIP(req);
 
-    if (!userId) {
-      console.warn("[IMAGE_API] Unauthorized access attempt.");
-      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" }
-      });
+    // 2. Rate Limiting (Image generation - very expensive, strict limits)
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'ai');
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: 'Too many requests', message: 'Image generation rate limit exceeded' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
+            'X-RateLimit-Remaining': String(rateLimit.remaining)
+          }
+        }
+      );
     }
 
+    // 3. Parse and Validate Input
     const body = await req.json();
-    const validation = requestSchema.safeParse(body);
+    const validation = imageGenerationSchema.safeParse(body);
 
     if (!validation.success) {
       console.warn("Invalid request body for /api/image:", validation.error.flatten());
@@ -47,25 +61,57 @@ export async function POST(req: Request) {
 
     const { prompt, amount, resolution: aspectRatio, model } = validation.data;
 
+    // 4. Rate/Credit Check (Atomic)
+    const costPerImage = CREDIT_COSTS.IMAGE_GENERATION;
+    const totalCost = amount * costPerImage;
+    const idempotencyKey = req.headers.get('idempotency-key') || `image-${user.userId}-${Date.now()}`;
+
+    const spendResult = await spendCreditsAtomic(user.userId, totalCost, idempotencyKey, `Generated ${amount} images`);
+
+    if (!spendResult.success && !spendResult.duplicate) {
+      return NextResponse.json(
+        { error: 'Insufficient credits', message: `You need ${totalCost} credits for this request.`, remaining: spendResult.remaining },
+        { status: 402 }
+      );
+    }
+
     console.log(`[IMAGE_API] Generating ${amount} image(s) with model: ${model || 'default'}`);
 
     // Generate images using the unified service
-    const results = await Promise.all(
-      Array.from({ length: amount }, async () => {
-        const result = await generateImage({
-          prompt,
-          aspectRatio,
-          model: model as ImageModel | undefined,
-        });
-        return result;
-      })
-    );
+    let results;
+    try {
+      results = await Promise.all(
+        Array.from({ length: amount }, async () => {
+          const result = await generateImage({
+            prompt,
+            aspectRatio,
+            model: model as ImageModel | undefined,
+          });
+          return result;
+        })
+      );
+    } catch (error) {
+      if (!spendResult.duplicate) {
+        console.log(`[IMAGE_API] Generation failed, refunding ${totalCost} credits`);
+        await refundCredits(user.userId, totalCost, "Refund for failed image generation");
+      }
+      throw error;
+    }
 
     // Check if any generation failed
     const failedResults = results.filter(r => !r.success);
     if (failedResults.length > 0) {
+      // If mixed failure/success, we ideally refund partial. 
+      // Current logic throws on ANY failure.
+      if (!spendResult.duplicate) {
+        console.log(`[IMAGE_API] Generation failed (partial/full), refunding ${totalCost} credits`);
+        await refundCredits(user.userId, totalCost, "Refund for failed image generation");
+      }
       throw new Error(failedResults[0].error || "Image generation failed");
     }
+
+    // Deduct credits handled atomically upfront
+    // await deductCredits(user.userId, totalCost, `Generated ${amount} images`);
 
     // Extract URLs and model info
     const images = results.flatMap(r => r.urls);
@@ -80,6 +126,18 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("[IMAGE_API_ERROR]", error);
+
+    // Handle auth/validation errors
+    const authResponse = handleAuthError(error);
+    if (authResponse) return authResponse;
+
+    if (error instanceof ValidationError) {
+      return NextResponse.json({
+        error: 'Validation Error',
+        details: error.message
+      }, { status: 400 });
+    }
+
     const errorMessage = error.message || "An unknown error occurred";
     return new NextResponse(JSON.stringify({
       error: "Internal Server Error",

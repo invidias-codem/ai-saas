@@ -9,17 +9,18 @@ const replicate = new Replicate({
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!params.id) {
+    const { id } = await params;
+    if (!id) {
       return new NextResponse(JSON.stringify({ error: "ID is required" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const prediction = await replicate.predictions.get(params.id);
+    const prediction = await replicate.predictions.get(id);
 
     if (prediction.status === "failed") {
       return new NextResponse(JSON.stringify({ error: prediction.error }), {

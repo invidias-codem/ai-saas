@@ -43,18 +43,18 @@ const pubsub_1 = require("@google-cloud/pubsub");
 // admin.initializeApp();
 const db = admin.firestore();
 // Initialize Vertex AI
-const project = process.env.GCP_PROJECT || "genie-ai-saas";
-const location = process.env.GCP_LOCATION || "us-central1";
+const project = process.env.GCP_PROJECT || 'genie-ai-saas';
+const location = process.env.GCP_LOCATION || 'us-central1';
 const vertexAI = new vertexai_1.VertexAI({ project: project, location: location });
 // Snowflake Configuration
 const snowflakeConnection = snowflake.createConnection({
-    account: process.env.SNOWFLAKE_ACCOUNT || "",
-    username: process.env.SNOWFLAKE_USERNAME || "",
-    password: process.env.SNOWFLAKE_PASSWORD || "", // Ideally use Key Pair auth in prod
-    warehouse: process.env.SNOWFLAKE_WAREHOUSE || "COMPUTE_WH",
-    database: process.env.SNOWFLAKE_DATABASE || "GENIE_R1",
-    schema: process.env.SNOWFLAKE_SCHEMA || "PUBLIC",
-    role: process.env.SNOWFLAKE_ROLE || "ACCOUNTADMIN",
+    account: process.env.SNOWFLAKE_ACCOUNT || '',
+    username: process.env.SNOWFLAKE_USERNAME || '',
+    password: process.env.SNOWFLAKE_PASSWORD || '', // Ideally use Key Pair auth in prod
+    warehouse: process.env.SNOWFLAKE_WAREHOUSE || 'COMPUTE_WH',
+    database: process.env.SNOWFLAKE_DATABASE || 'GENIE_R1',
+    schema: process.env.SNOWFLAKE_SCHEMA || 'PUBLIC',
+    role: process.env.SNOWFLAKE_ROLE || 'ACCOUNTADMIN',
 });
 /**
  * 1. INFERENCE FUNCTION
@@ -64,20 +64,20 @@ const snowflakeConnection = snowflake.createConnection({
  * - Publishes result to Pub/Sub for Verification
  */
 exports.orchestrateGenieLoop = functions.https.onCall(async (data, context) => {
-    const { prompt, conversationId, domain = "General", userId } = data;
+    const { prompt, conversationId, domain = 'General', userId } = data;
     if (!userId) {
-        throw new functions.https.HttpsError("unauthenticated", "User ID required.");
+        throw new functions.https.HttpsError('unauthenticated', 'User ID required.');
     }
     // 1. Jail Check (Cool-down enforcement)
     // In a real implementation, this would check a fast cache (Redis/Firestore)
-    const userStatusRef = db.collection("user_r1_status").doc(userId);
+    const userStatusRef = db.collection('user_r1_status').doc(userId);
     const userStatusDoc = await userStatusRef.get();
     if (userStatusDoc.exists) {
         const status = userStatusDoc.data();
-        if (status?.jail_status === "IN_SOLITARY") {
+        if (status?.jail_status === 'IN_SOLITARY') {
             const cooldownEnd = status.cooldown_expires_at?.toMillis() || 0;
             if (Date.now() < cooldownEnd) {
-                throw new functions.https.HttpsError("resource-exhausted", "Genie is currently in solitary confinement. Please try again later.");
+                throw new functions.https.HttpsError('resource-exhausted', 'Genie is currently in solitary confinement. Please try again later.');
             }
         }
     }
@@ -85,7 +85,7 @@ exports.orchestrateGenieLoop = functions.https.onCall(async (data, context) => {
         // 2. Call Gemini 2.0 Flash Thinking Mode
         // Note: 'gemini-2.0-flash-thinking-exp' is the experimental model name
         const model = vertexAI.getGenerativeModel({
-            model: "gemini-2.0-flash-thinking-exp-1219"
+            model: 'gemini-2.0-flash-thinking-exp-1219'
         });
         const chat = model.startChat({});
         // Depending on SDK support, we might need to parse 'thoughts' manually 
@@ -94,25 +94,25 @@ exports.orchestrateGenieLoop = functions.https.onCall(async (data, context) => {
         // OR the SDK provides a way to access separate 'candidates[0].content.parts' that are thoughts.
         const result = await chat.sendMessage(prompt);
         const response = await result.response;
-        const text = response.candidates?.[0].content.parts[0].text || "";
+        const text = response.candidates?.[0].content.parts[0].text || '';
         // Mock Parsing for 'Thinking' vs 'Answer' 
         // (If the model natively separates them, we'd access that property)
         // Adjust regex based on actual model behavior
         const thinkMatch = text.match(/<think>([\s\S]*?)<\/think>/);
         const trajectory = thinkMatch ? thinkMatch[1].trim() : "No explicit reasoning found.";
-        const answer = text.replace(/<think>[\s\S]*?<\/think>/, "").trim();
+        const answer = text.replace(/<think>[\s\S]*?<\/think>/, '').trim();
         // 3. Publish to Pub/Sub for Verification (Async)
         // This decouples the user response from the heavy verification logic
         const pubSubClient = new pubsub_1.PubSub();
-        const topicName = "verify-reasoning-trajectory";
+        const topicName = 'verify-reasoning-trajectory';
         const messageBuffer = Buffer.from(JSON.stringify({
             userId,
             conversationId,
             domain,
             trajectory,
             answer,
-            modelId: "gemini-2.0-flash-thinking-exp-1219",
-            sessionId: context.auth?.uid || "anonymous" // Or use specific session ID 
+            modelId: 'gemini-2.0-flash-thinking-exp-1219',
+            sessionId: context.auth?.uid || 'anonymous' // Or use specific session ID 
         }));
         try {
             await pubSubClient.topic(topicName).publishMessage({ data: messageBuffer });
@@ -125,7 +125,7 @@ exports.orchestrateGenieLoop = functions.https.onCall(async (data, context) => {
     }
     catch (error) {
         console.error("Orchestration Error:", error);
-        throw new functions.https.HttpsError("internal", "Reasoning Loop Failed");
+        throw new functions.https.HttpsError('internal', 'Reasoning Loop Failed');
     }
 });
 /**
@@ -134,14 +134,14 @@ exports.orchestrateGenieLoop = functions.https.onCall(async (data, context) => {
  * - Calls Snowflake Stored Procedure
  * - Triggers Feedback Function
  */
-exports.verifyReasoning = functions.pubsub.topic("verify-reasoning-trajectory").onPublish(async (message) => {
+exports.verifyReasoning = functions.pubsub.topic('verify-reasoning-trajectory').onPublish(async (message) => {
     const data = message.json;
     const { userId, trajectory, answer, domain, sessionId } = data;
     // Connect to Snowflake
     await new Promise((resolve, reject) => {
         snowflakeConnection.connect((err, conn) => {
             if (err) {
-                console.error("Unable to connect to Snowflake: " + err.message);
+                console.error('Unable to connect to Snowflake: ' + err.message);
                 reject(err);
             }
             else {
@@ -151,7 +151,7 @@ exports.verifyReasoning = functions.pubsub.topic("verify-reasoning-trajectory").
     });
     try {
         // Call Stored Procedure: VERIFY_REASONING(trajectory, answer, domain, sessionId)
-        const sqlText = "CALL VERIFY_REASONING(?, ?, ?, ?)";
+        const sqlText = `CALL VERIFY_REASONING(?, ?, ?, ?)`;
         const binds = [trajectory, answer, domain, sessionId];
         const result = await new Promise((resolve, reject) => {
             snowflakeConnection.execute({
@@ -163,7 +163,7 @@ exports.verifyReasoning = functions.pubsub.topic("verify-reasoning-trajectory").
                     }
                     else {
                         // Assuming the SP returns a JSON object in the first column
-                        resolve(rows?.[0]?.["VERIFY_REASONING"] || {});
+                        resolve(rows?.[0]?.['VERIFY_REASONING'] || {});
                     }
                 }
             });
@@ -181,12 +181,12 @@ exports.verifyReasoning = functions.pubsub.topic("verify-reasoning-trajectory").
  * - Distills "Gold Standard" trajectories
  */
 async function applyPunishmentOrReward(userId, result, trajectory) {
-    const userRef = db.collection("user_r1_status").doc(userId);
+    const userRef = db.collection('user_r1_status').doc(userId);
     // 1. Handle Punishment/Reward
-    if (result.jail_status === "IN_SOLITARY") {
+    if (result.jail_status === 'IN_SOLITARY') {
         // Apply 1 hour cooldown
         await userRef.set({
-            jail_status: "IN_SOLITARY",
+            jail_status: 'IN_SOLITARY',
             cooldown_expires_at: admin.firestore.Timestamp.fromMillis(Date.now() + 3600000),
             last_violation: admin.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
@@ -194,7 +194,7 @@ async function applyPunishmentOrReward(userId, result, trajectory) {
     else {
         // Reset or maintain status
         await userRef.set({
-            jail_status: result.jail_status || "FREE",
+            jail_status: result.jail_status || 'FREE',
             // Ideally we clear cooldown only if it was previously set and expired, or explicit forgiveness
         }, { merge: true });
     }
@@ -202,10 +202,10 @@ async function applyPunishmentOrReward(userId, result, trajectory) {
     if (result.score > 0.9) { // High quality threshold
         // We write back to Snowflake "Gold Standard" table for future fine-tuning
         // This could also be a separate async process if latency matters here
-        const insertSql = "INSERT INTO GOLD_STANDARD_TRAJECTORIES (TRAJECTORY, SCORE, DOMAIN, CREATED_AT) VALUES (?, ?, ?, CURRENT_TIMESTAMP())";
+        const insertSql = `INSERT INTO GOLD_STANDARD_TRAJECTORIES (TRAJECTORY, SCORE, DOMAIN, CREATED_AT) VALUES (?, ?, ?, CURRENT_TIMESTAMP())`;
         snowflakeConnection.execute({
             sqlText: insertSql,
-            binds: [trajectory, result.score, "General"] // pass domain if available in this scope
+            binds: [trajectory, result.score, 'General'] // pass domain if available in this scope
         });
     }
 }

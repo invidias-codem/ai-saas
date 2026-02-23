@@ -204,3 +204,53 @@ export function formatGraphContext(graphData: { centralNode: GraphNode | null; r
 
     return context + '\n';
 }
+
+/**
+ * Strengthens an existing edge or creates a new one.
+ * If the edge exists, increments weight by 0.5 (capped at 10.0).
+ * If not, creates it with weight 1.0.
+ */
+export async function strengthenEdge(
+    userId: string,
+    sourceId: string,
+    targetId: string,
+    relation: string
+): Promise<string | null> {
+    try {
+        // Check if edge exists
+        const { data: existing, error: fetchError } = await supabase
+            .from('graph_edges')
+            .select('id, weight')
+            .eq('user_id', userId)
+            .eq('source_node_id', sourceId)
+            .eq('target_node_id', targetId)
+            .eq('relation', relation)
+            .single();
+
+        if (fetchError && fetchError.code !== 'PGRST116') {
+            // PGRST116 = no rows — that's fine, we'll create
+            console.error('[GraphStore] Error checking edge:', fetchError);
+        }
+
+        if (existing) {
+            // Strengthen: increment weight, cap at 10.0
+            const newWeight = Math.min(10.0, (existing.weight || 1.0) + 0.5);
+            const { error: updateError } = await supabase
+                .from('graph_edges')
+                .update({ weight: newWeight, updated_at: new Date().toISOString() })
+                .eq('id', existing.id);
+
+            if (updateError) {
+                console.error('[GraphStore] Error strengthening edge:', updateError);
+                return null;
+            }
+            return existing.id;
+        } else {
+            // Create new edge
+            return addEdge(userId, sourceId, targetId, relation, 1.0);
+        }
+    } catch (error) {
+        console.error('[GraphStore] Failed to strengthen edge:', error);
+        return null;
+    }
+}

@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import {
     Sheet,
     SheetContent,
-    SheetTrigger
+    SheetTrigger,
+    SheetTitle
 } from "@/components/ui/sheet";
 import Sidebar from "@/components/sidebar";
 import { ConversationHistory } from "@/components/conversation-history";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 const MobileSidebar = () => {
     const [isMounted, setIsMounted] = useState(false);
@@ -39,6 +41,7 @@ const MobileSidebar = () => {
                 </Button>
             </SheetTrigger>
             <SheetContent side="left" className="p-0 bg-[#111827] text-white">
+                <SheetTitle className="hidden">Navigation Menu</SheetTitle>
                 <div className="h-full flex flex-col">
                     <Sidebar onNavigate={() => setIsOpen(false)} />
                 </div>

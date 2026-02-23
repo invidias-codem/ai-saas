@@ -102,13 +102,13 @@ exports.handleSlackInteractivity = functions.https.onRequest(async (req, res) =>
 async function resolveSlackUser(teamId, slackUserId) {
     try {
         const db = admin.firestore();
-        const mappingDoc = await db.collection("slackUserMappings").doc(`${teamId}:${slackUserId}`).get();
+        const mappingDoc = await db.collection('slackUserMappings').doc(`${teamId}:${slackUserId}`).get();
         if (mappingDoc.exists) {
             return mappingDoc.data()?.userId || slackUserId;
         }
     }
     catch (error) {
-        console.warn("Error resolving slack user:", error);
+        console.warn('Error resolving slack user:', error);
     }
     return slackUserId;
 }
@@ -122,8 +122,8 @@ async function processSlackCommand(slackUserId, channelId, text, responseUrl, te
         const userId = await resolveSlackUser(teamId, slackUserId);
         // Parse command: /genie [action] [args...]
         const parts = text.trim().split(/\s+/);
-        const action = parts[0] || "help";
-        const args = parts.slice(1).join(" ");
+        const action = parts[0] || 'help';
+        const args = parts.slice(1).join(' ');
         let response;
         switch (action.toLowerCase()) {
             case "help":
@@ -132,42 +132,42 @@ async function processSlackCommand(slackUserId, channelId, text, responseUrl, te
             case "memory":
                 response = await getMemorySummary(userId);
                 break;
-            case "remember":
+            case 'remember':
                 if (!args) {
-                    response = { text: "Please provide something to remember. Usage: `/genie remember [text]`" };
+                    response = { text: 'Please provide something to remember. Usage: `/genie remember [text]`' };
                 }
                 else {
                     await db
-                        .collection("users")
+                        .collection('users')
                         .doc(userId)
-                        .collection("memories")
+                        .collection('memories')
                         .add({
                         userId,
-                        featureType: "slack",
+                        featureType: 'slack',
                         title: `Memory: ${args.substring(0, 30)}...`,
                         summary: args,
                         messages: [],
-                        tags: ["slack", "command"],
+                        tags: ['slack', 'command'],
                         createdAt: Date.now(),
                         updatedAt: Date.now(),
                     });
                     response = {
-                        response_type: "ephemeral",
-                        text: "🧠 Memory stored successfully!"
+                        response_type: 'ephemeral',
+                        text: '🧠 Memory stored successfully!'
                     };
                 }
                 break;
-            case "stats":
+            case 'stats':
                 response = await getUserStats(userId);
                 break;
-            case "notify":
+            case 'notify':
                 response = await configureNotifications(userId, channelId, teamId);
                 break;
-            case "configure":
+            case 'configure':
                 // Open configuration modal
                 const triggerId = reqBody.trigger_id;
                 if (!triggerId) {
-                    response = { text: "Error: No trigger_id found." };
+                    response = { text: 'Error: No trigger_id found.' };
                 }
                 else {
                     await openConfigurationModal(triggerId, channelId, teamId);
@@ -176,7 +176,7 @@ async function processSlackCommand(slackUserId, channelId, text, responseUrl, te
                     // Actually, for opening modals, we usually ack immediately (done in handler) and then call views.open.
                     // But processSlackCommand is async *after* ack.
                     // So we just return nothing or a temp message.
-                    response = { text: "", response_type: "ephemeral", delete_original: true }; // Dummy
+                    response = { text: '', response_type: 'ephemeral', delete_original: true }; // Dummy
                 }
                 break;
             default:
@@ -328,10 +328,10 @@ async function configureNotifications(userId, channelId, teamId) {
             .collection("context")
             .doc("profile")
             .update({
-            "integrations.slackEnabled": true,
-            "integrations.slackChannelId": channelId,
-            "integrations.slackUserId": userId,
-            "integrations.slackTeamId": teamId,
+            'integrations.slackEnabled': true,
+            'integrations.slackChannelId': channelId,
+            'integrations.slackUserId': userId,
+            'integrations.slackTeamId': teamId,
         });
         return {
             response_type: "ephemeral",
@@ -394,102 +394,102 @@ async function openConfigurationModal(triggerId, channelId, teamId) {
         const db = admin.firestore();
         // Get existing config
         let currentConfig = {
-            persona: "default",
-            responseStyle: "concise",
+            persona: 'default',
+            responseStyle: 'concise',
             proactiveEnabled: false
         };
         try {
-            const configDoc = await db.collection("slack_channel_configs").doc(`${teamId}_${channelId}`).get();
+            const configDoc = await db.collection('slack_channel_configs').doc(`${teamId}_${channelId}`).get();
             if (configDoc.exists) {
                 currentConfig = { ...currentConfig, ...configDoc.data() };
             }
         }
         catch (e) {
-            console.warn("Error fetching config for modal:", e);
+            console.warn('Error fetching config for modal:', e);
         }
         const botToken = process.env.SLACK_BOT_TOKEN;
         if (!botToken)
-            throw new Error("SLACK_BOT_TOKEN missing");
+            throw new Error('SLACK_BOT_TOKEN missing');
         await axios_1.default.post(`${SLACK_API_BASE}/views.open`, {
             trigger_id: triggerId,
             view: {
-                type: "modal",
-                callback_id: "configure_channel_submission",
+                type: 'modal',
+                callback_id: 'configure_channel_submission',
                 private_metadata: JSON.stringify({ channelId, teamId }),
                 title: {
-                    type: "plain_text",
-                    text: "Channel Settings"
+                    type: 'plain_text',
+                    text: 'Channel Settings'
                 },
                 submit: {
-                    type: "plain_text",
-                    text: "Save"
+                    type: 'plain_text',
+                    text: 'Save'
                 },
                 blocks: [
                     {
-                        type: "section",
+                        type: 'section',
                         text: {
-                            type: "mrkdwn",
+                            type: 'mrkdwn',
                             text: `Configure Genie behavior for <#${channelId}>`
                         }
                     },
                     {
-                        type: "input",
-                        block_id: "persona_block",
+                        type: 'input',
+                        block_id: 'persona_block',
                         label: {
-                            type: "plain_text",
-                            text: "Bot Persona"
+                            type: 'plain_text',
+                            text: 'Bot Persona'
                         },
                         element: {
-                            type: "static_select",
-                            action_id: "persona_selection",
+                            type: 'static_select',
+                            action_id: 'persona_selection',
                             initial_option: {
-                                text: { type: "plain_text", text: currentConfig.persona.charAt(0).toUpperCase() + currentConfig.persona.slice(1) },
+                                text: { type: 'plain_text', text: currentConfig.persona.charAt(0).toUpperCase() + currentConfig.persona.slice(1) },
                                 value: currentConfig.persona
                             },
                             options: [
-                                { text: { type: "plain_text", text: "Default" }, value: "default" },
-                                { text: { type: "plain_text", text: "Developer" }, value: "developer" },
-                                { text: { type: "plain_text", text: "Pirate" }, value: "pirate" },
-                                { text: { type: "plain_text", text: "Executive" }, value: "executive" }
+                                { text: { type: 'plain_text', text: 'Default' }, value: 'default' },
+                                { text: { type: 'plain_text', text: 'Developer' }, value: 'developer' },
+                                { text: { type: 'plain_text', text: 'Pirate' }, value: 'pirate' },
+                                { text: { type: 'plain_text', text: 'Executive' }, value: 'executive' }
                             ]
                         }
                     },
                     {
-                        type: "input",
-                        block_id: "style_block",
+                        type: 'input',
+                        block_id: 'style_block',
                         label: {
-                            type: "plain_text",
-                            text: "Response Style"
+                            type: 'plain_text',
+                            text: 'Response Style'
                         },
                         element: {
-                            type: "static_select",
-                            action_id: "style_selection",
+                            type: 'static_select',
+                            action_id: 'style_selection',
                             initial_option: {
-                                text: { type: "plain_text", text: currentConfig.responseStyle.charAt(0).toUpperCase() + currentConfig.responseStyle.slice(1) },
+                                text: { type: 'plain_text', text: currentConfig.responseStyle.charAt(0).toUpperCase() + currentConfig.responseStyle.slice(1) },
                                 value: currentConfig.responseStyle
                             },
                             options: [
-                                { text: { type: "plain_text", text: "Concise" }, value: "concise" },
-                                { text: { type: "plain_text", text: "Detailed" }, value: "detailed" },
-                                { text: { type: "plain_text", text: "Bullet Points" }, value: "bullet-points" }
+                                { text: { type: 'plain_text', text: 'Concise' }, value: 'concise' },
+                                { text: { type: 'plain_text', text: 'Detailed' }, value: 'detailed' },
+                                { text: { type: 'plain_text', text: 'Bullet Points' }, value: 'bullet-points' }
                             ]
                         }
                     },
                     {
-                        type: "section",
-                        block_id: "proactive_block",
+                        type: 'section',
+                        block_id: 'proactive_block',
                         text: {
-                            type: "mrkdwn",
-                            text: "*Daily Summaries*\nEnable daily proactive summaries for this channel?"
+                            type: 'mrkdwn',
+                            text: '*Daily Summaries*\nEnable daily proactive summaries for this channel?'
                         },
                         accessory: {
-                            type: "checkboxes",
-                            action_id: "proactive_checkbox",
-                            initial_options: currentConfig.proactiveEnabled ? [{ value: "enabled", text: { type: "plain_text", text: "Enable" } }] : [],
+                            type: 'checkboxes',
+                            action_id: 'proactive_checkbox',
+                            initial_options: currentConfig.proactiveEnabled ? [{ value: 'enabled', text: { type: 'plain_text', text: 'Enable' } }] : [],
                             options: [
                                 {
-                                    text: { type: "plain_text", text: "Enable" },
-                                    value: "enabled"
+                                    text: { type: 'plain_text', text: 'Enable' },
+                                    value: 'enabled'
                                 }
                             ]
                         }
@@ -497,11 +497,11 @@ async function openConfigurationModal(triggerId, channelId, teamId) {
                 ]
             }
         }, {
-            headers: { "Authorization": `Bearer ${botToken}` }
+            headers: { 'Authorization': `Bearer ${botToken}` }
         });
     }
     catch (error) {
-        console.error("Error opening config modal:", error);
+        console.error('Error opening config modal:', error);
     }
 }
 /**

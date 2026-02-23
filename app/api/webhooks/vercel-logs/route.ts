@@ -26,13 +26,19 @@ export async function POST(req: Request) {
         // The format depends on the integration, but usually it's a list of JSON objects
         const logs = Array.isArray(body) ? body : [body];
 
-        const formattedLogs = logs.map((log: any) => ({
-            timestamp: log.timestamp ? new Date(log.timestamp) : new Date(),
-            level: log.level || "info",
-            message: log.message || JSON.stringify(log),
-            source: log.source || "vercel",
-            metadata: log, // Store raw log as metadata
-        }));
+        const formattedLogs = logs.map((log: any) => {
+            const level = log.level || "info";
+            return {
+                timestamp: log.timestamp ? new Date(log.timestamp) : new Date(),
+                level,
+                message: log.message || JSON.stringify(log),
+                source: log.source || "vercel",
+                metadata: log,
+                // Flag error-level logs for autonomous resolution pipeline
+                resolution_status: level === "error" ? "pending" : null,
+                updated_at: new Date().toISOString(),
+            };
+        });
 
         const supabaseAdmin = getSupabaseAdmin();
         const { error } = await supabaseAdmin
