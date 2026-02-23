@@ -15,7 +15,7 @@
 
 import { NextResponse } from 'next/server';
 import { generateConversationReply, ConversationRequestSchema } from '@/lib/llm/conversationEngine';
-import { storeMemory, searchMemories } from '@/lib/memory/vectorStore';
+import { storeMemory, searchMemories, deleteMemory } from '@/lib/memory/vectorStore';
 import { addNode } from '@/lib/memory/graphStore';
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
@@ -42,21 +42,72 @@ const JKLAW_CLERK_USER = {
 // ─── POST /api/internal/jklaw ──────────────────────────────────────────────
 export async function POST(req: Request) {
     if (!validateKey(req)) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     let body: any;
     try {
         body = await req.json();
     } catch {
-        return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
     const { action } = body;
 
     // ── status ────────────────────────────────────────────────────────────
     if (action === 'status') {
-        return NextResponse.json({
+    
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({
             ok: true,
             agent: 'JKlaw',
             version: '1.0.0',
@@ -70,7 +121,24 @@ export async function POST(req: Request) {
         const { messages, prompt, stream: wantStream = false } = body;
 
         if (!prompt && (!messages || messages.length === 0)) {
-            return NextResponse.json({ error: 'prompt or messages required' }, { status: 400 });
+        
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({ error: 'prompt or messages required' }, { status: 400 });
         }
 
         const requestPayload = {
@@ -79,7 +147,24 @@ export async function POST(req: Request) {
 
         const parsed = ConversationRequestSchema.safeParse(requestPayload);
         if (!parsed.success) {
-            return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 });
+        
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 });
         }
 
         try {
@@ -113,7 +198,24 @@ export async function POST(req: Request) {
                 text += decoder.decode(value, { stream: true });
             }
 
-            return NextResponse.json({
+        
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({
                 ok: true,
                 response: text,
                 model: result.debug?.model || 'unknown',
@@ -121,7 +223,24 @@ export async function POST(req: Request) {
             });
         } catch (err: any) {
             console.error('[JKlaw] chat error:', err);
-            return NextResponse.json({ error: err.message || 'Chat failed' }, { status: 500 });
+        
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({ error: err.message || 'Chat failed' }, { status: 500 });
         }
     }
 
@@ -130,7 +249,24 @@ export async function POST(req: Request) {
         const { fact, type = 'general', tags = [] } = body;
 
         if (!fact || typeof fact !== 'string') {
-            return NextResponse.json({ error: 'fact string required' }, { status: 400 });
+        
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({ error: 'fact string required' }, { status: 400 });
         }
 
         try {
@@ -145,14 +281,48 @@ export async function POST(req: Request) {
                 }
             }
 
-            return NextResponse.json({
+        
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({
                 ok: true,
                 stored: fact.substring(0, 100),
                 timestamp: new Date().toISOString(),
             });
         } catch (err: any) {
             console.error('[JKlaw] memory-push error:', err);
-            return NextResponse.json({ error: err.message || 'Memory push failed' }, { status: 500 });
+        
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({ error: err.message || 'Memory push failed' }, { status: 500 });
         }
     }
 
@@ -161,13 +331,47 @@ export async function POST(req: Request) {
         const { query, limit = 5 } = body;
 
         if (!query || typeof query !== 'string') {
-            return NextResponse.json({ error: 'query string required' }, { status: 400 });
+        
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({ error: 'query string required' }, { status: 400 });
         }
 
         try {
             const memories = await searchMemories(JKLAW_USER_ID, query, limit);
 
-            return NextResponse.json({
+        
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({
                 ok: true,
                 query,
                 results: memories,
@@ -176,7 +380,41 @@ export async function POST(req: Request) {
             });
         } catch (err: any) {
             console.error('[JKlaw] memory-query error:', err);
-            return NextResponse.json({ error: err.message || 'Memory query failed' }, { status: 500 });
+        
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
+    return NextResponse.json({ error: err.message || 'Memory query failed' }, { status: 500 });
+        }
+    }
+
+
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
         }
     }
 
@@ -189,7 +427,41 @@ export async function POST(req: Request) {
 // ─── GET /api/internal/jklaw (health ping) ────────────────────────────────
 export async function GET(req: Request) {
     if (!validateKey(req)) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
     }
+
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // ── memory-delete ─────────────────────────────────────────────────────
+    if (action === 'memory-delete') {
+        const { id } = body;
+        if (!id || typeof id !== 'string') {
+            return NextResponse.json({ error: 'id required' }, { status: 400 });
+        }
+        
+        try {
+            const success = await deleteMemory(id, JKLAW_USER_ID);
+            return NextResponse.json({ ok: success, id, timestamp: new Date().toISOString() });
+        } catch (err: any) {
+            console.error('[JKlaw] memory-delete error:', err);
+            return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+        }
+    }
+
     return NextResponse.json({ ok: true, agent: 'JKlaw', timestamp: new Date().toISOString() });
 }
