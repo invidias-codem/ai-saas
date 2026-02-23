@@ -6,7 +6,7 @@
         },
         {
             "path": "/api/cron/error-resolution",
-            "schedule": "*/30 * * * *"
+            "schedule": "0 2 * * *"
         }
     ]
 }
