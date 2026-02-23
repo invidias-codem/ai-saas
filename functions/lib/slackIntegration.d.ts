@@ -1,7 +1,7 @@
 /**
  * Slack Integration - Bot commands and notifications
  */
-import * as functions from 'firebase-functions';
+import * as functions from "firebase-functions";
 /**
  * HTTP Cloud Function - Handle Slack Commands (/genie)
  */

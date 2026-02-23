@@ -2,8 +2,8 @@
  * Conversation Capture - Triggered after successful API responses
  * Stores interactions in Firestore for RAG memory
  */
-import * as functions from 'firebase-functions';
-import { UserMemory } from './schemas';
+import * as functions from "firebase-functions";
+import { UserMemory } from "./schemas";
 /**
  * HTTP Cloud Function - Capture conversation after API call
  * Called from Next.js API routes to store interaction in memory

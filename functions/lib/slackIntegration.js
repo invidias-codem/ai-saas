@@ -44,7 +44,7 @@ exports.sendSlackNotification = sendSlackNotification;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 const axios_1 = __importDefault(require("axios"));
-const SLACK_API_BASE = 'https://slack.com/api';
+const SLACK_API_BASE = "https://slack.com/api";
 /**
  * HTTP Cloud Function - Handle Slack Commands (/genie)
  */
@@ -52,24 +52,24 @@ exports.handleSlackCommand = functions.https.onRequest(async (req, res) => {
     try {
         // Verify Slack signature
         if (!verifySlackSignature(req)) {
-            res.status(401).json({ error: 'Unauthorized' });
+            res.status(401).json({ error: "Unauthorized" });
             return;
         }
         const { user_id, channel_id, text, response_url, team_id } = req.body;
         if (!user_id || !channel_id) {
-            res.status(400).json({ error: 'Missing required Slack fields' });
+            res.status(400).json({ error: "Missing required Slack fields" });
             return;
         }
         // Acknowledge command immediately
         res.status(200).json({
-            response_type: 'in_channel',
+            response_type: "in_channel",
             text: `Processing your request: "${text}"`,
         });
         // Process command asynchronously
         await processSlackCommand(user_id, channel_id, text, response_url, team_id, req.body);
     }
     catch (error) {
-        console.error('Error handling Slack command:', error);
+        console.error("Error handling Slack command:", error);
         res.status(500).json({ error: `Failed to process command: ${error}` });
     }
 });
@@ -80,19 +80,19 @@ exports.handleSlackInteractivity = functions.https.onRequest(async (req, res) =>
     try {
         // Verify Slack signature
         if (!verifySlackSignature(req)) {
-            res.status(401).json({ error: 'Unauthorized' });
+            res.status(401).json({ error: "Unauthorized" });
             return;
         }
-        const payload = JSON.parse(req.body.payload || '{}');
+        const payload = JSON.parse(req.body.payload || "{}");
         const { type, user, trigger_id, response_url } = payload;
         res.status(200).json({ ok: true });
         // Process interaction asynchronously
-        if (type === 'block_actions') {
+        if (type === "block_actions") {
             await handleBlockActions(payload);
         }
     }
     catch (error) {
-        console.error('Error handling Slack interactivity:', error);
+        console.error("Error handling Slack interactivity:", error);
         res.status(500).json({ error: `Failed to handle interaction: ${error}` });
     }
 });
@@ -126,10 +126,10 @@ async function processSlackCommand(slackUserId, channelId, text, responseUrl, te
         const args = parts.slice(1).join(' ');
         let response;
         switch (action.toLowerCase()) {
-            case 'help':
+            case "help":
                 response = getHelpMessage();
                 break;
-            case 'memory':
+            case "memory":
                 response = await getMemorySummary(userId);
                 break;
             case 'remember':
@@ -188,7 +188,7 @@ async function processSlackCommand(slackUserId, channelId, text, responseUrl, te
         await axios_1.default.post(responseUrl, response);
     }
     catch (error) {
-        console.error('Error processing Slack command:', error);
+        console.error("Error processing Slack command:", error);
         // Send error message
         try {
             await axios_1.default.post(responseUrl, {
@@ -196,7 +196,7 @@ async function processSlackCommand(slackUserId, channelId, text, responseUrl, te
             });
         }
         catch (err) {
-            console.error('Failed to send error message to Slack:', err);
+            console.error("Failed to send error message to Slack:", err);
         }
     }
 }
@@ -207,11 +207,11 @@ async function handleBlockActions(payload) {
     const { actions, user, trigger_id } = payload;
     for (const action of actions) {
         const { action_id, value } = action;
-        if (action_id === 'view_memory') {
+        if (action_id === "view_memory") {
             // TODO: Send modal with memory details
             console.log(`User ${user.id} requested to view memory: ${value}`);
         }
-        else if (action_id === 'enable_notifications') {
+        else if (action_id === "enable_notifications") {
             // TODO: Enable notifications
             console.log(`User ${user.id} enabled notifications`);
         }
@@ -222,13 +222,13 @@ async function handleBlockActions(payload) {
  */
 function getHelpMessage() {
     return {
-        response_type: 'ephemeral',
+        response_type: "ephemeral",
         blocks: [
             {
-                type: 'section',
+                type: "section",
                 text: {
-                    type: 'mrkdwn',
-                    text: '*Genie AI Slack Commands*\n\n`/genie help` - Show this help message\n`/genie memory` - View your memory summary\n`/genie stats` - Get your usage statistics\n`/genie notify` - Configure notifications',
+                    type: "mrkdwn",
+                    text: "*Genie AI Slack Commands*\n\n`/genie help` - Show this help message\n`/genie memory` - View your memory summary\n`/genie stats` - Get your usage statistics\n`/genie notify` - Configure notifications",
                 },
             },
         ],
@@ -241,16 +241,16 @@ async function getMemorySummary(userId) {
     try {
         const db = admin.firestore();
         const memories = await db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('memories')
-            .orderBy('createdAt', 'desc')
+            .collection("memories")
+            .orderBy("createdAt", "desc")
             .limit(5)
             .get();
         if (memories.empty) {
             return {
-                response_type: 'ephemeral',
-                text: 'No memories found. Start using Genie to build your knowledge base!',
+                response_type: "ephemeral",
+                text: "No memories found. Start using Genie to build your knowledge base!",
             };
         }
         const memoryList = memories.docs
@@ -258,14 +258,14 @@ async function getMemorySummary(userId) {
             const memory = doc.data();
             return `• *${memory.title}* (${memory.featureType})\n  ${memory.summary}`;
         })
-            .join('\n');
+            .join("\n");
         return {
-            response_type: 'ephemeral',
+            response_type: "ephemeral",
             blocks: [
                 {
-                    type: 'section',
+                    type: "section",
                     text: {
-                        type: 'mrkdwn',
+                        type: "mrkdwn",
                         text: `*Your Recent Memories*\n\n${memoryList}`,
                     },
                 },
@@ -273,9 +273,9 @@ async function getMemorySummary(userId) {
         };
     }
     catch (error) {
-        console.error('Error getting memory summary:', error);
+        console.error("Error getting memory summary:", error);
         return {
-            text: 'Error retrieving memories',
+            text: "Error retrieving memories",
         };
     }
 }
@@ -286,24 +286,24 @@ async function getUserStats(userId) {
     try {
         const db = admin.firestore();
         const context = await db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('context')
-            .doc('profile')
+            .collection("context")
+            .doc("profile")
             .get();
         if (!context.exists) {
-            return { text: 'No usage data found' };
+            return { text: "No usage data found" };
         }
         const data = context.data();
         const totalInteractions = data?.totalInteractions || 0;
         const totalTokens = data?.totalTokensUsed || 0;
         return {
-            response_type: 'ephemeral',
+            response_type: "ephemeral",
             blocks: [
                 {
-                    type: 'section',
+                    type: "section",
                     text: {
-                        type: 'mrkdwn',
+                        type: "mrkdwn",
                         text: `*Your Genie Stats*\n\n📊 Total Interactions: ${totalInteractions}\n🔤 Total Tokens Used: ${totalTokens}\n⏰ Member Since: ${new Date(data?.createdAt).toLocaleDateString()}`,
                     },
                 },
@@ -311,8 +311,8 @@ async function getUserStats(userId) {
         };
     }
     catch (error) {
-        console.error('Error getting user stats:', error);
-        return { text: 'Error retrieving statistics' };
+        console.error("Error getting user stats:", error);
+        return { text: "Error retrieving statistics" };
     }
 }
 /**
@@ -323,10 +323,10 @@ async function configureNotifications(userId, channelId, teamId) {
         const db = admin.firestore();
         // Update user context
         await db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('context')
-            .doc('profile')
+            .collection("context")
+            .doc("profile")
             .update({
             'integrations.slackEnabled': true,
             'integrations.slackChannelId': channelId,
@@ -334,13 +334,13 @@ async function configureNotifications(userId, channelId, teamId) {
             'integrations.slackTeamId': teamId,
         });
         return {
-            response_type: 'ephemeral',
-            text: '✅ Notifications enabled! You will receive updates in this channel.',
+            response_type: "ephemeral",
+            text: "✅ Notifications enabled! You will receive updates in this channel.",
         };
     }
     catch (error) {
-        console.error('Error configuring notifications:', error);
-        return { text: 'Error configuring notifications' };
+        console.error("Error configuring notifications:", error);
+        return { text: "Error configuring notifications" };
     }
 }
 /**
@@ -351,10 +351,10 @@ async function sendSlackNotification(userId, message, blocks) {
         const db = admin.firestore();
         // Get Slack configuration
         const context = await db
-            .collection('users')
+            .collection("users")
             .doc(userId)
-            .collection('context')
-            .doc('profile')
+            .collection("context")
+            .doc("profile")
             .get();
         const slackConfig = context.data()?.integrations;
         if (!slackConfig?.slackEnabled || !slackConfig?.slackChannelId) {
@@ -363,7 +363,7 @@ async function sendSlackNotification(userId, message, blocks) {
         }
         const botToken = process.env.SLACK_BOT_TOKEN;
         if (!botToken) {
-            throw new Error('SLACK_BOT_TOKEN not configured');
+            throw new Error("SLACK_BOT_TOKEN not configured");
         }
         // Send message via Slack API
         const payload = {
@@ -376,7 +376,7 @@ async function sendSlackNotification(userId, message, blocks) {
         await axios_1.default.post(`${SLACK_API_BASE}/chat.postMessage`, payload, {
             headers: {
                 Authorization: `Bearer ${botToken}`,
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
             },
         });
         console.log(`Slack notification sent to user ${userId}`);
@@ -509,10 +509,10 @@ async function openConfigurationModal(triggerId, channelId, teamId) {
  */
 function verifySlackSignature(req) {
     try {
-        const crypto = require('crypto');
-        const signingSecret = process.env.SLACK_SIGNING_SECRET || '';
-        const timestamp = req.headers['x-slack-request-timestamp'];
-        const signature = req.headers['x-slack-signature'];
+        const crypto = require("crypto");
+        const signingSecret = process.env.SLACK_SIGNING_SECRET || "";
+        const timestamp = req.headers["x-slack-request-timestamp"];
+        const signature = req.headers["x-slack-signature"];
         // Check timestamp is recent (within 5 minutes)
         const currentTime = Math.floor(Date.now() / 1000);
         if (Math.abs(currentTime - parseInt(timestamp)) > 300) {
@@ -521,14 +521,14 @@ function verifySlackSignature(req) {
         // Verify signature
         const baseString = `v0:${timestamp}:${JSON.stringify(req.body)}`;
         const hmac = crypto
-            .createHmac('sha256', signingSecret)
+            .createHmac("sha256", signingSecret)
             .update(baseString)
-            .digest('hex');
+            .digest("hex");
         const expectedSignature = `v0=${hmac}`;
         return signature === expectedSignature;
     }
     catch (error) {
-        console.error('Error verifying Slack signature:', error);
+        console.error("Error verifying Slack signature:", error);
         return false;
     }
 }

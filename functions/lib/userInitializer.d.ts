@@ -1,7 +1,7 @@
 /**
  * User initialization trigger - Creates memory collections on user signup
  */
-import * as functions from 'firebase-functions/v1';
+import * as functions from "firebase-functions/v1";
 /**
  * Firestore trigger: Initialize user context and memory collections on new user
  */

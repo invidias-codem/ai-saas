@@ -43,7 +43,7 @@ const db = admin.firestore();
  */
 async function getFactAnalytics(userId) {
     try {
-        const factsRef = db.collection('users').doc(userId).collection('facts');
+        const factsRef = db.collection("users").doc(userId).collection("facts");
         const snapshot = await factsRef.get();
         if (snapshot.empty) {
             return {
@@ -128,7 +128,7 @@ async function getFactAnalytics(userId) {
         };
     }
     catch (error) {
-        functions.logger.error(`Error getting fact analytics:`, error);
+        functions.logger.error("Error getting fact analytics:", error);
         throw error;
     }
 }
@@ -140,15 +140,15 @@ exports.getMemoryAnalytics = functions.https.onRequest(async (request, response)
         // Verify authentication (expect userId from auth context or request)
         const userId = request.user?.uid;
         if (!userId) {
-            response.status(401).json({ error: 'Unauthorized' });
+            response.status(401).json({ error: "Unauthorized" });
             return;
         }
         const analytics = await getFactAnalytics(userId);
         response.status(200).json(analytics);
     }
     catch (error) {
-        functions.logger.error('Error in getMemoryAnalytics:', error);
-        response.status(500).json({ error: 'Internal server error' });
+        functions.logger.error("Error in getMemoryAnalytics:", error);
+        response.status(500).json({ error: "Internal server error" });
     }
 });
 //# sourceMappingURL=memoryAnalytics.js.map
