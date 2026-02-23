@@ -35,6 +35,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/support/verify-donation',             // (Legacy/Optional)
     '/api/integrations/telegram/webhook',       // Telegram Webhook
     '/api/internal/jklaw',                     // JKlaw internal bridge (key-auth, not Clerk)
+    '/api/internal/route-to-jklaw',           // UCOL agent router (key-auth, not Clerk)
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

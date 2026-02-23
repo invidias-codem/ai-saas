@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { waitUntil } from "@vercel/functions";
+import { classifyQuery } from '@/lib/ucol/agentRouter';
 
 import { ExtractedFact } from '../intelligentMemory';
 import { SearchResult } from '../integrations/anyCrawl';
@@ -491,6 +492,30 @@ export async function generateConversationReply(
             }
           } catch (e) {
             console.error('Side effect processing failed', e);
+          }
+        })());
+      }
+
+      // ── UCOL Agent Router: fire-and-forget dispatch for research/strategy/orchestration ──
+      // Classifies the query in the background — never blocks the user response.
+      // If JKlaw should handle it, dispatches asynchronously so JKlaw builds context.
+      if (!options.disableSideEffects && fullText && process.env.JKLAW_API_KEY) {
+        waitUntil((async () => {
+          try {
+            const decision = await classifyQuery(userQuery, fullText.substring(0, 400));
+            if (decision.targetNode === 'jklaw') {
+              const { getAgentRouter } = await import('@/lib/ucol/agentRouter');
+              const router = getAgentRouter();
+              await router.dispatchToJKlaw(
+                { query: userQuery, context: fullText.substring(0, 400), userId },
+                decision,
+                false // fire-and-forget
+              );
+              console.log(`[UCOL] Dispatched "${userQuery.substring(0, 60)}" to JKlaw (${decision.taskType})`);
+            }
+          } catch (e) {
+            // Non-blocking — never surface routing errors to users
+            console.warn('[UCOL] Agent router dispatch failed (non-blocking):', e);
           }
         })());
       }
