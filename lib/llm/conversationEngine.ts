@@ -65,6 +65,12 @@ export type ConversationEngineOptions = {
 
   /** Operating mode for the agent */
   mode?: AgentMode;
+
+  /**
+   * When true, skip web research and rely solely on stored memory/knowledge graph.
+   * Recommended for internal agent calls (e.g. JKlaw) where graph facts should dominate.
+   */
+  skipWebResearch?: boolean;
 };
 
 export type ConversationEngineResult = {
@@ -244,7 +250,7 @@ export async function generateConversationReply(
   if (!options.disableExternalContext) {
     const results = await Promise.allSettled([
       getHighConfidenceFacts(userId),
-      performResearch(userQuery, userContextPrompt),
+      options.skipWebResearch ? Promise.resolve({ results: [] }) : performResearch(userQuery, userContextPrompt),
       findRelatedEntities(userId, userQuery),
       getUserProfile(userId),
     ]);
