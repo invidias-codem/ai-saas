@@ -85,7 +85,12 @@ export async function POST(req: Request) {
         try {
             const result = await generateConversationReply(
                 { userId: JKLAW_USER_ID, clerkUser: JKLAW_CLERK_USER, request: parsed.data },
-                {}
+                {
+                    // Skip web research for internal JKlaw calls.
+                    // The knowledge graph + stored facts we push via memory-push
+                    // should be the authoritative source — not general web search.
+                    skipWebResearch: true,
+                }
             );
 
             if (wantStream) {
