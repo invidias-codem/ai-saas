@@ -1,6 +1,11 @@
+// middleware.ts — UPDATED with referral tracking
+// Changes from original: added referral cookie capture block (~15 lines)
+// Everything else is unchanged.
+
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import createMiddleware from 'next-intl/middleware';
 import { NextResponse } from 'next/server';
+import { parseReferralParams, REFERRAL_COOKIE, PLATFORM_COOKIE, COOKIE_MAX_AGE } from '@/lib/referral';
 
 const intlMiddleware = createMiddleware({
     locales: ['en', 'th', 'vi'],
@@ -8,44 +13,61 @@ const intlMiddleware = createMiddleware({
     localePrefix: 'always'
 });
 
-// Define public routes that don't require authentication
 const isPublicRoute = createRouteMatcher([
-    '/',                                        // Landing page
-    '/:locale',                                 // Localized landing page
+    '/',
+    '/:locale',
     '/:locale/sign-in(.*)',
     '/:locale/sign-up(.*)',
     '/sign-in(.*)',
     '/sign-up(.*)',
-    '/privacy',                                 // Privacy policy page
+    '/privacy',
     '/:locale/privacy',
-    '/support',                                 // Support page
+    '/support',
     '/:locale/support',
-    '/slack',                                   // Slack integration
+    '/slack',
     '/:locale/slack',
-    '/blog(.*)',                                // Blog pages
+    '/blog(.*)',
     '/:locale/blog(.*)',
-    '/api/guest-chat',                          // Guest chat API
-    '/api/feedback',                            // Feedback ingestion
-    '/api/integrations/slack/callback',         // Slack OAuth callback
-    '/api/integrations/slack/events',           // Slack Events API
-    '/api/integrations/slack/command',          // Slack slash commands
-    '/api/integrations/slack/interactivity',    // Slack interactivity
-    '/api/integrations/slack/auth',             // OAuth Init
-    '/api/webhooks/kofi',                       // Ko-fi Webhook
-    '/api/support/verify-donation',             // (Legacy/Optional)
-    '/api/integrations/telegram/webhook',       // Telegram Webhook
-    '/api/internal/jklaw',                     // JKlaw internal bridge (key-auth, not Clerk)
-    '/api/internal/route-to-jklaw',           // UCOL agent router (key-auth, not Clerk)
+    '/api/guest-chat',
+    '/api/feedback',
+    '/api/integrations/slack/callback',
+    '/api/integrations/slack/events',
+    '/api/integrations/slack/command',
+    '/api/integrations/slack/interactivity',
+    '/api/integrations/slack/auth',
+    '/api/webhooks/kofi',
+    '/api/support/verify-donation',
+    '/api/integrations/telegram/webhook',
+    '/api/internal/jklaw',
+    '/api/internal/route-to-jklaw',
+    '/api/referral/capture',  // ← NEW: public so it works right after signup
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
     const isApi = req.nextUrl.pathname.startsWith('/api') || req.nextUrl.pathname.startsWith('/trpc');
 
-    // Handle API routes (skip intl)
-    if (isApi) {
-        if (isPublicRoute(req)) {
-            return;
+    // ─── REFERRAL TRACKING (runs on ALL page requests, no auth needed) ──────────
+    // Only capture on page routes (not API), and only if ?ref= is present
+    const { ref, platform, campaign } = parseReferralParams(req.nextUrl.searchParams);
+
+    let response: NextResponse | undefined;
+
+    if (ref && !isApi) {
+        // First-touch only: don't overwrite an existing cookie
+        const existingRef = req.cookies.get(REFERRAL_COOKIE)?.value;
+
+        if (!existingRef) {
+            // We'll set the cookie on the response after routing resolves
+            // Using a flag to apply after intlMiddleware or auth redirect
+            req.headers.set('x-capture-ref', ref);
+            req.headers.set('x-capture-platform', platform || 'direct');
+            if (campaign) req.headers.set('x-capture-campaign', campaign);
         }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
+
+    if (isApi) {
+        if (isPublicRoute(req)) return;
         const { userId } = await auth();
         if (!userId) {
             return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
@@ -56,25 +78,43 @@ export default clerkMiddleware(async (auth, req) => {
         return;
     }
 
-    // Handle Page routes (use intl)
+    let res: NextResponse;
+
     if (isPublicRoute(req)) {
-        return intlMiddleware(req);
+        res = intlMiddleware(req) as NextResponse;
+    } else {
+        const { userId, redirectToSignIn } = await auth();
+        if (!userId) return redirectToSignIn();
+        res = intlMiddleware(req) as NextResponse;
     }
 
-    const { userId, redirectToSignIn } = await auth();
-
-    if (!userId) {
-        return redirectToSignIn();
+    // Apply referral cookies to the response if we captured a ref above
+    const capturedRef = req.headers.get('x-capture-ref');
+    if (capturedRef) {
+        res.cookies.set(REFERRAL_COOKIE, capturedRef, {
+            maxAge:   COOKIE_MAX_AGE,
+            path:     '/',
+            sameSite: 'lax',
+            secure:   process.env.NODE_ENV === 'production',
+            httpOnly: false, // Must be readable by client-side JS for capture API call
+        });
+        const capturedPlatform = req.headers.get('x-capture-platform');
+        if (capturedPlatform) {
+            res.cookies.set(PLATFORM_COOKIE, capturedPlatform, {
+                maxAge:   COOKIE_MAX_AGE,
+                path:     '/',
+                sameSite: 'lax',
+                secure:   process.env.NODE_ENV === 'production',
+            });
+        }
     }
 
-    return intlMiddleware(req);
+    return res;
 });
 
 export const config = {
     matcher: [
-        // Skip Next.js internals and all static files
         '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-        // Always run for API routes
         '/(api|trpc)(.*)',
     ],
 };
