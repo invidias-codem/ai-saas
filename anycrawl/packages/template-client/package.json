@@ -44,7 +44,7 @@
     "dependencies": {
         "@anycrawl/db": "workspace:*",
         "@anycrawl/libs": "workspace:*",
-        "minimatch": "^10.0.3"
+        "minimatch": "^10.2.1"
     },
     "devDependencies": {
         "@anycrawl/js-sdk": "workspace:*",
