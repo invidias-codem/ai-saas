@@ -40,6 +40,33 @@ const JKLAW_CLERK_USER = {
     createdAt: Date.now(),
 };
 
+/**
+ * Pre-fetch JKlaw's knowledge graph facts and format them as a context block.
+ *
+ * Why: getRAGMemoryContext() filters by feature_type="conversation", which
+ * excludes manually-pushed facts (they have no feature_type). This bypass
+ * calls searchMemories() directly without the feature_type filter, ensuring
+ * our curated knowledge graph is always injected into the context.
+ */
+async function buildJklawContext(query: string): Promise<string> {
+    try {
+        const memories = await searchMemories(JKLAW_USER_ID, query, 7);
+        if (!memories || memories.length === 0) return '';
+
+        const facts = memories
+            .filter((m: any) => m.similarity > 0.55)
+            .map((m: any) => `- ${m.content}`)
+            .join('\n');
+
+        if (!facts) return '';
+
+        return `\n\n## JKlaw Knowledge Base (Internal Facts)\nThe following facts are from the JKlaw internal knowledge graph. Use them as authoritative context:\n${facts}\n`;
+    } catch (e) {
+        console.warn('[JKlaw] Context pre-fetch failed:', e);
+        return '';
+    }
+}
+
 // ─── POST /api/internal/jklaw ──────────────────────────────────────────────
 export async function POST(req: Request) {
     if (!validateKey(req)) {
@@ -60,7 +87,7 @@ export async function POST(req: Request) {
         return NextResponse.json({
             ok: true,
             agent: 'JKlaw',
-            version: '1.1.0',
+            version: '1.2.0',
             features: ['chat', 'memory-push', 'memory-query', 'memory-delete', 'status'],
             timestamp: new Date().toISOString(),
         });
@@ -74,8 +101,23 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'prompt or messages required' }, { status: 400 });
         }
 
+        const userQuery = prompt || messages?.at(-1)?.text || '';
+
+        // Pre-fetch knowledge graph context, bypassing the feature_type filter
+        // that would otherwise exclude our manually-pushed facts.
+        const jklawContext = await buildJklawContext(userQuery);
+
+        // Inject context directly into the user message so the engine sees it
+        // regardless of its internal RAG pipeline.
+        const enrichedPrompt = jklawContext
+            ? `${jklawContext}\n\nQuestion: ${userQuery}`
+            : userQuery;
+
         const requestPayload = {
-            messages: [...(messages || []), { role: 'user', text: prompt || messages.at(-1)?.text }],
+            messages: [
+                ...(messages?.slice(0, -1) || []),
+                { role: 'user', text: enrichedPrompt },
+            ],
         };
 
         const parsed = ConversationRequestSchema.safeParse(requestPayload);
@@ -87,10 +129,10 @@ export async function POST(req: Request) {
             const result = await generateConversationReply(
                 { userId: JKLAW_USER_ID, clerkUser: JKLAW_CLERK_USER, request: parsed.data },
                 {
-                    // Skip web research — stored knowledge graph facts should dominate.
+                    // Skip web research — our curated graph is the authoritative source.
                     skipWebResearch: true,
-                    // Disable side-effect memory capture so conversation responses
-                    // don't pollute the graph. We manage memory explicitly via memory-push.
+                    // Disable side effects so conversation responses don't
+                    // pollute the knowledge graph. Memory is managed via memory-push only.
                     disableSideEffects: true,
                 }
             );
@@ -101,7 +143,6 @@ export async function POST(req: Request) {
                 });
             }
 
-            // Accumulate stream for non-streaming response
             const reader = result.stream.getReader();
             const decoder = new TextDecoder();
             let text = '';
