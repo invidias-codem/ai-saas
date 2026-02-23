@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { requireEnv } from '@/lib/env';
 import { z } from "zod";
+import { getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
 
 // Lazy initialize
 function getModel() {
@@ -50,6 +52,15 @@ const guestChatSchema = z.object({
 });
 
 export async function POST(req: Request) {
+    const ip = getClientIP(req);
+    const rateLimit = await limitApiEndpoint(null, ip, 'ai');
+    if (!rateLimit.success) {
+        return NextResponse.json(
+            { error: 'Too many requests. Please try again later.' },
+            { status: 429, headers: { 'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)) } }
+        );
+    }
+
     try {
         const body = await req.json();
 

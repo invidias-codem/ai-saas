@@ -1,0 +1,58 @@
+{
+    "$schema": "https://turbo.build/schema.json",
+    "ui": "tui",
+    "tasks": {
+        "build": {
+            "dependsOn": ["^build"],
+            "inputs": ["$TURBO_DEFAULT$", ".env*", "src/**/*"],
+            "outputs": [".next/**", "!.next/cache/**", "dist/**", "build/**"]
+        },
+        "dev": {
+            "cache": false,
+            "persistent": true
+        },
+        "start": {
+            "dependsOn": ["^build"],
+            "cache": false,
+            "persistent": true
+        },
+        "test": {
+            "dependsOn": ["^build"],
+            "outputs": ["coverage/**"]
+        },
+        "test:watch": {
+            "cache": false,
+            "persistent": true
+        },
+        "test:coverage": {
+            "dependsOn": ["^build"],
+            "outputs": ["coverage/**"]
+        },
+        "lint": {
+            "dependsOn": ["^lint"],
+            "outputs": []
+        },
+        "typecheck": {
+            "dependsOn": ["^build"],
+            "outputs": []
+        },
+        "clean": {
+            "cache": false
+        },
+        "db:generate": {
+            "cache": false,
+            "inputs": ["./src/db/schemas/**/*", ".env*"]
+        },
+        "db:migrate": {
+            "cache": false,
+            "dependsOn": ["db:generate"]
+        },
+        "format": {
+            "outputs": []
+        },
+        "watch": {
+            "cache": false,
+            "persistent": true
+        }
+    }
+}

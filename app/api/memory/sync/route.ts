@@ -8,29 +8,35 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { conversationIdSchema } from '@/lib/security/inputValidation';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
     try {
-        const { userId } = await auth();
+        const user = await requireAuth();
+        const ip = getClientIP(req);
 
-        if (!userId) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const rateLimit = await limitApiEndpoint(user.userId, ip, 'mutation');
+        if (!rateLimit.success) {
+            return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
         }
 
         const body = await req.json();
         const { conversationId, messages } = body;
 
-        if (!conversationId) {
-            return NextResponse.json({ error: "conversationId is required" }, { status: 400 });
+        const validationResult = conversationIdSchema.safeParse(conversationId);
+        if (!validationResult.success) {
+            return NextResponse.json({ error: "Invalid conversation ID format" }, { status: 400 });
         }
 
         // Return immediately - process in background
         // We use setImmediate or process.nextTick to defer processing
         setImmediate(async () => {
             try {
-                await processMemoriesInBackground(userId, conversationId, messages || []);
+                await processMemoriesInBackground(user.userId, conversationId, messages || []);
             } catch (error) {
                 console.error('[Memory:Sync] Background processing error:', error);
             }

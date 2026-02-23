@@ -26,7 +26,7 @@ jest.mock('child_process', () => ({
 
 // Mock NextResponse before importing the route
 jest.mock('next/server', () => {
-    const MockNextResponse = jest.fn().mockImplementation((body: any, init?: any) => ({
+    const MockNextResponse: any = jest.fn().mockImplementation((body: any, init?: any) => ({
         status: init?.status || 200,
         text: () => Promise.resolve(body),
         json: () => Promise.resolve(typeof body === 'string' ? JSON.parse(body) : body),

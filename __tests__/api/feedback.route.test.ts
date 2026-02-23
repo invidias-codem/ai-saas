@@ -123,7 +123,7 @@ describe("POST /api/feedback", () => {
 
     // Ensure insert received scrubbed values
     expect(insert).toHaveBeenCalledTimes(1);
-    const insertedArg = insert.mock.calls[0]?.[0];
+    const insertedArg = (insert.mock.calls[0] as any[])?.[0];
     expect(insertedArg).toBeDefined();
     if (!insertedArg) return;
 

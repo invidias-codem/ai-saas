@@ -23,8 +23,13 @@ jobs:
         uses: Codium-ai/pr-agent@main
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }} 
-          # OR use CODIUMAI_API_KEY: ${{ secrets.CODIUMAI_API_KEY }} if you have one
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+          # Point to our config file
+          CONFIG.CONFIGURATION_PATH: ".pr_agent.toml"
+          
+          # Enable RAG features
+          RAG_ARGUMENTS.ENABLE_RAG: "true"
           
           # Configuration
           PR_AGENT.TOOLS.COLLAPSIBLE_COMMENTS: true

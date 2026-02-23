@@ -3288,3 +3288,657 @@
 [2026-01-25T16:21:49.184Z] Stream produced empty response
 [2026-01-25T16:21:49.187Z] Using fallback generation
 [2026-01-25T16:21:49.189Z] Slack Message Sent Successfully:
+[2026-02-08T19:22:01.321Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "TA4AYX7CY7",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770578521.315.123456",
+    "text": "<@U_BOT_123> What is machine learning?",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evzgl5o51wso",
+  "event_time": 1770578521
+}
+[2026-02-08T19:22:01.353Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> What is machine learning?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T19:22:01.555Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "TA4AYX7CY7",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "message",
+    "user": "U_USER_123",
+    "ts": "1770578521.553.123456",
+    "text": "Hello Genie!",
+    "channel": "D_DM_123",
+    "channel_type": "im"
+  },
+  "event_id": "Evknf5yab7ug",
+  "event_time": 1770578521
+}
+[2026-02-08T19:22:01.561Z] Slack Message Sent Successfully:
+[2026-02-08T19:22:01.582Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "TA4AYX7CY7",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "message",
+    "user": "U_USER_123",
+    "ts": "1770578521.581.123456",
+    "text": "Bot response",
+    "bot_id": "B_BOT_123",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evo3y6dl2y71",
+  "event_time": 1770578521
+}
+[2026-02-08T19:22:02.337Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T_WORKSPACE_1",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770578522.336.123456",
+    "text": "<@U_BOT_123> Hello from workspace 1",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evehm0wo2878g",
+  "event_time": 1770578522
+}
+[2026-02-08T19:22:02.340Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello from workspace 1",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T19:22:02.341Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T_WORKSPACE_2",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770578522.339.123456",
+    "text": "<@U_BOT_123> Hello from workspace 2",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evizpnhxpkn4p",
+  "event_time": 1770578522
+}
+[2026-02-08T19:22:02.344Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello from workspace 2",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T19:22:02.344Z] Stream produced empty response
+[2026-02-08T19:22:02.345Z] Using fallback generation
+[2026-02-08T19:22:02.345Z] Slack Message Sent Successfully:
+[2026-02-08T19:22:02.346Z] Stream produced empty response
+[2026-02-08T19:22:02.347Z] Using fallback generation
+[2026-02-08T19:22:02.347Z] Slack Message Sent Successfully:
+[2026-02-08T19:22:02.351Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T_UNINSTALLED",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770578522.35.123456",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evcc6jv63e7ji",
+  "event_time": 1770578522
+}
+[2026-02-08T19:22:02.386Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "TA4AYX7CY7",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770578522.378.123456",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evfxcxa4aozcd",
+  "event_time": 1770578522
+}
+[2026-02-08T19:22:02.389Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T19:22:02.498Z] Using fallback generation
+[2026-02-08T19:22:02.501Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2026-02-08T19:22:02.506Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "TA4AYX7CY7",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770578522.506.123456",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Ev2e8fjm90lc4",
+  "event_time": 1770578522
+}
+[2026-02-08T19:22:02.527Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T19:22:02.528Z] Stream produced empty response
+[2026-02-08T19:22:02.529Z] Using fallback generation
+[2026-02-08T19:22:02.530Z] Slack Message Sent Successfully:
+[2026-02-08T19:22:08.129Z] Received event body:
+{
+  "type": "url_verification",
+  "challenge": "test-challenge-string"
+}
+[2026-02-08T19:22:08.152Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "text": "<@U_BOT_123> What is AI?",
+    "channel": "C_CHANNEL_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T19:22:08.389Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> What is AI?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T19:22:08.435Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "message",
+    "channel_type": "im",
+    "user": "U_USER_123",
+    "text": "Hello Genie!",
+    "channel": "D_DM_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T19:22:08.445Z] Slack Message Sent Successfully:
+[2026-02-08T19:22:08.446Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "message",
+    "user": "U_BOT_123",
+    "text": "Bot message",
+    "channel": "C_CHANNEL_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T19:22:08.457Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "message",
+    "user": "U_OTHER_BOT",
+    "bot_id": "B_BOT_123",
+    "text": "Another bot message",
+    "channel": "C_CHANNEL_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T19:22:08.461Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "app_home_opened",
+    "user": "U_USER_123",
+    "tab": "home",
+    "channel": "C_HOME",
+    "event_ts": "1234567890.123456",
+    "team_id": "T123ABC456"
+  }
+}
+[2026-02-08T19:22:08.993Z] Received event body:
+{
+  "token": "verification_token",
+  "team_id": "T_TEAM_123",
+  "api_app_id": "A_APP_123",
+  "event": {
+    "type": "file_shared",
+    "file_id": "F_FILE_123",
+    "user_id": "U_USER_123",
+    "channel_id": "C_CHANNEL_123",
+    "event_ts": "1234567890.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev12345",
+  "event_time": 1234567890
+}
+[2026-02-08T19:22:08.996Z] Slack Message Sent Successfully:
+"1234567891.000000"
+[2026-02-08T19:22:09.498Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T_SPECIFIC_TEAM",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_CHANNEL_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T19:22:09.500Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T19:22:09.505Z] Stream produced empty response
+[2026-02-08T19:22:09.506Z] Using fallback generation
+[2026-02-08T19:22:09.506Z] Slack Message Sent Successfully:
+[2026-02-08T19:22:09.511Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T_UNINSTALLED",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_CHANNEL_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T19:22:09.517Z] Received event body:
+{
+  "type": "event_callback",
+  "event": {
+    "type": "app_mention"
+  }
+}
+[2026-02-08T19:22:09.523Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_INVALID",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T19:22:09.527Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T19:22:09.528Z] Using fallback generation
+[2026-02-08T19:22:09.532Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2026-02-08T20:14:03.986Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T2CI7AN9J2",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770581643.984.123456",
+    "text": "<@U_BOT_123> What is machine learning?",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evmogbrnlg72g",
+  "event_time": 1770581643
+}
+[2026-02-08T20:14:04.008Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> What is machine learning?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T20:14:04.242Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T2CI7AN9J2",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "message",
+    "user": "U_USER_123",
+    "ts": "1770581644.237.123456",
+    "text": "Hello Genie!",
+    "channel": "D_DM_123",
+    "channel_type": "im"
+  },
+  "event_id": "Evbaie7mwpvh",
+  "event_time": 1770581644
+}
+[2026-02-08T20:14:04.266Z] Slack Message Sent Successfully:
+[2026-02-08T20:14:04.269Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T2CI7AN9J2",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "message",
+    "user": "U_USER_123",
+    "ts": "1770581644.268.123456",
+    "text": "Bot response",
+    "bot_id": "B_BOT_123",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evshr0awnw9yn",
+  "event_time": 1770581644
+}
+[2026-02-08T20:14:04.969Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T_WORKSPACE_1",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770581644.968.123456",
+    "text": "<@U_BOT_123> Hello from workspace 1",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evjb37eip2iji",
+  "event_time": 1770581644
+}
+[2026-02-08T20:14:04.972Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello from workspace 1",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T20:14:04.973Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T_WORKSPACE_2",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770581644.971.123456",
+    "text": "<@U_BOT_123> Hello from workspace 2",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evv2p2q5jquls",
+  "event_time": 1770581644
+}
+[2026-02-08T20:14:04.980Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello from workspace 2",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T20:14:04.982Z] Stream produced empty response
+[2026-02-08T20:14:04.982Z] Using fallback generation
+[2026-02-08T20:14:04.984Z] Slack Message Sent Successfully:
+[2026-02-08T20:14:04.985Z] Stream produced empty response
+[2026-02-08T20:14:04.985Z] Using fallback generation
+[2026-02-08T20:14:04.986Z] Slack Message Sent Successfully:
+[2026-02-08T20:14:04.988Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T_UNINSTALLED",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770581644.988.123456",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evgclpoe0kcn",
+  "event_time": 1770581644
+}
+[2026-02-08T20:14:05.021Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T2CI7AN9J2",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770581645.021.123456",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evn6uxolxf5gn",
+  "event_time": 1770581645
+}
+[2026-02-08T20:14:05.024Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T20:14:05.027Z] Using fallback generation
+[2026-02-08T20:14:05.036Z] Slack API Error in sendSlackMessage:
+"channel_not_found"
+[2026-02-08T20:14:05.043Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T2CI7AN9J2",
+  "api_app_id": "A123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "ts": "1770581645.039.123456",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_CHANNEL_123"
+  },
+  "event_id": "Evt9b3esn7nzs",
+  "event_time": 1770581645
+}
+[2026-02-08T20:14:05.068Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T20:14:05.081Z] Stream produced empty response
+[2026-02-08T20:14:05.081Z] Using fallback generation
+[2026-02-08T20:14:05.086Z] Slack Message Sent Successfully:
+[2026-02-08T20:14:08.782Z] Received event body:
+{
+  "type": "url_verification",
+  "challenge": "test-challenge-string"
+}
+[2026-02-08T20:14:08.799Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "text": "<@U_BOT_123> What is AI?",
+    "channel": "C_CHANNEL_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T20:14:08.983Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> What is AI?",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T20:14:09.091Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "message",
+    "channel_type": "im",
+    "user": "U_USER_123",
+    "text": "Hello Genie!",
+    "channel": "D_DM_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T20:14:09.104Z] Slack Message Sent Successfully:
+[2026-02-08T20:14:09.105Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "message",
+    "user": "U_BOT_123",
+    "text": "Bot message",
+    "channel": "C_CHANNEL_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T20:14:09.117Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "message",
+    "user": "U_OTHER_BOT",
+    "bot_id": "B_BOT_123",
+    "text": "Another bot message",
+    "channel": "C_CHANNEL_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T20:14:09.142Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "app_home_opened",
+    "user": "U_USER_123",
+    "tab": "home",
+    "channel": "C_HOME",
+    "event_ts": "1234567890.123456",
+    "team_id": "T123ABC456"
+  }
+}
+[2026-02-08T20:14:09.651Z] Received event body:
+{
+  "token": "verification_token",
+  "team_id": "T_TEAM_123",
+  "api_app_id": "A_APP_123",
+  "event": {
+    "type": "file_shared",
+    "file_id": "F_FILE_123",
+    "user_id": "U_USER_123",
+    "channel_id": "C_CHANNEL_123",
+    "event_ts": "1234567890.123456"
+  },
+  "type": "event_callback",
+  "event_id": "Ev12345",
+  "event_time": 1234567890
+}
+[2026-02-08T20:14:09.654Z] Slack Message Sent Successfully:
+"1234567891.000000"
+[2026-02-08T20:14:10.155Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T_SPECIFIC_TEAM",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_CHANNEL_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T20:14:10.157Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T20:14:10.161Z] Stream produced empty response
+[2026-02-08T20:14:10.162Z] Using fallback generation
+[2026-02-08T20:14:10.163Z] Slack Message Sent Successfully:
+[2026-02-08T20:14:10.168Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T_UNINSTALLED",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_CHANNEL_123",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T20:14:10.179Z] Received event body:
+{
+  "type": "event_callback",
+  "event": {
+    "type": "app_mention"
+  }
+}
+[2026-02-08T20:14:10.185Z] Received event body:
+{
+  "type": "event_callback",
+  "team_id": "T123ABC456",
+  "event": {
+    "type": "app_mention",
+    "user": "U_USER_123",
+    "text": "<@U_BOT_123> Hello",
+    "channel": "C_INVALID",
+    "ts": "1234567890.123456"
+  }
+}
+[2026-02-08T20:14:10.187Z] Message Analysis:
+{
+  "cleanText": "<@U_BOT_123> Hello",
+  "isCode": false,
+  "language": null,
+  "intent": null
+}
+[2026-02-08T20:14:10.189Z] Using fallback generation
+[2026-02-08T20:14:10.190Z] Slack API Error in sendSlackMessage:
+"channel_not_found"

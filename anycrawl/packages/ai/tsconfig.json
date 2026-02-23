@@ -1,0 +1,19 @@
+{
+    "extends": "@anycrawl/typescript-config/base.json",
+    "compilerOptions": {
+        "outDir": "dist",
+        "rootDir": "src",
+        "jsx": "react", // Check this line if missing.
+        "lib": [
+            "dom",
+            "es2015"
+        ]
+    },
+    "include": [
+        "src"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist"
+    ]
+}

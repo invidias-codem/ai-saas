@@ -1,8 +1,17 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { z } from "zod";
 import { waitUntil } from "@vercel/functions";
+import { classifyQuery } from '@/lib/ucol/agentRouter';
 
+import { ExtractedFact } from '../intelligentMemory';
+import { SearchResult } from '../integrations/anyCrawl';
+import { GraphNode } from '../memory/graphStore';
+import { PromotableMemory } from '../memoryPromotion';
+import { Source } from '../ragMemory';
 import { env } from "@/lib/env";
+import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
+import { GeminiProvider } from "./providers/gemini";
+import { ClaudeProvider } from "./providers/claude";
+import { DeepSeekProvider } from "./providers/deepseek";
 import {
   gatherUserContext,
   formatUserContextForPrompt,
@@ -14,28 +23,29 @@ import {
   generateSummary,
   estimateTokenCount,
 } from "@/lib/ragMemory";
-import { rankMemoriesIntelligently } from "@/lib/intelligentMemory";
-import { sanitizeHistory } from "@/lib/gemini";
-import { findRelatedEntities, formatGraphContext, addNode } from "@/lib/memory/graphStore";
+import { rankMemoriesIntelligently, synthesizeContextWithReasoning } from "@/lib/intelligentMemory";
+// import { sanitizeHistory } from "@/lib/gemini"; // Moved to provider
+import { findRelatedEntities, formatGraphContext, addNode, addEdge, strengthenEdge } from "@/lib/memory/graphStore";
+import { extractFactsFromConversation } from "@/lib/agents/factExtractor";
+import { generateEmbedding } from "@/lib/memory/embedding";
 import { performResearch, formatSearchResults } from "@/lib/agents/researcher";
 import { getUserProfile, formatUserProfileForPrompt } from "@/lib/memoryPromotion";
+import { SecurityAgent } from "@/lib/security/securityAgent";
 
-export const ChatMessageSchema = z.object({
-  role: z.string(),
-  text: z.string(),
-});
+// ChatMessageSchema imported from types
 
 export const ConversationRequestSchema = z.object({
   messages: z.array(ChatMessageSchema).min(1),
   fileData: z.string().optional(),
   fileName: z.string().optional(),
   mimeType: z.string().optional(),
+  fileUri: z.string().optional(),
   mode: z.enum(['standard', 'agentic-preview']).optional(),
 });
 
 export type ConversationRequest = z.infer<typeof ConversationRequestSchema>;
 
-export type AgentMode = 'standard' | 'agentic-preview';
+
 
 export type ConversationEngineOptions = {
   /**
@@ -55,10 +65,17 @@ export type ConversationEngineOptions = {
 
   /** Operating mode for the agent */
   mode?: AgentMode;
+
+  /**
+   * When true, skip web research and rely solely on stored memory/knowledge graph.
+   * Recommended for internal agent calls (e.g. JKlaw) where graph facts should dominate.
+   */
+  skipWebResearch?: boolean;
 };
 
 export type ConversationEngineResult = {
   stream: ReadableStream;
+  sources?: Source[];
   debug?: {
     promptVersion?: string | null;
     model?: string;
@@ -81,65 +98,49 @@ function getGoogleApiKey(): string {
   return key;
 }
 
-function getGenAI() {
-  return new GoogleGenerativeAI(getGoogleApiKey());
-}
-
 const DEFAULT_MODEL = "gemini-2.0-flash";
-const AGENTIC_MODEL = "gemini-3-flash-preview";
+const AGENTIC_MODEL = "gemini-1.5-pro-preview-0409";
+const QUALITY_MODEL = "claude-sonnet-4-5-20250929";
+const REASONING_MODEL = "deepseek-r1";
 
-const safetySettings = [
-  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-];
-
-function getGenerativeModel(mode: AgentMode) {
-  const genAI = getGenAI();
-
-  if (mode === 'agentic-preview') {
-    return genAI.getGenerativeModel({
-      model: AGENTIC_MODEL,
-      safetySettings,
-      tools: [{ codeExecution: {} }],
-      // Optional: Add explicit system instruction if needed for agentic behavior
-    });
+function getProviderForMode(mode: AgentMode): { provider: LLMProvider, modelId: string } {
+  if (mode === 'quality') {
+    return {
+      provider: new ClaudeProvider(),
+      modelId: QUALITY_MODEL
+    };
+  } else if (mode === 'agentic-preview') {
+    return {
+      provider: new GeminiProvider(),
+      modelId: AGENTIC_MODEL
+    };
+  } else if (mode === 'reasoning') {
+    return {
+      provider: new DeepSeekProvider(),
+      modelId: REASONING_MODEL
+    };
+  } else {
+    // Default / Fast
+    return {
+      provider: new GeminiProvider(),
+      modelId: DEFAULT_MODEL
+    };
   }
-
-  return genAI.getGenerativeModel({
-    model: DEFAULT_MODEL,
-    safetySettings,
-  });
 }
 
 function getSystemInstruction() {
-  return {
-    role: "user",
-    parts: [
-      {
-        text: `You are 'Genie', a helpful AI assistant. 
+  return `You are 'Genie', a helpful AI assistant. 
 Current Date: ${new Date().toLocaleDateString("en-US", {
-          weekday: "long",
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        })}.
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })}.
 
-Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences.`,
-      },
-    ],
-  };
+Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences.`;
 }
 
-const GREETING = {
-  role: "model",
-  parts: [
-    {
-      text: "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights.",
-    },
-  ],
-};
+const GREETING = "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights.";
 
 /**
  * Core conversation generation engine.
@@ -160,9 +161,75 @@ export async function generateConversationReply(
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'standard';
 
-  const model = getGenerativeModel(agentMode);
-  // Track actual model ID for debug (model.model is presumably available or we use our constants)
-  const actualModelId = agentMode === 'agentic-preview' ? AGENTIC_MODEL : DEFAULT_MODEL;
+  // ---------------------------------------------------------
+  // SPRINT 3: Agentic Integration
+  // ---------------------------------------------------------
+  if (agentMode === 'agentic-preview') {
+    const { runReActLoop } = await import('@/lib/agents/core/reactLoop');
+    const { ToolRegistry } = await import('@/lib/agents/core/registry');
+    const { dealSentinelTool } = await import('@/lib/agents/tools/dealSentinel');
+
+    // 1. Initialize Registry
+    const registry = new ToolRegistry();
+    registry.register(dealSentinelTool);
+
+    // 2. Construct Prompt (Multimodal support)
+    const userQuery = parsed.messages[parsed.messages.length - 1]?.text || "";
+    let promptInput: string | any[] = userQuery;
+
+    if (parsed.fileData && parsed.mimeType) {
+      promptInput = [
+        { text: userQuery },
+        {
+          inlineData: {
+            mimeType: parsed.mimeType,
+            data: parsed.fileData // Base64
+          }
+        }
+      ];
+    } else if (parsed.fileUri && parsed.mimeType) {
+      promptInput = [
+        { text: userQuery },
+        {
+          fileData: {
+            mimeType: parsed.mimeType,
+            fileUri: parsed.fileUri
+          }
+        }
+      ];
+    }
+
+    // 3. Execute ReAct Loop (Non-streaming for now, wrapped in stream)
+    // Note: ReAct loop takes time. We will await it and then stream the result all at once.
+    // Future optimization: Stream individual thought steps.
+    const agentResult = await runReActLoop(promptInput, {
+      userId,
+      sessionId: 'session-' + Date.now(), // specific session tracking if needed
+      history: [], // We could map `parsed.messages` to history if desired
+      enableTelemetry: true
+    }, registry);
+
+    // 4. Wrap result in ReadableStream to match expected output
+    const textEncoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(textEncoder.encode(agentResult.answer));
+        controller.close();
+      }
+    });
+
+    return {
+      stream,
+      sources: [], // We could populate this from agentResult.trajectory if we parsed it
+      debug: {
+        model: 'gemini-2.0-flash-agentic',
+        userQuery
+      }
+    };
+  }
+  // ---------------------------------------------------------
+
+  const { provider, modelId: actualModelId } = getProviderForMode(agentMode);
 
   const { messages, fileData, mimeType } = parsed;
 
@@ -173,184 +240,302 @@ export async function generateConversationReply(
   const userQuery = messages[messages.length - 1]?.text || "";
 
   // Tiered context gathering
-  let allFacts: any[] = [];
-  let researchResult: any = { results: [] };
-  let graphData: any = [];
-  let userProfileMemories: any = null;
+  let allFacts: ExtractedFact[] = [];
+  let researchResult: { results: SearchResult[] } = { results: [] };
+  let graphData: { centralNode: GraphNode | null; relatedNodes: any[] } = { centralNode: null, relatedNodes: [] }; // relatedNodes uses complex structure, keeping any for now/TODO
+  let userProfileMemories: PromotableMemory[] | null = null;
 
-  // Check if heavy context gathering is enabled (to avoid rate limits on free tier)
-  const enableHeavyContext = process.env.ENABLE_HEAVY_CONTEXT === 'true';
-
-  if (!options.disableExternalContext && enableHeavyContext) {
-    // Full context gathering (requires higher API quotas)
-    [allFacts, researchResult, graphData, userProfileMemories] = await Promise.all([
+  // Full context gathering — all sources in parallel with graceful degradation.
+  // Individual failures are caught so one slow/broken source doesn't block the rest.
+  if (!options.disableExternalContext) {
+    const results = await Promise.allSettled([
       getHighConfidenceFacts(userId),
-      performResearch(userQuery, userContextPrompt),
+      options.skipWebResearch ? Promise.resolve({ results: [] }) : performResearch(userQuery, userContextPrompt),
       findRelatedEntities(userId, userQuery),
       getUserProfile(userId),
     ]);
-  } else if (!options.disableExternalContext) {
-    // Lightweight mode: only fetch facts (no embeddings needed for this)
-    allFacts = await getHighConfidenceFacts(userId);
-    console.log('[ConversationEngine] Running in lightweight mode (ENABLE_HEAVY_CONTEXT=false)');
+
+    allFacts = results[0].status === 'fulfilled' ? results[0].value : [];
+    researchResult = results[1].status === 'fulfilled' ? results[1].value : { results: [] };
+    graphData = results[2].status === 'fulfilled' ? results[2].value : { centralNode: null, relatedNodes: [] };
+    userProfileMemories = results[3].status === 'fulfilled' ? results[3].value : null;
+
+    // Log any failures for debugging (non-blocking)
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        const labels = ['facts', 'research', 'graph', 'userProfile'];
+        console.warn(`[ConversationEngine] Context source "${labels[i]}" failed:`, r.reason?.message || r.reason);
+      }
+    });
   }
 
   const searchContext = options.disableExternalContext ? "" : formatSearchResults(researchResult.results);
   const graphContext = options.disableExternalContext ? "" : formatGraphContext(graphData);
 
-  // Create mock vector similarities based on keyword matching (same as route)
+
+  // ---------------------------------------------------------
+  // SPRINT 4: Security & Reasoning Integration
+  // ---------------------------------------------------------
+
+  // 1. Security Audit (Firewall)
+  // Only run if not disabled and for standard/reasoning modes
+  if (!options.disableExternalContext && (agentMode === 'standard' || agentMode === 'reasoning')) {
+    const securityAgent = new SecurityAgent();
+    const audit = await securityAgent.auditPrompt(userQuery, userId);
+
+    if (!audit.safe) {
+      console.warn(`[Security] Blocked unsafe prompt from user ${userId}: ${audit.reason}`);
+
+      // Return a canned rejection response stream
+      const textEncoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          const message = `I cannot fulfill this request. \n\n**Security Alert**: ${audit.reason}`;
+          controller.enqueue(textEncoder.encode(message));
+          controller.close();
+        }
+      });
+
+      return {
+        stream,
+        sources: [],
+        debug: {
+          model: 'security-agent',
+          userQuery,
+          context: { factsCount: 0 }
+        }
+      };
+    }
+  }
+
+  // Semantic similarity using embeddings — falls back to keyword matching if embedding fails
   const similarities = new Map<string, number>();
-  const queryWords = userQuery.toLowerCase().split(/\s+/);
-  for (const fact of allFacts) {
-    const factWords = (fact.content ?? "").toLowerCase().split(/\s+/);
-    const overlap = factWords.filter((w: string) => queryWords.includes(w)).length;
-    const similarity = overlap / Math.max(factWords.length, queryWords.length, 1);
-    similarities.set(fact.id || "", Math.min(1, similarity * 1.5));
+  let queryEmbedding: number[] | null = null;
+
+  if (!options.disableExternalContext && allFacts.length > 0) {
+    try {
+      queryEmbedding = await generateEmbedding(userQuery);
+    } catch (e: any) {
+      console.warn('[ConversationEngine] Query embedding failed, falling back to keyword matching:', e.message);
+    }
   }
 
-  const intelligentFacts = rankMemoriesIntelligently(allFacts, similarities, userQuery);
-  const factContext = options.disableExternalContext ? "" : formatFactsForPrompt(intelligentFacts);
-
-  // Only call RAG if heavy context is enabled
-  const memoryContext = (!options.disableExternalContext && enableHeavyContext)
-    ? await getRAGMemoryContext(userId, userQuery, "conversation")
-    : "";
-
-  // History for GenAI
-  let history = messages.map((msg) => ({
-    role: msg.role === "bot" ? "model" : "user",
-    parts: [{ text: msg.text }],
-  }));
-
-  const lastUserMessage = history.pop();
-  if (!lastUserMessage || lastUserMessage.role !== "user") {
-    throw new Error("Invalid prompt: last message must be user");
+  if (queryEmbedding && queryEmbedding.some(v => v !== 0)) {
+    // Semantic ranking: compute cosine similarity against fact embeddings
+    for (const fact of allFacts) {
+      try {
+        const factEmbedding = await generateEmbedding(fact.content ?? "");
+        if (factEmbedding.some(v => v !== 0)) {
+          // Cosine similarity
+          let dotProduct = 0, normA = 0, normB = 0;
+          for (let i = 0; i < queryEmbedding.length; i++) {
+            dotProduct += queryEmbedding[i] * (factEmbedding[i] || 0);
+            normA += queryEmbedding[i] * queryEmbedding[i];
+            normB += (factEmbedding[i] || 0) * (factEmbedding[i] || 0);
+          }
+          const cosineSim = normA && normB ? dotProduct / (Math.sqrt(normA) * Math.sqrt(normB)) : 0;
+          similarities.set(fact.id || "", Math.max(0, cosineSim));
+        }
+      } catch {
+        // Individual fact embedding failed — skip it
+        similarities.set(fact.id || "", 0);
+      }
+    }
+  } else {
+    // Fallback: keyword overlap (original behavior)
+    const queryWords = userQuery.toLowerCase().split(/\s+/);
+    for (const fact of allFacts) {
+      const factWords = (fact.content ?? "").toLowerCase().split(/\s+/);
+      const overlap = factWords.filter((w: string) => queryWords.includes(w)).length;
+      const similarity = overlap / Math.max(factWords.length, queryWords.length, 1);
+      similarities.set(fact.id || "", Math.min(1, similarity * 1.5));
+    }
   }
+
+  // 2. Context Synthesis
+  let factContext = "";
+  let intelligentFacts = rankMemoriesIntelligently(allFacts, similarities, userQuery);
+
+  if (agentMode === 'reasoning' && !options.disableExternalContext) {
+    // Use DeepSeek to synthesize context
+    factContext = await synthesizeContextWithReasoning(intelligentFacts.slice(0, 15), userQuery);
+    // Prepend header as synthesizeContextWithReasoning returns raw summary
+    if (factContext) {
+      factContext = `\n## Synthesized Context (DeepSeek-R1)\n${factContext}\n`;
+    }
+  } else {
+    // Standard ranking
+    factContext = options.disableExternalContext ? "" : formatFactsForPrompt(intelligentFacts);
+  }
+
+
+  // RAG memory context — always attempt, graceful fallback on failure
+  let ragResult: { contextString: string; sources: Source[] } = { contextString: "", sources: [] };
+  if (!options.disableExternalContext) {
+    try {
+      ragResult = await getRAGMemoryContext(userId, userQuery, "conversation");
+    } catch (e: any) {
+      console.warn('[ConversationEngine] RAG context failed:', e.message || e);
+    }
+  }
+
+  const memoryContext = ragResult.contextString;
+  const memorySources = ragResult.sources;
 
   const userProfileContext = options.disableExternalContext ? "" : formatUserProfileForPrompt(userProfileMemories);
 
-  let enhancedPromptText =
-    userContextPrompt +
+  const enhancedSystemInstruction = getSystemInstruction() +
+    "\n\n" + userContextPrompt +
     userProfileContext +
     factContext +
     graphContext +
     searchContext +
-    memoryContext +
-    lastUserMessage.parts[0].text;
+    memoryContext;
 
-  const fullHistory = [getSystemInstruction(), GREETING, ...history];
-  const { sanitizedHistory, prependToPrompt } = sanitizeHistory(fullHistory);
+  // Format history for provider
+  const history: ChatMessage[] = [
+    { role: "assistant", text: GREETING },
+    ...messages.map(msg => ({
+      role: msg.role === "bot" ? "assistant" : "user",
+      text: msg.text
+    } as ChatMessage))
+  ];
 
-  if (prependToPrompt) {
-    enhancedPromptText = prependToPrompt + "\n\n" + enhancedPromptText;
+  // Attach file to the last message if present
+  if (fileData && mimeType) {
+    const lastMsg = history[history.length - 1];
+    if (lastMsg && lastMsg.role === 'user') {
+      lastMsg.attachments = [{
+        name: parsed.fileName || 'attached_file',
+        mimeType: mimeType,
+        base64Data: fileData
+      }];
+    }
   }
 
-  const chat = model.startChat({
-    history: sanitizedHistory,
-    generationConfig: {
-      temperature: 0.9,
-      topK: 40,
-      topP: 0.7,
-      maxOutputTokens: agentMode === 'agentic-preview' ? 4096 : 2048, // Higher tokens for agentic thought process
-    },
+  const streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
+    model: actualModelId,
+    temperature: 0.9,
+    maxTokens: 2048
   });
 
-  const promptParts: any[] = [enhancedPromptText];
-  if (fileData && mimeType) {
-    promptParts.push({
-      inlineData: {
-        data: fileData,
-        mimeType,
-      },
-    });
-  }
+  const { stream: originalStream } = streamResult;
 
-  const result = await chat.sendMessageStream(promptParts);
+  // Wrap stream to capture full text for side effects
   const textEncoder = new TextEncoder();
+  const textDecoder = new TextDecoder();
+  let fullText = '';
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      let fullText = "";
-
-      try {
-        for await (const chunk of result.stream) {
-          let chunkText = "";
+  const transformedStream = new TransformStream({
+    transform(chunk, controller) {
+      const text = textDecoder.decode(chunk, { stream: true });
+      fullText += text;
+      controller.enqueue(chunk);
+    },
+    flush() {
+      // Side effects after stream completes
+      if (!options.disableSideEffects && fullText) {
+        waitUntil((async () => {
           try {
-            chunkText = chunk.text();
-          } catch (e) {
-            // Function call or other non-text chunk
-            // We could inspect chunk.functionCalls() or chunk.executableCode if we want to emit debug info
-            // For now, ignore text extraction errors in chunks
-          }
+            const tokensUsed = estimateTokenCount(userQuery + fullText);
+            const tags = extractTags(userQuery);
+            const summary = generateSummary([
+              { role: 'user', content: userQuery },
+              { role: 'assistant', content: fullText },
+            ]);
 
-          if (chunkText) {
-            fullText += chunkText;
-            controller.enqueue(textEncoder.encode(chunkText));
-          }
-        }
-      } catch (err: any) {
-        if (err?.status === 429 || err?.toString().includes('429')) {
-          console.warn("Genie Model Rate Limit (429).");
-          // Enqueue a friendly message to the user if possible, or just close
-          if (!fullText) {
-            controller.enqueue(textEncoder.encode("\n\n(Note: Agent is currently experiencing high load. Please try again or switch to standard mode.)"));
-          }
-        } else {
-          console.error("Stream error:", err);
-          controller.error(err);
-        }
-      } finally {
-        controller.close();
+            const formattedMessages = messages.map((msg) => ({
+              role: (msg.role === 'bot' ? 'assistant' : 'user') as 'user' | 'assistant' | 'system',
+              content: msg.text,
+            }));
 
-        // Side Effects (After stream closes)
-        if (!options.disableSideEffects && fullText) {
-          waitUntil((async () => {
+            await captureMemory(
+              userId,
+              'conversation',
+              userQuery.substring(0, 50) || 'Conversation',
+              summary,
+              formattedMessages,
+              tokensUsed,
+              tags,
+              {
+                userName: userContext.fullName,
+                userEmail: userContext.email,
+                responseLength: fullText.length,
+                interactionStyle: userContext.interactionStyle,
+                agentMode,
+              }
+            );
+
+            // LLM-powered fact extraction (replaces shallow tag-only approach)
             try {
-              // Capture interaction for future context
-              const tokensUsed = estimateTokenCount(userQuery + fullText);
-              const tags = extractTags(userQuery);
-              const summary = generateSummary([
-                { role: "user", content: userQuery },
-                { role: "assistant", content: fullText },
-              ]);
+              const extractedFacts = await extractFactsFromConversation(userQuery, fullText);
+              console.log(`[ConversationEngine] Extracted ${extractedFacts.length} structured facts`);
+            } catch (factErr) {
+              console.warn('[ConversationEngine] Fact extraction failed (non-blocking):', factErr);
+            }
 
-              const formattedMessages = messages.map((msg) => ({
-                role: (msg.role === "bot" ? "assistant" : "user") as "user" | "assistant" | "system",
-                content: msg.text,
-              }));
-
-              await captureMemory(
-                userId,
-                "conversation",
-                userQuery.substring(0, 50) || "Conversation",
-                summary,
-                formattedMessages,
-                tokensUsed,
-                tags,
-                {
-                  userName: userContext.fullName,
-                  userEmail: userContext.email,
-                  responseLength: fullText.length,
-                  interactionStyle: userContext.interactionStyle,
-                  agentMode,
-                }
+            // Knowledge graph update — extract ALL tags and link co-occurring concepts
+            if (tags.length > 0) {
+              const nodeIds: (string | null)[] = await Promise.all(
+                tags.slice(0, 10).map(tag =>
+                  addNode(userId, tag, 'concept', `Extracted from conversation: "${userQuery.substring(0, 80)}"`)
+                )
               );
 
-              // Knowledge graph update (best-effort)
-              if (tags.length > 0) {
-                await addNode(userId, tags[0], "concept", `Automatically extracted from conversation`);
+              // Strengthen edges between co-occurring concepts (weight increases with repetition)
+              const validNodes = nodeIds.filter((id): id is string => id !== null);
+              if (validNodes.length > 1) {
+                const edgePromises: Promise<string | null>[] = [];
+                for (let i = 0; i < validNodes.length; i++) {
+                  for (let j = i + 1; j < validNodes.length; j++) {
+                    edgePromises.push(
+                      strengthenEdge(userId, validNodes[i], validNodes[j], 'co-occurred')
+                    );
+                  }
+                }
+                await Promise.allSettled(edgePromises);
               }
-            } catch (e) {
-              console.error("Side effect processing failed", e);
             }
-          })());
-        }
+          } catch (e) {
+            console.error('Side effect processing failed', e);
+          }
+        })());
+      }
+
+      // ── UCOL Agent Router: fire-and-forget dispatch for research/strategy/orchestration ──
+      // Classifies the query in the background — never blocks the user response.
+      // If JKlaw should handle it, dispatches asynchronously so JKlaw builds context.
+      if (!options.disableSideEffects && fullText && process.env.JKLAW_API_KEY) {
+        waitUntil((async () => {
+          try {
+            const decision = await classifyQuery(userQuery, fullText.substring(0, 400));
+            if (decision.targetNode === 'jklaw') {
+              const { getAgentRouter } = await import('@/lib/ucol/agentRouter');
+              const router = getAgentRouter();
+              await router.dispatchToJKlaw(
+                { query: userQuery, context: fullText.substring(0, 400), userId },
+                decision,
+                false // fire-and-forget
+              );
+              console.log(`[UCOL] Dispatched "${userQuery.substring(0, 60)}" to JKlaw (${decision.taskType})`);
+            }
+          } catch (e) {
+            // Non-blocking — never surface routing errors to users
+            console.warn('[UCOL] Agent router dispatch failed (non-blocking):', e);
+          }
+        })());
       }
     }
   });
 
+  const stream = originalStream.pipeThrough(transformedStream);
+
   return {
     stream,
+    sources: [
+      ...intelligentFacts.map(f => ({ id: f.id || `fact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
+      ...(memorySources || [])
+    ],
     debug: {
       model: actualModelId,
       userQuery,

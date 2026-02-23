@@ -1,25 +1,31 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { uuidSchema } from '@/lib/security/inputValidation';
 
 export async function POST(request: Request) {
   try {
-    const { userId } = await auth();
+    const user = await requireAuth();
+    const ip = getClientIP(request);
 
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'mutation');
+    if (!rateLimit.success) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
     const { factId } = await request.json();
 
-    if (!factId) {
+    const factIdValidation = uuidSchema.safeParse(factId);
+    if (!factIdValidation.success) {
       return NextResponse.json(
-        { error: "Fact ID is required" },
+        { error: "Invalid fact ID format" },
         { status: 400 }
       );
     }
 
-    const factRef = db.collection("users").doc(userId).collection("facts").doc(factId);
+    const factRef = db.collection("users").doc(user.userId).collection("facts").doc(factId);
     const factDoc = await factRef.get();
 
     if (!factDoc.exists) {

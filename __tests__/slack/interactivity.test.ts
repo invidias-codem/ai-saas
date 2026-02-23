@@ -5,19 +5,19 @@
 
 // Mock NextResponse before importing the route
 jest.mock('next/server', () => {
-  const MockNextResponse = jest.fn().mockImplementation((body: any, init?: any) => ({
+  const MockNextResponse: any = jest.fn().mockImplementation((body: any, init?: any) => ({
     status: init?.status || 200,
     text: () => Promise.resolve(body),
     json: () => Promise.resolve(typeof body === 'string' ? JSON.parse(body) : body),
     headers: new Map(Object.entries(init?.headers || {})),
   }));
-  
+
   MockNextResponse.json = jest.fn((data: any, init?: any) => ({
     status: init?.status || 200,
     json: () => Promise.resolve(data),
     text: () => Promise.resolve(JSON.stringify(data)),
   }));
-  
+
   return {
     NextResponse: MockNextResponse,
   };

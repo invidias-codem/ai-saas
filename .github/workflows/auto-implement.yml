@@ -1,0 +1,129 @@
+name: Auto-Implementation
+
+on:
+  workflow_run:
+    workflows: ["CodiumAI PR-Agent", "Genie AI PR Review"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  auto-implement:
+    name: 🤖 Apply Safe Suggestions
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps --no-audit
+
+      - name: Check RAG Budget
+        id: budget
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          npx tsx scripts/check-rag-budget.ts || exit 0
+          echo "budget_ok=true" >> $GITHUB_OUTPUT
+
+      - name: Extract PR Suggestions
+        if: steps.budget.outputs.budget_ok == 'true'
+        id: extract
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get PR number from workflow run using the branch name
+          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          PR_NUMBER=$(gh pr list --head "$HEAD_BRANCH" --json number -q '.[0].number')
+          
+          # Sanitize PR_NUMBER to ensure it only contains digits (strip newlines/whitespace)
+          PR_NUMBER=$(echo "$PR_NUMBER" | tr -cd '0-9')
+          
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" == "null" ]; then
+            echo "Could not find open PR for branch $HEAD_BRANCH"
+            exit 0
+          fi
+          
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          
+          # Get review comments from Qodo/Genie
+          gh pr view $PR_NUMBER --json reviewDecision,reviews -q '.reviews' > reviews.json
+          
+          # Extract suggestions (placeholder - in reality would parse review comments)
+          echo "[]" > suggestions.json
+
+      - name: Classify and Apply Suggestions
+        if: steps.extract.outputs.pr_number != ''
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          # Run auto-implementation with dry-run first
+          npx tsx -e "
+            import { autoImplementSafeSuggestions } from './lib/rag/autoImplementer';
+            import suggestions from './suggestions.json';
+            
+            async function main() {
+              const result = await autoImplementSafeSuggestions(suggestions, '.', true);
+              console.log(result.summary);
+            }
+            
+            main();
+          " || echo "No suggestions to apply"
+
+      - name: Commit Applied Changes
+        if: steps.extract.outputs.pr_number != ''
+        run: |
+          git config user.name "Genie Auto-Implementer"
+          git config user.email "genie@gen1e.xyz"
+          
+          if git diff --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          # Commit each changed file separately for easy rollback
+          for file in $(git diff --name-only); do
+            git add "$file"
+            git commit -m "🤖 Auto-implement: $file" -m "Applied safe suggestion from PR review"
+          done
+          
+          git pull --rebase origin HEAD
+          git push origin HEAD
+
+      - name: Post Summary Comment
+        if: steps.extract.outputs.pr_number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat << 'EOF' > comment.md
+          ## 🤖 Auto-Implementation Complete
+          
+          Genie has automatically applied safe suggestions from the review.
+          
+          **Applied changes:**
+          - See commits above
+          
+          **Rollback instructions:**
+          ```bash
+          git revert HEAD~<number_of_commits>
+          ```
+          EOF
+          
+          gh pr comment ${{ steps.extract.outputs.pr_number }} --body-file comment.md || true

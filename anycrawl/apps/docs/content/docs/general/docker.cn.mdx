@@ -1,0 +1,326 @@
+---
+title: Docker deployment
+description: Using docker to run AnyCrawl
+icon: Hammer
+---
+
+## 前置要求
+
+在开始之前，请确保您的系统已安装以下软件：
+
+- **Docker**: 版本 20.10 或更高
+- **Docker Compose**: 版本 2.0 或更高
+
+### 安装 Docker 和 Docker Compose
+
+#### macOS
+
+```bash
+# 使用 Homebrew 安装
+brew install docker docker-compose
+
+# 或者下载 Docker Desktop
+# https://www.docker.com/products/docker-desktop
+```
+
+#### Ubuntu/Debian
+
+```bash
+# 安装 Docker
+# Add Docker's official GPG key:
+sudo apt-get update
+sudo apt-get install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+## 快速开始
+
+### 1. 克隆项目
+
+```bash
+git clone https://github.com/any4ai/AnyCrawl.git
+cd AnyCrawl
+```
+
+### 2. 启动服务
+
+```bash
+# 构建并启动所有服务
+docker compose up --build
+
+# 或者在后台运行
+docker compose up --build -d
+```
+
+### 3. 验证部署
+
+```bash
+# 检查服务状态
+docker compose ps
+
+# 测试 API 是否正常运行
+curl http://localhost:8080/health
+```
+
+## 服务架构
+
+AnyCrawl 采用微服务架构，包含以下服务：
+
+### 核心服务
+
+| 服务名称            | 描述                           | 端口 | 依赖  |
+| ------------------- | ------------------------------ | ---- | ----- |
+| `api`               | API 网关和主要服务接口         | 8080 | redis |
+| `scrape-puppeteer`  | Puppeteer 爬虫引擎             | -    | redis |
+| `scrape-playwright` | Playwright 爬虫引擎            | -    | redis |
+| `scrape-cheerio`    | Cheerio 爬虫引擎（不支持 SPA） | -    | redis |
+| `redis`             | 消息队列和缓存                 | 6379 | -     |
+
+## 环境变量配置
+
+### 基础配置
+
+| 变量名              | 描述         | 默认值       | 示例                        |
+| ------------------- | ------------ | ------------ | --------------------------- |
+| `NODE_ENV`          | 运行环境     | `production` | `production`, `development` |
+| `ANYCRAWL_API_PORT` | API 服务端口 | `8080`       | `8080`                      |
+
+### 爬虫配置
+
+| 变量名                      | 描述             | 默认值 | 示例                |
+| --------------------------- | ---------------- | ------ | ------------------- |
+| `ANYCRAWL_HEADLESS`         | 是否使用无头模式 | `true` | `true`, `false`     |
+| `ANYCRAWL_PROXY_URL`        | 代理服务器地址   | -      | `http://proxy:8080` |
+| `ANYCRAWL_IGNORE_SSL_ERROR` | 忽略 SSL 错误    | `true` | `true`, `false`     |
+
+### 数据库配置
+
+| 变量名                       | 描述           | 默认值                        |
+| ---------------------------- | -------------- | ----------------------------- |
+| `ANYCRAWL_API_DB_TYPE`       | 数据库类型     | `sqlite`                      |
+| `ANYCRAWL_API_DB_CONNECTION` | 数据库连接路径 | `/usr/src/app/db/database.db` |
+
+### Redis 配置
+
+| 变量名               | 描述           | 默认值               |
+| -------------------- | -------------- | -------------------- |
+| `ANYCRAWL_REDIS_URL` | Redis 连接地址 | `redis://redis:6379` |
+
+### 认证配置
+
+| 变量名                      | 描述              | 默认值  |
+| --------------------------- | ----------------- | ------- |
+| `ANYCRAWL_API_AUTH_ENABLED` | 是否启用 API 认证 | `false` |
+
+## 自定义配置
+
+### 创建环境配置文件
+
+```bash
+# 创建 .env 文件
+cp .env.example .env
+```
+
+### 示例 .env 文件
+
+```bash
+# 基础配置
+NODE_ENV=production
+ANYCRAWL_API_PORT=8080
+
+# 爬虫配置
+ANYCRAWL_HEADLESS=true
+ANYCRAWL_PROXY_URL=
+ANYCRAWL_IGNORE_SSL_ERROR=true
+
+# 数据库配置
+ANYCRAWL_API_DB_TYPE=sqlite
+ANYCRAWL_API_DB_CONNECTION=/usr/src/app/db/database.db
+
+# Redis 配置
+ANYCRAWL_REDIS_URL=redis://redis:6379
+
+# 认证配置
+ANYCRAWL_API_AUTH_ENABLED=false
+```
+
+## 数据持久化
+
+### 存储卷
+
+AnyCrawl 使用以下卷来持久化数据：
+
+```yaml
+volumes:
+    - ./storage:/usr/src/app/storage # 爬虫数据存储
+    - ./db:/usr/src/app/db # 数据库文件
+    - redis-data:/data # Redis 数据
+```
+
+### 备份数据
+
+```bash
+# 备份数据库
+docker compose exec api cp /usr/src/app/db/database.db /usr/src/app/storage/backup.db
+
+# 备份 Redis 数据
+docker compose exec redis redis-cli SAVE
+docker compose cp redis:/data/dump.rdb ./backup/
+```
+
+## 常用命令
+
+### 服务管理
+
+```bash
+# 启动服务
+docker compose up -d
+
+# 停止服务
+docker compose down
+
+# 重启特定服务
+docker compose restart api
+
+# 查看服务日志
+docker compose logs -f api
+
+# 进入容器
+docker compose exec api bash
+```
+
+### 扩展服务
+
+```bash
+# 扩展爬虫服务实例
+docker compose up -d --scale scrape-puppeteer=3
+docker compose up -d --scale scrape-playwright=2
+```
+
+## 监控命令
+
+```bash
+# 查看服务状态
+docker compose ps
+
+# 查看资源使用情况
+docker stats
+
+# 查看特定服务日志
+docker compose logs -f --tail=100 api
+```
+
+## 故障排除
+
+### 常见问题
+
+#### 1. 端口冲突
+
+```bash
+# 检查端口占用
+lsof -i :8080
+
+# 修改端口映射
+# 在 docker-compose.yml 中修改 ports 配置
+ports:
+  - "8081:8080"  # 将本地端口改为 8081
+```
+
+#### 2. 内存不足
+
+```bash
+# 检查容器内存使用
+docker stats
+
+# 增加 Docker 可用内存（Docker Desktop）
+# Docker Desktop -> Settings -> Resources -> Memory
+```
+
+#### 3. 数据库连接失败
+
+```bash
+# 检查数据库文件权限
+ls -la ./db/
+
+# 重新创建数据库卷
+docker compose down -v
+docker compose up --build
+```
+
+#### 4. Redis 连接失败
+
+```bash
+# 检查 Redis 服务状态
+docker compose exec redis redis-cli ping
+
+# 查看 Redis 日志
+docker compose logs redis
+```
+
+### 调试模式
+
+启用调试模式进行问题排查：
+
+```bash
+# 设置环境变量启用调试
+export NODE_ENV=development
+export DEBUG=anycrawl:*
+
+# 启动服务
+docker compose up --build
+```
+
+## 生产环境部署
+
+### 安全配置
+
+1. **启用认证**：
+
+```bash
+ANYCRAWL_API_AUTH_ENABLED=true
+```
+
+启用认证后，需要添加 ApiKey 并在请求头中使用。
+
+2. **使用 HTTPS**：
+
+参考：
+
+```yaml
+services:
+    nginx:
+        image: nginx:alpine
+        ports:
+            - "443:443"
+        volumes:
+            - ./nginx.conf:/etc/nginx/nginx.conf
+            - ./ssl:/etc/ssl/certs
+```
+
+通过 `nginx` 做反向代理。
+
+## 更新和维护
+
+### 更新服务
+
+```bash
+# 拉取最新镜像
+docker compose pull
+
+# 重新构建并启动
+docker compose up --build -d
+
+# 清理旧镜像
+docker image prune -f
+```

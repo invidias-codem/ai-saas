@@ -1,5 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { requireAuth, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
 
 // Memory type from database
 interface Memory {
@@ -18,12 +20,14 @@ interface Memory {
 // Force dynamic rendering since this route uses Clerk auth (headers)
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const { userId } = await auth();
+    const user = await requireAuth();
+    const ip = getClientIP(req);
 
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'query');
+    if (!rateLimit.success) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
     const { supabase } = await import("@/lib/supabaseClient");
@@ -37,7 +41,7 @@ export async function GET() {
     const { data: profileData } = await supabase
       .from('user_profiles')
       .select('memory_count')
-      .eq('user_id', userId)
+      .eq('user_id', user.userId)
       .single();
 
     const totalFacts = profileData?.memory_count || 0;
@@ -69,7 +73,7 @@ export async function GET() {
     const { data: memories, error } = await supabase
       .from('memory_bank')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', user.userId)
       .order('extracted_at', { ascending: false }) as { data: Memory[] | null; error: any };
 
     if (error) {

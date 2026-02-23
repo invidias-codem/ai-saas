@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Verify Dataset Exists
         run: |
@@ -34,7 +34,7 @@ jobs:
           echo "Promoted ${{ github.event.inputs.dataset_id }} to datasets/golden/dataset.jsonl"
 
       - name: Commit and Push
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: "chore(data): promote ${{ github.event.inputs.dataset_id }} to golden dataset"
           file_pattern: "datasets/golden/**"

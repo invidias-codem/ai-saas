@@ -8,7 +8,7 @@ export const maxDuration = 300; // 5 minutes max for simple processing
 
 export async function POST(req: Request) {
     try {
-        const { userId } = auth();
+        const { userId } = await auth();
         if (!userId) {
             return new NextResponse("Unauthorized", { status: 401 });
         }

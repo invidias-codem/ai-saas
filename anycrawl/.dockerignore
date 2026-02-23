@@ -1,0 +1,38 @@
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# Development files
+.git
+.github
+.vscode
+.idea
+*.log
+*.md
+!README.md
+
+# Test files
+__tests__
+*.test.*
+*.spec.*
+
+# Environment files
+.env*
+!.env.example
+
+# Cache directories
+.cache
+.temp
+.tmp
+
+# System files
+.DS_Store
+*.db 
+
+# project files
+db
+storage

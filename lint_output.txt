@@ -1,0 +1,45 @@
+
+> ai-saas@0.1.0 lint
+> eslint .
+
+
+/Users/jroot/Desktop/ai-nexus/ai-saas/__tests__/rag.test.ts
+   23:9  error  Do not assign to the variable `module`. See: https://nextjs.org/docs/messages/no-assign-module-variable  @next/next/no-assign-module-variable
+   61:9  error  Do not assign to the variable `module`. See: https://nextjs.org/docs/messages/no-assign-module-variable  @next/next/no-assign-module-variable
+  130:9  error  Do not assign to the variable `module`. See: https://nextjs.org/docs/messages/no-assign-module-variable  @next/next/no-assign-module-variable
+  159:9  error  Do not assign to the variable `module`. See: https://nextjs.org/docs/messages/no-assign-module-variable  @next/next/no-assign-module-variable
+  183:9  error  Do not assign to the variable `module`. See: https://nextjs.org/docs/messages/no-assign-module-variable  @next/next/no-assign-module-variable
+
+/Users/jroot/Desktop/ai-nexus/ai-saas/anycrawl/scripts/k6.js
+  58:1  warning  Unexpected default export of anonymous function  import/no-anonymous-default-export
+
+/Users/jroot/Desktop/ai-nexus/ai-saas/app/[locale]/(dashboard)/(routes)/admin/layout.tsx
+  49:21  error  Do not use an `<a>` element to navigate to `/admin/logs/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages  @next/next/no-html-link-for-pages
+  49:21  error  Do not use an `<a>` element to navigate to `/admin/logs/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages  @next/next/no-html-link-for-pages
+  49:21  error  Do not use an `<a>` element to navigate to `/admin/logs/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages  @next/next/no-html-link-for-pages
+  49:21  error  Do not use an `<a>` element to navigate to `/admin/logs/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages  @next/next/no-html-link-for-pages
+  49:21  error  Do not use an `<a>` element to navigate to `/admin/logs/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages  @next/next/no-html-link-for-pages
+  50:21  error  Do not use an `<a>` element to navigate to `/dashboard/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages   @next/next/no-html-link-for-pages
+  50:21  error  Do not use an `<a>` element to navigate to `/dashboard/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages   @next/next/no-html-link-for-pages
+  50:21  error  Do not use an `<a>` element to navigate to `/dashboard/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages   @next/next/no-html-link-for-pages
+  50:21  error  Do not use an `<a>` element to navigate to `/dashboard/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages   @next/next/no-html-link-for-pages
+  50:21  error  Do not use an `<a>` element to navigate to `/dashboard/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages   @next/next/no-html-link-for-pages
+
+/Users/jroot/Desktop/ai-nexus/ai-saas/app/[locale]/(dashboard)/(routes)/video/page.tsx
+  100:6  warning  React Hook useEffect has a missing dependency: 'trackActivity'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/Users/jroot/Desktop/ai-nexus/ai-saas/components/DataImportWizard.tsx
+  88:43  warning  The ref value 'intervalRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'intervalRef.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+/Users/jroot/Desktop/ai-nexus/ai-saas/components/blog/mdx-components.tsx
+  172:5  warning  Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+/Users/jroot/Desktop/ai-nexus/ai-saas/components/email-templates/DailyBriefing.tsx
+  26:130  error  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  42:98   error  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  46:146  error  `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`  react/no-unescaped-entities
+  51:13   error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+  51:21   error  `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`  react/no-unescaped-entities
+
+✖ 24 problems (20 errors, 4 warnings)
+

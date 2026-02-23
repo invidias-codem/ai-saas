@@ -1,4 +1,5 @@
 import createMDX from '@next/mdx';
+import createNextIntlPlugin from 'next-intl/plugin';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -21,22 +22,23 @@ const nextConfig = {
       },
     ],
   },
-  experimental: {
-    serverComponentsExternalPackages: [
-      '@google-cloud/tasks',
-      '@google-cloud/storage',
-      '@google-cloud/vertexai',
-      '@google-cloud/aiplatform',
-      'google-gax',
-      'grpc'
-    ],
-    outputFileTracingIncludes: {
-      '/api/**/*': [
-        'node_modules/@google-cloud/tasks/build/esm/src/**/*.json',
-        'node_modules/google-gax/build/src/**/*.json'
-      ]
-    },
+  // Required for Turbopack to properly resolve recharts dependencies
+  transpilePackages: ['recharts', 'react-is'],
+  serverExternalPackages: [
+    '@google-cloud/tasks',
+    '@google-cloud/storage',
+    '@google-cloud/vertexai',
+    '@google-cloud/aiplatform',
+    'google-gax',
+    'grpc'
+  ],
+  outputFileTracingIncludes: {
+    '/api/**/*': [
+      'node_modules/@google-cloud/tasks/build/esm/src/**/*.json',
+      'node_modules/google-gax/build/src/**/*.json'
+    ]
   },
+  experimental: {},
   webpack: (config) => {
     config.resolve.extensionAlias = {
       ".js": [".ts", ".tsx", ".js", ".jsx"],
@@ -55,8 +57,10 @@ const withMDX = createMDX({
   },
 });
 
+const withNextIntl = createNextIntlPlugin('./i18n.ts');
+
 // Merge MDX config with Next.js config
-export default withMDX({
+export default withMDX(withNextIntl({
   ...nextConfig,
   async headers() {
     return [
@@ -95,4 +99,5 @@ export default withMDX({
       }
     ];
   },
-});
+}));
+
