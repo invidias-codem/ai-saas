@@ -22,11 +22,13 @@ const DEVICE_ID_KEY = 'genie_device_id';
 const DEVICE_INFO_KEY = 'genie_device_info';
 
 /**
- * Generate random string for device ID suffix
+ * Generate cryptographically secure random string for device ID suffix
+ * Uses crypto.getRandomValues() instead of Math.random() (insecure, predictable)
  */
 function generateRandomSuffix(): string {
-  return Math.random().toString(36).substring(2, 15) +
-    Math.random().toString(36).substring(2, 15);
+  const bytes = new Uint8Array(16);
+  (typeof window !== 'undefined' ? window.crypto : require('crypto')).getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
