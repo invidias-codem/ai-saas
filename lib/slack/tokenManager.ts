@@ -43,7 +43,7 @@ export async function getSlackConfig(teamId: string): Promise<SlackConfig> {
 
   // 1. Env Var Override (Dev/Testing)
   if (process.env.SLACK_BOT_TOKEN && (!process.env.NODE_ENV || process.env.NODE_ENV === 'development')) {
-    console.warn(`[TOKEN_MANAGER] ⚠️ Using environment variable override for team ${teamId}`);
+    console.warn(`[TOKEN_MANAGER] ⚠️ Using environment variable override for team ${sanitizeForLog(teamId)}`);
     return {
       teamId,
       teamName: 'Env Var Workspace',
@@ -103,11 +103,11 @@ export async function removeSlackInstallation(teamId: string): Promise<void> {
     .eq('slack_team_id', teamId);
 
   if (error) {
-    console.error(`[TOKEN_MANAGER] Failed to remove team ${teamId}:`, error);
+    console.error(`[TOKEN_MANAGER] Failed to remove team ${sanitizeForLog(teamId)}:`, error);
     throw new Error('Failed to remove installation');
   }
 
-  console.log(`[TOKEN_MANAGER] Removed installation for team ${teamId}`);
+  console.log(`[TOKEN_MANAGER] Removed installation for team ${sanitizeForLog(teamId)}`);
 }
 
 /**
