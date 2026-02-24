@@ -1,3 +1,4 @@
+import { validateWebhookUrl } from '../../lib/security/urlValidator';
 /**
  * Slack Integration - Bot commands and notifications
  */
@@ -175,12 +176,16 @@ async function processSlackCommand(
     }
 
     // Send response to Slack
+    const ssrfCheck1 = validateWebhookUrl(responseUrl);
+    if (!ssrfCheck1.valid) throw new Error(`Blocked SSRF: ${ssrfCheck1.reason}`);
     await axios.post(responseUrl, response);
   } catch (error) {
     console.error("Error processing Slack command:", error);
 
     // Send error message
     try {
+      const ssrfCheck2 = validateWebhookUrl(responseUrl);
+      if (!ssrfCheck2.valid) throw new Error(`Blocked SSRF: ${ssrfCheck2.reason}`);
       await axios.post(responseUrl, {
         text: `Error processing command: ${error}`,
       });
