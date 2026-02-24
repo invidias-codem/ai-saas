@@ -112,6 +112,8 @@ jobs:
         if: steps.extract.outputs.pr_number != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pass via env to avoid ${{ }} shell injection
+          PR_NUMBER: ${{ steps.extract.outputs.pr_number }}
         run: |
           cat << 'EOF' > comment.md
           ## 🤖 Auto-Implementation Complete
@@ -127,4 +129,4 @@ jobs:
           ```
           EOF
           
-          gh pr comment ${{ steps.extract.outputs.pr_number }} --body-file comment.md || true
+          gh pr comment "$PR_NUMBER" --body-file comment.md || true
