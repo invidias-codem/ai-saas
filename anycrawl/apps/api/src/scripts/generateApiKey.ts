@@ -2,13 +2,19 @@ import { randomBytes } from "crypto";
 import { getDB, schemas, eq } from "@anycrawl/db";
 
 function generateApiKey(): string {
-    // ac- prefix + 32 non-hex alphanumeric characters
+    // ac- prefix + 32 unbiased alphanumeric characters
+    // Uses rejection sampling to eliminate modulo bias (byte % 62 is biased for bytes >= 248)
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    const bytes = randomBytes(32);
+    const maxUnbiased = 256 - (256 % alphabet.length); // 248 — reject bytes >= this
     let id = "";
-    for (let i = 0; i < 32; i++) {
-        const byte = bytes[i]!; // i is within range; non-null assertion is safe
-        id += alphabet.charAt(byte % alphabet.length);
+    while (id.length < 32) {
+        const bytes = randomBytes(64); // batch for efficiency
+        for (let i = 0; i < bytes.length && id.length < 32; i++) {
+            const byte = bytes[i]!;
+            if (byte < maxUnbiased) { // rejection sampling — no modulo bias
+                id += alphabet.charAt(byte % alphabet.length);
+            }
+        }
     }
     return `ac-${id}`;
 }
