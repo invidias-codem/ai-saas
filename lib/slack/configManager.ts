@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 import { db } from '@/lib/firebaseAdmin';
 import { SlackConfig } from './tokenManager';
 
@@ -21,7 +22,7 @@ export async function getChannelConfig(teamId: string, channelId: string): Promi
     try {
         const configDoc = await db
             .collection('slack_channel_configs')
-            .doc(`${teamId}_${channelId}`)
+            .doc(`${sanitizeForLog(teamId)}_${channelId}`)
             .get();
 
         if (configDoc.exists) {
@@ -42,7 +43,7 @@ export async function saveChannelConfig(teamId: string, channelId: string, confi
     try {
         await db
             .collection('slack_channel_configs')
-            .doc(`${teamId}_${channelId}`)
+            .doc(`${sanitizeForLog(teamId)}_${channelId}`)
             .set(config, { merge: true });
 
         console.log(`[CONFIG_MANAGER] Saved config for ${channelId}`);
