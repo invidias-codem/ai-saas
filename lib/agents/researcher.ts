@@ -259,11 +259,16 @@ export function formatSearchResults(results: SearchResult[]): string {
  * Detects if a query is academic/research focused.
  */
 function isAcademicQuery(query: string): { isAcademic: boolean; topic: string | null } {
+    // ReDoS guard: cap input length before regex evaluation
+    if (query.length > 500) {
+        return { isAcademic: false, topic: null };
+    }
+
     const academicPatterns = [
-        /(?:latest\s+)?research\s+(?:papers?|about|on|for)\s+(.+)/i,
-        /(?:find|search|show)\s+(?:arxiv|scholar|academic)\s+(?:papers?\s+)?(?:about|on)\s+(.+)/i,
-        /analysis\s+of\s+(?:the\s+)?paper\s+(.+)/i,
-        /study\s+(?:about|on)\s+(.+)/i
+        /(?:latest\s+)?research\s+(?:papers?|about|on|for)\s+(.{1,400})/i,
+        /(?:find|search|show)\s+(?:arxiv|scholar|academic)\s+(?:papers?\s+)?(?:about|on)\s+(.{1,400})/i,
+        /analysis\s+of\s+(?:the\s+)?paper\s+(.{1,400})/i,
+        /study\s+(?:about|on)\s+(.{1,400})/i
     ];
 
     for (const pattern of academicPatterns) {
