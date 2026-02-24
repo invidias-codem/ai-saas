@@ -33,6 +33,9 @@ jobs:
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
       
       - name: Build check
+      - name: Remove broken symlinks
+        run: find . -path ./node_modules -prune -o -type l -print0 | xargs -0 -I{} sh -c 'test -e "{}" || rm -f "{}"' 2>/dev/null || true
+
         run: npm run build
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
