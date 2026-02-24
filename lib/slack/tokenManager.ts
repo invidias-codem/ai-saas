@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 /**
  * Slack Token Manager (Supabase Edition)
  * Handles multi-tenant token resolution from Supabase
@@ -62,8 +63,8 @@ export async function getSlackConfig(teamId: string): Promise<SlackConfig> {
     .single();
 
   if (error || !data) {
-    console.error(`[TOKEN_MANAGER] Failed to fetch token for team ${teamId}:`, error?.message);
-    throw new Error(`No Slack installation found for team ${teamId}`);
+    console.error(`[TOKEN_MANAGER] Failed to fetch token for team ${sanitizeForLog(teamId)}:`, error?.message);
+    throw new Error(`No Slack installation found for team ${sanitizeForLog(teamId)}`);
   }
 
   return {
