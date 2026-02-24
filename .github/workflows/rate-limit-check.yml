@@ -6,6 +6,9 @@ on:
     - cron: '0 3 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read  # read-only — rate limit checks never push
+
 jobs:
   rate-limit-test:
     runs-on: ubuntu-latest
