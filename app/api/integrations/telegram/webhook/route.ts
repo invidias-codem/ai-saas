@@ -190,7 +190,9 @@ export async function POST(req: Request) {
                 try {
                     // Dynamic path construction to bypass Turbopack static analysis
     // Dev-only script path — not resolved at build time
-    const scriptPath = require('path').join(process.cwd(), '.agent', 'skills', 'genie-context', 'scripts', ['engineer', 'mjs'].join('.'));
+        // Obfuscated path construction to prevent Turbopack static analysis (base64 for '.agent')
+    const agentDir = Buffer.from('LmFnZW50', 'base64').toString('utf-8');
+    const scriptPath = path.join(process.cwd(), agentDir, 'skills', 'genie-context', 'scripts', 'engineer.mjs');
                     // Run plan
                     const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
                         encoding: 'utf-8',
@@ -246,7 +248,9 @@ export async function POST(req: Request) {
 
                     // Dynamic path construction to bypass Turbopack static analysis
     // Dev-only script path — not resolved at build time
-    const scriptPath = require('path').join(process.cwd(), '.agent', 'skills', 'genie-context', 'scripts', ['engineer', 'mjs'].join('.'));
+        // Obfuscated path construction to prevent Turbopack static analysis (base64 for '.agent')
+    const agentDir = Buffer.from('LmFnZW50', 'base64').toString('utf-8');
+    const scriptPath = path.join(process.cwd(), agentDir, 'skills', 'genie-context', 'scripts', 'engineer.mjs');
                     // Run plan using the SAME engineer logic
                     const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
                         encoding: 'utf-8',
@@ -310,7 +314,9 @@ export async function POST(req: Request) {
                     try {
                         // Dynamic path construction to bypass Turbopack static analysis
     // Dev-only script path — not resolved at build time
-    const scriptPath = require('path').join(process.cwd(), '.agent', 'skills', 'genie-context', 'scripts', ['engineer', 'mjs'].join('.'));
+        // Obfuscated path construction to prevent Turbopack static analysis (base64 for '.agent')
+    const agentDir = Buffer.from('LmFnZW50', 'base64').toString('utf-8');
+    const scriptPath = path.join(process.cwd(), agentDir, 'skills', 'genie-context', 'scripts', 'engineer.mjs');
                         // Execute using file path (Safe from shell escaping issues)
                         execFileSync('node', [scriptPath, 'EXECUTE', '--plan-file', tmpPath], {
                             encoding: 'utf-8',
