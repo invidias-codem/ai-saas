@@ -100,6 +100,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
       
+      - name: Remove broken Python venv symlinks
+        run: find . -path ./node_modules -prune -o -type l -print | xargs -I{} sh -c 'test -e "{}" || rm -f "{}"' 2>/dev/null; true
+
       - name: Build application
         run: npm run build
         env:
