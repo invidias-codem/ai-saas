@@ -210,8 +210,8 @@ export class DomainValidator {
         const pathname = url.pathname || '/';
         const queryString = url.search || '';
         const hash = url.hash || '';
-        const normalizedPathWithSlash = pathname === '/' ? '/' : pathname.replace(/\/+$/, '/');
-        const normalizedPathNoSlash = pathname === '/' ? '/' : pathname.replace(/\/+$/, '');
+        const normalizedPathWithSlash = pathname === '/' ? '/' : (pathname.length > 2048 ? pathname : pathname.replace(/\/+$/, '/'));
+        const normalizedPathNoSlash = pathname === '/' ? '/' : (pathname.length > 2048 ? pathname.replace(/\/{1,100}$/, '') : pathname.replace(/\/+$/, ''));
 
         // Generate multiple representations of the URL so various glob pattern formats work correctly
         // Example: For URL 'https://api.example.com/v1/data?q=test', we generate:
