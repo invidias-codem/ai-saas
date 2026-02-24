@@ -1,7 +1,7 @@
 // lib/referral/index.ts
 // Tech Genie Referral Tracking Utilities
 
-import { createHash } from 'crypto';
+
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
 export const REFERRAL_COOKIE = 'tg_ref';
@@ -22,8 +22,11 @@ export function parseReferralParams(searchParams: URLSearchParams) {
 /**
  * Hash an IP address for privacy-safe deduplication.
  */
-export function hashIP(ip: string): string {
-  return createHash('sha256').update(ip + process.env.REFERRAL_IP_SALT || 'tg_salt').digest('hex');
+export async function hashIP(ip: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(ip + (process.env.REFERRAL_IP_SALT || 'tg_salt'));
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
