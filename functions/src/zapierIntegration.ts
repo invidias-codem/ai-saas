@@ -1,3 +1,4 @@
+import { validateWebhookUrl } from '../../lib/security/urlValidator';
 /**
  * Zapier Integration - Webhook handlers for triggering external workflows
  */
@@ -54,6 +55,10 @@ export const handleZapierAuth = functions.https.onRequest(async (req, res) => {
 
     // Send test webhook
     try {
+      const ssrfCheck = validateWebhookUrl(webhookUrl);
+      if (!ssrfCheck.valid) {
+        throw new Error(`Blocked unsafe webhook URL: ${ssrfCheck.reason}`);
+      }
       await axios.post(webhookUrl, {
         event: "zapier.connected",
         userId,
@@ -116,6 +121,8 @@ export async function triggerZapierWebhook(
       data: eventData,
     };
 
+    const webhookCheck = validateWebhookUrl(zapier.webhookUrl);
+    if (!webhookCheck.valid) throw new Error(`Blocked unsafe webhook URL: ${webhookCheck.reason}`);
     await axios.post(zapier.webhookUrl, payload, {
       headers: {
         "Content-Type": "application/json",
