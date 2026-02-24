@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 /**
  * Slack App Home Manager
  *
@@ -16,7 +17,7 @@ const SLACK_API_BASE = 'https://slack.com/api';
  */
 export async function publishAppHome(userId: string, teamId: string): Promise<void> {
   if (!teamId) {
-    console.warn(`[APP_HOME] Cannot publish App Home: Team ID is missing for user ${userId}`);
+    console.warn(`[APP_HOME] Cannot publish App Home: Team ID is missing for user ${sanitizeForLog(userId)}`);
     return;
   }
 
@@ -36,7 +37,7 @@ export async function publishAppHome(userId: string, teamId: string): Promise<vo
       }),
     });
   } catch (error) {
-    console.error(`[APP_HOME] Error publishing App Home for user ${userId} in team ${teamId}:`, error);
+    console.error(`[APP_HOME] Error publishing App Home for user ${sanitizeForLog(userId)} in team ${sanitizeForLog(teamId)}:`, error);
   }
 }
 
@@ -59,7 +60,7 @@ async function buildAppHomeView(userId: string, teamId: string): Promise<any> {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*Welcome to Genie AI, <@${userId}>!* 🧞`,
+          text: `*Welcome to Genie AI, <@${sanitizeForLog(userId)}>!* 🧞`,
         },
       },
       {
@@ -201,7 +202,7 @@ async function getRecentMemories(userId: string, teamId: string): Promise<any[]>
       };
     });
   } catch (error) {
-    console.error(`[APP_HOME] Error fetching memories for ${userId}:`, error);
+    console.error(`[APP_HOME] Error fetching memories for ${sanitizeForLog(userId)}:`, error);
     return [
       {
         type: 'section',
@@ -244,7 +245,7 @@ async function getUserStats(userId: string, teamId: string): Promise<any> {
       ],
     };
   } catch (error) {
-    console.error(`[APP_HOME] Error fetching stats for ${userId}:`, error);
+    console.error(`[APP_HOME] Error fetching stats for ${sanitizeForLog(userId)}:`, error);
     return {
       type: 'section',
       text: {
