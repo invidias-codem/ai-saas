@@ -121,7 +121,7 @@ export class SearxngSearchEngine implements SearchEngine {
                     // Parse resolution (e.g., "1000×1500" or "1000x1500")
                     let imageWidth: number | undefined;
                     let imageHeight: number | undefined;
-                    if (item.resolution) {
+                    if (item.resolution && item.resolution.length <= 50) {
                         const match = item.resolution.match(/(\d+)\s*[×x]\s*(\d+)/);
                         if (match) {
                             imageWidth = parseInt(match[1], 10);
