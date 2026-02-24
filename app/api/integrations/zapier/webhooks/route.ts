@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 /**
  * Zapier Webhook Receiver
  * Receives events triggered from Zapier workflows
@@ -72,7 +73,7 @@ async function handleCreateMemory(
     // TODO: Store memory in Firestore via Cloud Function
     // For now, just log and return success
 
-    console.log(`Memory creation requested for user ${userId}:`, {
+    console.log(`Memory creation requested for user ${sanitizeForLog(userId)}:`, {
       title,
       summary,
     });
@@ -102,7 +103,7 @@ async function handleTriggerConversation(
     // TODO: Trigger conversation API
     // For now, just log and return success
 
-    console.log(`Conversation requested for user ${userId}:`, prompt);
+    console.log(`Conversation requested for user ${sanitizeForLog(userId)}:`, prompt);
 
     return NextResponse.json({
       success: true,
@@ -123,7 +124,7 @@ async function handleExportMemories(userId: string): Promise<NextResponse> {
   try {
     // TODO: Fetch all memories from Firestore and export
 
-    console.log(`Exporting memories for user ${userId}`);
+    console.log(`Exporting memories for user ${sanitizeForLog(userId)}`);
 
     return NextResponse.json({
       success: true,
