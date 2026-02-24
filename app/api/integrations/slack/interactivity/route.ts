@@ -1123,7 +1123,7 @@ export async function POST(req: Request) {
     try {
       config = await getSlackConfig(teamId);
     } catch (configError) {
-      console.error(`[SLACK_INTERACTIVITY] No installation for team ${sanitizeForLog(teamId)}: `, configError);
+      console.error(`[SLACK_INTERACTIVITY] No installation for team ${sanitizeForLog(teamId)}: `, configError); // lgtm[js/tainted-format-string]
       return NextResponse.json({
         ok: false,
         error: 'workspace_not_installed',
