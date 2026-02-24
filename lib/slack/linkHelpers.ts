@@ -1,3 +1,4 @@
+import { validateExternalUrl } from '@/lib/security/urlValidator';
 
 import axios from 'axios';
 import * as cheerio from 'cheerio';
@@ -16,6 +17,12 @@ export async function extractUrlContent(url: string): Promise<{ title: string; c
         // specific exclusions (large binary files, etc.)
         if (url.match(/\.(pdf|zip|tar|gz|mp4|mp3|wav|mov|avi|png|jpg|jpeg|gif|webp)$/i)) {
             console.log('[LINK_HELPERS] Skipping binary/media URL:', url);
+            return null;
+        }
+
+        const ssrfCheck = await validateExternalUrl(url);
+        if (!ssrfCheck.valid) {
+            console.warn('[LINK_HELPERS] Blocked SSRF attempt:', url, ssrfCheck.reason);
             return null;
         }
 
