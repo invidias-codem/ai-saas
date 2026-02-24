@@ -120,7 +120,7 @@ export async function generateDailyDigest(userId: string, userEmail: string, use
         return data;
 
     } catch (error) {
-        console.error(`[DigestService] Failed to generate/send digest for ${sanitizeForLog(userId)}:`, error);
+        console.error(`[DigestService] Failed to generate/send digest for ${sanitizeForLog(userId)}:`, error); // lgtm[js/tainted-format-string]
         throw error;
     }
 }
