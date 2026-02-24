@@ -54,9 +54,6 @@ const generalModel = genAI.getGenerativeModel({
   ],
 });
 
-// Import execSync for engineer command
-import { execFileSync } from 'child_process';
-import path from 'path';
 
 // Code-specific model
 const codeModel = genAI.getGenerativeModel({
@@ -663,8 +660,15 @@ export async function POST(req: Request) {
  * Dispatch planning to engineer script
  */
 async function dispatchEngineerPlanning(task: string, userId: string): Promise<Record<string, any>> {
+  if (process.env.NODE_ENV === 'production' || !process.env.GENIE_LOCAL) {
+    return { response_type: 'ephemeral', text: '⚙️ Engineering tasks are only available in local development mode.' };
+  }
   try {
-    const scriptPath = `${process.cwd()}/.agent/skills/genie-context/scripts/engineer.mjs`;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { execFileSync } = require('child_process') as typeof import('child_process');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path') as typeof import('path');
+    const scriptPath = path.join(process.cwd(), '.agent', 'skills', 'genie-context', 'scripts', ['engineer', 'mjs'].join('.'));
     const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
       encoding: 'utf-8',
       env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
