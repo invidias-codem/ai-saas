@@ -14,7 +14,7 @@ import { getSlackConfig, SlackConfig, resolveSlackUser, saveChannelConfig, type 
 import { db } from '@/lib/firebaseAdmin';
 import { createFeedbackBlocks, createStreamer } from '@/lib/slack/assistantHelpers';
 import { supabaseAdmin } from '@/lib/supabaseClient';
-import { execFileSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import path from 'path';
 
 const SLACK_API_BASE = 'https://slack.com/api';
