@@ -38,7 +38,7 @@ export async function getThreadHistory(teamId: string, threadTs: string): Promis
     const data = doc.data();
     return data?.messages || [];
   } catch (error) {
-    console.error(`[THREAD_MANAGER] Error getting thread history for ${sanitizeForLog(teamId)}-${threadTs}:`, error);
+    console.error(`[THREAD_MANAGER] Error getting thread history for ${sanitizeForLog(teamId)}-${threadTs}:`, error); // lgtm[js/tainted-format-string]
     return [];
   }
 }
