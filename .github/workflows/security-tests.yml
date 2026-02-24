@@ -18,6 +18,9 @@ on:
       - 'package.json'
       - 'package-lock.json'
 
+permissions:
+  contents: read  # read-only — security tests never push
+
 jobs:
   security-tests:
     runs-on: ubuntu-latest
