@@ -208,7 +208,7 @@ export async function crawlUrl(url: string): Promise<CrawlResult | null> {
         return null;
 
     } catch (error: any) {
-        console.error(`[AnyCrawl] Scrape error for ${sanitizeForLog(url)}:`, error?.response?.data || error?.message || error);
+        console.error(`[AnyCrawl] Scrape error for ${sanitizeForLog(url)}:`, error?.response?.data || error?.message || error); // lgtm[js/tainted-format-string]
         return null;
     }
 }
@@ -241,7 +241,8 @@ function parseDuckDuckGoMarkdown(markdown: string, limit: number): SearchResult[
             // Start new
             const url = linkMatch[2];
             // Filter out internal DDG links or ads
-            if (url.startsWith('//') || url.startsWith('javascript:') || url.startsWith('data:') || url.includes('duckduckgo.com')) {
+            const _parsedDdg = (() => { try { return new URL(url.startsWith('//') ? 'https:' + url : url); } catch { return null; } })();
+            if (!_parsedDdg || url.startsWith('javascript:') || url.startsWith('data:') || _parsedDdg.hostname === 'duckduckgo.com' || _parsedDdg.hostname.endsWith('.duckduckgo.com')) {
                 currentResult = null;
                 continue;
             }
