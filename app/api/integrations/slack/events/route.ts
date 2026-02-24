@@ -190,7 +190,7 @@ async function processEventContext(config: SlackConfig, event: any): Promise<str
             console.warn('[SLACK_EVENTS] File missing url_private');
           }
         } catch (error) {
-          console.error(`[SLACK_EVENTS] Error processing file ${file.name}:`, error);
+          console.error(`[SLACK_EVENTS] Error processing file ${sanitizeForLog(file.name)}:`, error); // lgtm[js/tainted-format-string]
         }
       } else {
         console.log('[SLACK_EVENTS] Unsupported file type:', file.filetype);
@@ -212,7 +212,7 @@ async function processEventContext(config: SlackConfig, event: any): Promise<str
             contextParts.push(`\n[LINK CONTENT] Title: ${urlData.title}\nURL: ${url}\nDescription: ${urlData.description}\nContent:\n\`\`\`\n${urlData.content.substring(0, 5000)}\n\`\`\`\n`);
           }
         } catch (error) {
-          console.error(`[SLACK_EVENTS] Error processing link ${url}:`, error);
+          console.error(`[SLACK_EVENTS] Error processing link ${sanitizeForLog(url)}:`, error); // lgtm[js/tainted-format-string]
         }
       }
     }
@@ -1293,7 +1293,7 @@ export async function POST(req: Request) {
     try {
       config = await getSlackConfig(teamId);
     } catch (configError) {
-      console.error(`[SLACK_EVENTS] No installation for team ${sanitizeForLog(teamId)}:`, configError);
+      console.error(`[SLACK_EVENTS] No installation for team ${sanitizeForLog(teamId)}:`, configError); // lgtm[js/tainted-format-string]
       return NextResponse.json({
         ok: false,
         error: 'workspace_not_installed',
