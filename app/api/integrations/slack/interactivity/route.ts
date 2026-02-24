@@ -1,3 +1,4 @@
+import { validateWebhookUrl } from '@/lib/security/urlValidator';
 /**
  * Slack Interactivity Handler (Multi-Tenant) v3.1
  * 
@@ -82,6 +83,11 @@ async function updateMessageViaResponseUrl(
   }
 ): Promise<void> {
   try {
+    const ssrfCheck = validateWebhookUrl(responseUrl);
+    if (!ssrfCheck.valid) {
+      console.error('[SLACK_INT] Blocked SSRF via response_url:', ssrfCheck.reason);
+      return;
+    }
     await fetch(responseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
