@@ -33,7 +33,13 @@ const nextConfig = {
     'grpc'
   ],
   outputFileTracingExcludes: {
-    '**': ['.agent/**', '.agent/skills/**'],
+    '**': [
+      '.agent/**',
+      '.agent/skills/**',
+      'functions/**/venv/**',
+      'functions/**/__pycache__/**',
+      'anycrawl/**',
+    ],
   },
   outputFileTracingIncludes: {
     '/api/**/*': [
