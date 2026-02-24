@@ -71,7 +71,7 @@ def vector_agent(request):
 
     except Exception as e:
         logger.error(f"Vector Agent Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An internal error occurred. Please try again."}), 500
 
 if __name__ == "__main__":
     # Local Test Loop
