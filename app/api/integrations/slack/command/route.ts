@@ -1,3 +1,5 @@
+import { execFileSync } from 'child_process';
+import path from 'path';
 import { validateWebhookUrl } from '@/lib/security/urlValidator';
 /**
  * Slack Slash Command Handler (Multi-Tenant) v3.1
@@ -120,7 +122,7 @@ async function sendToResponseUrl(
     const ssrfCheck = validateWebhookUrl(responseUrl);
     if (!ssrfCheck.valid) {
       console.error('[SLACK_CMD] Blocked SSRF via response_url:', ssrfCheck.reason);
-      return;
+      return false;
     }
     const response = await fetch(responseUrl, {
       method: 'POST',
