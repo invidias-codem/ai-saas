@@ -116,7 +116,8 @@ export function htmlToMarkdown(html: string): string {
             const anchor = node as HTMLAnchorElement;
             const hrefRaw = anchor.getAttribute ? (anchor.getAttribute('href') || '') : '';
             const href = hrefRaw.trim();
-            const isInvalidHref = !href || href === '#' || href.toLowerCase().startsWith('javascript:');
+            const hrefLower = href.toLowerCase();
+            const isInvalidHref = !href || href === '#' || hrefLower.startsWith('javascript:') || hrefLower.startsWith('data:') || hrefLower.startsWith('vbscript:');
 
             const imageMd = content.trim(); // expected: ![alt](src)
             return isInvalidHref ? imageMd : `[${imageMd}](${href})`;
