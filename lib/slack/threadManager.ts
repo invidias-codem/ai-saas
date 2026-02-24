@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 /**
  * Slack Thread Manager
  *
@@ -27,7 +28,7 @@ export interface SlackThreadMessage {
  */
 export async function getThreadHistory(teamId: string, threadTs: string): Promise<SlackThreadMessage[]> {
   try {
-    const docRef = db.collection(THREAD_COLLECTION).doc(`${teamId}-${threadTs}`);
+    const docRef = db.collection(THREAD_COLLECTION).doc(`${sanitizeForLog(teamId)}-${threadTs}`);
     const doc = await docRef.get();
 
     if (!doc.exists) {
@@ -37,7 +38,7 @@ export async function getThreadHistory(teamId: string, threadTs: string): Promis
     const data = doc.data();
     return data?.messages || [];
   } catch (error) {
-    console.error(`[THREAD_MANAGER] Error getting thread history for ${teamId}-${threadTs}:`, error);
+    console.error(`[THREAD_MANAGER] Error getting thread history for ${sanitizeForLog(teamId)}-${threadTs}:`, error);
     return [];
   }
 }
@@ -51,7 +52,7 @@ export async function getThreadHistory(teamId: string, threadTs: string): Promis
  */
 export async function updateThreadHistory(teamId: string, threadTs: string, message: Omit<SlackThreadMessage, 'timestamp'>): Promise<void> {
   try {
-    const docRef = db.collection(THREAD_COLLECTION).doc(`${teamId}-${threadTs}`);
+    const docRef = db.collection(THREAD_COLLECTION).doc(`${sanitizeForLog(teamId)}-${threadTs}`);
     const newMessage: SlackThreadMessage = {
       ...message,
       timestamp: new Date() as any, // Firestore arrays cannot contain serverTimestamp()
@@ -67,6 +68,6 @@ export async function updateThreadHistory(teamId: string, threadTs: string, mess
       { merge: true }
     );
   } catch (error) {
-    console.error(`[THREAD_MANAGER] Error updating thread history for ${teamId}-${threadTs}:`, error);
+    console.error(`[THREAD_MANAGER] Error updating thread history for ${sanitizeForLog(teamId)}-${threadTs}:`, error);
   }
 }
