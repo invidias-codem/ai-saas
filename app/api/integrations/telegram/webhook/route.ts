@@ -187,8 +187,8 @@ export async function POST(req: Request) {
 
                 try {
                     // Dynamic path construction to bypass Turbopack static analysis
-    const scriptSegments = ['.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs'];
-    const scriptPath = path.join(process.cwd(), ...scriptSegments);
+    // Dev-only script path — not resolved at build time
+    const scriptPath = require('path').join(process.cwd(), '.agent', 'skills', 'genie-context', 'scripts', ['engineer', 'mjs'].join('.'));
                     // Run plan
                     const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
                         encoding: 'utf-8',
@@ -243,8 +243,8 @@ export async function POST(req: Request) {
                     const task = `Write a high-quality blog post about "${topic}" in content/blog/. IMPORTANT: Use this exact frontmatter with publishedAt: "${today}", author: "genie-team", and category: "engineering". Quote any title/description values that contain colons. Use the existing MDX files as a reference for style. Create a new file with a kebab-case filename. Ensure the content is engaging and technical.`;
 
                     // Dynamic path construction to bypass Turbopack static analysis
-    const scriptSegments = ['.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs'];
-    const scriptPath = path.join(process.cwd(), ...scriptSegments);
+    // Dev-only script path — not resolved at build time
+    const scriptPath = require('path').join(process.cwd(), '.agent', 'skills', 'genie-context', 'scripts', ['engineer', 'mjs'].join('.'));
                     // Run plan using the SAME engineer logic
                     const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
                         encoding: 'utf-8',
@@ -307,8 +307,8 @@ export async function POST(req: Request) {
 
                     try {
                         // Dynamic path construction to bypass Turbopack static analysis
-    const scriptSegments = ['.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs'];
-    const scriptPath = path.join(process.cwd(), ...scriptSegments);
+    // Dev-only script path — not resolved at build time
+    const scriptPath = require('path').join(process.cwd(), '.agent', 'skills', 'genie-context', 'scripts', ['engineer', 'mjs'].join('.'));
                         // Execute using file path (Safe from shell escaping issues)
                         execFileSync('node', [scriptPath, 'EXECUTE', '--plan-file', tmpPath], {
                             encoding: 'utf-8',
