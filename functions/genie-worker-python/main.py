@@ -137,7 +137,7 @@ def genie_worker(request):
     except RETRIABLE_ERRORS as e:
         # ⚠️ CRITICAL: Raise 500 so Cloud Tasks retries automatically
         logging.warning(f"🔄 Transient Error: {str(e)}")
-        return jsonify({"error": str(e), "retry": True}), 500
+        return jsonify({"error": "A transient error occurred. Retrying...", "retry": True}), 500
 
     except Exception as e:
         # 🛑 FATAL: Call the Doctor, then kill the task (200 OK)
@@ -193,4 +193,4 @@ def genie_worker(request):
             except Exception:
                 pass
         
-        return jsonify({"status": "Handled by Doctor", "error": str(e)}), 200
+        return jsonify({"status": "Handled by Doctor", "error": "An unexpected error occurred."}), 200
