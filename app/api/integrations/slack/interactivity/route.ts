@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 import { validateWebhookUrl } from '@/lib/security/urlValidator';
 /**
  * Slack Interactivity Handler (Multi-Tenant) v3.1
@@ -1122,7 +1123,7 @@ export async function POST(req: Request) {
     try {
       config = await getSlackConfig(teamId);
     } catch (configError) {
-      console.error(`[SLACK_INTERACTIVITY] No installation for team ${teamId}: `, configError);
+      console.error(`[SLACK_INTERACTIVITY] No installation for team ${sanitizeForLog(teamId)}: `, configError);
       return NextResponse.json({
         ok: false,
         error: 'workspace_not_installed',
