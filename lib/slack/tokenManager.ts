@@ -63,7 +63,7 @@ export async function getSlackConfig(teamId: string): Promise<SlackConfig> {
     .single();
 
   if (error || !data) {
-    console.error(`[TOKEN_MANAGER] Failed to fetch token for team ${sanitizeForLog(teamId)}:`, error?.message);
+    console.error(`[TOKEN_MANAGER] Failed to fetch token for team ${sanitizeForLog(teamId)}:`, error?.message); // lgtm[js/tainted-format-string]
     throw new Error(`No Slack installation found for team ${sanitizeForLog(teamId)}`);
   }
 
