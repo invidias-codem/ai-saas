@@ -1,3 +1,4 @@
+import { validateWebhookUrl } from '@/lib/security/urlValidator';
 /**
  * Slack Slash Command Handler (Multi-Tenant) v3.1
  * 
@@ -119,6 +120,11 @@ async function sendToResponseUrl(
   payload: Record<string, any>
 ): Promise<boolean> {
   try {
+    const ssrfCheck = validateWebhookUrl(responseUrl);
+    if (!ssrfCheck.valid) {
+      console.error('[SLACK_CMD] Blocked SSRF via response_url:', ssrfCheck.reason);
+      return;
+    }
     const response = await fetch(responseUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
