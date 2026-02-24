@@ -664,7 +664,7 @@ export async function POST(req: Request) {
  */
 async function dispatchEngineerPlanning(task: string, userId: string): Promise<Record<string, any>> {
   try {
-    const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
+    const scriptPath = path.resolve(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
     const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
       encoding: 'utf-8',
       env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
