@@ -202,7 +202,9 @@ async function processEventContext(config: SlackConfig, event: any): Promise<str
     const urls = extractUrlsFromText(event.text);
     for (const url of urls) {
       // Avoid scraping Slack internal links
-      if (!url.includes('slack.com')) {
+      // Use proper URL parsing to avoid bypass via 'slack.com.evil.com'
+      const parsedUrl = (() => { try { return new URL(url); } catch { return null; } })();
+      if (parsedUrl && parsedUrl.protocol === 'https:' && !parsedUrl.hostname.endsWith('.slack.com') && parsedUrl.hostname !== 'slack.com') {
         try {
           const urlData = await extractUrlContent(url);
           if (urlData) {
