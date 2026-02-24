@@ -1,7 +1,5 @@
 
 import { NextResponse } from 'next/server';
-import { execFileSync } from 'child_process';
-import path from 'path';
 
 // Types for Telegram Updates
 interface TelegramUpdate {
