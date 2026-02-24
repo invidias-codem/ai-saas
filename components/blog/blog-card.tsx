@@ -29,13 +29,18 @@ function ImagePlaceholder({ title, category }: { title: string; category: string
   );
 }
 
+// Sanitize slug to prevent XSS via javascript: or data: URIs
+function sanitizeSlug(slug: string): string {
+  return slug.replace(/[^a-z0-9-]/gi, '').toLowerCase();
+}
+
 export function BlogCard({ post, featured = false }: BlogCardProps) {
   const [imageError, setImageError] = useState(false);
   const category = BLOG_CATEGORIES[post.category] || BLOG_CATEGORIES['industry-insights'];
 
   if (featured) {
     return (
-      <Link href={`/blog/${post.slug}`} className="group block">
+      <Link href={`/blog/${sanitizeSlug(post.slug)}`} className="group block">
         <article className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all duration-300">
           <div className="grid md:grid-cols-2 gap-6">
             {/* Image */}
@@ -102,7 +107,7 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
   }
 
   return (
-    <Link href={`/blog/${post.slug}`} className="group block h-full">
+    <Link href={`/blog/${sanitizeSlug(post.slug)}`} className="group block h-full">
       <article className="h-full flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all duration-300">
         {/* Image */}
         <div className="relative aspect-video overflow-hidden">
