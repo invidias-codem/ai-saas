@@ -174,7 +174,11 @@ export function getOrCreateSessionId(): string {
  * Generate unique session ID
  */
 function generateSessionId(): string {
-    return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    // Use crypto.randomUUID() instead of Math.random() (cryptographically insecure)
+    const randomPart = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID().replace(/-/g, '').substring(0, 12)
+        : Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('');
+    return `session_${Date.now()}_${randomPart}`;
 }
 
 /**
