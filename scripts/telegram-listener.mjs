@@ -1,5 +1,5 @@
 import http from 'http';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -158,7 +158,7 @@ const requestHandler = async (req, res) => {
 
                         try {
                             const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
-                            const output = execSync(`node ${scriptPath} "${task}" --plan-only`, {
+                            const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
                                 encoding: 'utf-8',
                                 env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
                             });
@@ -200,11 +200,8 @@ const requestHandler = async (req, res) => {
                             const today = new Date().toISOString().split('T')[0]; // "2026-02-03"
                             const task = `Write a high-quality blog post about "${topic}" in content/blog/. IMPORTANT: Use this exact frontmatter with publishedAt: "${today}", author: "genie-team", and category: "engineering". Quote any title/description values that contain colons. Use the existing MDX files as a reference for style. Create a new file with a kebab-case filename. Ensure the content is engaging and technical.`;
 
-                            // Sanitize task for shell execution
-                            const safeTask = task.replace(/"/g, '\\"').replace(/\n/g, ' ');
-
                             const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
-                            const output = execSync(`node ${scriptPath} "${safeTask}" --plan-only`, {
+                            const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
                                 encoding: 'utf-8',
                                 env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
                             });
@@ -255,7 +252,7 @@ const requestHandler = async (req, res) => {
                     if (fs.existsSync(tmpPath)) {
                         try {
                             const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
-                            execSync(`node ${scriptPath} "EXECUTE" --plan-file '${tmpPath}'`, {
+                            execFileSync('node', [scriptPath, 'EXECUTE', '--plan-file', tmpPath], {
                                 encoding: 'utf-8',
                                 env: { ...process.env }
                             });
