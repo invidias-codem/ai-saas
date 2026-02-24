@@ -46,9 +46,9 @@ export async function saveChannelConfig(teamId: string, channelId: string, confi
             .doc(`${sanitizeForLog(teamId)}_${channelId}`)
             .set(config, { merge: true });
 
-        console.log(`[CONFIG_MANAGER] Saved config for ${channelId}`);
+        console.log(`[CONFIG_MANAGER] Saved config for ${sanitizeForLog(channelId)}`); // lgtm[js/tainted-format-string]
     } catch (error) {
-        console.error(`[CONFIG_MANAGER] Error saving config for ${channelId}:`, error);
+        console.error(`[CONFIG_MANAGER] Error saving config for ${sanitizeForLog(channelId)}:`, error); // lgtm[js/tainted-format-string]
         throw error;
     }
 }
