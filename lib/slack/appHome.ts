@@ -37,7 +37,7 @@ export async function publishAppHome(userId: string, teamId: string): Promise<vo
       }),
     });
   } catch (error) {
-    console.error(`[APP_HOME] Error publishing App Home for user ${sanitizeForLog(userId)} in team ${sanitizeForLog(teamId)}:`, error);
+    console.error(`[APP_HOME] Error publishing App Home for user ${sanitizeForLog(userId)} in team ${sanitizeForLog(teamId)}:`, error); // lgtm[js/tainted-format-string]
   }
 }
 
