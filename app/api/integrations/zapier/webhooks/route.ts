@@ -73,10 +73,7 @@ async function handleCreateMemory(
     // TODO: Store memory in Firestore via Cloud Function
     // For now, just log and return success
 
-    console.log(`Memory creation requested for user ${sanitizeForLog(userId)}:`, // lgtm[js/tainted-format-string] {
-      title,
-      summary,
-    });
+    console.log(`Memory creation requested for user ${sanitizeForLog(userId)}:`, { title, summary }); // lgtm[js/tainted-format-string]
 
     return NextResponse.json({
       success: true,
