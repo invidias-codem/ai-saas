@@ -709,7 +709,7 @@ async function handleBlockActions(
         // Run execution in the background
         waitUntil((async () => {
           try {
-            const scriptPath = path.resolve(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
+            const scriptPath = path.join(process.cwd(), '.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs');
             const sanitizedPlan = JSON.stringify(plan).replace(/'/g, "'\\''");
 
             execSync(`node ${scriptPath} "${task}" --execute-plan '${sanitizedPlan}'`, {
