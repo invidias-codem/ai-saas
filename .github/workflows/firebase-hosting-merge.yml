@@ -18,6 +18,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+      - name: Remove broken Python venv symlinks
+        run: find . -path ./node_modules -prune -o -type l -print | xargs -I{} sh -c 'test -e "{}" || rm -f "{}"' 2>/dev/null; true
+
       - name: Build Next.js app
         env:
           GOOGLE_API_KEY: "dummy-key-for-build"
