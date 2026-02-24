@@ -1,3 +1,4 @@
+import { validateSlackFileUrl } from '@/lib/security/urlValidator';
 import { extractText } from 'unpdf';
 
 /**
@@ -44,6 +45,11 @@ export async function downloadSlackFile(
 ): Promise<Buffer> {
     try {
         console.log(`[FILE_HELPERS] Downloading file from ${url}`);
+
+        const ssrfCheck = validateSlackFileUrl(url);
+        if (!ssrfCheck.valid) {
+            throw new Error(`[FILE_HELPERS] Blocked unsafe file URL: ${ssrfCheck.reason}`);
+        }
 
         const response = await fetch(url, {
             headers: {
