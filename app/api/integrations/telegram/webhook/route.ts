@@ -1,6 +1,6 @@
 
 import { NextResponse } from 'next/server';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import path from 'path';
 
 // Types for Telegram Updates
@@ -190,7 +190,7 @@ export async function POST(req: Request) {
                 try {
                     const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
                     // Run plan
-                    const output = execSync(`node ${scriptPath} "${task}" --plan-only`, {
+                    const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
                         encoding: 'utf-8',
                         env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY } // Ensure keys are passed
                     });
@@ -244,7 +244,7 @@ export async function POST(req: Request) {
 
                     const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
                     // Run plan using the SAME engineer logic
-                    const output = execSync(`node ${scriptPath} "${task}" --plan-only`, {
+                    const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
                         encoding: 'utf-8',
                         env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
                     });
@@ -306,7 +306,7 @@ export async function POST(req: Request) {
                     try {
                         const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
                         // Execute using file path (Safe from shell escaping issues)
-                        execSync(`node ${scriptPath} "EXECUTE" --plan-file '${tmpPath}'`, {
+                        execFileSync('node', [scriptPath, 'EXECUTE', '--plan-file', tmpPath], {
                             encoding: 'utf-8',
                             env: { ...process.env }
                         });
