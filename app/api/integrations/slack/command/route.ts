@@ -670,9 +670,8 @@ async function dispatchEngineerPlanning(task: string, userId: string): Promise<R
     const { execFileSync } = require('child_process') as typeof import('child_process');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require('path') as typeof import('path');
-        // Obfuscated path construction to prevent Turbopack static analysis (base64 for '.agent')
-    const agentDir = Buffer.from('LmFnZW50', 'base64').toString('utf-8');
-    const scriptPath = path.join(process.cwd(), agentDir, 'skills', 'genie-context', 'scripts', 'engineer.mjs');
+    // Full path base64-encoded to prevent Turbopack static module resolution
+    const scriptPath = path.join(process.cwd(), Buffer.from('LmFnZW50L3NraWxscy9nZW5pZS1jb250ZXh0L3NjcmlwdHMvZW5naW5lZXIubWpz', 'base64').toString('utf-8'));
     const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
       encoding: 'utf-8',
       env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
