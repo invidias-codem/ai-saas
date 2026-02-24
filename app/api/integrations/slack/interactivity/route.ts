@@ -709,7 +709,9 @@ async function handleBlockActions(
         // Run execution in the background
         waitUntil((async () => {
           try {
-            const scriptPath = `${process.cwd()}/.agent/skills/genie-context/scripts/engineer.mjs`;
+            // Dynamic path construction to bypass Turbopack static analysis
+    const scriptSegments = ['.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs'];
+    const scriptPath = path.join(process.cwd(), ...scriptSegments);
             const sanitizedPlan = JSON.stringify(plan).replace(/'/g, "'\\''");
 
             execSync(`node ${scriptPath} "${task}" --execute-plan '${sanitizedPlan}'`, {
