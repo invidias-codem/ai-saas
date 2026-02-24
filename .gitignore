@@ -46,3 +46,8 @@ keys/genie-ai-1ca85-a79dca93b5cd.json
 # python
 __pycache__/
 *.pyc
+# Python virtual environments
+venv/
+.venv/
+functions/**/venv/
+functions/**/__pycache__/
