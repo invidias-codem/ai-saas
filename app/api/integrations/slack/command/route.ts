@@ -54,7 +54,7 @@ const generalModel = genAI.getGenerativeModel({
 });
 
 // Import execSync for engineer command
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import path from 'path';
 
 // Code-specific model
@@ -659,7 +659,7 @@ export async function POST(req: Request) {
 async function dispatchEngineerPlanning(task: string, userId: string): Promise<Record<string, any>> {
   try {
     const scriptPath = path.join(process.cwd(), '.agent/skills/genie-context/scripts/engineer.mjs');
-    const output = execSync(`node ${scriptPath} "${task}" --plan-only`, {
+    const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
       encoding: 'utf-8',
       env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
     });
