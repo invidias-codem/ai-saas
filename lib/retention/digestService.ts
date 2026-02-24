@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getHighConfidenceFacts } from "@/lib/ragMemory";
@@ -39,7 +40,7 @@ OUTPUT RESULT (JSON format):
 `;
 
 export async function generateDailyDigest(userId: string, userEmail: string, userName?: string) {
-    console.log(`[DigestService] Generating digest for user ${userId}`);
+    console.log(`[DigestService] Generating digest for user ${sanitizeForLog(userId)}`);
 
     try {
         // 0. Check User Preferences (Opt-in)
@@ -51,7 +52,7 @@ export async function generateDailyDigest(userId: string, userEmail: string, use
                 .single();
 
             if (settings && settings.daily_digest_enabled === false) {
-                console.log(`[DigestService] User ${userId} has opted out of daily digests.`);
+                console.log(`[DigestService] User ${sanitizeForLog(userId)} has opted out of daily digests.`);
                 return;
             }
             // If no settings found, default to TRUE for now (Growth) or FALSE (Strict Opt-in)
@@ -61,7 +62,7 @@ export async function generateDailyDigest(userId: string, userEmail: string, use
         // 1. Fetch Context
         const facts = await getHighConfidenceFacts(userId, 50); // Get last 50 facts
         if (facts.length === 0) {
-            console.log(`[DigestService] No facts found for user ${userId}, skipping digest.`);
+            console.log(`[DigestService] No facts found for user ${sanitizeForLog(userId)}, skipping digest.`);
             return;
         }
 
@@ -84,7 +85,7 @@ export async function generateDailyDigest(userId: string, userEmail: string, use
 
         // 3. Send Email
         if (!userEmail) {
-            console.error(`[DigestService] No email for user ${userId}`);
+            console.error(`[DigestService] No email for user ${sanitizeForLog(userId)}`);
             return;
         }
 
@@ -115,11 +116,11 @@ export async function generateDailyDigest(userId: string, userEmail: string, use
             throw error;
         }
 
-        console.log(`[DigestService] Digest sent to ${userEmail} (ID: ${data?.id})`);
+        console.log(`[DigestService] Digest sent to ${sanitizeForLog(userEmail)} (ID: ${data?.id})`);
         return data;
 
     } catch (error) {
-        console.error(`[DigestService] Failed to generate/send digest for ${userId}:`, error);
+        console.error(`[DigestService] Failed to generate/send digest for ${sanitizeForLog(userId)}:`, error);
         throw error;
     }
 }
