@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       code,
       eventType: 'signup',
       userId,
-      ipHash:    hashIP(ip),
+      ipHash:    await hashIP(ip),
       platform,
       utmSource: platform,
       metadata: {
