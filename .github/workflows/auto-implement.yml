@@ -21,7 +21,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -47,9 +47,10 @@ jobs:
         id: extract
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Passed via env (not ${{ }} interpolation) to prevent shell injection
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          # Get PR number from workflow run using the branch name
-          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          # HEAD_BRANCH comes from env var — safe from injection
           PR_NUMBER=$(gh pr list --head "$HEAD_BRANCH" --json number -q '.[0].number')
           
           # Sanitize PR_NUMBER to ensure it only contains digits (strip newlines/whitespace)
