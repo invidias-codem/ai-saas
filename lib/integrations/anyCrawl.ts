@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 
 import axios from 'axios';
 
@@ -168,7 +169,7 @@ export async function crawlUrl(url: string): Promise<CrawlResult | null> {
             }
         };
 
-        console.log(`[AnyCrawl] Scraping: ${url}`);
+        console.log(`[AnyCrawl] Scraping: ${sanitizeForLog(url)}`);
         const response = await axios.post(`${ANYCRAWL_API_URL}/v1/scrape`, body, {
             headers,
             timeout: 15000 // 15 second timeout for scrape
@@ -207,7 +208,7 @@ export async function crawlUrl(url: string): Promise<CrawlResult | null> {
         return null;
 
     } catch (error: any) {
-        console.error(`[AnyCrawl] Scrape error for ${url}:`, error?.response?.data || error?.message || error);
+        console.error(`[AnyCrawl] Scrape error for ${sanitizeForLog(url)}:`, error?.response?.data || error?.message || error);
         return null;
     }
 }
