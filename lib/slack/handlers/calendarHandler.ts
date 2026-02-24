@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 /**
  * Google Calendar Handler for Slack
  * Creates calendar events using Google Calendar API
@@ -79,7 +80,7 @@ function extractSlackUserIds(text: string): string[] {
  */
 async function getSlackUserEmail(botToken: string, userId: string): Promise<string | null> {
     try {
-        const response = await fetch(`${SLACK_API_BASE}/users.info?user=${userId}`, {
+        const response = await fetch(`${SLACK_API_BASE}/users.info?user=${sanitizeForLog(userId)}`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${botToken}`,
@@ -92,11 +93,11 @@ async function getSlackUserEmail(botToken: string, userId: string): Promise<stri
         if (data.ok && data.user && data.user.profile && data.user.profile.email) {
             return data.user.profile.email;
         } else {
-            console.warn(`[CALENDAR_HANDLER] Failed to get email for Slack user ${userId}:`, data.error || 'User not found or no email');
+            console.warn(`[CALENDAR_HANDLER] Failed to get email for Slack user ${sanitizeForLog(userId)}:`, data.error || 'User not found or no email');
             return null;
         }
     } catch (error) {
-        console.error(`[CALENDAR_HANDLER] Error fetching Slack user info for ${userId}:`, error);
+        console.error(`[CALENDAR_HANDLER] Error fetching Slack user info for ${sanitizeForLog(userId)}:`, error);
         return null;
     }
 }
@@ -300,7 +301,7 @@ export async function handleCalendarEvent(
                         if (email) {
                             resolvedAttendees.add(email);
                         } else {
-                            console.warn(`[CALENDAR_HANDLER] Could not resolve Slack user ${userId}, skipping`);
+                            console.warn(`[CALENDAR_HANDLER] Could not resolve Slack user ${sanitizeForLog(userId)}, skipping`);
                         }
                     }
                 } else if (attendee.includes('@') && !attendee.includes('<')) {
@@ -312,12 +313,12 @@ export async function handleCalendarEvent(
 
         // 2. Automatically invite the sender
         if (user) {
-            console.log(`[CALENDAR_HANDLER] Auto-inviting sender: ${user}`);
+            console.log(`[CALENDAR_HANDLER] Auto-inviting sender: ${sanitizeForLog(user)}`);
             const senderEmail = await getSlackUserEmail(config.botToken, user);
             if (senderEmail) {
                 resolvedAttendees.add(senderEmail);
             } else {
-                console.warn(`[CALENDAR_HANDLER] Could not resolve email for sender ${user}`);
+                console.warn(`[CALENDAR_HANDLER] Could not resolve email for sender ${sanitizeForLog(user)}`);
             }
         }
 
