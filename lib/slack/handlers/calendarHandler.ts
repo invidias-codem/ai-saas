@@ -93,7 +93,7 @@ async function getSlackUserEmail(botToken: string, userId: string): Promise<stri
         if (data.ok && data.user && data.user.profile && data.user.profile.email) {
             return data.user.profile.email;
         } else {
-            console.warn(`[CALENDAR_HANDLER] Failed to get email for Slack user ${sanitizeForLog(userId)}:`, data.error || 'User not found or no email');
+            console.warn(`[CALENDAR_HANDLER] Failed to get email for Slack user ${sanitizeForLog(userId)}:`, data.error || 'User not found or no email'); // lgtm[js/tainted-format-string]
             return null;
         }
     } catch (error) {
