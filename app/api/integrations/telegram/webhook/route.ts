@@ -186,7 +186,9 @@ export async function POST(req: Request) {
                 await sendChatAction(chatId, 'typing');
 
                 try {
-                    const scriptPath = `${process.cwd()}/.agent/skills/genie-context/scripts/engineer.mjs`;
+                    // Dynamic path construction to bypass Turbopack static analysis
+    const scriptSegments = ['.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs'];
+    const scriptPath = path.join(process.cwd(), ...scriptSegments);
                     // Run plan
                     const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
                         encoding: 'utf-8',
@@ -240,7 +242,9 @@ export async function POST(req: Request) {
                     const today = new Date().toISOString().split('T')[0]; // "2026-02-03"
                     const task = `Write a high-quality blog post about "${topic}" in content/blog/. IMPORTANT: Use this exact frontmatter with publishedAt: "${today}", author: "genie-team", and category: "engineering". Quote any title/description values that contain colons. Use the existing MDX files as a reference for style. Create a new file with a kebab-case filename. Ensure the content is engaging and technical.`;
 
-                    const scriptPath = `${process.cwd()}/.agent/skills/genie-context/scripts/engineer.mjs`;
+                    // Dynamic path construction to bypass Turbopack static analysis
+    const scriptSegments = ['.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs'];
+    const scriptPath = path.join(process.cwd(), ...scriptSegments);
                     // Run plan using the SAME engineer logic
                     const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
                         encoding: 'utf-8',
@@ -302,7 +306,9 @@ export async function POST(req: Request) {
                     const stored = JSON.parse(fs.readFileSync(tmpPath, 'utf-8'));
 
                     try {
-                        const scriptPath = `${process.cwd()}/.agent/skills/genie-context/scripts/engineer.mjs`;
+                        // Dynamic path construction to bypass Turbopack static analysis
+    const scriptSegments = ['.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs'];
+    const scriptPath = path.join(process.cwd(), ...scriptSegments);
                         // Execute using file path (Safe from shell escaping issues)
                         execFileSync('node', [scriptPath, 'EXECUTE', '--plan-file', tmpPath], {
                             encoding: 'utf-8',
