@@ -32,6 +32,9 @@ const nextConfig = {
     'google-gax',
     'grpc'
   ],
+  outputFileTracingExcludes: {
+    '**': ['.agent/**', '.agent/skills/**'],
+  },
   outputFileTracingIncludes: {
     '/api/**/*': [
       'node_modules/@google-cloud/tasks/build/esm/src/**/*.json',
@@ -39,7 +42,19 @@ const nextConfig = {
     ]
   },
   experimental: {},
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
+    // Exclude .agent paths from module resolution (these are runtime scripts, not imports)
+    if (isServer) {
+      config.externals = config.externals || [];
+      if (Array.isArray(config.externals)) {
+        config.externals.push(({ request }, callback) => {
+          if (request && request.includes('.agent/')) {
+            return callback(null, 'commonjs ' + request);
+          }
+          callback();
+        });
+      }
+    }
     config.resolve.extensionAlias = {
       ".js": [".ts", ".tsx", ".js", ".jsx"],
       ".mjs": [".mts", ".mjs"],
