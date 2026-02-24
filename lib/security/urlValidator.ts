@@ -137,3 +137,15 @@ export function validateWebhookUrl(rawUrl: string): { valid: boolean; reason?: s
 
   return { valid: true };
 }
+
+/**
+ * Sanitizes user-controlled strings before interpolation into log messages.
+ * Prevents log injection via newline/ANSI escape sequences.
+ */
+export function sanitizeForLog(value: unknown, maxLength = 200): string {
+  return String(value ?? '')
+    .replace(/[\r\n\t]/g, ' ')          // strip newlines (log injection)
+    .replace(/\x1b\[[0-9;]*m/g, '')      // strip ANSI color codes
+    .replace(/[\x00-\x1f\x7f]/g, '')    // strip other control chars
+    .slice(0, maxLength);
+}
