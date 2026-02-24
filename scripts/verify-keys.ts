@@ -18,5 +18,5 @@ if (CLERK_KEY.startsWith('sk_')) {
     console.log('✅ Clerk Secret Key starts with "sk_"');
 } else {
     console.error('❌ Clerk Secret Key DOES NOT start with "sk_".');
-    console.log(`First 3 chars: ${CLERK_KEY.substring(0, 3)}`);
+    console.log('First 3 chars: [REDACTED] (remove this script before production)');  // Never log key material
 }
