@@ -240,7 +240,7 @@ function parseDuckDuckGoMarkdown(markdown: string, limit: number): SearchResult[
             // Start new
             const url = linkMatch[2];
             // Filter out internal DDG links or ads
-            if (url.startsWith('//') || url.includes('duckduckgo.com')) {
+            if (url.startsWith('//') || url.startsWith('javascript:') || url.startsWith('data:') || url.includes('duckduckgo.com')) {
                 currentResult = null;
                 continue;
             }
