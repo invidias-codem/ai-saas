@@ -671,7 +671,7 @@ async function handleAppMention(config: SlackConfig, event: any): Promise<void> 
   const { channel, text, ts, thread_ts, user } = event;
 
   // Remove the bot mention from the text (handle both <@U123> and <@U123|name>)
-  const cleanText = text.replace(/<@[A-Z0-9]+(\|[^>]+)?>/g, '').trim();
+  const cleanText = text.replace(/<@[A-Z0-9]{1,12}(?:\|[^>]{0,50})?>/g, '').trim();
 
   console.log('[SLACK_EVENTS] App mention received:', {
     rawText: text,
@@ -890,7 +890,7 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
   // STEP 1: Classify intent using Intent Router
   const { classifyIntent, routeMessage } = await import('@/lib/slack/intentRouter');
   // Remove bot mention if present (unlikely in DM but good practice)
-  const cleanText = text.replace(/<@[A-Z0-9]+(\|[^>]+)?>/g, '').trim();
+  const cleanText = text.replace(/<@[A-Z0-9]{1,12}(?:\|[^>]{0,50})?>/g, '').trim();
 
   // Only classify if there's text (if just file, we handle differently below)
   if (cleanText) {
