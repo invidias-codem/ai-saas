@@ -10,7 +10,7 @@ function getAnthropicClient() {
     return new Anthropic({ apiKey });
 }
 
-const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 
 export class ClaudeProvider implements LLMProvider {
     id = "claude";
