@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 /**
  * Slack Events API Endpoint (Multi-Tenant) v3.2
  * 
@@ -981,7 +982,7 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
     if (started) {
       // Build message with file context for code mode
       const messageWithContext = eventContext
-        ? `${text}\n\n=== ATTACHED FILE/LINK CONTENT ===\n${eventContext}`
+        ? `${sanitizeForLog(text)}\n\n=== ATTACHED FILE/LINK CONTENT ===\n${eventContext}`
         : text;
 
       // Stream the response based on type
@@ -1003,7 +1004,7 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
       if (fullResponse && fullResponse.trim().length > 0) {
         await updateThreadHistory(config.teamId, threadTs, {
           role: 'user',
-          content: eventContext ? `${text}\n\n${eventContext}` : text
+          content: eventContext ? `${sanitizeForLog(text)}\n\n${eventContext}` : text
         });
         await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: fullResponse });
         responseSent = true;
@@ -1032,7 +1033,7 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
 
       // Build message with file context for code mode
       const messageWithContext = eventContext
-        ? `${text}\n\n=== ATTACHED FILE/LINK CONTENT ===\n${eventContext}`
+        ? `${sanitizeForLog(text)}\n\n=== ATTACHED FILE/LINK CONTENT ===\n${eventContext}`
         : text;
 
       if (isCode && intent) {
@@ -1047,7 +1048,7 @@ async function handleDirectMessage(config: SlackConfig, event: any): Promise<voi
 
       await updateThreadHistory(config.teamId, threadTs, {
         role: 'user',
-        content: eventContext ? `${text}\n\n${eventContext}` : text
+        content: eventContext ? `${sanitizeForLog(text)}\n\n${eventContext}` : text
       });
       await updateThreadHistory(config.teamId, threadTs, { role: 'model', content: response });
 
@@ -1092,7 +1093,7 @@ async function handleWorkflowStepExecute(config: SlackConfig, event: any): Promi
       const text = inputs.text?.value;
       if (text) {
         const analysis = await generateCodeResponse(
-          `Analyze the following text/code and provide a summary:\n\n${text}`,
+          `Analyze the following text/code and provide a summary:\n\n${sanitizeForLog(text)}`,
           null,
           'review'
         );
@@ -1292,7 +1293,7 @@ export async function POST(req: Request) {
     try {
       config = await getSlackConfig(teamId);
     } catch (configError) {
-      console.error(`[SLACK_EVENTS] No installation for team ${teamId}:`, configError);
+      console.error(`[SLACK_EVENTS] No installation for team ${sanitizeForLog(teamId)}:`, configError);
       return NextResponse.json({
         ok: false,
         error: 'workspace_not_installed',
