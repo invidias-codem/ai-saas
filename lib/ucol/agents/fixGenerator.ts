@@ -45,14 +45,19 @@ Your job: produce a precise, actionable analysis in JSON with this exact shape:
 
 Return ONLY valid JSON. No markdown fences.`;
 
+// Cost cap: max chars of source file content sent to Gemini per file.
+// 1000 chars ≈ 250 tokens — enough for error context without burning budget.
+const MAX_FILE_CONTEXT_CHARS = 1000;
+
 async function analyzeWithGemini(
   error: ClassifiedError,
   files: CodebaseFile[]
 ): Promise<any> {
-  const model = getGemini().getGenerativeModel({ model: 'gemini-1.5-pro' });
+  // Use Flash instead of Pro for analysis — 20x cheaper, sufficient for classification tasks.
+  const model = getGemini().getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const filesContext = files
-    .map(f => `### ${f.path}\n\`\`\`\n${f.content.slice(0, 4000)}\n\`\`\``)
+    .map(f => `### ${f.path}\n\`\`\`\n${f.content.slice(0, MAX_FILE_CONTEXT_CHARS)}\n\`\`\``)
     .join('\n\n');
 
   const prompt = `${ANALYSIS_PROMPT}
@@ -141,11 +146,12 @@ async function generateFixWithGemini(
   analysis: any,
   files: CodebaseFile[]
 ): Promise<{ explanation: string; confidence: number; fileChanges: Record<string, string> }> {
-  const model = getGemini().getGenerativeModel({ model: 'gemini-1.5-pro' });
+  // Flash fallback — keeps GCP costs predictable when Claude is unavailable.
+  const model = getGemini().getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const filesToChange = files.filter(f => analysis.filesToChange?.includes(f.path));
   const filesContext = filesToChange
-    .map(f => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``)
+    .map(f => `### ${f.path}\n\`\`\`\n${f.content.slice(0, MAX_FILE_CONTEXT_CHARS)}\n\`\`\``)
     .join('\n\n');
 
   const prompt = `${FIX_PROMPT}
