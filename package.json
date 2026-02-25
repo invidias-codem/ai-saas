@@ -26,7 +26,8 @@
     "rag:budget": "tsx scripts/check-rag-budget.ts",
     "rag:index": "tsx scripts/index-codebase.ts",
     "rag:index:dry": "tsx scripts/index-codebase.ts --dry-run",
-    "rag:test": "tsx scripts/test-rag-integration.ts"
+    "rag:test": "tsx scripts/test-rag-integration.ts",
+    "prebuild": "rm -rf functions/vector-agent-python/venv && echo prebuild: cleaned venv symlinks"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
