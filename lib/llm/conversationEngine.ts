@@ -257,7 +257,12 @@ export async function generateConversationReply(
   if (!effectivelyDisabled) {
     const results = await Promise.allSettled([
       getHighConfidenceFacts(userId),
-      options.skipWebResearch ? Promise.resolve({ results: [] }) : performResearch(userQuery, userContextPrompt),
+      // Web research is expensive (calls AnyCrawl → LLM extraction per page).
+      // Gate it: only run if ENABLE_WEB_RESEARCH=true AND user hasn't disabled it.
+      // Default: off. Enable per-user or per-session when needed.
+      (process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch)
+        ? Promise.resolve({ results: [] })
+        : performResearch(userQuery, userContextPrompt),
       findRelatedEntities(userId, userQuery),
       getUserProfile(userId),
     ]);
