@@ -245,12 +245,24 @@ export async function generateConversationReply(
   let graphData: { centralNode: GraphNode | null; relatedNodes: any[] } = { centralNode: null, relatedNodes: [] }; // relatedNodes uses complex structure, keeping any for now/TODO
   let userProfileMemories: PromotableMemory[] | null = null;
 
+  // Cost guard: ENABLE_HEAVY_CONTEXT=false disables the expensive per-conversation
+  // memory/embedding pipeline (fact ranking, per-fact embeddings, graph updates,
+  // fact extraction). Flip this in Vercel env vars without a redeploy.
+  // Default: false (safe) — set to "true" to re-enable the full memory system.
+  const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT === 'true';
+  const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
+
   // Full context gathering — all sources in parallel with graceful degradation.
   // Individual failures are caught so one slow/broken source doesn't block the rest.
-  if (!options.disableExternalContext) {
+  if (!effectivelyDisabled) {
     const results = await Promise.allSettled([
       getHighConfidenceFacts(userId),
-      options.skipWebResearch ? Promise.resolve({ results: [] }) : performResearch(userQuery, userContextPrompt),
+      // Web research is expensive (calls AnyCrawl → LLM extraction per page).
+      // Gate it: only run if ENABLE_WEB_RESEARCH=true AND user hasn't disabled it.
+      // Default: off. Enable per-user or per-session when needed.
+      (process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch)
+        ? Promise.resolve({ results: [] })
+        : performResearch(userQuery, userContextPrompt),
       findRelatedEntities(userId, userQuery),
       getUserProfile(userId),
     ]);
@@ -269,8 +281,8 @@ export async function generateConversationReply(
     });
   }
 
-  const searchContext = options.disableExternalContext ? "" : formatSearchResults(researchResult.results);
-  const graphContext = options.disableExternalContext ? "" : formatGraphContext(graphData);
+  const searchContext = effectivelyDisabled ? "" : formatSearchResults(researchResult.results);
+  const graphContext = effectivelyDisabled ? "" : formatGraphContext(graphData);
 
 
   // ---------------------------------------------------------
@@ -279,7 +291,7 @@ export async function generateConversationReply(
 
   // 1. Security Audit (Firewall)
   // Only run if not disabled and for standard/reasoning modes
-  if (!options.disableExternalContext && (agentMode === 'standard' || agentMode === 'reasoning')) {
+  if (!effectivelyDisabled && (agentMode === 'standard' || agentMode === 'reasoning')) {
     const securityAgent = new SecurityAgent();
     const audit = await securityAgent.auditPrompt(userQuery, userId);
 
@@ -312,7 +324,7 @@ export async function generateConversationReply(
   const similarities = new Map<string, number>();
   let queryEmbedding: number[] | null = null;
 
-  if (!options.disableExternalContext && allFacts.length > 0) {
+  if (!effectivelyDisabled && allFacts.length > 0) {
     try {
       queryEmbedding = await generateEmbedding(userQuery);
     } catch (e: any) {
@@ -356,7 +368,7 @@ export async function generateConversationReply(
   let factContext = "";
   let intelligentFacts = rankMemoriesIntelligently(allFacts, similarities, userQuery);
 
-  if (agentMode === 'reasoning' && !options.disableExternalContext) {
+  if (agentMode === 'reasoning' && !effectivelyDisabled) {
     // Use DeepSeek to synthesize context
     factContext = await synthesizeContextWithReasoning(intelligentFacts.slice(0, 15), userQuery);
     // Prepend header as synthesizeContextWithReasoning returns raw summary
@@ -365,13 +377,13 @@ export async function generateConversationReply(
     }
   } else {
     // Standard ranking
-    factContext = options.disableExternalContext ? "" : formatFactsForPrompt(intelligentFacts);
+    factContext = effectivelyDisabled ? "" : formatFactsForPrompt(intelligentFacts);
   }
 
 
   // RAG memory context — always attempt, graceful fallback on failure
   let ragResult: { contextString: string; sources: Source[] } = { contextString: "", sources: [] };
-  if (!options.disableExternalContext) {
+  if (!effectivelyDisabled) {
     try {
       ragResult = await getRAGMemoryContext(userId, userQuery, "conversation");
     } catch (e: any) {
@@ -382,7 +394,7 @@ export async function generateConversationReply(
   const memoryContext = ragResult.contextString;
   const memorySources = ragResult.sources;
 
-  const userProfileContext = options.disableExternalContext ? "" : formatUserProfileForPrompt(userProfileMemories);
+  const userProfileContext = effectivelyDisabled ? "" : formatUserProfileForPrompt(userProfileMemories);
 
   const enhancedSystemInstruction = getSystemInstruction() +
     "\n\n" + userContextPrompt +
@@ -466,16 +478,19 @@ export async function generateConversationReply(
               }
             );
 
-            // LLM-powered fact extraction (replaces shallow tag-only approach)
-            try {
-              const extractedFacts = await extractFactsFromConversation(userQuery, fullText);
-              console.log(`[ConversationEngine] Extracted ${extractedFacts.length} structured facts`);
-            } catch (factErr) {
-              console.warn('[ConversationEngine] Fact extraction failed (non-blocking):', factErr);
+            // LLM-powered fact extraction + graph updates are gated by ENABLE_HEAVY_CONTEXT.
+            // When false, only lightweight captureMemory runs (no extra LLM calls).
+            if (process.env.ENABLE_HEAVY_CONTEXT === 'true') {
+              try {
+                const extractedFacts = await extractFactsFromConversation(userQuery, fullText);
+                console.log(`[ConversationEngine] Extracted ${extractedFacts.length} structured facts`);
+              } catch (factErr) {
+                console.warn('[ConversationEngine] Fact extraction failed (non-blocking):', factErr);
+              }
             }
 
             // Knowledge graph update — extract ALL tags and link co-occurring concepts
-            if (tags.length > 0) {
+            if (process.env.ENABLE_HEAVY_CONTEXT === 'true' && tags.length > 0) {
               const nodeIds: (string | null)[] = await Promise.all(
                 tags.slice(0, 10).map(tag =>
                   addNode(userId, tag, 'concept', `Extracted from conversation: "${userQuery.substring(0, 80)}"`)
