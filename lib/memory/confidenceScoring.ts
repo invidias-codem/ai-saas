@@ -22,6 +22,49 @@
 
 import type { ExtractedFact } from '@/lib/intelligentMemory';
 
+// ─── Date Normalization ───────────────────────────────────────────────────────
+
+/**
+ * Normalize any timestamp shape to a valid Date.
+ *
+ * Facts can arrive as:
+ *   - real Date objects (ideal)
+ *   - ISO strings (after JSON.parse / req.json())
+ *   - Unix ms numbers
+ *   - Firestore Timestamp objects with a toDate() method
+ *   - null / undefined
+ *
+ * Always returns a valid Date. Falls back to `new Date()` (now) when the
+ * input cannot be parsed, so hoursElapsed = 0 and no decay is applied —
+ * the conservative safe default.
+ */
+export function normalizeDate(input: unknown): Date {
+  if (input == null) return new Date();
+
+  // Already a Date — validate it
+  if (input instanceof Date) {
+    return isNaN(input.getTime()) ? new Date() : input;
+  }
+
+  // String or number — parse it
+  if (typeof input === 'string' || typeof input === 'number') {
+    const d = new Date(input as string | number);
+    return isNaN(d.getTime()) ? new Date() : d;
+  }
+
+  // Firestore Timestamp (has toDate() method)
+  if (typeof (input as Record<string, unknown>).toDate === 'function') {
+    try {
+      const d = (input as { toDate(): Date }).toDate();
+      return d instanceof Date && !isNaN(d.getTime()) ? d : new Date();
+    } catch {
+      return new Date();
+    }
+  }
+
+  return new Date(); // Unknown shape — treat as now (no decay)
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Confidence lost per hour without access (0.5%/hr → fully decayed in ~200h) */
@@ -87,7 +130,9 @@ export function calculateEffectiveConfidence(
   now: Date = new Date()
 ): ConfidenceResult {
   const msElapsed = now.getTime() - state.lastAccessedAt.getTime();
-  const hoursElapsed = Math.max(0, msElapsed / (1000 * 60 * 60));
+  // Guard: if either timestamp is invalid (NaN), treat hoursElapsed as 0
+  // so we apply no decay — conservative default, never crashes.
+  const hoursElapsed = Number.isFinite(msElapsed) ? Math.max(0, msElapsed / (1000 * 60 * 60)) : 0;
 
   const decayPenalty = hoursElapsed * DECAY_RATE_PER_HOUR;
   const accessBonus = state.accessCount * BOOST_PER_ACCESS;
@@ -110,7 +155,8 @@ export function calculateEffectiveConfidence(
 export function factToConfidenceState(fact: ExtractedFact): ConfidenceState {
   return {
     baseConfidence: fact.confidence ?? DEFAULT_BASE_CONFIDENCE,
-    lastAccessedAt: fact.lastUsedAt ?? fact.extractedAt ?? new Date(),
+    // normalizeDate handles strings (JSON), Firestore Timestamps, and real Dates
+    lastAccessedAt: normalizeDate(fact.lastUsedAt ?? fact.extractedAt),
     accessCount: fact.usageCount ?? 0,
   };
 }
