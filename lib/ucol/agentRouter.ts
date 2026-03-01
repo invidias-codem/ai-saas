@@ -26,6 +26,7 @@ import { GeminiProvider } from '@/lib/llm/providers/gemini';
 import type { ExtractedFact } from '@/lib/intelligentMemory';
 import {
   scoreContextForRouting,
+  type ConfidenceModelTier,
   type ConfidenceRoutingSignal,
   type AggregationStrategy,
   DEFAULT_BASE_CONFIDENCE,
@@ -54,11 +55,28 @@ const CONFIDENCE_OVERRIDABLE: Set<TaskType> = new Set([
   'unknown',
 ]);
 
-/** Map from confidence tier to router target node */
-const CONFIDENCE_TIER_TO_NODE: Record<string, RoutingDecision['targetNode']> = {
+/**
+ * Map from confidence tier to router target node.
+ * Typed against ConfidenceModelTier so TypeScript enforces completeness —
+ * any new tier added to confidenceScoring.ts must be handled here too.
+ */
+const CONFIDENCE_TIER_TO_NODE: Record<ConfidenceModelTier, RoutingDecision['targetNode']> = {
   'gemini-flash':  'gemini-flash',
   'deepseek':      'deepseek',
   'claude-sonnet': 'claude',
+} as const satisfies Record<ConfidenceModelTier, RoutingDecision['targetNode']>;
+
+/**
+ * Cost/capability rank for each target node (ascending = cheaper/faster).
+ * Used to determine whether a confidence override is an upgrade or downgrade
+ * based on actual node comparison, not raw confidence score.
+ */
+const NODE_COST_RANK: Record<RoutingDecision['targetNode'], number> = {
+  'gemini-flash':   1,
+  'deepseek':       2,
+  'context-router': 2,
+  'claude':         3,
+  'jklaw':          3,
 };
 
 export interface RoutingDecision {
@@ -214,17 +232,26 @@ export class AgentRouter {
 
         // Apply confidence override for flexible task types
         if (memorySignal && CONFIDENCE_OVERRIDABLE.has(taskType)) {
-            const confidenceTarget = CONFIDENCE_TIER_TO_NODE[memorySignal.recommendedTier];
+            // Bug fix: fall back to staticTarget if tier key is missing from map (future-proof)
+            const confidenceTarget =
+                CONFIDENCE_TIER_TO_NODE[memorySignal.recommendedTier] ?? staticTarget;
             const overrideApplied = confidenceTarget !== staticTarget;
 
             if (overrideApplied) {
-                const direction = memorySignal.contextConfidence > 0.85
-                    ? 'downgraded (high confidence — using faster model)'
-                    : 'upgraded (low confidence — using more capable model)';
+                // Bug fix: determine direction by comparing actual node cost ranks,
+                // not by confidence score alone. A quality_analysis at 0.70 routes
+                // claude→deepseek which is a downgrade, not an upgrade.
+                const staticRank = NODE_COST_RANK[staticTarget] ?? 1;
+                const confidenceRank = NODE_COST_RANK[confidenceTarget] ?? 1;
+                const direction =
+                    confidenceRank > staticRank
+                        ? `upgraded to more capable model (ctx_conf=${memorySignal.contextConfidence.toFixed(3)} < 0.50)`
+                        : confidenceRank < staticRank
+                            ? `downgraded to faster model (ctx_conf=${memorySignal.contextConfidence.toFixed(3)} > 0.85)`
+                            : `remapped (same tier, ctx_conf=${memorySignal.contextConfidence.toFixed(3)})`;
 
                 console.log(
-                    `[AgentRouter] Confidence override: ${staticTarget} → ${confidenceTarget} ` +
-                    `(${direction}, ctx_conf=${memorySignal.contextConfidence.toFixed(3)})`
+                    `[AgentRouter] Confidence override: ${staticTarget} → ${confidenceTarget} (${direction})`
                 );
             }
 
