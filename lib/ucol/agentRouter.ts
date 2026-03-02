@@ -1,46 +1,94 @@
 /**
  * lib/ucol/agentRouter.ts
- * 
- * UCOL Unified Agent Router
- * 
- * Classifies incoming tasks and routes them to the most capable node:
- * 
- *   gemini-flash  → fast answers, fact extraction, embeddings
- *   claude        → quality code generation, nuanced analysis
- *   deepseek      → deep reasoning, multi-step logic
- *   jklaw         → research, strategy, orchestration, co-founder thinking
- *   context-router → full Gemini→Claude→Gemini code builder pipeline
- * 
- * JKlaw is a first-class routing target for tasks that need:
- *   - multi-source research synthesis
- *   - strategic / product-level decisions
- *   - long-horizon planning
- *   - anything that benefits from persistent memory across sessions
+ *
+ * UCOL Unified Agent Router — with Confidence-Aware Routing
+ *
+ * Classifies incoming tasks and routes them to the most capable node.
+ * Now supports a second routing dimension: memory context confidence.
+ *
+ * Two-axis routing:
+ *   Axis 1 — Task Type  (static, rules-based)
+ *   Axis 2 — Context Confidence  (dynamic, learned)
+ *
+ * When memory facts are provided, confidence scores override the static
+ * model target for "flexible" task types. Fixed pipelines (code generation,
+ * research, orchestration) are never overridden — they own their routing.
+ *
+ * Routing targets:
+ *   gemini-flash    → fast answers, fact extraction, embeddings
+ *   claude          → quality code generation, nuanced analysis
+ *   deepseek        → deep reasoning, multi-step logic
+ *   jklaw           → research, strategy, orchestration, co-founder thinking
+ *   context-router  → full Gemini→Claude→Gemini code builder pipeline
  */
 
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
+import type { ExtractedFact } from '@/lib/intelligentMemory';
+import {
+  scoreContextForRouting,
+  type ConfidenceModelTier,
+  type ConfidenceRoutingSignal,
+  type AggregationStrategy,
+  DEFAULT_BASE_CONFIDENCE,
+} from '@/lib/memory/confidenceScoring';
 
 // ─── Task Classification ────────────────────────────────────────────────────
 
 export type TaskType =
     | 'code_generation'      // → ContextRouter (Gemini→Claude→review loop)
-    | 'quick_answer'         // → Gemini Flash
-    | 'quality_analysis'     // → Claude
-    | 'deep_reasoning'       // → DeepSeek R1
+    | 'quick_answer'         // → Gemini Flash  (confidence-overridable)
+    | 'quality_analysis'     // → Claude        (confidence-overridable)
+    | 'deep_reasoning'       // → DeepSeek R1   (confidence-overridable)
     | 'memory_extract'       // → MemoryRouter (Gemini)
     | 'memory_synthesize'    // → MemoryRouter (DeepSeek or Gemini)
     | 'user_profile'         // → MemoryRouter (Claude)
-    | 'research'             // → JKlaw
-    | 'strategy'             // → JKlaw
-    | 'orchestration'        // → JKlaw
-    | 'unknown';             // → Gemini Flash (fallback)
+    | 'research'             // → JKlaw  (fixed — needs persistent memory)
+    | 'strategy'             // → JKlaw  (fixed — needs persistent memory)
+    | 'orchestration'        // → JKlaw  (fixed — needs persistent memory)
+    | 'unknown';             // → Gemini Flash (fallback, confidence-overridable)
+
+/** Task types where confidence can override the static model target */
+const CONFIDENCE_OVERRIDABLE: Set<TaskType> = new Set([
+  'quick_answer',
+  'quality_analysis',
+  'deep_reasoning',
+  'unknown',
+]);
+
+/**
+ * Map from confidence tier to router target node.
+ * Typed against ConfidenceModelTier so TypeScript enforces completeness —
+ * any new tier added to confidenceScoring.ts must be handled here too.
+ */
+const CONFIDENCE_TIER_TO_NODE: Record<ConfidenceModelTier, RoutingDecision['targetNode']> = {
+  'gemini-flash':  'gemini-flash',
+  'deepseek':      'deepseek',
+  'claude-sonnet': 'claude',
+} as const satisfies Record<ConfidenceModelTier, RoutingDecision['targetNode']>;
+
+/**
+ * Cost/capability rank for each target node (ascending = cheaper/faster).
+ * Used to determine whether a confidence override is an upgrade or downgrade
+ * based on actual node comparison, not raw confidence score.
+ */
+const NODE_COST_RANK: Record<RoutingDecision['targetNode'], number> = {
+  'gemini-flash':   1,
+  'deepseek':       2,
+  'context-router': 2,
+  'claude':         3,
+  'jklaw':          3,
+};
 
 export interface RoutingDecision {
     taskType: TaskType;
     targetNode: 'gemini-flash' | 'claude' | 'deepseek' | 'jklaw' | 'context-router';
-    confidence: number;      // 0.0 – 1.0
+    confidence: number;      // 0.0 – 1.0 — classifier confidence in task type
     reasoning: string;
     jklawWebhook?: boolean;  // if true, dispatch to JKlaw asynchronously
+    /** Present when memory facts were scored and influenced routing */
+    memorySignal?: ConfidenceRoutingSignal;
+    /** True when confidence scoring changed the model from the static default */
+    confidenceOverride?: boolean;
 }
 
 export interface AgentRouterTask {
@@ -49,6 +97,10 @@ export interface AgentRouterTask {
     context?: string;        // additional context (previous messages, facts, etc.)
     preferSpeed?: boolean;   // hint: prioritize latency over quality
     requireOrchestration?: boolean; // hint: this task needs multi-step coordination
+    /** Retrieved memory facts — triggers confidence-aware routing when provided */
+    memoryFacts?: ExtractedFact[];
+    /** Override aggregation strategy (default: 'minimum' — conservative) */
+    confidenceStrategy?: AggregationStrategy;
 }
 
 export interface AgentRouterResult {
@@ -83,7 +135,7 @@ Respond with ONLY a JSON object:
   "reasoning": "<one sentence>"
 }`;
 
-// ─── Routing Rules ──────────────────────────────────────────────────────────
+// ─── Static Routing Table ───────────────────────────────────────────────────
 
 const ROUTING_TABLE: Record<TaskType, RoutingDecision['targetNode']> = {
     code_generation:   'context-router',
@@ -115,7 +167,7 @@ export class AgentRouter {
     // ─── Classify a task ─────────────────────────────────────────────────
 
     async classify(task: AgentRouterTask): Promise<RoutingDecision> {
-        // Fast-path overrides
+        // Fast-path overrides (highest priority — never confidence-overridden)
         if (task.requireOrchestration) {
             return {
                 taskType: 'orchestration',
@@ -135,6 +187,16 @@ export class AgentRouter {
             };
         }
 
+        // Score memory context confidence if facts are provided
+        const memorySignal = task.memoryFacts && task.memoryFacts.length > 0
+            ? scoreContextForRouting(task.memoryFacts, task.confidenceStrategy ?? 'minimum')
+            : null;
+
+        // Classify task type via Gemini Flash
+        let taskType: TaskType = 'unknown';
+        let classifierConfidence = DEFAULT_BASE_CONFIDENCE;
+        let classifierReasoning = 'Unclassified — defaulting to Gemini Flash';
+
         try {
             const result = await this.gemini.generateStream(
                 [{ role: 'user', text: `Query: ${task.query}${task.context ? `\n\nContext: ${task.context.substring(0, 500)}` : ''}` }],
@@ -151,30 +213,69 @@ export class AgentRouter {
                 raw += decoder.decode(value, { stream: true });
             }
 
-            // Extract JSON from response
             const match = raw.match(/\{[\s\S]*\}/);
             if (!match) throw new Error('No JSON in classifier response');
 
             const parsed = JSON.parse(match[0]);
-            const taskType: TaskType = parsed.taskType || 'unknown';
-            const targetNode = ROUTING_TABLE[taskType] || 'gemini-flash';
+            taskType = (parsed.taskType as TaskType) || 'unknown';
+            classifierConfidence = parsed.confidence ?? 0.7;
+            classifierReasoning = parsed.reasoning || 'Classified by Gemini Flash router';
+        } catch (err) {
+            console.error('[AgentRouter] Classification failed:', err);
+            taskType = 'unknown';
+            classifierConfidence = 0.3;
+            classifierReasoning = 'Classification failed — defaulting to Gemini Flash';
+        }
+
+        // Determine static target from routing table
+        const staticTarget = ROUTING_TABLE[taskType] ?? 'gemini-flash';
+
+        // Apply confidence override for flexible task types
+        if (memorySignal && CONFIDENCE_OVERRIDABLE.has(taskType)) {
+            // Bug fix: fall back to staticTarget if tier key is missing from map (future-proof)
+            const confidenceTarget =
+                CONFIDENCE_TIER_TO_NODE[memorySignal.recommendedTier] ?? staticTarget;
+            const overrideApplied = confidenceTarget !== staticTarget;
+
+            if (overrideApplied) {
+                // Bug fix: determine direction by comparing actual node cost ranks,
+                // not by confidence score alone. A quality_analysis at 0.70 routes
+                // claude→deepseek which is a downgrade, not an upgrade.
+                const staticRank = NODE_COST_RANK[staticTarget] ?? 1;
+                const confidenceRank = NODE_COST_RANK[confidenceTarget] ?? 1;
+                const direction =
+                    confidenceRank > staticRank
+                        ? `upgraded to more capable model (ctx_conf=${memorySignal.contextConfidence.toFixed(3)} < 0.50)`
+                        : confidenceRank < staticRank
+                            ? `downgraded to faster model (ctx_conf=${memorySignal.contextConfidence.toFixed(3)} > 0.85)`
+                            : `remapped (same tier, ctx_conf=${memorySignal.contextConfidence.toFixed(3)})`;
+
+                console.log(
+                    `[AgentRouter] Confidence override: ${staticTarget} → ${confidenceTarget} (${direction})`
+                );
+            }
 
             return {
                 taskType,
-                targetNode,
-                confidence: parsed.confidence ?? 0.7,
-                reasoning: parsed.reasoning || 'Classified by Gemini Flash router',
-                jklawWebhook: targetNode === 'jklaw',
-            };
-        } catch (err) {
-            console.error('[AgentRouter] Classification failed:', err);
-            return {
-                taskType: 'unknown',
-                targetNode: 'gemini-flash',
-                confidence: 0.3,
-                reasoning: 'Classification failed — defaulting to Gemini Flash',
+                targetNode: confidenceTarget,
+                confidence: classifierConfidence,
+                reasoning: overrideApplied
+                    ? `${classifierReasoning} [confidence override: ctx=${memorySignal.contextConfidence.toFixed(2)} → ${memorySignal.recommendedTier}]`
+                    : classifierReasoning,
+                jklawWebhook: confidenceTarget === 'jklaw',
+                memorySignal,
+                confidenceOverride: overrideApplied,
             };
         }
+
+        return {
+            taskType,
+            targetNode: staticTarget,
+            confidence: classifierConfidence,
+            reasoning: classifierReasoning,
+            jklawWebhook: staticTarget === 'jklaw',
+            ...(memorySignal ? { memorySignal, confidenceOverride: false } : {}),
+        };
     }
 
     // ─── Dispatch to JKlaw ───────────────────────────────────────────────
@@ -192,12 +293,18 @@ export class AgentRouter {
             action: 'chat',
             prompt: task.query,
             messages: [],
-            // Include routing context so JKlaw knows why it was called
             _routingContext: {
                 taskType: decision.taskType,
                 reasoning: decision.reasoning,
                 confidence: decision.confidence,
                 callerContext: task.context?.substring(0, 500),
+                memorySignal: decision.memorySignal
+                    ? {
+                        contextConfidence: decision.memorySignal.contextConfidence,
+                        recommendedTier: decision.memorySignal.recommendedTier,
+                        factCount: decision.memorySignal.factCount,
+                    }
+                    : undefined,
             },
         };
 
@@ -211,6 +318,9 @@ export class AgentRouter {
                     'Content-Type': 'application/json',
                     'X-JKlaw-Key': this.jklawKey,
                     'X-UCOL-Route': decision.taskType,
+                    ...(decision.memorySignal
+                        ? { 'X-UCOL-Confidence': decision.memorySignal.contextConfidence.toFixed(3) }
+                        : {}),
                 },
                 body: JSON.stringify(payload),
                 signal: controller.signal,
@@ -230,7 +340,6 @@ export class AgentRouter {
             return { dispatched: true };
         } catch (err: any) {
             if (err.name === 'AbortError') {
-                // Fire-and-forget timed out — that's fine for async dispatch
                 return { dispatched: true };
             }
             return { dispatched: false, error: err.message };
@@ -242,29 +351,27 @@ export class AgentRouter {
     async route(task: AgentRouterTask): Promise<AgentRouterResult> {
         const decision = await this.classify(task);
 
-        console.log(`[AgentRouter] ${task.query.substring(0, 60)} → ${decision.targetNode} (${decision.taskType}, conf=${decision.confidence.toFixed(2)})`);
+        const confLabel = decision.memorySignal
+            ? `, ctx_conf=${decision.memorySignal.contextConfidence.toFixed(2)}, tier=${decision.memorySignal.recommendedTier}`
+            : '';
+
+        console.log(
+            `[AgentRouter] "${task.query.substring(0, 60)}" → ${decision.targetNode}` +
+            ` (type=${decision.taskType}, clf_conf=${decision.confidence.toFixed(2)}${confLabel}` +
+            `${decision.confidenceOverride ? ', ⚡ confidence_override' : ''})`
+        );
 
         if (decision.targetNode === 'jklaw') {
-            // For research/strategy/orchestration: dispatch to JKlaw
-            // Wait for response for strategy (synchronous), fire-and-forget for orchestration
             const waitForResponse = decision.taskType === 'research' || decision.taskType === 'strategy';
             const result = await this.dispatchToJKlaw(task, decision, waitForResponse);
-
-            return {
-                decision,
-                response: result.response,
-                dispatched: result.dispatched,
-                error: result.error,
-            };
+            return { decision, response: result.response, dispatched: result.dispatched, error: result.error };
         }
 
-        // For other nodes, return the decision and let the caller handle it
-        // (MemoryRouter, ContextRouter, etc. handle their own execution)
         return { decision };
     }
 }
 
-// ─── Singleton helper ────────────────────────────────────────────────────────
+// ─── Singleton ───────────────────────────────────────────────────────────────
 
 let _router: AgentRouter | null = null;
 
@@ -275,12 +382,13 @@ export function getAgentRouter(): AgentRouter {
 
 /**
  * Quick-classify a query without full routing.
- * Useful for the conversationEngine to decide if JKlaw should be looped in.
+ * Pass memoryFacts to enable confidence-aware classification.
  */
 export async function classifyQuery(
     query: string,
-    context?: string
+    context?: string,
+    memoryFacts?: ExtractedFact[]
 ): Promise<RoutingDecision> {
     const router = getAgentRouter();
-    return router.classify({ query, context });
+    return router.classify({ query, context, memoryFacts });
 }

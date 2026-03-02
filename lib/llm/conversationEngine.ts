@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { waitUntil } from "@vercel/functions";
 import { classifyQuery } from '@/lib/ucol/agentRouter';
+import { scoreContextForRouting } from '@/lib/memory/confidenceScoring';
 
 import { ExtractedFact } from '../intelligentMemory';
 import { SearchResult } from '../integrations/anyCrawl';
@@ -80,6 +81,11 @@ export type ConversationEngineResult = {
     promptVersion?: string | null;
     model?: string;
     userQuery?: string;
+    confidenceSignal?: {
+      contextConfidence: number;
+      recommendedTier: string;
+      overrideApplied: boolean;
+    };
     context?: {
       factsCount?: number;
       graphEntitiesCount?: number;
@@ -229,7 +235,9 @@ export async function generateConversationReply(
   }
   // ---------------------------------------------------------
 
-  const { provider, modelId: actualModelId } = getProviderForMode(agentMode);
+  // Use `let` so the confidence routing layer can upgrade the provider
+  // for standard mode when context confidence is low.
+  let { provider, modelId: actualModelId } = getProviderForMode(agentMode);
 
   const { messages, fileData, mimeType } = parsed;
 
@@ -380,6 +388,45 @@ export async function generateConversationReply(
     factContext = effectivelyDisabled ? "" : formatFactsForPrompt(intelligentFacts);
   }
 
+  // ─── UCOL Confidence-Aware Provider Override ────────────────────────────────
+  // Only applies to 'standard' mode — explicit mode selections (quality, reasoning)
+  // represent the user's intent and are never overridden.
+  //
+  // Logic: score the top-5 retrieved facts. Low confidence → novel context →
+  // route to a more capable model. High confidence → known pattern → stay fast.
+  //
+  //   > 0.85  → Gemini Flash  (default, no change)
+  //   0.5–0.85 → DeepSeek R1  (moderate confidence — balanced reasoning)
+  //   < 0.5   → Claude Sonnet (low confidence — novel query, max capability)
+  let confidenceSignal: ReturnType<typeof scoreContextForRouting> | null = null;
+  let confidenceOverrideApplied = false;
+
+  if (agentMode === 'standard' && !effectivelyDisabled && intelligentFacts.length > 0) {
+    try {
+      confidenceSignal = scoreContextForRouting(intelligentFacts.slice(0, 5), 'minimum');
+
+      if (confidenceSignal.recommendedTier !== 'gemini-flash') {
+        const upgradeMode = confidenceSignal.recommendedTier === 'claude-sonnet'
+          ? 'quality'
+          : 'reasoning';
+        const upgraded = getProviderForMode(upgradeMode);
+        provider = upgraded.provider;
+        actualModelId = upgraded.modelId;
+        confidenceOverrideApplied = true;
+
+        console.log(
+          `[ConversationEngine] Confidence override: ${DEFAULT_MODEL} → ${actualModelId}` +
+          ` (ctx_conf=${confidenceSignal.contextConfidence.toFixed(3)},` +
+          ` tier=${confidenceSignal.recommendedTier},` +
+          ` facts=${confidenceSignal.factCount})`
+        );
+      }
+    } catch (e: any) {
+      // Non-blocking — confidence scoring failure falls back to default provider
+      console.warn('[ConversationEngine] Confidence scoring failed (non-blocking):', e.message);
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────────
 
   // RAG memory context — always attempt, graceful fallback on failure
   let ragResult: { contextString: string; sources: Source[] } = { contextString: "", sources: [] };
@@ -437,6 +484,9 @@ export async function generateConversationReply(
   const textEncoder = new TextEncoder();
   const textDecoder = new TextDecoder();
   let fullText = '';
+
+  // Snapshot facts at call time so the closure captures the ranked list
+  const factsForRouting = intelligentFacts.slice(0, 5);
 
   const transformedStream = new TransformStream({
     transform(chunk, controller) {
@@ -517,13 +567,19 @@ export async function generateConversationReply(
         })());
       }
 
-      // ── UCOL Agent Router: fire-and-forget dispatch for research/strategy/orchestration ──
-      // Classifies the query in the background — never blocks the user response.
-      // If JKlaw should handle it, dispatches asynchronously so JKlaw builds context.
+      // ── UCOL Agent Router: confidence-aware fire-and-forget dispatch ──────────
+      // Passes the ranked memory facts so the router can use confidence scoring
+      // to make a smarter dispatch decision. Never blocks the user response.
       if (!options.disableSideEffects && fullText && process.env.JKLAW_API_KEY) {
         waitUntil((async () => {
           try {
-            const decision = await classifyQuery(userQuery, fullText.substring(0, 400));
+            // Pass factsForRouting — enables the two-axis (task + confidence) routing
+            const decision = await classifyQuery(
+              userQuery,
+              fullText.substring(0, 400),
+              factsForRouting,
+            );
+
             if (decision.targetNode === 'jklaw') {
               const { getAgentRouter } = await import('@/lib/ucol/agentRouter');
               const router = getAgentRouter();
@@ -532,7 +588,11 @@ export async function generateConversationReply(
                 decision,
                 false // fire-and-forget
               );
-              console.log(`[UCOL] Dispatched "${userQuery.substring(0, 60)}" to JKlaw (${decision.taskType})`);
+              console.log(
+                `[UCOL] Dispatched "${userQuery.substring(0, 60)}" to JKlaw` +
+                ` (type=${decision.taskType}` +
+                `${decision.memorySignal ? `, ctx_conf=${decision.memorySignal.contextConfidence.toFixed(2)}` : ''})`
+              );
             }
           } catch (e) {
             // Non-blocking — never surface routing errors to users
@@ -554,6 +614,14 @@ export async function generateConversationReply(
     debug: {
       model: actualModelId,
       userQuery,
+      // Surface confidence signal in debug output for observability
+      ...(confidenceSignal ? {
+        confidenceSignal: {
+          contextConfidence: confidenceSignal.contextConfidence,
+          recommendedTier: confidenceSignal.recommendedTier,
+          overrideApplied: confidenceOverrideApplied,
+        }
+      } : {}),
       context: {
         factsCount: intelligentFacts.length,
         graphEntitiesCount: Array.isArray(graphData) ? graphData.length : undefined,
