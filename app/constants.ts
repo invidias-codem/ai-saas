@@ -1,4 +1,3 @@
-
 import {
   LayoutDashboard,
   MessageSquare,
@@ -7,6 +6,7 @@ import {
   Music,
   Code,
   Settings,
+  Zap,
 } from "lucide-react";
 
 export const routes = [
@@ -45,6 +45,12 @@ export const routes = [
     icon: Code,
     href: "/code",
     color: "text-green-700",
+  },
+  {
+    label: "Code Builder ⚡",
+    icon: Zap,
+    href: "/code/builder",
+    color: "text-yellow-400",
   },
   {
     label: "Settings",
