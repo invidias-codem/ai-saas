@@ -528,7 +528,7 @@ function buildExplanation(
   const topFeatures = Object.entries(result.featureImportances)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
-    .map(([f, imp]) => `${f}=${(features as FeatureVector)[f]?.toFixed(2) ?? '?'} (imp ${(imp * 100).toFixed(0)}%)`)
+    .map(([f, imp]) => `${f}=${(features as unknown as FeatureVector)[f]?.toFixed(2) ?? '?'} (imp ${(imp * 100).toFixed(0)}%)`)
     .join(', ')
 
   return `[ML] ${verdict} (conf=${(result.confidence * 100).toFixed(0)}%) — `
