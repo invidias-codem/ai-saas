@@ -20,7 +20,10 @@ import {
 import type { BuildSession, ContextFlowEntry, GeneratedFile } from '@/lib/ucol/types';
 
 export const runtime = 'nodejs';
-export const maxDuration = 120; // Long-running SSE — 2 min ceiling
+export const maxDuration = 300; // Vercel Pro: 5 min ceiling for streaming SSE
+
+// Max components before we warn and trim (prevents guaranteed timeout)
+const MAX_COMPONENTS = 12;
 
 // ─── Dev bypass helper ────────────────────────────────────────────────────────
 // Returns a synthetic user object if DEV_BYPASS_TOKEN is configured and the
@@ -65,6 +68,9 @@ export async function GET(req: Request) {
         // 3. Parse params
         const { searchParams } = new URL(req.url);
         const prompt = searchParams.get('prompt');
+        // ?mode=fast  → single-pass (no Gemini review loop) — faster, good for iteration
+        // ?mode=full  → full debate loop (default) — higher quality
+        const fast = searchParams.get('mode') === 'fast';
 
         if (!prompt || !prompt.trim()) {
             return new Response(JSON.stringify({ error: 'Missing prompt parameter' }), {
@@ -116,10 +122,21 @@ export async function GET(req: Request) {
                     // ── Phase 1: Gemini plans ──
                     const plan = await router.planProject(prompt, session);
                     session.plan = plan;
+
+                    // ── Component cap: warn + trim if Gemini over-plans ──
+                    if (plan.components.length > MAX_COMPONENTS) {
+                        const trimmed = plan.components.length - MAX_COMPONENTS;
+                        plan.components = plan.components.slice(0, MAX_COMPONENTS);
+                        send('warning', {
+                            message: `Plan trimmed: ${trimmed} lower-priority component(s) deferred to keep build under time limit. Use ?mode=fast for large projects.`,
+                            componentCount: plan.components.length,
+                        });
+                    }
+
                     send('plan-ready', plan);
 
-                    // ── Phase 2: Claude codes each component ──
-                    const files = await router.generateCode(plan, session);
+                    // ── Phase 2: Claude codes each component (parallel by dependency tier) ──
+                    const files = await router.generateCode(plan, session, fast);
 
                     // Emit individual file events
                     for (const file of files) {
@@ -198,6 +215,7 @@ export async function GET(req: Request) {
                         reviewRounds: session.reviewRounds,
                         constraintRounds: session.constraintRounds,
                         discoveredPatterns: session.discoveredPatterns,
+                        mode: fast ? 'fast' : 'full',
                     });
                 } catch (err: any) {
                     console.error('[UCOL:Stream] Build error:', err);

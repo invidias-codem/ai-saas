@@ -67,6 +67,25 @@ function getAnthropicClient(): Anthropic {
     return new Anthropic({ apiKey });
 }
 
+// Condensed plan summary — avoids sending full JSON (pages, dataModel, apiRoutes) every time
+function condensePlan(plan: any): string {
+    return [
+        `App: ${plan.appName}`,
+        `Description: ${plan.description}`,
+        `Tech stack: ${(plan.techStack || []).join(', ')}`,
+        `Components: ${(plan.components || []).map((c: any) => c.name).join(', ')}`,
+    ].join('\n');
+}
+
+// Trim dependency file content to the first 600 chars (enough to see exports/types)
+function trimDependencyContent(files: GeneratedFile[]): string {
+    if (!files || files.length === 0) return '(none — this is a leaf component)';
+    return files.map(f => {
+        const preview = f.content.length > 600 ? f.content.substring(0, 600) + '\n// ... (truncated)' : f.content;
+        return `### ${f.path}\n\`\`\`${f.language}\n${preview}\n\`\`\``;
+    }).join('\n\n');
+}
+
 export async function generateComponent(
     contextPackage: ContextPackage,
     refinement?: RefinementContext,
@@ -76,14 +95,18 @@ export async function generateComponent(
 
     const anthropic = getAnthropicClient();
 
-    let userPrompt = `## Project Plan
-${JSON.stringify(fullPlan, null, 2)}
+    let userPrompt = `## Project Context
+${condensePlan(fullPlan)}
 
 ## Component to Build
-${JSON.stringify(component, null, 2)}
+Name: ${component.name}
+File: ${component.filePath}
+Description: ${component.description}
+Props: ${JSON.stringify(component.props)}
+Dependencies: ${(component.dependencies || []).join(', ') || 'none'}
 
 ## Already Built Dependencies
-${(existingFiles || []).map((f: GeneratedFile) => `### ${f.path}\n\`\`\`${f.language}\n${f.content}\n\`\`\``).join('\n\n') || '(none — this is a leaf component)'}
+${trimDependencyContent(existingFiles || [])}
 
 ## Tech Stack
 ${(techStack || []).join(', ')}`;
@@ -137,7 +160,7 @@ ${discoveredPatterns.map((p, i) => `${i + 1}. **${p.component}** — ${p.pattern
 
     const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 8192,
+        max_tokens: 4096, // 8192 → 4096: components rarely need more; cuts latency ~40%
         system: systemPrompt,
         messages: [
             { role: 'user', content: userPrompt },

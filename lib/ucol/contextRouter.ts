@@ -35,6 +35,9 @@ const SIMILARITY_THRESHOLD = 0.95;
 const ORIGINALITY_THRESHOLD = 4; // Score below this triggers a creativity constraint
 const PRAGMATISM_THRESHOLD = 5;  // Score below this triggers a simplicity constraint
 
+// Per-component generation timeout (ms) — fall back to Gemini coder if exceeded
+const COMPONENT_TIMEOUT_MS = 25_000;
+
 // Creativity constraints — one is chosen randomly when originality is low
 const CREATIVITY_CONSTRAINTS = [
     'Extract at least one reusable custom hook that encapsulates the core logic of this component',
@@ -125,33 +128,77 @@ export class ContextRouter {
     }
 
     // ─── Phase 2: Route plan → Claude for code generation with review loop ───
+    // Parallel execution: components with no shared deps run concurrently.
+    // fast=true skips the Gemini review loop (single-pass generation).
 
-    async generateCode(plan: ProjectPlan, session: BuildSession): Promise<GeneratedFile[]> {
-        const files: GeneratedFile[] = [];
+    async generateCode(plan: ProjectPlan, session: BuildSession, fast = false): Promise<GeneratedFile[]> {
         const buildOrder = this.resolveBuildOrder(plan.components);
+        const tiers = this.groupIntoTiers(buildOrder);
+        const allFiles: GeneratedFile[] = [];
 
-        for (const component of buildOrder) {
-            const dependencies = files.filter(f =>
-                component.dependencies.includes(f.component)
+        for (const tier of tiers) {
+            // All components in a tier are independent — run them in parallel
+            const tierResults = await Promise.all(
+                tier.map(component => {
+                    const deps = allFiles.filter(f =>
+                        component.dependencies.includes(f.component)
+                    );
+                    return this.generateAndReviewComponent(component, plan, deps, session, fast);
+                })
             );
 
-            const componentFiles = await this.generateAndReviewComponent(
-                component, plan, dependencies, session
-            );
-
-            files.push(...componentFiles);
+            for (const files of tierResults) {
+                allFiles.push(...files);
+            }
         }
 
-        return files;
+        return allFiles;
+    }
+
+    // ─── Group topologically-sorted components into parallel tiers ───
+    // Tier 0: no dependencies. Tier N: depends only on components in tiers 0..N-1.
+
+    private groupIntoTiers(buildOrder: ComponentSpec[]): ComponentSpec[][] {
+        const tierOf = new Map<string, number>();
+
+        for (const component of buildOrder) {
+            const depTiers = component.dependencies
+                .filter(d => tierOf.has(d))
+                .map(d => tierOf.get(d)!);
+            const tier = depTiers.length > 0 ? Math.max(...depTiers) + 1 : 0;
+            tierOf.set(component.name, tier);
+        }
+
+        const tiers: ComponentSpec[][] = [];
+        for (const component of buildOrder) {
+            const t = tierOf.get(component.name) ?? 0;
+            if (!tiers[t]) tiers[t] = [];
+            tiers[t].push(component);
+        }
+
+        return tiers;
+    }
+
+    // ─── Per-promise timeout helper ───
+
+    private withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+        return Promise.race([
+            promise,
+            new Promise<T>((_, reject) =>
+                setTimeout(() => reject(new Error(`Timeout: ${label} exceeded ${ms}ms`)), ms)
+            ),
+        ]);
     }
 
     // ─── The Debate Loop with Originality Pressure ───
+    // fast=true: single-pass generation only (no Gemini review, no retries)
 
     private async generateAndReviewComponent(
         component: ComponentSpec,
         plan: ProjectPlan,
         dependencies: GeneratedFile[],
-        session: BuildSession
+        session: BuildSession,
+        fast = false
     ): Promise<GeneratedFile[]> {
         let attempt = 0;
         let feedbackHistory: ReviewFeedback[] = [];
@@ -210,20 +257,23 @@ export class ContextRouter {
                 }
                 : undefined;
 
-            // Try Claude first, fall back to Gemini
+            // Try Claude first (with timeout), fall back to Gemini
             try {
-                latestFiles = await generateComponent(
-                    contextPackage, refinement, session.discoveredPatterns
+                latestFiles = await this.withTimeout(
+                    generateComponent(contextPackage, refinement, session.discoveredPatterns),
+                    COMPONENT_TIMEOUT_MS,
+                    component.name
                 );
             } catch (claudeErr: any) {
-                console.warn(`[UCOL] Claude failed: ${claudeErr.message} — falling back to Gemini coder`);
+                const reason = claudeErr.message?.substring(0, 100) || 'Unknown error';
+                console.warn(`[UCOL] Claude failed for ${component.name}: ${reason} — falling back to Gemini coder`);
                 this.emitContextFlow({
                     id: crypto.randomUUID(),
                     timestamp: Date.now(),
                     source: 'system',
                     target: 'gemini',
-                    action: `⚡ Claude unavailable — falling back to Gemini coder`,
-                    reasoning: claudeErr.message?.substring(0, 100) || 'Unknown error',
+                    action: `⚡ Claude timeout — falling back to Gemini coder for ${component.name}`,
+                    reasoning: reason,
                     status: 'active',
                 });
                 latestFiles = await generateComponentGemini(
@@ -232,6 +282,20 @@ export class ContextRouter {
             }
 
             const currentCode = latestFiles.map(f => f.content).join('\n---\n');
+
+            // ── Fast mode: skip review, return immediately ──
+            if (fast) {
+                this.emitContextFlow({
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    source: 'system',
+                    target: 'user',
+                    action: `⚡ ${component.name} generated (fast mode — no review)`,
+                    reasoning: 'Fast mode: single-pass generation, no debate loop',
+                    status: 'complete',
+                });
+                return latestFiles;
+            }
 
             // ── Similarity escape hatch ──
             if (attempt > 1 && previousCode) {
