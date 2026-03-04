@@ -4,11 +4,13 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowRightIcon, ChatBubbleIcon, CodeIcon, DiscIcon, ImageIcon, VideoIcon } from "@radix-ui/react-icons";
-import { Brain, TrendingUp, Zap, Sparkles, Loader2, RefreshCw } from "lucide-react";
+import { Brain, TrendingUp, Zap, Sparkles, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@clerk/nextjs";
 import { DashboardSupport } from "@/components/dashboard-support";
+import { DataImportWizard } from "@/components/DataImportWizard";
 
 const tools = [
   {
@@ -84,7 +86,7 @@ const DashboardPage = () => {
   const { userId } = useAuth();
   const [analytics, setAnalytics] = useState<FactAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [backfilling, setBackfilling] = useState(false);
+  const [showImportWizard, setShowImportWizard] = useState(false);
 
   // Fetch memory analytics
   useEffect(() => {
@@ -113,28 +115,13 @@ const DashboardPage = () => {
     fetchAnalytics();
   }, [userId]);
 
-  const handleBackfill = async () => {
+  // Refresh analytics after a successful import
+  const handleImportComplete = async () => {
+    setShowImportWizard(false);
     try {
-      setBackfilling(true);
-      const response = await fetch("/api/memory/backfill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        // Refresh analytics
-        const analyticsResponse = await fetch("/api/memory/analytics");
-        if (analyticsResponse.ok) {
-          const analyticsData = await analyticsResponse.json();
-          setAnalytics(analyticsData);
-        }
-      }
-    } catch (error) {
-      console.error("Error backfilling memories:", error);
-    } finally {
-      setBackfilling(false);
-    }
+      const res = await fetch("/api/memory/analytics");
+      if (res.ok) setAnalytics(await res.json());
+    } catch { /* analytics refresh is best-effort */ }
   };
 
   return (
@@ -174,26 +161,14 @@ const DashboardPage = () => {
                     <p className="text-sm text-muted-foreground">Your AI&apos;s knowledge about you</p>
                   </div>
                 </div>
-                {analytics.totalFacts === 0 && (
-                  <Button
-                    onClick={handleBackfill}
-                    disabled={backfilling}
-                    size="sm"
-                    className="bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white shadow-lg shadow-purple-500/30 rounded-xl"
-                  >
-                    {backfilling ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Import Memories
-                      </>
-                    )}
-                  </Button>
-                )}
+                <Button
+                  onClick={() => setShowImportWizard(true)}
+                  size="sm"
+                  className="bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500 text-white shadow-lg shadow-purple-500/30 rounded-xl"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import Memories
+                </Button>
               </div>
 
               {/* Stats Grid */}
@@ -263,6 +238,19 @@ const DashboardPage = () => {
             </div>
           </div>
         )}
+
+        {/* Import Memories Wizard */}
+        <Dialog open={showImportWizard} onOpenChange={setShowImportWizard}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-purple-500" />
+                Import Memories
+              </DialogTitle>
+            </DialogHeader>
+            <DataImportWizard onComplete={handleImportComplete} />
+          </DialogContent>
+        </Dialog>
 
         {/* Support Narrative */}
         <DashboardSupport />
