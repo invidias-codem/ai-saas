@@ -1,0 +1,120 @@
+// middleware.ts — UPDATED with referral tracking
+// Changes from original: added referral cookie capture block (~15 lines)
+// Everything else is unchanged.
+
+import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
+import createMiddleware from 'next-intl/middleware';
+import { NextResponse } from 'next/server';
+import { parseReferralParams, REFERRAL_COOKIE, PLATFORM_COOKIE, COOKIE_MAX_AGE } from '@/lib/referral';
+
+const intlMiddleware = createMiddleware({
+    locales: ['en', 'th', 'vi'],
+    defaultLocale: 'en',
+    localePrefix: 'always'
+});
+
+const isPublicRoute = createRouteMatcher([
+    '/',
+    '/:locale',
+    '/:locale/sign-in(.*)',
+    '/:locale/sign-up(.*)',
+    '/sign-in(.*)',
+    '/sign-up(.*)',
+    '/privacy',
+    '/:locale/privacy',
+    '/support',
+    '/:locale/support',
+    '/slack',
+    '/:locale/slack',
+    '/blog(.*)',
+    '/:locale/blog(.*)',
+    '/api/guest-chat',
+    '/api/feedback',
+    '/api/integrations/slack/callback',
+    '/api/integrations/slack/events',
+    '/api/integrations/slack/command',
+    '/api/integrations/slack/interactivity',
+    '/api/integrations/slack/auth',
+    '/api/webhooks/kofi',
+    '/api/support/verify-donation',
+    '/api/integrations/telegram/webhook',
+    '/api/internal/jklaw',
+    '/api/internal/route-to-jklaw',
+    '/api/referral/capture',  // ← NEW: public so it works right after signup
+]);
+
+export default clerkMiddleware(async (auth, req) => {
+    const isApi = req.nextUrl.pathname.startsWith('/api') || req.nextUrl.pathname.startsWith('/trpc');
+
+    // ─── REFERRAL TRACKING (runs on ALL page requests, no auth needed) ──────────
+    // Only capture on page routes (not API), and only if ?ref= is present
+    const { ref, platform, campaign } = parseReferralParams(req.nextUrl.searchParams);
+
+    let response: NextResponse | undefined;
+
+    if (ref && !isApi) {
+        // First-touch only: don't overwrite an existing cookie
+        const existingRef = req.cookies.get(REFERRAL_COOKIE)?.value;
+
+        if (!existingRef) {
+            // We'll set the cookie on the response after routing resolves
+            // Using a flag to apply after intlMiddleware or auth redirect
+            req.headers.set('x-capture-ref', ref);
+            req.headers.set('x-capture-platform', platform || 'direct');
+            if (campaign) req.headers.set('x-capture-campaign', campaign);
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────────
+
+    if (isApi) {
+        if (isPublicRoute(req)) return;
+        const { userId } = await auth();
+        if (!userId) {
+            return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        }
+        return;
+    }
+
+    let res: NextResponse;
+
+    if (isPublicRoute(req)) {
+        res = intlMiddleware(req) as NextResponse;
+    } else {
+        const { userId, redirectToSignIn } = await auth();
+        if (!userId) return redirectToSignIn();
+        res = intlMiddleware(req) as NextResponse;
+    }
+
+    // Apply referral cookies to the response if we captured a ref above
+    const capturedRef = req.headers.get('x-capture-ref');
+    if (capturedRef) {
+        res.cookies.set(REFERRAL_COOKIE, capturedRef, {
+            maxAge:   COOKIE_MAX_AGE,
+            path:     '/',
+            sameSite: 'lax',
+            secure:   process.env.NODE_ENV === 'production',
+            httpOnly: false, // Must be readable by client-side JS for capture API call
+        });
+        const capturedPlatform = req.headers.get('x-capture-platform');
+        if (capturedPlatform) {
+            res.cookies.set(PLATFORM_COOKIE, capturedPlatform, {
+                maxAge:   COOKIE_MAX_AGE,
+                path:     '/',
+                sameSite: 'lax',
+                secure:   process.env.NODE_ENV === 'production',
+            });
+        }
+    }
+
+    return res;
+});
+
+export const config = {
+    matcher: [
+        '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+        '/(api|trpc)(.*)',
+    ],
+};
