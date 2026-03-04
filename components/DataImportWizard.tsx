@@ -4,11 +4,11 @@ import React, { useState, useEffect, useRef } from "react"
 import { Upload, FileType, Check, AlertCircle, Loader2, Shield, Lock, EyeOff } from "lucide-react"
 import { ImportPreview } from "@/components/ImportPreview"
 import { cn } from "@/lib/utils"
-import type { GenieUniversalImport, PreviewableParser } from "@/lib/types/imports"
+import type { GenieUniversalImport, PreviewableParser, SupportedPlatform } from "@/lib/types/imports"
 
 // --- Types ---
 
-type Platform = "openai" | "anthropic" | "gemini" | "perplexity" | "manus" | "other"
+type Platform = SupportedPlatform
 
 interface ImportStats {
     conversationsFound: number
