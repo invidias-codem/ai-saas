@@ -1,6 +1,9 @@
 // app/api/code-builder/stream/route.ts
 // SSE streaming endpoint for UCOL Code Builder.
 // Clerk auth + rate limiting + per-request ContextRouter + error events.
+//
+// DEV BYPASS: Set DEV_BYPASS_TOKEN in .env.local and pass ?dev_token=<value>
+// to skip Clerk auth for local testing. Never set this in production.
 
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
@@ -19,25 +22,44 @@ import type { BuildSession, ContextFlowEntry, GeneratedFile } from '@/lib/ucol/t
 export const runtime = 'nodejs';
 export const maxDuration = 120; // Long-running SSE — 2 min ceiling
 
+// ─── Dev bypass helper ────────────────────────────────────────────────────────
+// Returns a synthetic user object if DEV_BYPASS_TOKEN is configured and the
+// request includes a matching ?dev_token= param. Returns null otherwise.
+function checkDevBypass(req: Request): { userId: string } | null {
+    const bypassToken = process.env.DEV_BYPASS_TOKEN;
+    if (!bypassToken || process.env.NODE_ENV === 'production') return null;
+
+    const { searchParams } = new URL(req.url);
+    const provided = searchParams.get('dev_token');
+    if (provided && provided === bypassToken) {
+        return { userId: 'dev-bypass-user' };
+    }
+    return null;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function GET(req: Request) {
     try {
-        // 1. Auth
-        const user = await requireAuth();
+        // 1. Auth (with dev bypass for local testing)
+        const devUser = checkDevBypass(req);
+        const user = devUser ?? await requireAuth();
         const ip = getClientIP(req);
 
-        // 2. Rate Limiting (AI endpoint)
-        const rateLimit = await limitApiEndpoint(user.userId, ip, 'ai');
-        if (!rateLimit.success) {
-            return new Response(
-                JSON.stringify({ error: 'Too many requests', message: 'Code builder rate limit exceeded' }),
-                {
-                    status: 429,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
-                    },
-                }
-            );
+        // 2. Rate Limiting — skip for dev bypass
+        if (!devUser) {
+            const rateLimit = await limitApiEndpoint(user.userId, ip, 'ai');
+            if (!rateLimit.success) {
+                return new Response(
+                    JSON.stringify({ error: 'Too many requests', message: 'Code builder rate limit exceeded' }),
+                    {
+                        status: 429,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
+                        },
+                    }
+                );
+            }
         }
 
         // 3. Parse params
