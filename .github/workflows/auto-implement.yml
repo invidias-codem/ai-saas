@@ -19,9 +19,9 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -90,6 +90,8 @@ jobs:
 
       - name: Commit Applied Changes
         if: steps.extract.outputs.pr_number != ''
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           git config user.name "Genie Auto-Implementer"
           git config user.email "genie@gen1e.xyz"
@@ -105,8 +107,8 @@ jobs:
             git commit -m "🤖 Auto-implement: $file" -m "Applied safe suggestion from PR review"
           done
           
-          git pull --rebase origin HEAD
-          git push origin HEAD
+          git pull --rebase origin "$HEAD_BRANCH"
+          git push origin HEAD:refs/heads/$HEAD_BRANCH
 
       - name: Post Summary Comment
         if: steps.extract.outputs.pr_number != ''
