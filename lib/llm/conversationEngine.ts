@@ -32,6 +32,12 @@ import { generateEmbedding } from "@/lib/memory/embedding";
 import { performResearch, formatSearchResults } from "@/lib/agents/researcher";
 import { getUserProfile, formatUserProfileForPrompt } from "@/lib/memoryPromotion";
 import { SecurityAgent } from "@/lib/security/securityAgent";
+// ── World Model: Distribution Shift + Self-Benchmarking ──────────────────────
+import { createDistributionShiftDetector } from '@/lib/world-model/distribution-shift';
+import { createBenchmarkingPipeline } from '@/lib/world-model/benchmarking';
+import { ModelStore } from '@/lib/world-model/ml/ModelStore';
+import { supabase } from '@/lib/supabaseClient';
+import type { AIOutputAudit } from '@/lib/world-model/types';
 
 // ChatMessageSchema imported from types
 
@@ -472,6 +478,38 @@ export async function generateConversationReply(
     }
   }
 
+  // ── World Model: instantiate detectors (lightweight, no I/O) ─────────────────
+  // Created here so both the logQuery() call below and the flush() side-effect
+  // share the same instances without re-allocating on every chunk.
+  const wmDetector  = createDistributionShiftDetector(supabase);
+  const wmModelStore = new ModelStore(supabase);
+  const { benchmark: wmBenchmark } = createBenchmarkingPipeline(supabase, wmModelStore);
+
+  // Classify this query's domain once — used by both logQuery and scoreResponse.
+  const wmDomain = (() => {
+    try { return wmDetector.classifyDomain(userQuery); }
+    catch { return 'general' as const; }
+  })();
+
+  // Track stream start time for latency scoring in flush().
+  const streamStartMs = Date.now();
+
+  // ── logQuery(): fire-and-forget — never blocks the user response ─────────────
+  void (async () => {
+    try {
+      await wmDetector.logQuery({
+        session_id: userId,
+        domain: wmDomain,
+        keywords: wmDetector.extractKeywords(userQuery),
+        timestamp: new Date(),
+        model_used: actualModelId,
+      });
+    } catch (e) {
+      console.warn('[WorldModel] logQuery failed (non-blocking):', e);
+    }
+  })();
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
     model: actualModelId,
     temperature: 0.9,
@@ -561,6 +599,34 @@ export async function generateConversationReply(
                 await Promise.allSettled(edgePromises);
               }
             }
+            // ── World Model: score this response via ModelSelfBenchmark ────────
+            // Records latency, claim quality, and graph utilization for the
+            // feedback loop. Stub audit is used until the Delta Engine is wired.
+            // TODO: replace stubAudit with real Delta Engine claim verdicts once
+            //       DeltaEngine.auditResponse() is integrated here.
+            try {
+              const stubAudit: AIOutputAudit = {
+                id: crypto.randomUUID(),
+                created_at: new Date(),
+                session_id: userId,
+                model: actualModelId,
+                claims: [],
+                overall_delta_score: 0,    // placeholder until Delta Engine wired
+                hallucination_rate: 0,     // placeholder until Delta Engine wired
+                domain: wmDomain,
+              };
+              await wmBenchmark.scoreResponse({
+                sessionId: userId,
+                model: actualModelId,
+                domain: wmDomain,
+                audit: stubAudit,
+                latencyMs: Date.now() - streamStartMs,
+              });
+            } catch (e) {
+              console.warn('[WorldModel] scoreResponse failed (non-blocking):', e);
+            }
+            // ────────────────────────────────────────────────────────────────────
+
           } catch (e) {
             console.error('Side effect processing failed', e);
           }
