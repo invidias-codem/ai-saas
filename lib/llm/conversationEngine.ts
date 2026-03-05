@@ -38,6 +38,7 @@ import { createBenchmarkingPipeline } from '@/lib/world-model/benchmarking';
 import { ModelStore } from '@/lib/world-model/ml/ModelStore';
 import { supabase } from '@/lib/supabaseClient';
 import type { AIOutputAudit } from '@/lib/world-model/types';
+import { deltaEngine } from '@/lib/world-model/delta';
 
 // ChatMessageSchema imported from types
 
@@ -482,7 +483,7 @@ export async function generateConversationReply(
   // Created here so both the logQuery() call below and the flush() side-effect
   // share the same instances without re-allocating on every chunk.
   const wmDetector  = createDistributionShiftDetector(supabase);
-  const wmModelStore = new ModelStore(supabase);
+  const wmModelStore = new ModelStore();
   const { benchmark: wmBenchmark } = createBenchmarkingPipeline(supabase, wmModelStore);
 
   // Classify this query's domain once — used by both logQuery and scoreResponse.
@@ -599,6 +600,16 @@ export async function generateConversationReply(
                 await Promise.allSettled(edgePromises);
               }
             }
+            // ── World Model: Delta Engine (Phase 3) ──────────────────────────
+            // Fire-and-forget: audit AI output against world model (never blocks response)
+            if (process.env.ENABLE_DELTA_AUDIT !== 'false') {
+              void deltaEngine.scoreClaims(
+                fullText,        // the assembled response string
+                userId,          // sessionId (using userId as session scope for now)
+                actualModelId,   // the model that generated this response
+              ).catch((err) => console.error('[DeltaEngine] audit failed:', err));
+            }
+
             // ── World Model: score this response via ModelSelfBenchmark ────────
             // Records latency, claim quality, and graph utilization for the
             // feedback loop. Stub audit is used until the Delta Engine is wired.
