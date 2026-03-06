@@ -83,6 +83,64 @@ const withNextIntl = createNextIntlPlugin('./i18n.ts');
 // Merge MDX config with Next.js config
 export default withMDX(withNextIntl({
   ...nextConfig,
+  async redirects() {
+    return [
+      // ── Non-locale routes → /en/* (permanent 308) ───────────────────────────
+      // These were returning 404 because next-intl requires a locale prefix.
+      // Using permanent: false (307) so we can change the default locale later
+      // without being stuck in cached redirects.
+      {
+        source: '/dashboard',
+        destination: '/en/dashboard',
+        permanent: false,
+      },
+      {
+        source: '/dashboard/:path*',
+        destination: '/en/dashboard/:path*',
+        permanent: false,
+      },
+      {
+        source: '/blog',
+        destination: '/en/blog',
+        permanent: false,
+      },
+      {
+        source: '/blog/:path*',
+        destination: '/en/blog/:path*',
+        permanent: false,
+      },
+      {
+        source: '/support',
+        destination: '/en/support',
+        permanent: false,
+      },
+      {
+        source: '/support/:path*',
+        destination: '/en/support/:path*',
+        permanent: false,
+      },
+      {
+        source: '/slack',
+        destination: '/en/slack',
+        permanent: false,
+      },
+      {
+        source: '/settings',
+        destination: '/en/settings',
+        permanent: false,
+      },
+      {
+        source: '/settings/:path*',
+        destination: '/en/settings/:path*',
+        permanent: false,
+      },
+      {
+        source: '/conversation/:path*',
+        destination: '/en/conversation/:path*',
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {
