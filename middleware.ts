@@ -1,6 +1,6 @@
-// middleware.ts — UPDATED with referral tracking
-// Changes from original: added referral cookie capture block (~15 lines)
-// Everything else is unchanged.
+// middleware.ts — UPDATED: fix Clerk auth() context propagation for API routes
+// Changes from previous: return NextResponse.next() instead of bare return; for API routes
+// so Clerk can inject auth headers into downstream route handlers (fixes 500s on all API routes).
 
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import createMiddleware from 'next-intl/middleware';
@@ -40,7 +40,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/integrations/telegram/webhook',
     '/api/internal/jklaw',
     '/api/internal/route-to-jklaw',
-    '/api/referral/capture',  // ← NEW: public so it works right after signup
+    '/api/referral/capture',  // ← public so it works right after signup
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
@@ -49,8 +49,6 @@ export default clerkMiddleware(async (auth, req) => {
     // ─── REFERRAL TRACKING (runs on ALL page requests, no auth needed) ──────────
     // Only capture on page routes (not API), and only if ?ref= is present
     const { ref, platform, campaign } = parseReferralParams(req.nextUrl.searchParams);
-
-    let response: NextResponse | undefined;
 
     if (ref && !isApi) {
         // First-touch only: don't overwrite an existing cookie
@@ -67,7 +65,10 @@ export default clerkMiddleware(async (auth, req) => {
     // ────────────────────────────────────────────────────────────────────────────
 
     if (isApi) {
-        if (isPublicRoute(req)) return;
+        // IMPORTANT: Must return NextResponse.next() (not bare `return`) so Clerk
+        // injects its internal auth headers. Without this, auth() calls inside
+        // route handlers throw "Clerk can't detect usage of clerkMiddleware()".
+        if (isPublicRoute(req)) return NextResponse.next();
         const { userId } = await auth();
         if (!userId) {
             return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
@@ -75,7 +76,7 @@ export default clerkMiddleware(async (auth, req) => {
                 headers: { 'Content-Type': 'application/json' },
             });
         }
-        return;
+        return NextResponse.next();
     }
 
     let res: NextResponse;
