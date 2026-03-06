@@ -4,6 +4,7 @@ import { Montserrat } from "next/font/google";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { useLocale } from "next-intl";
 
 import { cn } from "@/lib/utils";
 import { routes } from "@/app/constants";
@@ -21,13 +22,16 @@ interface SidebarProps {
 const Sidebar = ({ onNavigate }: SidebarProps) => {
   const pathname = usePathname();
   const router = useRouter();
+  const locale = useLocale();
+
+  // Build a locale-prefixed href so next-intl routing works correctly
+  const localHref = (href: string) => `/${locale}${href}`;
 
   const handleClick = (href: string) => {
     if (onNavigate) {
       onNavigate();
     }
-    // Programmatically navigate to ensure it works on mobile
-    router.push(href);
+    router.push(localHref(href));
   };
 
   return (
@@ -51,7 +55,8 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
               onClick={() => handleClick(route.href)}
               className={cn(
                 "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:text-white hover:bg-white/10 rounded-lg transition",
-                pathname === route.href
+                // Compare against locale-prefixed path so active state is correct
+                pathname === localHref(route.href)
                   ? "text-white bg-white/10"
                   : "text-zinc-400"
               )}
