@@ -38,7 +38,7 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
           onClick={() => handleClick("/dashboard")}
         >
           <div className="relative w-8 h-8 mr-4">
-            <Image fill alt="Logo" src="/genie.png" sizes="(max-width: 768px) 32px, 80px" />
+            <Image fill alt="Logo" src="/Genie.png" sizes="(max-width: 768px) 32px, 80px" />
           </div>
           <h1 className={cn("text-2xl font-bold", montserrat.className)}>
             Genie
