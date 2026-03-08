@@ -10,6 +10,7 @@ import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_
 import { requireAuth, handleAuthError } from "@/lib/security/apiAuth";
 import { checkTokenBudget, recordTokenUsage } from "@/lib/security/budgetGuard";
 import { estimateTokenCount } from "@/lib/ragMemory";
+import { audit } from "@/lib/security/auditLog";
 import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
@@ -50,11 +51,15 @@ export async function POST(req: Request) {
     const estimatedTokens = estimateTokenCount(userQuery) + 2048; // query + max response
     const budgetCheck = await checkTokenBudget(userId, estimatedTokens);
     if (!budgetCheck.allowed) {
+      void audit('chat.budget_exceeded', userId, { tier: budgetCheck.tier, used: budgetCheck.tokensUsedThisMonth, budget: budgetCheck.tokenBudget }, req);
       return NextResponse.json(
         { error: 'Token Budget Exceeded', message: budgetCheck.reason },
         { status: 402 }
       );
     }
+
+    // Log chat request
+    void audit('chat.request', userId, { estimatedTokens, tier: budgetCheck.tier }, req);
 
     // 4. Credit Check (Atomic)
     const cost = CREDIT_COSTS.CHAT_MESSAGE;

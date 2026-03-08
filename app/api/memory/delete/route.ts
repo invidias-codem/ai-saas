@@ -4,6 +4,7 @@ import { db } from "@/lib/firebaseAdmin";
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { uuidSchema } from '@/lib/security/inputValidation';
+import { auditMemoryOp } from '@/lib/security/auditLog';
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
     }
 
     await factRef.delete();
+    auditMemoryOp('memory.delete', user.userId, { memoryId: factId });
 
     return NextResponse.json({
       success: true,

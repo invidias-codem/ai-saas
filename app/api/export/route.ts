@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { exportToGUIF, exportToUDIFDraft, exportToOpenAIFormat } from '@/lib/import/exporters';
 import type { GenieExportOptions, GenieConversation } from '@/lib/types/imports';
+import { audit } from '@/lib/security/auditLog';
 
 export async function POST(req: Request) {
   try {
@@ -19,6 +20,13 @@ export async function POST(req: Request) {
     if (!conversations.length) {
       return NextResponse.json({ error: 'No conversations provided' }, { status: 400 });
     }
+
+    // Audit all data exports — high sensitivity operation
+    void audit('export.request', userId, {
+      format: options.format,
+      conversationCount: conversations.length,
+      includeMemories: options.includeMemories,
+    }, req);
 
     let exportedData: object;
     let filename: string;
