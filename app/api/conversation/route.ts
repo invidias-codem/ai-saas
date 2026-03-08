@@ -8,6 +8,8 @@ import {
 } from "@/lib/llm/conversationEngine";
 import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
 import { requireAuth, handleAuthError } from "@/lib/security/apiAuth";
+import { checkTokenBudget, recordTokenUsage } from "@/lib/security/budgetGuard";
+import { estimateTokenCount } from "@/lib/ragMemory";
 import { logger } from "@/lib/logger";
 
 export async function POST(req: Request) {
@@ -43,7 +45,18 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Credit Check (Atomic)
+    // 3. Token Budget Check (pre-flight — prevents runaway LLM spend)
+    const userQuery = validationResult.data.messages.at(-1)?.text ?? '';
+    const estimatedTokens = estimateTokenCount(userQuery) + 2048; // query + max response
+    const budgetCheck = await checkTokenBudget(userId, estimatedTokens);
+    if (!budgetCheck.allowed) {
+      return NextResponse.json(
+        { error: 'Token Budget Exceeded', message: budgetCheck.reason },
+        { status: 402 }
+      );
+    }
+
+    // 4. Credit Check (Atomic)
     const cost = CREDIT_COSTS.CHAT_MESSAGE;
     const idempotencyKey = req.headers.get('idempotency-key') || `chat-${userId}-${Date.now()}`;
 
@@ -77,6 +90,10 @@ export async function POST(req: Request) {
       }
       throw error;
     }
+
+    // Record actual token usage (fire-and-forget — never blocks response)
+    const modelUsed = result.debug?.model ?? 'gemini-2.0-flash';
+    void recordTokenUsage(userId, estimatedTokens, modelUsed);
 
     // Return the stream directly
     return new NextResponse(result.stream, {
