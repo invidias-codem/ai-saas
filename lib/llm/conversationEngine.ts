@@ -661,7 +661,17 @@ export async function generateConversationReply(
               const { getAgentRouter } = await import('@/lib/ucol/agentRouter');
               const router = getAgentRouter();
               await router.dispatchToJKlaw(
-                { query: userQuery, context: fullText.substring(0, 400), userId },
+                {
+                  query: userQuery,
+                  context: fullText.substring(0, 400),
+                  userId, // tenant scope — required
+                  goalContext: {
+                    // Surface the "why" behind this task to JKlaw (T-007)
+                    sessionIntent: formattedMessages.at(-2)?.text?.substring(0, 150),
+                    recentTopics: tags?.slice(0, 5),
+                    userTier: userContext?.subscriptionTier ?? 'free',
+                  },
+                },
                 decision,
                 false // fire-and-forget
               );

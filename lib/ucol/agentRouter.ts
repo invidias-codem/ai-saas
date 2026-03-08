@@ -91,9 +91,21 @@ export interface RoutingDecision {
     confidenceOverride?: boolean;
 }
 
+export interface AgentRouterGoalContext {
+    /** Current sprint or mission goal (from GOALS.md / product roadmap) */
+    currentGoal?: string;
+    /** User's recent conversation topics from knowledge graph */
+    recentTopics?: string[];
+    /** User's subscription tier — affects routing priority and budget */
+    userTier?: 'free' | 'pro' | 'enterprise';
+    /** Session intent — what the user is trying to accomplish this session */
+    sessionIntent?: string;
+}
+
 export interface AgentRouterTask {
     query: string;
-    userId?: string;
+    /** Required: Clerk user ID — enforces tenant isolation on all dispatches */
+    userId: string;
     context?: string;        // additional context (previous messages, facts, etc.)
     preferSpeed?: boolean;   // hint: prioritize latency over quality
     requireOrchestration?: boolean; // hint: this task needs multi-step coordination
@@ -101,6 +113,8 @@ export interface AgentRouterTask {
     memoryFacts?: ExtractedFact[];
     /** Override aggregation strategy (default: 'minimum' — conservative) */
     confidenceStrategy?: AggregationStrategy;
+    /** Goal ancestry context — gives routing nodes the "why" behind this task */
+    goalContext?: AgentRouterGoalContext;
 }
 
 export interface AgentRouterResult {
@@ -289,10 +303,18 @@ export class AgentRouter {
             return { dispatched: false, error: 'JKLAW_API_KEY not configured' };
         }
 
+        // Tenant scope guard — never dispatch without a userId
+        if (!task.userId) {
+            console.error('[AgentRouter] dispatchToJKlaw called without userId — blocking dispatch');
+            return { dispatched: false, error: 'Missing userId: tenant scope violation' };
+        }
+
         const payload = {
             action: 'chat',
             prompt: task.query,
             messages: [],
+            // Tenant identity — validated by JKlaw endpoint on receipt
+            userId: task.userId,
             _routingContext: {
                 taskType: decision.taskType,
                 reasoning: decision.reasoning,
@@ -303,6 +325,15 @@ export class AgentRouter {
                         contextConfidence: decision.memorySignal.contextConfidence,
                         recommendedTier: decision.memorySignal.recommendedTier,
                         factCount: decision.memorySignal.factCount,
+                    }
+                    : undefined,
+                // Goal ancestry — gives JKlaw the "why" behind this task (T-007)
+                goalContext: task.goalContext
+                    ? {
+                        currentGoal: task.goalContext.currentGoal,
+                        recentTopics: task.goalContext.recentTopics?.slice(0, 5),
+                        userTier: task.goalContext.userTier,
+                        sessionIntent: task.goalContext.sessionIntent,
                     }
                     : undefined,
             },

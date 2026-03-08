@@ -18,6 +18,7 @@ import { NextResponse } from 'next/server';
 import { generateConversationReply, ConversationRequestSchema } from '@/lib/llm/conversationEngine';
 import { storeMemory, searchMemories, deleteMemory } from '@/lib/memory/vectorStore';
 import { addNode } from '@/lib/memory/graphStore';
+import { audit } from '@/lib/security/auditLog';
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 const JKLAW_USER_ID = 'jklaw-internal-agent';
@@ -95,7 +96,21 @@ export async function POST(req: Request) {
 
     // ── chat ──────────────────────────────────────────────────────────────
     if (action === 'chat') {
-        const { messages, prompt, stream: wantStream = false } = body;
+        const { messages, prompt, stream: wantStream = false, userId: originatingUserId, _routingContext } = body;
+
+        // Validate tenant scope — userId must be present in every dispatch
+        if (!originatingUserId || typeof originatingUserId !== 'string') {
+            console.error('[JKlaw] Dispatch rejected: missing userId (tenant scope violation)');
+            return NextResponse.json({ error: 'Missing userId: tenant scope required for all dispatches' }, { status: 400 });
+        }
+
+        // Audit the agent dispatch with full tenant context
+        void audit('agent.dispatch', originatingUserId, {
+            targetNode: 'jklaw',
+            taskType: _routingContext?.taskType,
+            goalContext: _routingContext?.goalContext,
+            confidence: _routingContext?.confidence,
+        });
 
         if (!prompt && (!messages || messages.length === 0)) {
             return NextResponse.json({ error: 'prompt or messages required' }, { status: 400 });
