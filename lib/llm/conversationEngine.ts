@@ -668,8 +668,8 @@ export async function generateConversationReply(
                   goalContext: {
                     // Surface the "why" behind this task to JKlaw (T-007)
                     sessionIntent: messages.at(-2)?.text?.substring(0, 150),
-                    recentTopics: tags.slice(0, 5),
-                    userTier: 'free', // Tier inference added in T-004 budgetGuard; wire here when exposed on userContext
+                    recentTopics: extractTags(userQuery).slice(0, 5),
+                    userTier: 'free', // Tier inference from T-004 budgetGuard; wire here when exposed on userContext
                   },
                 },
                 decision,
