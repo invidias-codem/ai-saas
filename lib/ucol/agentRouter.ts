@@ -414,12 +414,14 @@ export function getAgentRouter(): AgentRouter {
 /**
  * Quick-classify a query without full routing.
  * Pass memoryFacts to enable confidence-aware classification.
+ * userId defaults to 'system' for internal classification calls.
  */
 export async function classifyQuery(
     query: string,
     context?: string,
-    memoryFacts?: ExtractedFact[]
+    memoryFacts?: ExtractedFact[],
+    userId: string = 'system'
 ): Promise<RoutingDecision> {
     const router = getAgentRouter();
-    return router.classify({ query, context, memoryFacts });
+    return router.classify({ query, context, memoryFacts, userId });
 }

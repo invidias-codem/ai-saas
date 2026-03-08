@@ -29,10 +29,14 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
-    const { query, context, preferSpeed, requireOrchestration } = body;
+    const { query, context, preferSpeed, requireOrchestration, userId } = body;
 
     if (!query || typeof query !== 'string') {
         return NextResponse.json({ error: 'query string required' }, { status: 400 });
+    }
+
+    if (!userId || typeof userId !== 'string') {
+        return NextResponse.json({ error: 'userId required for tenant scoping' }, { status: 400 });
     }
 
     try {
@@ -40,12 +44,12 @@ export async function POST(req: Request) {
 
         // Just classify — caller decides whether to dispatch
         if (body.classifyOnly) {
-            const decision = await router.classify({ query, context, preferSpeed, requireOrchestration });
+            const decision = await router.classify({ query, context, preferSpeed, requireOrchestration, userId });
             return NextResponse.json({ ok: true, decision, timestamp: new Date().toISOString() });
         }
 
         // Full route + execute
-        const result = await router.route({ query, context, preferSpeed, requireOrchestration });
+        const result = await router.route({ query, context, preferSpeed, requireOrchestration, userId });
 
         return NextResponse.json({
             ok: true,
