@@ -42,6 +42,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
+    const body = await req.json();
+
     const feedbackSchema = z.object({
       factId: z.string().uuid(),
       helpful: z.boolean(),

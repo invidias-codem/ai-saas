@@ -50,9 +50,11 @@ export async function POST(req: NextRequest) {
 
             case "create_file":
             case "update_file":
-                // Commit equivalent
-                // First get SHA if updating
-                let sha;
+                if (!path || !content) {
+                    return NextResponse.json({ error: 'Validation Error', details: 'path and content are required for file operations' }, { status: 400 });
+                }
+                // Commit equivalent — first get SHA if updating
+                let sha: string | undefined;
                 if (action === "update_file") {
                     try {
                         const existing = await octokit.rest.repos.getContent({ owner, repo: repoName, path });
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
                             sha = existing.data.sha;
                         }
                     } catch (e) {
-                        // Ignore if creating check
+                        // Ignore — file may not exist yet
                     }
                 }
 
@@ -76,6 +78,9 @@ export async function POST(req: NextRequest) {
                 break;
 
             case "create_pr":
+                if (!branch) {
+                    return NextResponse.json({ error: 'Validation Error', details: 'branch is required for create_pr' }, { status: 400 });
+                }
                 result = await octokit.rest.pulls.create({
                     owner,
                     repo: repoName,
