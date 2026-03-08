@@ -42,31 +42,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
-    const body = await req.json();
-    const { factId, helpful, rating, feedback } = body;
-
-    // Validate input with Zod
-    const factIdValidation = uuidSchema.safeParse(factId);
-    if (!factIdValidation.success) {
-      return NextResponse.json(
-        { error: 'Invalid fact ID format' },
-        { status: 400 }
-      );
-    }
-
     const feedbackSchema = z.object({
+      factId: z.string().uuid(),
       helpful: z.boolean(),
       rating: z.number().int().min(1).max(5),
-      feedback: z.string().optional()
+      feedback: z.string().max(1000).optional()
     });
 
-    const validationResult = feedbackSchema.safeParse({ helpful, rating, feedback });
+    const validationResult = feedbackSchema.safeParse(body);
     if (!validationResult.success) {
       return NextResponse.json(
         { error: 'Invalid input', details: validationResult.error.flatten() },
         { status: 400 }
       );
     }
+    
+    // Destructure validated data
+    const { factId, helpful, rating, feedback } = validationResult.data;
 
     // Call Cloud Function to update fact importance based on feedback
     if (!process.env.FEEDBACK_CLOUD_FUNCTION_URL) {

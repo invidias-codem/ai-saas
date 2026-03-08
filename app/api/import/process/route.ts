@@ -1,10 +1,30 @@
 
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { z } from 'zod';
 import { extractKnowledgeFromImport } from '@/lib/import/memoryExtractor';
 import { storeImportedMemories, createImportJob, updateImportJob } from '@/lib/import/memoryStorage';
 
 export const maxDuration = 300; // 5 minutes max for simple processing
+
+// Zod Schema for Validation
+const ImportedMessageSchema = z.object({
+    role: z.enum(['user', 'assistant', 'system', 'tool']).or(z.string()),
+    content: z.string().max(100000, "Message content too large"), // 100KB max per message
+    timestamp: z.string().optional(),
+});
+
+const ImportedConversationSchema = z.object({
+    externalId: z.string().optional(),
+    title: z.string().optional(),
+    messages: z.array(ImportedMessageSchema).max(500, "Too many messages in conversation"),
+});
+
+const ImportDataSchema = z.object({
+    version: z.string().optional(),
+    source: z.string().optional(),
+    conversations: z.array(ImportedConversationSchema).max(50, "Batch too large (max 50 conversations)"),
+});
 
 export async function POST(req: Request) {
     try {
@@ -13,32 +33,24 @@ export async function POST(req: Request) {
             return new NextResponse("Unauthorized", { status: 401 });
         }
 
-        const { importData, options, jobId: providedJobId } = await req.json();
+        const body = await req.json();
+        const { importData, options, jobId: providedJobId } = body;
 
-        if (!importData || !importData.conversations) {
-            return new NextResponse("Invalid import data", { status: 400 });
+        // Zod Validation
+        if (!importData) {
+             return new NextResponse("Missing importData", { status: 400 });
         }
-
-        // Add size validation
-        const MAX_CONVERSATIONS_PER_BATCH = 50;
-        const MAX_MESSAGES_PER_CONVERSATION = 500;
-
-        if (importData.conversations.length > MAX_CONVERSATIONS_PER_BATCH) {
-            return new NextResponse(
-                `Batch too large. Maximum ${MAX_CONVERSATIONS_PER_BATCH} conversations per request.`,
+        
+        const validationResult = ImportDataSchema.safeParse(importData);
+        if (!validationResult.success) {
+            return NextResponse.json(
+                { error: "Validation Error", details: validationResult.error.flatten() },
                 { status: 400 }
             );
         }
 
-        const hasOversizedConversation = importData.conversations.some(
-            (conv: any) => conv.messages?.length > MAX_MESSAGES_PER_CONVERSATION
-        );
-        if (hasOversizedConversation) {
-            return new NextResponse(
-                `Conversation too large. Maximum ${MAX_MESSAGES_PER_CONVERSATION} messages per conversation.`,
-                { status: 400 }
-            );
-        }
+        // Use validated data
+        const safeImportData = validationResult.data;
 
         let jobId = providedJobId;
 
@@ -46,10 +58,10 @@ export async function POST(req: Request) {
         if (!jobId) {
             jobId = await createImportJob(
                 userId,
-                importData.source,
+                safeImportData.source || 'unknown',
                 // Note: If batching, this total might be just the first batch's length if client doesn't send total.
                 // Ideal client sends total in options or first call.
-                options?.totalConversations || importData.conversations.length,
+                options?.totalConversations || safeImportData.conversations.length,
                 { fileName: options?.fileName }
             );
         }
@@ -59,7 +71,12 @@ export async function POST(req: Request) {
         // But for now, we process in-request (up to maxDuration)
 
         try {
-            const knowledge = await extractKnowledgeFromImport(importData);
+            // Cast back to any because safeParse strips unknown keys but extractKnowledgeFromImport might expect them
+            // or just rely on the structure we validated.
+            // Actually, we should probably pass the full object if we trust the extra fields,
+            // but for security we should only pass what we validated. 
+            // However, extractKnowledgeFromImport types are loose enough.
+            const knowledge = await extractKnowledgeFromImport(safeImportData as any);
 
             // Store memories
             const memoryIds = await storeImportedMemories(userId, knowledge.facts);

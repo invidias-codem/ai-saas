@@ -8,6 +8,7 @@
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { ContextRouter } from '@/lib/ucol/contextRouter';
+import { z } from 'zod';
 import {
     generatePackageJson,
     generateTsConfig,
@@ -21,6 +22,12 @@ import type { BuildSession, ContextFlowEntry, GeneratedFile } from '@/lib/ucol/t
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // Vercel Pro: 5 min ceiling for streaming SSE
+
+const CodeBuilderQuerySchema = z.object({
+    prompt: z.string().min(1, "Prompt is required").max(5000, "Prompt too long"),
+    mode: z.enum(['fast', 'full']).optional(),
+    dev_token: z.string().optional()
+});
 
 // Max components before we warn and trim (prevents guaranteed timeout)
 const MAX_COMPONENTS = 12;
@@ -66,18 +73,21 @@ export async function GET(req: Request) {
         }
 
         // 3. Parse params
-        const { searchParams } = new URL(req.url);
-        const prompt = searchParams.get('prompt');
-        // ?mode=fast  → single-pass (no Gemini review loop) — faster, good for iteration
-        // ?mode=full  → full debate loop (default) — higher quality
-        const fast = searchParams.get('mode') === 'fast';
+        const url = new URL(req.url);
+        const params = Object.fromEntries(url.searchParams.entries());
 
-        if (!prompt || !prompt.trim()) {
-            return new Response(JSON.stringify({ error: 'Missing prompt parameter' }), {
+        const validation = CodeBuilderQuerySchema.safeParse(params);
+        if (!validation.success) {
+            return new Response(JSON.stringify({ error: 'Validation Error', details: validation.error.flatten() }), {
                 status: 400,
                 headers: { 'Content-Type': 'application/json' },
             });
         }
+
+        const { prompt, mode } = validation.data;
+        // ?mode=fast  → single-pass (no Gemini review loop) — faster, good for iteration
+        // ?mode=full  → full debate loop (default) — higher quality
+        const fast = mode === 'fast';
 
         // 4. Build SSE stream
         const encoder = new TextEncoder();

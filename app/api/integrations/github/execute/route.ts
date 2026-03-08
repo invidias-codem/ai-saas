@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOctokit } from "@/lib/github";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/firebaseAdmin";
+import { z } from "zod";
+
+const GithubExecuteSchema = z.object({
+    action: z.enum(['get_repo', 'create_file', 'update_file', 'create_pr']),
+    repo: z.string().regex(/^[a-zA-Z0-9-]+\/[a-zA-Z0-9-._]+$/, "Invalid repo format (owner/repo)"),
+    path: z.string().max(1000).optional(),
+    message: z.string().max(1000).optional(),
+    content: z.string().max(1000000).optional(), // 1MB max content
+    branch: z.string().max(255).optional(),
+    title: z.string().max(255).optional(),
+});
 
 export async function POST(req: NextRequest) {
     const { userId } = await auth();
@@ -10,7 +21,13 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { action, repo, path, message, content, branch, title } = body;
+    const validation = GithubExecuteSchema.safeParse(body);
+
+    if (!validation.success) {
+        return NextResponse.json({ error: "Validation Error", details: validation.error.flatten() }, { status: 400 });
+    }
+
+    const { action, repo, path, message, content, branch, title } = validation.data;
 
     // Retrieve user's access token
     const integrationDoc = await db.collection("users").doc(userId).collection("integrations").doc("github").get();

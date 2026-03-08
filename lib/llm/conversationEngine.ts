@@ -43,11 +43,11 @@ import { deltaEngine } from '@/lib/world-model/delta';
 // ChatMessageSchema imported from types
 
 export const ConversationRequestSchema = z.object({
-  messages: z.array(ChatMessageSchema).min(1),
-  fileData: z.string().optional(),
-  fileName: z.string().optional(),
-  mimeType: z.string().optional(),
-  fileUri: z.string().optional(),
+  messages: z.array(ChatMessageSchema).min(1).max(100),
+  fileData: z.string().max(30 * 1024 * 1024, "File too large (max 20MB)").optional(),
+  fileName: z.string().max(255).optional(),
+  mimeType: z.string().max(100).optional(),
+  fileUri: z.string().max(1024).optional(),
   mode: z.enum(['standard', 'agentic-preview']).optional(),
 });
 
