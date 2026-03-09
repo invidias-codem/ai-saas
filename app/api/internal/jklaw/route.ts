@@ -210,7 +210,13 @@ export async function POST(req: Request) {
 
     // ── memory-delete ─────────────────────────────────────────────────────
     if (action === 'memory-delete') {
-        const { id } = body;
+        const { id, allowDestructiveActions } = body;
+
+        if (!allowDestructiveActions) {
+            return NextResponse.json({ 
+                error: 'Forbidden: allowDestructiveActions flag is required for this operation (T-008)' 
+            }, { status: 403 });
+        }
 
         if (!id || typeof id !== 'string') {
             return NextResponse.json({ error: 'id required' }, { status: 400 });
