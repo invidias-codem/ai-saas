@@ -9,7 +9,18 @@
  */
 
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { getAgentRouter } from '@/lib/ucol/agentRouter';
+
+const RouteToJklawSchema = z.object({
+    query: z.string().min(1).max(50000),
+    context: z.any().optional(),
+    preferSpeed: z.boolean().optional(),
+    requireOrchestration: z.boolean().optional(),
+    classifyOnly: z.boolean().optional(),
+    userId: z.string().min(1).optional(),            // T-006 tenant scoping
+    allowDestructiveActions: z.boolean().optional(), // T-008 Approval gate flag
+});
 
 function validateKey(req: Request): boolean {
     const key = process.env.JKLAW_API_KEY;
@@ -22,18 +33,21 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    let body: any;
+    let rawBody: unknown;
     try {
-        body = await req.json();
+        rawBody = await req.json();
     } catch {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
-    const { query, context, preferSpeed, requireOrchestration, userId } = body;
-
-    if (!query || typeof query !== 'string') {
-        return NextResponse.json({ error: 'query string required' }, { status: 400 });
+    const parsed = RouteToJklawSchema.safeParse(rawBody);
+    if (!parsed.success) {
+        return NextResponse.json(
+            { error: 'Invalid request', details: parsed.error.flatten() },
+            { status: 400 }
+        );
     }
+    const { query, context, preferSpeed, requireOrchestration, classifyOnly, userId, allowDestructiveActions } = parsed.data;
 
     if (!userId || typeof userId !== 'string') {
         return NextResponse.json({ error: 'userId required for tenant scoping' }, { status: 400 });
@@ -43,13 +57,13 @@ export async function POST(req: Request) {
         const router = getAgentRouter();
 
         // Just classify — caller decides whether to dispatch
-        if (body.classifyOnly) {
-            const decision = await router.classify({ query, context, preferSpeed, requireOrchestration, userId });
+        if (classifyOnly) {
+            const decision = await router.classify({ query, context, preferSpeed, requireOrchestration, userId, allowDestructiveActions });
             return NextResponse.json({ ok: true, decision, timestamp: new Date().toISOString() });
         }
 
         // Full route + execute
-        const result = await router.route({ query, context, preferSpeed, requireOrchestration, userId });
+        const result = await router.route({ query, context, preferSpeed, requireOrchestration, userId, allowDestructiveActions });
 
         return NextResponse.json({
             ok: true,

@@ -89,6 +89,8 @@ export interface RoutingDecision {
     memorySignal?: ConfidenceRoutingSignal;
     /** True when confidence scoring changed the model from the static default */
     confidenceOverride?: boolean;
+    /** Enforced gate for destructive actions (T-008) */
+    allowDestructiveActions?: boolean;
 }
 
 export interface AgentRouterGoalContext {
@@ -115,6 +117,8 @@ export interface AgentRouterTask {
     confidenceStrategy?: AggregationStrategy;
     /** Goal ancestry context — gives routing nodes the "why" behind this task */
     goalContext?: AgentRouterGoalContext;
+    /** Require human approval before performing destructive actions (T-008) */
+    allowDestructiveActions?: boolean;
 }
 
 export interface AgentRouterResult {
@@ -189,6 +193,7 @@ export class AgentRouter {
                 confidence: 1.0,
                 reasoning: 'Caller explicitly requested orchestration',
                 jklawWebhook: true,
+                allowDestructiveActions: task.allowDestructiveActions ?? false,
             };
         }
 
@@ -198,6 +203,7 @@ export class AgentRouter {
                 targetNode: 'gemini-flash',
                 confidence: 0.8,
                 reasoning: 'Speed preferred — routing to Gemini Flash',
+                allowDestructiveActions: task.allowDestructiveActions ?? false,
             };
         }
 
@@ -279,6 +285,7 @@ export class AgentRouter {
                 jklawWebhook: confidenceTarget === 'jklaw',
                 memorySignal,
                 confidenceOverride: overrideApplied,
+                allowDestructiveActions: task.allowDestructiveActions ?? false,
             };
         }
 
@@ -289,6 +296,7 @@ export class AgentRouter {
             reasoning: classifierReasoning,
             jklawWebhook: staticTarget === 'jklaw',
             ...(memorySignal ? { memorySignal, confidenceOverride: false } : {}),
+            allowDestructiveActions: task.allowDestructiveActions ?? false,
         };
     }
 
@@ -320,6 +328,7 @@ export class AgentRouter {
                 reasoning: decision.reasoning,
                 confidence: decision.confidence,
                 callerContext: task.context?.substring(0, 500),
+                allowDestructiveActions: decision.allowDestructiveActions ?? false,
                 memorySignal: decision.memorySignal
                     ? {
                         contextConfidence: decision.memorySignal.contextConfidence,
