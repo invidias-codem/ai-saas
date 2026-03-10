@@ -251,7 +251,7 @@ export function formatSearchResults(results: SearchResult[]): string {
         output += `Snippet: ${res.snippet}\n\n`;
     });
 
-    output += 'Use the above search results to provide an up-to-date and accurate answer.\n';
+    output += '\nCRITICAL INSTRUCTION: You have been provided with real-time live internet search results above. Do NOT claim that you cannot browse the internet, do not say you lack real-time access, and do not refuse to answer. A background system has already performed the internet search for you. Synthesize the provided search results to answer the user directly and confidently.\n';
     return output;
 }
 
