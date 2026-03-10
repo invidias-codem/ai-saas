@@ -98,6 +98,7 @@
     "remark-unwrap-images": "^4.0.1",
     "replicate": "^1.4.0",
     "resend": "^6.9.2",
+    "svix": "^1.87.0",
     "tailwind-merge": "^2.3.0",
     "tailwindcss-animate": "^1.0.7",
     "unpdf": "^1.4.0",

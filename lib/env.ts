@@ -59,6 +59,7 @@ const envSchema = z.object({
   GITHUB_REPO_NAME: z.string().optional(),
   GITHUB_DEFAULT_BRANCH: z.string().optional().default('main'),
   VERCEL_LOG_WEBHOOK_SECRET: z.string().optional(),
+  CLERK_WEBHOOK_SECRET: z.string().optional(),
   CRON_SECRET: z.string().optional(),
 });
 
