@@ -128,3 +128,95 @@ class EngagementBrain:
         except Exception as e:
             logger.error(f"Reply generation failed: {e}")
             return None
+
+    def generate_geo_post(self, region: str) -> dict:
+        """
+        Generates a Bluesky post targeting users in regions with restricted AI access.
+        Returns: { "text": str, "language": str, "region": str }
+
+        Supported regions:
+          - russia, iran, china, middle_east, north_africa,
+            sub_saharan_africa, southeast_asia, latin_america
+        """
+        region_configs = {
+            "russia": {
+                "language": "Russian",
+                "lang_code": "ru",
+                "pain_point": "ChatGPT и Claude заблокированы или недоступны",
+                "cta": "Попробуй Genie — работает без ограничений",
+            },
+            "iran": {
+                "language": "Farsi",
+                "lang_code": "fa",
+                "pain_point": "ابزارهای هوش مصنوعی مانند ChatGPT در ایران مسدود هستند",
+                "cta": "Genie را امتحان کنید — بدون محدودیت دسترسی دارید",
+            },
+            "china": {
+                "language": "Mandarin Chinese",
+                "lang_code": "zh",
+                "pain_point": "ChatGPT和大多数西方AI工具在中国无法使用",
+                "cta": "试试Genie——随时随地可用的AI助手",
+            },
+            "middle_east": {
+                "language": "Arabic",
+                "lang_code": "ar",
+                "pain_point": "أدوات الذكاء الاصطناعي مقيدة في بعض مناطق الشرق الأوسط",
+                "cta": "جرّب Genie — الذكاء الاصطناعي المتاح للجميع",
+            },
+            "north_africa": {
+                "language": "Arabic/French",
+                "lang_code": "ar",
+                "pain_point": "AI tools are expensive or blocked across North Africa",
+                "cta": "Genie works where others don't — try it free",
+            },
+            "sub_saharan_africa": {
+                "language": "English",
+                "lang_code": "en",
+                "pain_point": "Most AI tools are priced for Western markets, leaving Africa behind",
+                "cta": "Genie is built for everyone. Try it free at gen1e.xyz",
+            },
+            "southeast_asia": {
+                "language": "English",
+                "lang_code": "en",
+                "pain_point": "AI access is inconsistent across Southeast Asia — some tools are slow, blocked, or expensive",
+                "cta": "Genie runs where you are. Try it at gen1e.xyz",
+            },
+            "latin_america": {
+                "language": "Spanish",
+                "lang_code": "es",
+                "pain_point": "Las herramientas de IA como ChatGPT son lentas o bloqueadas en algunos países de Latinoamérica",
+                "cta": "Genie es tu alternativa — acceso sin barreras en gen1e.xyz",
+            },
+        }
+
+        config = region_configs.get(region.lower())
+        if not config:
+            logger.error(f"Unknown region: {region}")
+            return {}
+
+        prompt = (
+            f"You are Vector, an AI agent advocating for open access to AI tools worldwide.\n"
+            f"Write a short, authentic Bluesky post (under 280 chars) in {config['language']}.\n"
+            f"Context: {config['pain_point']}\n"
+            f"CTA hint: {config['cta']}\n\n"
+            f"Rules:\n"
+            f"- Sound like a real person, NOT an ad\n"
+            f"- Lead with the problem, not the product\n"
+            f"- Mention 'Genie' or 'gen1e.xyz' naturally, once\n"
+            f"- No hashtags in the middle; 1-2 at the end max\n"
+            f"- Under 280 characters TOTAL\n\n"
+            f"Return JSON only: {{ \"text\": \"...\", \"language\": \"{config['lang_code']}\" }}"
+        )
+
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config={"response_mime_type": "application/json"}
+            )
+            result = json.loads(response.text)
+            result["region"] = region
+            return result
+        except Exception as e:
+            logger.error(f"Geo post generation failed for {region}: {e}")
+            return {}

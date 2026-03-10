@@ -45,7 +45,7 @@ jobs:
             --project genie-ai-1ca85 \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars GEMINI_MODEL=gemini-2.0-flash \
+            --set-env-vars "GEMINI_MODEL=gemini-2.0-flash,BLUESKY_HANDLE=${{ secrets.BLUESKY_HANDLE }},BLUESKY_PASSWORD=${{ secrets.BLUESKY_PASSWORD }}" \
             --quiet
         env:
           CLOUDSDK_CORE_DISABLE_PROMPTS: 1
