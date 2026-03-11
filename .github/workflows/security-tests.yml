@@ -19,7 +19,9 @@ on:
       - 'package-lock.json'
 
 permissions:
-  contents: read  # read-only — security tests never push
+  contents: read        # read-only — security tests never push
+  issues: write         # needed to post failure comments on PRs
+  pull-requests: write  # needed to post review comments
 
 jobs:
   security-tests:
