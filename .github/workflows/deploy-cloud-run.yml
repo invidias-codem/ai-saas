@@ -37,15 +37,23 @@ jobs:
         with:
           project_id: genie-ai-1ca85
 
+      - name: Build Docker image via Cloud Build
+        run: |
+          gcloud builds submit functions/vector-agent-python \
+            --tag gcr.io/genie-ai-1ca85/vector-agent-python:${{ github.sha }} \
+            --project genie-ai-1ca85
+
       - name: Deploy vector-agent-python to Cloud Run
         run: |
           gcloud run deploy vector-agent-python \
-            --source functions/vector-agent-python \
+            --image gcr.io/genie-ai-1ca85/vector-agent-python:${{ github.sha }} \
             --region us-central1 \
             --project genie-ai-1ca85 \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars "GEMINI_MODEL=gemini-2.0-flash,BLUESKY_HANDLE=${{ secrets.BLUESKY_HANDLE }},BLUESKY_PASSWORD=${{ secrets.BLUESKY_PASSWORD }}" \
+            --memory=1024Mi \
+            --port=8080 \
+            --set-env-vars "GEMINI_MODEL=gemini-2.0-flash,GOOGLE_API_KEY=${{ secrets.GEMINI_API_KEY }},BLUESKY_HANDLE=${{ secrets.BLUESKY_HANDLE }},BLUESKY_PASSWORD=${{ secrets.BLUESKY_PASSWORD }},VECTOR_API_KEY=${{ secrets.VECTOR_API_KEY }}" \
             --quiet
         env:
           CLOUDSDK_CORE_DISABLE_PROMPTS: 1
