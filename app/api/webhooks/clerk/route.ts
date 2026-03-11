@@ -102,19 +102,21 @@ export async function POST(req: Request) {
         }
 
         // Log the welcome grant in credit_transactions for audit trail
-        await supabaseAdmin.rpc('increment_credits', {
-            p_user_id:    data.id,
-            p_amount:     0,        // Balance already set via upsert; this is just an audit log entry
-            p_type:       'WELCOME',
-            p_description: `Welcome gift: ${FREE_WELCOME_CREDITS} free credits`,
-            p_metadata:   {
-                source:         'clerk_signup',
-                welcome_credits: FREE_WELCOME_CREDITS,
-                email:           primaryEmail,
-            },
-        }).catch(() => {
+        try {
+            await supabaseAdmin.rpc('increment_credits', {
+                p_user_id:     data.id,
+                p_amount:      0,   // Balance already set via upsert; this is just an audit log entry
+                p_type:        'WELCOME',
+                p_description: `Welcome gift: ${FREE_WELCOME_CREDITS} free credits`,
+                p_metadata:    {
+                    source:          'clerk_signup',
+                    welcome_credits: FREE_WELCOME_CREDITS,
+                    email:           primaryEmail,
+                },
+            });
+        } catch {
             // Non-fatal — credits are already granted via upsert
-        });
+        }
 
         console.log(`[Clerk Webhook] ✅ Provisioned ${FREE_WELCOME_CREDITS} welcome credits for ${data.id} (${primaryEmail})`);
         return NextResponse.json({ received: true, provisioned: true, credits: FREE_WELCOME_CREDITS });
@@ -122,11 +124,14 @@ export async function POST(req: Request) {
 
     // ── user.deleted: soft-mark only, never delete data ──────────────────────
     if (type === 'user.deleted') {
-        await supabaseAdmin
-            .from('supporter_credits')
-            .update({ tier: 'deleted' })
-            .eq('user_id', data.id)
-            .catch(() => {});
+        try {
+            await supabaseAdmin
+                .from('supporter_credits')
+                .update({ tier: 'deleted' })
+                .eq('user_id', data.id);
+        } catch {
+            // Non-fatal
+        }
 
         console.log(`[Clerk Webhook] User ${data.id} marked as deleted`);
         return NextResponse.json({ received: true });
