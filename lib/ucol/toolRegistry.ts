@@ -98,7 +98,7 @@ export class ToolRegistry {
    * If multiple tools claim it, the first one found is returned.
    */
   getByTaskType(taskType: string): ToolNode | undefined {
-    for (const tool of this.tools.values()) {
+    for (const tool of Array.from(this.tools.values())) {
       if (tool.isAvailable && tool.taskTypes.includes(taskType)) {
         return tool;
       }

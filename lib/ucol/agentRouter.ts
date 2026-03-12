@@ -61,7 +61,7 @@ export type TaskType =
     | 'unknown';             // → Gemini Flash (fallback, confidence-overridable)
 
 /** Task types where confidence can override the static model target */
-const CONFIDENCE_OVERRIDABLE: Set<TaskType> = new Set([
+const CONFIDENCE_OVERRIDABLE = new Set<TaskType>([
   'quick_answer',
   'quality_analysis',
   'deep_reasoning',
@@ -84,15 +84,25 @@ const CONFIDENCE_TIER_TO_NODE: Record<ConfidenceModelTier, RoutingDecision['targ
  * Used to determine whether a confidence override is an upgrade or downgrade
  * based on actual node comparison, not raw confidence score.
  */
-const NODE_COST_RANK: Record<RoutingDecision['targetNode'], number> = {
+// NODE_COST_RANK only applies to LLM nodes — tools are bypassed by the
+// isToolNode() guard below and never go through confidence override logic.
+const LLM_NODE_COST_RANK: Partial<Record<string, number>> = {
   'gemini-flash':   1,
   'deepseek':       2,
   'context-router': 2,
   'claude':         3,
   'jklaw':          3,
-  // Note: tools don't have a cost rank as they are not LLM targets
-  // We'll give them a default value of 1 for completeness
-} as any; // Using any to bypass the record type checking for template string literal types
+};
+
+/** Returns true when a routing decision targets a CLI tool harness */
+export function isToolNode(targetNode: RoutingDecision['targetNode']): boolean {
+  return targetNode.startsWith('tool:');
+}
+
+/** Extracts the harness name from a tool node target, e.g. "tool:supabase" → "supabase" */
+export function getToolName(targetNode: RoutingDecision['targetNode']): string | null {
+  return isToolNode(targetNode) ? targetNode.slice(5) : null;
+}
 
 export interface RoutingDecision {
     taskType: TaskType;
@@ -184,6 +194,7 @@ Respond with ONLY a JSON object:
 // ─── Static Routing Table ───────────────────────────────────────────────────
 
 const ROUTING_TABLE: Record<TaskType, RoutingDecision['targetNode']> = {
+    // ── LLM nodes ───────────────────────────────────────────────────────
     code_generation:   'context-router',
     quick_answer:      'gemini-flash',
     quality_analysis:  'claude',
@@ -194,6 +205,23 @@ const ROUTING_TABLE: Record<TaskType, RoutingDecision['targetNode']> = {
     research:          'jklaw',
     strategy:          'jklaw',
     orchestration:     'jklaw',
+    // ── Tool nodes: Supabase ─────────────────────────────────────────────
+    database_query:    'tool:supabase',
+    migration:         'tool:supabase',
+    db_inspect:        'tool:supabase',
+    edge_functions:    'tool:supabase',
+    // ── Tool nodes: GitHub CLI ───────────────────────────────────────────
+    repo_management:   'tool:gh',
+    pr_management:     'tool:gh',
+    ci_status:         'tool:gh',
+    issue_tracking:    'tool:gh',
+    deployment_debug:  'tool:gh',
+    // ── Tool nodes: Firebase ─────────────────────────────────────────────
+    deployment:        'tool:firebase',
+    hosting:           'tool:firebase',
+    auth_management:   'tool:firebase',
+    firestore_ops:     'tool:firebase',
+    // ── Fallback ─────────────────────────────────────────────────────────
     unknown:           'gemini-flash',
 };
 
@@ -279,7 +307,8 @@ export class AgentRouter {
         const staticTarget = ROUTING_TABLE[taskType] ?? 'gemini-flash';
 
         // Apply confidence override for flexible task types
-        if (memorySignal && CONFIDENCE_OVERRIDABLE.has(taskType)) {
+        // Tool nodes are never confidence-overridden — they bypass this block entirely.
+        if (memorySignal && CONFIDENCE_OVERRIDABLE.has(taskType) && !isToolNode(staticTarget)) {
             // Bug fix: fall back to staticTarget if tier key is missing from map (future-proof)
             const confidenceTarget =
                 CONFIDENCE_TIER_TO_NODE[memorySignal.recommendedTier] ?? staticTarget;
@@ -289,8 +318,8 @@ export class AgentRouter {
                 // Bug fix: determine direction by comparing actual node cost ranks,
                 // not by confidence score alone. A quality_analysis at 0.70 routes
                 // claude→deepseek which is a downgrade, not an upgrade.
-                const staticRank = NODE_COST_RANK[staticTarget] ?? 1;
-                const confidenceRank = NODE_COST_RANK[confidenceTarget] ?? 1;
+                const staticRank = LLM_NODE_COST_RANK[staticTarget] ?? 1;
+                const confidenceRank = LLM_NODE_COST_RANK[confidenceTarget] ?? 1;
                 const direction =
                     confidenceRank > staticRank
                         ? `upgraded to more capable model (ctx_conf=${memorySignal.contextConfidence.toFixed(3)} < 0.50)`
