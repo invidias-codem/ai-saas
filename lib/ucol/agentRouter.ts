@@ -45,6 +45,19 @@ export type TaskType =
     | 'research'             // → JKlaw  (fixed — needs persistent memory)
     | 'strategy'             // → JKlaw  (fixed — needs persistent memory)
     | 'orchestration'        // → JKlaw  (fixed — needs persistent memory)
+    | 'database_query'       // → supabase tool node
+    | 'migration'            // → supabase tool node
+    | 'db_inspect'           // → supabase tool node
+    | 'edge_functions'       // → supabase tool node
+    | 'repo_management'      // → gh tool node
+    | 'pr_management'        // → gh tool node
+    | 'ci_status'            // → gh tool node
+    | 'issue_tracking'       // → gh tool node
+    | 'deployment_debug'     // → gh/firebase tool node
+    | 'deployment'           // → firebase tool node
+    | 'hosting'              // → firebase tool node
+    | 'auth_management'      // → firebase tool node
+    | 'firestore_ops'        // → firebase tool node
     | 'unknown';             // → Gemini Flash (fallback, confidence-overridable)
 
 /** Task types where confidence can override the static model target */
@@ -64,7 +77,7 @@ const CONFIDENCE_TIER_TO_NODE: Record<ConfidenceModelTier, RoutingDecision['targ
   'gemini-flash':  'gemini-flash',
   'deepseek':      'deepseek',
   'claude-sonnet': 'claude',
-} as const satisfies Record<ConfidenceModelTier, RoutingDecision['targetNode']>;
+} as Record<ConfidenceModelTier, RoutingDecision['targetNode']>;
 
 /**
  * Cost/capability rank for each target node (ascending = cheaper/faster).
@@ -77,11 +90,13 @@ const NODE_COST_RANK: Record<RoutingDecision['targetNode'], number> = {
   'context-router': 2,
   'claude':         3,
   'jklaw':          3,
-};
+  // Note: tools don't have a cost rank as they are not LLM targets
+  // We'll give them a default value of 1 for completeness
+} as any; // Using any to bypass the record type checking for template string literal types
 
 export interface RoutingDecision {
     taskType: TaskType;
-    targetNode: 'gemini-flash' | 'claude' | 'deepseek' | 'jklaw' | 'context-router';
+    targetNode: 'gemini-flash' | 'claude' | 'deepseek' | 'jklaw' | 'context-router' | `tool:${string}`;
     confidence: number;      // 0.0 – 1.0 — classifier confidence in task type
     reasoning: string;
     jklawWebhook?: boolean;  // if true, dispatch to JKlaw asynchronously
@@ -144,6 +159,19 @@ Given a user query and optional context, classify it into exactly ONE of these t
 - research: Multi-source information gathering, topic deep-dives, competitive analysis
 - strategy: Product strategy, business decisions, roadmaps, prioritization
 - orchestration: Tasks that require coordinating multiple agents or multi-step workflows
+- database_query: Direct database queries, data extraction
+- migration: Database schema migrations, up/down/status
+- db_inspect: Inspecting DB health, bloat, locks, indexes
+- edge_functions: Supabase Edge Functions deployment or logs
+- repo_management: GitHub repo listing, cloning, syncing
+- pr_management: GitHub Pull Request creation, review, merging
+- ci_status: GitHub Actions workflow runs, logs, status
+- issue_tracking: GitHub Issues creation, closing, commenting
+- deployment: Firebase/Hosting/Vercel deployments
+- deployment_debug: Investigating failed deployments, hosting logs
+- hosting: Managing preview channels, domain mapping
+- auth_management: Firebase Auth user management
+- firestore_ops: Firestore data import/export, rules, indexes
 - unknown: Doesn't fit any category
 
 Respond with ONLY a JSON object:
