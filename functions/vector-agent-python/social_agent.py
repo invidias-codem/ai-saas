@@ -2,6 +2,14 @@ import logging
 import os
 from atproto import Client, client_utils
 import time
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+# Initialize Firebase for session caching
+if not firebase_admin._apps:
+    firebase_admin.initialize_app()
+
+db = firestore.client()
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +32,35 @@ class SocialAgent:
         if not self.handle or not self.password:
             logger.error("❌ Bluesky credentials missing (BLUESKY_HANDLE / BLUESKY_PASSWORD)")
             return False
+            
+        doc_ref = db.collection('vector_state').document('bluesky_session')
+        
         try:
-            logger.info(f"🔌 Connecting to Bluesky as {self.handle}...")
+            # 1. Try resuming from Firestore session
+            doc = doc_ref.get()
+            if doc.exists:
+                session_str = doc.to_dict().get('session_string')
+                if session_str:
+                    logger.info(f"🔌 Resuming Bluesky session for {self.handle}...")
+                    try:
+                        self.client.login(session_string=session_str)
+                        self.is_connected = True
+                        logger.info("✅ Resumed connection to Bluesky.")
+                        return True
+                    except Exception as e:
+                        logger.warning(f"⚠️ Saved session invalid/expired: {e}. Falling back to password...")
+            
+            # 2. Fallback to fresh password login
+            logger.info(f"🔌 Connecting to Bluesky as {self.handle} with password...")
             self.client.login(self.handle, self.password)
             self.is_connected = True
-            logger.info("✅ Connected to Bluesky.")
+            
+            # 3. Cache the new session string
+            new_session = self.client.export_session_string()
+            doc_ref.set({'session_string': new_session})
+            logger.info("✅ Connected to Bluesky and cached new session to Firestore.")
             return True
+            
         except Exception as e:
             logger.error(f"❌ Bluesky login failed: {e}")
             return False

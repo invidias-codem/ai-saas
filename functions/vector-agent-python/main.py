@@ -92,6 +92,12 @@ def vector_agent(request):
 
             results = []
             processed = 0
+            # ── Anti-spam hard caps ───────────────────────────────────────────
+            MAX_REPLIES_PER_RUN = 2
+            MAX_LIKES_PER_RUN   = 1
+            MIN_CONFIDENCE      = 8   # 0-10; only act if brain is very sure
+            replies_sent = 0
+            likes_sent   = 0
 
             for keyword in keywords:
                 logger.info(f"🔍 Searching: '{keyword}'")
@@ -111,11 +117,25 @@ def vector_agent(request):
                         decision = brain_inst.decide_engagement(post_text, author, keyword)
                         action_taken = decision.get("action", "IGNORE")
                         reply_text = decision.get("reply_text", "")
+                        confidence = decision.get("confidence", 0)
+
+                        # Gate: skip low-confidence decisions
+                        if action_taken != "IGNORE" and confidence < MIN_CONFIDENCE:
+                            logger.info(f"⏭️ Skipping low-confidence ({confidence}/10) action on @{author}")
+                            action_taken = "IGNORE"
+
+                        # Gate: enforce hard caps
+                        if action_taken in ("REPLY", "BOTH") and replies_sent >= MAX_REPLIES_PER_RUN:
+                            logger.info(f"🛑 Reply cap reached ({MAX_REPLIES_PER_RUN}), skipping @{author}")
+                            action_taken = "LIKE" if likes_sent < MAX_LIKES_PER_RUN else "IGNORE"
+                        if action_taken in ("LIKE", "BOTH") and likes_sent >= MAX_LIKES_PER_RUN:
+                            action_taken = "IGNORE" if action_taken == "LIKE" else "REPLY"
 
                         result = {
                             "author": author,
                             "post_preview": post_text[:80],
                             "decision": action_taken,
+                            "confidence": confidence,
                             "reply": reply_text,
                             "dry_run": dry_run,
                         }
@@ -123,11 +143,13 @@ def vector_agent(request):
                         if not dry_run:
                             if action_taken in ("LIKE", "BOTH"):
                                 social_inst.like_post(post.uri, post.cid)
+                                likes_sent += 1
 
                             if action_taken in ("REPLY", "BOTH") and reply_text:
                                 social_inst.reply_to_post(post, reply_text)
+                                replies_sent += 1
 
-                            time.sleep(1.5)  # Rate limit buffer
+                            time.sleep(3)  # Slower cadence — safer
 
                         results.append(result)
                         processed += 1
@@ -135,6 +157,8 @@ def vector_agent(request):
                     except Exception as e:
                         logger.warning(f"Skipped post due to error: {e}")
                         continue
+
+            logger.info(f"📊 Run summary: {replies_sent} replies, {likes_sent} likes out of {processed} posts scanned")
 
             # Also check notifications (mentions/replies to us)
             if not dry_run:
@@ -146,9 +170,11 @@ def vector_agent(request):
                         if not post_text:
                             continue
                         decision = brain_inst.decide_engagement(post_text, author, f"mention/reply from @{author}")
-                        if decision.get("action") in ("REPLY", "BOTH") and decision.get("reply_text"):
+                        confidence = decision.get("confidence", 0)
+                        if decision.get("action") in ("REPLY", "BOTH") and decision.get("reply_text") and confidence >= MIN_CONFIDENCE and replies_sent < MAX_REPLIES_PER_RUN:
                             social_inst.reply_to_post(notif, decision["reply_text"])
-                            time.sleep(1.5)
+                            replies_sent += 1
+                            time.sleep(3)
                     except Exception as e:
                         logger.warning(f"Skipped notification: {e}")
 

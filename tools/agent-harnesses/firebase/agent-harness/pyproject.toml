@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cli-anything-firebase"
+version = "0.1.0"
+description = "CLI-Anything agent harness for the Firebase CLI"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+  { name = "JKlaw", email = "agent@openclaw.ai" },
+]
+keywords = ["firebase", "cli", "agent", "harness", "automation"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Utilities",
+]
+dependencies = [
+  "click>=8.0",
+  "prompt_toolkit>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "pytest-cov",
+]
+
+[project.scripts]
+cli-anything-firebase = "cli_anything.firebase.firebase_cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cli_anything*"]
+
+[tool.pytest.ini_options]
+testpaths = ["cli_anything/firebase/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["cli_anything.firebase"]
+omit = ["cli_anything/firebase/tests/*"]
