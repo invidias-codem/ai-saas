@@ -36,9 +36,12 @@ jobs:
           echo "🌐 Package ecosystem: ${{ steps.metadata.outputs.package-ecosystem }}"
 
       # Step 3: Checkout the PR branch at its exact SHA (security: explicit pin)
-      - uses: actions/checkout@v6
+      # persist-credentials: false prevents the checked-out code from accessing
+      # the GITHUB_TOKEN via git credentials (CodeQL alert #96: untrusted-checkout).
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

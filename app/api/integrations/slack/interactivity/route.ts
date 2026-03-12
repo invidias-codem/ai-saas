@@ -14,7 +14,7 @@ import { getSlackConfig, SlackConfig, resolveSlackUser, saveChannelConfig, type 
 import { db } from '@/lib/firebaseAdmin';
 import { createFeedbackBlocks, createStreamer } from '@/lib/slack/assistantHelpers';
 import { supabaseAdmin } from '@/lib/supabaseClient';
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import path from 'path';
 
 const SLACK_API_BASE = 'https://slack.com/api';
@@ -712,9 +712,9 @@ async function handleBlockActions(
             // Dynamic path construction to bypass Turbopack static analysis
     const scriptSegments = ['.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs'];
     const scriptPath = path.join(process.cwd(), ...scriptSegments);
-            const sanitizedPlan = JSON.stringify(plan).replace(/'/g, "'\\''");
-
-            execSync(`node ${scriptPath} "${task}" --execute-plan '${sanitizedPlan}'`, {
+            // Security fix (CodeQL #31, #23): use execFileSync with array args —
+            // never interpolate user-controlled values into a shell command string.
+            execFileSync('node', [scriptPath, task, '--execute-plan', JSON.stringify(plan)], {
               cwd: process.cwd(),
               env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
             });

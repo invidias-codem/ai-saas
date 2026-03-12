@@ -15,7 +15,11 @@ jobs:
   auto-implement:
     name: 🤖 Apply Safe Suggestions
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    # Security: only run on non-fork PRs to prevent secret exfiltration
+    # (CodeQL alert #1, #97: actions/untrusted-checkout)
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.fork == false
     
     steps:
       - name: Checkout code
@@ -23,6 +27,9 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
+          # Security: do not persist credentials to prevent exfiltration via
+          # untrusted code that may be checked out from a PR branch.
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
