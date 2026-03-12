@@ -10,12 +10,11 @@
  *   6. Log the interaction to Supabase (with rate-limit check)
  */
 
-import fs from 'fs';
-import path from 'path';
 import { BskyAgent, RichText } from '@atproto/api';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { classifyQuery } from '@/lib/ucol/agentRouter';
+import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor';
 import type { BlueskyMention, EngagementResult } from './types';
 
@@ -25,16 +24,15 @@ const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const RESPONSE_MAX_CHARS = 290; // Bluesky post limit with a small buffer
 const CTA_SUFFIX = ' — gen1e.xyz';
 
-// Load the SudoLang agent definition from the companion .sudo.md file.
-// SudoLang's constraint + interface system replaces verbose natural language prompts
-// with typed, continuously-respected rules — ~30% fewer tokens, more reliable output.
-function loadSudoPrompt(): string {
-  const promptPath = path.join(__dirname, 'prompts', 'tech-genie-bluesky.sudo.md');
-  try {
-    return fs.readFileSync(promptPath, 'utf-8');
-  } catch {
-    // Fallback to inline prompt if file is unavailable (e.g., edge runtime)
-    return `TechGenieBlueskyAgent {
+// Lazy-loaded system prompt: initialized on first use, cached for the process lifetime.
+// Uses the UCOL sudoLoader which handles file resolution, caching, and fallback automatically.
+let _techGenieSystemPrompt: string | null = null;
+
+async function getTechGenieSystemPrompt(): Promise<string> {
+  if (_techGenieSystemPrompt !== null) return _techGenieSystemPrompt;
+
+  _techGenieSystemPrompt = await loadSudoPrompt('tech-genie-bluesky', {
+    fallback: `TechGenieBlueskyAgent {
   identity: "Tech Genie — AI that remembers, connects, and builds with you"
   constraints {
     response length <= ${RESPONSE_MAX_CHARS} characters including CTA
@@ -42,11 +40,11 @@ function loadSudoPrompt(): string {
     never use hashtags | never hallucinate | never engage with spam
   }
   response format: <useful answer> ${CTA_SUFFIX}
-}`;
-  }
-}
+}`,
+  });
 
-const TECH_GENIE_SYSTEM_PROMPT = loadSudoPrompt();
+  return _techGenieSystemPrompt;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -148,10 +146,11 @@ export class BlueskyResponder {
 
   private async generateResponse(context: string): Promise<string> {
     const model = this.gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const systemPrompt = await getTechGenieSystemPrompt();
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: context }] }],
-      systemInstruction: { role: 'user', parts: [{ text: TECH_GENIE_SYSTEM_PROMPT }] },
+      systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
       generationConfig: {
         maxOutputTokens: 150,
         temperature: 0.7,
