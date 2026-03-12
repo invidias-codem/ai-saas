@@ -1,0 +1,2 @@
+[console_scripts]
+cli-anything-gcloud = cli_anything.gcloud.gcloud_cli:cli
