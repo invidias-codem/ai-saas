@@ -31,6 +31,8 @@ import {
   type AggregationStrategy,
   DEFAULT_BASE_CONFIDENCE,
 } from '@/lib/memory/confidenceScoring';
+import { findMatchingProcedure } from './proceduralMemory';
+import type { ToolStep } from './proceduralMemory';
 
 // ─── Task Classification ────────────────────────────────────────────────────
 
@@ -116,6 +118,10 @@ export interface RoutingDecision {
     confidenceOverride?: boolean;
     /** Enforced gate for destructive actions (T-008) */
     allowDestructiveActions?: boolean;
+    /** Source of this routing decision */
+    source?: 'procedural_memory' | 'llm_routing';
+    /** Populated when source is 'procedural_memory' — the pre-learned tool sequence */
+    proceduralSequence?: ToolStep[];
 }
 
 export interface AgentRouterGoalContext {
@@ -263,6 +269,42 @@ export class AgentRouter {
             };
         }
 
+        // ── Procedural Memory Fast-Path ───────────────────────────────────
+        // Check for a pre-learned tool sequence BEFORE hitting the LLM.
+        // This block is purely additive — any error falls through to normal routing.
+        try {
+            const proceduralMatch = await findMatchingProcedure(task.userId, task.query);
+            if (
+                proceduralMatch &&
+                proceduralMatch.isStableMacro &&
+                proceduralMatch.similarity > 0.92
+            ) {
+                // Derive taskType from the matched record — it was stored at record time
+                const proceduralTaskType = (proceduralMatch.record.taskType as TaskType) ?? 'unknown';
+                const staticTarget = ROUTING_TABLE[proceduralTaskType] ?? 'gemini-flash';
+
+                console.log(
+                    `[AgentRouter] ⚡ Procedural memory fast-path for "${task.query.substring(0, 60)}"` +
+                    ` (similarity=${proceduralMatch.similarity.toFixed(3)}, procedure=${proceduralMatch.record.id})`
+                );
+
+                return {
+                    taskType: proceduralTaskType,
+                    targetNode: staticTarget,
+                    confidence: 1.0,
+                    reasoning: `Procedural memory macro hit (similarity=${proceduralMatch.similarity.toFixed(3)})`,
+                    jklawWebhook: staticTarget === 'jklaw',
+                    allowDestructiveActions: task.allowDestructiveActions ?? false,
+                    source: 'procedural_memory',
+                    proceduralSequence: proceduralMatch.record.toolSequence,
+                };
+            }
+        } catch (pmErr: unknown) {
+            // Never block routing on procedural memory errors
+            const msg = pmErr instanceof Error ? pmErr.message : String(pmErr);
+            console.warn('[AgentRouter] Procedural memory lookup failed (falling through):', msg);
+        }
+
         // Score memory context confidence if facts are provided
         const memorySignal = task.memoryFacts && task.memoryFacts.length > 0
             ? scoreContextForRouting(task.memoryFacts, task.confidenceStrategy ?? 'minimum')
@@ -343,6 +385,7 @@ export class AgentRouter {
                 memorySignal,
                 confidenceOverride: overrideApplied,
                 allowDestructiveActions: task.allowDestructiveActions ?? false,
+                source: 'llm_routing' as const,
             };
         }
 
@@ -354,6 +397,7 @@ export class AgentRouter {
             jklawWebhook: staticTarget === 'jklaw',
             ...(memorySignal ? { memorySignal, confidenceOverride: false } : {}),
             allowDestructiveActions: task.allowDestructiveActions ?? false,
+            source: 'llm_routing' as const,
         };
     }
 

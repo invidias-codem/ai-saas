@@ -9,15 +9,43 @@
  *   - Always appends --json to every command
  *   - Never throws — always returns ToolResult with ok:false on error
  *   - Timeout enforced on every execution (default 30s)
+ *
+ * Extended with StateDiff (Foundation Agent Phase 1+3):
+ *   - Before/after state snapshots for every execution
+ *   - Auto-derives human-readable delta list
+ *   - Fire-and-forget recordExecution() — never blocks
  */
 
 import { execFile as _execFile } from 'child_process';
 import { promisify } from 'util';
 import { getToolRegistry } from './toolRegistry';
+import { recordExecution } from './proceduralMemory';
+import type { ToolStep } from './proceduralMemory';
 
 const execFile = promisify(_execFile);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+/**
+ * Before/after state snapshot for a single tool execution.
+ * Always present on ToolExecutionResult — uses empty objects when
+ * no meaningful state could be captured.
+ */
+export interface StateDiff {
+  before: Record<string, unknown>;
+  action: { tool: string; command: string; args: string[] };
+  after: Record<string, unknown>;
+  /** Human-readable change list, e.g. ["created PR #42", "CI status: pending"] */
+  delta: string[];
+}
+
+/**
+ * Full execution result including state diff.
+ * Extends ToolResult with a guaranteed `stateDiff` field.
+ */
+export interface ToolExecutionResult extends ToolResult {
+  stateDiff: StateDiff;
+}
 
 export interface ToolCommand {
   /** Harness name: "supabase" | "gh" | "firebase" */
@@ -30,10 +58,14 @@ export interface ToolCommand {
   workDir?: string;
   /** Timeout in ms — defaults to 30000 */
   timeoutMs?: number;
-  /** Clerk userId for audit logging */
+  /** Clerk userId for audit logging and procedural memory */
   userId?: string;
   /** Session id for audit logging */
   sessionId?: string;
+  /** Task type hint for procedural memory recording */
+  taskType?: string;
+  /** Human-readable task description for procedural memory embedding */
+  taskDescription?: string;
 }
 
 export interface ToolResult {
@@ -53,15 +85,111 @@ export interface ToolResult {
 // ─── Core Executor ────────────────────────────────────────────────────────────
 
 /**
+ * Capture a lightweight pre/post-execution state snapshot.
+ * Intentionally non-blocking — only uses data already available.
+ */
+function captureStateSnapshot(
+  harness: string,
+  command: string[],
+  output?: unknown
+): Record<string, unknown> {
+  const base: Record<string, unknown> = { capturedAt: new Date().toISOString() };
+
+  if (output !== undefined) {
+    // post-execution snapshot: include output summary
+    base.outputType = typeof output;
+    if (Array.isArray(output)) {
+      base.outputLength = output.length;
+    } else if (output !== null && typeof output === 'object') {
+      base.outputKeys = Object.keys(output as Record<string, unknown>).slice(0, 10);
+    } else if (typeof output === 'string') {
+      base.outputPreview = (output as string).substring(0, 120);
+    }
+  }
+
+  // Tool-specific lightweight context
+  switch (harness) {
+    case 'gh':
+      base.tool = 'github';
+      base.subcommand = command[0] ?? '';
+      break;
+    case 'supabase':
+      base.tool = 'supabase';
+      base.subcommand = command[0] ?? '';
+      break;
+    case 'firebase':
+      base.tool = 'firebase';
+      base.subcommand = command[0] ?? '';
+      break;
+    default:
+      base.tool = harness;
+  }
+
+  return base;
+}
+
+/**
+ * Derive a human-readable delta list from before/after snapshots.
+ * Compares shared keys and flags new/removed/changed values.
+ */
+function deriveDelta(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  harness: string,
+  commandStr: string,
+  success: boolean
+): string[] {
+  const delta: string[] = [];
+
+  // Always record the action outcome
+  delta.push(`${success ? '✓' : '✗'} ${harness} ${commandStr}`);
+
+  const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
+
+  for (const key of Array.from(allKeys)) {
+    // Skip bookkeeping fields
+    if (key === 'capturedAt' || key === 'tool' || key === 'subcommand') continue;
+
+    const hadKey = key in before;
+    const hasKey = key in after;
+
+    if (!hadKey && hasKey) {
+      delta.push(`added: ${key}=${JSON.stringify(after[key]).substring(0, 80)}`);
+    } else if (hadKey && !hasKey) {
+      delta.push(`removed: ${key}`);
+    } else if (hadKey && hasKey) {
+      const bv = JSON.stringify(before[key]);
+      const av = JSON.stringify(after[key]);
+      if (bv !== av) {
+        delta.push(`changed: ${key} ${bv.substring(0, 40)} → ${av.substring(0, 40)}`);
+      }
+    }
+  }
+
+  return delta;
+}
+
+/**
  * Execute a CLI-Anything harness command.
  * Always uses --json output mode. Never throws.
+ * Returns ToolExecutionResult with always-populated stateDiff.
  */
-export async function executeTool(cmd: ToolCommand): Promise<ToolResult> {
+export async function executeTool(cmd: ToolCommand): Promise<ToolExecutionResult> {
   const startMs = Date.now();
   const executedAt = new Date().toISOString();
   const commandStr = [cmd.harness, ...cmd.command].join(' ');
 
-  const base: ToolResult = {
+  // ── Capture pre-execution state snapshot ──────────────────────────────
+  const stateBefore = captureStateSnapshot(cmd.harness, cmd.command);
+
+  const emptyStateDiff: StateDiff = {
+    before: stateBefore,
+    action: { tool: cmd.harness, command: commandStr, args: cmd.args ?? [] },
+    after: {},
+    delta: [],
+  };
+
+  const base: ToolExecutionResult = {
     ok: false,
     harness: cmd.harness,
     command: commandStr,
@@ -69,6 +197,7 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolResult> {
     raw: '',
     durationMs: 0,
     executedAt,
+    stateDiff: emptyStateDiff,
   };
 
   try {
@@ -127,6 +256,34 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolResult> {
 
     console.log(`[ToolExecutor] ✓ ${commandStr} completed in ${durationMs}ms`);
 
+    // ── Build state diff ─────────────────────────────────────────────────
+    const stateAfter = captureStateSnapshot(cmd.harness, cmd.command, data);
+    const delta = deriveDelta(stateBefore, stateAfter, cmd.harness, commandStr, true);
+
+    const stateDiff: StateDiff = {
+      before: stateBefore,
+      action: { tool: cmd.harness, command: commandStr, args: cmd.args ?? [] },
+      after: stateAfter,
+      delta,
+    };
+
+    // ── Fire-and-forget procedural memory recording ──────────────────────
+    if (cmd.userId && cmd.taskDescription) {
+      const step: ToolStep = {
+        tool: cmd.harness,
+        command: cmd.command.join(' '),
+        args: cmd.args ?? [],
+      };
+      recordExecution(
+        cmd.userId,
+        cmd.taskType ?? cmd.harness,
+        cmd.taskDescription,
+        [step],
+        true,
+        durationMs
+      );
+    }
+
     return {
       ok: true,
       harness: cmd.harness,
@@ -135,6 +292,7 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolResult> {
       raw,
       durationMs,
       executedAt,
+      stateDiff,
     };
   } catch (err: unknown) {
     const durationMs = Date.now() - startMs;
@@ -143,10 +301,43 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolResult> {
 
     console.error(`[ToolExecutor] ✗ ${commandStr} failed in ${durationMs}ms: ${message}`);
 
+    // ── Capture failure state diff ───────────────────────────────────────
+    const stateAfterFailure = captureStateSnapshot(cmd.harness, cmd.command, { error: message });
+    const failureDelta = deriveDelta(
+      stateBefore,
+      stateAfterFailure,
+      cmd.harness,
+      commandStr,
+      false
+    );
+
+    // ── Fire-and-forget failure recording ────────────────────────────────
+    if (cmd.userId && cmd.taskDescription) {
+      const step: ToolStep = {
+        tool: cmd.harness,
+        command: cmd.command.join(' '),
+        args: cmd.args ?? [],
+      };
+      recordExecution(
+        cmd.userId,
+        cmd.taskType ?? cmd.harness,
+        cmd.taskDescription,
+        [step],
+        false,
+        durationMs
+      );
+    }
+
     return {
       ...base,
       error: `${message}${stderr ? `\nstderr: ${stderr.substring(0, 500)}` : ''}`,
       durationMs,
+      stateDiff: {
+        before: stateBefore,
+        action: { tool: cmd.harness, command: commandStr, args: cmd.args ?? [] },
+        after: stateAfterFailure,
+        delta: failureDelta,
+      },
     };
   }
 }
