@@ -39,6 +39,7 @@ import { ModelStore } from '@/lib/world-model/ml/ModelStore';
 import { supabase } from '@/lib/supabaseClient';
 import type { AIOutputAudit } from '@/lib/world-model/types';
 import { deltaEngine } from '@/lib/world-model/delta';
+import { critiqueLLMOutput } from '@/lib/ucol/critics/OutputCritic';
 
 // ChatMessageSchema imported from types
 
@@ -614,6 +615,20 @@ export async function generateConversationReply(
                 actualModelId,   // the model that generated this response
               ).catch((err) => console.error('[DeltaEngine] audit failed:', err));
             }
+
+            // ── OutputCritic: async quality gate (fire-and-forget) ───────────────
+            // Never awaited — critic must never add latency to the hot path.
+            // block verdicts → console.error; warn verdicts → console.warn.
+            critiqueLLMOutput(fullText, { userId, taskType: agentMode }).then(verdict => {
+              if (verdict.severity === 'block') {
+                // TODO: persist to ucol_critic_verdicts Supabase table (next PR)
+                console.error('[OutputCritic] BLOCK verdict:', verdict.overallReason);
+              }
+              if (!verdict.passed) {
+                console.warn('[OutputCritic] Warnings:', verdict.checks.filter(c => !c.passed));
+              }
+            }).catch(() => { /* critic never crashes the hot path */ });
+            // ────────────────────────────────────────────────────────────────────
 
             // ── World Model: score this response via ModelSelfBenchmark ────────
             // Records latency, claim quality, and graph utilization for the
