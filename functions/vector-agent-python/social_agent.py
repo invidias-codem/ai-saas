@@ -32,38 +32,81 @@ class SocialAgent:
         if not self.handle or not self.password:
             logger.error("❌ Bluesky credentials missing (BLUESKY_HANDLE / BLUESKY_PASSWORD)")
             return False
-            
+
         doc_ref = db.collection('vector_state').document('bluesky_session')
-        
+
+        # 0. Check if we're currently rate-limited on createSession — skip this run
         try:
-            # 1. Try resuming from Firestore session
             doc = doc_ref.get()
-            if doc.exists:
-                session_str = doc.to_dict().get('session_string')
-                if session_str:
-                    logger.info(f"🔌 Resuming Bluesky session for {self.handle}...")
-                    try:
-                        self.client.login(session_string=session_str)
-                        self.is_connected = True
-                        logger.info("✅ Resumed connection to Bluesky.")
-                        return True
-                    except Exception as e:
-                        logger.warning(f"⚠️ Saved session invalid/expired: {e}. Falling back to password...")
-            
-            # 2. Fallback to fresh password login
-            logger.info(f"🔌 Connecting to Bluesky as {self.handle} with password...")
+            doc_data = doc.to_dict() if doc.exists else {}
+        except Exception as e:
+            logger.error(f"❌ Firestore read failed: {e}")
+            return False
+
+        rate_limited_until = doc_data.get('rate_limited_until', 0)
+        if rate_limited_until > time.time():
+            remaining = int(rate_limited_until - time.time())
+            logger.warning(f"⏳ Bluesky createSession rate-limited. Skipping for {remaining}s.")
+            return False
+
+        # 1. Try resuming from cached session string
+        session_str = doc_data.get('session_string')
+        if session_str:
+            logger.info(f"🔌 Resuming Bluesky session for {self.handle}...")
+            try:
+                self.client.login(session_string=session_str)
+                # ⚠️ Critical: save the refreshed session back — atproto rotates the
+                # refresh token on each use. Without this write, every subsequent
+                # invocation re-uses the same stale (already-rotated) token and falls
+                # through to password login, burning through the 10/day createSession limit.
+                refreshed = self.client.export_session_string()
+                doc_ref.set({'session_string': refreshed}, merge=True)
+                self.is_connected = True
+                logger.info("✅ Resumed Bluesky session and persisted refreshed token.")
+                return True
+            except Exception as e:
+                logger.warning(f"⚠️ Session resume failed: {e}. Attempting password login...")
+
+        # 2. Distributed lock: only one Cloud Run instance should call createSession
+        #    at a time. Use a Firestore transaction to claim the lock.
+        lock_ref = db.collection('vector_state').document('bluesky_session_lock')
+        lock_expiry = time.time() + 30  # 30s lock TTL
+
+        @firestore.transactional
+        def claim_lock(transaction: firestore.Transaction) -> bool:
+            lock_doc = lock_ref.get(transaction=transaction)
+            lock_data = lock_doc.to_dict() if lock_doc.exists else {}
+            if lock_data.get('locked_until', 0) > time.time():
+                return False  # Another instance holds the lock
+            transaction.set(lock_ref, {'locked_until': lock_expiry})
+            return True
+
+        got_lock = claim_lock(db.transaction())
+        if not got_lock:
+            logger.warning("🔒 Another instance is creating a Bluesky session. Skipping this run.")
+            return False
+
+        try:
+            logger.info(f"🔌 Creating new Bluesky session as {self.handle}...")
             self.client.login(self.handle, self.password)
             self.is_connected = True
-            
-            # 3. Cache the new session string
             new_session = self.client.export_session_string()
-            doc_ref.set({'session_string': new_session})
-            logger.info("✅ Connected to Bluesky and cached new session to Firestore.")
+            doc_ref.set({'session_string': new_session, 'rate_limited_until': 0}, merge=True)
+            logger.info("✅ Connected to Bluesky and cached new session.")
             return True
-            
         except Exception as e:
-            logger.error(f"❌ Bluesky login failed: {e}")
+            err_str = str(e)
+            if '429' in err_str or 'RateLimitExceeded' in err_str:
+                reset_ts = time.time() + 86400
+                doc_ref.set({'rate_limited_until': reset_ts}, merge=True)
+                logger.error(f"❌ Failed to connect to Bluesky: {e}")
+                logger.warning(f"⛔ createSession rate limit hit — backing off until {int(reset_ts)}")
+            else:
+                logger.error(f"❌ Bluesky login failed: {e}")
             return False
+        finally:
+            # Release the lock regardless of outcome
+            lock_ref.set({'locked_until': 0})
 
     # ── Feed / Discovery ──────────────────────────────────────────────────────
 
