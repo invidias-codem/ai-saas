@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { waitUntil } from "@vercel/functions";
+import { budgetKillSwitch } from "@/lib/budget/redisKillSwitch";
 import { classifyQuery } from '@/lib/ucol/agentRouter';
 import { scoreContextForRouting } from '@/lib/memory/confidenceScoring';
 
@@ -247,6 +248,27 @@ export async function generateConversationReply(
     };
   }
   // ---------------------------------------------------------
+
+  // ─── Budget Kill Switch: enforce per-user and global LLM spend caps ─────────
+  // Non-fatal: if Redis is unavailable the check is skipped and the request
+  // is allowed through. Enforcement is gated by ENABLE_LLM_BUDGET_ENFORCEMENT=true.
+  const budgetCheck = await budgetKillSwitch.checkBudget(userId);
+  if (!budgetCheck.allowed) {
+    const limitMsg =
+      budgetCheck.reason === "global_budget_exceeded"
+        ? "The global AI budget has been reached. Service is temporarily paused. Please contact support."
+        : `You've reached your AI spending limit ($${budgetKillSwitch.getLimits().perUserLimitUSD.toFixed(2)} USD). ` +
+          `Please upgrade your plan or wait for your budget to reset.`;
+    const textEncoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(textEncoder.encode(limitMsg));
+        controller.close();
+      },
+    });
+    return { stream, sources: [], debug: { model: "budget-kill-switch", userQuery: "" } };
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
@@ -545,6 +567,19 @@ export async function generateConversationReply(
         waitUntil((async () => {
           try {
             const tokensUsed = estimateTokenCount(userQuery + fullText);
+
+            // ── Budget Kill Switch: record actual spend (fire-and-forget) ────
+            // Uses estimated token counts since providers stream without usage metadata.
+            // estimateTokenCount approximates total tokens; split 30/70 input/output.
+            const estimatedInputTokens  = Math.round(tokensUsed * 0.30);
+            const estimatedOutputTokens = Math.round(tokensUsed * 0.70);
+            budgetKillSwitch
+              .recordSpend(userId, estimatedInputTokens, estimatedOutputTokens, actualModelId)
+              .catch((err) =>
+                console.warn("[BudgetKillSwitch] recordSpend failed (non-blocking):", err)
+              );
+            // ─────────────────────────────────────────────────────────────────
+
             const tags = extractTags(userQuery);
             const summary = generateSummary([
               { role: 'user', content: userQuery },
