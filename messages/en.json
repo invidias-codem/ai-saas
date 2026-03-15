@@ -1,0 +1,71 @@
+{
+    "Navbar": {
+        "supportGenie": "Support Genie",
+        "credits": "Credits"
+    },
+    "KoFiNudge": {
+        "enjoyingGenie": "Enjoying Genie?",
+        "supportProject": "Support the project & keep servers running!",
+        "supportOnKoFi": "Support on Ko-fi"
+    },
+    "SupportGenie": {
+        "title": "Support Genie",
+        "description": "Unlock automated credits by supporting the project on Ko-fi.",
+        "important": "Important: Use the same email address on Ko-fi as your Genie account so we can automatically credit you!",
+        "donatedWithDifferentEmail": "Donated with a different email?",
+        "contactSupport": "Contact Support"
+    },
+    "DashboardSupport": {
+        "title": "A personal appeal",
+        "p1": "We generally don't ask, but today we need your help. Genie AI is an independent project, built to provide you with the most advanced AI tools without the big corporate price tag.",
+        "p2": "It takes a lot of resources to keep our servers running and to develop new innovative features. If everyone reading this gave a small amount, we could keep Genie AI thriving for years to come.",
+        "p3": "If you find value in what we do, please consider supporting us. It only takes a minute, and it makes a huge difference.",
+        "button": "Support Genie AI \u2764\ufe0f"
+    },
+    "Metadata": {
+        "title": "Genie AI: OpenAI, Gemini & Claude All-in-One Platform",
+        "description": "Unlock your creativity with Genie AI. The ultimate AI SaaS platform integrating OpenAI, Google Gemini, and Anthropic Claude for text, code, image, video, and music generation.",
+        "keywords": "Genie AI, AI Platform, Gemini AI, Claude AI, AI SaaS, Memory System, Slack Integration, Content Creation, Smartest AI Assistant"
+    },
+    "Landing": {
+        "hero": {
+            "title": "The Smartest AI Assistant Ever Built",
+            "description": "Streamline your workflow with our advanced Memory System, Slack Integration, and Content Creation tools. Powered by Gemini and Anthropic models for the best results.",
+            "cta": "Start Generating For Free",
+            "login": "Log in"
+        },
+        "features": {
+            "title": "Supercharge your creativity",
+            "subtitle": "Five powerful tools in one dashboard. Generate content faster than ever before.",
+            "conversation": "Conversation",
+            "conversationDesc": "Chat with advanced AI models like GPT-4, Gemini Pro, and Claude 3.",
+            "image": "Image Generation",
+            "imageDesc": "Turn your text prompts into stunning, high-quality visuals in seconds.",
+            "video": "Video Creation",
+            "videoDesc": "Bring stories to life with AI-generated video clips from simple descriptions.",
+            "music": "Music Composition",
+            "musicDesc": "Generate original audio tracks and sound effects for your projects.",
+            "code": "Code Assistant",
+            "codeDesc": "Generate, debug, and explain code snippets in various programming languages.",
+            "fast": "Fast & Secure",
+            "fastDesc": "Enterprise-grade security with lightning-fast generation speeds."
+        },
+        "cta": {
+            "title": "Ready to create the impossible?",
+            "subtitle": "Join thousands of creators pushing boundaries with AI.",
+            "button": "Start Generating For Free"
+        },
+        "pricing": {
+            "title": "Flexible Pricing",
+            "subtitle": "Pay only for what you generate.",
+            "payAsYouGo": "Pay As You Go",
+            "creatorBundle": "Creator Bundle",
+            "proStudio": "Pro Studio",
+            "startCreating": "Start Creating Now",
+            "disclaimer": "Prices are estimated based on standard usage."
+        },
+        "footer": {
+            "rights": "© {year} Genie AI. All rights reserved."
+        }
+    }
+}
