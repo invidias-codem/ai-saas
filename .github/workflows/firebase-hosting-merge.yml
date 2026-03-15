@@ -9,34 +9,12 @@ on:
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Required for creating tags
     steps:
-      - uses: actions/checkout@v6
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - name: Remove broken Python venv symlinks
-        run: find . -path ./node_modules -prune -o -type l -print | xargs -I{} sh -c 'test -e "{}" || rm -f "{}"' 2>/dev/null; true
-
-      - name: Build Next.js app
-        env:
-          GOOGLE_API_KEY: "dummy-key-for-build"
-        run: npm install --legacy-peer-deps && npm run build
+      - uses: actions/checkout@v4
+      - run: npm ci && npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GENIE_AI_1CA85 }}
           channelId: live
           projectId: genie-ai-1ca85
-
-      - name: Tag Release (Stable Build)
-        if: success()
-        uses: mathieudutour/github-tag-action@v6.2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag_prefix: "v"
-          custom_tag: "stable-${{ github.run_number }}"
-

@@ -1,121 +1,56 @@
-// middleware.ts — UPDATED: fix Clerk auth() context propagation for API routes
-// Changes from previous: return NextResponse.next() instead of bare return; for API routes
-// so Clerk can inject auth headers into downstream route handlers (fixes 500s on all API routes).
+// proxy.ts
+import { authMiddleware } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
-import createMiddleware from 'next-intl/middleware';
-import { NextResponse } from 'next/server';
-import { parseReferralParams, REFERRAL_COOKIE, PLATFORM_COOKIE, COOKIE_MAX_AGE } from '@/lib/referral';
+export default authMiddleware({
+  // ✅ 1. Manually pass all environment variables
+  // This bypasses the broken process.env access on the Edge.
+  publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  secretKey: process.env.CLERK_SECRET_KEY,
+  signInUrl: process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL,
+  signUpUrl: process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL,
+  afterSignInUrl: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL,
+  afterSignUpUrl: process.env.NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL, // Often the same as after-sign-in
+  
+  publicRoutes: [
+    "/", // Landing page
+    "/sign-in",
+    "/sign-up",
+  ],
+  
+  ignoredRoutes: ["/ws"],
 
-const intlMiddleware = createMiddleware({
-    locales: ['en', 'th', 'vi'],
-    defaultLocale: 'en',
-    localePrefix: 'always'
-});
-
-const isPublicRoute = createRouteMatcher([
-    '/',
-    '/:locale',
-    '/:locale/sign-in(.*)',
-    '/:locale/sign-up(.*)',
-    '/sign-in(.*)',
-    '/sign-up(.*)',
-    '/privacy',
-    '/:locale/privacy',
-    '/support',
-    '/:locale/support',
-    '/slack',
-    '/:locale/slack',
-    '/blog(.*)',
-    '/:locale/blog(.*)',
-    '/api/guest-chat',
-    '/api/feedback',
-    '/api/integrations/slack/callback',
-    '/api/integrations/slack/events',
-    '/api/integrations/slack/command',
-    '/api/integrations/slack/interactivity',
-    '/api/integrations/slack/auth',
-    '/api/webhooks/kofi',
-    '/api/support/verify-donation',
-    '/api/integrations/telegram/webhook',
-    '/api/internal/jklaw',
-    '/api/internal/route-to-jklaw',
-    '/api/referral/capture',  // ← public so it works right after signup
-]);
-
-export default clerkMiddleware(async (auth, req) => {
-    const isApi = req.nextUrl.pathname.startsWith('/api') || req.nextUrl.pathname.startsWith('/trpc');
-
-    // ─── REFERRAL TRACKING (runs on ALL page requests, no auth needed) ──────────
-    // Only capture on page routes (not API), and only if ?ref= is present
-    const { ref, platform, campaign } = parseReferralParams(req.nextUrl.searchParams);
-
-    if (ref && !isApi) {
-        // First-touch only: don't overwrite an existing cookie
-        const existingRef = req.cookies.get(REFERRAL_COOKIE)?.value;
-
-        if (!existingRef) {
-            // We'll set the cookie on the response after routing resolves
-            // Using a flag to apply after intlMiddleware or auth redirect
-            req.headers.set('x-capture-ref', ref);
-            req.headers.set('x-capture-platform', platform || 'direct');
-            if (campaign) req.headers.set('x-capture-campaign', campaign);
-        }
-    }
-    // ────────────────────────────────────────────────────────────────────────────
-
-    if (isApi) {
-        // IMPORTANT: Must return NextResponse.next() (not bare `return`) so Clerk
-        // injects its internal auth headers. Without this, auth() calls inside
-        // route handlers throw "Clerk can't detect usage of clerkMiddleware()".
-        if (isPublicRoute(req)) return NextResponse.next();
-        const { userId } = await auth();
-        if (!userId) {
-            return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json' },
-            });
-        }
-        return NextResponse.next();
+  afterAuth(auth, req) {
+    // Handle public routes
+    if (auth.isPublicRoute) {
+      return NextResponse.next();
     }
 
-    let res: NextResponse;
-
-    if (isPublicRoute(req)) {
-        res = intlMiddleware(req) as NextResponse;
-    } else {
-        const { userId, redirectToSignIn } = await auth();
-        if (!userId) return redirectToSignIn();
-        res = intlMiddleware(req) as NextResponse;
+    // Handle authenticated users
+    if (auth.userId) {
+      return NextResponse.next();
     }
 
-    // Apply referral cookies to the response if we captured a ref above
-    const capturedRef = req.headers.get('x-capture-ref');
-    if (capturedRef) {
-        res.cookies.set(REFERRAL_COOKIE, capturedRef, {
-            maxAge:   COOKIE_MAX_AGE,
-            path:     '/',
-            sameSite: 'lax',
-            secure:   process.env.NODE_ENV === 'production',
-            httpOnly: false, // Must be readable by client-side JS for capture API call
-        });
-        const capturedPlatform = req.headers.get('x-capture-platform');
-        if (capturedPlatform) {
-            res.cookies.set(PLATFORM_COOKIE, capturedPlatform, {
-                maxAge:   COOKIE_MAX_AGE,
-                path:     '/',
-                sameSite: 'lax',
-                secure:   process.env.NODE_ENV === 'production',
-            });
-        }
-    }
+    // ---
+    // User is NOT authenticated and is on a PROTECTED route.
+    // ---
+    const isApiRoute = req.nextUrl.pathname.startsWith("/api");
 
-    return res;
+    if (isApiRoute) {
+      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    
+    // For all other protected pages, redirect to sign-in.
+    const signInUrl = new URL("/sign-in", req.url);
+    signInUrl.searchParams.set("redirect_url", req.url);
+    return NextResponse.redirect(signInUrl);
+  },
 });
 
 export const config = {
-    matcher: [
-        '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-        '/(api|trpc)(.*)',
-    ],
+  matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
 };
+

@@ -1,7 +1,0 @@
-functions-framework==3.*
-supabase>=2.27.0
-google-genai==0.3.0
-google-generativeai==0.8.3
-opik==1.1.10
-requests
-

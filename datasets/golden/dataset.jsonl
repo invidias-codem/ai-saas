@@ -1,1 +1,0 @@
-{"id":"golden-sample-1","createdAt":"2023-01-01T00:00:00.000Z","userId":"user_123","source":"manual_curation","conversationId":"conv_123","messageId":"msg_123","promptVersion":"v1","model":"gpt-4","rating":1,"labels":[],"feedbackText":"Good response","retrievalContextIds":[],"input":"Hello world","output":"Hello! How can I help you today?","metadata":{}}

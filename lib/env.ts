@@ -3,27 +3,26 @@ import { z } from "zod";
 
 const envSchema = z.object({
   // Clerk keys (publicly exposed to browser)
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1, { message: "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required" }).optional(),
-  NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().min(1).optional(),
-  NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().min(1).optional(),
-  NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: z.string().min(1).optional(),
-  NEXT_PUBLIC_CLERK_AFTER_SIGN_OUT_URL: z.string().min(1).optional(),
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1, { message: "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required" }),
+  NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().min(1),
+  NEXT_PUBLIC_CLERK_SIGN_UP_URL: z.string().min(1),
+  NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: z.string().min(1),
+  NEXT_PUBLIC_CLERK_AFTER_SIGN_OUT_URL: z.string().min(1),
 
   // Clerk keys (server-side only)
-  CLERK_SECRET_KEY: z.string().min(1, { message: "CLERK_SECRET_KEY is required" }).or(z.literal('')).optional(),
-
+  CLERK_SECRET_KEY: z.string().min(1, { message: "CLERK_SECRET_KEY is required" }),
+  
   // Server-side AI keys
-  // NOTE: These can be optional for offline scripts (dataset curation/eval harness).
-  GOOGLE_API_KEY: z.string().min(1).optional(),
-  REPLICATE_API_TOKEN: z.string().min(1).optional(),
-  REPLICATE_API_TOKEN_MUSIC: z.string().min(1).optional(), // Added
-  REPLICATE_API_TOKEN_VIDEO: z.string().min(1).optional(), // Added
+  GOOGLE_API_KEY: z.string().min(1),
+  REPLICATE_API_TOKEN: z.string().min(1),
+  REPLICATE_API_TOKEN_MUSIC: z.string().min(1), // Added
+  REPLICATE_API_TOKEN_VIDEO: z.string().min(1), // Added
 
   // ADD THESE FOR VERTEX AI (IMAGEN)
-  GOOGLE_PROJECT_ID: z.string().min(1, { message: "GOOGLE_PROJECT_ID is required" }).optional(),
+  GOOGLE_PROJECT_ID: z.string().min(1, { message: "GOOGLE_PROJECT_ID is required" }),
   GOOGLE_LOCATION: z.string().min(1).default("us-central1"), // e.g., "us-central1"
 
-  GCP_SERVICE_ACCOUNT_KEY_JSON: z.string().min(1, { message: "GCP_SERVICE_ACCOUNT_KEY_JSON (raw JSON) is required for Google Cloud APIs" }).optional(),
+  GCP_SERVICE_ACCOUNT_KEY_JSON: z.string().min(1, { message: "GCP_SERVICE_ACCOUNT_KEY_JSON (raw JSON) is required for Google Cloud APIs" }),
 
   // RAG Memory Configuration
   NEXT_PUBLIC_RAG_ENABLED: z.string().optional().default("true"),
@@ -41,41 +40,7 @@ const envSchema = z.object({
   SLACK_BOT_TOKEN: z.string().optional(),
   SLACK_SIGNING_SECRET: z.string().optional(),
   SLACK_APP_ID: z.string().optional(),
-  SLACK_CLIENT_ID: z.string().optional(),
-  SLACK_CLIENT_SECRET: z.string().optional(),
-  NEXT_PUBLIC_SLACK_CLIENT_ID: z.string().optional(), // For client-side Add to Slack button
-
-  // Supabase
-  // NOTE: optional for offline eval runs; required for dataset curation and runtime features.
-  NEXT_PUBLIC_SUPABASE_URL: z.string().min(1, { message: "NEXT_PUBLIC_SUPABASE_URL is required" }).optional(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, { message: "NEXT_PUBLIC_SUPABASE_ANON_KEY is required" }).optional(),
-  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, { message: "SUPABASE_SERVICE_ROLE_KEY is required" }).optional(),
-
-  // UCOL Error Resolution Agent — GitHub bot token (PAT with repo scope)
-  // Used by the autonomous error resolution agent to search code, create branches, and open PRs.
-  // Generate at: https://github.com/settings/tokens → "repo" scope
-  GITHUB_AGENT_TOKEN: z.string().optional(),
-  GITHUB_REPO_OWNER: z.string().optional(),
-  GITHUB_REPO_NAME: z.string().optional(),
-  GITHUB_DEFAULT_BRANCH: z.string().optional().default('main'),
-  VERCEL_LOG_WEBHOOK_SECRET: z.string().optional(),
-  CLERK_WEBHOOK_SECRET: z.string().optional(),
-  CRON_SECRET: z.string().optional(),
 });
 
 // Parse the environment variables and export the result
 export const env = envSchema.parse(process.env);
-
-/**
- * Require a specific env var at runtime.
- *
- * Useful when envSchema allows optional keys (to support offline scripts),
- * but application code needs a hard requirement.
- */
-export function requireEnv<K extends keyof typeof env>(key: K): NonNullable<(typeof env)[K]> {
-  const value = env[key];
-  if (value == null || (typeof value === 'string' && value.length === 0)) {
-    throw new Error(`${String(key)} is required`);
-  }
-  return value as NonNullable<(typeof env)[K]>;
-}

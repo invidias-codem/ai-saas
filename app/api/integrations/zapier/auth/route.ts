@@ -11,7 +11,7 @@ const ZAPIER_AUTH_URL = 'https://zapier.com/oauth/authorize';
 
 export async function GET(req: Request) {
   try {
-    const { userId } = await auth();
+    const { userId } = auth();
     if (!userId) {
       return new NextResponse('Unauthorized', { status: 401 });
     }

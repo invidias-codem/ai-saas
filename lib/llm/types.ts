@@ -19,7 +19,21 @@ export const ChatMessageSchema = z.object({
 
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
-export type AgentMode = 'standard' | 'quality' | 'agentic-preview' | 'reasoning';
+/**
+ * UCOL Conversation Engine — Agent Mode Definitions
+ *
+ * fast     → Hermes3 (Ollama local) / fallback: Gemini Flash-Lite
+ *            Low latency, zero API cost, great for quick Q&A and iteration.
+ *
+ * quality  → Gemini Pro
+ *            Best reasoning, analysis, and structured output. Full memory context.
+ *
+ * agentic  → Claude (Sonnet)
+ *            Autonomous multi-step execution. Access to tools: web search,
+ *            research paper writing, novel/creative writing, and more.
+ *            Powered by ReAct loop with approval gates for destructive actions.
+ */
+export type AgentMode = 'fast' | 'quality' | 'agentic' | 'reasoning';
 
 export type CodeAgentMode = 'fast' | 'quality' | 'agentic';
 

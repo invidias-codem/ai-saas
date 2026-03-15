@@ -1,7 +1,0 @@
-{
-    "title": "Run Through Template",
-    "description": "A run through template for AnyCrawl OpenAPI",
-    "root": true,
-    "icon": "Play",
-    "pages": ["...(generated)"]
-}

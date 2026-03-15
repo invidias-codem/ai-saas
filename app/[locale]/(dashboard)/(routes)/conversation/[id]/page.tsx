@@ -556,7 +556,7 @@ function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
   // Modern Typing Indicator (Gemini Sparkle style)
   const TypingIndicator = () => {
     // Show 'Thinking' state for Agentic mode? or just standard dots
-    if (agentMode === 'agentic-preview') {
+    if (agentMode === 'agentic') {
       return (
         <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
           <Avatar className="h-8 w-8 ring-1 ring-border/50">
@@ -887,7 +887,7 @@ function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder={agentMode === 'agentic-preview' ? "Agentic Mode (Reasoning & Code)..." : "Message Genie..."}
+              placeholder={agentMode === 'agentic' ? "Agentic Mode active — try: search the web, write a research paper, write a story..." : agentMode === 'quality' ? "Quality Mode — ask anything complex..." : "Ask Genie anything..."}
               className="flex-1 min-h-[44px] max-h-[200px] border-0 focus-visible:ring-0 resize-none py-3 px-2 bg-transparent text-[15px] placeholder:text-muted-foreground/70"
               rows={1}
             />

@@ -1,126 +1,153 @@
 // app/api/conversation/route.ts
-import { currentUser } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import { env } from '@/lib/env';
+import { 
+  getRAGMemoryContext, 
+  captureMemory, 
+  extractTags, 
+  generateSummary,
+  estimateTokenCount,
+  gatherUserContext,
+  formatUserContextForPrompt,
+  getHighConfidenceFacts,
+  formatFactsForPrompt
+} from '@/lib/ragMemory';
 
-import {
-  ConversationRequestSchema,
-  generateConversationReply,
-} from "@/lib/llm/conversationEngine";
-import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
-import { requireAuth, handleAuthError } from "@/lib/security/apiAuth";
-import { checkTokenBudget, recordTokenUsage } from "@/lib/security/budgetGuard";
-import { estimateTokenCount } from "@/lib/ragMemory";
-import { audit } from "@/lib/security/auditLog";
-import { logger } from "@/lib/logger";
+const genAI = new GoogleGenerativeAI(env.GOOGLE_API_KEY);
+
+const model = genAI.getGenerativeModel({
+  model: "gemini-2.0-flash", // Or your preferred model
+  safetySettings: [
+    // Your safety settings
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+  ],
+});
+
+// ✅ Add instruction for data formatting with RAG context notice
+const SYSTEM_INSTRUCTION = {
+    role: "user", // System instructions often go under the 'user' role for initial setup
+    parts: [{
+      text: "You are 'Genie', a helpful AI assistant. Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences."
+    }],
+};
+
+// Optional: Initial greeting from the model
+const GREETING = {
+    role: "model",
+    parts: [{ text: "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights."}]
+};
+
 
 export async function POST(req: Request) {
   try {
-    // 1. Authentication
-    // requireAuth throws specific errors that handleAuthError converts to standardized JSON responses
-    const user = await requireAuth();
-
-    // Get full Clerk user object for context
-    const clerkUser = await currentUser();
-    // requireAuth guarantees userId, but currentUser might fail internally (unlikely if auth passed)
-    if (!clerkUser) {
-      // Should be handled by requireAuth usually, but safe fallback
-      console.error("[Conversation API] requireAuth passed but currentUser failed");
-      return NextResponse.json(
-        { error: "Unauthorized", message: "User profile not found." },
-        { status: 401 }
-      );
+    // ✅ Get authenticated user from Clerk
+    const { userId } = auth();
+    if (!userId) {
+      return new NextResponse("Unauthorized", { status: 401 });
     }
-    const userId = user.userId;
+
+    // ✅ Get full Clerk user object for context
+    const clerkUser = await currentUser();
+    if (!clerkUser) {
+      return new NextResponse("User not found", { status: 401 });
+    }
 
     const body = await req.json();
+    const { messages } = body;
 
-    const validationResult = ConversationRequestSchema.safeParse(body);
-
-    if (!validationResult.success) {
-      return NextResponse.json(
-        {
-          error: "Validation Error",
-          details: validationResult.error.flatten(),
-        },
-        { status: 400 }
-      );
+    if (!messages || messages.length === 0) {
+      return new NextResponse("Messages are required", { status: 400 });
     }
 
-    // 3. Token Budget Check (pre-flight — prevents runaway LLM spend)
-    const userQuery = validationResult.data.messages.at(-1)?.text ?? '';
-    const estimatedTokens = estimateTokenCount(userQuery) + 2048; // query + max response
-    const budgetCheck = await checkTokenBudget(userId, estimatedTokens);
-    if (!budgetCheck.allowed) {
-      void audit('chat.budget_exceeded', userId, { tier: budgetCheck.tier, used: budgetCheck.tokensUsedThisMonth, budget: budgetCheck.tokenBudget }, req);
-      return NextResponse.json(
-        { error: 'Token Budget Exceeded', message: budgetCheck.reason },
-        { status: 402 }
-      );
+    // ✅ Gather comprehensive user context
+    const userContext = await gatherUserContext(userId, clerkUser);
+    const userContextPrompt = formatUserContextForPrompt(userContext);
+
+    // ✅ Retrieve high-confidence facts for accurate responses (prevents hallucinations)
+    const facts = await getHighConfidenceFacts(userId);
+    console.log(`[Memory Persistence] Retrieved ${facts.length} facts for user ${userId}`);
+    if (facts.length > 0) {
+      console.log('[Memory Persistence] Sample facts:', facts.slice(0, 2).map(f => ({ type: f.type, content: f.content.substring(0, 50) })));
+    }
+    const factContext = formatFactsForPrompt(facts);
+
+    // ✅ Retrieve relevant memories for context
+    const userQuery = messages[messages.length - 1]?.text || '';
+    const memoryContext = await getRAGMemoryContext(userId, userQuery, 'conversation');
+
+    // Adapt messages for GenAI history format
+    const history = messages.map((msg: { role: string; text: string; }) => ({
+      role: msg.role === 'bot' ? 'model' : 'user',
+      parts: [{ text: msg.text }],
+    }));
+
+    const lastUserMessage = history.pop();
+    if (!lastUserMessage || lastUserMessage.role !== 'user') {
+       return new NextResponse("Invalid prompt", { status: 400 });
     }
 
-    // Log chat request
-    void audit('chat.request', userId, { estimatedTokens, tier: budgetCheck.tier }, req);
+    // ✅ Inject user context + facts (HIGH PRIORITY) + memory context into the prompt
+    const enhancedPromptText = userContextPrompt + factContext + memoryContext + lastUserMessage.parts[0].text;
 
-    // 4. Credit Check (Atomic)
-    const cost = CREDIT_COSTS.CHAT_MESSAGE;
-    const idempotencyKey = req.headers.get('idempotency-key') || `chat-${userId}-${Date.now()}`;
-
-    const spendResult = await spendCreditsAtomic(userId, cost, idempotencyKey, "Chat message");
-
-    if (!spendResult.success && !spendResult.duplicate) {
-      return NextResponse.json(
-        { error: "Insufficient credits", message: `You need ${cost} credits for this request.`, remaining: spendResult.remaining },
-        { status: 402 }
-      );
-    }
-
-    let result;
-    try {
-      result = await generateConversationReply(
-        {
-          userId,
-          clerkUser,
-          request: validationResult.data,
-        },
-        {
-          disableSideEffects: process.env.DISABLE_SIDE_EFFECTS === "true",
-          disableExternalContext: process.env.DISABLE_EXTERNAL_CONTEXT === "true",
-        }
-      );
-    } catch (error) {
-      // Refund logic
-      if (!spendResult.duplicate) {
-        logger.info(`[Conversation API] Generation failed, refunding ${cost} credits to ${userId}`);
-        await refundCredits(userId, cost, "Refund for failed chat generation");
-      }
-      throw error;
-    }
-
-    // Record actual token usage (fire-and-forget — never blocks response)
-    const modelUsed = result.debug?.model ?? 'gemini-2.0-flash';
-    void recordTokenUsage(userId, estimatedTokens, modelUsed);
-
-    // Return the stream directly
-    return new NextResponse(result.stream, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "X-Debug-Model": result.debug?.model || "unknown",
-        "X-Genie-Sources": JSON.stringify(result.sources || []),
+    const chat = model.startChat({
+      // ✅ Prepend system instruction and greeting to history
+      history: [SYSTEM_INSTRUCTION, GREETING, ...history],
+      generationConfig: {
+        // Your generation config
+        temperature: 0.9,
+        topK: 40,
+        topP: 0.7,
+        maxOutputTokens: 2048,
       },
     });
+
+    const result = await chat.sendMessage(enhancedPromptText);
+    const responseText = result.response.text();
+
+    // ✅ Capture this interaction for future context
+    const tokensUsed = estimateTokenCount(userQuery + responseText);
+    const tags = extractTags(userQuery);
+    const summary = generateSummary([
+      { role: 'user', content: userQuery },
+      { role: 'assistant', content: responseText }
+    ]);
+
+    // ✅ Send to Cloud Function for async memory capture with user metadata
+    captureMemory(
+      userId,
+      'conversation',
+      userQuery.substring(0, 50) || 'Conversation',
+      summary,
+      messages,
+      tokensUsed,
+      tags,
+      {
+        userName: userContext.fullName,
+        userEmail: userContext.email,
+        responseLength: responseText.length,
+        interactionStyle: userContext.interactionStyle,
+      }
+    ).catch(err => console.error('Memory capture failed:', err));
+
+    // ✅ Log successful conversation
+    console.log(`[CONVERSATION] User: ${userContext.fullName} (${userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
+
+    return NextResponse.json({ text: responseText });
+
   } catch (error: any) {
     console.error("[CONVERSATION_API_ERROR]", error);
-
-    const authResponse = handleAuthError(error);
-    if (authResponse) return authResponse;
-
     const errorMessage = error.message || "An unknown error occurred";
-    return NextResponse.json(
-      {
-        error: "Internal Server Error",
-        details: errorMessage,
-      },
-      { status: 500 }
-    );
+    return new NextResponse(JSON.stringify({
+      error: "Internal Server Error",
+      details: errorMessage
+    }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" }
+    });
   }
 }

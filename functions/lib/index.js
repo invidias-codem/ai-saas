@@ -37,7 +37,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scheduleFactCleanup = exports.softDeleteFact = exports.deleteFact = exports.extendFactTTL = exports.getMemoryAnalytics = exports.getFactAnalytics = exports.retrieveFactsForUser = exports.sendDailySummaries = exports.handleSlackInteractivity = exports.handleSlackCommand = exports.handleZapierAuth = exports.handleZapierWebhook = exports.getMemoryStats = exports.handleMemoryUpdate = exports.retrieveMemories = exports.captureConversationMemory = exports.updateUserContext = exports.initializeUserMemory = void 0;
+exports.scheduleFactCleanup = exports.softDeleteFact = exports.deleteFact = exports.extendFactTTL = exports.getMemoryAnalytics = exports.getFactAnalytics = exports.retrieveFactsForUser = exports.handleSlackInteractivity = exports.handleSlackCommand = exports.handleZapierAuth = exports.handleZapierWebhook = exports.getMemoryStats = exports.handleMemoryUpdate = exports.retrieveMemories = exports.captureConversationMemory = exports.updateUserContext = exports.initializeUserMemory = void 0;
 const admin = __importStar(require("firebase-admin"));
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -56,8 +56,6 @@ Object.defineProperty(exports, "handleZapierAuth", { enumerable: true, get: func
 var slackIntegration_1 = require("./slackIntegration");
 Object.defineProperty(exports, "handleSlackCommand", { enumerable: true, get: function () { return slackIntegration_1.handleSlackCommand; } });
 Object.defineProperty(exports, "handleSlackInteractivity", { enumerable: true, get: function () { return slackIntegration_1.handleSlackInteractivity; } });
-var scheduledSummaries_1 = require("./scheduledSummaries");
-Object.defineProperty(exports, "sendDailySummaries", { enumerable: true, get: function () { return scheduledSummaries_1.sendDailySummaries; } });
 var factExtractor_1 = require("./factExtractor");
 Object.defineProperty(exports, "retrieveFactsForUser", { enumerable: true, get: function () { return factExtractor_1.retrieveFactsForUser; } });
 var memoryAnalytics_1 = require("./memoryAnalytics");

@@ -1,4 +1,4 @@
-import * as functions from "firebase-functions";
+import * as functions from 'firebase-functions';
 /**
  * Scheduled Cloud Function to clean up expired conversation-level facts
  * Runs daily at midnight UTC

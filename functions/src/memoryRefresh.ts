@@ -1,5 +1,5 @@
-import * as functions from "firebase-functions";
-import * as admin from "firebase-admin";
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
 
 const db = admin.firestore();
 
@@ -15,23 +15,23 @@ export async function extendFactTTL(
   extendDays: number = 90
 ): Promise<{ success: boolean; newExpiresAt?: number; message: string }> {
   try {
-    const factRef = db.collection("users").doc(userId).collection("facts").doc(factId);
+    const factRef = db.collection('users').doc(userId).collection('facts').doc(factId);
     const factDoc = await factRef.get();
 
     if (!factDoc.exists) {
       return {
         success: false,
-        message: "Fact not found",
+        message: 'Fact not found',
       };
     }
 
     const factData = factDoc.data();
 
     // Only conversation-level facts can expire; user-level facts persist indefinitely
-    if (factData?.scope !== "conversation") {
+    if (factData?.scope !== 'conversation') {
       return {
         success: false,
-        message: "User-level facts do not expire",
+        message: 'User-level facts do not expire',
       };
     }
 
@@ -54,10 +54,10 @@ export async function extendFactTTL(
       message: `Memory extended by ${extendDays} days`,
     };
   } catch (error) {
-    functions.logger.error("Error extending fact TTL:", error);
+    functions.logger.error(`Error extending fact TTL:`, error);
     return {
       success: false,
-      message: "Error extending memory",
+      message: 'Error extending memory',
     };
   }
 }
@@ -70,13 +70,13 @@ export async function deleteFact(
   factId: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const factRef = db.collection("users").doc(userId).collection("facts").doc(factId);
+    const factRef = db.collection('users').doc(userId).collection('facts').doc(factId);
     const factDoc = await factRef.get();
 
     if (!factDoc.exists) {
       return {
         success: false,
-        message: "Fact not found",
+        message: 'Fact not found',
       };
     }
 
@@ -86,13 +86,13 @@ export async function deleteFact(
 
     return {
       success: true,
-      message: "Memory deleted successfully",
+      message: 'Memory deleted successfully',
     };
   } catch (error) {
-    functions.logger.error("Error deleting fact:", error);
+    functions.logger.error(`Error deleting fact:`, error);
     return {
       success: false,
-      message: "Error deleting memory",
+      message: 'Error deleting memory',
     };
   }
 }
@@ -106,13 +106,13 @@ export async function softDeleteFact(
   factId: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const factRef = db.collection("users").doc(userId).collection("facts").doc(factId);
+    const factRef = db.collection('users').doc(userId).collection('facts').doc(factId);
     const factDoc = await factRef.get();
 
     if (!factDoc.exists) {
       return {
         success: false,
-        message: "Fact not found",
+        message: 'Fact not found',
       };
     }
 
@@ -125,13 +125,13 @@ export async function softDeleteFact(
 
     return {
       success: true,
-      message: "Memory deleted successfully",
+      message: 'Memory deleted successfully',
     };
   } catch (error) {
-    functions.logger.error("Error soft-deleting fact:", error);
+    functions.logger.error(`Error soft-deleting fact:`, error);
     return {
       success: false,
-      message: "Error deleting memory",
+      message: 'Error deleting memory',
     };
   }
 }

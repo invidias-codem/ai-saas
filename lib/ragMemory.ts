@@ -4,23 +4,7 @@
  */
 
 import axios from 'axios';
-import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
-import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/graphStore';
 import { Message } from './schemas';
-import { searchMemories, storeMemory, getMemoryStats } from '@/lib/memory/vectorStore';
-
-export interface Source {
-  id: string;
-  title: string; // or summary
-  type: string;
-  similarity?: number;
-  content?: string;
-}
-
-export interface RAGContext {
-  contextString: string;
-  sources: Source[];
-}
 
 /**
  * Fetch relevant memories from Cloud Function and format for prompt injection
@@ -29,64 +13,35 @@ export async function getRAGMemoryContext(
   userId: string,
   query: string,
   featureType?: string
-): Promise<RAGContext> {
+): Promise<string> {
   try {
-    // Replaced Cloud Function with Supabase Vector Search
-    const memories = await searchMemories(userId, query, 10, featureType); // Fetch more to filter
-
-    if (memories.length === 0) {
-      return { contextString: '', sources: [] };
+    if (!process.env.NEXT_PUBLIC_RAG_ENABLED || !process.env.RAG_CLOUD_FUNCTION_URL) {
+      return '';
     }
 
-    // Create vector similarities map
-    const similarities = new Map<string, number>();
-    memories.forEach((m: any) => {
-      similarities.set(m.id, m.similarity || 0);
-    });
+    const response = await axios.post(
+      `${process.env.RAG_CLOUD_FUNCTION_URL}/retrieveMemories`,
+      {
+        userId,
+        query,
+        featureType,
+        limit: parseInt(process.env.RAG_RETRIEVAL_LIMIT || '5'),
+      },
+      {
+        timeout: 5000, // 5 second timeout for RAG retrieval
+      }
+    );
 
-    // Map to ExtractedFact format
-    const facts = memories.map((m: any) => ({
-      id: m.id,
-      content: m.content, // Use full content or summary? summary is usually what we want for context
-      type: m.type as any,
-      confidence: 0.8,
-      extractedAt: new Date(m.createdAt),
-      metadata: m.metadata
-    }));
-
-    const ranked = rankMemoriesIntelligently(facts, similarities, query);
-    const rankedMemories = ranked.slice(0, 5);
+    if (!response.data.memories || response.data.memories.length === 0) {
+      return '';
+    }
 
     // Format memories for prompt injection
-    const contextString = formatMemoriesForPrompt(rankedMemories);
-
-    // Extract sources
-    const sources: Source[] = rankedMemories.map((m: any) => ({
-      id: m.id,
-      title: m.metadata?.title || m.content.substring(0, 50) + '...',
-      type: m.type || 'memory',
-      similarity: m.contextRelevance,
-      content: m.content
-    }));
-
-    return { contextString, sources };
-
-  } catch (error: any) {
-    const errorMessage = error?.message || error?.toString() || 'Unknown error';
-    const isRateLimit = error?.status === 429 || errorMessage.includes('429');
-
-    if (isRateLimit) {
-      console.warn(`[RAG] Rate limited for user ${userId}, query: "${query.substring(0, 50)}..."`);
-    } else {
-      console.error(`[RAG] Error retrieving context for user ${userId}:`, {
-        query: query.substring(0, 100),
-        featureType,
-        error: errorMessage
-      });
-    }
-    return { contextString: '', sources: [] }; // Fail gracefully - don't block main request
+    return formatMemoriesForPrompt(response.data.memories);
+  } catch (error) {
+    console.error('Error retrieving RAG memory context:', error);
+    return ''; // Fail gracefully - don't block main request
   }
-
 }
 
 /**
@@ -132,85 +87,39 @@ export async function captureMemory(
   metadata?: Record<string, any>
 ): Promise<{ success: boolean; memoryId?: string; error?: string }> {
   try {
-    // Replaced Cloud Function with Supabase Store
-    const memoryId = await storeMemory(userId, summary, 'conversation_summary', {
-      title,
-      featureType,
-      tags,
-      ...metadata,
-      tokensUsed
-    });
+    if (!process.env.RAG_CLOUD_FUNCTION_URL) {
+      console.warn('RAG_CLOUD_FUNCTION_URL not configured - skipping memory capture');
+      return { success: false, error: 'RAG not configured' };
+    }
 
-    if (memoryId) {
-      return { success: true, memoryId };
-    } else {
-      return { success: false, error: "Failed to store memory" };
-    }
-  } catch (error: any) {
-    if (error?.status === 429 || error?.toString().includes("429")) {
-      console.warn('Memory Capture Rate Limited (429). Skipping capture.');
-      return { success: false, error: 'Rate limit' };
-    }
+    const response = await axios.post(
+      `${process.env.RAG_CLOUD_FUNCTION_URL}/captureConversationMemory`,
+      {
+        userId,
+        featureType,
+        title,
+        summary,
+        messages,
+        tokensUsed,
+        tags,
+        metadata,
+      },
+      {
+        timeout: 10000, // 10 second timeout
+      }
+    );
+
+    return {
+      success: response.data.success,
+      memoryId: response.data.memoryId,
+    };
+  } catch (error) {
     console.error('Error capturing memory:', error);
     // Don't throw - memory capture failure shouldn't block API response
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
-  }
-}
-
-/**
- * Retrieve GitHub context for a specific repo
- */
-export async function getGitHubContext(userId: string, query: string, repo: string): Promise<string> {
-  try {
-    // Search specifically for GitHub code chunks
-    const memories = await searchMemories(userId, query, 15, 'github');
-
-    // Filter by repo if multiple are indexed (though usually we index one at a time for context)
-    const repoMemories = memories.filter((m: any) => m.metadata?.repo === repo);
-
-    if (repoMemories.length === 0) return '';
-
-    // Create vector similarities map
-    const similarities = new Map<string, number>();
-    repoMemories.forEach((m: any) => {
-      similarities.set(m.id, m.similarity || 0);
-    });
-
-    // Map to ExtractedFact format for ranking
-    const facts = repoMemories.map((m: any) => ({
-      id: m.id,
-      content: m.content,
-      type: 'code' as any,
-      confidence: 1.0, // Assumed high for code
-      extractedAt: new Date(m.createdAt),
-      metadata: m.metadata
-    }));
-
-    // Rank intelligently
-    // We pass 'query' as context for keyword overlap check
-    const ranked = rankMemoriesIntelligently(facts, similarities, query);
-    const topChunks = ranked.slice(0, 5);
-
-    return `
-## GitHub Repository Context (${repo})
-The following code snippets from the user's repository are relevant to the query:
-
-${topChunks.map((chunk: any) => `
-**File: ${chunk.metadata?.filePath || 'unknown'}** (Relevance: ${Math.round((chunk.contextRelevance || 0) * 100)}%)
-\`\`\`${chunk.metadata?.language || ''}
-${chunk.content.substring(0, 1500)}
-\`\`\`
-`).join('\n')}
-
----
-`;
-
-  } catch (error) {
-    console.error('Error retrieving GitHub context:', error);
-    return '';
   }
 }
 
@@ -358,12 +267,8 @@ export async function gatherUserContext(
     };
 
     return userContext;
-  } catch (error: any) {
-    if (error?.status === 429 || error?.toString().includes("429")) {
-      console.warn('User Context Rate Limited (429). Returning minimal context.');
-    } else {
-      console.error('Error gathering user context:', error);
-    }
+  } catch (error) {
+    console.error('Error gathering user context:', error);
     // Return minimal context on error
     return {
       userId,
@@ -386,16 +291,39 @@ export async function getMemoryStatistics(userId: string): Promise<{
   topTags: string[];
 }> {
   try {
-    const stats = await getMemoryStats(userId);
+    if (!process.env.RAG_CLOUD_FUNCTION_URL) {
+      return {
+        totalMemories: 0,
+        totalTokensUsed: 0,
+        topFeatures: [],
+        topTags: [],
+      };
+    }
+
+    const response = await axios.post(
+      `${process.env.RAG_CLOUD_FUNCTION_URL}/getMemoryStats`,
+      { userId },
+      { timeout: 5000 }
+    );
+
+    if (response.data.success) {
+      return {
+        totalMemories: response.data.totalMemories || 0,
+        totalTokensUsed: response.data.totalTokensUsed || 0,
+        lastInteractionDate: response.data.lastInteractionDate
+          ? new Date(response.data.lastInteractionDate)
+          : undefined,
+        topFeatures: response.data.topFeatures || [],
+        topTags: response.data.topTags || [],
+      };
+    }
 
     return {
-      totalMemories: stats.totalMemories,
-      totalTokensUsed: 0, // Not yet fully tracked in aggregate
-      lastInteractionDate: stats.lastInteractionDate,
-      topFeatures: [], // Not yet implemented
-      topTags: [], // Not yet implemented
+      totalMemories: 0,
+      totalTokensUsed: 0,
+      topFeatures: [],
+      topTags: [],
     };
-
   } catch (error) {
     console.error('Error fetching memory statistics:', error);
     return {
@@ -489,10 +417,35 @@ export async function getHighConfidenceFacts(
   limit = 10
 ): Promise<any[]> {
   try {
-    // Direct retrieval (Cloud Function deprecated)
+    // Try Cloud Function first if configured
+    if (process.env.NEXT_PUBLIC_RAG_ENABLED && process.env.RAG_CLOUD_FUNCTION_URL) {
+      try {
+        const response = await axios.post(
+          `${process.env.RAG_CLOUD_FUNCTION_URL}/retrieveFacts`,
+          {
+            userId,
+            limit,
+          },
+          {
+            timeout: 3000,
+          }
+        );
+
+        const facts = response.data.facts || [];
+        if (facts.length > 0) {
+          return facts;
+        }
+      } catch (cloudFunctionError) {
+        console.warn('Cloud Function retrieval failed, falling back to direct Firestore:', cloudFunctionError);
+        // Fall through to direct Firestore retrieval
+      }
+    }
+
+    // Fallback: Direct Firestore retrieval
+    console.log('Using direct Firestore retrieval for facts');
     return await getHighConfidenceFactsDirectly(userId, limit);
   } catch (error) {
-    console.error('Error retrieving facts:', error);
+    console.error('Error retrieving facts (all methods failed):', error);
     return [];
   }
 }
@@ -568,14 +521,20 @@ export async function getHighConfidenceFactsDirectly(
   limit = 10
 ): Promise<any[]> {
   try {
-    // Use centralized initialization to ensure credentials are loaded
-    const { db } = await import('@/lib/firebaseAdmin');
+    // Dynamic import to avoid issues in server context
+    const admin = await import('firebase-admin');
+    
+    // Initialize if needed
+    if (!admin.default.apps.length) {
+      admin.default.initializeApp();
+    }
 
+    const db = admin.default.firestore();
     const now = Date.now();
 
     // Query facts collection for user
     const factsRef = db.collection('users').doc(userId).collection('facts');
-
+    
     // Get facts ordered by confidence and recency
     const snapshot = await factsRef
       .orderBy('confidence', 'desc')
@@ -584,15 +543,15 @@ export async function getHighConfidenceFactsDirectly(
       .get();
 
     const facts: any[] = [];
-
+    
     snapshot.docs.forEach((doc) => {
       const data = doc.data();
-
+      
       // Skip soft-deleted facts
       if (data.isDeleted === true) {
         return;
       }
-
+      
       // Skip expired conversation facts
       if (data.expiresAt && data.expiresAt < now) {
         return;

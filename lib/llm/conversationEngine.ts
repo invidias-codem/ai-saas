@@ -13,6 +13,7 @@ import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSche
 import { GeminiProvider } from "./providers/gemini";
 import { ClaudeProvider } from "./providers/claude";
 import { DeepSeekProvider } from "./providers/deepseek";
+import { HermesProvider } from "./providers/hermes";
 import {
   gatherUserContext,
   formatUserContextForPrompt,
@@ -49,7 +50,7 @@ export const ConversationRequestSchema = z.object({
   fileName: z.string().max(255).optional(),
   mimeType: z.string().max(100).optional(),
   fileUri: z.string().max(1024).optional(),
-  mode: z.enum(['standard', 'agentic-preview']).optional(),
+  mode: z.enum(['fast', 'quality', 'agentic', 'reasoning']).optional(),
 });
 
 export type ConversationRequest = z.infer<typeof ConversationRequestSchema>;
@@ -112,20 +113,36 @@ function getGoogleApiKey(): string {
   return key;
 }
 
-const DEFAULT_MODEL = "gemini-2.0-flash";
-const AGENTIC_MODEL = "gemini-1.5-pro-preview-0409";
-const QUALITY_MODEL = "claude-sonnet-4-5-20250929";
+/**
+ * UCOL Provider Routing Table
+ *
+ * fast     → Hermes3 (Ollama) / fallback: Gemini Flash-Lite
+ *            Zero API cost, lowest latency, great for quick Q&A.
+ *
+ * quality  → Gemini Pro (google/gemini-3.1-pro-preview)
+ *            Best reasoning, analysis, structured output, full memory context.
+ *
+ * agentic  → Claude Sonnet (latest)
+ *            Autonomous multi-step execution via ReAct loop.
+ *            Tools: web_search, write_research_paper, write_creative_content.
+ *
+ * reasoning → DeepSeek R1 (Vertex AI)
+ *            Chain-of-thought reasoning for complex analytical tasks.
+ */
+const FAST_MODEL = process.env.HERMES_MODEL_ID || "hermes3";
+const QUALITY_MODEL = "gemini-3.1-pro-preview";
+const AGENTIC_MODEL = "claude-sonnet-4-6"; // Claude drives the agentic ReAct loop
 const REASONING_MODEL = "deepseek-r1";
 
 function getProviderForMode(mode: AgentMode): { provider: LLMProvider, modelId: string } {
   if (mode === 'quality') {
     return {
-      provider: new ClaudeProvider(),
+      provider: new GeminiProvider(),
       modelId: QUALITY_MODEL
     };
-  } else if (mode === 'agentic-preview') {
+  } else if (mode === 'agentic') {
     return {
-      provider: new GeminiProvider(),
+      provider: new ClaudeProvider(),
       modelId: AGENTIC_MODEL
     };
   } else if (mode === 'reasoning') {
@@ -134,10 +151,10 @@ function getProviderForMode(mode: AgentMode): { provider: LLMProvider, modelId: 
       modelId: REASONING_MODEL
     };
   } else {
-    // Default / Fast
+    // fast (default)
     return {
-      provider: new GeminiProvider(),
-      modelId: DEFAULT_MODEL
+      provider: new HermesProvider(),
+      modelId: FAST_MODEL
     };
   }
 }
@@ -178,19 +195,26 @@ export async function generateConversationReply(
 ): Promise<ConversationEngineResult> {
   const { userId, clerkUser, request } = args;
   const parsed = ConversationRequestSchema.parse(request);
-  const agentMode = parsed.mode || options.mode || 'standard';
+  const agentMode = parsed.mode || options.mode || 'fast';
 
   // ---------------------------------------------------------
-  // SPRINT 3: Agentic Integration
+  // UCOL AGENTIC MODE — Claude + ReAct Loop
+  // Tools: web_search, write_research_paper, write_creative_content
   // ---------------------------------------------------------
-  if (agentMode === 'agentic-preview') {
+  if (agentMode === 'agentic') {
     const { runReActLoop } = await import('@/lib/agents/core/reactLoop');
     const { ToolRegistry } = await import('@/lib/agents/core/registry');
     const { dealSentinelTool } = await import('@/lib/agents/tools/dealSentinel');
+    const { webSearchTool } = await import('@/lib/agents/tools/webSearch');
+    const { researchWriterTool } = await import('@/lib/agents/tools/researchWriter');
+    const { novelWriterTool } = await import('@/lib/agents/tools/novelWriter');
 
-    // 1. Initialize Registry
+    // 1. Initialize Registry with all agentic tools
     const registry = new ToolRegistry();
     registry.register(dealSentinelTool);
+    registry.register(webSearchTool);
+    registry.register(researchWriterTool);
+    registry.register(novelWriterTool);
 
     // 2. Construct Prompt (Multimodal support)
     const userQuery = parsed.messages[parsed.messages.length - 1]?.text || "";
@@ -241,8 +265,9 @@ export async function generateConversationReply(
       stream,
       sources: [], // We could populate this from agentResult.trajectory if we parsed it
       debug: {
-        model: 'gemini-2.0-flash-agentic',
-        userQuery
+        model: `claude/${AGENTIC_MODEL}`,
+        userQuery,
+        tools: ['web_search', 'write_research_paper', 'write_creative_content', 'deal_sentinel']
       }
     };
   }
@@ -312,7 +337,7 @@ export async function generateConversationReply(
 
   // 1. Security Audit (Firewall)
   // Only run if not disabled and for standard/reasoning modes
-  if (!effectivelyDisabled && (agentMode === 'standard' || agentMode === 'reasoning')) {
+  if (!effectivelyDisabled && (agentMode === 'fast' || agentMode === 'reasoning')) {
     const securityAgent = new SecurityAgent();
     const audit = await securityAgent.auditPrompt(userQuery, userId);
 
@@ -414,7 +439,7 @@ export async function generateConversationReply(
   let confidenceSignal: ReturnType<typeof scoreContextForRouting> | null = null;
   let confidenceOverrideApplied = false;
 
-  if (agentMode === 'standard' && !effectivelyDisabled && intelligentFacts.length > 0) {
+  if (agentMode === 'fast' && !effectivelyDisabled && intelligentFacts.length > 0) {
     try {
       confidenceSignal = scoreContextForRouting(intelligentFacts.slice(0, 5), 'minimum');
 

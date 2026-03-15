@@ -4,8 +4,8 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 
 import { AgentMode } from "@/lib/llm/types";
 
-// Valid agent modes - keep in sync with AgentMode type
-const VALID_AGENT_MODES: AgentMode[] = ['standard', 'quality', 'agentic-preview'];
+// Valid agent modes - keep in sync with AgentMode type in lib/llm/types.ts
+const VALID_AGENT_MODES: AgentMode[] = ['fast', 'quality', 'agentic', 'reasoning'];
 
 function isValidAgentMode(value: string): value is AgentMode {
     return VALID_AGENT_MODES.includes(value as AgentMode);
@@ -19,7 +19,7 @@ interface ModelContextType {
 const ModelContext = createContext<ModelContextType | undefined>(undefined);
 
 export function ModelProvider({ children }: { children: React.ReactNode }) {
-    const [agentMode, setAgentModeState] = useState<AgentMode>("standard");
+    const [agentMode, setAgentModeState] = useState<AgentMode>("fast");
 
     useEffect(() => {
         // Load from localStorage on mount

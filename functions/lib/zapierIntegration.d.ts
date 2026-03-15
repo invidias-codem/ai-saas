@@ -1,7 +1,7 @@
 /**
  * Zapier Integration - Webhook handlers for triggering external workflows
  */
-import * as functions from "firebase-functions";
+import * as functions from 'firebase-functions';
 /**
  * HTTP Cloud Function - Zapier Authentication/Configuration
  */

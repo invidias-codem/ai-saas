@@ -1,7 +1,0 @@
-{
-    "title": "OpenAPI",
-    "description": "A demo for AnyCrawl OpenAPI",
-    "root": true,
-    "icon": "Play",
-    "pages": ["...(generated)"]
-}

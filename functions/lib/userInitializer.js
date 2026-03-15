@@ -44,7 +44,7 @@ const admin = __importStar(require("firebase-admin"));
  * Firestore trigger: Initialize user context and memory collections on new user
  */
 exports.initializeUserMemory = functions.firestore
-    .document("users/{userId}")
+    .document('users/{userId}')
     .onCreate(async (snap, context) => {
     const userId = context.params.userId;
     const db = admin.firestore();
@@ -64,35 +64,35 @@ exports.initializeUserMemory = functions.firestore
             },
         };
         await db
-            .collection("users")
+            .collection('users')
             .doc(userId)
-            .collection("context")
-            .doc("profile")
+            .collection('context')
+            .doc('profile')
             .set(userContext);
         // Create empty subcollections to enable indexing
         await db
-            .collection("users")
+            .collection('users')
             .doc(userId)
-            .collection("memories")
-            .doc("_placeholder")
+            .collection('memories')
+            .doc('_placeholder')
             .set({
             placeholder: true,
             createdAt: Date.now(),
         });
         await db
-            .collection("users")
+            .collection('users')
             .doc(userId)
-            .collection("ragIndex")
-            .doc("_placeholder")
+            .collection('ragIndex')
+            .doc('_placeholder')
             .set({
             placeholder: true,
             createdAt: Date.now(),
         });
         await db
-            .collection("users")
+            .collection('users')
             .doc(userId)
-            .collection("interactions")
-            .doc("_placeholder")
+            .collection('interactions')
+            .doc('_placeholder')
             .set({
             placeholder: true,
             createdAt: Date.now(),
@@ -111,10 +111,10 @@ async function updateUserContext(userId, tokensUsed, featureType, topics) {
     try {
         const db = admin.firestore();
         const contextRef = db
-            .collection("users")
+            .collection('users')
             .doc(userId)
-            .collection("context")
-            .doc("profile");
+            .collection('context')
+            .doc('profile');
         await contextRef.update({
             totalInteractions: admin.firestore.FieldValue.increment(1),
             totalTokensUsed: admin.firestore.FieldValue.increment(tokensUsed),
@@ -126,7 +126,7 @@ async function updateUserContext(userId, tokensUsed, featureType, topics) {
         });
     }
     catch (error) {
-        console.error("Error updating user context:", error);
+        console.error('Error updating user context:', error);
         // Don't throw - context update shouldn't block main flow
     }
 }

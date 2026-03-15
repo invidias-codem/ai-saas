@@ -1,32 +1,30 @@
 import { auth } from "@clerk/nextjs/server";
+import * as admin from "firebase-admin";
 import { NextResponse } from "next/server";
-import { db } from "@/lib/firebaseAdmin";
-import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
-import { limitApiEndpoint } from '@/lib/security/rateLimit';
-import { uuidSchema } from '@/lib/security/inputValidation';
-import { auditMemoryOp } from '@/lib/security/auditLog';
+
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+const db = admin.firestore();
 
 export async function POST(request: Request) {
   try {
-    const user = await requireAuth();
-    const ip = getClientIP(request);
+    const { userId } = await auth();
 
-    const rateLimit = await limitApiEndpoint(user.userId, ip, 'mutation');
-    if (!rateLimit.success) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { factId } = await request.json();
 
-    const factIdValidation = uuidSchema.safeParse(factId);
-    if (!factIdValidation.success) {
+    if (!factId) {
       return NextResponse.json(
-        { error: "Invalid fact ID format" },
+        { error: "Fact ID is required" },
         { status: 400 }
       );
     }
 
-    const factRef = db.collection("users").doc(user.userId).collection("facts").doc(factId);
+    const factRef = db.collection("users").doc(userId).collection("facts").doc(factId);
     const factDoc = await factRef.get();
 
     if (!factDoc.exists) {
@@ -34,7 +32,6 @@ export async function POST(request: Request) {
     }
 
     await factRef.delete();
-    auditMemoryOp('memory.delete', user.userId, { memoryId: factId });
 
     return NextResponse.json({
       success: true,
