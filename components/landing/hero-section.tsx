@@ -28,7 +28,7 @@ const AnimatedCapabilities = () => {
 
     return (
         <div className="flex items-center justify-center mb-8">
-            <div className="relative px-6 py-2 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm">
+            <div className="relative px-6 py-2 rounded-full border border-slate-200/80 dark:border-white/10 bg-white/60 dark:bg-white/5 backdrop-blur-sm shadow-sm dark:shadow-none">
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={currentIndex}
@@ -47,8 +47,6 @@ const AnimatedCapabilities = () => {
         </div>
     );
 };
-
-
 
 export const HeroSection = () => {
     const proModal = useProModal();
@@ -70,10 +68,19 @@ export const HeroSection = () => {
 
     return (
         <section className="relative pt-20 pb-32 overflow-hidden">
-            {/* Background Gradients */}
+            {/* Background Gradients — light mode: warm soft orbs; dark mode: subtle glows */}
             <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-primary/5 blur-[100px]" />
-                <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-purple-500/5 blur-[100px]" />
+                {/* Light mode: warm ivory gradient base */}
+                <div className="absolute inset-0 hero-gradient-light dark:opacity-0 opacity-100 transition-opacity duration-500" />
+
+                {/* Light mode floating orbs */}
+                <div className="absolute top-[-15%] left-[-8%] w-[500px] h-[500px] rounded-full orb-lavender dark:opacity-0 opacity-100 blur-[80px] transition-opacity duration-500" />
+                <div className="absolute bottom-[-5%] right-[-3%] w-[400px] h-[400px] rounded-full orb-cream dark:opacity-0 opacity-100 blur-[80px] transition-opacity duration-500" />
+                <div className="absolute top-[30%] right-[10%] w-[300px] h-[300px] rounded-full orb-indigo dark:opacity-0 opacity-100 blur-[60px] transition-opacity duration-500" />
+
+                {/* Dark mode orbs */}
+                <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-primary/5 dark:opacity-100 opacity-0 blur-[100px] transition-opacity duration-500" />
+                <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-purple-500/5 dark:opacity-100 opacity-0 blur-[100px] transition-opacity duration-500" />
             </div>
 
             <div className="container relative z-10 mx-auto px-4 text-center">
@@ -83,7 +90,7 @@ export const HeroSection = () => {
                 <motion.h1
                     {...animationProps}
                     transition={{ duration: 0.5 }}
-                    className="text-5xl md:text-7xl font-bold tracking-tight text-white mb-6 font-heading"
+                    className="text-5xl md:text-7xl font-bold tracking-tight text-slate-800 dark:text-white mb-6 font-heading"
                 >
                     {t('title')}
                 </motion.h1>
@@ -92,7 +99,7 @@ export const HeroSection = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: 0.2 }}
-                    className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed"
+                    className="text-lg md:text-xl text-slate-500 dark:text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed"
                 >
                     {t('description')}
                 </motion.p>
@@ -104,7 +111,10 @@ export const HeroSection = () => {
                     className="flex flex-col sm:flex-row gap-4 justify-center items-center"
                 >
                     <Link href="/dashboard">
-                        <Button size="lg" className="rounded-full px-8 py-6 text-base shadow-[0_0_20px_-5px_rgba(168,85,247,0.5)] hover:shadow-[0_0_25px_-5px_rgba(168,85,247,0.6)] transition-all duration-300">
+                        <Button
+                            size="lg"
+                            className="rounded-full px-8 py-6 text-base bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:opacity-90 shadow-[0_0_20px_-5px_rgba(139,92,246,0.5)] hover:shadow-[0_0_28px_-5px_rgba(139,92,246,0.65)] transition-all duration-300"
+                        >
                             {t('cta')}
                             <ArrowRightIcon className="ml-2 w-5 h-5" />
                         </Button>
@@ -113,21 +123,22 @@ export const HeroSection = () => {
                         onClick={proModal.onOpen}
                         variant="outline"
                         size="lg"
-                        className="rounded-full px-8 py-6 text-base border-white/10 bg-white/5 hover:bg-white/10 backdrop-blur-sm"
+                        className="rounded-full px-8 py-6 text-base border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 text-slate-700 dark:text-white hover:bg-white dark:hover:bg-white/10 backdrop-blur-sm shadow-sm dark:shadow-none transition-all"
                     >
                         Support Genie
                     </Button>
                 </motion.div>
 
-                {/* Dashboard Mockup Halo Effect (Replaces old mobile animation) */}
+                {/* Dashboard Mockup */}
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.8, delay: 0.5 }}
-                    className="mt-20 relative mx-auto w-full max-w-6xl rounded-xl border border-white/10 bg-black/40 backdrop-blur-md shadow-2xl p-3 md:p-6"
+                    className="mt-20 relative mx-auto w-full max-w-6xl rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur-md shadow-xl dark:shadow-2xl p-3 md:p-6"
                 >
-                    <div className="absolute -inset-1 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl blur opacity-20" />
-                    <div className="relative rounded-lg overflow-hidden bg-[#0f1117]/50 border border-white/5 p-1">
+                    {/* Glow ring — violet on both modes, subtle on light */}
+                    <div className="absolute -inset-1 bg-gradient-to-r from-violet-500 to-blue-500 rounded-xl blur opacity-10 dark:opacity-20" />
+                    <div className="relative rounded-lg overflow-hidden bg-slate-50/80 dark:bg-[#0f1117]/50 border border-slate-100 dark:border-white/5 p-1">
                         <LandingChat />
                     </div>
                 </motion.div>
