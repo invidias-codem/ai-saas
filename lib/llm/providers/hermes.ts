@@ -18,20 +18,14 @@ import { logger } from "@/lib/logger";
 
 const NOUS_API_KEY = process.env.NOUSE_API_KEY;
 
-// Nous/Hermes is available through multiple inference providers.
-// HERMES_BASE_URL env var lets you pin a specific one in Vercel.
-// Priority order if not set: Together AI → Fireworks AI → Nous direct
+// Nous Research inference API (portal.nous.ai)
+// Override via HERMES_BASE_URL env var if needed
 const NOUS_BASE_URL =
-  process.env.HERMES_BASE_URL ||
-  "https://api.together.xyz/v1";
+  process.env.HERMES_BASE_URL || "https://api.nous.ai/v1";
 
-// Model IDs per provider:
-//   Together AI:  "NousResearch/Hermes-3-Llama-3.1-70B-Turbo"
-//   Fireworks AI: "accounts/fireworks/models/hermes-3-llama-3-1-70b"
-//   Nous direct:  "hermes-3-llama-3.1-70b"
+// Model ID from the Nous portal — override via HERMES_MODEL_ID
 const NOUS_MODEL =
-  process.env.HERMES_MODEL_ID ||
-  "NousResearch/Hermes-3-Llama-3.1-70B-Turbo";
+  process.env.HERMES_MODEL_ID || "hermes-3-llama-3.1-70b";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const OLLAMA_MODEL = "hermes3";
