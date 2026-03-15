@@ -2,21 +2,28 @@ import { LLMProvider, ChatMessage, CompletionOptions, StreamResult } from "../ty
 import { logger } from "@/lib/logger";
 
 /**
- * Hermes3 Provider (via Ollama local inference)
+ * Hermes3 Provider — NousResearch Hermes-3 via Nous AI Cloud API
  *
  * Used for the "Fast" toggle in the UCOL conversation engine.
- * Hermes3 (NousResearch) is a strong instruction-following model
- * optimized for low-latency, local inference with no API cost.
+ * Hermes-3 (NousResearch) is a strong instruction-following model
+ * optimized for low latency and high quality reasoning.
  *
- * Requires Ollama running locally: https://ollama.ai
- * Model pull: `ollama pull hermes3`
+ * Primary: Nous AI Cloud API (NOUSE_API_KEY required)
+ *   Endpoint: https://api.nous.ai/v1
+ *   Model: Hermes-3-405B or hermes-3-llama-3.1-70b
  *
- * Falls back to gemini-2.0-flash-lite if Ollama is unavailable.
+ * Fallback 1: Ollama local inference (OLLAMA_BASE_URL, no key needed)
+ * Fallback 2: Gemini Flash-Lite (always available, cost $0.10/1M tokens)
  */
 
+const NOUS_API_KEY = process.env.NOUSE_API_KEY;
+const NOUS_BASE_URL = "https://api.nous.ai/v1";
+const NOUS_MODEL = process.env.HERMES_MODEL_ID || "hermes-3-llama-3.1-70b";
+
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const HERMES_MODEL = process.env.HERMES_MODEL_ID || "hermes3";
-const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview"; // cost: $0.10/1M
+const OLLAMA_MODEL = "hermes3";
+
+const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
 
 export class HermesProvider implements LLMProvider {
   id = "hermes";
@@ -27,7 +34,6 @@ export class HermesProvider implements LLMProvider {
     systemInstruction?: string,
     options: CompletionOptions = {}
   ): Promise<StreamResult> {
-    // --- Build OpenAI-compatible message array ---
     const formattedMessages: { role: string; content: string }[] = [];
 
     if (systemInstruction) {
@@ -41,10 +47,18 @@ export class HermesProvider implements LLMProvider {
       });
     }
 
-    // --- Try Ollama first ---
+    // --- 1. Nous AI Cloud (primary) ---
+    if (NOUS_API_KEY) {
+      try {
+        return await this.streamFromNousAI(formattedMessages, options);
+      } catch (err) {
+        logger.warn("[HermesProvider] Nous AI request failed, trying Ollama fallback", err);
+      }
+    }
+
+    // --- 2. Ollama local (dev fallback) ---
     try {
       const ollamaAvailable = await this.pingOllama();
-
       if (ollamaAvailable) {
         return await this.streamFromOllama(formattedMessages, options);
       }
@@ -52,14 +66,84 @@ export class HermesProvider implements LLMProvider {
       logger.warn("[HermesProvider] Ollama unavailable, falling back to Gemini Flash-Lite", err);
     }
 
-    // --- Fallback: Gemini Flash-Lite (cheap + fast) ---
+    // --- 3. Gemini Flash-Lite (always-available fallback) ---
     return await this.streamFromGeminiFallback(formattedMessages, systemInstruction, options);
   }
+
+  // ─── Nous AI Cloud ────────────────────────────────────────────────────────
+
+  private async streamFromNousAI(
+    messages: { role: string; content: string }[],
+    options: CompletionOptions
+  ): Promise<StreamResult> {
+    const response = await fetch(`${NOUS_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${NOUS_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: NOUS_MODEL,
+        messages,
+        stream: true,
+        temperature: options.temperature ?? 0.7,
+        max_tokens: options.maxTokens ?? 2048,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      const errText = await response.text().catch(() => response.statusText);
+      throw new Error(`Nous AI request failed (${response.status}): ${errText}`);
+    }
+
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    const body = response.body;
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = body.getReader();
+        let buffer = "";
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed === "data: [DONE]") continue;
+              if (!trimmed.startsWith("data: ")) continue;
+
+              try {
+                const json = JSON.parse(trimmed.slice(6));
+                const delta = json?.choices?.[0]?.delta?.content;
+                if (delta) controller.enqueue(encoder.encode(delta));
+              } catch {
+                // skip malformed chunk
+              }
+            }
+          }
+        } finally {
+          controller.close();
+          reader.releaseLock();
+        }
+      },
+    });
+
+    return { stream, debug: { model: `nous/${NOUS_MODEL}` } };
+  }
+
+  // ─── Ollama Local ─────────────────────────────────────────────────────────
 
   private async pingOllama(): Promise<boolean> {
     try {
       const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
-        signal: AbortSignal.timeout(1500), // 1.5s ping timeout
+        signal: AbortSignal.timeout(1500),
       });
       return res.ok;
     } catch {
@@ -75,7 +159,7 @@ export class HermesProvider implements LLMProvider {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: HERMES_MODEL,
+        model: OLLAMA_MODEL,
         messages,
         stream: true,
         temperature: options.temperature ?? 0.7,
@@ -126,19 +210,19 @@ export class HermesProvider implements LLMProvider {
       },
     });
 
-    return { stream, debug: { model: `ollama/${HERMES_MODEL}` } };
+    return { stream, debug: { model: `ollama/${OLLAMA_MODEL}` } };
   }
+
+  // ─── Gemini Flash-Lite Fallback ───────────────────────────────────────────
 
   private async streamFromGeminiFallback(
     messages: { role: string; content: string }[],
     systemInstruction: string | undefined,
     options: CompletionOptions
   ): Promise<StreamResult> {
-    // Lazy-import GeminiProvider to avoid circular deps
     const { GeminiProvider } = await import("./gemini");
     const gemini = new GeminiProvider();
 
-    // Reconstruct ChatMessage array for Gemini
     const { ChatMessageSchema } = await import("../types");
     const chatMessages = messages
       .filter((m) => m.role !== "system")
