@@ -20,7 +20,7 @@ export async function syncUser() {
             return { success: false, error: "Database connection error" };
         }
 
-        // Upsert into user_profiles
+        // Upsert into user_profiles — conflict on user_id first (normal path)
         const { error: profileError } = await supabaseAdmin
             .from("user_profiles")
             .upsert({
@@ -32,6 +32,27 @@ export async function syncUser() {
             }, { onConflict: "user_id" });
 
         if (profileError) {
+            // If user_id upsert fails due to email unique constraint (e.g. user re-registered
+            // with a new Clerk ID but same email), fall back to updating the existing row by email.
+            if (profileError.code === "23505" && profileError.message.includes("email")) {
+                const { error: updateError } = await supabaseAdmin
+                    .from("user_profiles")
+                    .update({
+                        user_id: user.id,
+                        full_name: fullName || null,
+                        avatar_url: avatarUrl || null,
+                        updated_at: new Date().toISOString(),
+                    })
+                    .eq("email", email);
+
+                if (updateError) {
+                    console.error("Error updating user profile by email:", updateError);
+                    return { success: false, error: updateError.message };
+                }
+                // Successfully reconciled — email row now has the current user_id
+                return { success: true };
+            }
+
             console.error("Error syncing user profile:", profileError);
             return { success: false, error: profileError.message };
         }

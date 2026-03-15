@@ -43,7 +43,9 @@ interface ShareButtonProps {
 const getShareUrls = (content: ShareContent) => {
   const encodedText = encodeURIComponent(content.text);
   const encodedTitle = encodeURIComponent(content.title);
-  const encodedUrl = encodeURIComponent(content.url || window.location.href);
+  // Safely access window.location.href — only available client-side
+  const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+  const encodedUrl = encodeURIComponent(content.url || currentUrl);
   const fullText = encodeURIComponent(`${content.title}\n\n${content.text}`);
 
   return {
