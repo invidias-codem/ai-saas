@@ -21,7 +21,7 @@
     "firebase-functions": "^5.0.0",
     "@google-cloud/vertexai": "^1.10.0",
     "@google-cloud/aiplatform": "^5.11.0",
-    "axios": "^1.6.2",
+    "axios": "^1.13.5",
     "zod": "^3.22.4"
   },
   "devDependencies": {
