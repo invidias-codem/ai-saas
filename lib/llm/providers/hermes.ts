@@ -2,58 +2,68 @@ import { LLMProvider, ChatMessage, CompletionOptions, StreamResult } from "../ty
 import { logger } from "@/lib/logger";
 
 /**
- * Hermes3 Provider — NousResearch Hermes-3 via Nous AI Cloud API
+ * Hermes Provider — Nous Research Inference API
  *
- * Used for the "Fast" toggle in the UCOL conversation engine.
- * Hermes-3 (NousResearch) is a strong instruction-following model
- * optimized for low latency and high quality reasoning.
+ * Docs: https://portal.nousresearch.com/api-docs
+ * Base: https://inference-api.nousresearch.com/v1
+ * Auth: Bearer token (NOUSE_API_KEY)
+ * Rate: 100 req/min, 80k tokens/min
  *
- * Primary: Nous AI Cloud API (NOUSE_API_KEY required)
- *   Endpoint: https://api.nous.ai/v1
- *   Model: Hermes-3-405B or hermes-3-llama-3.1-70b
+ * Available models:
+ *   Hermes-4.3-36B  — fastest, 128k context (default for Fast mode)
+ *   Hermes-4-70B    — balanced, 128k context
+ *   Hermes-4-405B   — most capable, 128k context
  *
- * Fallback 1: Ollama local inference (OLLAMA_BASE_URL, no key needed)
- * Fallback 2: Gemini Flash-Lite (always available, cost $0.10/1M tokens)
+ * Reasoning (Hermes 4):
+ *   - With reasoning system prompt + NO prefill → reasoning goes to `reasoning_content` field
+ *   - With reasoning system prompt + prefill `<think>` → reasoning in `content` between tags
+ *   - Fast mode: reasoning OFF (direct answers, low latency)
+ *   - Set options.thinking = true to enable reasoning for heavier queries
+ *
+ * Fallback chain: Nous API → Ollama local → Gemini Flash-Lite
  */
 
 const NOUS_API_KEY = process.env.NOUSE_API_KEY;
-
-// Nous Research inference API (portal.nous.ai)
-// Override via HERMES_BASE_URL env var if needed
 const NOUS_BASE_URL =
-  process.env.HERMES_BASE_URL || "https://api.nous.ai/v1";
+  process.env.HERMES_BASE_URL || "https://inference-api.nousresearch.com/v1";
 
-// Model ID from the Nous portal — confirmed as "Hermes-4-70B" on portal UI
-// Override via HERMES_MODEL_ID env var if needed
+// Hermes-4.3-36B: fastest model, 128k context — ideal for Fast toggle
+// Override via HERMES_MODEL_ID env var for heavier model
 const NOUS_MODEL =
-  process.env.HERMES_MODEL_ID || "Hermes-4-70B";
+  process.env.HERMES_MODEL_ID || "Hermes-4.3-36B";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const OLLAMA_MODEL = "hermes3";
-
 const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
+
+// Reasoning system prompt from Nous docs
+const HERMES_THINKING_SYSTEM_PROMPT =
+  `You are a deep thinking AI, you may use extremely long chains of thought to deeply consider the problem and deliberate with yourself via systematic reasoning processes to help come to a correct solution prior to answering. You should enclose your thoughts and internal monologue inside <think> </think> tags, and then provide your solution or response to the problem.`;
 
 export class HermesProvider implements LLMProvider {
   id = "hermes";
-  name = "Hermes3 (Fast)";
+  name = "Hermes4 (Fast)";
 
   async generateStream(
     messages: ChatMessage[],
     systemInstruction?: string,
-    options: CompletionOptions = {}
+    options: CompletionOptions & { thinking?: boolean } = {}
   ): Promise<StreamResult> {
     const formattedMessages: { role: string; content: string }[] = [];
 
-    // Hermes-4 supports native chain-of-thought via <think></think> tags.
-    // Prepend the deep-thinking system prompt to activate it, then append
-    // any caller-provided system instruction.
-    const hermesSystemPrompt = `You are a deep thinking AI. You may use extremely long chains of thought to deeply consider the problem and deliberate with yourself via systematic reasoning processes to help come to a correct solution prior to answering. You should enclose your thoughts and internal monologue inside <think> </think> tags, and then provide your solution or response to the problem.`;
+    // Reasoning is opt-in — Fast mode keeps it OFF for low latency.
+    // Pass options.thinking = true for deeper queries that benefit from CoT.
+    const useThinking = options.thinking === true;
 
-    const combinedSystem = systemInstruction
-      ? `${hermesSystemPrompt}\n\n${systemInstruction}`
-      : hermesSystemPrompt;
-
-    formattedMessages.push({ role: "system", content: combinedSystem });
+    if (useThinking) {
+      // Prepend Nous reasoning system prompt, then caller instruction
+      const combinedSystem = systemInstruction
+        ? `${HERMES_THINKING_SYSTEM_PROMPT}\n\n${systemInstruction}`
+        : HERMES_THINKING_SYSTEM_PROMPT;
+      formattedMessages.push({ role: "system", content: combinedSystem });
+    } else if (systemInstruction) {
+      formattedMessages.push({ role: "system", content: systemInstruction });
+    }
 
     for (const msg of messages) {
       formattedMessages.push({
@@ -62,26 +72,26 @@ export class HermesProvider implements LLMProvider {
       });
     }
 
-    // --- 1. Nous AI Cloud (primary) ---
+    // 1. Nous AI Cloud (primary)
     if (NOUS_API_KEY) {
       try {
-        return await this.streamFromNousAI(formattedMessages, options);
+        return await this.streamFromNousAI(formattedMessages, options, useThinking);
       } catch (err) {
-        logger.warn("[HermesProvider] Nous AI request failed, trying Ollama fallback", err);
+        logger.warn("[HermesProvider] Nous AI request failed, trying Ollama", err);
       }
     }
 
-    // --- 2. Ollama local (dev fallback) ---
+    // 2. Ollama local (dev fallback)
     try {
-      const ollamaAvailable = await this.pingOllama();
-      if (ollamaAvailable) {
+      const ollamaUp = await this.pingOllama();
+      if (ollamaUp) {
         return await this.streamFromOllama(formattedMessages, options);
       }
     } catch (err) {
       logger.warn("[HermesProvider] Ollama unavailable, falling back to Gemini Flash-Lite", err);
     }
 
-    // --- 3. Gemini Flash-Lite (always-available fallback) ---
+    // 3. Gemini Flash-Lite (always-available fallback)
     return await this.streamFromGeminiFallback(formattedMessages, systemInstruction, options);
   }
 
@@ -89,7 +99,8 @@ export class HermesProvider implements LLMProvider {
 
   private async streamFromNousAI(
     messages: { role: string; content: string }[],
-    options: CompletionOptions
+    options: CompletionOptions,
+    useThinking: boolean
   ): Promise<StreamResult> {
     const response = await fetch(`${NOUS_BASE_URL}/chat/completions`, {
       method: "POST",
@@ -108,7 +119,7 @@ export class HermesProvider implements LLMProvider {
 
     if (!response.ok || !response.body) {
       const errText = await response.text().catch(() => response.statusText);
-      throw new Error(`Nous AI request failed (${response.status}): ${errText}`);
+      throw new Error(`Nous AI (${response.status}): ${errText}`);
     }
 
     const encoder = new TextEncoder();
@@ -136,8 +147,15 @@ export class HermesProvider implements LLMProvider {
 
               try {
                 const json = JSON.parse(trimmed.slice(6));
-                const delta = json?.choices?.[0]?.delta?.content;
-                if (delta) controller.enqueue(encoder.encode(delta));
+                const delta = json?.choices?.[0]?.delta;
+                if (!delta) continue;
+
+                // When reasoning is ON, Hermes 4 sends thinking to `reasoning_content`
+                // and the final answer to `content`. We stream only the answer.
+                // When reasoning is OFF, everything comes through `content` directly.
+                const text = delta.content ?? "";
+                if (text) controller.enqueue(encoder.encode(text));
+
               } catch {
                 // skip malformed chunk
               }
@@ -150,7 +168,12 @@ export class HermesProvider implements LLMProvider {
       },
     });
 
-    return { stream, debug: { model: `nous/${NOUS_MODEL}` } };
+    return {
+      stream,
+      debug: {
+        model: `nous/${NOUS_MODEL}${useThinking ? " (thinking)" : ""}`,
+      },
+    };
   }
 
   // ─── Ollama Local ─────────────────────────────────────────────────────────
@@ -183,7 +206,7 @@ export class HermesProvider implements LLMProvider {
     });
 
     if (!response.ok || !response.body) {
-      throw new Error(`Ollama request failed: ${response.status} ${response.statusText}`);
+      throw new Error(`Ollama (${response.status}): ${response.statusText}`);
     }
 
     const encoder = new TextEncoder();
