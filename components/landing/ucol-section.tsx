@@ -154,7 +154,7 @@ const FlowDiagram = () => (
             x={node.x} y={node.y + 4}
             textAnchor="middle"
             fontSize={node.id === "kg" ? "6.5" : "8"}
-            fill="white"
+            className="fill-slate-800 dark:fill-white"
             fontWeight="600"
             fontFamily="system-ui"
             opacity={0.9}
@@ -174,7 +174,7 @@ export const UCOLSection = () => {
   return (
     <section
       id="ucol"
-      className="relative py-32 px-4 bg-background overflow-hidden"
+      className="relative py-16 md:py-32 px-4 bg-background overflow-hidden"
     >
       {/* Ambient glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] bg-violet-500/5 dark:bg-violet-500/8 rounded-full blur-[120px] pointer-events-none" />
@@ -203,7 +203,7 @@ export const UCOLSection = () => {
         </motion.div>
 
         {/* Three model cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-20">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12 md:mb-20">
           {models.map((model, i) => (
             <motion.div
               key={model.key}
@@ -257,7 +257,7 @@ export const UCOLSection = () => {
           className="relative rounded-2xl border border-slate-200/60 dark:border-white/8 bg-white/40 dark:bg-white/3 backdrop-blur-md p-8"
         >
           <div className="absolute -inset-px bg-gradient-to-b from-violet-400/10 to-transparent rounded-2xl pointer-events-none" />
-          <p className="text-center text-sm text-slate-400 dark:text-slate-500 tracking-widest uppercase mb-8 font-medium">
+          <p className="text-center text-sm text-slate-500 dark:text-slate-400 tracking-widest uppercase mb-8 font-medium">
             {t("flowLabel")}
           </p>
           <FlowDiagram />

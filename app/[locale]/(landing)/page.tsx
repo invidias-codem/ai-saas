@@ -82,7 +82,7 @@ const LandingPage = () => {
         <MemorySection />
 
         {/* 4 — Features Grid: One platform. Every capability. */}
-        <section className="px-4 py-32 max-w-7xl mx-auto relative cursor-default">
+        <section className="px-4 py-16 md:py-32 max-w-7xl mx-auto relative cursor-default">
           {/* Ambient glow */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-violet-500/5 dark:bg-indigo-500/10 rounded-full blur-[100px] -z-10" />
 
@@ -115,11 +115,11 @@ const LandingPage = () => {
         <Testimonials />
 
         {/* 5 — CTA: Meet the AI that remembers. */}
-        <section className="py-32 text-center px-4 relative overflow-hidden">
-          {/* Background: indigo-950 → violet-950 gradient with soft glow */}
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 via-violet-950 to-indigo-950 pointer-events-none" />
+        <section className="py-16 md:py-32 text-center px-4 relative overflow-hidden">
+          {/* Background: light mode = soft violet/indigo gradient. Dark = deep indigo-950. */}
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-100 via-indigo-50 to-violet-100 dark:from-indigo-950 dark:via-violet-950 dark:to-indigo-950 pointer-events-none" />
           {/* Soft center glow */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-violet-500/20 rounded-full blur-[100px] pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-violet-400/15 dark:bg-violet-500/20 rounded-full blur-[100px] pointer-events-none" />
 
           <motion.div
             initial={{ opacity: 0, y: 24 }}
@@ -129,18 +129,18 @@ const LandingPage = () => {
             className="max-w-3xl mx-auto relative z-10 space-y-8"
           >
             <h2
-              className="font-bold text-white font-heading tracking-tight"
+              className="font-bold text-slate-900 dark:text-white font-heading tracking-tight"
               style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)" }}
             >
               {t('cta.title')}
             </h2>
-            <p className="text-xl text-slate-300/80">
+            <p className="text-xl text-slate-600 dark:text-slate-300/80">
               {t('cta.subtitle')}
             </p>
             <Link href="/dashboard">
               <Button
                 size="lg"
-                className="rounded-full px-12 py-8 text-lg mt-4 bg-white text-violet-900 font-bold hover:bg-white/90 shadow-[0_0_60px_-10px_rgba(255,255,255,0.3)] hover:shadow-[0_0_80px_-10px_rgba(255,255,255,0.45)] transition-all duration-300"
+                className="rounded-full px-12 py-8 text-lg mt-4 bg-violet-700 dark:bg-white text-white dark:text-violet-900 font-bold hover:opacity-90 dark:hover:bg-white/90 shadow-[0_0_40px_-10px_rgba(124,58,237,0.5)] dark:shadow-[0_0_60px_-10px_rgba(255,255,255,0.3)] transition-all duration-300"
               >
                 {t('cta.button')}
               </Button>

@@ -55,6 +55,7 @@ const getNode = (id: string): NodeDef =>
 // ── Constellation SVG Component ──────────────────────────────────────────────
 const Constellation = () => {
   return (
+    // SVG scales naturally via w-full h-auto on mobile
     <svg
       viewBox="0 0 600 420"
       className="w-full h-auto max-w-2xl mx-auto"
@@ -158,13 +159,13 @@ const Constellation = () => {
               ease: "easeInOut",
             }}
           />
-          {/* Label text */}
+          {/* Label text — dark charcoal in light mode, white in dark */}
           <text
             x={node.x}
             y={node.y + 4}
             textAnchor="middle"
             fontSize={node.r > 16 ? "8" : "6.5"}
-            fill="white"
+            className="fill-slate-800 dark:fill-white"
             fontWeight="600"
             fontFamily="system-ui"
             opacity={0.9}
@@ -195,11 +196,12 @@ export const MemorySection = () => {
   return (
     <section
       ref={sectionRef}
-      className="relative py-32 px-4 bg-[#070a12] dark:bg-[#070a12] overflow-hidden"
+      // Light: warm ivory (#FAF9F7). Dark: deep midnight (#070a12).
+      className="relative py-16 md:py-32 px-4 bg-[#FAF9F7] dark:bg-[#070a12] overflow-hidden"
     >
-      {/* Background glows */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-violet-800/10 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-sky-800/8 rounded-full blur-[100px] pointer-events-none" />
+      {/* Background glows — lighter tints for ivory bg, darker for midnight */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-violet-400/[0.08] dark:bg-violet-800/[0.10] rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-sky-400/[0.06] dark:bg-sky-800/[0.08] rounded-full blur-[100px] pointer-events-none" />
 
       {/* Subtle dot grid */}
       <div
@@ -219,38 +221,38 @@ export const MemorySection = () => {
           transition={{ duration: 0.6 }}
           className="text-center mb-16"
         >
-          <span className="inline-block px-4 py-1.5 rounded-full text-sm font-medium text-sky-400 border border-sky-500/30 bg-sky-500/10 mb-6">
+          <span className="inline-block px-4 py-1.5 rounded-full text-sm font-medium text-sky-600 dark:text-sky-400 border border-sky-400/40 dark:border-sky-500/30 bg-sky-100/80 dark:bg-sky-500/10 mb-6">
             {t("eyebrow")}
           </span>
           <h2
-            className="font-bold tracking-tight text-white mb-6 font-heading"
+            className="font-bold tracking-tight text-slate-900 dark:text-white mb-6 font-heading"
             style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)" }}
           >
             {t("title")}
           </h2>
-          <p className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
+          <p className="text-slate-500 dark:text-slate-400 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
             {t("subtitle")}
           </p>
         </motion.div>
 
-        {/* Constellation visual */}
+        {/* Constellation visual — SVG scales down naturally on mobile via w-full h-auto */}
         <motion.div
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          className="relative rounded-2xl border border-white/6 bg-white/2 backdrop-blur-sm p-6 md:p-10"
+          className="relative rounded-2xl border border-slate-200 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.02] backdrop-blur-sm p-6 md:p-10"
         >
-          <div className="absolute -inset-px bg-gradient-to-b from-violet-500/8 to-transparent rounded-2xl pointer-events-none" />
+          <div className="absolute -inset-px bg-gradient-to-b from-violet-500/[0.08] to-transparent rounded-2xl pointer-events-none" />
           <Constellation />
         </motion.div>
 
-        {/* Stats / callouts below constellation */}
+        {/* Stats / callouts below constellation — 1 col mobile, 3 col sm+ */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-12">
           {[
-            { value: t("stat1Value"), label: t("stat1Label"), color: "text-violet-400" },
-            { value: t("stat2Value"), label: t("stat2Label"), color: "text-sky-400" },
-            { value: t("stat3Value"), label: t("stat3Label"), color: "text-amber-400" },
+            { value: t("stat1Value"), label: t("stat1Label"), color: "text-violet-500 dark:text-violet-400" },
+            { value: t("stat2Value"), label: t("stat2Label"), color: "text-sky-500 dark:text-sky-400" },
+            { value: t("stat3Value"), label: t("stat3Label"), color: "text-amber-500 dark:text-amber-400" },
           ].map((stat, i) => (
             <motion.div
               key={i}
@@ -258,12 +260,12 @@ export const MemorySection = () => {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: 0.2 + i * 0.12, duration: 0.5 }}
-              className="text-center p-6 rounded-xl border border-white/6 bg-white/3"
+              className="text-center p-6 rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white/80 dark:bg-white/[0.03]"
             >
               <div className={`text-3xl font-bold ${stat.color} mb-2 font-heading`}>
                 {stat.value}
               </div>
-              <div className="text-slate-400 text-sm">{stat.label}</div>
+              <div className="text-slate-500 dark:text-slate-400 text-sm">{stat.label}</div>
             </motion.div>
           ))}
         </div>

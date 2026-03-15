@@ -41,7 +41,8 @@ const ParticleField = () => {
       {stars.map((star) => (
         <motion.div
           key={star.id}
-          className="absolute rounded-full bg-white"
+          // Dark: white dots. Light: dark slate dots so they read on ivory bg.
+          className="absolute rounded-full bg-slate-600 dark:bg-white"
           style={{
             left: `${star.x}%`,
             top: `${star.y}%`,
@@ -148,12 +149,12 @@ const MiniGraph = () => {
               stroke={node.color}
               strokeWidth="1.5"
             />
-            {/* Label */}
+            {/* Label — fill-slate-800 in light mode, fill-white in dark */}
             <text
               x={node.x} y={node.y + 4}
               textAnchor="middle"
               fontSize={node.r > 20 ? "9" : "7"}
-              fill="white"
+              className="fill-slate-800 dark:fill-white"
               fontWeight="600"
               fontFamily="system-ui"
             >
@@ -171,21 +172,22 @@ export const HeroSection = () => {
   const t = useTranslations("Landing.hero");
 
   return (
-    <section className="relative min-h-screen flex flex-col justify-center items-center overflow-hidden bg-[#080b14]">
+    // Light: soft lavender-to-cream gradient. Dark: deep midnight #080b14.
+    <section className="relative min-h-screen flex flex-col justify-center items-center overflow-hidden bg-gradient-to-br from-violet-50 via-slate-50 to-indigo-50 dark:from-[#080b14] dark:via-[#080b14] dark:to-[#080b14]">
       {/* Particle constellation background */}
       <ParticleField />
 
-      {/* Ambient glows */}
-      <div className="absolute top-[-20%] left-[-10%] w-[700px] h-[700px] rounded-full bg-violet-700/8 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-indigo-600/8 blur-[120px] pointer-events-none" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[400px] rounded-full bg-violet-900/10 blur-[100px] pointer-events-none" />
+      {/* Ambient glows — softer in light mode */}
+      <div className="absolute top-[-20%] left-[-10%] w-[700px] h-[700px] rounded-full bg-violet-300/15 dark:bg-violet-700/8 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-indigo-300/15 dark:bg-indigo-600/8 blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[400px] rounded-full bg-violet-200/10 dark:bg-violet-900/10 blur-[100px] pointer-events-none" />
 
-      {/* Grid overlay — very subtle */}
+      {/* Grid overlay — violet-tinted so it reads on both light and dark */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-[0.03]"
+        className="absolute inset-0 pointer-events-none opacity-[0.04] dark:opacity-[0.03]"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)",
+            "linear-gradient(rgba(139,92,246,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(139,92,246,0.4) 1px, transparent 1px)",
           backgroundSize: "60px 60px",
         }}
       />
@@ -196,10 +198,10 @@ export const HeroSection = () => {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-10 inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 backdrop-blur-sm"
+          className="mb-10 inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-violet-400/40 dark:border-violet-500/30 bg-violet-100/80 dark:bg-violet-500/10 backdrop-blur-sm"
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
-          <span className="text-sm text-violet-300 font-medium tracking-wide">
+          <span className="w-1.5 h-1.5 rounded-full bg-violet-500 dark:bg-violet-400 animate-pulse" />
+          <span className="text-sm text-violet-700 dark:text-violet-300 font-medium tracking-wide">
             {t("badge")}
           </span>
         </motion.div>
@@ -210,11 +212,11 @@ export const HeroSection = () => {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.1 }}
-            className="text-white font-bold tracking-tight leading-[1.05] font-heading"
+            className="text-slate-900 dark:text-white font-bold tracking-tight leading-[1.05] font-heading"
             style={{ fontSize: "clamp(2.8rem, 7.5vw, 6.5rem)" }}
           >
             {t("headline1")}
-            <span className="block text-slate-400 mt-1">{t("headline2")}</span>
+            <span className="block text-slate-500 dark:text-slate-400 mt-1">{t("headline2")}</span>
           </motion.h1>
 
           <motion.div
@@ -223,7 +225,7 @@ export const HeroSection = () => {
             transition={{ duration: 0.6, delay: 0.9 }}
           >
             <span
-              className="block font-bold tracking-tight leading-tight mt-2 bg-gradient-to-r from-violet-400 via-purple-300 to-indigo-400 bg-clip-text text-transparent font-heading"
+              className="block font-bold tracking-tight leading-tight mt-2 bg-gradient-to-r from-violet-500 via-purple-400 to-indigo-500 dark:from-violet-400 dark:via-purple-300 dark:to-indigo-400 bg-clip-text text-transparent font-heading"
               style={{ fontSize: "clamp(2.8rem, 7.5vw, 6.5rem)" }}
             >
               {t("headline3")}
@@ -236,12 +238,12 @@ export const HeroSection = () => {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 1.3 }}
-          className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto mb-12 leading-relaxed"
+          className="text-slate-600 dark:text-slate-400 text-lg md:text-xl max-w-2xl mx-auto mb-12 leading-relaxed"
         >
           {t("subhead")}
         </motion.p>
 
-        {/* CTAs */}
+        {/* CTAs — stack vertically on mobile, side-by-side on sm+ */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -261,7 +263,7 @@ export const HeroSection = () => {
             <Button
               variant="outline"
               size="lg"
-              className="rounded-full px-8 py-6 text-base border-white/15 bg-white/5 text-white hover:bg-white/10 backdrop-blur-sm transition-all"
+              className="rounded-full px-8 py-6 text-base border-slate-300 dark:border-white/15 bg-slate-100/80 dark:bg-white/5 text-slate-700 dark:text-white hover:bg-slate-200 dark:hover:bg-white/10 backdrop-blur-sm transition-all"
             >
               {t("ctaSecondary")}
             </Button>
@@ -275,19 +277,19 @@ export const HeroSection = () => {
           transition={{ duration: 0.9, delay: 1.7 }}
           className="w-full max-w-lg mx-auto relative"
         >
-          <div className="relative rounded-2xl border border-white/8 bg-white/3 backdrop-blur-md p-6">
+          <div className="relative rounded-2xl border border-slate-200/80 dark:border-white/[0.08] bg-white/60 dark:bg-white/[0.03] backdrop-blur-md p-6">
             <div className="absolute -inset-px bg-gradient-to-b from-violet-500/10 to-transparent rounded-2xl pointer-events-none" />
-            <p className="text-xs text-violet-400/80 tracking-widest uppercase mb-4 font-medium">
+            <p className="text-xs text-violet-600 dark:text-violet-400/80 tracking-widest uppercase mb-4 font-medium">
               {t("graphLabel")}
             </p>
             <MiniGraph />
           </div>
-          {/* Bottom fade */}
-          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#080b14] to-transparent rounded-b-2xl pointer-events-none" />
+          {/* Bottom fade — matches the section bg in both modes */}
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-violet-50/90 dark:from-[#080b14] to-transparent rounded-b-2xl pointer-events-none" />
         </motion.div>
       </div>
 
-      {/* Section fade to next */}
+      {/* Section fade to next — uses CSS variable so it matches both modes */}
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background/80 to-transparent pointer-events-none" />
     </section>
   );
