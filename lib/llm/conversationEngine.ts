@@ -474,7 +474,7 @@ export async function generateConversationReply(
         confidenceOverrideApplied = true;
 
         console.log(
-          `[ConversationEngine] Confidence override: ${DEFAULT_MODEL} → ${actualModelId}` +
+          `[ConversationEngine] Confidence override: ${FAST_MODEL} → ${actualModelId}` +
           ` (ctx_conf=${confidenceSignal.contextConfidence.toFixed(3)},` +
           ` tier=${confidenceSignal.recommendedTier},` +
           ` facts=${confidenceSignal.factCount})`
