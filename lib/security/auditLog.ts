@@ -1,0 +1,205 @@
+/**
+ * auditLog.ts — Immutable Operation Audit Log
+ *
+ * Records every significant action taken in the system — API calls, memory
+ * writes, agent dispatches, bulk operations, auth events — to an append-only
+ * Supabase table. Rows are INSERT-only (no UPDATE, no DELETE) enforced by RLS.
+ *
+ * Inspired by Paperclip AI's immutable audit trail model.
+ *
+ * Design principles:
+ *  - Fire-and-forget: NEVER awaited on the critical path. Always async, always non-blocking.
+ *  - Never throws: all errors are logged internally, never surfaced to callers.
+ *  - Payload hashing: sensitive data is hashed (SHA-256), never stored raw.
+ *  - Compliance-ready: structured for SOC2, HIPAA (Journey Financial), FINRA audit trails.
+ *
+ * Usage:
+ *   import { audit } from '@/lib/security/auditLog';
+ *
+ *   // Fire-and-forget (recommended)
+ *   void audit('memory.write', userId, { memoryId, type });
+ *
+ *   // With request context
+ *   void audit('chat.request', userId, { model, tokenCount }, req);
+ */
+
+import { supabaseAdmin } from '@/lib/supabaseClient';
+import { createHash } from 'crypto';
+
+// ─── Action Types ─────────────────────────────────────────────────────────────
+
+export type AuditAction =
+  // Auth
+  | 'auth.login'
+  | 'auth.logout'
+  | 'auth.unauthorized'
+  // Chat / LLM
+  | 'chat.request'
+  | 'chat.blocked'          // Security agent blocked a prompt
+  | 'chat.budget_exceeded'
+  // Memory
+  | 'memory.write'
+  | 'memory.delete'
+  | 'memory.bulk_delete'
+  | 'memory.export'
+  // Agent / UCOL
+  | 'agent.dispatch'
+  | 'agent.pr_opened'
+  | 'agent.pr_blocked'      // Agent wanted to merge but was gated
+  // Import / Export
+  | 'import.start'
+  | 'import.complete'
+  | 'import.failed'
+  | 'export.request'
+  // Admin
+  | 'admin.credits_adjust'
+  | 'admin.user_tier_change'
+  // Security
+  | 'security.rate_limit'
+  | 'security.pii_detected'
+  | 'security.ssrf_blocked'
+  | 'security.injection_blocked';
+
+// ─── Severity ─────────────────────────────────────────────────────────────────
+
+export type AuditSeverity = 'info' | 'warn' | 'critical';
+
+const ACTION_SEVERITY: Partial<Record<AuditAction, AuditSeverity>> = {
+  'auth.unauthorized':        'warn',
+  'chat.blocked':             'warn',
+  'chat.budget_exceeded':     'warn',
+  'memory.bulk_delete':       'warn',
+  'memory.delete':            'info',
+  'agent.pr_blocked':         'warn',
+  'security.rate_limit':      'warn',
+  'security.pii_detected':    'critical',
+  'security.ssrf_blocked':    'critical',
+  'security.injection_blocked': 'critical',
+  'admin.credits_adjust':     'warn',
+  'admin.user_tier_change':   'warn',
+};
+
+function getSeverity(action: AuditAction): AuditSeverity {
+  return ACTION_SEVERITY[action] ?? 'info';
+}
+
+// ─── Payload Sanitization ────────────────────────────────────────────────────
+
+const SENSITIVE_KEYS = new Set([
+  'password', 'token', 'secret', 'api_key', 'apiKey',
+  'authorization', 'credit_card', 'ssn', 'dob',
+]);
+
+/**
+ * Redacts sensitive keys and hashes values >500 chars (e.g. file content).
+ * Returns a safe-to-store metadata object.
+ */
+function sanitizePayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (SENSITIVE_KEYS.has(key.toLowerCase())) {
+      sanitized[key] = '[REDACTED]';
+    } else if (typeof value === 'string' && value.length > 500) {
+      // Hash large strings (file content, prompts) instead of storing raw
+      sanitized[key] = `sha256:${createHash('sha256').update(value).digest('hex').slice(0, 16)}`;
+    } else {
+      sanitized[key] = value;
+    }
+  }
+
+  return sanitized;
+}
+
+// ─── Core Audit Function ──────────────────────────────────────────────────────
+
+/**
+ * Records an audit event. Always fire-and-forget — call with `void`.
+ *
+ * @param action   - The action type (see AuditAction)
+ * @param userId   - Clerk user ID (or 'system' for automated actions)
+ * @param metadata - Arbitrary context — sensitive values are auto-redacted
+ * @param req      - Optional Request object to extract IP and user-agent
+ */
+export async function audit(
+  action: AuditAction,
+  userId: string,
+  metadata: Record<string, unknown> = {},
+  req?: Request
+): Promise<void> {
+  if (!supabaseAdmin) return;
+
+  try {
+    const severity = getSeverity(action);
+    const safeMetadata = sanitizePayload(metadata);
+
+    // Extract request context if available
+    const ip = req ? extractIP(req) : null;
+    const userAgent = req ? (req.headers.get('user-agent') ?? null) : null;
+
+    const { error } = await supabaseAdmin
+      .from('audit_log')
+      .insert({
+        action,
+        user_id: userId,
+        severity,
+        metadata: safeMetadata,
+        ip_address: ip,
+        user_agent: userAgent,
+        created_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error(`[AuditLog] Failed to write audit event "${action}":`, error.message);
+    }
+
+    // Also log critical events to console for immediate visibility in Vercel logs
+    if (severity === 'critical') {
+      console.warn(`[AUDIT:CRITICAL] ${action} | user=${userId} | ${JSON.stringify(safeMetadata)}`);
+    }
+  } catch (e: any) {
+    // Never let audit logging break the application
+    console.error('[AuditLog] Exception writing audit event:', e.message);
+  }
+}
+
+// ─── Convenience Wrappers ─────────────────────────────────────────────────────
+
+/** Log a blocked security event (critical severity) */
+export function auditSecurityBlock(
+  action: AuditAction,
+  userId: string,
+  reason: string,
+  req?: Request
+): void {
+  void audit(action, userId, { reason, blocked: true }, req);
+}
+
+/** Log an agent action (dispatch, PR open, etc.) */
+export function auditAgentAction(
+  action: AuditAction,
+  userId: string,
+  agentMetadata: { targetNode?: string; taskType?: string; prUrl?: string; [key: string]: unknown }
+): void {
+  void audit(action, userId, agentMetadata);
+}
+
+/** Log a memory operation */
+export function auditMemoryOp(
+  action: AuditAction,
+  userId: string,
+  memoryMetadata: { memoryId?: string; count?: number; type?: string }
+): void {
+  void audit(action, userId, memoryMetadata);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function extractIP(req: Request): string | null {
+  return (
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    req.headers.get('x-real-ip') ??
+    req.headers.get('cf-connecting-ip') ??
+    null
+  );
+}

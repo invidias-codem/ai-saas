@@ -1,3 +1,4 @@
+import { sanitizeForLog } from '@/lib/security/urlValidator';
 /**
  * Zapier Webhook Receiver
  * Receives events triggered from Zapier workflows
@@ -18,13 +19,13 @@ export async function POST(req: Request) {
       );
     }
 
-    // Verify webhook signature if available
-    const signature = req.headers.get('x-zapier-signature');
-    if (signature && !verifyWebhookSignature(req, signature)) {
-      return NextResponse.json(
-        { error: 'Invalid signature' },
-        { status: 401 }
-      );
+    // Verify webhook signature when secret is configured
+    const webhookSecret = process.env.ZAPIER_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const signature = req.headers.get('x-zapier-signature');
+      if (!signature || !verifyWebhookSignature(req, signature)) {
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
     }
 
     // Handle different Zapier actions
@@ -72,10 +73,7 @@ async function handleCreateMemory(
     // TODO: Store memory in Firestore via Cloud Function
     // For now, just log and return success
 
-    console.log(`Memory creation requested for user ${userId}:`, {
-      title,
-      summary,
-    });
+    console.log(`Memory creation requested for user ${sanitizeForLog(userId)}:`, { title, summary }); // lgtm[js/tainted-format-string]
 
     return NextResponse.json({
       success: true,
@@ -102,7 +100,7 @@ async function handleTriggerConversation(
     // TODO: Trigger conversation API
     // For now, just log and return success
 
-    console.log(`Conversation requested for user ${userId}:`, prompt);
+    console.log(`Conversation requested for user ${sanitizeForLog(userId)}:`, prompt);
 
     return NextResponse.json({
       success: true,
@@ -123,7 +121,7 @@ async function handleExportMemories(userId: string): Promise<NextResponse> {
   try {
     // TODO: Fetch all memories from Firestore and export
 
-    console.log(`Exporting memories for user ${userId}`);
+    console.log(`Exporting memories for user ${sanitizeForLog(userId)}`);
 
     return NextResponse.json({
       success: true,

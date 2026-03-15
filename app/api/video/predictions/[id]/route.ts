@@ -15,12 +15,12 @@ const replicate = new Replicate({
  */
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // 1. Clerk Authentication (optional but recommended)
     // You should secure this endpoint to prevent others from polling your job statuses.
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -29,7 +29,7 @@ export async function GET(
     }
 
     // 2. Get predictionId from the URL
-    const predictionId = params.id;
+    const { id: predictionId } = await params;
     if (!predictionId) {
       return new NextResponse(JSON.stringify({ error: "Prediction ID is required." }), {
         status: 400,
