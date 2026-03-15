@@ -268,7 +268,6 @@ export async function generateConversationReply(
       debug: {
         model: `claude/${AGENTIC_MODEL}`,
         userQuery,
-        tools: ['web_search', 'write_research_paper', 'write_creative_content', 'deal_sentinel']
       }
     };
   }
