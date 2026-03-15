@@ -19,7 +19,7 @@ export const FeatureCard = ({ label, description, icon: Icon, color, bgColor, de
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay }}
-            viewport={{ once: true }}
+            viewport={{ once: true, margin: "-50px" }}
             className="group relative p-6 rounded-2xl border border-white/5 bg-white/5 hover:bg-white/10 transition-colors duration-300 backdrop-blur-sm overflow-hidden"
         >
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
