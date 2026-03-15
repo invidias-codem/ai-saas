@@ -15,7 +15,7 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
       {
@@ -38,6 +38,11 @@
   "exclude": [
     ".next",
     ".git",
-    "node_modules"
+    "node_modules",
+    "anycrawl",
+    "functions",
+    "packages",
+    "tools",
+    "scripts"
   ]
 }
