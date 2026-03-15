@@ -11,7 +11,10 @@ import {
   VideoIcon,
   RocketIcon,
 } from "@radix-ui/react-icons";
+import { motion } from "framer-motion";
 import { HeroSection } from "@/components/landing/hero-section";
+import { UCOLSection } from "@/components/landing/ucol-section";
+import { MemorySection } from "@/components/landing/memory-section";
 import { FeatureCard } from "@/components/landing/feature-card";
 import { Testimonials } from "@/components/landing/testimonials";
 import { useTranslations } from "next-intl";
@@ -69,21 +72,34 @@ const LandingPage = () => {
 
       <main className="relative z-10 flex-grow pt-16">
 
+        {/* 1 — Hero: "forgotten. not anymore." */}
         <HeroSection />
 
-        {/* Features Grid */}
+        {/* 2 — UCOL: Three minds. One answer. */}
+        <UCOLSection />
+
+        {/* 3 — Memory: Genie learns you. */}
+        <MemorySection />
+
+        {/* 4 — Features Grid: One platform. Every capability. */}
         <section className="px-4 py-32 max-w-7xl mx-auto relative cursor-default">
-          {/* Soft ambient glow — works on both modes */}
+          {/* Ambient glow */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-violet-500/5 dark:bg-indigo-500/10 rounded-full blur-[100px] -z-10" />
 
-          <div className="text-center mb-16">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-16"
+          >
             <h2 className="text-3xl md:text-5xl font-bold text-slate-800 dark:text-white mb-6 font-heading">
               {t('features.title')}
             </h2>
             <p className="text-slate-500 dark:text-muted-foreground text-lg max-w-2xl mx-auto">
               {t('features.subtitle')}
             </p>
-          </div>
+          </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
             {features.map((feature, i) => (
@@ -98,26 +114,38 @@ const LandingPage = () => {
 
         <Testimonials />
 
-        {/* Bottom CTA */}
-        <section className="py-24 text-center px-4 relative overflow-hidden">
-          {/* Light: soft violet wash from below; Dark: purple fog */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-violet-100/60 dark:to-purple-900/20 pointer-events-none" />
-          <div className="max-w-3xl mx-auto relative z-10 space-y-8">
-            <h2 className="text-4xl md:text-5xl font-bold text-slate-800 dark:text-white font-heading tracking-tight">
+        {/* 5 — CTA: Meet the AI that remembers. */}
+        <section className="py-32 text-center px-4 relative overflow-hidden">
+          {/* Background: indigo-950 → violet-950 gradient with soft glow */}
+          <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 via-violet-950 to-indigo-950 pointer-events-none" />
+          {/* Soft center glow */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-violet-500/20 rounded-full blur-[100px] pointer-events-none" />
+
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="max-w-3xl mx-auto relative z-10 space-y-8"
+          >
+            <h2
+              className="font-bold text-white font-heading tracking-tight"
+              style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)" }}
+            >
               {t('cta.title')}
             </h2>
-            <p className="text-xl text-slate-500 dark:text-muted-foreground">
+            <p className="text-xl text-slate-300/80">
               {t('cta.subtitle')}
             </p>
             <Link href="/dashboard">
               <Button
                 size="lg"
-                className="rounded-full px-10 py-8 text-lg mt-4 bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-white dark:to-white text-white dark:text-black hover:opacity-90 dark:hover:bg-gray-200 shadow-[0_0_40px_-10px_rgba(139,92,246,0.4)] dark:shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]"
+                className="rounded-full px-12 py-8 text-lg mt-4 bg-white text-violet-900 font-bold hover:bg-white/90 shadow-[0_0_60px_-10px_rgba(255,255,255,0.3)] hover:shadow-[0_0_80px_-10px_rgba(255,255,255,0.45)] transition-all duration-300"
               >
                 {t('cta.button')}
               </Button>
             </Link>
-          </div>
+          </motion.div>
         </section>
       </main>
 

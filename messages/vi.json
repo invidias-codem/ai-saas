@@ -25,7 +25,14 @@
             "title": "Các Mô Hình AI Tốt Nhất, Tất Cả Trong Một",
             "description": "Truy cập sức mạnh của OpenAI, Google Gemini và Anthropic Claude trên một nền tảng duy nhất. Tạo nội dung nhanh hơn gấp 10 lần.",
             "cta": "Bắt đầu miễn phí",
-            "login": "Đăng nhập"
+            "login": "Đăng nhập",
+            "badge": "Powered by UCOL — Unified Context Orchestration Layer",
+            "headline1": "Every conversation you've ever had with AI —",
+            "headline2": "forgotten.",
+            "headline3": "Not anymore.",
+            "subhead": "Tech Genie remembers you. Learns you. Connects three AI minds — so you never start from zero.",
+            "ctaSecondary": "See how it works",
+            "graphLabel": "Your Knowledge Graph — live preview"
         },
         "features": {
             "title": "Siêu tốc độ sáng tạo của bạn",
@@ -44,9 +51,9 @@
             "fastDesc": "Bảo mật cấp doanh nghiệp với tốc độ tạo cực nhanh."
         },
         "cta": {
-            "title": "Sẵn sàng tạo ra những điều không thể?",
-            "subtitle": "Tham gia cùng hàng nghìn nhà sáng tạo đang phá vỡ giới hạn với AI.",
-            "button": "Bắt đầu miễn phí"
+            "title": "Meet the AI that remembers.",
+            "subtitle": "Join thousands of builders who've stopped starting from zero.",
+            "button": "Start for free →"
         },
         "pricing": {
             "title": "Giá cả linh hoạt",
@@ -59,6 +66,29 @@
         },
         "footer": {
             "rights": "© {year} Genie AI. Bảo lưu mọi quyền."
+        },
+        "ucol": {
+            "eyebrow": "UCOL — Unified Context Orchestration Layer",
+            "title": "Three minds. One answer.",
+            "subtitle": "UCOL routes every question to the right model, passes memory between them, and delivers one seamless response.",
+            "hermesTagline": "Fast reasoning. Instant answers.",
+            "geminiTagline": "Deep analysis. Strategic thinking.",
+            "claudeTagline": "Precise language. Thoughtful craft.",
+            "hermes": "Hermes",
+            "gemini": "Gemini",
+            "claude": "Claude",
+            "flowLabel": "How UCOL routes your query"
+        },
+        "memory": {
+            "eyebrow": "Persistent Memory",
+            "title": "Genie learns you.",
+            "subtitle": "Every conversation adds to your knowledge graph. Facts, preferences, goals — connected and remembered.",
+            "stat1Value": "∞",
+            "stat1Label": "Memory never expires",
+            "stat2Value": "3",
+            "stat2Label": "AI models, one context",
+            "stat3Value": "0",
+            "stat3Label": "Times you start from zero"
         }
     }
 }

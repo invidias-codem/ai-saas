@@ -29,31 +29,62 @@
     },
     "Landing": {
         "hero": {
+            "badge": "Powered by UCOL — Unified Context Orchestration Layer",
+            "headline1": "Every conversation you've ever had with AI —",
+            "headline2": "forgotten.",
+            "headline3": "Not anymore.",
+            "subhead": "Tech Genie remembers you. Learns you. Connects three AI minds — so you never start from zero.",
+            "cta": "Start for free",
+            "ctaSecondary": "See how it works",
+            "graphLabel": "Your Knowledge Graph — live preview",
             "title": "The Smartest AI Assistant Ever Built",
             "description": "Streamline your workflow with our advanced Memory System, Slack Integration, and Content Creation tools. Powered by Gemini and Anthropic models for the best results.",
-            "cta": "Start Generating For Free",
             "login": "Log in"
         },
+        "ucol": {
+            "eyebrow": "UCOL — Unified Context Orchestration Layer",
+            "title": "Three minds. One answer.",
+            "subtitle": "UCOL routes every question to the right model, passes memory between them, and delivers one seamless response.",
+            "hermeTagline": "Fast reasoning. Instant answers.",
+            "hermes": "Hermes",
+            "hermesTagline": "Fast reasoning. Instant answers.",
+            "gemini": "Gemini",
+            "geminiTagline": "Deep analysis. Strategic thinking.",
+            "claude": "Claude",
+            "claudeTagline": "Precise language. Thoughtful craft.",
+            "flowLabel": "How UCOL routes your query"
+        },
+        "memory": {
+            "eyebrow": "Persistent Memory",
+            "title": "Genie learns you.",
+            "subtitle": "Every conversation adds to your knowledge graph. Facts, preferences, goals — connected and remembered.",
+            "stat1Value": "∞",
+            "stat1Label": "Memory never expires",
+            "stat2Value": "3",
+            "stat2Label": "AI models, one context",
+            "stat3Value": "0",
+            "stat3Label": "Times you start from zero"
+        },
         "features": {
-            "title": "Supercharge your creativity",
-            "subtitle": "Five powerful tools in one dashboard. Generate content faster than ever before.",
-            "conversation": "Conversation",
-            "conversationDesc": "Chat with advanced AI models like GPT-4, Gemini Pro, and Claude 3.",
-            "image": "Image Generation",
-            "imageDesc": "Turn your text prompts into stunning, high-quality visuals in seconds.",
-            "video": "Video Creation",
+            "title": "One platform. Every capability.",
+            "subtitle": "Everything you need to build, create, and think — with AI that actually knows you.",
+            "conversation": "Chat with memory",
+            "conversationDesc": "Three AI minds with shared context. Your preferences, goals, and history — carried across every conversation.",
+            "image": "Visual generation",
+            "imageDesc": "Turn ideas into stunning visuals. Describe it, refine it, own it.",
+            "video": "Video creation",
             "videoDesc": "Bring stories to life with AI-generated video clips from simple descriptions.",
-            "music": "Music Composition",
+            "music": "Music composition",
             "musicDesc": "Generate original audio tracks and sound effects for your projects.",
-            "code": "Code Assistant",
-            "codeDesc": "Generate, debug, and explain code snippets in various programming languages.",
-            "fast": "Fast & Secure",
-            "fastDesc": "Enterprise-grade security with lightning-fast generation speeds."
+            "code": "Code Builder",
+            "codeDesc": "Plan, build, and review code with an AI that understands your stack and remembers your patterns.",
+            "fast": "Fast & always on",
+            "fastDesc": "Enterprise-grade infrastructure. Your AI never sleeps, never forgets, never slows down."
         },
         "cta": {
-            "title": "Ready to create the impossible?",
-            "subtitle": "Join thousands of creators pushing boundaries with AI.",
-            "button": "Start Generating For Free"
+            "title": "Meet the AI that remembers.",
+            "subtitle": "Join thousands of builders who've stopped starting from zero.",
+            "button": "Start for free →"
         },
         "pricing": {
             "title": "Flexible Pricing",

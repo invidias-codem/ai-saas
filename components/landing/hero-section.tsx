@@ -1,148 +1,294 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useAnimationFrame } from "framer-motion";
 import { ArrowRightIcon } from "@radix-ui/react-icons";
 
 import { Button } from "@/components/ui/button";
-import { LandingChat } from "@/components/landing-chat";
-import { useProModal } from "@/hooks/use-pro-modal";
 
-const capabilities = [
-    { text: "Memory System", gradient: "from-sky-400 to-blue-500" },
-    { text: "Slack Integration", gradient: "from-purple-400 to-pink-500" },
-    { text: "Content Creation", gradient: "from-green-400 to-emerald-500" },
-];
+// ── Constellation particle field (pure CSS + Framer Motion, no canvas) ──────
+const STAR_COUNT = 55;
 
-const AnimatedCapabilities = () => {
-    const [currentIndex, setCurrentIndex] = useState(0);
+interface Star {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+  opacity: number;
+  duration: number;
+  delay: number;
+}
 
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setCurrentIndex((prev) => (prev + 1) % capabilities.length);
-        }, 3000);
-        return () => clearInterval(interval);
-    }, []);
+function generateStars(count: number): Star[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    x: Math.random() * 100,
+    y: Math.random() * 100,
+    size: Math.random() * 2 + 0.5,
+    opacity: Math.random() * 0.5 + 0.1,
+    duration: Math.random() * 4 + 3,
+    delay: Math.random() * 5,
+  }));
+}
 
-    return (
-        <div className="flex items-center justify-center mb-8">
-            <div className="relative px-6 py-2 rounded-full border border-slate-200/80 dark:border-white/10 bg-white/60 dark:bg-white/5 backdrop-blur-sm shadow-sm dark:shadow-none">
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={currentIndex}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.3 }}
-                        className="text-lg md:text-xl font-medium"
-                    >
-                        <span className={`text-transparent bg-clip-text bg-gradient-to-r ${capabilities[currentIndex].gradient}`}>
-                            {capabilities[currentIndex].text}
-                        </span>
-                    </motion.div>
-                </AnimatePresence>
-            </div>
-        </div>
-    );
+const ParticleField = () => {
+  const [stars] = useState<Star[]>(() => generateStars(STAR_COUNT));
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {stars.map((star) => (
+        <motion.div
+          key={star.id}
+          className="absolute rounded-full bg-white"
+          style={{
+            left: `${star.x}%`,
+            top: `${star.y}%`,
+            width: `${star.size}px`,
+            height: `${star.size}px`,
+          }}
+          animate={{
+            opacity: [star.opacity * 0.4, star.opacity, star.opacity * 0.4],
+            scale: [1, 1.4, 1],
+          }}
+          transition={{
+            duration: star.duration,
+            delay: star.delay,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+    </div>
+  );
 };
 
+// ── Mini knowledge graph preview (hero visual) ───────────────────────────────
+const MiniGraph = () => {
+  const nodes = [
+    { id: "ucol", x: 200, y: 140, label: "UCOL", color: "#8b5cf6", r: 28 },
+    { id: "hermes", x: 80, y: 60, label: "Hermes ⚡", color: "#a855f7", r: 20 },
+    { id: "gemini", x: 320, y: 60, label: "Gemini 🧠", color: "#38bdf8", r: 20 },
+    { id: "claude", x: 200, y: 240, label: "Claude ✨", color: "#f59e0b", r: 20 },
+    { id: "mem1", x: 60, y: 210, label: "Memory", color: "#6366f1", r: 14 },
+    { id: "mem2", x: 340, y: 200, label: "Context", color: "#6366f1", r: 14 },
+  ];
+
+  const edges = [
+    ["ucol", "hermes"],
+    ["ucol", "gemini"],
+    ["ucol", "claude"],
+    ["ucol", "mem1"],
+    ["ucol", "mem2"],
+    ["hermes", "mem1"],
+    ["gemini", "mem2"],
+  ];
+
+  const getNode = (id: string) => nodes.find((n) => n.id === id)!;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 1, delay: 0.8 }}
+      className="relative mx-auto w-full max-w-[420px]"
+    >
+      <svg viewBox="0 0 400 290" className="w-full h-auto drop-shadow-2xl">
+        {/* Edges */}
+        {edges.map(([a, b], i) => {
+          const na = getNode(a);
+          const nb = getNode(b);
+          return (
+            <motion.line
+              key={`${a}-${b}`}
+              x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
+              stroke="rgba(139,92,246,0.3)"
+              strokeWidth="1"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.2 + i * 0.12, duration: 0.4 }}
+            />
+          );
+        })}
+
+        {/* Animated traveling dot on main edge */}
+        <motion.circle r="3" fill="#8b5cf6"
+          animate={{
+            cx: [80, 200, 320, 200, 80],
+            cy: [60, 140, 60, 140, 60],
+          }}
+          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+          opacity={0.9}
+        />
+
+        {/* Nodes */}
+        {nodes.map((node, i) => (
+          <motion.g
+            key={node.id}
+            initial={{ opacity: 0, scale: 0 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 1.0 + i * 0.15, duration: 0.4, type: "spring", stiffness: 200 }}
+          >
+            {/* Glow ring */}
+            <motion.circle
+              cx={node.x} cy={node.y} r={node.r + 6}
+              fill="none"
+              stroke={node.color}
+              strokeWidth="1"
+              opacity={0.2}
+              animate={{ r: [node.r + 6, node.r + 10, node.r + 6] }}
+              transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.3 }}
+            />
+            {/* Main circle */}
+            <circle
+              cx={node.x} cy={node.y} r={node.r}
+              fill={node.color}
+              fillOpacity={0.15}
+              stroke={node.color}
+              strokeWidth="1.5"
+            />
+            {/* Label */}
+            <text
+              x={node.x} y={node.y + 4}
+              textAnchor="middle"
+              fontSize={node.r > 20 ? "9" : "7"}
+              fill="white"
+              fontWeight="600"
+              fontFamily="system-ui"
+            >
+              {node.label}
+            </text>
+          </motion.g>
+        ))}
+      </svg>
+    </motion.div>
+  );
+};
+
+// ── Hero Section ─────────────────────────────────────────────────────────────
 export const HeroSection = () => {
-    const proModal = useProModal();
-    const t = useTranslations("Landing.hero");
-    const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const t = useTranslations("Landing.hero");
 
-    useEffect(() => {
-        const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-        setPrefersReducedMotion(mediaQuery.matches);
+  return (
+    <section className="relative min-h-screen flex flex-col justify-center items-center overflow-hidden bg-[#080b14]">
+      {/* Particle constellation background */}
+      <ParticleField />
 
-        const handler = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
-        mediaQuery.addEventListener('change', handler);
-        return () => mediaQuery.removeEventListener('change', handler);
-    }, []);
+      {/* Ambient glows */}
+      <div className="absolute top-[-20%] left-[-10%] w-[700px] h-[700px] rounded-full bg-violet-700/8 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-indigo-600/8 blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[400px] rounded-full bg-violet-900/10 blur-[100px] pointer-events-none" />
 
-    const animationProps = prefersReducedMotion
-        ? { initial: {}, animate: {}, transition: {} }
-        : { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } };
+      {/* Grid overlay — very subtle */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.03]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+        }}
+      />
 
-    return (
-        <section className="relative pt-20 pb-32 overflow-hidden">
-            {/* Background Gradients — light mode: warm soft orbs; dark mode: subtle glows */}
-            <div className="absolute inset-0 pointer-events-none">
-                {/* Light mode: warm ivory gradient base */}
-                <div className="absolute inset-0 hero-gradient-light dark:opacity-0 opacity-100 transition-opacity duration-500" />
+      <div className="container relative z-10 mx-auto px-4 text-center flex flex-col items-center pt-24 pb-16">
+        {/* Eyebrow badge */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-10 inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 backdrop-blur-sm"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+          <span className="text-sm text-violet-300 font-medium tracking-wide">
+            {t("badge")}
+          </span>
+        </motion.div>
 
-                {/* Light mode floating orbs */}
-                <div className="absolute top-[-15%] left-[-8%] w-[500px] h-[500px] rounded-full orb-lavender dark:opacity-0 opacity-100 blur-[80px] transition-opacity duration-500" />
-                <div className="absolute bottom-[-5%] right-[-3%] w-[400px] h-[400px] rounded-full orb-cream dark:opacity-0 opacity-100 blur-[80px] transition-opacity duration-500" />
-                <div className="absolute top-[30%] right-[10%] w-[300px] h-[300px] rounded-full orb-indigo dark:opacity-0 opacity-100 blur-[60px] transition-opacity duration-500" />
+        {/* Headline — two acts */}
+        <div className="mb-6 max-w-5xl mx-auto">
+          <motion.h1
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.1 }}
+            className="text-white font-bold tracking-tight leading-[1.05] font-heading"
+            style={{ fontSize: "clamp(2.8rem, 7.5vw, 6.5rem)" }}
+          >
+            {t("headline1")}
+            <span className="block text-slate-400 mt-1">{t("headline2")}</span>
+          </motion.h1>
 
-                {/* Dark mode orbs */}
-                <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-primary/5 dark:opacity-100 opacity-0 blur-[100px] transition-opacity duration-500" />
-                <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-purple-500/5 dark:opacity-100 opacity-0 blur-[100px] transition-opacity duration-500" />
-            </div>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.9 }}
+          >
+            <span
+              className="block font-bold tracking-tight leading-tight mt-2 bg-gradient-to-r from-violet-400 via-purple-300 to-indigo-400 bg-clip-text text-transparent font-heading"
+              style={{ fontSize: "clamp(2.8rem, 7.5vw, 6.5rem)" }}
+            >
+              {t("headline3")}
+            </span>
+          </motion.div>
+        </div>
 
-            <div className="container relative z-10 mx-auto px-4 text-center">
+        {/* Subhead */}
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 1.3 }}
+          className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto mb-12 leading-relaxed"
+        >
+          {t("subhead")}
+        </motion.p>
 
-                <AnimatedCapabilities />
+        {/* CTAs */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 1.5 }}
+          className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-20"
+        >
+          <Link href="/dashboard">
+            <Button
+              size="lg"
+              className="rounded-full px-8 py-6 text-base bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:opacity-90 shadow-[0_0_32px_-8px_rgba(139,92,246,0.7)] hover:shadow-[0_0_48px_-8px_rgba(139,92,246,0.85)] transition-all duration-300"
+            >
+              {t("cta")}
+              <ArrowRightIcon className="ml-2 w-5 h-5" />
+            </Button>
+          </Link>
+          <a href="#ucol">
+            <Button
+              variant="outline"
+              size="lg"
+              className="rounded-full px-8 py-6 text-base border-white/15 bg-white/5 text-white hover:bg-white/10 backdrop-blur-sm transition-all"
+            >
+              {t("ctaSecondary")}
+            </Button>
+          </a>
+        </motion.div>
 
-                <motion.h1
-                    {...animationProps}
-                    transition={{ duration: 0.5 }}
-                    className="text-5xl md:text-7xl font-bold tracking-tight text-slate-800 dark:text-white mb-6 font-heading"
-                >
-                    {t('title')}
-                </motion.h1>
+        {/* Knowledge graph preview */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, delay: 1.7 }}
+          className="w-full max-w-lg mx-auto relative"
+        >
+          <div className="relative rounded-2xl border border-white/8 bg-white/3 backdrop-blur-md p-6">
+            <div className="absolute -inset-px bg-gradient-to-b from-violet-500/10 to-transparent rounded-2xl pointer-events-none" />
+            <p className="text-xs text-violet-400/80 tracking-widest uppercase mb-4 font-medium">
+              {t("graphLabel")}
+            </p>
+            <MiniGraph />
+          </div>
+          {/* Bottom fade */}
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#080b14] to-transparent rounded-b-2xl pointer-events-none" />
+        </motion.div>
+      </div>
 
-                <motion.p
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    className="text-lg md:text-xl text-slate-500 dark:text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed"
-                >
-                    {t('description')}
-                </motion.p>
-
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.3 }}
-                    className="flex flex-col sm:flex-row gap-4 justify-center items-center"
-                >
-                    <Link href="/dashboard">
-                        <Button
-                            size="lg"
-                            className="rounded-full px-8 py-6 text-base bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:opacity-90 shadow-[0_0_20px_-5px_rgba(139,92,246,0.5)] hover:shadow-[0_0_28px_-5px_rgba(139,92,246,0.65)] transition-all duration-300"
-                        >
-                            {t('cta')}
-                            <ArrowRightIcon className="ml-2 w-5 h-5" />
-                        </Button>
-                    </Link>
-                    <Button
-                        onClick={proModal.onOpen}
-                        variant="outline"
-                        size="lg"
-                        className="rounded-full px-8 py-6 text-base border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 text-slate-700 dark:text-white hover:bg-white dark:hover:bg-white/10 backdrop-blur-sm shadow-sm dark:shadow-none transition-all"
-                    >
-                        Support Genie
-                    </Button>
-                </motion.div>
-
-                {/* Dashboard Mockup */}
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.8, delay: 0.5 }}
-                    className="mt-20 relative mx-auto w-full max-w-6xl rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur-md shadow-xl dark:shadow-2xl p-3 md:p-6"
-                >
-                    {/* Glow ring — violet on both modes, subtle on light */}
-                    <div className="absolute -inset-1 bg-gradient-to-r from-violet-500 to-blue-500 rounded-xl blur opacity-10 dark:opacity-20" />
-                    <div className="relative rounded-lg overflow-hidden bg-slate-50/80 dark:bg-[#0f1117]/50 border border-slate-100 dark:border-white/5 p-1">
-                        <LandingChat />
-                    </div>
-                </motion.div>
-            </div>
-        </section>
-    );
+      {/* Section fade to next */}
+      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background/80 to-transparent pointer-events-none" />
+    </section>
+  );
 };
