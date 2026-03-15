@@ -1,0 +1,62 @@
+name: Deploy Cloud Run Functions
+
+on:
+  workflow_dispatch:
+    inputs:
+      function:
+        description: 'Function to deploy (vector-agent-python | all)'
+        required: true
+        default: 'vector-agent-python'
+  push:
+    branches: [main]
+    paths:
+      - 'functions/vector-agent-python/**'
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-vector-agent:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.inputs.function == 'vector-agent-python' ||
+      github.event.inputs.function == 'all' ||
+      github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GENIE_AI_1CA85 }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: genie-ai-1ca85
+
+      - name: Deploy vector-agent-python to Cloud Run
+        run: |
+          gcloud run deploy vector-agent-python \
+            --source functions/vector-agent-python \
+            --region us-central1 \
+            --project genie-ai-1ca85 \
+            --platform managed \
+            --allow-unauthenticated \
+            --memory=1024Mi \
+            --port=8080 \
+            --clear-base-image \
+            --set-env-vars "GEMINI_MODEL=gemini-2.0-flash,GOOGLE_API_KEY=${{ secrets.GEMINI_API_KEY }},BLUESKY_HANDLE=${{ secrets.BLUESKY_HANDLE }},BLUESKY_PASSWORD=${{ secrets.BLUESKY_PASSWORD }},VECTOR_API_KEY=${{ secrets.VECTOR_API_KEY }}" \
+            --quiet
+        env:
+          CLOUDSDK_CORE_DISABLE_PROMPTS: 1
+
+      - name: Get service URL
+        run: |
+          URL=$(gcloud run services describe vector-agent-python \
+            --region us-central1 \
+            --project genie-ai-1ca85 \
+            --format 'value(status.url)')
+          echo "✅ Deployed: $URL"

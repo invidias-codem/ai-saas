@@ -1,0 +1,162 @@
+name: Eval (Regression Gate)
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  eval:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Detect changed paths
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            memory:
+              - 'lib/memory/**'
+            prompts:
+              - 'prompts/**'
+              - 'anycrawl/**/prompts/**'
+              - 'lib/slack/**'
+            conversation:
+              - 'app/api/conversation/**'
+              - 'lib/llm/**'
+
+      - name: Skip if not relevant
+        if: steps.changes.outputs.memory != 'true' && steps.changes.outputs.prompts != 'true' && steps.changes.outputs.conversation != 'true'
+        run: |
+          echo "No prompt/memory/llm changes detected; skipping eval."
+
+      - name: Setup Node
+        if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
+        run: npm install --legacy-peer-deps
+
+      # Option 1: download curated dataset artifact from nightly workflow.
+      # For now we re-run curation in the PR job for determinism.
+      - name: Curate dataset (PR)
+        if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          npm run curate:dataset -- \
+            --since-days 30 \
+            --min-rating -1 \
+            --max-rating -1 \
+            --out datasets
+
+      # --- GOLDEN DATASET REGRESSION ---
+      - name: Run eval (Golden Dataset)
+        if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          EVAL_USER_ID: "eval_golden_user"
+          DISABLE_SIDE_EFFECTS: "true"
+          DISABLE_EXTERNAL_CONTEXT: "true"
+        run: |
+          # Guard: skip gracefully if GOOGLE_API_KEY is not configured in repo secrets.
+          # Matches the same pattern used by Supabase credentials in the eval script.
+          if [ -z "${GOOGLE_API_KEY}" ]; then
+            echo "⚠️  GOOGLE_API_KEY secret is not set — skipping Golden Dataset eval."
+            echo "    Add GOOGLE_API_KEY to repository secrets (Settings → Secrets → Actions) to enable."
+            exit 0
+          fi
+
+          if [ -f "datasets/golden/dataset.jsonl" ]; then
+            echo "Running eval on Golden Dataset..."
+            npm run eval:run -- \
+              --dataset "datasets/golden/dataset.jsonl" \
+              --out eval_golden \
+              --disable-side-effects true \
+              --disable-external-context true \
+              --model gemini-2.0-flash
+            
+            # Compare to baseline if it exists
+            if [ -f "datasets/golden/baseline.json" ]; then
+              npm run eval:compare -- --report eval_golden/report.json --baseline datasets/golden/baseline.json
+            else
+              echo "No baseline found at datasets/golden/baseline.json, skipping comparison."
+            fi
+          else
+            echo "No Golden Dataset found at datasets/golden/dataset.jsonl, skipping regression test."
+          fi
+
+      # --- DYNAMIC DATASET REPLAY ---
+      - name: Run eval (Mode B replay)
+        if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          EVAL_USER_ID: "eval_user"
+          DISABLE_SIDE_EFFECTS: "true"
+          DISABLE_EXTERNAL_CONTEXT: "true"
+        run: |
+          # Guard: skip gracefully if GOOGLE_API_KEY is not configured in repo secrets.
+          if [ -z "${GOOGLE_API_KEY}" ]; then
+            echo "⚠️  GOOGLE_API_KEY secret is not set — skipping Dynamic Dataset eval."
+            exit 0
+          fi
+
+          # Use the freshly curated dataset from above
+          DATASET_DIR=$(ls -1 datasets | grep feedback_dataset_ | head -n 1)
+          if [ -z "$DATASET_DIR" ]; then
+             echo "No dynamic dataset generated, skipping dynamic replay."
+          else
+             echo "Running eval on Dynamic Dataset: $DATASET_DIR"
+             npm run eval:run -- \
+               --dataset "datasets/${DATASET_DIR}/dataset.jsonl" \
+               --out eval \
+               --disable-side-effects true \
+               --disable-external-context true \
+               --model gemini-2.0-flash
+          fi
+
+      - name: Upload eval artifacts
+        if: always() && (steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true')
+        uses: actions/upload-artifact@v6
+        with:
+          name: eval-artifacts
+          path: |
+            eval/**
+            eval_golden/**
+
+      - name: Comment PR summary
+        if: always() && github.event_name == 'pull_request' && (steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true')
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Dynamic Report
+            const summaryPath = 'eval/summary.md';
+            const summary = fs.existsSync(summaryPath) ? fs.readFileSync(summaryPath, 'utf8') : '# Eval Summary (Dynamic)\n\n(No dynamic dataset run)\n';
+            
+            // Golden Report
+            const goldenComparePath = 'eval_golden/baseline_comparison.md';
+            const goldenCompare = fs.existsSync(goldenComparePath) ? fs.readFileSync(goldenComparePath, 'utf8') : '';
+            
+            const body = `${summary}\n\n---\n\n## Golden Dataset Regression\n\n${goldenCompare || '(No golden dataset run or no baseline comparison)'}`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
