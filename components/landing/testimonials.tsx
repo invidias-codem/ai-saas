@@ -28,7 +28,7 @@ const testimonials = [
 
 export const Testimonials = () => {
     return (
-        <section className="py-24 border-t border-white/5 bg-black/20 relative overflow-hidden">
+        <section className="py-24 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-black/20 relative overflow-hidden">
             {/* Decorative elements */}
             <div className="absolute pointer-events-none top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full">
                 <div className="absolute top-1/4 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-[80px]" />
@@ -42,7 +42,7 @@ export const Testimonials = () => {
                     transition={{ duration: 0.5 }}
                     className="text-center mb-16"
                 >
-                    <h2 className="text-3xl md:text-5xl font-bold text-white mb-4 font-heading">Trusted by Creators</h2>
+                    <h2 className="text-3xl md:text-5xl font-bold text-slate-900 dark:text-white mb-4 font-heading">Trusted by Creators</h2>
                     <p className="text-muted-foreground text-lg">Join thousands of professionals using Genie AI.</p>
                 </motion.div>
 
@@ -54,15 +54,15 @@ export const Testimonials = () => {
                             whileInView={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: i * 0.1 }}
                             viewport={{ once: true }}
-                            className="p-8 rounded-2xl bg-[#0f1117] border border-white/5 hover:border-white/10 transition-colors shadow-lg"
+                            className="p-8 rounded-2xl bg-white dark:bg-[#0f1117] border border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/10 transition-colors shadow-lg"
                         >
-                            <p className="text-lg text-gray-300 mb-6 italic leading-relaxed">&quot;{item.quote}&quot;</p>
+                            <p className="text-lg text-slate-700 dark:text-gray-300 mb-6 italic leading-relaxed">&quot;{item.quote}&quot;</p>
                             <div className="flex items-center gap-4">
-                                <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${item.gradient} flex items-center justify-center text-white font-bold text-sm`}>
+                                <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${item.gradient} flex items-center justify-center text-slate-900 dark:text-white font-bold text-sm`}>
                                     {item.initials}
                                 </div>
                                 <div>
-                                    <p className="font-semibold text-white">{item.name}</p>
+                                    <p className="font-semibold text-slate-900 dark:text-white">{item.name}</p>
                                     <p className="text-sm text-gray-500">{item.role}</p>
                                 </div>
                             </div>
