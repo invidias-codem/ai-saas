@@ -23,9 +23,10 @@ const NOUS_API_KEY = process.env.NOUSE_API_KEY;
 const NOUS_BASE_URL =
   process.env.HERMES_BASE_URL || "https://api.nous.ai/v1";
 
-// Model ID from the Nous portal — override via HERMES_MODEL_ID
+// Model ID from the Nous portal — confirmed as "Hermes-4-70B" on portal UI
+// Override via HERMES_MODEL_ID env var if needed
 const NOUS_MODEL =
-  process.env.HERMES_MODEL_ID || "hermes-3-llama-3.1-70b";
+  process.env.HERMES_MODEL_ID || "Hermes-4-70B";
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const OLLAMA_MODEL = "hermes3";
@@ -43,9 +44,16 @@ export class HermesProvider implements LLMProvider {
   ): Promise<StreamResult> {
     const formattedMessages: { role: string; content: string }[] = [];
 
-    if (systemInstruction) {
-      formattedMessages.push({ role: "system", content: systemInstruction });
-    }
+    // Hermes-4 supports native chain-of-thought via <think></think> tags.
+    // Prepend the deep-thinking system prompt to activate it, then append
+    // any caller-provided system instruction.
+    const hermesSystemPrompt = `You are a deep thinking AI. You may use extremely long chains of thought to deeply consider the problem and deliberate with yourself via systematic reasoning processes to help come to a correct solution prior to answering. You should enclose your thoughts and internal monologue inside <think> </think> tags, and then provide your solution or response to the problem.`;
+
+    const combinedSystem = systemInstruction
+      ? `${hermesSystemPrompt}\n\n${systemInstruction}`
+      : hermesSystemPrompt;
+
+    formattedMessages.push({ role: "system", content: combinedSystem });
 
     for (const msg of messages) {
       formattedMessages.push({
