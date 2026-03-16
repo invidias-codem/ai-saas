@@ -76,7 +76,6 @@ export default async function LocaleLayout({
     return (
         <html lang={locale} suppressHydrationWarning={true}>
             <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
-                <ThemeTransition />
                 <ClerkProvider
                     publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}
                 >
@@ -87,6 +86,7 @@ export default async function LocaleLayout({
                             enableSystem={false}
                             disableTransitionOnChange={false}
                         >
+                            <ThemeTransition />
                             <ModalProvider>
                                 <UserSyncProvider>
                                     {children}
