@@ -14,7 +14,7 @@ const models = [
     color: "#a855f7",         // violet
     border: "border-violet-500/50",
     glow: "shadow-[0_0_24px_-8px_rgba(168,85,247,0.5)]",
-    badge: "bg-violet-500/15 text-violet-300 border-violet-500/30",
+    badge: "bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-300 dark:border-violet-500/30",
     accent: "from-violet-500/20 to-transparent",
   },
   {
@@ -25,7 +25,7 @@ const models = [
     color: "#38bdf8",         // sky
     border: "border-sky-400/50",
     glow: "shadow-[0_0_24px_-8px_rgba(56,189,248,0.5)]",
-    badge: "bg-sky-500/15 text-sky-300 border-sky-400/30",
+    badge: "bg-sky-100 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-400/30",
     accent: "from-sky-500/20 to-transparent",
   },
   {
@@ -36,7 +36,7 @@ const models = [
     color: "#f59e0b",         // amber
     border: "border-amber-400/50",
     glow: "shadow-[0_0_24px_-8px_rgba(245,158,11,0.5)]",
-    badge: "bg-amber-500/15 text-amber-300 border-amber-400/30",
+    badge: "bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-400/30",
     accent: "from-amber-500/20 to-transparent",
   },
 ];
@@ -214,7 +214,7 @@ export const UCOLSection = () => {
               transition={{ duration: 0.5, delay: i * 0.15 }}
               className={`
                 group relative rounded-2xl overflow-hidden
-                bg-white/60 dark:bg-white/4
+                bg-white dark:bg-white/[0.04]
                 backdrop-blur-md
                 border ${model.border}
                 ${model.glow}
