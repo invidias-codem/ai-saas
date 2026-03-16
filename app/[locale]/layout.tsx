@@ -51,6 +51,13 @@ export async function generateMetadata({
             title: t('title'),
             description: t('description'),
             type: 'website',
+        },
+        other: {
+            // Tell iOS Safari that this site supports both light and dark.
+            // Without this, Safari on iOS Dark Mode overrides class-based
+            // theming and forces dark rendering even when the toggle is in
+            // light mode.
+            'color-scheme': 'light dark',
         }
     };
 }
@@ -74,7 +81,7 @@ export default async function LocaleLayout({
     const messages = await getMessages();
 
     return (
-        <html lang={locale} suppressHydrationWarning={true}>
+        <html lang={locale} suppressHydrationWarning={true} style={{ colorScheme: 'auto' }}>
             <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
                 <ClerkProvider
                     publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}
