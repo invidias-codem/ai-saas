@@ -20,7 +20,8 @@ import type { BlueskyMention, EngagementResult } from './types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+// 15 min window — allows back-and-forth conversation without killing threads
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RESPONSE_MAX_CHARS = 290; // Bluesky post limit with a small buffer
 const CTA_SUFFIX = ' — gen1e.xyz';
 
@@ -81,13 +82,16 @@ export class BlueskyResponder {
         '[BlueskyResponder] Missing env vars: BLUESKY_HANDLE and/or BLUESKY_APP_PASSWORD'
       );
     }
-    if (!googleApiKey) {
-      throw new Error('[BlueskyResponder] Missing env var: GOOGLE_API_KEY');
+    // BLUESKY_GEMINI_API_KEY is a dedicated key for the agent (separate from the
+    // main GOOGLE_API_KEY so a key rotation on one doesn't break the other).
+    const effectiveApiKey = process.env.BLUESKY_GEMINI_API_KEY ?? googleApiKey;
+    if (!effectiveApiKey) {
+      throw new Error('[BlueskyResponder] Missing env var: BLUESKY_GEMINI_API_KEY or GOOGLE_API_KEY');
     }
 
     this.agent = new BskyAgent({ service: 'https://bsky.social' });
     this.supabase = getSupabaseClient();
-    this.gemini = new GoogleGenerativeAI(googleApiKey);
+    this.gemini = new GoogleGenerativeAI(effectiveApiKey);
   }
 
   // ─── Auth ────────────────────────────────────────────────────────────────
