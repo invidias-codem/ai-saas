@@ -18,6 +18,13 @@ import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor';
 import type { BlueskyMention, EngagementResult } from './types';
 
+// ─── Hermes (Nous Research) Config ───────────────────────────────────────────
+
+const NOUS_API_KEY = process.env.NOUSE_API_KEY;
+const NOUS_BASE_URL =
+  process.env.HERMES_BASE_URL || 'https://inference-api.nousresearch.com/v1';
+const NOUS_MODEL = process.env.HERMES_MODEL_ID || 'Hermes-4.3-36B';
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 // 15 min window — allows back-and-forth conversation without killing threads
@@ -69,29 +76,25 @@ function getSupabaseClient(): SupabaseClient {
 export class BlueskyResponder {
   private agent: BskyAgent;
   private supabase: SupabaseClient;
-  private gemini: GoogleGenerativeAI;
   private authenticated = false;
 
   constructor() {
     const handle = process.env.BLUESKY_HANDLE;
     const appPassword = process.env.BLUESKY_APP_PASSWORD;
-    const googleApiKey = process.env.GOOGLE_API_KEY;
 
     if (!handle || !appPassword) {
       throw new Error(
         '[BlueskyResponder] Missing env vars: BLUESKY_HANDLE and/or BLUESKY_APP_PASSWORD'
       );
     }
-    // BLUESKY_GEMINI_API_KEY is a dedicated key for the agent (separate from the
-    // main GOOGLE_API_KEY so a key rotation on one doesn't break the other).
-    const effectiveApiKey = process.env.BLUESKY_GEMINI_API_KEY ?? googleApiKey;
-    if (!effectiveApiKey) {
-      throw new Error('[BlueskyResponder] Missing env var: BLUESKY_GEMINI_API_KEY or GOOGLE_API_KEY');
-    }
+
+    // Primary: Hermes via NOUSE_API_KEY (Nous Research portal)
+    // Fallback: Gemini via BLUESKY_GEMINI_API_KEY or GOOGLE_API_KEY
+    // At least one must be present at runtime (not validated at construction time
+    // to allow partial deployments to still start up).
 
     this.agent = new BskyAgent({ service: 'https://bsky.social' });
     this.supabase = getSupabaseClient();
-    this.gemini = new GoogleGenerativeAI(effectiveApiKey);
   }
 
   // ─── Auth ────────────────────────────────────────────────────────────────
@@ -148,26 +151,87 @@ export class BlueskyResponder {
 
   // ─── Response Generation ─────────────────────────────────────────────────
 
+  /**
+   * Primary: Hermes-4.3-36B via Nous Research inference API
+   * Fallback: Gemini Flash
+   *
+   * Hermes is used as primary because it has native chain-of-thought reasoning,
+   * 128k context, and is purpose-built for instruction following.
+   * Gemini is the always-available fallback if the Nous key is unavailable.
+   */
   private async generateResponse(context: string): Promise<string> {
-    const model = this.gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const systemPrompt = await getTechGenieSystemPrompt();
+
+    // ── 1. Try Hermes (Nous Research) ──────────────────────────────────────
+    if (NOUS_API_KEY) {
+      try {
+        const raw = await this.generateWithHermes(context, systemPrompt);
+        return this.enforceCharLimit(raw);
+      } catch (err) {
+        console.warn('[BlueskyResponder] Hermes failed, falling back to Gemini:', err);
+      }
+    } else {
+      console.warn('[BlueskyResponder] NOUSE_API_KEY not set — skipping Hermes, using Gemini');
+    }
+
+    // ── 2. Fallback: Gemini Flash ───────────────────────────────────────────
+    return this.generateWithGemini(context, systemPrompt);
+  }
+
+  private async generateWithHermes(context: string, systemPrompt: string): Promise<string> {
+    const response = await fetch(`${NOUS_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${NOUS_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: NOUS_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: context },
+        ],
+        max_tokens: 150,
+        temperature: 0.75,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => response.statusText);
+      throw new Error(`Nous API ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    const text = data?.choices?.[0]?.message?.content;
+    if (typeof text !== 'string' || !text.trim()) {
+      throw new Error('Hermes returned empty content');
+    }
+    return text.trim();
+  }
+
+  private async generateWithGemini(context: string, systemPrompt: string): Promise<string> {
+    const effectiveApiKey =
+      process.env.BLUESKY_GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
+    const gemini = new GoogleGenerativeAI(effectiveApiKey);
+    const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: context }] }],
       systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
-      generationConfig: {
-        maxOutputTokens: 150,
-        temperature: 0.7,
-      },
+      generationConfig: { maxOutputTokens: 150, temperature: 0.7 },
     });
 
-    const raw = result.response.text().trim();
+    return result.response.text().trim();
+  }
 
-    // Enforce character limit — truncate gracefully before the CTA if needed
+  private enforceCharLimit(raw: string): string {
     if (raw.length <= RESPONSE_MAX_CHARS) return raw;
-
-    const truncated = raw.substring(0, RESPONSE_MAX_CHARS - CTA_SUFFIX.length - 3) + '...' + CTA_SUFFIX;
-    return truncated;
+    return (
+      raw.substring(0, RESPONSE_MAX_CHARS - CTA_SUFFIX.length - 3) +
+      '...' +
+      CTA_SUFFIX
+    );
   }
 
   // ─── Log Interaction ─────────────────────────────────────────────────────
