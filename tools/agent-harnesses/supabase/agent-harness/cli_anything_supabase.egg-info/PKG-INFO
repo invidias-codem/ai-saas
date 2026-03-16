@@ -1,0 +1,23 @@
+Metadata-Version: 2.4
+Name: cli-anything-supabase
+Version: 1.0.0
+Summary: CLI-Anything agent harness for the Supabase CLI
+Author: JKlaw / CLI-Anything
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Database
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Requires-Python: >=3.9
+Requires-Dist: click>=8.0
+Requires-Dist: prompt_toolkit>=3.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov; extra == "dev"
+Dynamic: author
+Dynamic: classifier
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

@@ -1,0 +1,12 @@
+{
+    "model": "gemini-2.0-flash",
+    "thresholds": {
+        "maxFailureRateIncrease": 0.05,
+        "maxFailureRateAbsolute": 0.2
+    },
+    "counts": {
+        "total": 1,
+        "passed": 1,
+        "failed": 0
+    }
+}

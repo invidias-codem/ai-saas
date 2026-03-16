@@ -40,7 +40,7 @@ const MobileSidebar = () => {
                     <Menu className="h-5 w-5" />
                 </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-0 bg-[#111827] text-white">
+            <SheetContent side="left" className="p-0 bg-white dark:bg-[#111827] text-slate-900 dark:text-white">
                 <SheetTitle className="hidden">Navigation Menu</SheetTitle>
                 <div className="h-full flex flex-col">
                     <Sidebar onNavigate={() => setIsOpen(false)} />

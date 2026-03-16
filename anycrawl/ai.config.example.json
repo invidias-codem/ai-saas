@@ -1,0 +1,42 @@
+{
+    "providers": {
+        "openai": {
+            "enabled": true,
+            "apiKey": "OPENAI_API_KEY"
+        },
+        "openrouter": {
+            "enabled": true,
+            "apiKey": "OPENROUTER_API_KEY",
+            "baseURL": "https://openrouter.ai/api/v1"
+        },
+        "custom": {
+            "enabled": false,
+            "apiKey": "CUSTOM_API_KEY",
+            "baseURL": "CUSTOM_BASE_URL"
+        }
+    },
+    "modelMapping": {
+        "gpt-4o": {
+            "displayName": "GPT-4o",
+            "providers": [
+                { "provider": "openai", "modelId": "gpt-4o" },
+                { "provider": "openrouter", "modelId": "openai/gpt-4o" }
+            ]
+        },
+        "gpt-4o-mini": {
+            "displayName": "GPT-4o-mini",
+            "providers": [
+                { "provider": "openai", "modelId": "gpt-4o-mini" },
+                { "provider": "openrouter", "modelId": "openai/gpt-4o-mini" }
+            ]
+        },
+        "gemini-2.5-flash": {
+            "displayName": "Gemini 2.5 Flash",
+            "providers": [{ "provider": "openrouter", "modelId": "google/gemini-2.5-flash" }]
+        }
+    },
+    "defaults": {
+        "DEFAULT_LLM_MODEL": "gpt-4o-mini",
+        "DEFAULT_EXTRACT_MODEL": "gpt-4o-mini"
+    }
+}

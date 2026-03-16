@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 import { Analytics } from "@vercel/analytics/react";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeTransition } from "@/components/theme-transition";
 import { ModalProvider } from "@/components/modal-provider";
 import { UserSyncProvider } from "@/components/user-sync-provider";
 
@@ -75,6 +76,7 @@ export default async function LocaleLayout({
     return (
         <html lang={locale} suppressHydrationWarning={true}>
             <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
+                <ThemeTransition />
                 <ClerkProvider
                     publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}
                 >

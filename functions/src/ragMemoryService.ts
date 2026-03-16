@@ -3,18 +3,18 @@
  * Uses Vertex AI for semantic embeddings and vector search
  */
 
-import * as admin from 'firebase-admin';
-import { VertexAI } from '@google-cloud/vertexai';
-import { Message, UserMemory, RAGIndex } from './schemas';
+import * as admin from "firebase-admin";
+import { VertexAI } from "@google-cloud/vertexai";
+import { Message, UserMemory, RAGIndex } from "./schemas";
 
 // Initialize Vertex AI
 const vertexAI = new VertexAI({
-  project: process.env.GOOGLE_CLOUD_PROJECT || 'genie-ai-1ca85',
-  location: process.env.VERTEX_AI_LOCATION || 'us-central1',
+  project: process.env.GOOGLE_CLOUD_PROJECT || "genie-ai-1ca85",
+  location: process.env.VERTEX_AI_LOCATION || "us-central1",
 });
 
 const embeddingModel = vertexAI.getGenerativeModel({
-  model: 'text-embedding-004',
+  model: "text-embedding-004",
 });
 
 /**
@@ -23,7 +23,7 @@ const embeddingModel = vertexAI.getGenerativeModel({
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
     if (!text || text.trim().length === 0) {
-      console.warn('[generateEmbedding] Empty text provided, returning empty embedding');
+      console.warn("[generateEmbedding] Empty text provided, returning empty embedding");
       return [];
     }
 
@@ -34,17 +34,17 @@ export async function generateEmbedding(text: string): Promise<number[]> {
     // Try common embed APIs (embedContent or embed) and normalize the response.
     let response;
     
-    if (typeof modelAny.embedContent === 'function') {
+    if (typeof modelAny.embedContent === "function") {
       response = await modelAny.embedContent({
         content: {
-          role: 'user',
+          role: "user",
           parts: [{ text }],
         },
       });
-    } else if (typeof modelAny.embed === 'function') {
+    } else if (typeof modelAny.embed === "function") {
       response = await modelAny.embed({ input: text });
     } else {
-      console.error('[generateEmbedding] No embed method available on model');
+      console.error("[generateEmbedding] No embed method available on model");
       return [];
     }
 
@@ -56,16 +56,16 @@ export async function generateEmbedding(text: string): Promise<number[]> {
       response?.embeddings ||
       [];
 
-    console.log('[generateEmbedding] Generated embedding with', embedding?.length || 0, 'dimensions');
+    console.log("[generateEmbedding] Generated embedding with", embedding?.length || 0, "dimensions");
 
     if (!embedding || embedding.length === 0) {
-      console.warn('[generateEmbedding] No embedding returned from API for text:', text.substring(0, 50));
+      console.warn("[generateEmbedding] No embedding returned from API for text:", text.substring(0, 50));
       return [];
     }
 
     return embedding;
   } catch (error) {
-    console.error('Error generating embedding:', error);
+    console.error("Error generating embedding:", error);
     throw new Error(`Failed to generate embedding: ${error}`);
   }
 }
@@ -87,22 +87,22 @@ function cosineSimilarity(a: number[], b: number[]): number {
  */
 export async function storeUserMemory(
   userId: string,
-  memory: Omit<UserMemory, 'id' | 'embedding'>
+  memory: Omit<UserMemory, "id" | "embedding">
 ): Promise<UserMemory> {
   try {
     const db = admin.firestore();
     
     // Generate summary for embedding
     const summaryText = memory.summary || memory.title;
-    console.log('[storeUserMemory] Generating embedding for:', summaryText.substring(0, 50));
+    console.log("[storeUserMemory] Generating embedding for:", summaryText.substring(0, 50));
     
     const embedding = await generateEmbedding(summaryText);
-    console.log('[storeUserMemory] Embedding generated, dimensions:', embedding?.length || 0);
+    console.log("[storeUserMemory] Embedding generated, dimensions:", embedding?.length || 0);
 
     // Create memory document
     const memoryData: UserMemory = {
       ...memory,
-      id: db.collection('users').doc(userId).collection('memories').doc().id,
+      id: db.collection("users").doc(userId).collection("memories").doc().id,
       embedding,
     };
 
@@ -111,25 +111,25 @@ export async function storeUserMemory(
       Object.entries(memoryData).filter(([_, value]) => value !== undefined)
     );
 
-    console.log('[storeUserMemory] Cleaned data keys:', Object.keys(cleanedData));
-    console.log('[storeUserMemory] Has embedding:', 'embedding' in cleanedData);
+    console.log("[storeUserMemory] Cleaned data keys:", Object.keys(cleanedData));
+    console.log("[storeUserMemory] Has embedding:", "embedding" in cleanedData);
 
     // Store in Firestore
     const memoryRef = db
-      .collection('users')
+      .collection("users")
       .doc(userId)
-      .collection('memories')
+      .collection("memories")
       .doc(memoryData.id);
 
     await memoryRef.set(cleanedData);
-    console.log('[storeUserMemory] Memory stored successfully:', memoryData.id);
+    console.log("[storeUserMemory] Memory stored successfully:", memoryData.id);
 
     // Also add to RAG index for faster semantic search
     await indexMemoryForRAG(userId, memoryData);
 
     return memoryData;
   } catch (error) {
-    console.error('Error storing user memory:', error);
+    console.error("Error storing user memory:", error);
     throw error;
   }
 }
@@ -152,13 +152,13 @@ async function indexMemoryForRAG(userId: string, memory: UserMemory): Promise<vo
     };
 
     await db
-      .collection('users')
+      .collection("users")
       .doc(userId)
-      .collection('ragIndex')
+      .collection("ragIndex")
       .doc(ragIndex.id)
       .set(ragIndex);
   } catch (error) {
-    console.error('Error indexing memory for RAG:', error);
+    console.error("Error indexing memory for RAG:", error);
     // Don't throw - RAG indexing failure shouldn't block memory storage
   }
 }
@@ -176,36 +176,36 @@ export async function retrieveRelevantMemories(
     const db = admin.firestore();
 
     // Generate embedding for query
-    console.log('[retrieveRelevantMemories] Generating embedding for query:', query.substring(0, 50));
+    console.log("[retrieveRelevantMemories] Generating embedding for query:", query.substring(0, 50));
     const queryEmbedding = await generateEmbedding(query);
-    console.log('[retrieveRelevantMemories] Query embedding dimensions:', queryEmbedding?.length || 0);
+    console.log("[retrieveRelevantMemories] Query embedding dimensions:", queryEmbedding?.length || 0);
 
     // Fetch all memories for user (Firestore doesn't have native vector search yet)
     let memoryQuery: FirebaseFirestore.Query = db
-      .collection('users')
+      .collection("users")
       .doc(userId)
-      .collection('memories');
+      .collection("memories");
 
     if (featureType) {
-      memoryQuery = memoryQuery.where('featureType', '==', featureType);
+      memoryQuery = memoryQuery.where("featureType", "==", featureType);
     }
 
     const snapshot = await memoryQuery.get();
-    console.log('[retrieveRelevantMemories] Found', snapshot.size, 'total memories for user');
+    console.log("[retrieveRelevantMemories] Found", snapshot.size, "total memories for user");
     
     const memories: UserMemory[] = [];
-    const threshold = parseFloat(process.env.RAG_SIMILARITY_THRESHOLD || '0.3');
+    const threshold = parseFloat(process.env.RAG_SIMILARITY_THRESHOLD || "0.3");
     const useEmbeddings = queryEmbedding && queryEmbedding.length > 0;
 
     snapshot.forEach((doc) => {
       const memory = doc.data() as UserMemory;
       let similarity = 0;
-      let matchMethod = 'none';
+      let matchMethod = "none";
 
       // Method 1: Vector similarity (if embeddings available)
       if (useEmbeddings && memory.embedding && memory.embedding.length > 0) {
         similarity = cosineSimilarity(queryEmbedding, memory.embedding);
-        matchMethod = 'embedding';
+        matchMethod = "embedding";
       } 
       // Method 2: Fallback to keyword matching
       else {
@@ -214,7 +214,7 @@ export async function retrieveRelevantMemories(
         const summaryMatch = memory.summary.toLowerCase().includes(queryLower) ? 0.7 : 0;
         const tagsMatch = memory.tags?.some(tag => queryLower.includes(tag.toLowerCase())) ? 0.6 : 0;
         similarity = Math.max(titleMatch, summaryMatch, tagsMatch);
-        matchMethod = 'keyword';
+        matchMethod = "keyword";
       }
 
       console.log(`[retrieveRelevantMemories] Memory: "${memory.title}" | Similarity: ${similarity.toFixed(4)} | Method: ${matchMethod} | Threshold: ${threshold}`);
@@ -228,14 +228,14 @@ export async function retrieveRelevantMemories(
       }
     });
 
-    console.log('[retrieveRelevantMemories] Memories passing threshold:', memories.length);
+    console.log("[retrieveRelevantMemories] Memories passing threshold:", memories.length);
 
     // Sort by similarity and return top results
     return memories
       .sort((a, b) => (b.similarity as any) - (a.similarity as any))
       .slice(0, limit);
   } catch (error) {
-    console.error('Error retrieving relevant memories:', error);
+    console.error("Error retrieving relevant memories:", error);
     return []; // Return empty array if retrieval fails
   }
 }
@@ -245,7 +245,7 @@ export async function retrieveRelevantMemories(
  */
 export function formatMemoriesForContext(memories: UserMemory[]): string {
   if (memories.length === 0) {
-    return '';
+    return "";
   }
 
   const formattedMemories = memories
@@ -254,9 +254,9 @@ export function formatMemoriesForContext(memories: UserMemory[]): string {
         `**Previous Context** (${memory.featureType}):
 Title: ${memory.title}
 Summary: ${memory.summary}
-Key Points: ${memory.tags?.join(', ') || 'N/A'}`
+Key Points: ${memory.tags?.join(", ") || "N/A"}`
     )
-    .join('\n\n');
+    .join("\n\n");
 
   return `\n\n## User's Previous Interactions\n${formattedMemories}\n---\n`;
 }
@@ -267,14 +267,14 @@ Key Points: ${memory.tags?.join(', ') || 'N/A'}`
 export async function cleanupOldMemories(userId: string): Promise<number> {
   try {
     const db = admin.firestore();
-    const retentionDays = parseInt(process.env.RAG_MEMORY_RETENTION_DAYS || '90');
+    const retentionDays = parseInt(process.env.RAG_MEMORY_RETENTION_DAYS || "90");
     const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
 
     const oldMemories = await db
-      .collection('users')
+      .collection("users")
       .doc(userId)
-      .collection('memories')
-      .where('createdAt', '<', cutoffTime)
+      .collection("memories")
+      .where("createdAt", "<", cutoffTime)
       .get();
 
     let deletedCount = 0;
@@ -288,7 +288,7 @@ export async function cleanupOldMemories(userId: string): Promise<number> {
     await batch.commit();
     return deletedCount;
   } catch (error) {
-    console.error('Error cleaning up old memories:', error);
+    console.error("Error cleaning up old memories:", error);
     return 0;
   }
 }

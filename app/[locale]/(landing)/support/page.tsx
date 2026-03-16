@@ -68,7 +68,7 @@ const SupportPage = () => {
   };
 
   return (
-    <div className="bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
+    <div className="bg-[#FAF9F7] dark:bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
 
       {/* Background Gradients */}
       <div className="fixed inset-0 z-0 pointer-events-none">
@@ -103,7 +103,7 @@ const SupportPage = () => {
             {contactOptions.map((option, index) => (
               <div
                 key={index}
-                className="p-6 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition text-center"
+                className="p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/5 hover:bg-white/10 transition text-center"
               >
                 <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4", option.bgColor)}>
                   <option.icon className={cn("w-6 h-6", option.color)} />
@@ -124,7 +124,7 @@ const SupportPage = () => {
         <section className="px-4 pb-16 max-w-5xl mx-auto space-y-12">
 
           {/* Slack Integration */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-8">
+          <div className="bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-8">
             <div className="flex items-center gap-3 mb-6">
               <Slack className="w-8 h-8 text-white" />
               <h2 className="text-2xl font-bold text-white">Getting Started with Slack</h2>
@@ -159,7 +159,7 @@ const SupportPage = () => {
           </div>
 
           {/* Image Generation */}
-          <div className="bg-gradient-to-br from-pink-500/10 to-purple-500/10 border border-white/10 rounded-2xl p-8">
+          <div className="bg-gradient-to-br from-pink-500/10 to-purple-500/10 border border-slate-200 dark:border-white/10 rounded-2xl p-8">
             <div className="flex items-center gap-3 mb-6">
               <ImageIcon className="w-8 h-8 text-pink-400" />
               <h2 className="text-2xl font-bold text-white">Image Generation</h2>
@@ -180,7 +180,7 @@ const SupportPage = () => {
                 </div>
               </div>
 
-              <div className="border-t border-white/10 pt-6">
+              <div className="border-t border-slate-200 dark:border-white/10 pt-6">
                 <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
                   <Zap className="w-4 h-4 text-yellow-400" />
                   Advanced: Controlling Models
@@ -219,7 +219,7 @@ const SupportPage = () => {
         </section>
 
         {/* Contact Form */}
-        <section className="py-16 px-4 border-t border-white/10 bg-black/20">
+        <section className="py-16 px-4 border-t border-slate-200 dark:border-white/10 bg-black/20">
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-10">
               <h2 className="text-3xl font-bold text-white mb-4">Send Us a Message</h2>
@@ -253,7 +253,7 @@ const SupportPage = () => {
                       required
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500"
+                      className="bg-white/5 border-slate-200 dark:border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500"
                       placeholder="John Doe"
                     />
                   </div>
@@ -266,7 +266,7 @@ const SupportPage = () => {
                       required
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500"
+                      className="bg-white/5 border-slate-200 dark:border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500"
                       placeholder="john@example.com"
                     />
                   </div>
@@ -281,7 +281,7 @@ const SupportPage = () => {
                     required
                     value={formData.subject}
                     onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500"
+                    className="bg-white/5 border-slate-200 dark:border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500"
                     placeholder="How can we help?"
                   />
                 </div>
@@ -295,7 +295,7 @@ const SupportPage = () => {
                     rows={6}
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500 resize-none"
+                    className="bg-white/5 border-slate-200 dark:border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500 resize-none"
                     placeholder="Please describe your issue or question in detail..."
                   />
                 </div>
@@ -341,7 +341,7 @@ const SupportPage = () => {
               {faqs.map((faq, index) => (
                 <div
                   key={index}
-                  className="rounded-xl border border-white/10 bg-white/5 overflow-hidden"
+                  className="rounded-xl border border-slate-200 dark:border-white/10 bg-white/5 overflow-hidden"
                 >
                   <button
                     onClick={() => setExpandedFaq(expandedFaq === index ? null : index)}
@@ -366,7 +366,7 @@ const SupportPage = () => {
         </section>
 
         {/* Response Time */}
-        <section className="py-16 px-4 border-t border-white/10">
+        <section className="py-16 px-4 border-t border-slate-200 dark:border-white/10">
           <div className="max-w-4xl mx-auto text-center">
             <Clock className="w-10 h-10 text-blue-400 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-white mb-4">Our Response Commitment</h2>
@@ -379,7 +379,7 @@ const SupportPage = () => {
       </main>
 
       {/* Footer */}
-      <footer className="py-10 border-t border-white/10 bg-[#111827]">
+      <footer className="py-10 border-t border-slate-200 dark:border-white/10 bg-[#FAF9F7] dark:bg-[#111827]">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
@@ -397,7 +397,7 @@ const SupportPage = () => {
             </div>
           </div>
 
-          <div className="mt-8 pt-8 border-t border-white/10 text-center">
+          <div className="mt-8 pt-8 border-t border-slate-200 dark:border-white/10 text-center">
             <p className="text-gray-500 text-sm">
               © {new Date().getFullYear()} Genie AI. All rights reserved.
             </p>

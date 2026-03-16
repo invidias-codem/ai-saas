@@ -131,7 +131,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
+      <div className="bg-[#FAF9F7] dark:bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
         {/* Background Gradients */}
         <div className="fixed inset-0 z-0 pointer-events-none">
           <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl" />
@@ -208,7 +208,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         </main>
 
         {/* Footer */}
-        <footer className="py-10 border-t border-white/10 bg-[#111827]">
+        <footer className="py-10 border-t border-slate-200 dark:border-white/10 bg-[#FAF9F7] dark:bg-[#111827]">
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="flex items-center gap-2">
@@ -226,7 +226,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               </div>
             </div>
 
-            <div className="mt-8 pt-8 border-t border-white/10 text-center">
+            <div className="mt-8 pt-8 border-t border-slate-200 dark:border-white/10 text-center">
               <p className="text-gray-500 text-sm">
                 © {new Date().getFullYear()} Genie AI. All rights reserved.
               </p>

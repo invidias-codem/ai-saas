@@ -1,0 +1,20 @@
+{
+    "rules": [
+        {
+            "url": "https://api.example.com/v1/data",
+            "proxy": "http://username:password@proxy1.example.com:8080"
+        },
+        {
+            "pattern": "https://*.googleapis.com/*",
+            "proxy": "http://username:password@proxy3.example.com:3128"
+        },
+        {
+            "pattern": "https://secure-*.example.org/*",
+            "proxy": "http://premium-proxy.example.com:8888"
+        },
+        {
+            "domain": "*.example.com",
+            "proxy": "http://username:password@proxy2.example.com:8080"
+        }
+    ]
+}

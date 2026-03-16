@@ -1,0 +1,13 @@
+.gcloudignore
+.git
+.gitignore
+__pycache__
+venv/
+.pytest_cache/
+*.pyc
+*.pyo
+.DS_Store
+# Exclude Node.js artifacts if any accidentally exist here
+node_modules/
+npm-debug.log
+yarn-error.log

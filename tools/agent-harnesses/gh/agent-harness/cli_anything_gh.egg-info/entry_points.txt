@@ -1,0 +1,2 @@
+[console_scripts]
+cli-anything-gh = cli_anything.gh.gh_cli:cli

@@ -1,5 +1,5 @@
-import * as functions from 'firebase-functions';
-import * as admin from 'firebase-admin';
+import * as functions from "firebase-functions";
+import * as admin from "firebase-admin";
 
 const db = admin.firestore();
 
@@ -37,7 +37,7 @@ interface FactAnalytics {
  */
 export async function getFactAnalytics(userId: string): Promise<FactAnalytics> {
   try {
-    const factsRef = db.collection('users').doc(userId).collection('facts');
+    const factsRef = db.collection("users").doc(userId).collection("facts");
     const snapshot = await factsRef.get();
 
     if (snapshot.empty) {
@@ -133,7 +133,7 @@ export async function getFactAnalytics(userId: string): Promise<FactAnalytics> {
       facts: facts.sort((a, b) => b.extractedAt - a.extractedAt),
     };
   } catch (error) {
-    functions.logger.error(`Error getting fact analytics:`, error);
+    functions.logger.error("Error getting fact analytics:", error);
     throw error;
   }
 }
@@ -147,15 +147,15 @@ export const getMemoryAnalytics = functions.https.onRequest(
       // Verify authentication (expect userId from auth context or request)
       const userId = (request as any).user?.uid;
       if (!userId) {
-        response.status(401).json({ error: 'Unauthorized' });
+        response.status(401).json({ error: "Unauthorized" });
         return;
       }
 
       const analytics = await getFactAnalytics(userId);
       response.status(200).json(analytics);
     } catch (error) {
-      functions.logger.error('Error in getMemoryAnalytics:', error);
-      response.status(500).json({ error: 'Internal server error' });
+      functions.logger.error("Error in getMemoryAnalytics:", error);
+      response.status(500).json({ error: "Internal server error" });
     }
   }
 );

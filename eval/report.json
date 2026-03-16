@@ -1,0 +1,94 @@
+{
+  "generatedAt": "2026-01-18T09:41:13.467Z",
+  "datasetPath": "datasets/feedback_dataset_ffb990139d8c/dataset.jsonl",
+  "runId": "ec47e6d8735c",
+  "model": "gemini-2.0-flash",
+  "options": {
+    "disableSideEffects": true,
+    "disableExternalContext": true
+  },
+  "counts": {
+    "total": 11,
+    "passed": 11,
+    "failed": 0
+  },
+  "results": [
+    {
+      "id": "bfd5a554-7da2-4c8d-9973-5919fa106b8c",
+      "input": "Seed input",
+      "expected": "Seed output",
+      "candidate": "Okay, I understand. I'll aim to provide helpful and concise responses in a general style. Let me know what you need!\n",
+      "pass": true
+    },
+    {
+      "id": "618f218a-e34b-442d-98c7-2151de42d8b5",
+      "input": "Seed input 1: What is 2+1?",
+      "expected": "Seed output 1: 2+1 = 3.",
+      "candidate": "3\n",
+      "pass": true
+    },
+    {
+      "id": "8820312a-2aea-4626-bba4-08c30ed2de90",
+      "input": "Seed input 2: What is 2+2?",
+      "expected": "Seed output 2: 2+2 = 4.",
+      "candidate": "2 + 2 = 4\n",
+      "pass": true
+    },
+    {
+      "id": "474b9234-6a02-4886-82b5-a5b1c863c9c9",
+      "input": "Seed input 3: What is 2+3?",
+      "expected": "Seed output 3: 2+3 = 5.",
+      "candidate": "2 + 3 = 5\n",
+      "pass": true
+    },
+    {
+      "id": "ecd5047d-4261-426f-abed-89f72dcca8f6",
+      "input": "Seed input 4: What is 2+4?",
+      "expected": "Seed output 4: 2+4 = 6.",
+      "candidate": "2 + 4 = 6\n",
+      "pass": true
+    },
+    {
+      "id": "161b15d2-a9ce-4551-b6f2-d9700381eba2",
+      "input": "Seed input 5: What is 2+5?",
+      "expected": "Seed output 5: 2+5 = 7.",
+      "candidate": "2 + 5 = 7\n",
+      "pass": true
+    },
+    {
+      "id": "06b87c84-7277-478c-aebd-f4d9b95f94f1",
+      "input": "Seed input 6: What is 2+6?",
+      "expected": "Seed output 6: 2+6 = 8.",
+      "candidate": "2 + 6 = 8\n",
+      "pass": true
+    },
+    {
+      "id": "d58d4663-8d39-4806-bb2e-c61dda06984b",
+      "input": "Seed input 7: What is 2+7?",
+      "expected": "Seed output 7: 2+7 = 9.",
+      "candidate": "2 + 7 = 9\n",
+      "pass": true
+    },
+    {
+      "id": "af92d386-c4e9-48eb-a43d-5093af8990eb",
+      "input": "Seed input 8: What is 2+8?",
+      "expected": "Seed output 8: 2+8 = 10.",
+      "candidate": "2 + 8 = 10\n",
+      "pass": true
+    },
+    {
+      "id": "42ae0519-db7e-4cd5-b7e4-400be7c22ae9",
+      "input": "Seed input 9: What is 2+9?",
+      "expected": "Seed output 9: 2+9 = 11.",
+      "candidate": "2 + 9 = 11\n",
+      "pass": true
+    },
+    {
+      "id": "7845cb74-612f-484d-93d3-368ffa18d299",
+      "input": "Seed input 10: What is 2+10?",
+      "expected": "Seed output 10: 2+10 = 12.",
+      "candidate": "12\n",
+      "pass": true
+    }
+  ]
+}

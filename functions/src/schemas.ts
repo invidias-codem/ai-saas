@@ -5,7 +5,7 @@
 
 // Message format for conversation history
 export interface Message {
-  role: 'user' | 'assistant' | 'system';
+  role: "user" | "assistant" | "system";
   content: string;
   timestamp?: number;
 }
@@ -14,7 +14,7 @@ export interface Message {
 export interface UserMemory {
   id: string;
   userId: string;
-  featureType: 'conversation' | 'code' | 'image' | 'music' | 'video';
+  featureType: "conversation" | "code" | "image" | "music" | "video";
   title: string;
   summary: string;
   messages: Message[];
@@ -60,8 +60,8 @@ export interface RAGIndex {
 export interface InteractionEvent {
   id: string;
   userId: string;
-  featureType: 'conversation' | 'code' | 'image' | 'music' | 'video';
-  action: 'create' | 'retrieve' | 'search' | 'share';
+  featureType: "conversation" | "code" | "image" | "music" | "video";
+  action: "create" | "retrieve" | "search" | "share";
   inputLength: number;
   outputLength: number;
   tokensUsed: number;
@@ -100,12 +100,12 @@ export interface SlackIntegration {
 // Extracted fact - key-value knowledge base for preventing hallucinations
 export interface ExtractedFact {
   id?: string;
-  type: 'decision' | 'action_item' | 'blocker' | 'project' | 'verification';
+  type: "decision" | "action_item" | "blocker" | "project" | "verification";
   content: string;
   confidence: number; // 0-1 confidence score
   extractedAt: number;
   expiresAt?: number; // For conversation-level facts (30 days)
   conversationId?: string;
-  scope: 'conversation' | 'user'; // conversation-level vs persistent user facts
+  scope: "conversation" | "user"; // conversation-level vs persistent user facts
   createdAt?: number;
 }

@@ -46,20 +46,20 @@ const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
  */
 async function extendFactTTL(userId, factId, extendDays = 90) {
     try {
-        const factRef = db.collection('users').doc(userId).collection('facts').doc(factId);
+        const factRef = db.collection("users").doc(userId).collection("facts").doc(factId);
         const factDoc = await factRef.get();
         if (!factDoc.exists) {
             return {
                 success: false,
-                message: 'Fact not found',
+                message: "Fact not found",
             };
         }
         const factData = factDoc.data();
         // Only conversation-level facts can expire; user-level facts persist indefinitely
-        if (factData?.scope !== 'conversation') {
+        if (factData?.scope !== "conversation") {
             return {
                 success: false,
-                message: 'User-level facts do not expire',
+                message: "User-level facts do not expire",
             };
         }
         const extendMs = extendDays * 24 * 60 * 60 * 1000;
@@ -77,10 +77,10 @@ async function extendFactTTL(userId, factId, extendDays = 90) {
         };
     }
     catch (error) {
-        functions.logger.error(`Error extending fact TTL:`, error);
+        functions.logger.error("Error extending fact TTL:", error);
         return {
             success: false,
-            message: 'Error extending memory',
+            message: "Error extending memory",
         };
     }
 }
@@ -89,26 +89,26 @@ async function extendFactTTL(userId, factId, extendDays = 90) {
  */
 async function deleteFact(userId, factId) {
     try {
-        const factRef = db.collection('users').doc(userId).collection('facts').doc(factId);
+        const factRef = db.collection("users").doc(userId).collection("facts").doc(factId);
         const factDoc = await factRef.get();
         if (!factDoc.exists) {
             return {
                 success: false,
-                message: 'Fact not found',
+                message: "Fact not found",
             };
         }
         await factRef.delete();
         functions.logger.debug(`Deleted fact ${factId} for user ${userId}`);
         return {
             success: true,
-            message: 'Memory deleted successfully',
+            message: "Memory deleted successfully",
         };
     }
     catch (error) {
-        functions.logger.error(`Error deleting fact:`, error);
+        functions.logger.error("Error deleting fact:", error);
         return {
             success: false,
-            message: 'Error deleting memory',
+            message: "Error deleting memory",
         };
     }
 }
@@ -118,12 +118,12 @@ async function deleteFact(userId, factId) {
  */
 async function softDeleteFact(userId, factId) {
     try {
-        const factRef = db.collection('users').doc(userId).collection('facts').doc(factId);
+        const factRef = db.collection("users").doc(userId).collection("facts").doc(factId);
         const factDoc = await factRef.get();
         if (!factDoc.exists) {
             return {
                 success: false,
-                message: 'Fact not found',
+                message: "Fact not found",
             };
         }
         await factRef.update({
@@ -133,14 +133,14 @@ async function softDeleteFact(userId, factId) {
         functions.logger.debug(`Soft-deleted fact ${factId} for user ${userId}`);
         return {
             success: true,
-            message: 'Memory deleted successfully',
+            message: "Memory deleted successfully",
         };
     }
     catch (error) {
-        functions.logger.error(`Error soft-deleting fact:`, error);
+        functions.logger.error("Error soft-deleting fact:", error);
         return {
             success: false,
-            message: 'Error deleting memory',
+            message: "Error deleting memory",
         };
     }
 }
