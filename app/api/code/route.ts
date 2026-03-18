@@ -3,6 +3,7 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Part } from "@google/generative-ai";
 import { requireEnv } from '@/lib/env';
+import { tagMessagesForStorage, tagLLMMessage, extractWMRTMetadata } from '@/lib/world-model/trustTag';
 import {
   getRAGMemoryContext,
   captureMemory,
@@ -409,17 +410,21 @@ export async function POST(req: Request) {
       { role: 'assistant', content: responseText }
     ]);
 
-    // Format messages for memory capture
-    const formattedMessages = (messages || []).map((msg: { role: string; text: string }) => ({
+    // ── RFC-001 WMRT: Tag all messages with trust tier before storage ──
+    // Raw LLM output is always UNVERIFIED at write time.
+    // Only DeltaEngine can promote to CONFIRMED/SUPPORTED after scoring.
+    const rawHistory = (messages || []).map((msg: { role: string; text: string }) => ({
       role: (msg.role === 'bot' ? 'assistant' : 'user') as "user" | "assistant" | "system",
-      content: msg.text
+      content: msg.text,
     }));
-
-    // Add current interaction
-    formattedMessages.push(
-      { role: 'user', content: userQuery },
-      { role: 'assistant', content: responseText }
+    const taggedHistory = tagMessagesForStorage(rawHistory, modelConfig.modelId);
+    // Append the current turn — assistant response tagged as UNVERIFIED
+    taggedHistory.push(
+      { role: 'user', content: userQuery, trust_tier: 'UNVERIFIED' as const, tagged_at: new Date().toISOString() },
+      tagLLMMessage(responseText, modelConfig.modelId),
     );
+    const wmrtMeta = extractWMRTMetadata(taggedHistory, modelConfig.modelId);
+    // ──────────────────────────────────────────────────────────────────
 
     // Send to memory capture (async, fire-and-forget)
     captureMemory(
@@ -427,7 +432,7 @@ export async function POST(req: Request) {
       'code',
       userQuery.substring(0, 50) || 'Code Assistance',
       summary,
-      formattedMessages,
+      taggedHistory,
       tokensUsed,
       tags,
       {
@@ -436,9 +441,10 @@ export async function POST(req: Request) {
         responseLength: responseText.length,
         interactionStyle: userContext.interactionStyle,
         hasFileAttachment: !!fileData,
-        fileName: fileData?.name
+        fileName: fileData?.name,
+        ...wmrtMeta,
       }
-    ).catch(err => console.error('Memory capture failed:', err));
+    ).catch(err => console.error('[WMRT] Memory capture failed:', err));
 
     // [New] Code RAG Indexing (Explicit Save)
     const { saveToMemory } = body;

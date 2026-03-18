@@ -18,8 +18,11 @@ import { logger } from "@/lib/logger";
  */
 
 const NOUS_API_KEY = process.env.NOUSE_API_KEY;
-const NOUS_BASE_URL =
-  process.env.HERMES_BASE_URL || "https://inference-api.nousresearch.com/v1";
+
+// ── Security: base URL is hardcoded — never env-overridable (CVE-2025-59536) ──
+// Allowing an env override would let an attacker exfiltrate NOUS_API_KEY by
+// pointing HERMES_BASE_URL at a controlled server. Model ID is safe to configure.
+const NOUS_BASE_URL = "https://inference-api.nousresearch.com/v1";
 
 const NOUS_MODEL = process.env.HERMES_MODEL_ID || "Hermes-4.3-36B";
 

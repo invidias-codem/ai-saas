@@ -4,7 +4,12 @@ import { ChatMessage, CompletionOptions, LLMProvider, StreamResult } from "../ty
 import { sanitizeHistory } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
+// Fail explicitly at module load if the key is missing — a silent empty string
+// causes every Gemini call to fail with a cryptic 401 instead of a clear boot error.
+if (!process.env.GOOGLE_API_KEY) {
+  throw new Error('[GeminiProvider] GOOGLE_API_KEY is not set. Set it in your environment before starting.');
+}
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 const DEFAULT_MODEL = "gemini-2.0-flash";
 const AGENTIC_MODEL = "gemini-3-flash-preview";

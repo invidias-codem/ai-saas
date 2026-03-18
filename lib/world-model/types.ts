@@ -7,6 +7,45 @@
  */
 
 // ─────────────────────────────────────────────
+// RFC-001: World Model Root of Trust (WMRT)
+// Trust Tier — assigned at write time, upgraded only by DeltaEngine
+// ─────────────────────────────────────────────
+
+/**
+ * Trust tier for any content stored in or flowing through the UCOL memory layer.
+ *
+ * AXIOM      — Cryptographically anchored, KMS-signed. LLM layer is physically
+ *              read-only. Math facts, system-ledger entries. Cannot be downgraded.
+ * CONFIRMED  — DeltaEngine verified against ≥1 high-confidence graph edge.
+ * SUPPORTED  — Consistent with graph context; no direct confirmation.
+ * UNVERIFIED — Raw LLM output, user assertion, or external feed not yet scored.
+ *              This is the default for ALL new content entering the system.
+ *
+ * Promotion path: UNVERIFIED → SUPPORTED → CONFIRMED (DeltaEngine only).
+ * Demotion path:  Any tier → UNVERIFIED if contradicting evidence arrives.
+ * AXIOM is immutable — never demoted, never written by the LLM layer.
+ */
+export type TrustTier = 'AXIOM' | 'CONFIRMED' | 'SUPPORTED' | 'UNVERIFIED';
+
+/**
+ * A conversation message annotated with WMRT provenance.
+ * Use this instead of bare { role, content } whenever storing LLM output
+ * into memory, audit logs, or context windows that will be replayed.
+ */
+export interface TrustTaggedMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  /** WMRT trust tier. LLM-generated content must always start as UNVERIFIED. */
+  trust_tier: TrustTier;
+  /** ISO timestamp of when this message was tagged. */
+  tagged_at: string;
+  /** The model that produced this content (undefined for user/system messages). */
+  source_model?: string;
+  /** delta_score from DeltaEngine if this message has been scored (0.0 = perfect, 1.0 = fabricated). */
+  delta_score?: number;
+}
+
+// ─────────────────────────────────────────────
 // Relationship Types (Causal Graph)
 // ─────────────────────────────────────────────
 

@@ -24,7 +24,13 @@ export function parseReferralParams(searchParams: URLSearchParams) {
  */
 export async function hashIP(ip: string): Promise<string> {
   const encoder = new TextEncoder();
-  const data = encoder.encode(ip + (process.env.REFERRAL_IP_SALT || 'tg_salt'));
+  // Never fall back to a known string — a known salt makes hashed IPs reversible
+  // via rainbow table. Fail explicitly so the misconfiguration is visible on boot.
+  const salt = process.env.REFERRAL_IP_SALT;
+  if (!salt) {
+    throw new Error('[hashIP] REFERRAL_IP_SALT is not set. Set a random secret in your environment.');
+  }
+  const data = encoder.encode(ip + salt);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { waitUntil } from "@vercel/functions";
 import { budgetKillSwitch } from "@/lib/budget/redisKillSwitch";
+import { tagMessagesForStorage, tagLLMMessage, extractWMRTMetadata } from "@/lib/world-model/trustTag";
 import { classifyQuery } from '@/lib/ucol/agentRouter';
 import { scoreContextForRouting } from '@/lib/memory/confidenceScoring';
 
@@ -610,17 +611,28 @@ export async function generateConversationReply(
               { role: 'assistant', content: fullText },
             ]);
 
-            const formattedMessages = messages.map((msg) => ({
+            // ── RFC-001 WMRT: Tag all messages with trust tier before storage ──
+            // Raw LLM output is always UNVERIFIED at write time.
+            // Only DeltaEngine can promote to CONFIRMED/SUPPORTED after scoring.
+            const rawMessages = messages.map((msg) => ({
               role: (msg.role === 'bot' ? 'assistant' : 'user') as 'user' | 'assistant' | 'system',
               content: msg.text,
             }));
+            const taggedHistory = tagMessagesForStorage(rawMessages, actualModelId);
+            // Append the current turn — assistant response tagged as UNVERIFIED
+            taggedHistory.push(
+              { role: 'user', content: userQuery, trust_tier: 'UNVERIFIED', tagged_at: new Date().toISOString() },
+              tagLLMMessage(fullText, actualModelId),
+            );
+            const wmrtMeta = extractWMRTMetadata(taggedHistory, actualModelId);
+            // ──────────────────────────────────────────────────────────────────
 
             await captureMemory(
               userId,
               'conversation',
               userQuery.substring(0, 50) || 'Conversation',
               summary,
-              formattedMessages,
+              taggedHistory,
               tokensUsed,
               tags,
               {
@@ -629,6 +641,7 @@ export async function generateConversationReply(
                 responseLength: fullText.length,
                 interactionStyle: userContext.interactionStyle,
                 agentMode,
+                ...wmrtMeta,
               }
             );
 
