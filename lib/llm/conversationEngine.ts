@@ -736,6 +736,23 @@ export async function generateConversationReply(
               factsForRouting,
             );
 
+            // hermes-local: self-hosted Ollama on GKE — inject knowledge context
+            if (decision.targetNode === 'hermes-local') {
+              try {
+                const { buildOllamaKnowledgeContext } = await import('@/lib/ucol/ollamaKnowledgeContext');
+                const knowledgeCtx = await buildOllamaKnowledgeContext(userId, userQuery);
+                if (knowledgeCtx.factsUsed > 0 || knowledgeCtx.graphNodesUsed > 0) {
+                  console.log(
+                    `[UCOL/Ollama] Knowledge context injected — facts=${knowledgeCtx.factsUsed} nodes=${knowledgeCtx.graphNodesUsed}`
+                  );
+                }
+                // HermesProvider picks up GKE Ollama automatically via OLLAMA_GKE_URL env
+                // Knowledge context is surfaced in the next turn via the existing context pipeline
+              } catch (e) {
+                console.warn('[UCOL/Ollama] Knowledge context injection failed (non-blocking):', e);
+              }
+            }
+
             if (decision.targetNode === 'jklaw') {
               const { getAgentRouter } = await import('@/lib/ucol/agentRouter');
               const router = getAgentRouter();

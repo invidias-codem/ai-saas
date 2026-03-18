@@ -2,38 +2,32 @@ import { LLMProvider, ChatMessage, CompletionOptions, StreamResult } from "../ty
 import { logger } from "@/lib/logger";
 
 /**
- * Hermes Provider — Nous Research Inference API
+ * Hermes Provider — Self-hosted Ollama (GKE) + Nous Research Inference API
  *
- * Docs: https://portal.nousresearch.com/api-docs
- * Base: https://inference-api.nousresearch.com/v1
- * Auth: Bearer token (NOUSE_API_KEY)
+ * Routing priority (UCOL T-027):
+ *   1. GKE Ollama (self-hosted Hermes 3 8B) — primary, zero API cost
+ *   2. Nous AI Cloud (Hermes-4.3-36B)        — fallback when GKE unavailable
+ *   3. Gemini Flash-Lite                       — always-available last resort
+ *
+ * GKE Ollama endpoint: set OLLAMA_GKE_URL env var to the internal K8s service
+ *   e.g. http://ollama.ollama.svc.cluster.local:11434 (in-cluster)
+ *        or https://ollama.gen1e.xyz (external via ingress)
+ *
+ * Nous AI docs: https://portal.nousresearch.com/api-docs
  * Rate: 100 req/min, 80k tokens/min
- *
- * Available models:
- *   Hermes-4.3-36B  — fastest, 128k context (default for Fast mode)
- *   Hermes-4-70B    — balanced, 128k context
- *   Hermes-4-405B   — most capable, 128k context
- *
- * Reasoning (Hermes 4):
- *   - With reasoning system prompt + NO prefill → reasoning goes to `reasoning_content` field
- *   - With reasoning system prompt + prefill `<think>` → reasoning in `content` between tags
- *   - Fast mode: reasoning OFF (direct answers, low latency)
- *   - Set options.thinking = true to enable reasoning for heavier queries
- *
- * Fallback chain: Nous API → Ollama local → Gemini Flash-Lite
  */
 
 const NOUS_API_KEY = process.env.NOUSE_API_KEY;
 const NOUS_BASE_URL =
   process.env.HERMES_BASE_URL || "https://inference-api.nousresearch.com/v1";
 
-// Hermes-4.3-36B: fastest model, 128k context — ideal for Fast toggle
-// Override via HERMES_MODEL_ID env var for heavier model
-const NOUS_MODEL =
-  process.env.HERMES_MODEL_ID || "Hermes-4.3-36B";
+const NOUS_MODEL = process.env.HERMES_MODEL_ID || "Hermes-4.3-36B";
 
+// GKE Ollama (primary) — internal K8s service or external ingress URL
+const OLLAMA_GKE_URL = process.env.OLLAMA_GKE_URL || "";
+// Local Ollama (dev) — fallback for local development
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const OLLAMA_MODEL = "hermes3";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "hermes3";
 const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
 
 // Reasoning system prompt from Nous docs
@@ -72,26 +66,39 @@ export class HermesProvider implements LLMProvider {
       });
     }
 
-    // 1. Nous AI Cloud (primary)
+    // 1. GKE Ollama (self-hosted Hermes 3 — zero API cost, primary for UCOL Fast tier)
+    if (OLLAMA_GKE_URL) {
+      try {
+        const gkeUp = await this.pingOllamaEndpoint(OLLAMA_GKE_URL);
+        if (gkeUp) {
+          logger.info("[HermesProvider] Routing to GKE Ollama (self-hosted)");
+          return await this.streamFromOllamaEndpoint(OLLAMA_GKE_URL, formattedMessages, options);
+        }
+      } catch (err) {
+        logger.warn("[HermesProvider] GKE Ollama unavailable, falling back to Nous AI", err);
+      }
+    }
+
+    // 2. Nous AI Cloud (API fallback when GKE unavailable)
     if (NOUS_API_KEY) {
       try {
         return await this.streamFromNousAI(formattedMessages, options, useThinking);
       } catch (err) {
-        logger.warn("[HermesProvider] Nous AI request failed, trying Ollama", err);
+        logger.warn("[HermesProvider] Nous AI request failed, trying local Ollama", err);
       }
     }
 
-    // 2. Ollama local (dev fallback)
+    // 3. Local Ollama (dev fallback)
     try {
-      const ollamaUp = await this.pingOllama();
+      const ollamaUp = await this.pingOllamaEndpoint(OLLAMA_BASE_URL);
       if (ollamaUp) {
-        return await this.streamFromOllama(formattedMessages, options);
+        return await this.streamFromOllamaEndpoint(OLLAMA_BASE_URL, formattedMessages, options);
       }
     } catch (err) {
-      logger.warn("[HermesProvider] Ollama unavailable, falling back to Gemini Flash-Lite", err);
+      logger.warn("[HermesProvider] Local Ollama unavailable, falling back to Gemini Flash-Lite", err);
     }
 
-    // 3. Gemini Flash-Lite (always-available fallback)
+    // 4. Gemini Flash-Lite (always-available last resort)
     return await this.streamFromGeminiFallback(formattedMessages, systemInstruction, options);
   }
 
@@ -176,12 +183,12 @@ export class HermesProvider implements LLMProvider {
     };
   }
 
-  // ─── Ollama Local ─────────────────────────────────────────────────────────
+  // ─── Ollama (GKE or local) ────────────────────────────────────────────────
 
-  private async pingOllama(): Promise<boolean> {
+  private async pingOllamaEndpoint(baseUrl: string): Promise<boolean> {
     try {
-      const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
-        signal: AbortSignal.timeout(1500),
+      const res = await fetch(`${baseUrl}/api/tags`, {
+        signal: AbortSignal.timeout(2000),
       });
       return res.ok;
     } catch {
@@ -189,11 +196,13 @@ export class HermesProvider implements LLMProvider {
     }
   }
 
-  private async streamFromOllama(
+  private async streamFromOllamaEndpoint(
+    baseUrl: string,
     messages: { role: string; content: string }[],
     options: CompletionOptions
   ): Promise<StreamResult> {
-    const response = await fetch(`${OLLAMA_BASE_URL}/v1/chat/completions`, {
+    const isGke = baseUrl === OLLAMA_GKE_URL && !!OLLAMA_GKE_URL;
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -248,7 +257,8 @@ export class HermesProvider implements LLMProvider {
       },
     });
 
-    return { stream, debug: { model: `ollama/${OLLAMA_MODEL}` } };
+    const source = isGke ? `ollama-gke/${OLLAMA_MODEL}` : `ollama-local/${OLLAMA_MODEL}`;
+    return { stream, debug: { model: source } };
   }
 
   // ─── Gemini Flash-Lite Fallback ───────────────────────────────────────────

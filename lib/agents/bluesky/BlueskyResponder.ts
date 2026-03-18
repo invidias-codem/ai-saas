@@ -5,21 +5,33 @@
  *   1. Build context (mention text + thread parent if available)
  *   2. Route through AgentRouter (UCOL) to classify query
  *   3. Extract facts via KnowledgeExtractor → push to graph
- *   4. Generate a response via Gemini Flash (Tech Genie persona)
+ *   4. Generate a response via GKE Ollama/Hermes3 (UCOL T-027)
+ *      — grounded via knowledge graph retrieval before generation
+ *      — fallback chain: GKE Ollama → Nous API → Gemini Flash
  *   5. Post the reply to Bluesky with proper reply ref
  *   6. Log the interaction to Supabase (with rate-limit check)
+ *
+ * T-027 change: GKE Ollama (self-hosted Hermes3) is now the primary inference
+ * node for Bluesky content. Knowledge graph context is injected before
+ * generation to prevent hallucination of platform metrics and user stats.
  */
 
 import { BskyAgent, RichText } from '@atproto/api';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { classifyQuery } from '@/lib/ucol/agentRouter';
+import { buildOllamaKnowledgeContext } from '@/lib/ucol/ollamaKnowledgeContext';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor';
 import type { BlueskyMention, EngagementResult } from './types';
 
-// ─── Hermes (Nous Research) Config ───────────────────────────────────────────
+// ─── Inference Config ─────────────────────────────────────────────────────────
 
+// GKE Ollama (primary) — self-hosted Hermes3, zero API cost
+const OLLAMA_GKE_URL = process.env.OLLAMA_GKE_URL || '';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'hermes3';
+
+// Nous Research (secondary fallback)
 const NOUS_API_KEY = process.env.NOUSE_API_KEY;
 const NOUS_BASE_URL =
   process.env.HERMES_BASE_URL || 'https://inference-api.nousresearch.com/v1';
@@ -159,34 +171,71 @@ export class BlueskyResponder {
    * 128k context, and is purpose-built for instruction following.
    * Gemini is the always-available fallback if the Nous key is unavailable.
    */
-  private async generateResponse(context: string): Promise<string> {
+  private async generateResponse(context: string, userId?: string): Promise<string> {
     const systemPrompt = await getTechGenieSystemPrompt();
 
-    // ── 1. Try Hermes (Nous Research) ──────────────────────────────────────
-    if (NOUS_API_KEY) {
+    // ── 0. Inject knowledge graph context (T-027) ───────────────────────────
+    // Ground the generation in Tech Genie's memory before any model call.
+    // This is the primary fix for hallucinated platform metrics (T-013).
+    let enrichedSystem = systemPrompt;
+    if (userId) {
       try {
-        const raw = await this.generateWithHermes(context, systemPrompt);
-        return this.enforceCharLimit(raw);
+        const knowledgeCtx = await buildOllamaKnowledgeContext(userId, context);
+        if (knowledgeCtx.systemFragment) {
+          enrichedSystem = `${systemPrompt}\n\n${knowledgeCtx.systemFragment}`;
+          console.log(
+            `[BlueskyResponder] Knowledge context injected — facts=${knowledgeCtx.factsUsed} nodes=${knowledgeCtx.graphNodesUsed}`
+          );
+        }
       } catch (err) {
-        console.warn('[BlueskyResponder] Hermes failed, falling back to Gemini:', err);
+        console.warn('[BlueskyResponder] Knowledge context injection failed (non-blocking):', err);
       }
-    } else {
-      console.warn('[BlueskyResponder] NOUSE_API_KEY not set — skipping Hermes, using Gemini');
     }
 
-    // ── 2. Fallback: Gemini Flash ───────────────────────────────────────────
-    return this.generateWithGemini(context, systemPrompt);
+    // ── 1. GKE Ollama — self-hosted Hermes3 (primary, UCOL T-027) ──────────
+    if (OLLAMA_GKE_URL) {
+      try {
+        const raw = await this.generateWithOllamaEndpoint(OLLAMA_GKE_URL, context, enrichedSystem);
+        console.log('[BlueskyResponder] Generated via GKE Ollama (self-hosted)');
+        return this.enforceCharLimit(raw);
+      } catch (err) {
+        console.warn('[BlueskyResponder] GKE Ollama failed, falling back to Nous API:', err);
+      }
+    }
+
+    // ── 2. Nous Research (API fallback) ────────────────────────────────────
+    if (NOUS_API_KEY) {
+      try {
+        const raw = await this.generateWithOllamaEndpoint(NOUS_BASE_URL, context, enrichedSystem, {
+          apiKey: NOUS_API_KEY,
+          model: NOUS_MODEL,
+        });
+        return this.enforceCharLimit(raw);
+      } catch (err) {
+        console.warn('[BlueskyResponder] Nous API failed, falling back to Gemini:', err);
+      }
+    }
+
+    // ── 3. Fallback: Gemini Flash ───────────────────────────────────────────
+    return this.generateWithGemini(context, enrichedSystem);
   }
 
-  private async generateWithHermes(context: string, systemPrompt: string): Promise<string> {
-    const response = await fetch(`${NOUS_BASE_URL}/chat/completions`, {
+  /** Shared OpenAI-compatible chat completion (non-streaming) for Ollama + Nous */
+  private async generateWithOllamaEndpoint(
+    baseUrl: string,
+    context: string,
+    systemPrompt: string,
+    opts?: { apiKey?: string; model?: string }
+  ): Promise<string> {
+    const model = opts?.model ?? OLLAMA_MODEL;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (opts?.apiKey) headers['Authorization'] = `Bearer ${opts.apiKey}`;
+
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${NOUS_API_KEY}`,
-      },
+      headers,
       body: JSON.stringify({
-        model: NOUS_MODEL,
+        model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: context },
@@ -199,13 +248,13 @@ export class BlueskyResponder {
 
     if (!response.ok) {
       const errText = await response.text().catch(() => response.statusText);
-      throw new Error(`Nous API ${response.status}: ${errText}`);
+      throw new Error(`Ollama endpoint ${response.status}: ${errText}`);
     }
 
     const data = await response.json();
     const text = data?.choices?.[0]?.message?.content;
     if (typeof text !== 'string' || !text.trim()) {
-      throw new Error('Hermes returned empty content');
+      throw new Error('Endpoint returned empty content');
     }
     return text.trim();
   }

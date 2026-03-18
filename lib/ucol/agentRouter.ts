@@ -15,6 +15,7 @@
  * research, orchestration) are never overridden — they own their routing.
  *
  * Routing targets:
+ *   hermes-local    → self-hosted Ollama/Hermes3 on GKE (fast, zero API cost)
  *   gemini-flash    → fast answers, fact extraction, embeddings
  *   claude          → quality code generation, nuanced analysis
  *   deepseek        → deep reasoning, multi-step logic
@@ -89,12 +90,16 @@ const CONFIDENCE_TIER_TO_NODE: Record<ConfidenceModelTier, RoutingDecision['targ
 // NODE_COST_RANK only applies to LLM nodes — tools are bypassed by the
 // isToolNode() guard below and never go through confidence override logic.
 const LLM_NODE_COST_RANK: Partial<Record<string, number>> = {
+  'hermes-local':   0,  // self-hosted, zero API cost — cheapest tier
   'gemini-flash':   1,
   'deepseek':       2,
   'context-router': 2,
   'claude':         3,
   'jklaw':          3,
 };
+
+/** True when the self-hosted Ollama GKE node is configured and should be used */
+const OLLAMA_GKE_ENABLED = !!process.env.OLLAMA_GKE_URL;
 
 /** Returns true when a routing decision targets a CLI tool harness */
 export function isToolNode(targetNode: RoutingDecision['targetNode']): boolean {
@@ -108,7 +113,7 @@ export function getToolName(targetNode: RoutingDecision['targetNode']): string |
 
 export interface RoutingDecision {
     taskType: TaskType;
-    targetNode: 'gemini-flash' | 'claude' | 'deepseek' | 'jklaw' | 'context-router' | `tool:${string}`;
+    targetNode: 'hermes-local' | 'gemini-flash' | 'claude' | 'deepseek' | 'jklaw' | 'context-router' | `tool:${string}`;
     confidence: number;      // 0.0 – 1.0 — classifier confidence in task type
     reasoning: string;
     jklawWebhook?: boolean;  // if true, dispatch to JKlaw asynchronously
@@ -202,7 +207,7 @@ Respond with ONLY a JSON object:
 const ROUTING_TABLE: Record<TaskType, RoutingDecision['targetNode']> = {
     // ── LLM nodes ───────────────────────────────────────────────────────
     code_generation:   'context-router',
-    quick_answer:      'gemini-flash',
+    quick_answer:      OLLAMA_GKE_ENABLED ? 'hermes-local' : 'gemini-flash',
     quality_analysis:  'claude',
     deep_reasoning:    'deepseek',
     memory_extract:    'gemini-flash',
