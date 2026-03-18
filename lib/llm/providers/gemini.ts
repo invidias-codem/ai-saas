@@ -4,12 +4,19 @@ import { ChatMessage, CompletionOptions, LLMProvider, StreamResult } from "../ty
 import { sanitizeHistory } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
 
-// Fail explicitly at module load if the key is missing — a silent empty string
-// causes every Gemini call to fail with a cryptic 401 instead of a clear boot error.
-if (!process.env.GOOGLE_API_KEY) {
-  throw new Error('[GeminiProvider] GOOGLE_API_KEY is not set. Set it in your environment before starting.');
+// Lazy initialisation — validate at first use, not at module load.
+// Module-level throws break integration tests that import routes without setting env vars.
+// The key is validated inside getGenAI() before any network call is made.
+let _genAI: GoogleGenerativeAI | null = null;
+function getGenAI(): GoogleGenerativeAI {
+  if (!_genAI) {
+    if (!process.env.GOOGLE_API_KEY) {
+      throw new Error('[GeminiProvider] GOOGLE_API_KEY is not set. Set it in your environment before starting.');
+    }
+    _genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+  }
+  return _genAI;
 }
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 const DEFAULT_MODEL = "gemini-2.0-flash";
 const AGENTIC_MODEL = "gemini-3-flash-preview";
@@ -57,7 +64,7 @@ export class GeminiProvider implements LLMProvider {
             throw new Error("Gemini requires the last message to be from the user.");
         }
 
-        const model = genAI.getGenerativeModel({
+        const model = getGenAI().getGenerativeModel({
             model: modelId,
             systemInstruction: systemInstruction ? {
                 role: 'user',
