@@ -124,7 +124,6 @@ export class UCOLNode {
       port: 3001,
       operator: 'UCOL Node',
       sessionTtlSeconds: 3600,
-      identity: undefined as unknown as NodeIdentity,
       ...config,
     };
   }

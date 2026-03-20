@@ -172,7 +172,7 @@ export function auditSecurityBlock(
   reason: string,
   req?: Request
 ): void {
-  void audit(action, userId, { reason, blocked: true }, req);
+  audit(action, userId, { reason, blocked: true }, req).catch(err => console.error("[AuditLog] Failed to write block event:", err));
 }
 
 /** Log an agent action (dispatch, PR open, etc.) */
@@ -181,7 +181,7 @@ export function auditAgentAction(
   userId: string,
   agentMetadata: { targetNode?: string; taskType?: string; prUrl?: string; [key: string]: unknown }
 ): void {
-  void audit(action, userId, agentMetadata);
+  audit(action, userId, agentMetadata).catch(err => console.error("[AuditLog] Failed to write agent event:", err));
 }
 
 /** Log a memory operation */
@@ -190,7 +190,7 @@ export function auditMemoryOp(
   userId: string,
   memoryMetadata: { memoryId?: string; count?: number; type?: string }
 ): void {
-  void audit(action, userId, memoryMetadata);
+  audit(action, userId, memoryMetadata).catch(err => console.error("[AuditLog] Failed to write memory event:", err));
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

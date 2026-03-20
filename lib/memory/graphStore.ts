@@ -1,8 +1,9 @@
-
 import { supabase } from '../supabaseClient';
 import { generateEmbedding } from './embedding';
 
 export type NodeType = 'person' | 'project' | 'technology' | 'organization' | 'concept' | 'event' | 'location' | 'other';
+export type WMEventType = 'ASSERTED' | 'CONTRADICTED' | 'OBSOLETED' | 'MERGED';
+export type TrustTier = 'AXIOM' | 'CONFIRMED' | 'SUPPORTED' | 'UNVERIFIED';
 
 export interface GraphNode {
     id: string;
@@ -23,21 +24,56 @@ export interface GraphEdge {
 }
 
 /**
+ * Emits an immutable event to the World Model event log (wm_events).
+ * This is the Step 1 DDIA implementation for Event Sourcing.
+ */
+export async function emitWorldModelEvent(
+    entityId: string,
+    eventType: WMEventType,
+    payload: any,
+    sourceModel: string = 'system',
+    trustTier: TrustTier = 'UNVERIFIED',
+    contextVersionId?: string
+): Promise<boolean> {
+    try {
+        const { error } = await supabase.from('wm_events').insert({
+            entity_id: entityId,
+            event_type: eventType,
+            payload,
+            source_model: sourceModel,
+            trust_tier: trustTier,
+            context_version_id: contextVersionId || null
+        });
+
+        if (error) {
+            console.error('[WorldModel] Failed to emit event:', error);
+            return false;
+        }
+        return true;
+    } catch (err) {
+        console.error('[WorldModel] Exception emitting event:', err);
+        return false;
+    }
+}
+
+/**
  * Adds or updates a node in the knowledge graph.
- * If a node with the same name and type exists for the user, it returns the existing ID.
  */
 export async function addNode(
     userId: string,
     name: string,
     type: NodeType,
     description?: string,
-    metadata: any = {}
+    metadata: any = {},
+    sourceModel: string = 'system',
+    trustTier: TrustTier = 'UNVERIFIED'
 ): Promise<string | null> {
     try {
         // 1. Generate embedding for semantic search
         const embedding = await generateEmbedding(`${name}: ${description || ''}`);
 
-        // 2. Upsert node (requires UNIQUE constraint on user_id, name, type)
+        // 2. Legacy Projection Update (graph_nodes)
+        // TODO (T-032): Once wm_current_entities view supports vector search, remove this direct upsert.
         const { data, error } = await supabase
             .from('graph_nodes')
             .upsert({
@@ -54,10 +90,23 @@ export async function addNode(
             .select('id')
             .single();
 
-        if (error) {
-            console.error('Error adding graph node:', error);
-            throw error;
-        }
+        if (error) throw error;
+
+        // 3. Emit immutable event to the World Model Event Log
+        await emitWorldModelEvent(
+            data.id,
+            'ASSERTED',
+            {
+                entity_type: 'node',
+                user_id: userId,
+                name,
+                type,
+                description,
+                metadata
+            },
+            sourceModel,
+            trustTier
+        );
 
         return data.id;
     } catch (error) {
@@ -74,9 +123,12 @@ export async function addEdge(
     sourceId: string,
     targetId: string,
     relation: string,
-    weight: number = 1.0
+    weight: number = 1.0,
+    sourceModel: string = 'system',
+    trustTier: TrustTier = 'UNVERIFIED'
 ): Promise<string | null> {
     try {
+        // Legacy Projection Update
         const { data, error } = await supabase
             .from('graph_edges')
             .upsert({
@@ -91,10 +143,23 @@ export async function addEdge(
             .select('id')
             .single();
 
-        if (error) {
-            console.error('Error adding graph edge:', error);
-            throw error;
-        }
+        if (error) throw error;
+
+        // Emit immutable event
+        await emitWorldModelEvent(
+            data.id,
+            'ASSERTED',
+            {
+                entity_type: 'edge',
+                user_id: userId,
+                source_node_id: sourceId,
+                target_node_id: targetId,
+                relation,
+                weight
+            },
+            sourceModel,
+            trustTier
+        );
 
         return data.id;
     } catch (error) {
@@ -104,48 +169,129 @@ export async function addEdge(
 }
 
 /**
+ * Strengthens an existing edge or creates a new one.
+ * Deprecates direct UPDATE on nodes; emits an ASSERTED event with the new weight instead.
+ */
+export async function strengthenEdge(
+    userId: string,
+    sourceId: string,
+    targetId: string,
+    relation: string,
+    sourceModel: string = 'system',
+    trustTier: TrustTier = 'UNVERIFIED'
+): Promise<string | null> {
+    try {
+        const { data: existing, error: fetchError } = await supabase
+            .from('graph_edges')
+            .select('id, weight')
+            .eq('user_id', userId)
+            .eq('source_node_id', sourceId)
+            .eq('target_node_id', targetId)
+            .eq('relation', relation)
+            .single();
+
+        if (fetchError && fetchError.code !== 'PGRST116') {
+            console.error('[GraphStore] Error checking edge:', fetchError);
+        }
+
+        if (existing) {
+            const newWeight = Math.min(10.0, (existing.weight || 1.0) + 0.5);
+            
+            // 1. Emit immutable event reflecting the new state (Event Sourcing)
+            await emitWorldModelEvent(
+                existing.id,
+                'ASSERTED',
+                {
+                    entity_type: 'edge',
+                    user_id: userId,
+                    source_node_id: sourceId,
+                    target_node_id: targetId,
+                    relation,
+                    weight: newWeight
+                },
+                sourceModel,
+                trustTier
+            );
+
+            // 2. Legacy projection update (to keep current reads working)
+            const { error: updateError } = await supabase
+                .from('graph_edges')
+                .update({ weight: newWeight, updated_at: new Date().toISOString() })
+                .eq('id', existing.id);
+
+            if (updateError) {
+                console.error('[GraphStore] Error strengthening edge projection:', updateError);
+                return null;
+            }
+            return existing.id;
+        } else {
+            return addEdge(userId, sourceId, targetId, relation, 1.0, sourceModel, trustTier);
+        }
+    } catch (error) {
+        console.error('[GraphStore] Failed to strengthen edge:', error);
+        return null;
+    }
+}
+
+/**
+ * Invalidates a node or edge (Event Sourcing alternative to DELETE).
+ */
+export async function invalidateEntity(
+    entityId: string,
+    entityType: 'node' | 'edge',
+    sourceModel: string = 'system',
+    trustTier: TrustTier = 'UNVERIFIED'
+): Promise<boolean> {
+    // We emit an OBSOLETED event. The Materialized View (wm_current_entities) 
+    // will see this as the latest event and logically delete it from read queries.
+    const success = await emitWorldModelEvent(
+        entityId,
+        'OBSOLETED',
+        { entity_type: entityType, deleted: true },
+        sourceModel,
+        trustTier
+    );
+
+    // If we wanted to keep the legacy projection in sync, we could hard-delete from 
+    // graph_nodes or graph_edges here, but ideally we stop doing that.
+    // For now, we do hard-delete on legacy tables just so it's fully gone from legacy reads.
+    if (success) {
+        const table = entityType === 'node' ? 'graph_nodes' : 'graph_edges';
+        await supabase.from(table).delete().eq('id', entityId);
+    }
+
+    return success;
+}
+
+/**
  * Finds nodes related to a specific entity name using semantic search + edge traversal.
- * This is a two-step process:
- * 1. Find the central node by name/embedding.
- * 2. Find all connected nodes (1-hop).
+ * Note: Still uses legacy `match_nodes` and `graph_edges` until the Materialized View
+ * is fully mapped for embeddings.
  */
 export async function findRelatedEntities(
     userId: string,
     entityName: string
 ): Promise<{ centralNode: GraphNode | null; relatedNodes: any[] }> {
     try {
-        // 1. Find the central node
-        // diverse approach: exact match first, then semantic
         const embedding = await generateEmbedding(entityName);
 
-        // Call the RPC function we created
         const { data: similarNodes, error } = await supabase.rpc('match_nodes', {
             query_embedding: embedding,
-            match_threshold: 0.85, // High threshold for "identity" match
+            match_threshold: 0.85, 
             match_count: 1,
             p_user_id: userId
         });
 
         if (error) throw error;
-
-        if (!similarNodes || similarNodes.length === 0) {
-            return { centralNode: null, relatedNodes: [] };
-        }
+        if (!similarNodes || similarNodes.length === 0) return { centralNode: null, relatedNodes: [] };
 
         const centralNode = similarNodes[0];
 
-        // 2. Find connections (Edges) where this node is source or target
-        // We need to query graph_edges and join with graph_nodes
-        // Supabase JS client doesn't support deep joins easily without knowing foreign keys clearly, 
-        // but let's try standard relational query.
-
-        // Outgoing edges
         const { data: outgoing, error: outError } = await supabase
             .from('graph_edges')
             .select('relation, target_node_id, graph_nodes!graph_edges_target_node_id_fkey(name, type, description)')
             .eq('source_node_id', centralNode.id);
 
-        // Incoming edges
         const { data: incoming, error: inError } = await supabase
             .from('graph_edges')
             .select('relation, source_node_id, graph_nodes!graph_edges_source_node_id_fkey(name, type, description)')
@@ -162,30 +308,20 @@ export async function findRelatedEntities(
             })),
             ...(incoming || []).map((edge: any) => ({
                 relation: edge.relation,
-                direction: 'baskward', // passively related to
+                direction: 'baskward', 
                 node: edge.graph_nodes
             }))
         ];
 
-        return {
-            centralNode,
-            relatedNodes: interactions
-        };
-
+        return { centralNode, relatedNodes: interactions };
     } catch (error) {
         console.error('Error finding related entities:', error);
         return { centralNode: null, relatedNodes: [] };
     }
 }
 
-/**
- * Format graph context for the LLM prompt.
- */
 export function formatGraphContext(graphData: { centralNode: GraphNode | null; relatedNodes: any[] }): string {
-    if (!graphData.centralNode || graphData.relatedNodes.length === 0) {
-        return '';
-    }
-
+    if (!graphData.centralNode || graphData.relatedNodes.length === 0) return '';
     const { centralNode, relatedNodes } = graphData;
 
     let context = `\n## Knowledge Graph Context (Entity: ${centralNode.name})\n`;
@@ -193,7 +329,6 @@ export function formatGraphContext(graphData: { centralNode: GraphNode | null; r
     if (centralNode.description) context += `Description: ${centralNode.description}\n`;
 
     context += `\n**Relationships:**\n`;
-
     relatedNodes.forEach(rel => {
         if (rel.direction === 'forward') {
             context += `- [${centralNode.name}] --(${rel.relation})--> [${rel.node.name} (${rel.node.type})]\n`;
@@ -203,54 +338,4 @@ export function formatGraphContext(graphData: { centralNode: GraphNode | null; r
     });
 
     return context + '\n';
-}
-
-/**
- * Strengthens an existing edge or creates a new one.
- * If the edge exists, increments weight by 0.5 (capped at 10.0).
- * If not, creates it with weight 1.0.
- */
-export async function strengthenEdge(
-    userId: string,
-    sourceId: string,
-    targetId: string,
-    relation: string
-): Promise<string | null> {
-    try {
-        // Check if edge exists
-        const { data: existing, error: fetchError } = await supabase
-            .from('graph_edges')
-            .select('id, weight')
-            .eq('user_id', userId)
-            .eq('source_node_id', sourceId)
-            .eq('target_node_id', targetId)
-            .eq('relation', relation)
-            .single();
-
-        if (fetchError && fetchError.code !== 'PGRST116') {
-            // PGRST116 = no rows — that's fine, we'll create
-            console.error('[GraphStore] Error checking edge:', fetchError);
-        }
-
-        if (existing) {
-            // Strengthen: increment weight, cap at 10.0
-            const newWeight = Math.min(10.0, (existing.weight || 1.0) + 0.5);
-            const { error: updateError } = await supabase
-                .from('graph_edges')
-                .update({ weight: newWeight, updated_at: new Date().toISOString() })
-                .eq('id', existing.id);
-
-            if (updateError) {
-                console.error('[GraphStore] Error strengthening edge:', updateError);
-                return null;
-            }
-            return existing.id;
-        } else {
-            // Create new edge
-            return addEdge(userId, sourceId, targetId, relation, 1.0);
-        }
-    } catch (error) {
-        console.error('[GraphStore] Failed to strengthen edge:', error);
-        return null;
-    }
 }

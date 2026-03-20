@@ -83,9 +83,12 @@ export async function requireOwnership(
         throw new AuthorizationError('Resource not found or access denied');
     }
 
-    // Type assertion for dynamic column access - narrow through unknown
-    const record = data as unknown as Record<string, string>;
-    const userIdValue = record[userIdColumn];
+    if (typeof data !== 'object' || data === null || !(userIdColumn in data)) {
+        throw new AuthorizationError('Resource access error: missing ownership column');
+    }
+
+    // Safely narrow the type by property checking
+    const userIdValue = String((data as Record<string, unknown>)[userIdColumn]);
 
     if (userIdValue !== userId) {
         console.warn(`[AUTH] User ${userId} attempted to access ${tableName}/${resourceId} owned by ${userIdValue}`);

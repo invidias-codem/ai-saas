@@ -113,11 +113,10 @@ export class UCOLHandlers {
   // ── Routing handler ─────────────────────────────────────────────────────────
 
   private async route(params: Record<string, unknown>): Promise<unknown> {
-    const task = params as unknown as Task;
-    if (!task.query || !task.agent_id || !task.session_id) {
-      throw new UCOLError(-32602, 'Invalid params: query, agent_id, session_id required');
+    if (!isTask(params)) {
+      throw new UCOLError(-32602, 'Invalid params: query, agent_id, session_id required as strings');
     }
-    return this.node.route(task);
+    return this.node.route(params);
   }
 
   // ── Session handlers ────────────────────────────────────────────────────────
@@ -146,7 +145,10 @@ export class UCOLHandlers {
   // ── Mission handlers ────────────────────────────────────────────────────────
 
   private async missionCreate(params: Record<string, unknown>): Promise<unknown> {
-    return this.node.createMission(params as unknown as MissionSpec);
+    if (!isMissionSpec(params)) {
+      throw new UCOLError(-32602, 'Invalid params: goal (string), steps (array), agents (array), timeout_ms (number) required');
+    }
+    return this.node.createMission(params);
   }
 
   private async missionStatus(params: Record<string, unknown>): Promise<unknown> {
