@@ -275,7 +275,8 @@ export async function findRelatedEntities(
     try {
         const embedding = await generateEmbedding(entityName);
 
-        const { data: similarNodes, error } = await supabase.rpc('match_nodes', {
+        // 1. Semantic Match using the new Event Sourced view (via RPC)
+        const { data: similarNodes, error } = await supabase.rpc('match_wm_nodes', {
             query_embedding: embedding,
             match_threshold: 0.85, 
             match_count: 1,
@@ -287,33 +288,28 @@ export async function findRelatedEntities(
 
         const centralNode = similarNodes[0];
 
-        const { data: outgoing, error: outError } = await supabase
-            .from('graph_edges')
-            .select('relation, target_node_id, graph_nodes!graph_edges_target_node_id_fkey(name, type, description)')
-            .eq('source_node_id', centralNode.id);
+        // 2. Traverse 1-hop using the new Event Sourced view (via RPC)
+        const { data: interactions, error: traverseError } = await supabase.rpc('get_wm_related_entities', {
+            p_central_node_id: centralNode.id
+        });
 
-        const { data: incoming, error: inError } = await supabase
-            .from('graph_edges')
-            .select('relation, source_node_id, graph_nodes!graph_edges_source_node_id_fkey(name, type, description)')
-            .eq('target_node_id', centralNode.id);
+        if (traverseError) {
+            console.error('Error fetching event sourced edges:', traverseError);
+            return { centralNode, relatedNodes: [] };
+        }
 
-        if (outError) console.error('Error fetching outgoing edges:', outError);
-        if (inError) console.error('Error fetching incoming edges:', inError);
+        // Format the RPC output to match the legacy format expected by formatGraphContext
+        const formattedRelatedNodes = (interactions || []).map((rel: any) => ({
+            relation: rel.relation,
+            direction: rel.direction,
+            node: {
+                name: rel.node_name,
+                type: rel.node_type,
+                description: rel.node_description
+            }
+        }));
 
-        const interactions = [
-            ...(outgoing || []).map((edge: any) => ({
-                relation: edge.relation,
-                direction: 'forward',
-                node: edge.graph_nodes
-            })),
-            ...(incoming || []).map((edge: any) => ({
-                relation: edge.relation,
-                direction: 'baskward', 
-                node: edge.graph_nodes
-            }))
-        ];
-
-        return { centralNode, relatedNodes: interactions };
+        return { centralNode, relatedNodes: formattedRelatedNodes };
     } catch (error) {
         console.error('Error finding related entities:', error);
         return { centralNode: null, relatedNodes: [] };
