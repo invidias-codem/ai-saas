@@ -276,7 +276,7 @@ async function scoreFactsWithGemini(facts, context) {
     if (facts.length === 0)
         return facts;
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
         const factsToScore = facts.map((f, i) => `${i + 1}. [${f.type}] "${f.content}"`).join("\n");
         const prompt = `Given the conversation context below, score the confidence level (0.0-1.0) for each extracted fact.
 Score based on:

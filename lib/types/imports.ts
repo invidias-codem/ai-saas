@@ -7,7 +7,7 @@ export type Role = 'user' | 'assistant' | 'system' | 'tool';
 export interface UDIFMetadata {
   udifVersion?: string;          // e.g. "2.0" when spec ships
   contextId?: string;            // Unique ID for this context unit in UCOL graph
-  originModel?: string;          // e.g. "gpt-4o", "claude-3-5-sonnet", "gemini-2.0-flash"
+  originModel?: string;          // e.g. "gpt-4o", "claude-3-5-sonnet", "gemini-3.1-flash-lite-preview"
   routingTier?: 'fast' | 'balanced' | 'deep'; // UCOL routing tier hint
   sovereigntyMode?: 'user-owned' | 'platform' | 'shared'; // Data sovereignty flag
   exportedForPortability?: boolean;

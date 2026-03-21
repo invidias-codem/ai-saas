@@ -10,7 +10,7 @@ import { limitApiEndpoint } from '@/lib/security/rateLimit';
 function getModel() {
     const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
     return genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
+        model: "gemini-3.1-flash-lite-preview",
         safetySettings: [
             { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },

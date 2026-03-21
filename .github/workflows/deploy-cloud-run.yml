@@ -48,7 +48,7 @@ jobs:
             --memory=1024Mi \
             --port=8080 \
             --clear-base-image \
-            --set-env-vars "GEMINI_MODEL=gemini-2.0-flash,GOOGLE_API_KEY=${{ secrets.GEMINI_API_KEY }},BLUESKY_HANDLE=${{ secrets.BLUESKY_HANDLE }},BLUESKY_PASSWORD=${{ secrets.BLUESKY_PASSWORD }},VECTOR_API_KEY=${{ secrets.VECTOR_API_KEY }}" \
+            --set-env-vars "GEMINI_MODEL=gemini-3.1-flash-lite-preview,GOOGLE_API_KEY=${{ secrets.GEMINI_API_KEY }},BLUESKY_HANDLE=${{ secrets.BLUESKY_HANDLE }},BLUESKY_PASSWORD=${{ secrets.BLUESKY_PASSWORD }},VECTOR_API_KEY=${{ secrets.VECTOR_API_KEY }}" \
             --quiet
         env:
           CLOUDSDK_CORE_DISABLE_PROMPTS: 1

@@ -117,7 +117,7 @@ Return ONLY a valid JSON array of facts:
       [{ role: 'user', text: conversationText }],
       systemPrompt,
       {
-        model: "gemini-2.0-flash",
+        model: "gemini-3.1-flash-lite-preview",
         temperature: 0.1,
         maxTokens: 2048
       }
@@ -127,7 +127,7 @@ Return ONLY a valid JSON array of facts:
 
     return {
       provider: 'gemini',
-      model: 'gemini-2.0-flash',
+      model: 'gemini-3.1-flash-lite-preview',
       result: response,
       reasoning: 'Selected Gemini Flash for fast, structured fact extraction'
     };
@@ -195,7 +195,7 @@ Provide a concise, well-reasoned summary of the relevant context.`;
         [{ role: 'user', text: userMessage }],
         systemPrompt,
         {
-          model: "gemini-2.0-flash",
+          model: "gemini-3.1-flash-lite-preview",
           temperature: 0.5,
           maxTokens: 512
         }
@@ -205,7 +205,7 @@ Provide a concise, well-reasoned summary of the relevant context.`;
 
       return {
         provider: 'gemini',
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3.1-flash-lite-preview',
         result: response,
         reasoning: 'Selected Gemini Flash for fast context synthesis'
       };
@@ -288,7 +288,7 @@ Return ONLY a valid JSON object with this structure:
         [{ role: 'user', text: `Analyze these conversations to build a user profile:\n\n${conversationContext}` }],
         systemPrompt,
         {
-          model: "gemini-2.0-flash",
+          model: "gemini-3.1-flash-lite-preview",
           temperature: 0.3,
           maxTokens: 1024
         }
@@ -298,7 +298,7 @@ Return ONLY a valid JSON object with this structure:
 
       return {
         provider: 'gemini',
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3.1-flash-lite-preview',
         result: response,
         reasoning: 'Selected Gemini Flash for fast structured profile generation'
       };

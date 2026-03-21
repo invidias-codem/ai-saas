@@ -72,7 +72,7 @@ export type ConversationEngineOptions = {
    */
   disableExternalContext?: boolean;
 
-  /** Override model id (defaults to gemini-2.0-flash). */
+  /** Override model id (defaults to gemini-3.1-flash-lite-preview). */
   model?: string;
 
   /** Operating mode for the agent */

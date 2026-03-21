@@ -91,8 +91,8 @@ def genie_worker(request):
         
         ai_response_text = ""
         try:
-            # Use gemini-2.0-flash (Flash 2.0 is faster and smarter for this use case)
-            model_id = "gemini-2.0-flash"
+            # Use gemini-3.1-flash-lite-preview (Flash 2.0 is faster and smarter for this use case)
+            model_id = "gemini-3.1-flash-lite-preview"
             logging.info(f"🧠 Calling Gemini ({model_id})...")
             
             model = genai.GenerativeModel(model_id)

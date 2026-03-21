@@ -28,8 +28,8 @@ const MODEL_PRICING: Record<
   { inputPer1k: number; outputPer1k: number }
 > = {
   // Gemini Flash family
-  "gemini-2.0-flash":            { inputPer1k: 0.000075, outputPer1k: 0.000300 },
-  "gemini-2.0-flash-lite":       { inputPer1k: 0.000038, outputPer1k: 0.000150 },
+  "gemini-3.1-flash-lite-preview":            { inputPer1k: 0.000075, outputPer1k: 0.000300 },
+  "gemini-3.1-flash-lite-preview":       { inputPer1k: 0.000038, outputPer1k: 0.000150 },
   "gemini-1.5-flash":            { inputPer1k: 0.000075, outputPer1k: 0.000300 },
   // Gemini Pro family
   "gemini-1.5-pro":              { inputPer1k: 0.001250, outputPer1k: 0.005000 },

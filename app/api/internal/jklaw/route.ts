@@ -191,15 +191,37 @@ export async function POST(req: Request) {
             const memType = type === 'preference' ? 'preference' : 'fact';
             await storeMemory(JKLAW_USER_ID, fact, memType as any, { source: 'jklaw', tags });
 
+            // Using our new DDIA Event Sourcing logic to assert facts explicitly:
+            const { emitWorldModelEvent } = await import('@/lib/memory/graphStore');
+            const factEntityId = crypto.randomUUID();
+            
+            await emitWorldModelEvent(
+                factEntityId,
+                'ASSERTED',
+                {
+                    entity_type: 'fact',
+                    user_id: JKLAW_USER_ID,
+                    content: fact,
+                    type: memType,
+                    tags: tags
+                },
+                'jklaw-api',   // source_model
+                'AXIOM'        // trust_tier: JKlaw assertions are trusted axioms
+            );
+
+            // Backwards compatibility for the node projection
             if (tags.length > 0) {
                 for (const tag of tags.slice(0, 3)) {
-                    await addNode(JKLAW_USER_ID, tag, 'concept', `JKlaw: ${fact.substring(0, 80)}`);
+                    await addNode(JKLAW_USER_ID, tag, 'concept', `JKlaw: ${fact.substring(0, 80)}`, {}, 'jklaw-api', 'AXIOM');
                 }
             }
 
             return NextResponse.json({
                 ok: true,
                 stored: fact.substring(0, 100),
+                entity_id: factEntityId,
+                world_model_status: 'ASSERTED',
+                trust_tier: 'AXIOM',
                 timestamp: new Date().toISOString(),
             });
         } catch (err: any) {

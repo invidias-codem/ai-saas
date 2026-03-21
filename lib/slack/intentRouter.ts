@@ -61,7 +61,7 @@ Examples:
  */
 export async function classifyIntent(userMessage: string): Promise<IntentClassification> {
     try {
-        const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.0-flash" });
+        const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-3.1-flash-lite-preview" });
 
         const result = await model.generateContent([
             { text: INTENT_CLASSIFIER_PROMPT },
