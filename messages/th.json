@@ -90,5 +90,45 @@
             "stat3Value": "0",
             "stat3Label": "Times you start from zero"
         }
+    },
+    "Sidebar": {
+        "dashboard": "แผงควบคุม",
+        "conversation": "การสนทนา",
+        "imageGeneration": "การสร้างภาพ",
+        "videoGeneration": "การสร้างวิดีโอ",
+        "musicGeneration": "การสร้างเพลง",
+        "codeGeneration": "การสร้างโค้ด",
+        "codeBuilder": "ตัวสร้างโค้ด ⚡",
+        "settings": "การตั้งค่า"
+    },
+    "Dashboard": {
+        "exploreTitle": "สำรวจพลังของ AI",
+        "exploreSubtitle": "สนทนากับ AI ที่ฉลาดที่สุด - สัมผัสพลังของ AI",
+        "tools": {
+            "conversation": {
+                "label": "การสนทนา",
+                "description": "แชทกับ AI"
+            },
+            "image": {
+                "label": "การสร้างภาพ",
+                "description": "สร้างภาพจากข้อความ"
+            },
+            "video": {
+                "label": "การสร้างวิดีโอ",
+                "description": "สร้างวิดีโอจากข้อความ"
+            },
+            "music": {
+                "label": "การสร้างเพลง",
+                "description": "แต่งเพลงจากข้อความ"
+            },
+            "code": {
+                "label": "การสร้างโค้ด",
+                "description": "เขียนโค้ดด้วย AI"
+            },
+            "codeBuilder": {
+                "label": "ตัวสร้างโค้ด ⚡",
+                "description": "วางแผน เขียนโค้ด และทบทวนด้วย AI"
+            }
+        }
     }
 }

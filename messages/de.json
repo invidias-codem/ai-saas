@@ -98,5 +98,45 @@
         "footer": {
             "rights": "© {year} Genie AI. Alle Rechte vorbehalten."
         }
+    },
+    "Sidebar": {
+        "dashboard": "Dashboard",
+        "conversation": "Unterhaltung",
+        "imageGeneration": "Bildgenerierung",
+        "videoGeneration": "Videogenerierung",
+        "musicGeneration": "Musikgenerierung",
+        "codeGeneration": "Codegenerierung",
+        "codeBuilder": "Code Builder ⚡",
+        "settings": "Einstellungen"
+    },
+    "Dashboard": {
+        "exploreTitle": "Entdecke die Kraft der KI",
+        "exploreSubtitle": "Chatte mit der intelligentesten KI - Erlebe die Kraft der KI",
+        "tools": {
+            "conversation": {
+                "label": "Unterhaltung",
+                "description": "Chatte mit KI"
+            },
+            "image": {
+                "label": "Bildgenerierung",
+                "description": "Bilder aus Text generieren"
+            },
+            "video": {
+                "label": "Videogenerierung",
+                "description": "Video aus Text erstellen"
+            },
+            "music": {
+                "label": "Musikgenerierung",
+                "description": "Musik aus Text komponieren"
+            },
+            "code": {
+                "label": "Codegenerierung",
+                "description": "Code mit KI schreiben"
+            },
+            "codeBuilder": {
+                "label": "Code Builder ⚡",
+                "description": "Planen, codieren und überprüfen mit KI"
+            }
+        }
     }
 }

@@ -4,7 +4,7 @@ import { Montserrat } from "next/font/google";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { cn } from "@/lib/utils";
 import { routes } from "@/app/constants";
@@ -23,6 +23,18 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
   const pathname = usePathname();
   const router = useRouter();
   const locale = useLocale();
+  const t = useTranslations("Sidebar");
+  const labelMap: Record<string, string> = {
+    "Dashboard": "dashboard",
+    "Conversation": "conversation",
+    "Image Generation": "imageGeneration",
+    "Video Generation": "videoGeneration",
+    "Music Generation": "musicGeneration",
+    "Code Generation": "codeGeneration",
+    "Code Builder ⚡": "codeBuilder",
+    "Settings": "settings"
+  };
+
 
   // Build a locale-prefixed href so next-intl routing works correctly
   const localHref = (href: string) => `/${locale}${href}`;
@@ -63,7 +75,7 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
             >
               <div className="flex items-center flex-1">
                 <route.icon className={cn("h-5 w-5 mr-3", route.color)} />
-                {route.label}
+                {t(labelMap[route.label] || route.label)}
               </div>
             </div>
           ))}

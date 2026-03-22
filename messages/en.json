@@ -20,7 +20,7 @@
         "p1": "We generally don't ask, but today we need your help. Genie AI is an independent project, built to provide you with the most advanced AI tools without the big corporate price tag.",
         "p2": "It takes a lot of resources to keep our servers running and to develop new innovative features. If everyone reading this gave a small amount, we could keep Genie AI thriving for years to come.",
         "p3": "If you find value in what we do, please consider supporting us. It only takes a minute, and it makes a huge difference.",
-        "button": "Support Genie AI \u2764\ufe0f"
+        "button": "Support Genie AI ❤️"
     },
     "Metadata": {
         "title": "Genie AI: OpenAI, Gemini & Claude All-in-One Platform",
@@ -97,6 +97,46 @@
         },
         "footer": {
             "rights": "© {year} Genie AI. All rights reserved."
+        }
+    },
+    "Sidebar": {
+        "dashboard": "Dashboard",
+        "conversation": "Conversation",
+        "imageGeneration": "Image Generation",
+        "videoGeneration": "Video Generation",
+        "musicGeneration": "Music Generation",
+        "codeGeneration": "Code Generation",
+        "codeBuilder": "Code Builder ⚡",
+        "settings": "Settings"
+    },
+    "Dashboard": {
+        "exploreTitle": "Explore the power of AI",
+        "exploreSubtitle": "Chat with the smartest AI - Experience the power of AI",
+        "tools": {
+            "conversation": {
+                "label": "Conversation",
+                "description": "Chat with AI"
+            },
+            "image": {
+                "label": "Image Generation",
+                "description": "Generate images from text"
+            },
+            "video": {
+                "label": "Video Generation",
+                "description": "Create video from text"
+            },
+            "music": {
+                "label": "Music Generation",
+                "description": "Compose music from text"
+            },
+            "code": {
+                "label": "Code Generation",
+                "description": "Write code with AI"
+            },
+            "codeBuilder": {
+                "label": "Code Builder ⚡",
+                "description": "Plan, Code, and Review with AI"
+            }
         }
     }
 }

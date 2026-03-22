@@ -9,6 +9,7 @@ import { ArrowRightIcon, ChatBubbleIcon, CodeIcon, DiscIcon, ImageIcon, VideoIco
 import { Brain, TrendingUp, Zap, Sparkles, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@clerk/nextjs";
+import { useTranslations } from "next-intl";
 import { DashboardSupport } from "@/components/dashboard-support";
 import { DataImportWizard } from "@/components/DataImportWizard";
 
@@ -83,6 +84,29 @@ interface FactAnalytics {
 
 const DashboardPage = () => {
   const router = useRouter();
+  const t = useTranslations("Dashboard");
+  
+  const mapLabel = (label: string) => {
+    switch (label) {
+      case 'Conversation': return t('tools.conversation.label');
+      case 'Image Capsule': return t('tools.image.label');
+      case 'Quick Clip': return t('tools.video.label');
+      case 'Juke Box': return t('tools.music.label');
+      case 'Code': return t('tools.code.label');
+      default: return label;
+    }
+  };
+  
+  const mapDesc = (desc: string) => {
+    switch (desc) {
+      case 'Chat with AI': return t('tools.conversation.description');
+      case 'Generate images': return t('tools.image.description');
+      case 'Create videos': return t('tools.video.description');
+      case 'Compose music': return t('tools.music.description');
+      case 'Generate code': return t('tools.code.description');
+      default: return desc;
+    }
+  };
   const { userId } = useAuth();
   const [analytics, setAnalytics] = useState<FactAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -294,8 +318,8 @@ const DashboardPage = () => {
 
                   {/* Footer */}
                   <div>
-                    <h3 className="font-bold text-lg mb-1">{tool.label}</h3>
-                    <p className="text-xs text-muted-foreground">{tool.description}</p>
+                    <h3 className="font-bold text-lg mb-1">{mapLabel(tool.label)}</h3>
+                    <p className="text-xs text-muted-foreground">{mapDesc(tool.description)}</p>
                   </div>
                 </div>
               </Card>

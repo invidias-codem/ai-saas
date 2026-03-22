@@ -98,5 +98,45 @@
         "footer": {
             "rights": "© {year} Genie AI. Tous droits réservés."
         }
+    },
+    "Sidebar": {
+        "dashboard": "Tableau de Bord",
+        "conversation": "Conversation",
+        "imageGeneration": "Génération d'Images",
+        "videoGeneration": "Génération de Vidéos",
+        "musicGeneration": "Génération de Musique",
+        "codeGeneration": "Génération de Code",
+        "codeBuilder": "Constructeur de Code ⚡",
+        "settings": "Paramètres"
+    },
+    "Dashboard": {
+        "exploreTitle": "Explorez la puissance de l'IA",
+        "exploreSubtitle": "Discutez avec l'IA la plus intelligente - Découvrez la puissance de l'IA",
+        "tools": {
+            "conversation": {
+                "label": "Conversation",
+                "description": "Discutez avec l'IA"
+            },
+            "image": {
+                "label": "Génération d'Images",
+                "description": "Générer des images à partir de texte"
+            },
+            "video": {
+                "label": "Génération de Vidéos",
+                "description": "Créer une vidéo à partir de texte"
+            },
+            "music": {
+                "label": "Génération de Musique",
+                "description": "Composer de la musique à partir de texte"
+            },
+            "code": {
+                "label": "Génération de Code",
+                "description": "Écrire du code avec l'IA"
+            },
+            "codeBuilder": {
+                "label": "Constructeur de Code ⚡",
+                "description": "Planifiez, codez et révisez avec l'IA"
+            }
+        }
     }
 }

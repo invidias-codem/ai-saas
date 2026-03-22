@@ -90,5 +90,45 @@
             "stat3Value": "0",
             "stat3Label": "Times you start from zero"
         }
+    },
+    "Sidebar": {
+        "dashboard": "Bảng điều khiển",
+        "conversation": "Trò chuyện",
+        "imageGeneration": "Tạo hình ảnh",
+        "videoGeneration": "Tạo video",
+        "musicGeneration": "Tạo âm nhạc",
+        "codeGeneration": "Tạo mã",
+        "codeBuilder": "Trình xây dựng mã ⚡",
+        "settings": "Cài đặt"
+    },
+    "Dashboard": {
+        "exploreTitle": "Khám phá sức mạnh của AI",
+        "exploreSubtitle": "Trò chuyện với AI thông minh nhất - Trải nghiệm sức mạnh của AI",
+        "tools": {
+            "conversation": {
+                "label": "Trò chuyện",
+                "description": "Trò chuyện với AI"
+            },
+            "image": {
+                "label": "Tạo hình ảnh",
+                "description": "Tạo hình ảnh từ văn bản"
+            },
+            "video": {
+                "label": "Tạo video",
+                "description": "Tạo video từ văn bản"
+            },
+            "music": {
+                "label": "Tạo âm nhạc",
+                "description": "Sáng tác nhạc từ văn bản"
+            },
+            "code": {
+                "label": "Tạo mã",
+                "description": "Viết mã với AI"
+            },
+            "codeBuilder": {
+                "label": "Trình xây dựng mã ⚡",
+                "description": "Lên kế hoạch, lập trình và xem xét với AI"
+            }
+        }
     }
 }
