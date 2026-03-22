@@ -134,7 +134,7 @@ async function resolveError(log: {
         branchName,
         originalFile,
         newContent,
-        `fix: auto-resolve ${classified.category} in ${filePath}\n\n${fix.explanation.slice(0, 200)}`
+        `fix: auto-resolve ${classified.category} in ${filePath}\n\n${fix.summary.slice(0, 200)}`
       );
     }
 
