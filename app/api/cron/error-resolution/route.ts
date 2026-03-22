@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   try {
     const results = await runBatchResolution({
       limit: 3,        // Cap at 3 per run to control Gemini API spend
-      minAgeMinutes: 30, // Only process errors >30 min old (avoids transient noise)
+      minAgeMinutes: 0, // FAST processing // Only process errors >30 min old (avoids transient noise)
     });
 
     const summary = {

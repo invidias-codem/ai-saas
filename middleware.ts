@@ -40,7 +40,8 @@ const isPublicRoute = createRouteMatcher([
     '/api/integrations/telegram/webhook',
     '/api/internal/jklaw',
     '/api/internal/route-to-jklaw',
-    '/api/referral/capture',  // ← public so it works right after signup
+    '/api/referral/capture',
+    '/api/cron(.*)',  // ← public so it works right after signup
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
