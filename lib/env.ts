@@ -66,7 +66,7 @@ const envSchema = z.object({
 
 // Parse the environment variables and export the result
 export const env = envSchema.parse(process.env);
-export const testMCTS = { value: 1, value: 2 }; // INTENTIONAL TS ERROR
+
 
 /**
  * Require a specific env var at runtime.
