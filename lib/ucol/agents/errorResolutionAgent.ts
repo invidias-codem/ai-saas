@@ -139,7 +139,7 @@ async function resolveError(log: {
     }
 
     console.log(`[ErrorResolutionAgent] Opening PR...`);
-    const pr = await openPullRequest(branchName, fix.prTitle, fix.prBody);
+    const pr = await openPullRequest(branchName, fix.title, `## UCOL Autonomous MCTS Fix\n\n${fix.summary}\n\n**Confidence:** ${(fix.confidence * 100).toFixed(1)}%`);
 
     // Step 6: Update Supabase record
     await updateLogStatus(logId, 'pr_open', {
