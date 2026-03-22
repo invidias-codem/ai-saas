@@ -8,8 +8,13 @@ CREATE TYPE wm_event_type AS ENUM (
     'MERGED'         -- A node was merged with another entity
 );
 
--- Note: We assume the 'trust_tier' enum from RFC-001 already exists:
--- CREATE TYPE trust_tier AS ENUM ('AXIOM', 'CONFIRMED', 'SUPPORTED', 'UNVERIFIED');
+-- Create the 'trust_tier' enum from RFC-001 if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'trust_tier') THEN
+        CREATE TYPE trust_tier AS ENUM ('AXIOM', 'CONFIRMED', 'SUPPORTED', 'UNVERIFIED');
+    END IF;
+END$$;
 
 CREATE TABLE IF NOT EXISTS wm_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
