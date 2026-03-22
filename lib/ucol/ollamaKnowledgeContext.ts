@@ -81,6 +81,8 @@ export async function buildOllamaKnowledgeContext(
     // 2. Knowledge graph: fetch high-confidence nodes related to query keywords
     const keywords = extractKeywords(query);
     if (keywords.length > 0) {
+      const supabase = getSupabase();
+      if (!supabase) return { systemFragment: '', factsUsed: 0, graphNodesUsed: 0 };
       const { data: graphNodes, error: graphErr } = await supabase
         .from('graph_nodes')
         .select('label, description, confidence, node_type')
