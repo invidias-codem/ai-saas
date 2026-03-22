@@ -1,4 +1,5 @@
 from google import genai
+import requests
 import logging
 import json
 import os
@@ -10,6 +11,10 @@ class EngagementBrain:
     The 'Analyst' brain. Analyzes incoming social data and decides how to engage.
     """
     def __init__(self, api_key):
+        # Allow fallback to self-hosted LLM (Lambda Labs)
+        self.local_url = os.environ.get("LOCAL_LLM_URL")
+        self.local_model = os.environ.get("LOCAL_LLM_MODEL")
+        
         self.client = genai.Client(api_key=api_key)
         self.model_name = "gemini-3.1-flash-lite-preview"
         
@@ -71,9 +76,8 @@ class EngagementBrain:
     def decide_engagement(self, text, author, context="") -> dict:
         """
         Unified decision maker. Replaces RemoteBrain functionality.
-        Returns: { "action": "...", "reply_text": "...", "image_prompt": "..." }
+        Returns: { "action": "...", "reply_text": "...", "confidence": <num> }
         """
-        # Load persona if available
         persona = ""
         try:
             with open("social_persona.txt", "r") as f:
@@ -82,25 +86,66 @@ class EngagementBrain:
             pass
 
         prompt = (
-            f"You are Vector (AI Agent). Act as a 'Genie Advocate' (promoting the Genie AI-SaaS platform) and 'Tech Journalist'.\n"
-            f"PERSONA: {persona}\n"
-            f"Analyzing post by @{author}: '{text}'\n"
-            f"CONTEXT: {context}\n\n"
-            f"DECISION MATRIX:\n"
-            f"- REPLIES should be witty, genuinely insightful. Only if you have something WORTH saying.\n"
-            f"- IF content is boring/spam/hate/generic news -> IGNORE.\n"
-            f"- IF content is specifically interesting (hands-on AI/SaaS/startup insight) -> LIKE.\n"
-            f"- IF content is a direct question, strong opinion, or controversy in AI/SaaS -> REPLY with real substance.\n"
-            f"- IF content mentions 'Manus' or 'Manus AI' burning credits/failing -> High priority REPLY. Mention how Tech Genie's UCOL Router uses open-source models (Hermes 4) for simple tasks and Claude 3.5 for complex ones, saving 10x API costs.\n"
-            f"- NEVER reply with generic filler. If the reply isn't sharp, choose IGNORE.\n\n"
-            f"INSTRUCTIONS:\n"
-            f"- If REPLY, write the text. Keep it < 280 chars. No hashtags.\n"
-            f"- Don't sound like a salesperson. Be a thoughtful engineer.\n"
-            f"- Tag the user @{author} only if replying directly.\n"
-            f"- Rate your confidence in the decision from 0 (very unsure) to 10 (very sure).\n\n"
+            f"You are Vector (AI Agent). Act as a 'Genie Advocate' (promoting the Genie AI-SaaS platform) and 'Tech Journalist'.
+"
+            f"PERSONA: {persona}
+"
+            f"Analyzing post by @{author}: '{text}'
+"
+            f"CONTEXT: {context}
+
+"
+            f"DECISION MATRIX:
+"
+            f"- REPLIES should be witty, genuinely insightful. Only if you have something WORTH saying.
+"
+            f"- IF content is boring/spam/hate/generic news -> IGNORE.
+"
+            f"- IF content is specifically interesting (hands-on AI/SaaS/startup insight) -> LIKE.
+"
+            f"- IF content is a direct question, strong opinion, or controversy in AI/SaaS -> REPLY with real substance.
+"
+            f"- IF content mentions 'Manus' or 'Manus AI' burning credits/failing -> High priority REPLY. Mention how Tech Genie's UCOL Router uses open-source models (Hermes 4) for simple tasks and Claude 3.5 for complex ones, saving 10x API costs.
+"
+            f"- NEVER reply with generic filler. If the reply isn't sharp, choose IGNORE.
+
+"
+            f"INSTRUCTIONS:
+"
+            f"- If REPLY, write the text. Keep it < 280 chars. No hashtags.
+"
+            f"- Don't sound like a salesperson. Be a thoughtful engineer.
+"
+            f"- Tag the user @{author} only if replying directly.
+"
+            f"- Rate your confidence in the decision from 0 (very unsure) to 10 (very sure).
+
+"
             f"Output JSON ONLY: {{ \"action\": \"IGNORE\"|\"LIKE\"|\"REPLY\"|\"BOTH\", \"reply_text\": \"...\", \"confidence\": <0-10> }}"
         )
         
+        # If running inside Lambda Labs docker-compose with local LLM
+        if self.local_url and self.local_model:
+            try:
+                payload = {
+                    "model": self.local_model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.6,
+                    "max_tokens": 150
+                }
+                headers = {"Content-Type": "application/json"}
+                response = requests.post(f"{self.local_url}/chat/completions", json=payload, headers=headers, timeout=15)
+                content_text = response.json()["choices"][0]["message"]["content"]
+                
+                # Cleanup markdown formatting often added by local models
+                if content_text.startswith("```json"):
+                    content_text = content_text[7:-3]
+                    
+                return json.loads(content_text.strip())
+            except Exception as e:
+                logger.error(f"Local LLM Decision Failed: {e}, falling back to Gemini")
+        
+        # Fallback to Gemini Cloud
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
@@ -110,7 +155,7 @@ class EngagementBrain:
             return json.loads(response.text)
         except Exception as e:
             logger.error(f"Brain Decision Failed: {e}")
-            return {"action": "IGNORE"}
+            return {"action": "IGNORE", "confidence": 0}
 
     def generate_reply(self, target_post_text: str) -> str:
         """
