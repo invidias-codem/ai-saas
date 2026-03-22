@@ -10,32 +10,33 @@ export interface Message {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function useSupabaseChat(conversationId: string) {
-    const [messages, setMessages] = useState<Message[]>([]);
+export function useSupabaseChat(conversationId: string, initialData?: Message[]) {
+    const [messages, setMessages] = useState<Message[]>(() => initialData || []);
 
     useEffect(() => {
         if (!conversationId || !UUID_REGEX.test(conversationId)) return;
 
-        // 1. Initial Fetch
-        const fetchMessages = async () => {
-            const { data, error } = await supabase
-                .from('messages')
-                .select('*')
-                .eq('conversation_id', conversationId)
-                .order('created_at', { ascending: true });
+        // 1. Initial Fetch (only if no initialData)
+        if (!initialData || initialData.length === 0) {
+            const fetchMessages = async () => {
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('*')
+                    .eq('conversation_id', conversationId)
+                    .order('created_at', { ascending: true });
 
-            if (error) {
-                console.error("Error fetching messages:", error);
-            } else if (data) {
-                setMessages(data.map((msg: any) => ({
-                    role: msg.role as 'user' | 'bot',
-                    text: msg.content,
-                    timestamp: new Date(msg.created_at)
-                })));
-            }
-        };
-
-        fetchMessages();
+                if (error) {
+                    console.error("Error fetching messages:", error);
+                } else if (data) {
+                    setMessages(data.map((msg: any) => ({
+                        role: msg.role as 'user' | 'bot',
+                        text: msg.content,
+                        timestamp: new Date(msg.created_at)
+                    })));
+                }
+            };
+            fetchMessages();
+        }
 
         // 2. Realtime Subscription
         const channel = supabase
