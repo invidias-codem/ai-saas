@@ -37,6 +37,8 @@ const AUTO_RESOLVABLE: ErrorCategory[] = [
   'type_error',
   'hydration_mismatch',
   'env_missing',
+  'unknown',
+  'api_error',
 ];
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
