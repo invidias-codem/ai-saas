@@ -53,7 +53,7 @@ export async function buildOllamaKnowledgeContext(
     const embedding = await generateEmbedding(query);
 
     const supabase = getSupabase();
-    if (!supabase) return '';
+    if (!supabase) return { systemFragment: '', factsUsed: 0, graphNodesUsed: 0 };
     const { data: vectorFacts, error: vecErr } = await supabase.rpc(
       'match_memory_embeddings',
       {
