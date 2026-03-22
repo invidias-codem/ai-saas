@@ -119,7 +119,7 @@ async function resolveError(log: {
     }
 
     // Step 5: Create branch + commit + PR
-    const branchName = `${fix.branchSlug}-${Date.now()}`;
+    const branchName = `fix/mcts/auto-resolve-${Date.now()}`;
     console.log(`[ErrorResolutionAgent] Creating branch ${branchName}...`);
     await createBranch(branchName);
 
