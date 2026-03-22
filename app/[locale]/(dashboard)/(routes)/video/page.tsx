@@ -2,6 +2,7 @@
 "use client";
 
 // ✅ Added useEffect
+import { useTranslations } from "next-intl";
 import { useState, useEffect } from "react";
 import { formSchema, resolutionOptions, durationOptions, aspectRatioOptions } from './constants';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

@@ -2,6 +2,7 @@
 "use client";
 
 import { Input } from '@/components/ui/input';
+import { useTranslations } from "next-intl";
 import { useState, useEffect } from "react"; // ✅ Added useEffect
 import { formSchema } from './constants';
 import { Heading } from '@/components/heading';
