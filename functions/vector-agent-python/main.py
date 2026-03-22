@@ -78,8 +78,8 @@ def vector_agent(request):
         # ── RUN (autonomous loop: search → decide → act) ─────────────────────
         elif action == "run":
             keywords = data.get("keywords", [
-                "AI SaaS", "ChatGPT alternative", "Slack AI",
-                "AI assistant", "LLM tools", "build with AI"
+                "Manus", "Manus AI", "burning credits", "AI SaaS", 
+                "ChatGPT alternative", "AI assistant"
             ])
             dry_run = data.get("dry_run", False)
             limit = data.get("limit", 10)
