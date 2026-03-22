@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const testMCTS = { value: 1, value: 2 };
+
 
 const envSchema = z.object({
   // Clerk keys (publicly exposed to browser)
