@@ -16,10 +16,15 @@ import { createClient } from '@supabase/supabase-js';
 import { generateEmbedding } from '@/lib/memory/embedding';
 import { logger } from '@/lib/logger';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const getSupabase = () => {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null;
+  }
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+};
 
 const MAX_FACTS = 8;
 const MAX_GRAPH_NODES = 5;
@@ -47,7 +52,7 @@ export async function buildOllamaKnowledgeContext(
     // 1. Vector store: semantic fact retrieval
     const embedding = await generateEmbedding(query);
 
-    const { data: vectorFacts, error: vecErr } = await supabase.rpc(
+    const { data: vectorFacts, error: vecErr } = await getSupabase()?.rpc(
       'match_memory_embeddings',
       {
         query_embedding: embedding,
