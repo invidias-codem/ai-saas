@@ -52,7 +52,9 @@ export async function buildOllamaKnowledgeContext(
     // 1. Vector store: semantic fact retrieval
     const embedding = await generateEmbedding(query);
 
-    const { data: vectorFacts, error: vecErr } = await getSupabase()?.rpc(
+    const supabase = getSupabase();
+    if (!supabase) return '';
+    const { data: vectorFacts, error: vecErr } = await supabase.rpc(
       'match_memory_embeddings',
       {
         query_embedding: embedding,
