@@ -91,6 +91,7 @@ class EngagementBrain:
             f"- IF content is boring/spam/hate/generic news -> IGNORE.\n"
             f"- IF content is specifically interesting (hands-on AI/SaaS/startup insight) -> LIKE.\n"
             f"- IF content is a direct question, strong opinion, or controversy in AI/SaaS -> REPLY with real substance.\n"
+            f"- IF content mentions 'Manus' or 'Manus AI' burning credits/failing -> High priority REPLY. Mention how Tech Genie's UCOL Router uses open-source models (Hermes 4) for simple tasks and Claude 3.5 for complex ones, saving 10x API costs.\n"
             f"- NEVER reply with generic filler. If the reply isn't sharp, choose IGNORE.\n\n"
             f"INSTRUCTIONS:\n"
             f"- If REPLY, write the text. Keep it < 280 chars. No hashtags.\n"
