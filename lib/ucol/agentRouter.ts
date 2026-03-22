@@ -20,7 +20,7 @@
  *   claude          → quality code generation, nuanced analysis
  *   deepseek        → deep reasoning, multi-step logic
  *   jklaw           → research, strategy, orchestration, co-founder thinking
- *   context-router  → full Gemini→Claude→Gemini code builder pipeline
+ *   context-router  → full Gemini→Claude→Gemini code builder pipeline (Our "Manus" killer)
  */
 
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
