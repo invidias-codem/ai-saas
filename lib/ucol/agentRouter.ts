@@ -15,7 +15,7 @@
  * research, orchestration) are never overridden — they own their routing.
  *
  * Routing targets:
- *   hermes-local    → self-hosted Ollama/Hermes3 on GKE (fast, zero API cost)
+ *   hermes-local    → self-hosted Ollama/Hermes3 on Lambda Labs (fast, zero API cost)
  *   gemini-flash    → fast answers, fact extraction, embeddings
  *   claude          → quality code generation, nuanced analysis
  *   deepseek        → deep reasoning, multi-step logic
@@ -98,8 +98,8 @@ const LLM_NODE_COST_RANK: Partial<Record<string, number>> = {
   'jklaw':          3,
 };
 
-/** True when the self-hosted Ollama GKE node is configured and should be used */
-const OLLAMA_GKE_ENABLED = !!process.env.OLLAMA_GKE_URL;
+/** True when the self-hosted Ollama Lambda Labs node is configured and should be used */
+const LAMBDA_OLLAMA_ENABLED = !!process.env.LAMBDA_OLLAMA_URL;
 
 /** Returns true when a routing decision targets a CLI tool harness */
 export function isToolNode(targetNode: RoutingDecision['targetNode']): boolean {
@@ -207,7 +207,7 @@ Respond with ONLY a JSON object:
 const ROUTING_TABLE: Record<TaskType, RoutingDecision['targetNode']> = {
     // ── LLM nodes ───────────────────────────────────────────────────────
     code_generation:   'context-router',
-    quick_answer:      OLLAMA_GKE_ENABLED ? 'hermes-local' : 'gemini-flash',
+    quick_answer:      LAMBDA_OLLAMA_ENABLED ? 'hermes-local' : 'gemini-flash',
     quality_analysis:  'claude',
     deep_reasoning:    'deepseek',
     memory_extract:    'gemini-flash',

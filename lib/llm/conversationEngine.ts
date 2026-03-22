@@ -749,7 +749,7 @@ export async function generateConversationReply(
               factsForRouting,
             );
 
-            // hermes-local: self-hosted Ollama on GKE — inject knowledge context
+            // hermes-local: self-hosted Ollama on Lambda Labs — inject knowledge context
             if (decision.targetNode === 'hermes-local') {
               try {
                 const { buildOllamaKnowledgeContext } = await import('@/lib/ucol/ollamaKnowledgeContext');
@@ -759,7 +759,7 @@ export async function generateConversationReply(
                     `[UCOL/Ollama] Knowledge context injected — facts=${knowledgeCtx.factsUsed} nodes=${knowledgeCtx.graphNodesUsed}`
                   );
                 }
-                // HermesProvider picks up GKE Ollama automatically via OLLAMA_GKE_URL env
+                // HermesProvider picks up Lambda Labs Ollama automatically via LAMBDA_OLLAMA_URL env
                 // Knowledge context is surfaced in the next turn via the existing context pipeline
               } catch (e) {
                 console.warn('[UCOL/Ollama] Knowledge context injection failed (non-blocking):', e);

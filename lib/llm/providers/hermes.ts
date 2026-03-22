@@ -2,14 +2,14 @@ import { LLMProvider, ChatMessage, CompletionOptions, StreamResult } from "../ty
 import { logger } from "@/lib/logger";
 
 /**
- * Hermes Provider — Self-hosted Ollama (GKE) + Nous Research Inference API
+ * Hermes Provider — Self-hosted Ollama (Lambda Labs) + Nous Research Inference API
  *
  * Routing priority (UCOL T-027):
- *   1. GKE Ollama (self-hosted Hermes 3 8B) — primary, zero API cost
- *   2. Nous AI Cloud (Hermes-4.3-36B)        — fallback when GKE unavailable
+ *   1. Lambda Labs Ollama (self-hosted Hermes 3 8B) — primary, zero API cost
+ *   2. Nous AI Cloud (Hermes-4.3-36B)        — fallback when Lambda Labs unavailable
  *   3. Gemini Flash-Lite                       — always-available last resort
  *
- * GKE Ollama endpoint: set OLLAMA_GKE_URL env var to the internal K8s service
+ * Lambda Labs Ollama endpoint: set OLLAMA_Lambda Labs_URL env var to the internal K8s service
  *   e.g. http://ollama.ollama.svc.cluster.local:11434 (in-cluster)
  *        or https://ollama.gen1e.xyz (external via ingress)
  *
@@ -26,8 +26,8 @@ const NOUS_BASE_URL = "https://inference-api.nousresearch.com/v1";
 
 const NOUS_MODEL = process.env.HERMES_MODEL_ID || "Hermes-4.3-36B";
 
-// GKE Ollama (primary) — internal K8s service or external ingress URL
-const OLLAMA_GKE_URL = process.env.OLLAMA_GKE_URL || "";
+// Lambda Labs Ollama (primary) — internal K8s service or external ingress URL
+const OLLAMA_Lambda Labs_URL = process.env.OLLAMA_Lambda Labs_URL || "";
 // Local Ollama (dev) — fallback for local development
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "hermes3";
@@ -69,20 +69,20 @@ export class HermesProvider implements LLMProvider {
       });
     }
 
-    // 1. GKE Ollama (self-hosted Hermes 3 — zero API cost, primary for UCOL Fast tier)
-    if (OLLAMA_GKE_URL) {
+    // 1. Lambda Labs Ollama (self-hosted Hermes 3 — zero API cost, primary for UCOL Fast tier)
+    if (OLLAMA_Lambda Labs_URL) {
       try {
-        const gkeUp = await this.pingOllamaEndpoint(OLLAMA_GKE_URL);
+        const gkeUp = await this.pingOllamaEndpoint(OLLAMA_Lambda Labs_URL);
         if (gkeUp) {
-          logger.info("[HermesProvider] Routing to GKE Ollama (self-hosted)");
-          return await this.streamFromOllamaEndpoint(OLLAMA_GKE_URL, formattedMessages, options);
+          logger.info("[HermesProvider] Routing to Lambda Labs Ollama (self-hosted)");
+          return await this.streamFromOllamaEndpoint(OLLAMA_Lambda Labs_URL, formattedMessages, options);
         }
       } catch (err) {
-        logger.warn("[HermesProvider] GKE Ollama unavailable, falling back to Nous AI", err);
+        logger.warn("[HermesProvider] Lambda Labs Ollama unavailable, falling back to Nous AI", err);
       }
     }
 
-    // 2. Nous AI Cloud (API fallback when GKE unavailable)
+    // 2. Nous AI Cloud (API fallback when Lambda Labs unavailable)
     if (NOUS_API_KEY) {
       try {
         return await this.streamFromNousAI(formattedMessages, options, useThinking);
@@ -186,7 +186,7 @@ export class HermesProvider implements LLMProvider {
     };
   }
 
-  // ─── Ollama (GKE or local) ────────────────────────────────────────────────
+  // ─── Ollama (Lambda Labs or local) ────────────────────────────────────────────────
 
   private async pingOllamaEndpoint(baseUrl: string): Promise<boolean> {
     try {
@@ -204,7 +204,7 @@ export class HermesProvider implements LLMProvider {
     messages: { role: string; content: string }[],
     options: CompletionOptions
   ): Promise<StreamResult> {
-    const isGke = baseUrl === OLLAMA_GKE_URL && !!OLLAMA_GKE_URL;
+    const isGke = baseUrl === OLLAMA_Lambda Labs_URL && !!OLLAMA_Lambda Labs_URL;
     const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
