@@ -16,7 +16,7 @@ import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 
 export function generateStaticParams() {
-    return [{ locale: 'en' }, { locale: 'th' }, { locale: 'vi' }];
+    return [{ locale: 'en' }, { locale: 'th' }, { locale: 'vi' }, { locale: 'es' }, { locale: 'fr' }, { locale: 'de' }];
 }
 
 const inter = Inter({
@@ -45,7 +45,10 @@ export async function generateMetadata({
             languages: {
                 'en': '/en',
                 'th': '/th',
-                'vi': '/vi'
+                'vi': '/vi',
+                'es': '/es',
+                'fr': '/fr',
+                'de': '/de'
             }
         },
         openGraph: {
@@ -73,7 +76,7 @@ export default async function LocaleLayout({
     const { locale } = await params;
 
     // Ensure that the incoming `locale` is valid
-    if (!['en', 'th', 'vi'].includes(locale)) {
+    if (!['en', 'th', 'vi', 'es', 'fr', 'de'].includes(locale)) {
         notFound();
     }
 

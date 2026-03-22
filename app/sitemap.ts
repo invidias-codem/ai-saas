@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
     const baseUrl = 'https://genie-ai.com'; // Replace with actual domain
-    const locales = ['en', 'th', 'vi'];
+    const locales = ['en', 'th', 'vi', 'es', 'fr', 'de'];
     const routes = ['', '/dashboard', '/blog', '/pricing', '/support'];
 
     const sitemap: MetadataRoute.Sitemap = [];
@@ -19,6 +19,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
                         en: `${baseUrl}/en${route}`,
                         th: `${baseUrl}/th${route}`,
                         vi: `${baseUrl}/vi${route}`,
+                        es: `${baseUrl}/es${route}`,
+                        fr: `${baseUrl}/fr${route}`,
+                        de: `${baseUrl}/de${route}`,
                     }
                 }
             });
