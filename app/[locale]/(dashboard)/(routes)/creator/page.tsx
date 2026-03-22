@@ -1,4 +1,5 @@
 import { requireAuth } from "@/lib/security/apiAuth";
+import { clerkClient } from "@clerk/nextjs/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 import { 
   Card, 
@@ -14,6 +15,11 @@ import { getTranslations } from "next-intl/server";
 export default async function CreatorDashboardPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const user = await requireAuth();
+  // Look up email from Clerk
+
+  const clerk = await clerkClient();
+  const fullUser = await clerk.users.getUser(user.userId);
+  const userEmail = fullUser.emailAddresses[0]?.emailAddress;
 
   // Look up if this user is an approved creator
   let creatorCode = null;
@@ -28,7 +34,7 @@ export default async function CreatorDashboardPage({ params }: { params: Promise
     const { data: codeData } = await supabaseAdmin
       .from('referral_codes')
       .select('*')
-      .eq('email', user.primaryEmailAddress?.emailAddress)
+      .eq('email', userEmail)
       .eq('is_active', true)
       .single();
 
