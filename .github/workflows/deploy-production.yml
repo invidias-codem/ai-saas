@@ -36,7 +36,8 @@ jobs:
         run: find . -path ./node_modules -prune -o -type l -print0 | xargs -0 -I{} sh -c 'test -e "{}" || rm -f "{}"' 2>/dev/null || true
 
       - name: Build check
-        run: npm run build
+        id: build_check
+        run: npm run build > build_logs.txt 2>&1 || { cat build_logs.txt; exit 1; }
         env:
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
@@ -45,6 +46,16 @@ jobs:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
   
+      - name: Ingest CI Failure to UCOL Agent
+        if: failure() && steps.build_check.outcome == 'failure'
+        run: |
+          ERROR_LOG=$(tail -n 100 build_logs.txt | jq -Rsa .)
+          curl -s -X POST "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/logs" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"level\":\"error\",\"source\":\"github_actions_ci\",\"resolution_status\":\"pending\",\"message\":$ERROR_LOG,\"metadata\":{\"run_id\":\"${{ github.run_id }}\",\"repo\":\"${{ github.repository }}\",\"branch\":\"${{ github.ref_name }}\"}}"
+            
   deploy:
     runs-on: ubuntu-latest
     permissions:
