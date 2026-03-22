@@ -90,10 +90,16 @@ export class GeminiProvider implements LLMProvider {
 
         const { sanitizedHistory, prependToPrompt } = sanitizeHistory(history);
 
-        let promptText = lastMessage.parts[0].text;
+        let textPartIndex = lastMessage.parts.findIndex((p: any) => p.text !== undefined);
+        if (textPartIndex === -1) {
+            lastMessage.parts.unshift({ text: "" });
+            textPartIndex = 0;
+        }
+        let promptText = lastMessage.parts[textPartIndex].text;
         if (prependToPrompt) {
             promptText = prependToPrompt + "\n\n" + promptText;
         }
+        lastMessage.parts[textPartIndex].text = promptText;
 
         const chat = model.startChat({
             history: sanitizedHistory,
@@ -105,7 +111,7 @@ export class GeminiProvider implements LLMProvider {
             }
         });
 
-        const result = await chat.sendMessageStream(promptText);
+        const result = await chat.sendMessageStream(lastMessage.parts);
         const textEncoder = new TextEncoder();
 
                 const stream = new ReadableStream({
