@@ -7,9 +7,29 @@
  * successful resolution strategies into the Knowledge Graph.
  */
 
-import { generateText } from 'ai';
-import { getUcolProvider } from '../providers/providerFactory';
-import { supabaseAdmin } from '@/lib/supabase/admin';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic from '@anthropic-ai/sdk';
+import { createClient } from '@supabase/supabase-js';
+import { requireEnv } from '@/lib/env';
+
+// ─── Clients ──────────────────────────────────────────────────────────────────
+
+function getGemini() {
+  return new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
+}
+
+function getAnthropicClient(): Anthropic | null {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  return new Anthropic({ apiKey: key });
+}
+
+function getSupabase() {
+  return createClient(
+    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireEnv('SUPABASE_SERVICE_ROLE_KEY')
+  );
+}
 
 // ─── 1. MCTS Types ─────────────────────────────────────────────────────────────
 
@@ -58,7 +78,7 @@ export class MctsResolverAgent {
   private maxIterations: number;
   private maxDepth: number;
 
-  constructor(maxIterations = 5, maxDepth = 3) {
+  constructor(maxIterations = 3, maxDepth = 2) {
     this.maxIterations = maxIterations;
     this.maxDepth = maxDepth;
   }
@@ -66,26 +86,27 @@ export class MctsResolverAgent {
   /**
    * Main MCTS Execution Loop
    */
-  public async resolveError(initialState: CodeState): Promise<CodeAction | null> {
+  public async resolveError(initialState: CodeState): Promise<{ confidence: number; fileChanges: Record<string, string>; summary: string; title: string; }> {
     console.log('[MCTS] Starting resolution tree search...');
     const root = new MctsNode(initialState, null);
 
     for (let i = 0; i < this.maxIterations; i++) {
-      // 1. SELECTION: Traverse the tree using UCB1 to find a leaf node
+      console.log(`[MCTS] Iteration ${i + 1}/${this.maxIterations}`);
+      // 1. SELECTION
       const nodeToExpand = this.selectNode(root);
 
-      // 2. EXPANSION: Use Gemini (Policy Network) to generate N possible fixes
-      if (this.getDepth(nodeToExpand) < this.maxDepth && nodeToExpand.visits > 0 || nodeToExpand === root) {
+      // 2. EXPANSION
+      if (this.getDepth(nodeToExpand) < this.maxDepth && (nodeToExpand.visits > 0 || nodeToExpand === root)) {
         await this.expandNode(nodeToExpand);
       }
 
       // Pick an unvisited child to simulate, or simulate the node itself if it has no children
       const nodeToSimulate = nodeToExpand.children.find(c => c.visits === 0) || nodeToExpand;
 
-      // 3. SIMULATION: Use Claude (Value Network) to grade the code state
+      // 3. SIMULATION
       const reward = await this.simulate(nodeToSimulate.state);
 
-      // 4. BACKPROPAGATION: Update visits and rewards up the tree
+      // 4. BACKPROPAGATION
       this.backpropagate(nodeToSimulate, reward);
     }
 
@@ -93,10 +114,26 @@ export class MctsResolverAgent {
     const bestChild = this.getBestChild(root, 0); // explorationParam = 0 (pure exploitation)
     
     if (bestChild && bestChild.actionTaken) {
-      await this.saveLearnedStrategy(initialState.errorTrace, bestChild.actionTaken);
-      return bestChild.actionTaken;
+      console.log(`[MCTS] Winning Strategy: ${bestChild.actionTaken.description} (Score: ${bestChild.totalReward / bestChild.visits})`);
+      
+      // Save strategy to Knowledge Graph asynchronously
+      this.saveLearnedStrategy(initialState.errorTrace, bestChild.actionTaken).catch(e => console.error('[MCTS] Save strategy failed:', e));
+      
+      return {
+        confidence: bestChild.totalReward / bestChild.visits,
+        fileChanges: bestChild.actionTaken.diffs,
+        summary: `MCTS Resolution: ${bestChild.actionTaken.description}`,
+        title: `fix(mcts): Auto-resolve error via MCTS strategy`
+      };
     }
-    return null;
+    
+    // Fallback if MCTS fails to find any valid path
+    return {
+      confidence: 0,
+      fileChanges: {},
+      summary: 'MCTS failed to find a confident resolution path',
+      title: 'fix: unknown'
+    };
   }
 
   // ─── MCTS Phases ─────────────────────────────────────────────────────────────
@@ -104,11 +141,9 @@ export class MctsResolverAgent {
   private selectNode(node: MctsNode): MctsNode {
     let current = node;
     while (current.children.length > 0) {
-      // If any child is unvisited, we must expand it first
       const unvisited = current.children.find(c => c.visits === 0);
       if (unvisited) return unvisited;
 
-      // Otherwise, pick the child with the highest UCB1 score
       current = current.children.reduce((best, child) => 
         child.getUcbScore() > best.getUcbScore() ? child : best
       );
@@ -120,7 +155,8 @@ export class MctsResolverAgent {
     console.log('[MCTS] Expanding state space (Policy Network generating moves)...');
     
     // Use Gemini (Fast/Policy) to brainstorm distinct approaches
-    const provider = getUcolProvider('google', 'gemini-3.1-flash-lite-preview');
+    const gemini = getGemini();
+    const model = gemini.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview', generationConfig: { responseMimeType: 'application/json' } });
     
     const prompt = `
       You are the Policy Network for an MCTS error resolver.
@@ -131,19 +167,16 @@ export class MctsResolverAgent {
       ${JSON.stringify(node.state.fileContents)}
       
       Generate exactly 3 distinct, mutually exclusive approaches to fix this error. 
-      Return JSON: { "actions": [{ "description": "...", "diffs": { "filename": "new content" } }] }
+      For example, Approach A might be adding a type assertion, Approach B might be wrapping in a try-catch, Approach C might be rewriting the logic.
+      Return JSON: { "actions": [{ "description": "<plain english explanation>", "diffs": { "filepath": "<entire new file content replacing the old>" } }] }
     `;
 
     try {
-      const response = await generateText({
-        model: provider,
-        prompt,
-      });
-
-      const parsed = JSON.parse(response.text.replace(/```json|```/g, ''));
+      const response = await model.generateContent(prompt);
+      const text = response.response.text();
+      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
       
-      for (const action of parsed.actions) {
-        // Create a new hypothetical code state for this branch
+      for (const action of (parsed.actions || [])) {
         const nextState: CodeState = {
           filePaths: node.state.filePaths,
           fileContents: { ...node.state.fileContents, ...action.diffs },
@@ -152,6 +185,7 @@ export class MctsResolverAgent {
         
         node.children.push(new MctsNode(nextState, action, node));
       }
+      console.log(`[MCTS] Expanded ${node.children.length} branches.`);
     } catch (e) {
       console.error('[MCTS] Expansion failed:', e);
     }
@@ -160,12 +194,12 @@ export class MctsResolverAgent {
   private async simulate(state: CodeState): Promise<number> {
     console.log('[MCTS] Simulating compiler validation (Value Network Critic)...');
     
-    // Use Claude Sonnet (Quality/Critic) to grade the state
-    const provider = getUcolProvider('anthropic', 'claude-sonnet-4-6');
+    // Try Claude Sonnet, fallback to Gemini
+    const anthropic = getAnthropicClient();
     
     const prompt = `
       You are the Value Network (Critic) for an MCTS error resolver.
-      You are acting as a strict TypeScript compiler.
+      You are acting as a strict TypeScript compiler and security scanner.
       
       Original Error:
       ${state.errorTrace}
@@ -180,16 +214,28 @@ export class MctsResolverAgent {
     `;
 
     try {
-      const response = await generateText({
-        model: provider,
-        prompt,
-      });
+      let text = '';
+      if (anthropic) {
+        const response = await anthropic.messages.create({
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 1024,
+          temperature: 0,
+          messages: [{ role: 'user', content: prompt }]
+        });
+        text = response.content[0].type === 'text' ? response.content[0].text : '';
+      } else {
+        // Fallback to Gemini if no Anthropic key
+        const gemini = getGemini();
+        const model = gemini.getGenerativeModel({ model: 'gemini-1.5-pro', generationConfig: { responseMimeType: 'application/json' } });
+        const res = await model.generateContent(prompt);
+        text = res.response.text();
+      }
 
-      const parsed = JSON.parse(response.text.replace(/```json|```/g, ''));
+      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
       return typeof parsed.score === 'number' ? parsed.score : 0;
     } catch (e) {
       console.error('[MCTS] Simulation failed:', e);
-      return 0; // Penalize broken simulations
+      return 0.1; // Penalize broken simulations heavily but non-zero to differentiate from crash
     }
   }
 
@@ -221,13 +267,10 @@ export class MctsResolverAgent {
     );
   }
 
-  /**
-   * Commits the winning strategy to the UCOL Knowledge Graph so the 
-   * agent learns this fix topology for the future.
-   */
   private async saveLearnedStrategy(errorTrace: string, action: CodeAction) {
     try {
-      await supabaseAdmin.from('knowledge_nodes').insert({
+      const supabase = getSupabase();
+      await supabase.from('knowledge_nodes').insert({
         node_type: 'concept',
         content: `Error Resolution Strategy Learned via MCTS:\nError: ${errorTrace}\nWinning Approach: ${action.description}`,
         canonical_name: `mcts_resolution_${Date.now()}`

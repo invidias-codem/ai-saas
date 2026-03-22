@@ -16,7 +16,7 @@ import { createClient } from '@supabase/supabase-js';
 import { requireEnv } from '@/lib/env';
 import { classifyError } from './errorClassifier';
 import { gatherRelevantFiles, createBranch, commitFileToBranch, openPullRequest } from './codebaseExplorer';
-import { generateFix } from './fixGenerator';
+import { MctsResolverAgent } from './MctsResolverNode';
 import type { ResolutionResult, ClassifiedError, ErrorCategory } from './types';
 
 // ─── Supabase ─────────────────────────────────────────────────────────────────
@@ -97,15 +97,23 @@ async function resolveError(log: {
       return { logId, status: 'needs_human', category: classified.category };
     }
 
-    // Step 4: Generate fix
+    // Step 4: MCTS Error Resolution (Replaces zero-shot fix generation)
     await updateLogStatus(logId, 'generating');
-    console.log(`[ErrorResolutionAgent] Generating fix for ${files.length} files...`);
-    const fix = await generateFix(classified, files);
+    console.log(`[ErrorResolutionAgent] Initializing MCTS Resolver Node for ${files.length} files...`);
+    
+    const mcts = new MctsResolverAgent(3, 2); // 3 iterations, depth 2 for quick resolution
+    const initialState = {
+      filePaths: files.map(f => f.path),
+      fileContents: files.reduce((acc, f) => ({ ...acc, [f.path]: f.content }), {}),
+      errorTrace: log.message
+    };
+    
+    const fix = await mcts.resolveError(initialState);
 
-    if (fix.confidence < 0.5 || Object.keys(fix.fileChanges).length === 0) {
+    if (fix.confidence < 0.6 || Object.keys(fix.fileChanges).length === 0) {
       await updateLogStatus(logId, 'needs_human', {
         classification: classified.category,
-        classification_summary: `${classified.summary} — fix confidence too low (${fix.confidence})`,
+        classification_summary: `${classified.summary} — MCTS confidence too low (${fix.confidence.toFixed(2)})`,
       });
       return { logId, status: 'needs_human', category: classified.category };
     }
