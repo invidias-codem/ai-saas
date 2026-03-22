@@ -17,7 +17,7 @@ export function useSupabaseChat(conversationId: string, initialData?: Message[])
         if (!conversationId || !UUID_REGEX.test(conversationId)) return;
 
         // 1. Initial Fetch (only if no initialData)
-        if (!initialData || initialData.length === 0) {
+        if (!initialData) { // If explicitly passed (even as empty array), we skip initial fetch
             const fetchMessages = async () => {
                 const { data, error } = await supabase
                     .from('messages')
