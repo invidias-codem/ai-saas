@@ -43,6 +43,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/referral/capture',
     '/api/cron(.*)',  // ← public so it works right after signup
     '/api/test-mcts',
+    '/api/webhooks/vercel-logs',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
