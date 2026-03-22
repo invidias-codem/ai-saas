@@ -270,7 +270,7 @@ export class MctsResolverAgent {
   private async saveLearnedStrategy(errorTrace: string, action: CodeAction) {
     try {
       const supabase = getSupabase();
-      await supabase.from('knowledge_nodes').insert({
+      if (supabase) await supabase.from('knowledge_nodes').insert({
         node_type: 'concept',
         content: `Error Resolution Strategy Learned via MCTS:\nError: ${errorTrace}\nWinning Approach: ${action.description}`,
         canonical_name: `mcts_resolution_${Date.now()}`
