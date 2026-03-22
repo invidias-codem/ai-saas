@@ -42,6 +42,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/internal/route-to-jklaw',
     '/api/referral/capture',
     '/api/cron(.*)',  // ← public so it works right after signup
+    '/api/test-mcts',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
