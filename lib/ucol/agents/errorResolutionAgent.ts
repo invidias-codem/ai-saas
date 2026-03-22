@@ -22,10 +22,10 @@ import type { ResolutionResult, ClassifiedError, ErrorCategory } from './types';
 // ─── Supabase ─────────────────────────────────────────────────────────────────
 
 function getSupabase() {
-  return createClient(
-    requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
-    requireEnv('SUPABASE_SERVICE_ROLE_KEY')
-  );
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null as any;
+  return createClient(url, key);
 }
 
 // Categories the agent can autonomously attempt to fix.
