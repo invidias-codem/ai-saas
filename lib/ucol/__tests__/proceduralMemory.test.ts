@@ -75,13 +75,13 @@ type MockDb = {
 
 function buildMockDb(overrides: Partial<{
   rpcData: unknown[];
-  rpcError: { message: string } | null;
-  updateError: { message: string } | null;
-  insertError: { message: string } | null;
+  rpcError: { message: string } | undefined;
+  updateError: { message: string } | undefined;
+  insertError: { message: string } | undefined;
 }> = {}): MockDb {
-  const eqMock = jest.fn().mockResolvedValue({ error: overrides.updateError ?? null });
+  const eqMock = jest.fn().mockResolvedValue({ error: overrides.updateError ?? undefined });
   const updateMock = jest.fn().mockReturnValue({ eq: eqMock });
-  const insertMock = jest.fn().mockResolvedValue({ error: overrides.insertError ?? null });
+  const insertMock = jest.fn().mockResolvedValue({ error: overrides.insertError ?? undefined });
 
   const fromMock = jest.fn().mockReturnValue({
     update: updateMock,
@@ -90,7 +90,7 @@ function buildMockDb(overrides: Partial<{
 
   const rpcMock = jest.fn().mockResolvedValue({
     data: overrides.rpcData ?? [],
-    error: overrides.rpcError ?? null,
+    error: overrides.rpcError ?? undefined,
   });
 
   return {
@@ -178,7 +178,7 @@ it('recordExecution inserts a new record when no similar match exists', async ()
 
 // ── 2. recordExecution updates existing when match found ─────────────────────
 it('recordExecution increments success_count when an existing similar record matches', async () => {
-  const existingRow = makeRecord({ success_count: 2, failure_count: 0, promoted_at: null });
+  const existingRow = makeRecord({ success_count: 2, failure_count: 0, promoted_at: undefined });
   const db = buildMockDb({ rpcData: [existingRow] });
   mockSupabase(db);
 
@@ -191,8 +191,8 @@ it('recordExecution increments success_count when an existing similar record mat
   expect(db._insertMock).not.toHaveBeenCalled();
 });
 
-// ── 3. findMatchingProcedure returns null below threshold ─────────────────────
-it('findMatchingProcedure returns null when RPC returns no rows (below threshold)', async () => {
+// ── 3. findMatchingProcedure returns undefined below threshold ─────────────────────
+it('findMatchingProcedure returns undefined when RPC returns no rows (below threshold)', async () => {
   const db = buildMockDb({ rpcData: [] });
   mockSupabase(db);
 
@@ -222,7 +222,7 @@ it('findMatchingProcedure returns a ProceduralMatch when RPC returns a row', asy
 // ── 5. auto-promotion triggers at 3 successes + 0.85 confidence ──────────────
 it('auto-promotes procedure when successCount reaches 3 at ≥0.85 confidence', async () => {
   // Existing: 2 successes, 0 failures → new: 3/3 = 1.0 confidence
-  const existingRow = makeRecord({ success_count: 2, failure_count: 0, promoted_at: null });
+  const existingRow = makeRecord({ success_count: 2, failure_count: 0, promoted_at: undefined });
   const db = buildMockDb({ rpcData: [existingRow] });
   mockSupabase(db);
 
@@ -238,7 +238,7 @@ it('auto-promotes procedure when successCount reaches 3 at ≥0.85 confidence', 
 // ── 6. auto-promotion does NOT trigger when confidence < 0.85 ─────────────────
 it('does not auto-promote when confidence is below 0.85', async () => {
   // 2 success, 2 failures → confidence would be 3/5 = 0.6 after one more success
-  const existingRow = makeRecord({ success_count: 2, failure_count: 2, promoted_at: null });
+  const existingRow = makeRecord({ success_count: 2, failure_count: 2, promoted_at: undefined });
   const db = buildMockDb({ rpcData: [existingRow] });
   mockSupabase(db);
 
@@ -289,7 +289,7 @@ it('invalidateProcedure sets failure_count to 9999 and clears promoted_at', asyn
   await invalidateProcedure('proc-abc-123');
 
   expect(db._updateMock).toHaveBeenCalledWith(
-    expect.objectContaining({ failure_count: 9999, promoted_at: null })
+    expect.objectContaining({ failure_count: 9999, promoted_at: undefined })
   );
   expect(db._eqMock).toHaveBeenCalledWith('id', 'proc-abc-123');
 });
@@ -394,9 +394,9 @@ it('promoteToMacro sets promoted_at on the correct record', async () => {
   expect(db._eqMock).toHaveBeenCalledWith('id', 'proc-xyz-999');
 });
 
-// ── 16. isStableMacro is false when promoted_at is null ──────────────────────
-it('findMatchingProcedure sets isStableMacro=false when promoted_at is null', async () => {
-  const row = makeRecord({ promoted_at: null, success_count: 1, confidence: 1.0, similarity: 0.93 });
+// ── 16. isStableMacro is false when promoted_at is undefined ──────────────────────
+it('findMatchingProcedure sets isStableMacro=false when promoted_at is undefined', async () => {
+  const row = makeRecord({ promoted_at: undefined, success_count: 1, confidence: 1.0, similarity: 0.93 });
   const db = buildMockDb({ rpcData: [row] });
   mockSupabase(db);
 

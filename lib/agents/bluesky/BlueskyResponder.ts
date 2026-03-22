@@ -263,7 +263,7 @@ export class BlueskyResponder {
     const effectiveApiKey =
       process.env.BLUESKY_GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
     const gemini = new GoogleGenerativeAI(effectiveApiKey);
-    const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = gemini.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: context }] }],

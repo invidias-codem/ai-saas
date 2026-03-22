@@ -18,7 +18,7 @@ function getGenAI(): GoogleGenerativeAI {
   return _genAI;
 }
 
-const DEFAULT_MODEL = "gemini-2.0-flash";
+const DEFAULT_MODEL = "gemini-3.1-flash-lite-preview";
 const AGENTIC_MODEL = "gemini-3-flash-preview";
 
 export class GeminiProvider implements LLMProvider {
@@ -36,8 +36,24 @@ export class GeminiProvider implements LLMProvider {
 
         // Convert internal message format to Gemini format
         // Convert internal message format to Gemini format
-        const history = messages.map(msg => {
-            const parts: any[] = [{ text: msg.text }];
+                const history = messages.map(msg => {
+            const parts: any[] = [];
+            let textToProcess = msg.text;
+
+            // Extract thought signatures
+            const signatureRegex = /<thought_signature>([\s\S]*?)<\/thought_signature>/g;
+            let match;
+            while ((match = signatureRegex.exec(textToProcess)) !== null) {
+                parts.push({ thoughtSignature: match[1].trim() });
+            }
+
+            let remainingText = textToProcess.replace(signatureRegex, '').trim();
+            if (remainingText) {
+                parts.push({ text: remainingText });
+            } else if (parts.length === 0) {
+                parts.push({ text: "" });
+            }
+
             if (msg.attachments) {
                 msg.attachments.forEach((att: { mimeType: any; base64Data: any; }) => {
                     parts.push({
@@ -92,12 +108,26 @@ export class GeminiProvider implements LLMProvider {
         const result = await chat.sendMessageStream(promptText);
         const textEncoder = new TextEncoder();
 
-        const stream = new ReadableStream({
+                const stream = new ReadableStream({
             async start(controller) {
                 for await (const chunk of result.stream) {
-                    const chunkText = chunk.text();
-                    if (chunkText) {
-                        controller.enqueue(textEncoder.encode(chunkText));
+                    if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
+                        for (const part of chunk.candidates[0].content.parts) {
+                            if ((part as any).thoughtSignature) {
+                                controller.enqueue(textEncoder.encode(`\n<thought_signature>${(part as any).thoughtSignature}</thought_signature>\n`));
+                            }
+                            if ((part as any).thought) {
+                                controller.enqueue(textEncoder.encode(`<thought>${(part as any).thought}</thought>`));
+                            }
+                            if (part.text) {
+                                controller.enqueue(textEncoder.encode(part.text));
+                            }
+                        }
+                    } else {
+                        const chunkText = chunk.text();
+                        if (chunkText) {
+                            controller.enqueue(textEncoder.encode(chunkText));
+                        }
                     }
                 }
                 controller.close();

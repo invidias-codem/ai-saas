@@ -97,7 +97,7 @@ export async function POST(req: Request) {
     }
 
     // Record actual token usage (fire-and-forget — never blocks response)
-    const modelUsed = result.debug?.model ?? 'gemini-2.0-flash';
+    const modelUsed = result.debug?.model ?? 'gemini-3.1-flash-lite-preview';
     void recordTokenUsage(userId, estimatedTokens, modelUsed);
 
     // Return the stream directly

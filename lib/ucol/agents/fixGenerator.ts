@@ -54,7 +54,7 @@ async function analyzeWithGemini(
   files: CodebaseFile[]
 ): Promise<any> {
   // Use Flash instead of Pro for analysis — 20x cheaper, sufficient for classification tasks.
-  const model = getGemini().getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = getGemini().getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
 
   const filesContext = files
     .map(f => `### ${f.path}\n\`\`\`\n${f.content.slice(0, MAX_FILE_CONTEXT_CHARS)}\n\`\`\``)
@@ -147,7 +147,7 @@ async function generateFixWithGemini(
   files: CodebaseFile[]
 ): Promise<{ explanation: string; confidence: number; fileChanges: Record<string, string> }> {
   // Flash fallback — keeps GCP costs predictable when Claude is unavailable.
-  const model = getGemini().getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = getGemini().getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
 
   const filesToChange = files.filter(f => analysis.filesToChange?.includes(f.path));
   const filesContext = filesToChange

@@ -2,7 +2,7 @@
   "generatedAt": "2026-01-18T09:41:13.467Z",
   "datasetPath": "datasets/feedback_dataset_ffb990139d8c/dataset.jsonl",
   "runId": "ec47e6d8735c",
-  "model": "gemini-2.0-flash",
+  "model": "gemini-3.1-flash-lite-preview",
   "options": {
     "disableSideEffects": true,
     "disableExternalContext": true

@@ -55,7 +55,7 @@ export async function generateComponentGemini(
         : CODER_SYSTEM_PROMPT;
 
     const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-3.1-flash-lite-preview',
         systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
     });
 

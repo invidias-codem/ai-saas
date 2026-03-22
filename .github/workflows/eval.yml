@@ -87,7 +87,7 @@ jobs:
               --out eval_golden \
               --disable-side-effects true \
               --disable-external-context true \
-              --model gemini-2.0-flash
+              --model gemini-3.1-flash-lite-preview
             
             # Compare to baseline if it exists
             if [ -f "datasets/golden/baseline.json" ]; then
@@ -125,7 +125,7 @@ jobs:
                --out eval \
                --disable-side-effects true \
                --disable-external-context true \
-               --model gemini-2.0-flash
+               --model gemini-3.1-flash-lite-preview
           fi
 
       - name: Upload eval artifacts

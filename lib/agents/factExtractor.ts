@@ -15,7 +15,7 @@ export interface FactExtractionResult {
   storedCount: number;
 }
 
-const GEMINI_FLASH_MODEL = "gemini-2.0-flash";
+const GEMINI_FLASH_MODEL = "gemini-3.1-flash-lite-preview";
 
 /**
  * Extracts structured facts from conversation using Gemini Flash

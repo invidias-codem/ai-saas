@@ -65,7 +65,7 @@ KnowledgeExtractorAgent {
   }
 
   /extract_llm [content, sourceUrl?] {
-    model: gemini-2.0-flash
+    model: gemini-3.1-flash-lite-preview
     prompt: "Extract 2-3 key factual statements. Return JSON array: [{topic, fact, confidence}]. Focus on specific, verifiable facts. Skip opinions."
     input: content.substring(0, 2000)
 

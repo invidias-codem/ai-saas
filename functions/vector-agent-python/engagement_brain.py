@@ -11,7 +11,7 @@ class EngagementBrain:
     """
     def __init__(self, api_key):
         self.client = genai.Client(api_key=api_key)
-        self.model_name = "gemini-2.0-flash"
+        self.model_name = "gemini-3.1-flash-lite-preview"
         
     def analyze_social_economy(self, posts_text: list) -> dict:
         """
