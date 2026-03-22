@@ -22,7 +22,7 @@ export async function runReActLoop(
     userQuery: string | Array<Part>,
     context: AgentContext,
     registry: ToolRegistry,
-    modelName: string = 'gemini-3.1-flash-lite-preview'
+    modelName: string = 'gemini-2.5-flash'
 ): Promise<ReActResult> {
 
     const project = process.env.GCP_PROJECT || 'genie-ai-1ca85';
