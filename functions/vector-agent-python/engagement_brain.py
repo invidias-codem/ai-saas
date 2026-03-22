@@ -167,6 +167,21 @@ class EngagementBrain:
             f"Tone: Intelligent, slightly cyberpunk. No hashtags."
         )
         
+        # If running inside Lambda Labs docker-compose with local LLM
+        if self.local_url and self.local_model:
+            try:
+                payload = {
+                    "model": self.local_model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.8,
+                    "max_tokens": 100
+                }
+                headers = {"Content-Type": "application/json"}
+                response = requests.post(f"{self.local_url}/chat/completions", json=payload, headers=headers, timeout=10)
+                return response.json()["choices"][0]["message"]["content"].strip()
+            except Exception as e:
+                logger.error(f"Local Reply Failed: {e}, falling back to Gemini")
+
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
