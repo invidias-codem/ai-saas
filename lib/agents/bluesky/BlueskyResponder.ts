@@ -5,13 +5,13 @@
  *   1. Build context (mention text + thread parent if available)
  *   2. Route through AgentRouter (UCOL) to classify query
  *   3. Extract facts via KnowledgeExtractor → push to graph
- *   4. Generate a response via GKE Ollama/Hermes3 (UCOL T-027)
+ *   4. Generate a response via Lambda Labs Ollama/Hermes3 (UCOL T-027)
  *      — grounded via knowledge graph retrieval before generation
- *      — fallback chain: GKE Ollama → Nous API → Gemini Flash
+ *      — fallback chain: Lambda Labs Ollama → Nous API → Gemini Flash
  *   5. Post the reply to Bluesky with proper reply ref
  *   6. Log the interaction to Supabase (with rate-limit check)
  *
- * T-027 change: GKE Ollama (self-hosted Hermes3) is now the primary inference
+ * T-027 change: Lambda Labs Ollama (self-hosted Hermes3) is now the primary inference
  * node for Bluesky content. Knowledge graph context is injected before
  * generation to prevent hallucination of platform metrics and user stats.
  */
@@ -27,8 +27,8 @@ import type { BlueskyMention, EngagementResult } from './types';
 
 // ─── Inference Config ─────────────────────────────────────────────────────────
 
-// GKE Ollama (primary) — self-hosted Hermes3, zero API cost
-const OLLAMA_GKE_URL = process.env.OLLAMA_GKE_URL || '';
+// Lambda Labs Ollama (primary) — self-hosted Hermes3, zero API cost
+const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || '';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'hermes3';
 
 // Nous Research (secondary fallback)
@@ -192,14 +192,14 @@ export class BlueskyResponder {
       }
     }
 
-    // ── 1. GKE Ollama — self-hosted Hermes3 (primary, UCOL T-027) ──────────
-    if (OLLAMA_GKE_URL) {
+    // ── 1. Lambda Labs Ollama — self-hosted Hermes3 (primary, UCOL T-027) ──────────
+    if (LAMBDA_OLLAMA_URL) {
       try {
-        const raw = await this.generateWithOllamaEndpoint(OLLAMA_GKE_URL, context, enrichedSystem);
-        console.log('[BlueskyResponder] Generated via GKE Ollama (self-hosted)');
+        const raw = await this.generateWithOllamaEndpoint(LAMBDA_OLLAMA_URL, context, enrichedSystem);
+        console.log('[BlueskyResponder] Generated via Lambda Labs Ollama (self-hosted)');
         return this.enforceCharLimit(raw);
       } catch (err) {
-        console.warn('[BlueskyResponder] GKE Ollama failed, falling back to Nous API:', err);
+        console.warn('[BlueskyResponder] Lambda Labs Ollama failed, falling back to Nous API:', err);
       }
     }
 
