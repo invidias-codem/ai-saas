@@ -39,6 +39,7 @@ const VideoPage = () => {
   // Nudge Integration
   const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
 
+  const t = useTranslations("Video");
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -150,8 +151,8 @@ const VideoPage = () => {
     <div>
       <KoFiNudge isOpen={showNudge} onClose={dismissNudge} />
       <Heading
-        title="Quick Clip"
-        description="Generate videos with Replicate!"
+        title={t('title')}
+        description={t('description')}
         icon={VideoIcon}
         iconColor="text-pink-700"
         bgColor="bg-pink-700/10"
@@ -291,7 +292,7 @@ const VideoPage = () => {
         {/* Idle/Empty State */}
         {status === "idle" && !isLoading && !error && !videoUrl && (
           <div className="rounded-2xl border border-pink-700/10 bg-gradient-to-br from-background to-pink-700/5 p-12">
-            <EmptyState label="Ready to create your video! 🎬" />
+            <EmptyState label={t('empty')} />
           </div>
         )}
 

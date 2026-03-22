@@ -33,6 +33,7 @@ const MusicPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [predictionId, setPredictionId] = useState<string | null>(null);
 
+  const t = useTranslations("Music");
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -116,8 +117,8 @@ const MusicPage = () => {
   return (
     <div>
       <Heading
-        title="Juke Box"
-        description='Turn your prompt into a song with Lyria!'
+        title={t('title')}
+        description={t('description')}
         icon={DiscIcon}
         iconColor='text-emerald-500'
         bgColor='bg-emerald-500/10'
@@ -191,7 +192,7 @@ const MusicPage = () => {
 
         {!musicUrl && !isLoading && !error && (
           <div className="rounded-2xl border border-emerald-500/10 bg-gradient-to-br from-background to-emerald-500/5 p-12">
-            <EmptyState label={'No music generated yet. Start creating! 🎵'} />
+            <EmptyState label={t('empty')} />
           </div>
         )}
         {musicUrl && (

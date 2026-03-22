@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -170,6 +171,7 @@ function ConversationPageGlobalWrapper({ conversationId, initialMessages = [] }:
 
 // Internal Page Component
 function ConversationPage({ conversationId, initialMessages }: { conversationId: string; initialMessages: any[] }) {
+  const t = useTranslations("Conversation");
 
   const convertedInitialMessages = React.useMemo(() => initialMessages.map(msg => ({
     id: msg.id,
@@ -899,7 +901,7 @@ function ConversationPage({ conversationId, initialMessages }: { conversationId:
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder={agentMode === 'agentic' ? "Agentic Mode active — try: search the web, write a research paper, write a story..." : agentMode === 'quality' ? "Quality Mode — ask anything complex..." : "Ask Genie anything..."}
+              placeholder={agentMode === 'agentic' ? t("placeholderAgentic") : agentMode === 'quality' ? t("placeholderQuality") : t("placeholderFast")}
               className="flex-1 min-h-[44px] max-h-[200px] border-0 focus-visible:ring-0 resize-none py-3 px-2 bg-transparent text-[15px] placeholder:text-muted-foreground/70"
               rows={1}
             />

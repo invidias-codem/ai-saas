@@ -62,6 +62,7 @@ const ImagePage = () => {
     fetchSettings();
   }, []);
 
+  const t = useTranslations("Image");
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -128,8 +129,8 @@ const ImagePage = () => {
     <div>
       <KoFiNudge isOpen={showNudge} onClose={dismissNudge} />
       <Heading
-        title="Image Capsule"
-        description="Turn your prompt into an image with Seedream 4!"
+        title={t('title')}
+        description={t('description')}
         icon={ImageIcon}
         iconColor="text-violet-500"
         bgColor="bg-violet-500/10"
@@ -297,7 +298,7 @@ const ImagePage = () => {
         )}
         {images.length === 0 && !isLoading && !error && (
           <div className="rounded-2xl border border-violet-500/10 bg-gradient-to-br from-background to-violet-500/5 p-12">
-            <EmptyState label="No images generated yet. Start creating! 🎨" />
+            <EmptyState label={t('empty')} />
           </div>
         )}
         {images.length > 0 && (

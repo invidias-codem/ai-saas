@@ -138,5 +138,40 @@
                 "description": "Plan, Code, and Review with AI"
             }
         }
+    },
+    "Image": {
+        "title": "Image Capsule",
+        "description": "Turn your prompt into an image with Seedream 4!",
+        "empty": "No images generated yet. Start creating! 🎨",
+        "placeholder": "A cute dog walking on a colorful street",
+        "generateBtn": "Generate",
+        "downloadBtn": "Download"
+    },
+    "Video": {
+        "title": "Quick Clip",
+        "description": "Generate videos with Replicate!",
+        "empty": "Ready to create your video! 🎬",
+        "placeholder": "A futuristic city in the clouds",
+        "generateBtn": "Generate"
+    },
+    "Music": {
+        "title": "Juke Box",
+        "description": "Turn your prompt into a song with Lyria!",
+        "empty": "No music generated yet. Start creating! 🎵",
+        "placeholder": "A piano solo in the style of Mozart",
+        "generateBtn": "Generate"
+    },
+    "Conversation": {
+        "title": "Conversation",
+        "description": "Chat with the smartest AI - Experience the power of AI",
+        "placeholder": "How do I calculate the radius of a circle?",
+        "generateBtn": "Generate",
+        "placeholderAgentic": "Agentic Mode active — try: search the web, write a research paper...",
+        "placeholderQuality": "Quality Mode — ask anything complex...",
+        "placeholderFast": "Ask Genie anything..."
+    },
+    "Settings": {
+        "title": "Settings",
+        "description": "Manage your account settings and preferences."
     }
 }

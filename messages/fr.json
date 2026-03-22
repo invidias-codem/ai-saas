@@ -138,5 +138,40 @@
                 "description": "Planifiez, codez et révisez avec l'IA"
             }
         }
+    },
+    "Image": {
+        "title": "Capsule d'Images",
+        "description": "Transformez votre texte en image avec Seedream 4 !",
+        "empty": "Aucune image générée pour le moment. Commencez à créer ! 🎨",
+        "placeholder": "Un chien mignon marchant dans une rue colorée",
+        "generateBtn": "Générer",
+        "downloadBtn": "Télécharger"
+    },
+    "Video": {
+        "title": "Clip Rapide",
+        "description": "Générez des vidéos avec Replicate !",
+        "empty": "Prêt à créer votre vidéo ! 🎬",
+        "placeholder": "Une ville futuriste dans les nuages",
+        "generateBtn": "Générer"
+    },
+    "Music": {
+        "title": "Boîte à Musique",
+        "description": "Transformez votre texte en chanson avec Lyria !",
+        "empty": "Aucune musique générée pour le moment. Commencez à créer ! 🎵",
+        "placeholder": "Un solo de piano dans le style de Mozart",
+        "generateBtn": "Générer"
+    },
+    "Conversation": {
+        "title": "Conversation",
+        "description": "Discutez avec l'IA la plus intelligente - Découvrez la puissance de l'IA",
+        "placeholder": "Comment calculer le rayon d'un cercle ?",
+        "generateBtn": "Générer",
+        "placeholderAgentic": "Mode Agentique actif — essayez : chercher sur le web, écrire un article...",
+        "placeholderQuality": "Mode Qualité — posez n'importe quelle question complexe...",
+        "placeholderFast": "Demandez n'importe quoi à Genie..."
+    },
+    "Settings": {
+        "title": "Paramètres",
+        "description": "Gérez les paramètres et préférences de votre compte."
     }
 }

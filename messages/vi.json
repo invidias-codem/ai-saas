@@ -130,5 +130,40 @@
                 "description": "Lên kế hoạch, lập trình và xem xét với AI"
             }
         }
+    },
+    "Image": {
+        "title": "Viên nang Hình ảnh",
+        "description": "Biến văn bản của bạn thành hình ảnh với Seedream 4!",
+        "empty": "Chưa có hình ảnh nào được tạo. Hãy bắt đầu tạo! 🎨",
+        "placeholder": "Một chú chó dễ thương đi trên con phố đầy màu sắc",
+        "generateBtn": "Tạo",
+        "downloadBtn": "Tải xuống"
+    },
+    "Video": {
+        "title": "Clip Nhanh",
+        "description": "Tạo video với Replicate!",
+        "empty": "Sẵn sàng để tạo video của bạn! 🎬",
+        "placeholder": "Một thành phố tương lai trên mây",
+        "generateBtn": "Tạo"
+    },
+    "Music": {
+        "title": "Hộp Âm nhạc",
+        "description": "Biến văn bản của bạn thành bài hát với Lyria!",
+        "empty": "Chưa có âm nhạc nào được tạo. Hãy bắt đầu tạo! 🎵",
+        "placeholder": "Một bản solo piano theo phong cách Mozart",
+        "generateBtn": "Tạo"
+    },
+    "Conversation": {
+        "title": "Trò chuyện",
+        "description": "Trò chuyện với AI thông minh nhất - Trải nghiệm sức mạnh của AI",
+        "placeholder": "Làm thế nào để tính bán kính của một hình tròn?",
+        "generateBtn": "Tạo",
+        "placeholderAgentic": "Chế độ Đặc vụ đang hoạt động — hãy thử: tìm kiếm trên web, viết một bài nghiên cứu...",
+        "placeholderQuality": "Chế độ Chất lượng — hỏi bất cứ điều gì phức tạp...",
+        "placeholderFast": "Hỏi Genie bất cứ điều gì..."
+    },
+    "Settings": {
+        "title": "Cài đặt",
+        "description": "Quản lý cài đặt tài khoản và tùy chọn của bạn."
     }
 }

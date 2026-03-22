@@ -138,5 +138,40 @@
                 "description": "Planen, codieren und überprüfen mit KI"
             }
         }
+    },
+    "Image": {
+        "title": "Bildkapsel",
+        "description": "Verwandle deinen Text in ein Bild mit Seedream 4!",
+        "empty": "Noch keine Bilder generiert. Fange an zu erstellen! 🎨",
+        "placeholder": "Ein süßer Hund, der auf einer bunten Straße läuft",
+        "generateBtn": "Generieren",
+        "downloadBtn": "Herunterladen"
+    },
+    "Video": {
+        "title": "Schneller Clip",
+        "description": "Generiere Videos mit Replicate!",
+        "empty": "Bereit, dein Video zu erstellen! 🎬",
+        "placeholder": "Eine futuristische Stadt in den Wolken",
+        "generateBtn": "Generieren"
+    },
+    "Music": {
+        "title": "Musikbox",
+        "description": "Verwandle deinen Text in ein Lied mit Lyria!",
+        "empty": "Noch keine Musik generiert. Fange an zu erstellen! 🎵",
+        "placeholder": "Ein Klaviersolo im Stil von Mozart",
+        "generateBtn": "Generieren"
+    },
+    "Conversation": {
+        "title": "Unterhaltung",
+        "description": "Chatte mit der intelligentesten KI - Erlebe die Kraft der KI",
+        "placeholder": "Wie berechne ich den Radius eines Kreises?",
+        "generateBtn": "Generieren",
+        "placeholderAgentic": "Agentischer Modus aktiv — versuche: im Internet suchen, eine Arbeit schreiben...",
+        "placeholderQuality": "Qualitätsmodus — frage alles Komplexe...",
+        "placeholderFast": "Frag Genie alles..."
+    },
+    "Settings": {
+        "title": "Einstellungen",
+        "description": "Verwalte deine Kontoeinstellungen und Präferenzen."
     }
 }

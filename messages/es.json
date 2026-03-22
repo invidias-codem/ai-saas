@@ -138,5 +138,40 @@
                 "description": "Planifica, codifica y revisa con IA"
             }
         }
+    },
+    "Image": {
+        "title": "Cápsula de Imágenes",
+        "description": "¡Convierte tu texto en una imagen con Seedream 4!",
+        "empty": "No se han generado imágenes todavía. ¡Empieza a crear! 🎨",
+        "placeholder": "Un perro lindo caminando por una calle colorida",
+        "generateBtn": "Generar",
+        "downloadBtn": "Descargar"
+    },
+    "Video": {
+        "title": "Clip Rápido",
+        "description": "¡Genera videos con Replicate!",
+        "empty": "¡Listo para crear tu video! 🎬",
+        "placeholder": "Una ciudad futurista en las nubes",
+        "generateBtn": "Generar"
+    },
+    "Music": {
+        "title": "Caja de Música",
+        "description": "¡Convierte tu texto en una canción con Lyria!",
+        "empty": "No se ha generado música todavía. ¡Empieza a crear! 🎵",
+        "placeholder": "Un solo de piano al estilo de Mozart",
+        "generateBtn": "Generar"
+    },
+    "Conversation": {
+        "title": "Conversación",
+        "description": "Chatea con la IA más inteligente - Experimenta el poder de la IA",
+        "placeholder": "¿Cómo calculo el radio de un círculo?",
+        "generateBtn": "Generar",
+        "placeholderAgentic": "Modo Agente activo — intenta: buscar en la web, escribir un trabajo...",
+        "placeholderQuality": "Modo Calidad — pregunta cualquier cosa compleja...",
+        "placeholderFast": "Pregúntale a Genie cualquier cosa..."
+    },
+    "Settings": {
+        "title": "Configuración",
+        "description": "Administra la configuración y preferencias de tu cuenta."
     }
 }

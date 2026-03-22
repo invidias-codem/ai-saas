@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@clerk/nextjs";
+import { useTranslations } from "next-intl";
 import SlackIntegration from "@/components/slack-integration";
 import { ConversationHistory } from "@/components/conversation-history";
 
@@ -41,6 +42,7 @@ interface Integration {
 
 const SettingsPage = () => {
   const router = useRouter();
+  const t = useTranslations("Settings");
   const { userId } = useAuth();
   const [dailyDigestEnabled, setDailyDigestEnabled] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
@@ -206,7 +208,7 @@ const SettingsPage = () => {
   return (
     <div>
       <Heading
-        title="Settings"
+        title={t("title")}
         description="Manage your account settings, integrations, and memories."
         icon={Settings}
         iconColor="text-gray-700"
