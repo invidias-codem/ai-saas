@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeTransition } from "@/components/theme-transition";
 import { ModalProvider } from "@/components/modal-provider";
 import { UserSyncProvider } from "@/components/user-sync-provider";
+import { ReferralCapture } from "@/components/ReferralCapture";
 
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
@@ -96,6 +97,7 @@ export default async function LocaleLayout({
                             <ThemeTransition />
                             <ModalProvider>
                                 <UserSyncProvider>
+                                    <ReferralCapture />
                                     {children}
                                 </UserSyncProvider>
                                 <Analytics />
