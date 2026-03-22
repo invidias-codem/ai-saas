@@ -8,14 +8,15 @@ CREATE TYPE wm_event_type AS ENUM (
     'MERGED'         -- A node was merged with another entity
 );
 
--- Create the 'trust_tier' enum from RFC-001 if it doesn't exist
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'trust_tier') THEN
-        CREATE TYPE trust_tier AS ENUM ('AXIOM', 'CONFIRMED', 'SUPPORTED', 'UNVERIFIED');
-    END IF;
-END
-$$;
+-- Because Supabase SQL Editor evaluates CREATE TYPE blocks differently than pg_dump,
+-- we'll just try to create the type and suppress the error if it already exists.
+-- But we can't use DO blocks easily across statement boundaries in the editor.
+-- The simplest, bulletproof way for the GUI is:
+DO $$ BEGIN
+    CREATE TYPE trust_tier AS ENUM ('AXIOM', 'CONFIRMED', 'SUPPORTED', 'UNVERIFIED');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 CREATE TABLE IF NOT EXISTS wm_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
