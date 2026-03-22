@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 import { parseReferralParams, REFERRAL_COOKIE, PLATFORM_COOKIE, COOKIE_MAX_AGE } from '@/lib/referral';
 
 const intlMiddleware = createMiddleware({
-    locales: ['en', 'th', 'vi'],
+    locales: ['en', 'th', 'vi', 'es', 'fr', 'de'],
     defaultLocale: 'en',
     localePrefix: 'always'
 });

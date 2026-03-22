@@ -2,7 +2,7 @@
 
 import { useLocale, useTranslations } from "next-intl";
 import { usePathname, useRouter } from "next/navigation";
-import { ChangeEvent, useTransition } from "react";
+import { useTransition } from "react";
 import {
     Select,
     SelectContent,
@@ -21,18 +21,15 @@ export default function LanguageSwitcher() {
     const onSelectChange = (value: string) => {
         const nextLocale = value;
         startTransition(() => {
-            // Replace the locale in the pathname
-            // Current pathname: /en/some-path
-            // New pathname: /th/some-path
-            // Note: This simple replacement assumes the pathname always starts with the locale
-            // next-intl might handle this differently with its own Link/Router
-            // But for switching, a full reload or router.replace is common
-
-            // Using next-intl routing strategy is better if available, but for now manual replace:
             const segments = pathname.split('/');
             segments[1] = nextLocale;
             const newPath = segments.join('/');
+            
+            // Set the cookie for next-intl so the server remembers it immediately
+            document.cookie = `NEXT_LOCALE=${nextLocale};path=/;max-age=31536000;SameSite=Lax`;
+            
             router.replace(newPath);
+            router.refresh();
         });
     };
 
@@ -45,6 +42,9 @@ export default function LanguageSwitcher() {
                 <SelectItem value="en">🇺🇸 EN</SelectItem>
                 <SelectItem value="th">🇹🇭 TH</SelectItem>
                 <SelectItem value="vi">🇻🇳 VI</SelectItem>
+                <SelectItem value="es">🇪🇸 ES</SelectItem>
+                <SelectItem value="fr">🇫🇷 FR</SelectItem>
+                <SelectItem value="de">🇩🇪 DE</SelectItem>
             </SelectContent>
         </Select>
     );

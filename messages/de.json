@@ -1,0 +1,102 @@
+{
+    "Navbar": {
+        "supportGenie": "Genie unterstützen",
+        "credits": "Guthaben"
+    },
+    "KoFiNudge": {
+        "enjoyingGenie": "Gefällt dir Genie?",
+        "supportProject": "Unterstütze das Projekt & halte die Server am Laufen!",
+        "supportOnKoFi": "Auf Ko-fi unterstützen"
+    },
+    "SupportGenie": {
+        "title": "Genie unterstützen",
+        "description": "Schalte automatisches Guthaben frei, indem du das Projekt auf Ko-fi unterstützt.",
+        "important": "Wichtig: Verwende dieselbe E-Mail-Adresse auf Ko-fi wie für dein Genie-Konto, damit wir dir das Guthaben automatisch gutschreiben können!",
+        "donatedWithDifferentEmail": "Mit einer anderen E-Mail gespendet?",
+        "contactSupport": "Support kontaktieren"
+    },
+    "DashboardSupport": {
+        "title": "Ein persönlicher Appell",
+        "p1": "Wir bitten normalerweise nicht darum, aber heute brauchen wir deine Hilfe. Genie AI ist ein unabhängiges Projekt, das entwickelt wurde, um dir die fortschrittlichsten KI-Tools ohne den teuren Preis großer Unternehmen zu bieten.",
+        "p2": "Es kostet viele Ressourcen, unsere Server am Laufen zu halten und neue innovative Funktionen zu entwickeln. Wenn jeder, der dies liest, einen kleinen Betrag spenden würde, könnten wir Genie AI noch jahrelang florieren lassen.",
+        "p3": "Wenn du Wert in unserer Arbeit siehst, erwäge bitte, uns zu unterstützen. Es dauert nur eine Minute und macht einen riesigen Unterschied.",
+        "button": "Genie AI unterstützen ❤️"
+    },
+    "Metadata": {
+        "title": "Genie AI: OpenAI, Gemini & Claude All-in-One Plattform",
+        "description": "Entfessele deine Kreativität mit Genie AI. Die ultimative KI-SaaS-Plattform, die OpenAI, Google Gemini und Anthropic Claude für die Generierung von Text, Code, Bildern, Videos und Musik integriert.",
+        "keywords": "Genie AI, KI-Plattform, Gemini AI, Claude AI, KI SaaS, Speichersystem, Slack-Integration, Content-Erstellung, Der intelligenteste KI-Assistent"
+    },
+    "Landing": {
+        "hero": {
+            "badge": "Angetrieben von UCOL — Unified Context Orchestration Layer",
+            "headline1": "Jede Unterhaltung, die du je mit KI hattest —",
+            "headline2": "vergessen.",
+            "headline3": "Jetzt nicht mehr.",
+            "subhead": "Tech Genie erinnert sich an dich. Lernt von dir. Verbindet drei KI-Köpfe — damit du nie wieder bei Null anfangen musst.",
+            "cta": "Kostenlos starten",
+            "ctaSecondary": "Sehen, wie es funktioniert",
+            "graphLabel": "Dein Wissensgraph — Live-Vorschau",
+            "title": "Der intelligenteste KI-Assistent, der je gebaut wurde",
+            "description": "Optimiere deinen Workflow mit unserem fortschrittlichen Speichersystem, der Slack-Integration und den Tools zur Content-Erstellung. Angetrieben von Gemini- und Anthropic-Modellen für die besten Ergebnisse.",
+            "login": "Anmelden"
+        },
+        "ucol": {
+            "eyebrow": "UCOL — Unified Context Orchestration Layer",
+            "title": "Drei Köpfe. Eine Antwort.",
+            "subtitle": "UCOL leitet jede Frage an das richtige Modell weiter, gibt das Gedächtnis zwischen ihnen weiter und liefert eine nahtlose Antwort.",
+            "hermeTagline": "Schnelles Denken. Sofortige Antworten.",
+            "hermes": "Hermes",
+            "hermesTagline": "Schnelles Denken. Sofortige Antworten.",
+            "gemini": "Gemini",
+            "geminiTagline": "Tiefe Analyse. Strategisches Denken.",
+            "claude": "Claude",
+            "claudeTagline": "Präzise Sprache. Durchdachte Gestaltung.",
+            "flowLabel": "Wie UCOL deine Anfrage weiterleitet"
+        },
+        "memory": {
+            "eyebrow": "Dauerhaftes Gedächtnis",
+            "title": "Genie lernt dich kennen.",
+            "subtitle": "Jede Unterhaltung erweitert deinen Wissensgraphen. Fakten, Vorlieben, Ziele — verbunden und gemerkt.",
+            "stat1Value": "∞",
+            "stat1Label": "Gedächtnis läuft nie ab",
+            "stat2Value": "3",
+            "stat2Label": "KI-Modelle, ein Kontext",
+            "stat3Value": "0",
+            "stat3Label": "Mal, die du bei Null anfängst"
+        },
+        "features": {
+            "title": "Eine Plattform. Alle Fähigkeiten.",
+            "subtitle": "Alles, was du zum Erstellen, Denken und Bauen brauchst — mit einer KI, die dich wirklich kennt.",
+            "conversation": "Chat mit Gedächtnis",
+            "conversationDesc": "Drei KI-Köpfe mit gemeinsamem Kontext. Deine Vorlieben, Ziele und deine Historie — in jeder Unterhaltung vorhanden.",
+            "image": "Visuelle Generierung",
+            "imageDesc": "Verwandle Ideen in atemberaubende Bilder. Beschreibe es, verfeinere es, mach es zu deinem.",
+            "video": "Video-Erstellung",
+            "videoDesc": "Erwecke Geschichten zum Leben mit KI-generierten Videoclips aus einfachen Beschreibungen.",
+            "music": "Musikkomposition",
+            "musicDesc": "Generiere originale Audiospuren und Soundeffekte für deine Projekte.",
+            "code": "Code Builder",
+            "codeDesc": "Plane, baue und überprüfe Code mit einer KI, die deinen Stack versteht und sich an deine Muster erinnert.",
+            "fast": "Schnell & immer online",
+            "fastDesc": "Infrastruktur auf Unternehmensniveau. Deine KI schläft nie, vergisst nie, wird nie langsamer."
+        },
+        "cta": {
+            "title": "Triff die KI, die sich erinnert.",
+            "subtitle": "Schließe dich Tausenden von Erstellern an, die nicht mehr bei Null anfangen.",
+            "button": "Kostenlos starten →"
+        },
+        "pricing": {
+            "title": "Flexible Preisgestaltung",
+            "subtitle": "Zahle nur für das, was du generierst.",
+            "payAsYouGo": "Zahlen nach Bedarf",
+            "creatorBundle": "Creator-Paket",
+            "proStudio": "Pro Studio",
+            "startCreating": "Jetzt loslegen",
+            "disclaimer": "Die Preise werden basierend auf der Standardnutzung geschätzt."
+        },
+        "footer": {
+            "rights": "© {year} Genie AI. Alle Rechte vorbehalten."
+        }
+    }
+}

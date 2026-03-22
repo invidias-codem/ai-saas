@@ -1,0 +1,102 @@
+{
+    "Navbar": {
+        "supportGenie": "Apoyar a Genie",
+        "credits": "Créditos"
+    },
+    "KoFiNudge": {
+        "enjoyingGenie": "¿Disfrutando de Genie?",
+        "supportProject": "¡Apoya el proyecto y mantén los servidores funcionando!",
+        "supportOnKoFi": "Apoyar en Ko-fi"
+    },
+    "SupportGenie": {
+        "title": "Apoyar a Genie",
+        "description": "Desbloquea créditos automatizados apoyando el proyecto en Ko-fi.",
+        "important": "Importante: ¡Usa la misma dirección de correo electrónico en Ko-fi que en tu cuenta de Genie para que podamos acreditarte automáticamente!",
+        "donatedWithDifferentEmail": "¿Donaste con un correo electrónico diferente?",
+        "contactSupport": "Contactar Soporte"
+    },
+    "DashboardSupport": {
+        "title": "Una apelación personal",
+        "p1": "Por lo general, no pedimos, pero hoy necesitamos su ayuda. Genie AI es un proyecto independiente, construido para brindarle las herramientas de inteligencia artificial más avanzadas sin el gran precio corporativo.",
+        "p2": "Se necesitan muchos recursos para mantener nuestros servidores funcionando y desarrollar nuevas funciones innovadoras. Si todos los que leyeran esto donaran una pequeña cantidad, podríamos mantener a Genie AI prosperando en los próximos años.",
+        "p3": "Si encuentra valor en lo que hacemos, por favor considere apoyarnos. Solo toma un minuto y hace una gran diferencia.",
+        "button": "Apoyar a Genie AI ❤️"
+    },
+    "Metadata": {
+        "title": "Genie AI: Plataforma Todo en Uno de OpenAI, Gemini y Claude",
+        "description": "Desbloquea tu creatividad con Genie AI. La plataforma SaaS de IA definitiva que integra OpenAI, Google Gemini y Anthropic Claude para la generación de texto, código, imágenes, video y música.",
+        "keywords": "Genie AI, Plataforma de IA, Gemini AI, Claude AI, SaaS de IA, Sistema de Memoria, Integración con Slack, Creación de Contenido, El asistente de IA más inteligente"
+    },
+    "Landing": {
+        "hero": {
+            "badge": "Desarrollado por UCOL — Capa Unificada de Orquestación de Contexto",
+            "headline1": "Cada conversación que has tenido con la IA —",
+            "headline2": "olvidada.",
+            "headline3": "Ya no más.",
+            "subhead": "Tech Genie te recuerda. Aprende de ti. Conecta tres mentes de IA — para que nunca empieces desde cero.",
+            "cta": "Empieza gratis",
+            "ctaSecondary": "Mira cómo funciona",
+            "graphLabel": "Tu Grafo de Conocimiento — vista en vivo",
+            "title": "El Asistente de IA Más Inteligente Jamás Creado",
+            "description": "Agiliza tu flujo de trabajo con nuestro avanzado Sistema de Memoria, Integración con Slack y herramientas de Creación de Contenido. Desarrollado por modelos Gemini y Anthropic para obtener los mejores resultados.",
+            "login": "Iniciar sesión"
+        },
+        "ucol": {
+            "eyebrow": "UCOL — Capa Unificada de Orquestación de Contexto",
+            "title": "Tres mentes. Una respuesta.",
+            "subtitle": "UCOL enruta cada pregunta al modelo correcto, pasa la memoria entre ellos y ofrece una respuesta fluida.",
+            "hermeTagline": "Razonamiento rápido. Respuestas instantáneas.",
+            "hermes": "Hermes",
+            "hermesTagline": "Razonamiento rápido. Respuestas instantáneas.",
+            "gemini": "Gemini",
+            "geminiTagline": "Análisis profundo. Pensamiento estratégico.",
+            "claude": "Claude",
+            "claudeTagline": "Lenguaje preciso. Elaboración cuidadosa.",
+            "flowLabel": "Cómo UCOL enruta tu consulta"
+        },
+        "memory": {
+            "eyebrow": "Memoria Persistente",
+            "title": "Genie aprende de ti.",
+            "subtitle": "Cada conversación se suma a tu grafo de conocimiento. Hechos, preferencias, objetivos — conectados y recordados.",
+            "stat1Value": "∞",
+            "stat1Label": "La memoria nunca expira",
+            "stat2Value": "3",
+            "stat2Label": "Modelos de IA, un contexto",
+            "stat3Value": "0",
+            "stat3Label": "Veces que empiezas desde cero"
+        },
+        "features": {
+            "title": "Una plataforma. Todas las capacidades.",
+            "subtitle": "Todo lo que necesitas para construir, crear y pensar — con una IA que realmente te conoce.",
+            "conversation": "Chat con memoria",
+            "conversationDesc": "Tres mentes de IA con contexto compartido. Tus preferencias, metas e historial — presentes en cada conversación.",
+            "image": "Generación visual",
+            "imageDesc": "Convierte ideas en imágenes impresionantes. Descríbelo, refínalo, hazlo tuyo.",
+            "video": "Creación de video",
+            "videoDesc": "Da vida a tus historias con clips de video generados por IA a partir de descripciones simples.",
+            "music": "Composición musical",
+            "musicDesc": "Genera pistas de audio originales y efectos de sonido para tus proyectos.",
+            "code": "Constructor de Código",
+            "codeDesc": "Planifica, construye y revisa código con una IA que entiende tu stack y recuerda tus patrones.",
+            "fast": "Rápido y siempre activo",
+            "fastDesc": "Infraestructura de nivel empresarial. Tu IA nunca duerme, nunca olvida, nunca se ralentiza."
+        },
+        "cta": {
+            "title": "Conoce la IA que recuerda.",
+            "subtitle": "Únete a miles de constructores que han dejado de empezar desde cero.",
+            "button": "Empieza gratis →"
+        },
+        "pricing": {
+            "title": "Precios Flexibles",
+            "subtitle": "Paga solo por lo que generas.",
+            "payAsYouGo": "Pago por uso",
+            "creatorBundle": "Paquete de Creador",
+            "proStudio": "Pro Studio",
+            "startCreating": "Empieza a crear ahora",
+            "disclaimer": "Los precios se estiman en función del uso estándar."
+        },
+        "footer": {
+            "rights": "© {year} Genie AI. Todos los derechos reservados."
+        }
+    }
+}
