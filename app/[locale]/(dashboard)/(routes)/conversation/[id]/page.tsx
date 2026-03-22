@@ -20,6 +20,10 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   // Fetch initial history
   let initialMessages: any[] = [];
   try {
+    if (!supabaseAdmin) {
+      console.warn('supabaseAdmin is null, skipping message fetch');
+      return <ChatClient conversationId={conversationId} initialMessages={initialMessages} />;
+    }
     const { data: messages, error } = await supabaseAdmin
       .from('messages')
       .select('*')
