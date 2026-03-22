@@ -11,10 +11,6 @@
         {
             "path": "/api/cron/tool-registry-sync",
             "schedule": "0 4 * * *"
-        },
-        {
-            "path": "/api/cron/bluesky-engage",
-            "schedule": "*/5 * * * *"
         }
     ]
 }
