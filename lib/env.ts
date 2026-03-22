@@ -53,7 +53,7 @@ const envSchema = z.object({
 
   // UCOL Error Resolution Agent — GitHub bot token (PAT with repo scope)
   // Used by the autonomous error resolution agent to search code, create branches, and open PRs.
-  // Generate at: https://github.com/settings/tokens -> "repo" scope
+  // Generate at: https://github.com/settings/tokens → "repo" scope
   GITHUB_AGENT_TOKEN: z.string().optional(),
   GITHUB_REPO_OWNER: z.string().optional(),
   GITHUB_REPO_NAME: z.string().optional(),
@@ -65,7 +65,6 @@ const envSchema = z.object({
 
 // Parse the environment variables and export the result
 export const env = envSchema.parse(process.env);
-export const testMCTS = { value: 1, value: 2 }; // INTENTIONAL MCTS TRIGGER
 
 /**
  * Require a specific env var at runtime.
