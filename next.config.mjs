@@ -16,6 +16,12 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: '*.replicate.delivery',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
         hostname: 'scoutforge.net',
         port: '',
         pathname: '/**',
@@ -132,7 +138,7 @@ export default withMDX(withNextIntl({
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://clerk.com https://*.clerk.accounts.dev https://clerk.gen1e.xyz https://apis.google.com https://*.googleapis.com https://va.vercel-scripts.com https://challenges.cloudflare.com https://js.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' blob: data: https://*.clerk.com https://img.clerk.com https://replicate.delivery https://*.googleapis.com https://*.gstatic.com https://ozevwhiipwbcvyzkbhib.supabase.co https://*.supabase.co https://storage.ko-fi.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://clerk.com https://*.clerk.accounts.dev https://clerk.gen1e.xyz https://*.clerk.com https://*.googleapis.com https://ozevwhiipwbcvyzkbhib.supabase.co https://*.supabase.co wss://ozevwhiipwbcvyzkbhib.supabase.co wss://*.supabase.co https://clerk-telemetry.com https://challenges.cloudflare.com; frame-src 'self' https://ko-fi.com https://challenges.cloudflare.com https://newassets.hcaptcha.com; worker-src 'self' blob:;"
+            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://clerk.com https://*.clerk.accounts.dev https://clerk.gen1e.xyz https://apis.google.com https://*.googleapis.com https://va.vercel-scripts.com https://challenges.cloudflare.com https://js.hcaptcha.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' blob: data: https://*.clerk.com https://img.clerk.com https://replicate.delivery https://*.replicate.delivery https://*.googleapis.com https://*.gstatic.com https://ozevwhiipwbcvyzkbhib.supabase.co https://*.supabase.co https://storage.ko-fi.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://clerk.com https://*.clerk.accounts.dev https://clerk.gen1e.xyz https://*.clerk.com https://*.googleapis.com https://ozevwhiipwbcvyzkbhib.supabase.co https://*.supabase.co wss://ozevwhiipwbcvyzkbhib.supabase.co wss://*.supabase.co https://clerk-telemetry.com https://challenges.cloudflare.com; frame-src 'self' https://ko-fi.com https://challenges.cloudflare.com https://newassets.hcaptcha.com; worker-src 'self' blob:;"
           },
           { key: 'X-XSS-Protection',       value: '1; mode=block' },
           { key: 'X-Frame-Options',         value: 'SAMEORIGIN' },
