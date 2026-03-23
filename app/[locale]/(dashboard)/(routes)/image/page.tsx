@@ -328,7 +328,23 @@ const ImagePage = () => {
                 </div>
                 <CardFooter className="p-3 gap-2 bg-background/50 backdrop-blur-sm">
                   <Button
-                    onClick={() => window.open(src)}
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(src);
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const link = document.createElement("a");
+                        link.href = url;
+                        link.download = `genie-image-${Date.now()}.png`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(url);
+                      } catch (err) {
+                        console.error("Download failed:", err);
+                        window.open(src, "_blank");
+                      }
+                    }}
                     variant="secondary"
                     className="flex-1 bg-gradient-to-r from-violet-600/10 to-purple-600/10 hover:from-violet-600/20 hover:to-purple-600/20 border-violet-500/20 rounded-xl transition-all duration-300"
                   >
