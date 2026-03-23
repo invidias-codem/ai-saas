@@ -1,21 +1,34 @@
 """
 twin_router/main.py — UCOL Twin Router
-Sits in front of vLLM and injects Architect/Builder personas.
+Sits in front of vLLM and injects Architect/Builder/JKlaw personas.
 
-Endpoints:
+OpenAI-compat endpoints (for Vercel / direct API calls):
   POST /v1/architect/chat/completions  — Karpathy-mode: plan, question, architect
   POST /v1/builder/chat/completions    — Steinberger-mode: code, test, ship
-  POST /v1/debate                      — Run both twins, then synthesize
+  POST /v1/jklaw/chat/completions      — JKlaw: orchestration, research, strategy
+  POST /v1/debate                      — Run all twins, then synthesize
   GET  /health                         — Status + model info
+
+Ollama-compat endpoints (for OpenClaw routing via SSH tunnel):
+  GET  /api/tags                       — List available "models" (personas)
+  POST /api/chat                       — Ollama chat format, routes by model name
+  POST /api/generate                   — Ollama generate format, routes by model name
+
+Model name → persona routing:
+  jklaw / jklaw:latest                 → JKlaw (orchestration/strategy)
+  architect / hermes3:architect        → Architect (first-principles planner)
+  builder / hermes3:builder            → Builder (code/ship)
+  hermes3:8b / default / *             → pass-through (no persona injection)
 """
 
 import os
 import json
 import asyncio
+import time
 import httpx
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
-from personas import ARCHITECT_SYSTEM, BUILDER_SYSTEM, DEBATE_SYSTEM
+from personas import ARCHITECT_SYSTEM, BUILDER_SYSTEM, DEBATE_SYSTEM, JKLAW_SYSTEM
 
 app = FastAPI(title="UCOL Twin Router")
 
@@ -86,6 +99,135 @@ async def architect(request: Request):
 @app.post("/v1/builder/chat/completions")
 async def builder(request: Request):
     return await twin_endpoint(request, BUILDER_SYSTEM, "Builder")
+
+
+@app.post("/v1/jklaw/chat/completions")
+async def jklaw(request: Request):
+    return await twin_endpoint(request, JKLAW_SYSTEM, "JKlaw")
+
+
+# ── Ollama-Compatible Endpoints (for OpenClaw routing) ────────────────────────
+
+PERSONA_MAP = {
+    "jklaw": JKLAW_SYSTEM,
+    "jklaw:latest": JKLAW_SYSTEM,
+    "hermes3:architect": ARCHITECT_SYSTEM,
+    "architect": ARCHITECT_SYSTEM,
+    "hermes3:builder": BUILDER_SYSTEM,
+    "builder": BUILDER_SYSTEM,
+}
+
+AVAILABLE_MODELS = [
+    {"name": "jklaw:latest", "model": "jklaw:latest", "modified_at": "2026-03-23T00:00:00Z", "size": 0,
+     "details": {"family": "ucol-twin", "parameter_size": "8B", "quantization_level": "none"}},
+    {"name": "hermes3:architect", "model": "hermes3:architect", "modified_at": "2026-03-23T00:00:00Z", "size": 0,
+     "details": {"family": "ucol-twin", "parameter_size": "8B", "quantization_level": "none"}},
+    {"name": "hermes3:builder", "model": "hermes3:builder", "modified_at": "2026-03-23T00:00:00Z", "size": 0,
+     "details": {"family": "ucol-twin", "parameter_size": "8B", "quantization_level": "none"}},
+    {"name": "hermes3:8b", "model": "hermes3:8b", "modified_at": "2026-03-23T00:00:00Z", "size": 0,
+     "details": {"family": "hermes", "parameter_size": "8B", "quantization_level": "none"}},
+]
+
+
+@app.get("/api/tags")
+async def ollama_tags():
+    """Ollama /api/tags — lists available models/personas."""
+    return JSONResponse({"models": AVAILABLE_MODELS})
+
+
+@app.post("/api/chat")
+async def ollama_chat(request: Request):
+    """
+    Ollama /api/chat format adapter.
+    Translates Ollama request → OpenAI format → vLLM → Ollama response.
+    """
+    body = await request.json()
+    model_name = body.get("model", "hermes3:8b").lower()
+    messages = body.get("messages", [])
+    stream = body.get("stream", True)
+    options = body.get("options", {})
+
+    system_prompt = PERSONA_MAP.get(model_name)
+    if system_prompt:
+        messages = inject_system(messages, system_prompt)
+        print(f"[TwinRouter/Ollama] {model_name} → persona injected | stream={stream}")
+    else:
+        print(f"[TwinRouter/Ollama] {model_name} → pass-through")
+
+    oai_payload = {
+        "model": MODEL_NAME,
+        "messages": messages,
+        "stream": stream,
+        "temperature": options.get("temperature", 0.7),
+        "max_tokens": options.get("num_predict", 2048),
+    }
+
+    if stream:
+        async def ollama_stream():
+            url = f"{VLLM_BASE}/v1/chat/completions"
+            async with httpx.AsyncClient(timeout=TWIN_TIMEOUT) as client:
+                async with client.stream("POST", url, json=oai_payload) as resp:
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            # Send final Ollama done message
+                            done_msg = json.dumps({
+                                "model": model_name,
+                                "created_at": "",
+                                "message": {"role": "assistant", "content": ""},
+                                "done": True,
+                                "done_reason": "stop",
+                            })
+                            yield done_msg + "\n"
+                            break
+                        try:
+                            chunk = json.loads(data_str)
+                            delta = chunk["choices"][0]["delta"]
+                            content = delta.get("content", "")
+                            ollama_chunk = json.dumps({
+                                "model": model_name,
+                                "created_at": "",
+                                "message": {"role": "assistant", "content": content},
+                                "done": False,
+                            })
+                            yield ollama_chunk + "\n"
+                        except Exception:
+                            continue
+
+        return StreamingResponse(ollama_stream(), media_type="application/x-ndjson")
+    else:
+        content = await call_vllm_sync(oai_payload)
+        return JSONResponse({
+            "model": model_name,
+            "created_at": "",
+            "message": {"role": "assistant", "content": content},
+            "done": True,
+            "done_reason": "stop",
+        })
+
+
+@app.post("/api/generate")
+async def ollama_generate(request: Request):
+    """Ollama /api/generate → translate to /api/chat format."""
+    body = await request.json()
+    model_name = body.get("model", "hermes3:8b")
+    prompt = body.get("prompt", "")
+    system = body.get("system", "")
+    stream = body.get("stream", True)
+
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+
+    chat_body = {"model": model_name, "messages": messages, "stream": stream}
+
+    class FakeRequest:
+        async def json(self): return chat_body
+
+    return await ollama_chat(FakeRequest())
 
 # ── Debate Endpoint ───────────────────────────────────────────────────────────
 
