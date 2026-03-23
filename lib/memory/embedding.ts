@@ -51,43 +51,78 @@ function setCache(key: string, embedding: number[]): void {
 // ── Providers ─────────────────────────────────────────────────────────────────
 
 /**
- * Lambda Labs Ollama — primary provider.
- * Uses the /api/embeddings endpoint (Ollama-native, not OpenAI-compat).
- * Model: nomic-embed-text (768-dim, fast, good semantic quality).
+ * Lambda Labs Embedding Server — primary provider.
+ * OpenAI-compatible /v1/embeddings endpoint served by our CPU sidecar
+ * (BAAI/bge-base-en-v1.5, 768-dim, sentence-transformers).
+ *
+ * Env vars:
+ *   LAMBDA_EMBED_URL  — base URL of the embedding server (e.g. https://embed.yourtunnel.com)
+ *   LAMBDA_OLLAMA_URL — legacy: if set and LAMBDA_EMBED_URL is not, falls back to Ollama API
+ *   OLLAMA_EMBEDDING_MODEL — model name (default: nomic-embed-text)
  */
-async function embedWithOllama(text: string): Promise<number[]> {
-    const baseUrl = process.env.LAMBDA_OLLAMA_URL;
-    if (!baseUrl) throw new Error('[Embedding] LAMBDA_OLLAMA_URL not set');
+async function embedWithLambda(text: string): Promise<number[]> {
+    // Prefer the dedicated embedding server; fall back to Ollama-compat if needed
+    const embedUrl = process.env.LAMBDA_EMBED_URL;
+    const ollamaUrl = process.env.LAMBDA_OLLAMA_URL;
 
-    const model = process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text';
-    const url = `${baseUrl.replace(/\/$/, '')}/api/embeddings`;
+    if (embedUrl) {
+        // OpenAI-compat format (our FastAPI embedding sidecar)
+        const url = `${embedUrl.replace(/\/$/, '')}/v1/embeddings`;
+        const model = process.env.EMBED_MODEL || 'BAAI/bge-base-en-v1.5';
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
-
-    try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model, prompt: text }),
-            signal: controller.signal,
-        });
-
-        if (!res.ok) {
-            const body = await res.text().catch(() => '');
-            throw new Error(`[Embedding] Ollama HTTP ${res.status}: ${body}`);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input: text, model }),
+                signal: controller.signal,
+            });
+            if (!res.ok) {
+                const body = await res.text().catch(() => '');
+                throw new Error(`[Embedding] Lambda embed server HTTP ${res.status}: ${body}`);
+            }
+            const json = await res.json();
+            const embedding = json?.data?.[0]?.embedding;
+            if (!Array.isArray(embedding) || embedding.length === 0) {
+                throw new Error('[Embedding] Lambda embed server returned empty embedding');
+            }
+            return embedding as number[];
+        } finally {
+            clearTimeout(timeout);
         }
-
-        const json = await res.json();
-
-        if (!Array.isArray(json.embedding) || json.embedding.length === 0) {
-            throw new Error('[Embedding] Ollama returned empty embedding');
-        }
-
-        return json.embedding as number[];
-    } finally {
-        clearTimeout(timeout);
     }
+
+    if (ollamaUrl) {
+        // Legacy Ollama /api/embeddings format
+        const model = process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text';
+        const url = `${ollamaUrl.replace(/\/$/, '')}/api/embeddings`;
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model, prompt: text }),
+                signal: controller.signal,
+            });
+            if (!res.ok) {
+                const body = await res.text().catch(() => '');
+                throw new Error(`[Embedding] Ollama HTTP ${res.status}: ${body}`);
+            }
+            const json = await res.json();
+            if (!Array.isArray(json.embedding) || json.embedding.length === 0) {
+                throw new Error('[Embedding] Ollama returned empty embedding');
+            }
+            return json.embedding as number[];
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    throw new Error('[Embedding] Neither LAMBDA_EMBED_URL nor LAMBDA_OLLAMA_URL is set');
 }
 
 /**
@@ -128,15 +163,15 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         return cached;
     }
 
-    // 1. Try Lambda Labs Ollama
-    if (process.env.LAMBDA_OLLAMA_URL) {
+    // 1. Try Lambda Labs (embedding sidecar or Ollama)
+    if (process.env.LAMBDA_EMBED_URL || process.env.LAMBDA_OLLAMA_URL) {
         try {
-            const embedding = await embedWithOllama(text);
+            const embedding = await embedWithLambda(text);
             setCache(cacheKey, embedding);
-            console.log(`[Embedding] Ollama OK — dim=${embedding.length}`);
+            console.log(`[Embedding] Lambda Labs OK — dim=${embedding.length}`);
             return embedding;
         } catch (err) {
-            console.warn('[Embedding] Ollama failed, trying fallback:', err);
+            console.warn('[Embedding] Lambda Labs failed, trying fallback:', err);
         }
     }
 
