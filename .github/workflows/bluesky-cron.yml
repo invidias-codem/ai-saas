@@ -15,6 +15,6 @@ jobs:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           # Fetch the endpoint, failing the workflow if a non-200 HTTP code is returned
-          curl -f -X GET \
+          curl -sS -w "\n%{http_code}" -X GET \
             "https://gen1e.xyz/api/cron/bluesky-engage" \
             -H "Authorization: Bearer ${CRON_SECRET}"
