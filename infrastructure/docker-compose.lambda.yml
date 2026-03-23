@@ -1,0 +1,92 @@
+version: "3.9"
+
+services:
+  # 1. The LLM Server (vLLM — OpenAI-compatible, GPU-accelerated)
+  llm-server:
+    image: vllm/vllm-openai:latest
+    container_name: genie-llm
+    runtime: nvidia
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    command: >
+      --model "NousResearch/Hermes-3-Llama-3.1-8B"
+      --max-model-len 8192
+      --gpu-memory-utilization 0.82
+      --port 8000
+    ports:
+      - "127.0.0.1:8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    restart: unless-stopped
+
+  # 2. UCOL Twin Router (Architect + Builder personas over vLLM)
+  twin-router:
+    build:
+      context: ./twin-router
+      dockerfile: Dockerfile
+    container_name: genie-twins
+    environment:
+      - VLLM_URL=http://llm-server:8000
+      - VLLM_MODEL=NousResearch/Hermes-3-Llama-3.1-8B
+      - TWIN_TIMEOUT=120
+      - PORT=8002
+    ports:
+      - "127.0.0.1:8002:8002"
+    depends_on:
+      - llm-server
+    restart: unless-stopped
+
+  # 3. Embedding Server (CPU — BAAI/bge-base-en-v1.5, 768-dim, OpenAI-compat)
+  embedding-server:
+    build:
+      context: ./embedding-server
+      dockerfile: Dockerfile
+    container_name: genie-embeddings
+    environment:
+      - EMBED_MODEL=BAAI/bge-base-en-v1.5
+    ports:
+      - "127.0.0.1:8001:8001"
+    restart: unless-stopped
+
+  # 4. Python Brain (vector-agent-python)
+  vector-brain:
+    build:
+      context: ./vector-agent-python
+      dockerfile: Dockerfile
+    container_name: genie-vector-brain
+    environment:
+      - PORT=8080
+      - LOCAL_LLM_URL=http://llm-server:8000/v1
+      - LOCAL_LLM_MODEL=NousResearch/Hermes-3-Llama-3.1-8B
+      - LOCAL_EMBED_URL=http://embedding-server:8001
+      - LOCAL_TWIN_URL=http://twin-router:8002
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - NOUSE_API_KEY=${NOUSE_API_KEY}
+      - BLUESKY_HANDLE=${BLUESKY_HANDLE}
+      - BLUESKY_PASSWORD=${BLUESKY_PASSWORD}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - llm-server
+      - embedding-server
+      - twin-router
+    restart: unless-stopped
+    volumes:
+      - ./vector-agent-python:/app
+
+  # 5. Cloudflare Tunnel (zero-trust ingress to Vercel)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: genie-tunnel
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    restart: unless-stopped
