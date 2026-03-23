@@ -311,18 +311,18 @@ const ImagePage = () => {
                     alt="Generated Image"
                     fill
                     src={src}
-                    className="object-cover transition-transform duration-700 group-hover:scale-110"
+                    className="object-cover transition-transform duration-700 group-hover:scale-110 select-auto pointer-events-auto" style={{ pointerEvents: "auto", userSelect: "auto" }}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   {/* Share button overlay - appears on hover */}
-                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
+                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 pointer-events-none">
                     <ShareIconButton
                       content={{
                         title: "AI Generated Image by Genie",
                         text: `Check out this AI-generated image I created with Genie! 🎨`,
                         url: src,
                       }}
-                      className="bg-background/90 backdrop-blur-md shadow-lg border-violet-500/20 hover:bg-background hover:scale-110 transition-all"
+                      className="bg-background/90 backdrop-blur-md shadow-lg border-violet-500/20 hover:bg-background hover:scale-110 transition-all pointer-events-auto"
                     />
                   </div>
                 </div>
