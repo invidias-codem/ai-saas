@@ -51,3 +51,4 @@ venv/
 .venv/
 functions/**/venv/
 functions/**/__pycache__/
+infrastructure/lambda-manager/.env
