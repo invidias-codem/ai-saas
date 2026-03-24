@@ -242,11 +242,18 @@ export class AgentRouter {
     private gemini: GeminiProvider;
     private jklawUrl: string;
     private jklawKey: string | undefined;
+    // Direct twin router URL (Vast.ai / Lambda Labs) — bypasses Clerk auth,
+    // used for research/strategy/orchestration tasks that need low-latency
+    // dispatch to the self-hosted model. Falls back to internal JKlaw endpoint.
+    private twinRouterUrl: string | undefined;
 
     constructor() {
         this.gemini = new GeminiProvider();
         this.jklawUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://gen1e.xyz'}/api/internal/jklaw`;
         this.jklawKey = process.env.JKLAW_API_KEY;
+        // JKLAW_TWIN_URL = http://166.113.48.43:8002 (current Vast.ai instance)
+        // Set in Vercel env vars — cleared when instance terminates.
+        this.twinRouterUrl = process.env.JKLAW_TWIN_URL;
     }
 
     // ─── Classify a task ─────────────────────────────────────────────────
@@ -455,6 +462,70 @@ export class AgentRouter {
         };
 
         try {
+            // ── Path A: Direct twin router (Vast.ai / Lambda Labs) ──────────────
+            // If JKLAW_TWIN_URL is set, dispatch directly to the self-hosted model
+            // using the Ollama /api/generate format. Faster, no Clerk overhead.
+            if (this.twinRouterUrl) {
+                try {
+                    const twinController = new AbortController();
+                    const twinTimeout = setTimeout(
+                        () => twinController.abort(),
+                        waitForResponse ? 30000 : 6000
+                    );
+
+                    // Build a rich prompt that gives JKlaw full context
+                    const twinPrompt = [
+                        task.query,
+                        task.context ? `\n\nContext: ${task.context.substring(0, 400)}` : '',
+                        task.goalContext?.sessionIntent
+                            ? `\n\nSession intent: ${task.goalContext.sessionIntent}` : '',
+                    ].join('');
+
+                    const twinRes = await fetch(`${this.twinRouterUrl}/api/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: 'jklaw:latest',
+                            prompt: twinPrompt,
+                            stream: false,
+                            options: { temperature: 0.7, num_predict: 1024 },
+                        }),
+                        signal: twinController.signal,
+                    });
+
+                    clearTimeout(twinTimeout);
+
+                    if (twinRes.ok) {
+                        const twinData = await twinRes.json();
+                        const response = twinData.response ?? '';
+                        console.log(
+                            `[AgentRouter] Direct twin dispatch OK — ` +
+                            `task=${decision.taskType} chars=${response.length}`
+                        );
+                        return { dispatched: true, response: response || undefined };
+                    }
+                    // Non-OK from twin router → fall through to internal endpoint
+                    console.warn(
+                        `[AgentRouter] Twin router returned ${twinRes.status} — falling back to internal JKlaw endpoint`
+                    );
+                } catch (twinErr: any) {
+                    if (twinErr.name !== 'AbortError') {
+                        console.warn(`[AgentRouter] Twin router unreachable: ${twinErr.message} — falling back`);
+                    }
+                    // AbortError on fire-and-forget = intentional, treat as dispatched
+                    if (twinErr.name === 'AbortError' && !waitForResponse) {
+                        return { dispatched: true };
+                    }
+                }
+            }
+
+            // ── Path B: Internal JKlaw endpoint (gen1e.xyz/api/internal/jklaw) ──
+            // Requires JKLAW_API_KEY. Used when twin router is unavailable or
+            // JKLAW_TWIN_URL is not set.
+            if (!this.jklawKey) {
+                return { dispatched: false, error: 'No dispatch path available: JKLAW_API_KEY and JKLAW_TWIN_URL both unset' };
+            }
+
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), waitForResponse ? 25000 : 5000);
 

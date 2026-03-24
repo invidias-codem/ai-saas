@@ -313,11 +313,11 @@ export async function generateConversationReply(
   let graphData: { centralNode: GraphNode | null; relatedNodes: any[] } = { centralNode: null, relatedNodes: [] }; // relatedNodes uses complex structure, keeping any for now/TODO
   let userProfileMemories: PromotableMemory[] | null = null;
 
-  // Cost guard: ENABLE_HEAVY_CONTEXT=false disables the expensive per-conversation
-  // memory/embedding pipeline (fact ranking, per-fact embeddings, graph updates,
-  // fact extraction). Flip this in Vercel env vars without a redeploy.
-  // Default: false (safe) — set to "true" to re-enable the full memory system.
-  const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT === 'true';
+  // Cost guard: set ENABLE_HEAVY_CONTEXT=false in Vercel env to disable the
+  // expensive per-conversation memory pipeline (fact ranking, embeddings, graph
+  // updates, fact extraction). Default is ON — the graph must be populated for
+  // the DeltaEngine to have anything to look up against.
+  const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
   const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
 
   // Full context gathering — all sources in parallel with graceful degradation.
@@ -650,9 +650,9 @@ export async function generateConversationReply(
               }
             );
 
-            // LLM-powered fact extraction + graph updates are gated by ENABLE_HEAVY_CONTEXT.
-            // When false, only lightweight captureMemory runs (no extra LLM calls).
-            if (process.env.ENABLE_HEAVY_CONTEXT === 'true') {
+            // LLM-powered fact extraction + graph updates — runs unless ENABLE_HEAVY_CONTEXT=false.
+            // These populate the knowledge graph that the DeltaEngine queries.
+            if (process.env.ENABLE_HEAVY_CONTEXT !== 'false') {
               try {
                 const extractedFacts = await extractFactsFromConversation(userQuery, fullText);
                 console.log(`[ConversationEngine] Extracted ${extractedFacts.length} structured facts`);
@@ -662,7 +662,7 @@ export async function generateConversationReply(
             }
 
             // Knowledge graph update — extract ALL tags and link co-occurring concepts
-            if (process.env.ENABLE_HEAVY_CONTEXT === 'true' && tags.length > 0) {
+            if (process.env.ENABLE_HEAVY_CONTEXT !== 'false' && tags.length > 0) {
               const nodeIds: (string | null)[] = await Promise.all(
                 tags.slice(0, 10).map(tag =>
                   addNode(userId, tag, 'concept', `Extracted from conversation: "${userQuery.substring(0, 80)}"`)
