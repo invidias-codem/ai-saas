@@ -254,24 +254,49 @@ async def ollama_chat(request: Request):
 
 @app.post("/api/generate")
 async def ollama_generate(request: Request):
-    """Ollama /api/generate → translate to /api/chat format."""
+    """
+    Ollama /api/generate — direct non-streaming path.
+    Translates generate format directly to vLLM without going through ollama_chat,
+    so we avoid the streaming/non-streaming ambiguity.
+    """
     body = await request.json()
-    model_name = body.get("model", "hermes3:8b")
+    model_name = body.get("model", "hermes3:8b").lower()
     prompt = body.get("prompt", "")
-    system = body.get("system", "")
-    stream = body.get("stream", True)
+    system_override = body.get("system", "")
+    options = body.get("options", {})
 
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
+    # Build messages
+    messages: list = []
+    persona = PERSONA_MAP.get(model_name)
+    if persona:
+        messages.append({"role": "system", "content": persona})
+        print(f"[TwinRouter/Generate] {model_name} → persona injected")
+    elif system_override:
+        messages.append({"role": "system", "content": system_override})
     messages.append({"role": "user", "content": prompt})
 
-    chat_body = {"model": model_name, "messages": messages, "stream": stream}
+    oai_payload = {
+        "model": MODEL_NAME,
+        "messages": sanitize_messages(messages),
+        "stream": False,
+        "temperature": options.get("temperature", 0.7),
+        "max_tokens": options.get("num_predict", 2048),
+    }
 
-    class FakeRequest:
-        async def json(self): return chat_body
+    url = f"{VLLM_BASE}/v1/chat/completions"
+    async with httpx.AsyncClient(timeout=TWIN_TIMEOUT) as client:
+        resp = await client.post(url, json=oai_payload)
+        resp.raise_for_status()
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"]
 
-    return await ollama_chat(FakeRequest())
+    return JSONResponse({
+        "model": model_name,
+        "created_at": "",
+        "response": content,          # /api/generate uses "response", not "message"
+        "done": True,
+        "done_reason": "stop",
+    })
 
 # ── Debate Endpoint ───────────────────────────────────────────────────────────
 
