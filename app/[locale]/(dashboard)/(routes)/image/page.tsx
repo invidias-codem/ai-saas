@@ -311,6 +311,7 @@ const ImagePage = () => {
                     alt="Generated Image"
                     fill
                     src={src}
+                    unoptimized
                     className="object-cover transition-transform duration-700 group-hover:scale-110 select-auto pointer-events-auto" style={{ pointerEvents: "auto", userSelect: "auto" }}
                   />
                   <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

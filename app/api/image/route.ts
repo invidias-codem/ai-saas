@@ -114,8 +114,11 @@ export async function POST(req: Request) {
     // Deduct credits handled atomically upfront
     // await deductCredits(user.userId, totalCost, `Generated ${amount} images`);
 
-    // Extract URLs and model info
-    const images = results.flatMap(r => r.urls);
+    // Extract URLs and rewrite to stable proxy URLs (Replicate CDN links expire)
+    const rawImages = results.flatMap(r => r.urls);
+    const images = rawImages.map(url =>
+      `/api/image-proxy?url=${encodeURIComponent(url)}`
+    );
     const usedModel = results[0].model;
 
     console.log(`[IMAGE_API] Successfully generated ${images.length} images with ${usedModel}`);
