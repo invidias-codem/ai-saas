@@ -44,9 +44,49 @@ def inject_system(messages: list, system_prompt: str) -> list:
     return [{"role": "system", "content": system_prompt}] + filtered
 
 
+def sanitize_messages(messages: list) -> list:
+    """
+    Sanitize messages for vLLM compatibility.
+
+    vLLM requires tool_calls to have:
+      - id: string (required)
+      - type: "function" (required)
+      - function.arguments: JSON string (not dict)
+
+    OpenClaw/Hermes may send arguments as a dict and omit id/type.
+    This normalizes them before forwarding to vLLM.
+    """
+    sanitized = []
+    for i, msg in enumerate(messages):
+        msg = dict(msg)
+        tool_calls = msg.get("tool_calls")
+        if tool_calls:
+            fixed = []
+            for j, tc in enumerate(tool_calls):
+                tc = dict(tc)
+                # Ensure required fields
+                if "id" not in tc:
+                    tc["id"] = f"call_{i}_{j}"
+                if "type" not in tc:
+                    tc["type"] = "function"
+                # Ensure function.arguments is a JSON string, not a dict
+                fn = dict(tc.get("function", {}))
+                args = fn.get("arguments", {})
+                if isinstance(args, dict):
+                    fn["arguments"] = json.dumps(args)
+                elif args is None:
+                    fn["arguments"] = "{}"
+                tc["function"] = fn
+                fixed.append(tc)
+            msg["tool_calls"] = fixed
+        sanitized.append(msg)
+    return sanitized
+
+
 async def stream_vllm(payload: dict):
     """Stream tokens from vLLM back to the caller."""
     url = f"{VLLM_BASE}/v1/chat/completions"
+    payload = {**payload, "messages": sanitize_messages(payload.get("messages", []))}
     async with httpx.AsyncClient(timeout=TWIN_TIMEOUT) as client:
         async with client.stream("POST", url, json=payload) as resp:
             if resp.status_code != 200:
@@ -58,7 +98,11 @@ async def stream_vllm(payload: dict):
 
 async def call_vllm_sync(payload: dict) -> str:
     """Non-streaming call to vLLM, returns full content string."""
-    non_stream_payload = {**payload, "stream": False}
+    non_stream_payload = {
+        **payload,
+        "stream": False,
+        "messages": sanitize_messages(payload.get("messages", [])),
+    }
     url = f"{VLLM_BASE}/v1/chat/completions"
     async with httpx.AsyncClient(timeout=TWIN_TIMEOUT) as client:
         resp = await client.post(url, json=non_stream_payload)
