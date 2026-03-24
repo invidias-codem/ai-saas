@@ -8,6 +8,17 @@
  * All vectors are 768-dimensional — matches memory_bank, procedural_memory,
  * graph_nodes (after 20260323 migration), and match_memories RPC.
  *
+ * ── Two-Tier Cache (T-039) ────────────────────────────────────────────────────
+ * L1: In-memory Map (ultra-fast, per-instance, dies on cold start)
+ * L2: Upstash Redis (survives cold starts, shared across all Vercel instances)
+ *
+ * On cold start:
+ *   L1 miss → L2 hit  → serve from Redis, warm L1 (no API call)
+ *   L1 miss → L2 miss → generate embedding, write to L1 + L2
+ *
+ * This eliminates the "embedding avalanche" (3–15 API calls/turn after cold start).
+ * Redis TTL: 24h (embeddings are deterministic for the same text)
+ *
  * Migration from GCP: T-038 (2026-03-23)
  *   - Removed hard dependency on Google AI SDK for embeddings
  *   - Ollama /api/embeddings endpoint matches the generate API pattern already
@@ -17,11 +28,15 @@
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const EMBEDDING_DIM = 768;
-const CACHE_TTL_MS = 1000 * 60 * 60; // 1 hour
-const MAX_CACHE_SIZE = 100;
-const OLLAMA_TIMEOUT_MS = 10_000; // 10s — Lambda Labs should respond well within this
+const L1_CACHE_TTL_MS = 1000 * 60 * 60;   // 1 hour (in-memory)
+const L2_CACHE_TTL_SEC = 60 * 60 * 24;     // 24 hours (Redis) — embeddings are deterministic
+const MAX_L1_CACHE_SIZE = 100;
+const OLLAMA_TIMEOUT_MS = 10_000;
 
-// ── Cache ─────────────────────────────────────────────────────────────────────
+// Redis key prefix — namespaced to avoid collisions with rate-limit keys
+const REDIS_KEY_PREFIX = 'embed:v1:';
+
+// ── L1 Cache (in-memory) ──────────────────────────────────────────────────────
 
 interface CacheEntry {
     embedding: number[];
@@ -30,22 +45,80 @@ interface CacheEntry {
 
 const embeddingCache = new Map<string, CacheEntry>();
 
-function getCached(key: string): number[] | null {
+function getL1Cached(key: string): number[] | null {
     const entry = embeddingCache.get(key);
     if (!entry) return null;
-    if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    if (Date.now() - entry.timestamp > L1_CACHE_TTL_MS) {
         embeddingCache.delete(key);
         return null;
     }
     return entry.embedding;
 }
 
-function setCache(key: string, embedding: number[]): void {
-    if (embeddingCache.size >= MAX_CACHE_SIZE) {
+function setL1Cache(key: string, embedding: number[]): void {
+    if (embeddingCache.size >= MAX_L1_CACHE_SIZE) {
         const oldest = embeddingCache.keys().next().value;
         if (oldest) embeddingCache.delete(oldest);
     }
     embeddingCache.set(key, { embedding, timestamp: Date.now() });
+}
+
+// ── L2 Cache (Upstash Redis) ──────────────────────────────────────────────────
+
+/**
+ * Lazy Redis client — only instantiated if env vars are present.
+ * Non-fatal: if Redis is unavailable, falls through to provider.
+ */
+function getRedisClient() {
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (!url || !token) return null;
+    try {
+        const { Redis } = require('@upstash/redis');
+        return new Redis({ url, token });
+    } catch {
+        return null;
+    }
+}
+
+async function getL2Cached(key: string): Promise<number[] | null> {
+    const redis = getRedisClient();
+    if (!redis) return null;
+    try {
+        const value = await redis.get(`${REDIS_KEY_PREFIX}${key}`);
+        if (!value) return null;
+        const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+        if (Array.isArray(parsed) && parsed.length === EMBEDDING_DIM) {
+            return parsed as number[];
+        }
+        return null;
+    } catch (err) {
+        console.warn('[Embedding] Redis L2 get failed (non-fatal):', err);
+        return null;
+    }
+}
+
+async function setL2Cache(key: string, embedding: number[]): Promise<void> {
+    const redis = getRedisClient();
+    if (!redis) return;
+    try {
+        await redis.set(
+            `${REDIS_KEY_PREFIX}${key}`,
+            JSON.stringify(embedding),
+            { ex: L2_CACHE_TTL_SEC }
+        );
+    } catch (err) {
+        console.warn('[Embedding] Redis L2 set failed (non-fatal):', err);
+    }
+}
+
+// Legacy shim — kept for internal use only
+function getCached(key: string): number[] | null {
+    return getL1Cached(key);
+}
+
+function setCache(key: string, embedding: number[]): void {
+    setL1Cache(key, embedding);
 }
 
 // ── Providers ─────────────────────────────────────────────────────────────────
@@ -157,32 +230,38 @@ async function embedWithGemini(text: string): Promise<number[]> {
 export async function generateEmbedding(text: string): Promise<number[]> {
     const cacheKey = text.substring(0, 500);
 
-    const cached = getCached(cacheKey);
-    if (cached) {
-        console.log('[Embedding] Cache hit');
-        return cached;
+    // ── L1: In-memory cache (warm instance) ───────────────────────────────────
+    const l1Hit = getL1Cached(cacheKey);
+    if (l1Hit) {
+        console.log('[Embedding] L1 cache hit (in-memory)');
+        return l1Hit;
     }
 
-    // 1. Try Lambda Labs (embedding sidecar or Ollama)
+    // ── L2: Redis cache (survives cold starts, cross-instance) ────────────────
+    const l2Hit = await getL2Cached(cacheKey);
+    if (l2Hit) {
+        console.log('[Embedding] L2 cache hit (Redis) — warming L1');
+        setL1Cache(cacheKey, l2Hit); // warm the in-memory cache for this instance
+        return l2Hit;
+    }
+
+    let embedding: number[] | null = null;
+
+    // ── 1. Try Lambda Labs (embedding sidecar or Ollama) ──────────────────────
     if (process.env.LAMBDA_EMBED_URL || process.env.LAMBDA_OLLAMA_URL) {
         try {
-            const embedding = await embedWithLambda(text);
-            setCache(cacheKey, embedding);
+            embedding = await embedWithLambda(text);
             console.log(`[Embedding] Lambda Labs OK — dim=${embedding.length}`);
-            return embedding;
         } catch (err) {
             console.warn('[Embedding] Lambda Labs failed, trying fallback:', err);
         }
     }
 
-    // 2. Try Gemini
-    if (process.env.GOOGLE_API_KEY) {
+    // ── 2. Try Gemini ─────────────────────────────────────────────────────────
+    if (!embedding && process.env.GOOGLE_API_KEY) {
         try {
-            const embedding = await embedWithGemini(text);
-            // Handle rate limits
-            setCache(cacheKey, embedding);
+            embedding = await embedWithGemini(text);
             console.log(`[Embedding] Gemini OK — dim=${embedding.length}`);
-            return embedding;
         } catch (err: any) {
             if (err?.status === 429 || String(err).includes('429')) {
                 console.warn('[Embedding] Gemini rate limited');
@@ -192,9 +271,18 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         }
     }
 
-    // 3. Zero vector — graceful degradation
-    console.warn('[Embedding] All providers failed — returning zero vector');
-    return new Array(EMBEDDING_DIM).fill(0);
+    // ── 3. Zero vector — graceful degradation ────────────────────────────────
+    if (!embedding) {
+        console.warn('[Embedding] All providers failed — returning zero vector');
+        return new Array(EMBEDDING_DIM).fill(0);
+    }
+
+    // ── Write to both cache tiers ─────────────────────────────────────────────
+    setL1Cache(cacheKey, embedding);
+    // Fire-and-forget Redis write — never block the response
+    setL2Cache(cacheKey, embedding).catch(() => {});
+
+    return embedding;
 }
 
 /**
