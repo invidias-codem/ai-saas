@@ -42,19 +42,19 @@ jest.mock('@/lib/memory/embedding', () => ({
 
 // Mock RAG memory — returns known facts for the test user
 jest.mock('@/lib/ragMemory', () => ({
-  gatherUserContext: jest.fn(async () => ({
-    facts: [
-      { content: 'User is building Tech Genie AI SaaS', confidence: 0.95 },
-      { content: 'User prefers TypeScript and Next.js', confidence: 0.88 },
-    ],
-    graphContext: 'Tech Genie → UCOL → Knowledge Graph',
-    ragResults: [],
+  gatherUserContext: jest.fn(async (userId: string) => ({
+    userId,
+    conversationCount: 42,
+    totalTokensUsed: 10000,
+    preferredFeatures: ['chat', 'code'],
+    commonTopics: ['Tech Genie', 'UCOL', 'TypeScript'],
+    interactionStyle: 'technical',
   })),
-  formatUserContextForPrompt: jest.fn((ctx) => `[MEMORY] ${JSON.stringify(ctx)}`),
+  formatUserContextForPrompt: jest.fn((ctx: any) => `[MEMORY] ${JSON.stringify(ctx)}`),
   getHighConfidenceFacts: jest.fn(async () => [
     { content: 'User is building Tech Genie AI SaaS', confidence: 0.95 },
   ]),
-  formatFactsForPrompt: jest.fn((facts) => facts.map((f: any) => f.content).join('\n')),
+  formatFactsForPrompt: jest.fn((facts: any[]) => facts.map((f) => f.content).join('\n')),
   getRAGMemoryContext: jest.fn(async () => []),
   captureMemory: jest.fn(async () => {}),
   extractTags: jest.fn(async () => []),
@@ -65,9 +65,9 @@ jest.mock('@/lib/ragMemory', () => ({
 // Mock graph store
 jest.mock('@/lib/memory/graphStore', () => ({
   findRelatedEntities: jest.fn(async () => ({
-    centralNode: { id: 'tech-genie', label: 'Tech Genie', type: 'project' },
+    centralNode: { id: 'tech-genie', userId: 'test-user', name: 'Tech Genie', type: 'project' },
     relatedNodes: [
-      { id: 'ucol', label: 'UCOL', type: 'system' },
+      { id: 'ucol', userId: 'test-user', name: 'UCOL', type: 'concept' },
     ],
   })),
   formatGraphContext: jest.fn(() => 'Tech Genie is connected to UCOL'),
@@ -256,13 +256,13 @@ describe('T-011: UCOL Memory Cold Start Continuity', () => {
     const userQuery = 'What are we building together?';
 
     const [context, facts, graph] = await Promise.all([
-      gatherUserContext(TEST_USER_ID, userQuery, [] as any),
+      gatherUserContext(TEST_USER_ID),
       getHighConfidenceFacts(TEST_USER_ID),
       findRelatedEntities(TEST_USER_ID, userQuery),
     ]);
 
     // Step 3: Verify Supabase was queried (not just cache hit)
-    expect(gatherUserContext).toHaveBeenCalledWith(TEST_USER_ID, userQuery, []);
+    expect(gatherUserContext).toHaveBeenCalledWith(TEST_USER_ID);
     expect(getHighConfidenceFacts).toHaveBeenCalledWith(TEST_USER_ID);
     expect(findRelatedEntities).toHaveBeenCalledWith(TEST_USER_ID, userQuery);
 
@@ -273,12 +273,12 @@ describe('T-011: UCOL Memory Cold Start Continuity', () => {
 
     // Step 5: Verify graph context loaded
     expect(graph.centralNode).not.toBeNull();
-    expect(graph.centralNode?.label).toBe('Tech Genie');
+    expect(graph.centralNode?.name).toBe('Tech Genie');
     expect(graph.relatedNodes.length).toBeGreaterThan(0);
 
     // Step 6: Verify context object has expected structure
-    expect(context).toHaveProperty('facts');
-    expect(context).toHaveProperty('graphContext');
+    expect(context).toHaveProperty('userId');
+    expect(context).toHaveProperty('preferredFeatures');
   });
 
   it('should generate embeddings for semantic search after cold start (embedding avalanche metric)', async () => {
@@ -299,21 +299,18 @@ describe('T-011: UCOL Memory Cold Start Continuity', () => {
 
   it('should return coherent memory context even when embedding cache is cold', async () => {
     // Simulate a full context gather as conversationEngine does
-    const context = await gatherUserContext(
-      TEST_USER_ID,
-      'Tell me about my project',
-      [{ role: 'user', content: 'Hello' }] as any
-    );
+    const context = await gatherUserContext(TEST_USER_ID);
 
     // Memory must be present and usable even on cold start
     expect(context).toBeDefined();
-    expect(context.facts).toBeDefined();
-    expect(Array.isArray(context.facts)).toBe(true);
-    expect(context.facts.length).toBeGreaterThan(0);
+    expect(context.userId).toBe(TEST_USER_ID);
+    expect(Array.isArray(context.preferredFeatures)).toBe(true);
+    expect(Array.isArray(context.commonTopics)).toBe(true);
 
-    // Graph context must be a non-empty string
-    expect(typeof context.graphContext).toBe('string');
-    expect(context.graphContext.length).toBeGreaterThan(0);
+    // High confidence facts must load from Supabase
+    const facts = await getHighConfidenceFacts(TEST_USER_ID);
+    expect(facts).toBeDefined();
+    expect(facts!.length).toBeGreaterThan(0);
   });
 
   it('should not throw when supabaseAdmin is null (Vercel edge cold start edge case)', async () => {
@@ -324,7 +321,7 @@ describe('T-011: UCOL Memory Cold Start Continuity', () => {
 
     // System should still work — falls back to client supabase or empty state
     await expect(
-      gatherUserContext(TEST_USER_ID, 'test query', [])
+      gatherUserContext(TEST_USER_ID)
     ).resolves.not.toThrow();
   });
 });
