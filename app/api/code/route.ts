@@ -29,6 +29,7 @@ import { ClaudeProvider } from '@/lib/llm/providers/claude';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { ChatMessage } from '@/lib/llm/types';
 import { checkCredits, deductCredits, spendCreditsAtomic, CREDIT_COSTS } from "@/lib/credits";
+import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 import { logger } from "@/lib/logger";
 
 export const runtime = 'nodejs';
@@ -515,6 +516,8 @@ export async function POST(req: Request) {
     // Deduct credits handled atomically at start
     // await deductCredits(user.userId, CREDIT_COSTS.CODE_GENERATION, "Code generation");
 
+    void trackAIGeneration({ tool: 'code', userId: user.userId, success: true });
+    void trackCreditsDeducted({ tool: 'code', credits: cost, userId: user.userId });
     return NextResponse.json({ text: responseText });
 
   } catch (error: any) {

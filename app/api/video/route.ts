@@ -10,6 +10,7 @@ import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAut
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { videoGenerationSchema, ValidationError } from '@/lib/security/inputValidation';
 import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
+import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 
 // Initialize the Replicate client using the API token from your environment
 const replicate = new Replicate({
@@ -107,6 +108,8 @@ export async function POST(request: Request) {
 
     // 4. ✅ Return the initial prediction object to the client
     // The client will use this object (especially prediction.id) to poll for status.
+    void trackAIGeneration({ tool: 'video', model: 'veo-3-fast', userId: user.userId, success: true });
+    void trackCreditsDeducted({ tool: 'video', credits: cost, userId: user.userId });
     return NextResponse.json(prediction);
 
   } catch (error: any) {

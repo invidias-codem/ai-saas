@@ -10,6 +10,7 @@ import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAut
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { musicGenerationSchema, ValidationError } from '@/lib/security/inputValidation';
 import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
+import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 
 // 1. Initialize Replicate client
 const replicate = new Replicate({
@@ -105,6 +106,8 @@ export async function POST(req: Request) {
     console.log("Replicate job started. Sending prediction object to client:", prediction.id);
 
     // 7. Return the initial prediction object
+    void trackAIGeneration({ tool: 'music', model: 'replicate', userId: user.userId, success: true });
+    void trackCreditsDeducted({ tool: 'music', credits: cost, userId: user.userId });
     return NextResponse.json(prediction);
 
   } catch (error: any) {

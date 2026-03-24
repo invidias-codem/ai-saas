@@ -1,6 +1,7 @@
 // app/api/conversation/route.ts
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 
 import {
   ConversationRequestSchema,
@@ -100,6 +101,10 @@ export async function POST(req: Request) {
     const modelUsed = result.debug?.model ?? 'gemini-3.1-flash-lite-preview';
     void recordTokenUsage(userId, estimatedTokens, modelUsed);
 
+    // Track analytics (fire-and-forget)
+    void trackAIGeneration({ tool: 'chat', model: modelUsed, userId, tokenCount: estimatedTokens, success: true });
+    void trackCreditsDeducted({ tool: 'chat', credits: cost, userId });
+
     // Return the stream directly
     return new NextResponse(result.stream, {
       headers: {
@@ -115,6 +120,7 @@ export async function POST(req: Request) {
     if (authResponse) return authResponse;
 
     const errorMessage = error.message || "An unknown error occurred";
+    void trackAIError({ tool: 'chat', errorType: 'unknown', errorMessage, userId: 'unknown' });
     return NextResponse.json(
       {
         error: "Internal Server Error",

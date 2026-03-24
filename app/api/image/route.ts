@@ -9,6 +9,7 @@ import { requireAuth, handleAuthError, getClientIP } from "@/lib/security/apiAut
 import { limitApiEndpoint } from "@/lib/security/rateLimit";
 import { imageGenerationSchema, ValidationError } from "@/lib/security/inputValidation";
 import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
+import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 
 // Define the allowed aspect ratios
 const allowedAspectRatios = z.enum([
@@ -119,6 +120,8 @@ export async function POST(req: Request) {
 
     console.log(`[IMAGE_API] Successfully generated ${images.length} images with ${usedModel}`);
 
+    void trackAIGeneration({ tool: 'image', model: usedModel, userId: user.userId, success: true });
+    void trackCreditsDeducted({ tool: 'image', credits: totalCost, userId: user.userId });
     return NextResponse.json({
       images,
       model: usedModel,
