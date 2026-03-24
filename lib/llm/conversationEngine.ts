@@ -683,14 +683,89 @@ export async function generateConversationReply(
                 await Promise.allSettled(edgePromises);
               }
             }
-            // ── World Model: Delta Engine (Phase 3) ──────────────────────────
-            // Fire-and-forget: audit AI output against world model (never blocks response)
+            // ── World Model: Delta Engine + Benchmark (Phase 3 — fully wired) ──
+            // Run delta audit and feed real claim verdicts into the benchmark.
+            // Both run in the same waitUntil block — still fully non-blocking.
             if (process.env.ENABLE_DELTA_AUDIT !== 'false') {
-              void deltaEngine.scoreClaims(
-                fullText,        // the assembled response string
-                userId,          // sessionId (using userId as session scope for now)
-                actualModelId,   // the model that generated this response
-              ).catch((err) => console.error('[DeltaEngine] audit failed:', err));
+              try {
+                // 1. Score claims — returns real ClaimAuditResult[] from the graph
+                const deltaResults = await deltaEngine.scoreClaims(
+                  fullText,
+                  userId,
+                  actualModelId,
+                );
+
+                // 2. Build a real AIOutputAudit from delta results
+                //    Bridge: delta/types ClaimAuditResult → world-model/types ClaimAuditResult
+                const overallDeltaScore = deltaEngine.computeDeltaScore(deltaResults);
+                const hallucinationCount = deltaResults.filter(
+                  r => r.verdict === 'CONTRADICTED' || r.verdict === 'MISATTRIBUTED'
+                ).length;
+                const hallucinationRate = deltaResults.length > 0
+                  ? hallucinationCount / deltaResults.length
+                  : 0;
+
+                const realAudit: AIOutputAudit = {
+                  id: crypto.randomUUID(),
+                  created_at: new Date(),
+                  session_id: userId,
+                  model: actualModelId,
+                  // Map delta internal ClaimAuditResult → outer ClaimAuditResult shape
+                  claims: deltaResults.map(r => ({
+                    claim_text: r.claim.text,
+                    verdict: r.verdict,
+                    confidence: r.claim.confidence,
+                    delta_score: r.deltaScore,
+                    domain: r.claim.domain,
+                    supporting_edge_id: r.graphEdgeId,
+                    contradicting_node_id: r.contradictsNodeId,
+                    explanation: r.explanation,
+                  })),
+                  overall_delta_score: overallDeltaScore,
+                  hallucination_rate: hallucinationRate,
+                  domain: wmDomain,
+                };
+
+                // 3. Feed real audit into benchmark (replaces stub)
+                await wmBenchmark.scoreResponse({
+                  sessionId: userId,
+                  model: actualModelId,
+                  domain: wmDomain,
+                  audit: realAudit,
+                  latencyMs: Date.now() - streamStartMs,
+                });
+
+                // 4. Trust tier promotion: upgrade taggedHistory messages that were
+                //    confirmed/supported by the delta engine.
+                //    CONFIRMED claims → promote last assistant turn to SUPPORTED.
+                //    (Full CONFIRMED requires ≥3 corroborations per RFC-001.)
+                const hasConfirmedClaims = deltaResults.some(r => r.verdict === 'CONFIRMED');
+                const hasSupportedClaims = deltaResults.some(r => r.verdict === 'SUPPORTED');
+                if (hasConfirmedClaims || hasSupportedClaims) {
+                  const promotionTier = hasConfirmedClaims ? 'SUPPORTED' : 'SUPPORTED';
+                  // Re-tag the assistant message with promoted tier + avg delta score
+                  const lastAssistantIdx = taggedHistory.map(m => m.role).lastIndexOf('assistant');
+                  if (lastAssistantIdx >= 0) {
+                    const { promoteMessageTrust } = await import('@/lib/world-model/trustTag');
+                    taggedHistory[lastAssistantIdx] = promoteMessageTrust(
+                      taggedHistory[lastAssistantIdx],
+                      promotionTier,
+                      overallDeltaScore,
+                    );
+                  }
+                }
+
+                if (overallDeltaScore > 0.6) {
+                  console.warn(
+                    `[DeltaEngine] High delta score for ${actualModelId}: ${overallDeltaScore.toFixed(2)} ` +
+                    `(${hallucinationCount}/${deltaResults.length} hallucinations)`
+                  );
+                }
+
+              } catch (err) {
+                // Delta Engine must never crash the response pipeline
+                console.error('[DeltaEngine/Benchmark] wired audit failed (non-blocking):', err);
+              }
             }
 
             // ── OutputCritic: async quality gate (fire-and-forget) ───────────────
@@ -698,41 +773,13 @@ export async function generateConversationReply(
             // block verdicts → console.error; warn verdicts → console.warn.
             critiqueLLMOutput(fullText, { userId, taskType: agentMode }).then(verdict => {
               if (verdict.severity === 'block') {
-                // TODO: persist to ucol_critic_verdicts Supabase table (next PR)
                 console.error('[OutputCritic] BLOCK verdict:', verdict.overallReason);
+                // TODO: persist to ucol_critic_verdicts Supabase table (next PR)
               }
               if (!verdict.passed) {
                 console.warn('[OutputCritic] Warnings:', verdict.checks.filter(c => !c.passed));
               }
             }).catch(() => { /* critic never crashes the hot path */ });
-            // ────────────────────────────────────────────────────────────────────
-
-            // ── World Model: score this response via ModelSelfBenchmark ────────
-            // Records latency, claim quality, and graph utilization for the
-            // feedback loop. Stub audit is used until the Delta Engine is wired.
-            // TODO: replace stubAudit with real Delta Engine claim verdicts once
-            //       DeltaEngine.auditResponse() is integrated here.
-            try {
-              const stubAudit: AIOutputAudit = {
-                id: crypto.randomUUID(),
-                created_at: new Date(),
-                session_id: userId,
-                model: actualModelId,
-                claims: [],
-                overall_delta_score: 0,    // placeholder until Delta Engine wired
-                hallucination_rate: 0,     // placeholder until Delta Engine wired
-                domain: wmDomain,
-              };
-              await wmBenchmark.scoreResponse({
-                sessionId: userId,
-                model: actualModelId,
-                domain: wmDomain,
-                audit: stubAudit,
-                latencyMs: Date.now() - streamStartMs,
-              });
-            } catch (e) {
-              console.warn('[WorldModel] scoreResponse failed (non-blocking):', e);
-            }
             // ────────────────────────────────────────────────────────────────────
 
           } catch (e) {
