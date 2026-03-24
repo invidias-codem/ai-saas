@@ -176,8 +176,8 @@ export const LandingNavbar = () => {
                     "fixed md:absolute top-0 left-0 right-0 z-50 transition-all duration-300 border-b",
                     isHiddenOnDesktop && "md:hidden",
                     scrolled || isOpen
-                        ? "bg-white/80 dark:bg-[#0f1117]/80 backdrop-blur-xl border-slate-200/80 dark:border-white/10"
-                        : "bg-transparent border-transparent"
+                        ? "bg-white/90 dark:bg-[#0f1117]/90 backdrop-blur-xl border-slate-200/80 dark:border-white/10 shadow-sm dark:shadow-none"
+                        : "bg-white/60 dark:bg-transparent backdrop-blur-sm border-slate-100/80 dark:border-transparent"
                 )}
             >
                 <div className="max-w-7xl mx-auto px-4 md:px-10 flex justify-between items-center h-16">
@@ -277,9 +277,11 @@ export const LandingNavbar = () => {
                             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(139,92,246,0.08),transparent_70%)] dark:bg-[radial-gradient(circle_at_50%_40%,rgba(76,29,149,0.15),transparent_70%)] pointer-events-none z-0" />
                             <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-b from-violet-500/5 dark:from-purple-500/5 to-transparent pointer-events-none z-0" />
 
-                            <div className="z-10 relative w-full h-full dark:block hidden">
+                            {isDark && (
+                              <div className="z-10 relative w-full h-full">
                                 <Sparkles />
-                            </div>
+                              </div>
+                            )}
 
                             <div className="absolute inset-0 flex flex-col items-center pt-24 w-full max-w-sm mx-auto z-50 pointer-events-auto">
                                 <motion.div

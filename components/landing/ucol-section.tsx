@@ -1,7 +1,6 @@
 "use client";
 
-import { useRef } from "react";
-import { motion, useAnimationFrame, useMotionValue, animate } from "framer-motion";
+import { motion } from "framer-motion";
 import { useTranslations } from "next-intl";
 
 // ── Model card definitions ───────────────────────────────────────────────────
@@ -175,7 +174,7 @@ export const UCOLSection = () => {
   return (
     <section
       id="ucol"
-      className="relative py-16 md:py-32 px-4 bg-white dark:bg-[#0a0d14] overflow-hidden"
+      className="relative py-16 md:py-32 px-4 bg-slate-50 dark:bg-[#0a0d14] overflow-hidden"
     >
       {/* Ambient glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[600px] bg-violet-500/5 dark:bg-violet-500/8 rounded-full blur-[120px] pointer-events-none" />

@@ -85,7 +85,7 @@ export default async function LocaleLayout({
     const messages = await getMessages();
 
     return (
-        <html lang={locale} suppressHydrationWarning={true} style={{ colorScheme: 'auto' }}>
+        <html lang={locale} suppressHydrationWarning={true}>
             <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
                 <ClerkProvider
                     publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}

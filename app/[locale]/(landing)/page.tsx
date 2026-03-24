@@ -68,7 +68,7 @@ const LandingPage = () => {
   ];
 
   return (
-    <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative selection:bg-purple-500/30 selection:text-white dark:selection:text-white">
+    <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative selection:bg-purple-500/30 selection:text-slate-900 dark:selection:text-white">
 
       <main className="relative z-10 flex-grow pt-16">
 

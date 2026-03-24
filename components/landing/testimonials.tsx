@@ -54,11 +54,11 @@ export const Testimonials = () => {
                             whileInView={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: i * 0.1 }}
                             viewport={{ once: true }}
-                            className="p-8 rounded-2xl bg-white dark:bg-[#0f1117] border border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/10 transition-colors shadow-lg"
+                            className="p-8 rounded-2xl bg-white dark:bg-[#0f1117] border border-slate-200/80 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/10 transition-colors shadow-sm dark:shadow-none"
                         >
                             <p className="text-lg text-slate-700 dark:text-gray-300 mb-6 italic leading-relaxed">&quot;{item.quote}&quot;</p>
                             <div className="flex items-center gap-4">
-                                <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${item.gradient} flex items-center justify-center text-slate-900 dark:text-white font-bold text-sm`}>
+                                <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${item.gradient} flex items-center justify-center text-white font-bold text-sm`}>
                                     {item.initials}
                                 </div>
                                 <div>

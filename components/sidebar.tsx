@@ -47,7 +47,7 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
   };
 
   return (
-    <div className="space-y-4 py-4 flex flex-col h-full bg-white dark:bg-[#111827] text-slate-900 dark:text-white">
+    <div className="space-y-4 py-4 flex flex-col h-full bg-white dark:bg-[#111827] text-foreground">
       <div className="px-3 py-2 flex-1">
         <div
           className="flex items-center pl-3 mb-14 cursor-pointer"
