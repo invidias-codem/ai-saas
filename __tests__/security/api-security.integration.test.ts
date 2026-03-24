@@ -76,6 +76,18 @@ const mockQueryChain = {
 
 // Mock dependencies
 // REPLACE: Old Upstash mock with direct lib mock
+jest.mock('@vercel/analytics/server', () => ({
+    track: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('@/lib/analytics/track', () => ({
+    trackAIGeneration: jest.fn().mockResolvedValue(undefined),
+    trackAIError: jest.fn().mockResolvedValue(undefined),
+    trackCreditsDeducted: jest.fn().mockResolvedValue(undefined),
+    trackReferral: jest.fn().mockResolvedValue(undefined),
+    trackFeatureToggle: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('@/lib/security/rateLimit', () => ({
     limitApiEndpoint: mockLimitApiEndpoint,
     limitByUser: jest.fn<() => Promise<{ success: boolean; limit: number; remaining: number; reset: number }>>().mockResolvedValue({ success: true, limit: 100, remaining: 100, reset: 0 }),
