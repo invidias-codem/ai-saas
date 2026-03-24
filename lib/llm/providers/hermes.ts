@@ -15,6 +15,12 @@ import { logger } from "@/lib/logger";
  *
  * Nous AI docs: https://portal.nousresearch.com/api-docs
  * Rate: 100 req/min, 80k tokens/min
+ *
+ * Tool Calling (T-040):
+ *   Hermes 3/4 fully supports OpenAI-format function calling. Tools are passed
+ *   via the `tools` array in the request body. The model emits tool_calls in
+ *   the delta when it decides to invoke a function. The caller is responsible
+ *   for executing the tool and appending the result as a tool message.
  */
 
 const NOUS_API_KEY = process.env.NOUSE_API_KEY;
@@ -33,9 +39,46 @@ const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "hermes3";
 const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
 
+// ── Agentic System Prompt (T-040) ─────────────────────────────────────────────
+// Instructs Hermes to execute tools immediately rather than describing them.
+// This is the root fix for the "empty call to action" problem — without an
+// explicit directive, Hermes defaults to describing what it *would* do.
+const HERMES_AGENTIC_SYSTEM_PROMPT = `You are an autonomous AI agent with access to tools. When given a task:
+
+1. EXECUTE immediately — do not describe what you will do, just do it.
+2. Use the provided tools to accomplish the task. Call them directly.
+3. If a tool call returns a result, use it to continue toward the goal.
+4. Only respond in plain text when the task is fully complete or you need clarification.
+5. Never say "I would do X" — either do X using a tool call, or explain why you cannot.
+
+You are action-oriented. Bias toward execution over explanation.`;
+
 // Reasoning system prompt from Nous docs
 const HERMES_THINKING_SYSTEM_PROMPT =
   `You are a deep thinking AI, you may use extremely long chains of thought to deeply consider the problem and deliberate with yourself via systematic reasoning processes to help come to a correct solution prior to answering. You should enclose your thoughts and internal monologue inside <think> </think> tags, and then provide your solution or response to the problem.`;
+
+// ── OpenAI-format Tool Definition ────────────────────────────────────────────
+export interface HermesTool {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>; // JSON Schema object
+  };
+}
+
+export interface HermesToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string; // JSON string
+  };
+}
+
+export interface HermesStreamResultWithTools extends StreamResult {
+  toolCalls?: HermesToolCall[];
+}
 
 export class HermesProvider implements LLMProvider {
   id = "hermes";
@@ -44,22 +87,35 @@ export class HermesProvider implements LLMProvider {
   async generateStream(
     messages: ChatMessage[],
     systemInstruction?: string,
-    options: CompletionOptions & { thinking?: boolean } = {}
-  ): Promise<StreamResult> {
+    options: CompletionOptions & { thinking?: boolean; tools?: HermesTool[]; agentic?: boolean } = {}
+  ): Promise<HermesStreamResultWithTools> {
     const formattedMessages: { role: string; content: string }[] = [];
 
     // Reasoning is opt-in — Fast mode keeps it OFF for low latency.
     // Pass options.thinking = true for deeper queries that benefit from CoT.
     const useThinking = options.thinking === true;
 
+    // Agentic mode: prepend the execution-focused system prompt so the model
+    // acts rather than describes. Only injected when tools are provided.
+    const hasTools = options.tools && options.tools.length > 0;
+    const useAgentic = (options.agentic === true || hasTools);
+
+    let systemPrompt = systemInstruction ?? "";
+
     if (useThinking) {
-      // Prepend Nous reasoning system prompt, then caller instruction
-      const combinedSystem = systemInstruction
-        ? `${HERMES_THINKING_SYSTEM_PROMPT}\n\n${systemInstruction}`
+      systemPrompt = systemPrompt
+        ? `${HERMES_THINKING_SYSTEM_PROMPT}\n\n${systemPrompt}`
         : HERMES_THINKING_SYSTEM_PROMPT;
-      formattedMessages.push({ role: "system", content: combinedSystem });
-    } else if (systemInstruction) {
-      formattedMessages.push({ role: "system", content: systemInstruction });
+    }
+
+    if (useAgentic) {
+      systemPrompt = systemPrompt
+        ? `${HERMES_AGENTIC_SYSTEM_PROMPT}\n\n${systemPrompt}`
+        : HERMES_AGENTIC_SYSTEM_PROMPT;
+    }
+
+    if (systemPrompt) {
+      formattedMessages.push({ role: "system", content: systemPrompt });
     }
 
     for (const msg of messages) {
@@ -109,22 +165,30 @@ export class HermesProvider implements LLMProvider {
 
   private async streamFromNousAI(
     messages: { role: string; content: string }[],
-    options: CompletionOptions,
+    options: CompletionOptions & { tools?: HermesTool[] },
     useThinking: boolean
-  ): Promise<StreamResult> {
+  ): Promise<HermesStreamResultWithTools> {
+    const body: Record<string, unknown> = {
+      model: NOUS_MODEL,
+      messages,
+      stream: true,
+      temperature: options.temperature ?? 0.7,
+      max_tokens: options.maxTokens ?? 2048,
+    };
+
+    // Wire tools into Nous AI request (OpenAI-compatible format)
+    if (options.tools && options.tools.length > 0) {
+      body.tools = options.tools;
+      body.tool_choice = "auto";
+    }
+
     const response = await fetch(`${NOUS_BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${NOUS_API_KEY}`,
       },
-      body: JSON.stringify({
-        model: NOUS_MODEL,
-        messages,
-        stream: true,
-        temperature: options.temperature ?? 0.7,
-        max_tokens: options.maxTokens ?? 2048,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok || !response.body) {
@@ -134,11 +198,14 @@ export class HermesProvider implements LLMProvider {
 
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
-    const body = response.body;
+    const bodyStream = response.body;
 
-    const stream = new ReadableStream({
+    // Accumulate tool calls across streaming chunks (they arrive fragmented)
+    const accumulatedToolCalls: Map<number, HermesToolCall> = new Map();
+
+    const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const reader = body.getReader();
+        const reader = bodyStream.getReader();
         let buffer = "";
 
         try {
@@ -160,9 +227,25 @@ export class HermesProvider implements LLMProvider {
                 const delta = json?.choices?.[0]?.delta;
                 if (!delta) continue;
 
-                // When reasoning is ON, Hermes 4 sends thinking to `reasoning_content`
-                // and the final answer to `content`. We stream only the answer.
-                // When reasoning is OFF, everything comes through `content` directly.
+                // Accumulate tool_calls deltas
+                if (delta.tool_calls) {
+                  for (const tc of delta.tool_calls) {
+                    const idx: number = tc.index ?? 0;
+                    if (!accumulatedToolCalls.has(idx)) {
+                      accumulatedToolCalls.set(idx, {
+                        id: tc.id ?? `call_${idx}`,
+                        type: "function",
+                        function: { name: tc.function?.name ?? "", arguments: "" },
+                      });
+                    }
+                    const existing = accumulatedToolCalls.get(idx)!;
+                    if (tc.function?.name) existing.function.name = tc.function.name;
+                    if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
+                    if (tc.id) existing.id = tc.id;
+                  }
+                }
+
+                // Stream text content (final answer after tool calls)
                 const text = delta.content ?? "";
                 if (text) controller.enqueue(encoder.encode(text));
 
@@ -178,10 +261,15 @@ export class HermesProvider implements LLMProvider {
       },
     });
 
+    const toolCalls = accumulatedToolCalls.size > 0
+      ? Array.from(accumulatedToolCalls.values())
+      : undefined;
+
     return {
       stream,
+      toolCalls,
       debug: {
-        model: `nous/${NOUS_MODEL}${useThinking ? " (thinking)" : ""}`,
+        model: `nous/${NOUS_MODEL}${useThinking ? " (thinking)" : ""}${toolCalls ? ` (${toolCalls.length} tool_calls)` : ""}`,
       },
     };
   }
@@ -202,19 +290,28 @@ export class HermesProvider implements LLMProvider {
   private async streamFromOllamaEndpoint(
     baseUrl: string,
     messages: { role: string; content: string }[],
-    options: CompletionOptions
-  ): Promise<StreamResult> {
+    options: CompletionOptions & { tools?: HermesTool[] }
+  ): Promise<HermesStreamResultWithTools> {
     const isGke = baseUrl === LAMBDA_OLLAMA_URL && !!LAMBDA_OLLAMA_URL;
+
+    const body: Record<string, unknown> = {
+      model: OLLAMA_MODEL,
+      messages,
+      stream: true,
+      temperature: options.temperature ?? 0.7,
+      max_tokens: options.maxTokens ?? 2048,
+    };
+
+    // Wire tools into Ollama request (also OpenAI-compatible via /v1/chat/completions)
+    if (options.tools && options.tools.length > 0) {
+      body.tools = options.tools;
+      body.tool_choice = "auto";
+    }
+
     const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        messages,
-        stream: true,
-        temperature: options.temperature ?? 0.7,
-        max_tokens: options.maxTokens ?? 2048,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok || !response.body) {
@@ -223,11 +320,12 @@ export class HermesProvider implements LLMProvider {
 
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
-    const body = response.body;
+    const bodyStream = response.body;
+    const accumulatedToolCalls: Map<number, HermesToolCall> = new Map();
 
-    const stream = new ReadableStream({
+    const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const reader = body.getReader();
+        const reader = bodyStream.getReader();
         let buffer = "";
 
         try {
@@ -246,8 +344,29 @@ export class HermesProvider implements LLMProvider {
 
               try {
                 const json = JSON.parse(trimmed.slice(6));
-                const delta = json?.choices?.[0]?.delta?.content;
-                if (delta) controller.enqueue(encoder.encode(delta));
+                const delta = json?.choices?.[0]?.delta;
+                if (!delta) continue;
+
+                // Accumulate tool_calls
+                if (delta.tool_calls) {
+                  for (const tc of delta.tool_calls) {
+                    const idx: number = tc.index ?? 0;
+                    if (!accumulatedToolCalls.has(idx)) {
+                      accumulatedToolCalls.set(idx, {
+                        id: tc.id ?? `call_${idx}`,
+                        type: "function",
+                        function: { name: tc.function?.name ?? "", arguments: "" },
+                      });
+                    }
+                    const existing = accumulatedToolCalls.get(idx)!;
+                    if (tc.function?.name) existing.function.name = tc.function.name;
+                    if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
+                    if (tc.id) existing.id = tc.id;
+                  }
+                }
+
+                const delta_text = delta.content ?? "";
+                if (delta_text) controller.enqueue(encoder.encode(delta_text));
               } catch {
                 // skip malformed chunk
               }
@@ -260,8 +379,16 @@ export class HermesProvider implements LLMProvider {
       },
     });
 
+    const toolCalls = accumulatedToolCalls.size > 0
+      ? Array.from(accumulatedToolCalls.values())
+      : undefined;
+
     const source = isGke ? `ollama-gke/${OLLAMA_MODEL}` : `ollama-local/${OLLAMA_MODEL}`;
-    return { stream, debug: { model: source } };
+    return {
+      stream,
+      toolCalls,
+      debug: { model: source + (toolCalls ? ` (${toolCalls.length} tool_calls)` : "") },
+    };
   }
 
   // ─── Gemini Flash-Lite Fallback ───────────────────────────────────────────

@@ -564,10 +564,15 @@ export async function generateConversationReply(
   })();
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // T-040: For Hermes/fast mode, pass agentic flag so the model executes
+  // rather than describing what it would do. Also forward any tools defined
+  // for this mode so Hermes can make function calls when appropriate.
+  const isHermesMode = agentMode === 'fast';
   const streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
     model: actualModelId,
     temperature: 0.9,
-    maxTokens: 2048
+    maxTokens: 2048,
+    ...(isHermesMode ? { agentic: true } : {}),
   });
 
   const { stream: originalStream } = streamResult;
