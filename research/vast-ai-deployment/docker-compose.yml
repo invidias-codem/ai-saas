@@ -1,38 +1,26 @@
 version: "3.9"
 
 # ── Tech Genie — Vast.ai GPU Stack ────────────────────────────────────────────
-# Instance: 4x RTX 2080 Ti | 88GB VRAM | Instance ID: 33457656
-# Model: Qwen/Qwen2.5-32B-Instruct (bf16, tensor_parallel=4)
-#
-# Alt for max quality (requires 88GB in 4-bit AWQ):
-#   --model "Qwen/Qwen2.5-72B-Instruct-AWQ"
-#   --quantization awq
+# Instance: 4x RTX 2080 Ti | 88GB VRAM | nvidia/cuda_12.1.0-devel-ubuntu22.04
+# Model: Qwen/Qwen3.5-35B-A3B (MoE — 35B params, 3B active, runs lean)
+# Runner: Docker Model Runner (HF native, OpenAI-compatible API at :12434)
 #
 # Env vars required (fill in .env):
-#   HF_TOKEN                  — HuggingFace token (model download)
-#   SUPABASE_URL              — Supabase project URL
+#   SUPABASE_URL              — https://ozevwhiipwbcvyzkbhib.supabase.co
 #   SUPABASE_SERVICE_KEY      — Supabase service role key
-#   CLOUDFLARE_TUNNEL_TOKEN   — Cloudflare tunnel token (from Zero Trust dashboard)
+#   CLOUDFLARE_TUNNEL_TOKEN   — Cloudflare Zero Trust tunnel token
 # ──────────────────────────────────────────────────────────────────────────────
 
 services:
-  # 1. vLLM Server (OpenAI-compatible, tensor parallel across 4x 2080 Ti)
+  # 1. Docker Model Runner (HuggingFace native, OpenAI-compatible)
+  #    Exposes: POST http://localhost:12434/engines/v1/chat/completions
   llm-server:
-    image: vllm/vllm-openai:latest
+    image: docker/model-runner:latest
     container_name: genie-llm
     runtime: nvidia
-    environment:
-      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
-    command: >
-      --model "Qwen/Qwen2.5-32B-Instruct"
-      --tensor-parallel-size 4
-      --max-model-len 16384
-      --gpu-memory-utilization 0.92
-      --dtype bfloat16
-      --port 8000
-      --served-model-name qwen2.5-32b
+    command: ["hf.co/Qwen/Qwen3.5-35B-A3B"]
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:12434:12434"
     deploy:
       resources:
         reservations:
@@ -41,15 +29,14 @@ services:
               count: all
               capabilities: [gpu]
     volumes:
-      - ~/.cache/huggingface:/root/.cache/huggingface
-    shm_size: "16gb"
+      - model-cache:/root/.cache
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:12434/engines/v1/models"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 120s
+      retries: 10
+      start_period: 300s
 
   # 2. Python Brain (vector-agent — Supabase + knowledge graph)
   vector-brain:
@@ -58,8 +45,8 @@ services:
       dockerfile: Dockerfile
     container_name: genie-vector-brain
     environment:
-      - LOCAL_LLM_URL=http://llm-server:8000/v1
-      - LOCAL_LLM_MODEL=qwen2.5-32b
+      - LOCAL_LLM_URL=http://llm-server:12434/engines/v1
+      - LOCAL_LLM_MODEL=hf.co/Qwen/Qwen3.5-35B-A3B
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
     ports:
@@ -72,6 +59,7 @@ services:
       - ../../functions/vector-agent-python:/app
 
   # 3. Cloudflare Tunnel (zero-trust exposure to Vercel — no public port needed)
+  #    Routes: https://jklaw-llm.gen1e.xyz → http://llm-server:12434
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: genie-tunnel
@@ -81,3 +69,6 @@ services:
     depends_on:
       - llm-server
     restart: unless-stopped
+
+volumes:
+  model-cache:

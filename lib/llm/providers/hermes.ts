@@ -39,8 +39,8 @@ const NOUS_MODEL = process.env.HERMES_MODEL_ID || "Hermes-4.3-36B";
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || "";
 // Local Ollama (dev) — fallback for local development
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-// Model served by vLLM on Vast.ai (--served-model-name in docker-compose)
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5-32b";
+// Model served by Docker Model Runner on Vast.ai
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "hf.co/Qwen/Qwen3.5-35B-A3B";
 const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
 
 // ── Agentic System Prompt (T-040) ─────────────────────────────────────────────
@@ -282,7 +282,11 @@ export class HermesProvider implements LLMProvider {
 
   private async pingOllamaEndpoint(baseUrl: string): Promise<boolean> {
     try {
-      const res = await fetch(`${baseUrl}/api/tags`, {
+      // Docker Model Runner (Vast.ai) uses /engines/v1/models
+      // Local Ollama uses /api/tags
+      const isVastAi = baseUrl === LAMBDA_OLLAMA_URL && !!LAMBDA_OLLAMA_URL;
+      const healthPath = isVastAi ? "/engines/v1/models" : "/api/tags";
+      const res = await fetch(`${baseUrl}${healthPath}`, {
         signal: AbortSignal.timeout(2000),
       });
       return res.ok;
@@ -306,13 +310,17 @@ export class HermesProvider implements LLMProvider {
       max_tokens: options.maxTokens ?? 2048,
     };
 
-    // Wire tools into Ollama request (also OpenAI-compatible via /v1/chat/completions)
+    // Wire tools into request (OpenAI-compatible format)
     if (options.tools && options.tools.length > 0) {
       body.tools = options.tools;
       body.tool_choice = "auto";
     }
 
-    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+    // Docker Model Runner (Vast.ai) → /engines/v1/chat/completions
+    // Local Ollama → /v1/chat/completions
+    const isVastAi = baseUrl === LAMBDA_OLLAMA_URL && !!LAMBDA_OLLAMA_URL;
+    const completionsPath = isVastAi ? "/engines/v1/chat/completions" : "/v1/chat/completions";
+    const response = await fetch(`${baseUrl}${completionsPath}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
