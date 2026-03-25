@@ -23,7 +23,7 @@ jobs:
       # Step 1: Fetch Dependabot metadata — tells us what was bumped and how
       - name: Fetch Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
@@ -38,13 +38,13 @@ jobs:
       # Step 3: Checkout the PR branch at its exact SHA (security: explicit pin)
       # persist-credentials: false prevents the checked-out code from accessing
       # the GITHUB_TOKEN via git credentials (CodeQL alert #96: untrusted-checkout).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -56,7 +56,7 @@ jobs:
 
       # Step 4: Deploy Firebase preview — now works because pull_request_target has secrets
       - name: Deploy Firebase Preview
-        uses: FirebaseExtended/action-hosting-deploy@v0
+        uses: FirebaseExtended/action-hosting-deploy@e2eda2e106cfa35cdbcf4ac9ddaf6c4756df2c8c # v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GENIE_AI_1CA85 }}
