@@ -2,16 +2,18 @@ import { LLMProvider, ChatMessage, CompletionOptions, StreamResult } from "../ty
 import { logger } from "@/lib/logger";
 
 /**
- * Hermes Provider — Self-hosted Ollama (Lambda Labs) + Nous Research Inference API
+ * Fast Provider — Self-hosted vLLM (Vast.ai) + Nous Research Inference API
  *
  * Routing priority (UCOL T-027):
- *   1. Lambda Labs Ollama (self-hosted Hermes 3 8B) — primary, zero API cost
- *   2. Nous AI Cloud (Hermes-4.3-36B)        — fallback when Lambda Labs unavailable
+ *   1. Vast.ai vLLM (self-hosted Qwen2.5-32B-Instruct, 4x RTX 2080 Ti) — primary, zero API cost
+ *   2. Nous AI Cloud (Hermes-4.3-36B)        — fallback when Vast.ai unavailable
  *   3. Gemini Flash-Lite                       — always-available last resort
  *
- * Lambda Labs Ollama endpoint: set LAMBDA_OLLAMA_URL env var to the internal K8s service
- *   e.g. http://ollama.ollama.svc.cluster.local:11434 (in-cluster)
- *        or https://ollama.gen1e.xyz (external via ingress)
+ * Vast.ai vLLM endpoint: set LAMBDA_OLLAMA_URL env var to the Cloudflare tunnel URL
+ *   e.g. https://jklaw-llm.gen1e.xyz  (Cloudflare tunnel → Vast.ai instance:8000)
+ *
+ * Instance: 4x RTX 2080 Ti | 88GB VRAM | CUDA 12.1 | Instance ID: 33457656
+ * Model: Qwen/Qwen2.5-32B-Instruct (bf16, tensor_parallel=4)
  *
  * Nous AI docs: https://portal.nousresearch.com/api-docs
  * Rate: 100 req/min, 80k tokens/min
@@ -32,11 +34,13 @@ const NOUS_BASE_URL = "https://inference-api.nousresearch.com/v1";
 
 const NOUS_MODEL = process.env.HERMES_MODEL_ID || "Hermes-4.3-36B";
 
-// Lambda Labs Ollama (primary) — internal K8s service or external ingress URL
+// Vast.ai vLLM (primary) — Cloudflare tunnel URL to the Vast.ai instance
+// Set LAMBDA_OLLAMA_URL in Vercel env vars to your tunnel URL (e.g. https://jklaw-llm.gen1e.xyz)
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || "";
 // Local Ollama (dev) — fallback for local development
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "hermes3";
+// Model served by vLLM on Vast.ai (--served-model-name in docker-compose)
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5-32b";
 const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
 
 // ── Agentic System Prompt (T-040) ─────────────────────────────────────────────
@@ -130,7 +134,7 @@ export class HermesProvider implements LLMProvider {
       try {
         const gkeUp = await this.pingOllamaEndpoint(LAMBDA_OLLAMA_URL);
         if (gkeUp) {
-          logger.info("[HermesProvider] Routing to Lambda Labs Ollama (self-hosted)");
+          logger.info("[HermesProvider] Routing to Vast.ai vLLM (Qwen2.5-32B, self-hosted)");
           return await this.streamFromOllamaEndpoint(LAMBDA_OLLAMA_URL, formattedMessages, options);
         }
       } catch (err) {
@@ -383,7 +387,7 @@ export class HermesProvider implements LLMProvider {
       ? Array.from(accumulatedToolCalls.values())
       : undefined;
 
-    const source = isGke ? `ollama-gke/${OLLAMA_MODEL}` : `ollama-local/${OLLAMA_MODEL}`;
+    const source = isGke ? `vastai-vllm/${OLLAMA_MODEL}` : `ollama-local/${OLLAMA_MODEL}`;
     return {
       stream,
       toolCalls,

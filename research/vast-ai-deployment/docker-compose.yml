@@ -1,0 +1,83 @@
+version: "3.9"
+
+# ── Tech Genie — Vast.ai GPU Stack ────────────────────────────────────────────
+# Instance: 4x RTX 2080 Ti | 88GB VRAM | Instance ID: 33457656
+# Model: Qwen/Qwen2.5-32B-Instruct (bf16, tensor_parallel=4)
+#
+# Alt for max quality (requires 88GB in 4-bit AWQ):
+#   --model "Qwen/Qwen2.5-72B-Instruct-AWQ"
+#   --quantization awq
+#
+# Env vars required (fill in .env):
+#   HF_TOKEN                  — HuggingFace token (model download)
+#   SUPABASE_URL              — Supabase project URL
+#   SUPABASE_SERVICE_KEY      — Supabase service role key
+#   CLOUDFLARE_TUNNEL_TOKEN   — Cloudflare tunnel token (from Zero Trust dashboard)
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  # 1. vLLM Server (OpenAI-compatible, tensor parallel across 4x 2080 Ti)
+  llm-server:
+    image: vllm/vllm-openai:latest
+    container_name: genie-llm
+    runtime: nvidia
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    command: >
+      --model "Qwen/Qwen2.5-32B-Instruct"
+      --tensor-parallel-size 4
+      --max-model-len 16384
+      --gpu-memory-utilization 0.92
+      --dtype bfloat16
+      --port 8000
+      --served-model-name qwen2.5-32b
+    ports:
+      - "127.0.0.1:8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    shm_size: "16gb"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # 2. Python Brain (vector-agent — Supabase + knowledge graph)
+  vector-brain:
+    build:
+      context: ../../functions/vector-agent-python
+      dockerfile: Dockerfile
+    container_name: genie-vector-brain
+    environment:
+      - LOCAL_LLM_URL=http://llm-server:8000/v1
+      - LOCAL_LLM_MODEL=qwen2.5-32b
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      llm-server:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ../../functions/vector-agent-python:/app
+
+  # 3. Cloudflare Tunnel (zero-trust exposure to Vercel — no public port needed)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: genie-tunnel
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - llm-server
+    restart: unless-stopped

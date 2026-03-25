@@ -29,7 +29,7 @@ import type { BlueskyMention, EngagementResult } from './types';
 
 // Lambda Labs Ollama (primary) — self-hosted Hermes3, zero API cost
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || '';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'hermes3';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5-32b';
 
 // Nous Research (secondary fallback)
 const NOUS_API_KEY = process.env.NOUSE_API_KEY;
