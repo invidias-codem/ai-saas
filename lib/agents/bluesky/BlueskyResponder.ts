@@ -5,13 +5,13 @@
  *   1. Build context (mention text + thread parent if available)
  *   2. Route through AgentRouter (UCOL) to classify query
  *   3. Extract facts via KnowledgeExtractor → push to graph
- *   4. Generate a response via Lambda Labs Ollama/Hermes3 (UCOL T-027)
+ *   4. Generate a response via Vast.ai Docker Model Runner/Qwen3.5 (UCOL T-027)
  *      — grounded via knowledge graph retrieval before generation
- *      — fallback chain: Lambda Labs Ollama → Nous API → Gemini Flash
+ *      — fallback chain: Vast.ai Docker Model Runner → Nous API → Gemini Flash
  *   5. Post the reply to Bluesky with proper reply ref
  *   6. Log the interaction to Supabase (with rate-limit check)
  *
- * T-027 change: Lambda Labs Ollama (self-hosted Hermes3) is now the primary inference
+ * T-027 change: Vast.ai Docker Model Runner (self-hosted Qwen3.5-35B) is now the primary inference
  * node for Bluesky content. Knowledge graph context is injected before
  * generation to prevent hallucination of platform metrics and user stats.
  */
@@ -27,7 +27,7 @@ import type { BlueskyMention, EngagementResult } from './types';
 
 // ─── Inference Config ─────────────────────────────────────────────────────────
 
-// Lambda Labs Ollama (primary) — self-hosted Hermes3, zero API cost
+// Vast.ai Docker Model Runner (primary) — self-hosted Qwen3.5-35B, zero API cost
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || '';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'hf.co/Qwen/Qwen3.5-35B-A3B';
 
@@ -192,14 +192,14 @@ export class BlueskyResponder {
       }
     }
 
-    // ── 1. Lambda Labs Ollama — self-hosted Hermes3 (primary, UCOL T-027) ──────────
+    // ── 1. Vast.ai Docker Model Runner — self-hosted Qwen3.5-35B (primary, UCOL T-027) ──────────
     if (LAMBDA_OLLAMA_URL) {
       try {
         const raw = await this.generateWithOllamaEndpoint(LAMBDA_OLLAMA_URL, context, enrichedSystem);
-        console.log('[BlueskyResponder] Generated via Lambda Labs Ollama (self-hosted)');
+        console.log('[BlueskyResponder] Generated via Vast.ai Docker Model Runner (self-hosted)');
         return this.enforceCharLimit(raw);
       } catch (err) {
-        console.warn('[BlueskyResponder] Lambda Labs Ollama failed, falling back to Nous API:', err);
+        console.warn('[BlueskyResponder] Vast.ai Docker Model Runner failed, falling back to Nous API:', err);
       }
     }
 

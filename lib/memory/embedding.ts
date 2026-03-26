@@ -1,7 +1,7 @@
 /**
  * embedding.ts — Unified Embedding Provider
  *
- * Primary:  Lambda Labs Ollama (nomic-embed-text, 768-dim) — zero API cost, self-hosted
+ * Primary:  Vast.ai Docker Model Runner / Ollama (nomic-embed-text, 768-dim) — zero API cost, self-hosted
  * Fallback: Gemini gemini-embedding-001 (768-dim) — if GOOGLE_API_KEY is set
  * Safety:   Zero vector (768-dim) — graceful degradation, never throws to callers
  *
@@ -124,7 +124,7 @@ function setCache(key: string, embedding: number[]): void {
 // ── Providers ─────────────────────────────────────────────────────────────────
 
 /**
- * Lambda Labs Embedding Server — primary provider.
+ * Vast.ai / Self-hosted Embedding Server — primary provider.
  * OpenAI-compatible /v1/embeddings endpoint served by our CPU sidecar
  * (BAAI/bge-base-en-v1.5, 768-dim, sentence-transformers).
  *
@@ -223,7 +223,7 @@ async function embedWithGemini(text: string): Promise<number[]> {
  * generateEmbedding — generate a 768-dim vector for the given text.
  *
  * Provider order:
- *   1. Lambda Labs Ollama (nomic-embed-text) — if LAMBDA_OLLAMA_URL is set
+ *   1. Vast.ai Docker Model Runner / Ollama (nomic-embed-text) — if LAMBDA_OLLAMA_URL is set
  *   2. Gemini gemini-embedding-001           — if GOOGLE_API_KEY is set
  *   3. Zero vector                           — silent fallback, never throws
  */
@@ -247,13 +247,13 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
     let embedding: number[] | null = null;
 
-    // ── 1. Try Lambda Labs (embedding sidecar or Ollama) ──────────────────────
+    // ── 1. Try Vast.ai / self-hosted (embedding sidecar or Docker Model Runner) ──────────────────────
     if (process.env.LAMBDA_EMBED_URL || process.env.LAMBDA_OLLAMA_URL) {
         try {
             embedding = await embedWithLambda(text);
-            console.log(`[Embedding] Lambda Labs OK — dim=${embedding.length}`);
+            console.log(`[Embedding] Vast.ai / self-hosted OK — dim=${embedding.length}`);
         } catch (err) {
-            console.warn('[Embedding] Lambda Labs failed, trying fallback:', err);
+            console.warn('[Embedding] Vast.ai / self-hosted failed, trying fallback:', err);
         }
     }
 
