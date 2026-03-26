@@ -11,7 +11,7 @@ class EngagementBrain:
     The 'Analyst' brain. Analyzes incoming social data and decides how to engage.
     """
     def __init__(self, api_key):
-        # Allow fallback to self-hosted LLM (Lambda Labs)
+        # Allow fallback to self-hosted LLM (Vast.ai)
         self.local_url = os.environ.get("LOCAL_LLM_URL")
         self.local_model = os.environ.get("LOCAL_LLM_MODEL")
         
@@ -124,7 +124,7 @@ class EngagementBrain:
             f"Output JSON ONLY: {{ \"action\": \"IGNORE\"|\"LIKE\"|\"REPLY\"|\"BOTH\", \"reply_text\": \"...\", \"confidence\": <0-10> }}"
         )
         
-        # If running inside Lambda Labs docker-compose with local LLM
+        # If running inside Vast.ai Docker Model Runner with local LLM
         if self.local_url and self.local_model:
             try:
                 payload = {
@@ -167,7 +167,7 @@ class EngagementBrain:
             f"Tone: Intelligent, slightly cyberpunk. No hashtags."
         )
         
-        # If running inside Lambda Labs docker-compose with local LLM
+        # If running inside Vast.ai Docker Model Runner with local LLM
         if self.local_url and self.local_model:
             try:
                 payload = {

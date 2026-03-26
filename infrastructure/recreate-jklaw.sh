@@ -1,9 +1,9 @@
 #!/bin/bash
-# Recreate jklaw:latest on the Lambda Labs Ollama instance
-# Run this on the Lambda Labs server directly (or via SSH)
+# Recreate jklaw:latest on the Vast.ai Docker Model Runner instance
+# Run this on the Vast.ai server directly (or via SSH)
 #
 # Usage:
-#   ssh ubuntu@<lambda-labs-ip> "bash -s" < recreate-jklaw.sh
+#   ssh ubuntu@<vast-ai-ip> "bash -s" < recreate-jklaw.sh
 #   OR copy Modelfile.jklaw to the server and run manually
 
 set -e
