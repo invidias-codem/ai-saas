@@ -69,3 +69,24 @@ export interface EngagementResult {
   /** Error message if processing failed */
   error?: string;
 }
+
+
+export interface BlueskyDiscoveryCandidate {
+  uri: string;
+  cid: string;
+  text: string;
+  authorHandle: string;
+  authorDid: string;
+  likeCount?: number;
+  replyCount?: number;
+  repostCount?: number;
+  score: number;
+  reason: string;
+}
+
+export interface BlueskyDiscoveryDecision {
+  uri: string;
+  action: 'reply' | 'like' | 'skip';
+  score: number;
+  reason: string;
+}
