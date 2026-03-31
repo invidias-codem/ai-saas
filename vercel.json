@@ -15,6 +15,10 @@
         {
             "path": "/api/cron/refresh-truth-scores",
             "schedule": "0 6 * * *"
+        },
+        {
+            "path": "/api/cron/bluesky-post",
+            "schedule": "0 14 * * *"
         }
     ]
 }
