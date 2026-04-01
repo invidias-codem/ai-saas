@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BlueskyDiscoveryEngine } from '@/lib/agents/bluesky/BlueskyDiscoveryEngine';
 import { BlueskyResponder } from '@/lib/agents/bluesky/BlueskyResponder';
+import { BlueskySafetyPolicy } from '@/lib/agents/bluesky/BlueskySafetyPolicy';
 
 export const maxDuration = 300;
 
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
   try {
     const engine = new BlueskyDiscoveryEngine();
     const responder = new BlueskyResponder();
+    const safety = new BlueskySafetyPolicy();
     const candidates = await engine.discover();
 
     let liked = 0;
@@ -26,7 +28,14 @@ export async function GET(req: NextRequest) {
     for (const candidate of candidates.slice(0, 5)) {
       const decision = engine.decide(candidate);
       if (decision.action === 'like') {
+        const likeBudget = await safety.canLike();
+        const textCheck = safety.shouldAvoidText(candidate.text);
+        if (!likeBudget.allowed || textCheck.blocked) {
+          actions.push({ uri: candidate.uri, action: 'skip', reason: !likeBudget.allowed ? likeBudget.reason : textCheck.reason, author: candidate.authorHandle });
+          continue;
+        }
         await engine.like(candidate.uri, candidate.cid);
+        await safety.logAction({ route: 'discovery-like', authorHandle: candidate.authorHandle, authorDid: candidate.authorDid, mentionUri: candidate.uri, mentionText: candidate.text });
         liked++;
         actions.push({ uri: candidate.uri, action: 'like', score: candidate.score, author: candidate.authorHandle });
       } else if (decision.action === 'reply') {
@@ -37,7 +46,7 @@ export async function GET(req: NextRequest) {
           authorDid: candidate.authorDid,
           text: candidate.text,
           indexedAt: new Date().toISOString(),
-        });
+        }, 'discovery');
         if (result.responded) replied++;
         actions.push({ uri: candidate.uri, action: 'reply', score: candidate.score, author: candidate.authorHandle, responded: result.responded, error: result.error });
       }

@@ -24,6 +24,7 @@ import { buildOllamaKnowledgeContext } from '@/lib/ucol/ollamaKnowledgeContext';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor';
 import type { BlueskyMention, EngagementResult } from './types';
+import { BlueskySafetyPolicy } from './BlueskySafetyPolicy';
 
 // ─── Inference Config ─────────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ export class BlueskyResponder {
   private agent: BskyAgent;
   private supabase: SupabaseClient;
   private authenticated = false;
+  private safety = new BlueskySafetyPolicy();
 
   constructor() {
     const handle = process.env.BLUESKY_HANDLE;
@@ -315,7 +317,7 @@ export class BlueskyResponder {
   /**
    * Full pipeline: classify → extract facts → generate response → post reply → log.
    */
-  async respond(mention: BlueskyMention): Promise<EngagementResult> {
+  async respond(mention: BlueskyMention, source: 'mention' | 'discovery' = 'mention'): Promise<EngagementResult> {
     const base: EngagementResult = {
       mentionUri: mention.uri,
       responded: false,
@@ -326,6 +328,18 @@ export class BlueskyResponder {
       await this.ensureAuth();
 
       // ── Rate limit guard ──────────────────────────────────────────────
+      const policyCheck = this.safety.shouldAvoidText(mention.text);
+      if (policyCheck.blocked) {
+        console.log(`[BlueskyResponder] Safety policy blocked reply to ${mention.authorHandle}: ${policyCheck.reason}`);
+        return { ...base, error: policyCheck.reason };
+      }
+
+      const budget = await this.safety.canReply();
+      if (!budget.allowed) {
+        console.log(`[BlueskyResponder] Reply budget blocked reply to ${mention.authorHandle}: ${budget.reason}`);
+        return { ...base, error: budget.reason };
+      }
+
       const limited = await this.isRateLimited(mention.authorDid);
       if (limited) {
         console.log(`[BlueskyResponder] Rate-limited: skipping reply to ${mention.authorHandle}`);
@@ -404,6 +418,16 @@ export class BlueskyResponder {
         responseUri,
         factsExtracted,
         routedTo: routing.targetNode,
+      });
+
+      await this.safety.logAction({
+        route: source === 'discovery' ? 'discovery-reply' : 'mention-reply',
+        authorHandle: mention.authorHandle,
+        authorDid: mention.authorDid,
+        mentionUri: mention.uri,
+        responseUri,
+        mentionText: mention.text,
+        responseText,
       });
 
       return {

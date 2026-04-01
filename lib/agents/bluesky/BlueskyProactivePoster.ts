@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { BlueskyPoster } from './BlueskyPoster';
+import { BlueskySafetyPolicy } from './BlueskySafetyPolicy';
 
 const CTA_SUFFIX = ' — gen1e.xyz';
 const POST_MAX_CHARS = 290;
@@ -34,10 +35,12 @@ function normalizePost(raw: string): string {
 export class BlueskyProactivePoster {
   private supabase: SupabaseClient;
   private poster: BlueskyPoster;
+  private safety: BlueskySafetyPolicy;
 
   constructor() {
     this.supabase = getSupabaseClient();
     this.poster = new BlueskyPoster();
+    this.safety = new BlueskySafetyPolicy();
   }
 
   private async hasPostedRecently(windowHours = 18): Promise<boolean> {
@@ -127,6 +130,11 @@ Return only the post text.`;
   }
 
   async run(): Promise<{ posted: boolean; reason?: string; uri?: string; text?: string }> {
+    const budget = await this.safety.canPost();
+    if (!budget.allowed) {
+      return { posted: false, reason: budget.reason };
+    }
+
     const recent = await this.hasPostedRecently();
     if (recent) {
       return { posted: false, reason: 'recent_post_exists' };
