@@ -129,7 +129,7 @@ export class HermesProvider implements LLMProvider {
       });
     }
 
-    // 1. Lambda Labs Ollama (self-hosted Hermes 3 — zero API cost, primary for UCOL Fast tier)
+    // 1. Vast.ai Docker Model Runner (self-hosted Qwen3.5-35B — zero API cost, primary for UCOL Fast tier)
     if (LAMBDA_OLLAMA_URL) {
       try {
         const gkeUp = await this.pingOllamaEndpoint(LAMBDA_OLLAMA_URL);
@@ -138,11 +138,11 @@ export class HermesProvider implements LLMProvider {
           return await this.streamFromOllamaEndpoint(LAMBDA_OLLAMA_URL, formattedMessages, options);
         }
       } catch (err) {
-        logger.warn("[HermesProvider] Lambda Labs Ollama unavailable, falling back to Nous AI", err);
+        logger.warn("[HermesProvider] Vast.ai Docker Model Runner unavailable, falling back to Nous AI", err);
       }
     }
 
-    // 2. Nous AI Cloud (API fallback when Lambda Labs unavailable)
+    // 2. Nous AI Cloud (API fallback when Vast.ai unavailable)
     if (NOUS_API_KEY) {
       try {
         return await this.streamFromNousAI(formattedMessages, options, useThinking);
@@ -278,7 +278,7 @@ export class HermesProvider implements LLMProvider {
     };
   }
 
-  // ─── Ollama (Lambda Labs or local) ────────────────────────────────────────────────
+  // ─── Docker Model Runner (Vast.ai) or local Ollama ────────────────────────────────────────────────
 
   private async pingOllamaEndpoint(baseUrl: string): Promise<boolean> {
     try {

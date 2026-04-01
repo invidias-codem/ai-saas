@@ -1,14 +1,14 @@
 """
-Lambda Labs Smart Instance Manager
+Vast.ai Smart Instance Manager
 ===================================
 Starts the GPU instance on first request, keeps it warm for IDLE_TIMEOUT_MINUTES,
 then auto-terminates. All state is stored in Supabase so it survives process restarts.
 
 Environment variables required:
-  LAMBDA_API_KEY         - Lambda Labs API key
+  LAMBDA_API_KEY         - Vast.ai API key
   LAMBDA_INSTANCE_TYPE   - e.g. "gpu_1x_a100_sxm4" 
   LAMBDA_REGION_NAME     - e.g. "us-west-2"
-  LAMBDA_SSH_KEY_NAME    - SSH key name registered in Lambda Labs
+  LAMBDA_SSH_KEY_NAME    - SSH key name registered in Vast.ai
   SUPABASE_URL           - Supabase project URL
   SUPABASE_SERVICE_KEY   - Supabase service role key
   VLLM_PORT              - Port vLLM listens on (default: 8000)
@@ -28,7 +28,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-LAMBDA_API_BASE = "https://cloud.lambdalabs.com/api/v1"
+LAMBDA_API_BASE = "https://console.vast.ai/api/v0"
 LAMBDA_API_KEY = os.environ.get("LAMBDA_API_KEY", "")
 INSTANCE_TYPE = os.environ.get("LAMBDA_INSTANCE_TYPE", "gpu_1x_a100_sxm4")
 REGION_NAME = os.environ.get("LAMBDA_REGION_NAME", "us-west-2")
@@ -81,7 +81,7 @@ async def _sb_log(event: str, detail: str = ""):
         })
 
 # --------------------------------------------------------------------------- #
-# Lambda Labs API                                                               #
+# Vast.ai API                                                                   #
 # --------------------------------------------------------------------------- #
 
 def _lambda_headers():
@@ -191,7 +191,7 @@ async def is_alive(ip: str) -> bool:
 
 class LambdaInstanceManager:
     """
-    Manages a single Lambda Labs GPU instance lifecycle.
+    Manages a single Vast.ai GPU instance lifecycle.
     Thread-safe for async use; call ensure_running() before proxying requests.
     """
 

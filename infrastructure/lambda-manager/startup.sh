@@ -1,5 +1,5 @@
 #!/bin/bash
-# Cloud-init startup script for Lambda Labs GPU instance
+# Cloud-init startup script for Vast.ai GPU instance
 # Runs as ubuntu user on first boot after launch
 # Installs Docker, pulls twin-router image, starts vLLM + twin-router
 

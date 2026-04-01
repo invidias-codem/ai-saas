@@ -37,10 +37,16 @@ jobs:
         with:
           project_id: genie-ai-1ca85
 
+      - name: Build Docker image via Cloud Build
+        run: |
+          gcloud builds submit functions/vector-agent-python \
+            --tag gcr.io/genie-ai-1ca85/vector-agent-python:${{ github.sha }} \
+            --project genie-ai-1ca85
+
       - name: Deploy vector-agent-python to Cloud Run
         run: |
           gcloud run deploy vector-agent-python \
-            --source functions/vector-agent-python \
+            --image gcr.io/genie-ai-1ca85/vector-agent-python:${{ github.sha }} \
             --region us-central1 \
             --project genie-ai-1ca85 \
             --platform managed \

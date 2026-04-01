@@ -15,7 +15,7 @@
  * research, orchestration) are never overridden — they own their routing.
  *
  * Routing targets:
- *   hermes-local    → self-hosted Ollama/Hermes3 on Lambda Labs (fast, zero API cost)
+ *   hermes-local    → self-hosted Docker Model Runner/Qwen3.5 on Vast.ai (fast, zero API cost)
  *   gemini-flash    → fast answers, fact extraction, embeddings
  *   claude          → quality code generation, nuanced analysis
  *   deepseek        → deep reasoning, multi-step logic
@@ -98,7 +98,7 @@ const LLM_NODE_COST_RANK: Partial<Record<string, number>> = {
   'jklaw':          3,
 };
 
-/** True when the self-hosted Ollama Lambda Labs node is configured and should be used */
+/** True when the self-hosted Vast.ai Docker Model Runner node is configured and should be used */
 const LAMBDA_OLLAMA_ENABLED = !!process.env.LAMBDA_OLLAMA_URL;
 
 /** Returns true when a routing decision targets a CLI tool harness */
@@ -242,7 +242,7 @@ export class AgentRouter {
     private gemini: GeminiProvider;
     private jklawUrl: string;
     private jklawKey: string | undefined;
-    // Direct twin router URL (Vast.ai / Lambda Labs) — bypasses Clerk auth,
+    // Direct twin router URL (Vast.ai) — bypasses Clerk auth,
     // used for research/strategy/orchestration tasks that need low-latency
     // dispatch to the self-hosted model. Falls back to internal JKlaw endpoint.
     private twinRouterUrl: string | undefined;
@@ -462,7 +462,7 @@ export class AgentRouter {
         };
 
         try {
-            // ── Path A: Direct twin router (Vast.ai / Lambda Labs) ──────────────
+            // ── Path A: Direct twin router (Vast.ai) ──────────────
             // If JKLAW_TWIN_URL is set, dispatch directly to the self-hosted model
             // using the Ollama /api/generate format. Faster, no Clerk overhead.
             if (this.twinRouterUrl) {
