@@ -72,11 +72,13 @@ export class BlueskyProactivePoster {
       .map((row: any, i: number) => `${i + 1}. Mention: ${row.mention_text || 'n/a'} | Reply: ${row.response_text || 'n/a'}`)
       .join('\n');
 
+    const learnedTopicFocus = process.env.BLUESKY_TOPIC_FOCUS || DEFAULT_TOPIC;
+
     return `You are writing one original Bluesky post for Tech Genie.
 
 Goals:
 - sound like a sharp builder shipping in public
-- focus on ${process.env.BLUESKY_TOPIC_FOCUS || DEFAULT_TOPIC}
+- focus on ${learnedTopicFocus}
 - be useful, specific, and native to social media
 - no hashtags
 - no hype slang

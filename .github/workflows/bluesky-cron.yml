@@ -34,3 +34,11 @@ jobs:
           curl -sS -w "\n%{http_code}" -X GET \
             "https://gen1e.xyz/api/cron/bluesky-discover" \
             -H "Authorization: Bearer ${CRON_SECRET}"
+
+      - name: Trigger learning loop endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS -w "\n%{http_code}" -X GET \
+            "https://gen1e.xyz/api/cron/bluesky-learn" \
+            -H "Authorization: Bearer ${CRON_SECRET}"
