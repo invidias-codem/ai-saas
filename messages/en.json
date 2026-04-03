@@ -1,177 +1,191 @@
 {
-    "Navbar": {
-        "supportGenie": "Support Genie",
-        "credits": "Credits"
+  "Navbar": {
+    "supportGenie": "Support Genie",
+    "credits": "Credits"
+  },
+  "KoFiNudge": {
+    "enjoyingGenie": "Enjoying Genie?",
+    "supportProject": "Support the project & keep servers running!",
+    "supportOnKoFi": "Support on Ko-fi"
+  },
+  "SupportGenie": {
+    "title": "Support Genie",
+    "description": "Unlock automated credits by supporting the project on Ko-fi.",
+    "important": "Important: Use the same email address on Ko-fi as your Genie account so we can automatically credit you!",
+    "donatedWithDifferentEmail": "Donated with a different email?",
+    "contactSupport": "Contact Support"
+  },
+  "DashboardSupport": {
+    "title": "A personal appeal",
+    "p1": "We generally don't ask, but today we need your help. Genie AI is an independent project, built to provide you with the most advanced AI tools without the big corporate price tag.",
+    "p2": "It takes a lot of resources to keep our servers running and to develop new innovative features. If everyone reading this gave a small amount, we could keep Genie AI thriving for years to come.",
+    "p3": "If you find value in what we do, please consider supporting us. It only takes a minute, and it makes a huge difference.",
+    "button": "Support Genie AI ❤️"
+  },
+  "Metadata": {
+    "title": "Genie AI: OpenAI, Gemini & Claude All-in-One Platform",
+    "description": "Unlock your creativity with Genie AI. The ultimate AI SaaS platform integrating OpenAI, Google Gemini, and Anthropic Claude for text, code, image, video, and music generation.",
+    "keywords": "Genie AI, AI Platform, Gemini AI, Claude AI, AI SaaS, Memory System, Slack Integration, Content Creation, Smartest AI Assistant"
+  },
+  "Landing": {
+    "hero": {
+      "badge": "Memory-native AI · Hybrid Inference · Infrastructure You Control",
+      "headline1": "Own your AI stack.",
+      "headline2": "Keep the memory.",
+      "headline3": "Route the model.",
+      "subhead": "Tech Genie gives you persistent memory, model-aware routing, and flexible inference across self-hosted open-source models and premium frontier APIs — all behind one shared intelligence layer.",
+      "cta": "Start Building",
+      "ctaSecondary": "See how routing works",
+      "graphLabel": "Shared Context Layer",
+      "title": "The Smartest AI Assistant Ever Built",
+      "description": "Streamline your workflow with our advanced Memory System, Slack Integration, and Content Creation tools. Powered by Gemini and Anthropic models for the best results.",
+      "login": "Log in"
     },
-    "KoFiNudge": {
-        "enjoyingGenie": "Enjoying Genie?",
-        "supportProject": "Support the project & keep servers running!",
-        "supportOnKoFi": "Support on Ko-fi"
+    "ucol": {
+      "eyebrow": "Hybrid Orchestration",
+      "title": "One intelligence layer. Multiple inference paths.",
+      "subtitle": "Tech Genie routes requests across self-hosted open models and premium frontier APIs using task type, memory confidence, latency, and cost — while preserving the same context layer underneath.",
+      "flowLabel": "Query → Memory → Routing → Inference → Response",
+      "card1Title": "Open Models",
+      "card1Body": "Self-host efficient open-source inference on Lambda GPU infrastructure for fast, cost-controlled responses.",
+      "card2Title": "Frontier Models",
+      "card2Body": "Escalate high-stakes prompts to premium providers only when deeper reasoning or output quality justifies the cost.",
+      "card3Title": "Shared Memory",
+      "card3Body": "Keep one persistent context layer across every model so user memory, project state, and prior work compound over time.",
+      "card4Title": "UCOL Router",
+      "card4Body": "Decide dynamically using task type, confidence, latency, and budget — not manual model switching."
     },
-    "SupportGenie": {
-        "title": "Support Genie",
-        "description": "Unlock automated credits by supporting the project on Ko-fi.",
-        "important": "Important: Use the same email address on Ko-fi as your Genie account so we can automatically credit you!",
-        "donatedWithDifferentEmail": "Donated with a different email?",
-        "contactSupport": "Contact Support"
+    "memory": {
+      "eyebrow": "Persistent Memory",
+      "title": "Context that compounds across every model",
+      "subtitle": "Tech Genie stores user preferences, project history, technical context, and prior interactions in a shared memory layer that every model can read from and contribute to.",
+      "stat1Value": "Persistent",
+      "stat1Label": "Memory across sessions and models",
+      "stat2Value": "Shared",
+      "stat2Label": "Context for chat, code, research, and agents",
+      "stat3Value": "Compounding",
+      "stat3Label": "Knowledge that improves with use"
     },
-    "DashboardSupport": {
-        "title": "A personal appeal",
-        "p1": "We generally don't ask, but today we need your help. Genie AI is an independent project, built to provide you with the most advanced AI tools without the big corporate price tag.",
-        "p2": "It takes a lot of resources to keep our servers running and to develop new innovative features. If everyone reading this gave a small amount, we could keep Genie AI thriving for years to come.",
-        "p3": "If you find value in what we do, please consider supporting us. It only takes a minute, and it makes a huge difference.",
-        "button": "Support Genie AI ❤️"
+    "features": {
+      "title": "A platform for memory-native AI products",
+      "subtitle": "Everything you need to build hybrid AI workflows with persistent context, flexible inference, and production-grade integrations.",
+      "conversation": "Conversation",
+      "conversationDesc": "Chat backed by persistent memory, context retrieval, and model-aware routing.",
+      "code": "Code",
+      "codeDesc": "Generate, review, and iterate with agents that remember project structure and engineering context.",
+      "research": "Research",
+      "researchDesc": "Blend web retrieval, memory, and reasoning into reusable research workflows.",
+      "hybrid": "Hybrid Inference",
+      "hybridDesc": "Route between self-hosted open models and premium APIs based on cost, speed, and confidence.",
+      "memoryLayer": "Memory Layer",
+      "memoryLayerDesc": "Store user, project, and system knowledge in one shared intelligence substrate.",
+      "infrastructure": "Infrastructure Control",
+      "infrastructureDesc": "Deploy on hosted or self-managed GPU infrastructure without changing the product surface."
     },
-    "Metadata": {
-        "title": "Genie AI: OpenAI, Gemini & Claude All-in-One Platform",
-        "description": "Unlock your creativity with Genie AI. The ultimate AI SaaS platform integrating OpenAI, Google Gemini, and Anthropic Claude for text, code, image, video, and music generation.",
-        "keywords": "Genie AI, AI Platform, Gemini AI, Claude AI, AI SaaS, Memory System, Slack Integration, Content Creation, Smartest AI Assistant"
+    "cta": {
+      "title": "Build on a context layer you can actually own",
+      "subtitle": "Tech Genie gives you persistent memory, hybrid inference, and model routing designed to evolve with your product — not trap it inside one provider.",
+      "button": "Start Building with Tech Genie"
     },
-    "Landing": {
-        "hero": {
-            "badge": "Powered by UCOL — Unified Context Orchestration Layer",
-            "headline1": "Every conversation you've ever had with AI —",
-            "headline2": "forgotten.",
-            "headline3": "Not anymore.",
-            "subhead": "Tech Genie remembers you. Learns you. Connects three AI minds — so you never start from zero.",
-            "cta": "Start for free",
-            "ctaSecondary": "See how it works",
-            "graphLabel": "Your Knowledge Graph — live preview",
-            "title": "The Smartest AI Assistant Ever Built",
-            "description": "Streamline your workflow with our advanced Memory System, Slack Integration, and Content Creation tools. Powered by Gemini and Anthropic models for the best results.",
-            "login": "Log in"
-        },
-        "ucol": {
-            "eyebrow": "UCOL — Unified Context Orchestration Layer",
-            "title": "Three minds. One answer.",
-            "subtitle": "UCOL routes every question to the right model, passes memory between them, and delivers one seamless response.",
-            "hermeTagline": "Fast reasoning. Instant answers.",
-            "hermes": "Hermes",
-            "hermesTagline": "Fast reasoning. Instant answers.",
-            "gemini": "Gemini",
-            "geminiTagline": "Deep analysis. Strategic thinking.",
-            "claude": "Claude",
-            "claudeTagline": "Precise language. Thoughtful craft.",
-            "flowLabel": "How UCOL routes your query"
-        },
-        "memory": {
-            "eyebrow": "Persistent Memory",
-            "title": "Genie learns you.",
-            "subtitle": "Every conversation adds to your knowledge graph. Facts, preferences, goals — connected and remembered.",
-            "stat1Value": "∞",
-            "stat1Label": "Memory never expires",
-            "stat2Value": "3",
-            "stat2Label": "AI models, one context",
-            "stat3Value": "0",
-            "stat3Label": "Times you start from zero"
-        },
-        "features": {
-            "title": "One platform. Every capability.",
-            "subtitle": "Everything you need to build, create, and think — with AI that actually knows you.",
-            "conversation": "Chat with memory",
-            "conversationDesc": "Three AI minds with shared context. Your preferences, goals, and history — carried across every conversation.",
-            "image": "Visual generation",
-            "imageDesc": "Turn ideas into stunning visuals. Describe it, refine it, own it.",
-            "video": "Video creation",
-            "videoDesc": "Bring stories to life with AI-generated video clips from simple descriptions.",
-            "music": "Music composition",
-            "musicDesc": "Generate original audio tracks and sound effects for your projects.",
-            "code": "Code Builder",
-            "codeDesc": "Plan, build, and review code with an AI that understands your stack and remembers your patterns.",
-            "fast": "Fast & always on",
-            "fastDesc": "Enterprise-grade infrastructure. Your AI never sleeps, never forgets, never slows down."
-        },
-        "cta": {
-            "title": "Meet the AI that remembers.",
-            "subtitle": "Join thousands of builders who've stopped starting from zero.",
-            "button": "Start for free →"
-        },
-        "pricing": {
-            "title": "Flexible Pricing",
-            "subtitle": "Pay only for what you generate.",
-            "payAsYouGo": "Pay As You Go",
-            "creatorBundle": "Creator Bundle",
-            "proStudio": "Pro Studio",
-            "startCreating": "Start Creating Now",
-            "disclaimer": "Prices are estimated based on standard usage."
-        },
-        "footer": {
-            "rights": "© {year} Genie AI. All rights reserved."
-        }
+    "pricing": {
+      "title": "Flexible Pricing",
+      "subtitle": "Pay only for what you generate.",
+      "payAsYouGo": "Pay As You Go",
+      "creatorBundle": "Creator Bundle",
+      "proStudio": "Pro Studio",
+      "startCreating": "Start Creating Now",
+      "disclaimer": "Prices are estimated based on standard usage."
     },
-    "Sidebar": {
-        "dashboard": "Dashboard",
-        "conversation": "Conversation",
-        "imageGeneration": "Image Generation",
-        "videoGeneration": "Video Generation",
-        "musicGeneration": "Music Generation",
-        "codeGeneration": "Code Generation",
-        "codeBuilder": "Code Builder ⚡",
-        "settings": "Settings"
+    "footer": {
+      "rights": "© {year} Tech Genie. All rights reserved."
     },
-    "Dashboard": {
-        "exploreTitle": "Explore the power of AI",
-        "exploreSubtitle": "Chat with the smartest AI - Experience the power of AI",
-        "tools": {
-            "conversation": {
-                "label": "Conversation",
-                "description": "Chat with AI"
-            },
-            "image": {
-                "label": "Image Generation",
-                "description": "Generate images from text"
-            },
-            "video": {
-                "label": "Video Generation",
-                "description": "Create video from text"
-            },
-            "music": {
-                "label": "Music Generation",
-                "description": "Compose music from text"
-            },
-            "code": {
-                "label": "Code Generation",
-                "description": "Write code with AI"
-            },
-            "codeBuilder": {
-                "label": "Code Builder ⚡",
-                "description": "Plan, Code, and Review with AI"
-            }
-        }
-    },
-    "Image": {
-        "title": "Image Capsule",
-        "description": "Turn your prompt into an image with Seedream 4!",
-        "empty": "No images generated yet. Start creating! 🎨",
-        "placeholder": "A cute dog walking on a colorful street",
-        "generateBtn": "Generate",
-        "downloadBtn": "Download"
-    },
-    "Video": {
-        "title": "Quick Clip",
-        "description": "Generate videos with Replicate!",
-        "empty": "Ready to create your video! 🎬",
-        "placeholder": "A futuristic city in the clouds",
-        "generateBtn": "Generate"
-    },
-    "Music": {
-        "title": "Juke Box",
-        "description": "Turn your prompt into a song with Lyria!",
-        "empty": "No music generated yet. Start creating! 🎵",
-        "placeholder": "A piano solo in the style of Mozart",
-        "generateBtn": "Generate"
-    },
-    "Conversation": {
-        "title": "Conversation",
-        "description": "Chat with the smartest AI - Experience the power of AI",
-        "placeholder": "How do I calculate the radius of a circle?",
-        "generateBtn": "Generate",
-        "placeholderAgentic": "Agentic Mode active — try: search the web, write a research paper...",
-        "placeholderQuality": "Quality Mode — ask anything complex...",
-        "placeholderFast": "Ask Genie anything..."
-    },
-    "Settings": {
-        "title": "Settings",
-        "description": "Manage your account settings and preferences."
+    "infrastructure": {
+      "eyebrow": "Infrastructure Control",
+      "title": "Run the models you want on infrastructure you control",
+      "subtitle": "Start with hosted inference, move high-volume paths to self-hosted open models, and keep premium APIs as selective fallback. Tech Genie is built for hybrid deployment from day one.",
+      "card1Title": "Lambda-hosted inference",
+      "card1Body": "Deploy open-source models on your own Lambda Labs GPU infrastructure for predictable cost and lower vendor dependence.",
+      "card2Title": "Bring your own models",
+      "card2Body": "Swap in open-weight models from Hugging Face without rebuilding your memory or routing layer.",
+      "card3Title": "Premium fallback",
+      "card3Body": "Use frontier APIs only where they deliver a clear quality advantage — not as the default path for every request.",
+      "card4Title": "Future-proof architecture",
+      "card4Body": "As models improve and prices shift, Tech Genie lets you adapt the inference layer without rewriting the product."
     }
+  },
+  "Sidebar": {
+    "dashboard": "Dashboard",
+    "conversation": "Conversation",
+    "imageGeneration": "Image Generation",
+    "videoGeneration": "Video Generation",
+    "musicGeneration": "Music Generation",
+    "codeGeneration": "Code Generation",
+    "codeBuilder": "Code Builder ⚡",
+    "settings": "Settings"
+  },
+  "Dashboard": {
+    "exploreTitle": "Explore the power of AI",
+    "exploreSubtitle": "Chat with the smartest AI - Experience the power of AI",
+    "tools": {
+      "conversation": {
+        "label": "Conversation",
+        "description": "Chat with AI"
+      },
+      "image": {
+        "label": "Image Generation",
+        "description": "Generate images from text"
+      },
+      "video": {
+        "label": "Video Generation",
+        "description": "Create video from text"
+      },
+      "music": {
+        "label": "Music Generation",
+        "description": "Compose music from text"
+      },
+      "code": {
+        "label": "Code Generation",
+        "description": "Write code with AI"
+      },
+      "codeBuilder": {
+        "label": "Code Builder ⚡",
+        "description": "Plan, Code, and Review with AI"
+      }
+    }
+  },
+  "Image": {
+    "title": "Image Capsule",
+    "description": "Turn your prompt into an image with Seedream 4!",
+    "empty": "No images generated yet. Start creating! 🎨",
+    "placeholder": "A cute dog walking on a colorful street",
+    "generateBtn": "Generate",
+    "downloadBtn": "Download"
+  },
+  "Video": {
+    "title": "Quick Clip",
+    "description": "Generate videos with Replicate!",
+    "empty": "Ready to create your video! 🎬",
+    "placeholder": "A futuristic city in the clouds",
+    "generateBtn": "Generate"
+  },
+  "Music": {
+    "title": "Juke Box",
+    "description": "Turn your prompt into a song with Lyria!",
+    "empty": "No music generated yet. Start creating! 🎵",
+    "placeholder": "A piano solo in the style of Mozart",
+    "generateBtn": "Generate"
+  },
+  "Conversation": {
+    "title": "Conversation",
+    "description": "Chat with the smartest AI - Experience the power of AI",
+    "placeholder": "How do I calculate the radius of a circle?",
+    "generateBtn": "Generate",
+    "placeholderAgentic": "Agentic Mode active — try: search the web, write a research paper...",
+    "placeholderQuality": "Quality Mode — ask anything complex...",
+    "placeholderFast": "Ask Genie anything..."
+  },
+  "Settings": {
+    "title": "Settings",
+    "description": "Manage your account settings and preferences."
+  }
 }

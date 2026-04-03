@@ -16,6 +16,7 @@ import { HeroSection } from "@/components/landing/hero-section";
 import { UCOLSection } from "@/components/landing/ucol-section";
 import { MemorySection } from "@/components/landing/memory-section";
 import { FeatureCard } from "@/components/landing/feature-card";
+import { InfrastructureSection } from "@/components/landing/infrastructure-section";
 import { Testimonials } from "@/components/landing/testimonials";
 import { useTranslations } from "next-intl";
 
@@ -31,27 +32,6 @@ const LandingPage = () => {
       bgColor: "bg-sky-500/10",
     },
     {
-      label: t('features.image'),
-      icon: ImageIcon,
-      description: t('features.imageDesc'),
-      color: "text-violet-500",
-      bgColor: "bg-violet-500/10",
-    },
-    {
-      label: t('features.video'),
-      icon: VideoIcon,
-      description: t('features.videoDesc'),
-      color: "text-pink-600",
-      bgColor: "bg-pink-600/10",
-    },
-    {
-      label: t('features.music'),
-      icon: DiscIcon,
-      description: t('features.musicDesc'),
-      color: "text-orange-500",
-      bgColor: "bg-orange-500/10",
-    },
-    {
       label: t('features.code'),
       icon: CodeIcon,
       description: t('features.codeDesc'),
@@ -59,9 +39,30 @@ const LandingPage = () => {
       bgColor: "bg-green-500/10",
     },
     {
-      label: t('features.fast'),
+      label: t('features.research'),
       icon: RocketIcon,
-      description: t('features.fastDesc'),
+      description: t('features.researchDesc'),
+      color: "text-violet-500",
+      bgColor: "bg-violet-500/10",
+    },
+    {
+      label: t('features.hybrid'),
+      icon: VideoIcon,
+      description: t('features.hybridDesc'),
+      color: "text-pink-600",
+      bgColor: "bg-pink-600/10",
+    },
+    {
+      label: t('features.memoryLayer'),
+      icon: DiscIcon,
+      description: t('features.memoryLayerDesc'),
+      color: "text-orange-500",
+      bgColor: "bg-orange-500/10",
+    },
+    {
+      label: t('features.infrastructure'),
+      icon: ImageIcon,
+      description: t('features.infrastructureDesc'),
       color: "text-indigo-500 dark:text-white",
       bgColor: "bg-indigo-500/10 dark:bg-white/10",
     },
@@ -78,10 +79,13 @@ const LandingPage = () => {
         {/* 2 — UCOL: Three minds. One answer. */}
         <UCOLSection />
 
-        {/* 3 — Memory: Genie learns you. */}
+        {/* 3 — Memory: Persistent context across every inference path. */}
         <MemorySection />
 
-        {/* 4 — Features Grid: One platform. Every capability. */}
+        {/* 4 — Infrastructure control: self-hosted OSS + premium fallback. */}
+        <InfrastructureSection />
+
+        {/* 5 — Features Grid: Platform capabilities built on memory-native AI. */}
         <section className="px-4 py-16 md:py-32 max-w-7xl mx-auto relative cursor-default">
           {/* Ambient glow */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-violet-500/5 dark:bg-indigo-500/10 rounded-full blur-[100px] -z-10" />
@@ -114,7 +118,7 @@ const LandingPage = () => {
 
         <Testimonials />
 
-        {/* 5 — CTA: Meet the AI that remembers. */}
+        {/* 6 — CTA: Build on a context layer you can actually own. */}
         <section className="py-16 md:py-32 text-center px-4 relative overflow-hidden">
           {/* Background: light mode = soft violet/indigo gradient. Dark = deep indigo-950. */}
           <div className="absolute inset-0 bg-gradient-to-br from-violet-100 via-indigo-50 to-violet-100 dark:from-indigo-950 dark:via-violet-950 dark:to-indigo-950 pointer-events-none" />
@@ -157,7 +161,7 @@ const LandingPage = () => {
               <div className="relative w-8 h-8">
                 <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" sizes="(max-width: 768px) 32px, 32px" />
               </div>
-              <span className="text-xl font-bold text-slate-800 dark:text-foreground font-heading">Genie AI</span>
+              <span className="text-xl font-bold text-slate-800 dark:text-foreground font-heading">Tech Genie</span>
             </div>
 
             <div className="flex flex-wrap justify-center gap-8 text-sm text-slate-400 dark:text-muted-foreground">
