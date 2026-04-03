@@ -382,6 +382,15 @@ export async function generateConversationReply(
   const enhancedSystemInstruction = getSystemInstruction() +
     "\n\n" + promptLayout.packedContext;
 
+  // Format history for provider
+  const history: ChatMessage[] = [
+    { role: "assistant", text: GREETING },
+    ...messages.map(msg => ({
+      role: msg.role === "bot" ? "assistant" : "user",
+      text: msg.text
+    } as ChatMessage))
+  ];
+
   // Attach file to the last message if present
   if (fileData && mimeType) {
     const lastMsg = history[history.length - 1];
