@@ -76,6 +76,23 @@ function estimateTokens(text: string): number {
   return Math.ceil((text || '').length / 4);
 }
 
+function createPromptSection(
+  key: keyof PreparedContextSections,
+  label: string,
+  text: string,
+  priority: number,
+  required: boolean = false,
+): PromptSection {
+  return {
+    key,
+    label,
+    text,
+    estimatedTokens: estimateTokens(text),
+    priority,
+    ...(required ? { required: true } : {}),
+  };
+}
+
 async function computeFactSimilarities(allFacts: ExtractedFact[], userQuery: string): Promise<Map<string, number>> {
   const similarities = new Map<string, number>();
   if (!allFacts.length) return similarities;
@@ -224,24 +241,20 @@ export function layoutPromptContext(
   sections: PreparedContextSections,
   budgetTokens: number = 6000,
 ): PromptLayoutResult {
-  const candidates = [
-    { key: 'userContextPrompt', label: 'User Context', text: sections.userContextPrompt, estimatedTokens: estimateTokens(sections.userContextPrompt), priority: 100, required: true },
-    { key: 'userProfileContext', label: 'User Profile', text: sections.userProfileContext, estimatedTokens: estimateTokens(sections.userProfileContext), priority: 90 },
-    { key: 'factContext', label: 'Fact Context', text: sections.factContext, estimatedTokens: estimateTokens(sections.factContext), priority: 95 },
-    { key: 'graphContext', label: 'Graph Context', text: sections.graphContext, estimatedTokens: estimateTokens(sections.graphContext), priority: 80 },
-    { key: 'searchContext', label: 'Search Context', text: sections.searchContext, estimatedTokens: estimateTokens(sections.searchContext), priority: 60 },
-    { key: 'memoryContext', label: 'Memory Context', text: sections.memoryContext, estimatedTokens: estimateTokens(sections.memoryContext), priority: 85 },
-  ] satisfies PromptSection[];
-
-  const filteredCandidates: PromptSection[] = candidates.filter(
-    (section): section is PromptSection => Boolean(section.text && section.text.trim().length > 0)
-  );
+  const candidates: PromptSection[] = [
+    createPromptSection('userContextPrompt', 'User Context', sections.userContextPrompt, 100, true),
+    createPromptSection('userProfileContext', 'User Profile', sections.userProfileContext, 90),
+    createPromptSection('factContext', 'Fact Context', sections.factContext, 95),
+    createPromptSection('graphContext', 'Graph Context', sections.graphContext, 80),
+    createPromptSection('searchContext', 'Search Context', sections.searchContext, 60),
+    createPromptSection('memoryContext', 'Memory Context', sections.memoryContext, 85),
+  ].filter((section) => section.text && section.text.trim().length > 0);
 
   const includedSections: PromptSection[] = [];
   const omittedSections: PromptSection[] = [];
   let usedTokens = estimateTokens(systemInstruction);
 
-  for (const section of filteredCandidates.sort((a, b) => b.priority - a.priority)) {
+  for (const section of candidates.sort((a, b) => b.priority - a.priority)) {
     const nextUsed = usedTokens + section.estimatedTokens;
     if (section.required || nextUsed <= budgetTokens) {
       includedSections.push(section);
