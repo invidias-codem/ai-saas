@@ -2,12 +2,12 @@
 
 import { motion } from "framer-motion";
 import { useTranslations } from "next-intl";
-import { ServerIcon, LayersIcon, RocketIcon, LockClosedIcon } from "@radix-ui/react-icons";
+import { LayersIcon, RocketIcon, LockClosedIcon, CubeIcon } from "@radix-ui/react-icons";
 
 const infraCards = [
   {
     key: "card1",
-    icon: ServerIcon,
+    icon: CubeIcon,
     color: "text-violet-600 dark:text-violet-300",
     border: "border-violet-300/50 dark:border-violet-500/30",
     glow: "shadow-[0_0_24px_-10px_rgba(139,92,246,0.35)]",
