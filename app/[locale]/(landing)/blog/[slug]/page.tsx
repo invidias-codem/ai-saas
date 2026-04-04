@@ -25,10 +25,10 @@ interface BlogPostPageProps {
   params: Promise<{ slug: string }>;
 }
 
-// Generate static params for all blog posts
+// Avoid eagerly prebuilding every localized blog slug during production builds.
+// Blog posts can still be generated on demand via ISR.
 export async function generateStaticParams() {
-  const slugs = getAllPostSlugs();
-  return slugs.map((slug) => ({ slug }));
+  return [];
 }
 
 // Allow on-demand generation of blog posts not in the initial build
