@@ -1,4 +1,5 @@
 import { sanitizeForLog } from '@/lib/security/urlValidator';
+import { shouldQuietBuildLogs } from '@/lib/runtime/buildPhase';
 /**
  * Slack Token Manager (Supabase Edition)
  * Handles multi-tenant token resolution from Supabase
@@ -13,7 +14,7 @@ import { supabase } from '@/lib/supabaseClient';
 // We fallback to SLACK_CLIENT_SECRET if no dedicated key is providing, matching the callback logic
 const ENCRYPTION_KEY = process.env.SLACK_TOKEN_ENCRYPTION_KEY || process.env.SLACK_CLIENT_SECRET;
 
-if (!ENCRYPTION_KEY) {
+if (!ENCRYPTION_KEY && !shouldQuietBuildLogs()) {
   console.warn('[TOKEN_MANAGER] ⚠️ No encryption key found. Slack token retrieval will fail.');
 }
 

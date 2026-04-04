@@ -8,6 +8,7 @@
  */
 
 import * as admin from 'firebase-admin';
+import { shouldQuietBuildLogs } from '@/lib/runtime/buildPhase';
 
 // Track if we initialized with proper credentials
 let initializedWithCredentials = false;
@@ -36,7 +37,7 @@ function getServiceAccountFromEnv(): admin.ServiceAccount | null {
   if (serviceAccountJson) {
     try {
       // Diagnostic logging (masked)
-      console.log(`[FIREBASE_ADMIN] Found GCP_SERVICE_ACCOUNT_KEY_JSON (length: ${serviceAccountJson.length})`);
+      if (!shouldQuietBuildLogs()) console.log(`[FIREBASE_ADMIN] Found GCP_SERVICE_ACCOUNT_KEY_JSON (length: ${serviceAccountJson.length})`);
 
       let cleanedJson = serviceAccountJson.trim();
 
@@ -64,7 +65,7 @@ function getServiceAccountFromEnv(): admin.ServiceAccount | null {
       } catch (e) {
         // If direct parse fails, try 'cleaning' aggressive newlines/escapes setup
         // Only do this if direct parse failed, as it's risky
-        console.log('[FIREBASE_ADMIN] Direct JSON parse failed, attempting to clean string...');
+        if (!shouldQuietBuildLogs()) console.log('[FIREBASE_ADMIN] Direct JSON parse failed, attempting to clean string...');
 
         // Replace literal '\n' characters with space if they are outside strings? Hard to do with regex.
         // However, most env vars for this come in constrained formats.
@@ -86,10 +87,10 @@ function getServiceAccountFromEnv(): admin.ServiceAccount | null {
       }
 
     } catch (error) {
-      console.error('[FIREBASE_ADMIN] Failed to parse GCP_SERVICE_ACCOUNT_KEY_JSON:', error);
+      if (!shouldQuietBuildLogs()) console.error('[FIREBASE_ADMIN] Failed to parse GCP_SERVICE_ACCOUNT_KEY_JSON:', error);
       // Log a snippet to help debug (safety: show only start/end)
       const safeSnippet = serviceAccountJson.substring(0, 10) + '...' + serviceAccountJson.substring(serviceAccountJson.length - 10);
-      console.error(`[FIREBASE_ADMIN] Snippet: ${safeSnippet}`);
+      if (!shouldQuietBuildLogs()) console.error(`[FIREBASE_ADMIN] Snippet: ${safeSnippet}`);
     }
   }
 
@@ -100,10 +101,10 @@ function getServiceAccountFromEnv(): admin.ServiceAccount | null {
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
   if (projectId && clientEmail && privateKey) {
-    console.log('[FIREBASE_ADMIN] Found individual env vars (FIREBASE_PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY)');
+    if (!shouldQuietBuildLogs()) console.log('[FIREBASE_ADMIN] Found individual env vars (FIREBASE_PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY)');
     return { projectId, clientEmail, privateKey };
   } else {
-    if (projectId) console.log('[FIREBASE_ADMIN] Found projectId but missing clientEmail or privateKey');
+    if (projectId && !shouldQuietBuildLogs()) console.log('[FIREBASE_ADMIN] Found projectId but missing clientEmail or privateKey');
   }
 
   return null;
@@ -131,13 +132,13 @@ function initializeFirebaseAdmin(): admin.app.App {
     // If we have credentials but the existing app might not have them,
     // we can't reinitialize, but we can at least log a warning
     if (serviceAccount && !initializedWithCredentials) {
-      console.warn('[FIREBASE_ADMIN] Firebase was already initialized without proper credentials. Some operations may fail.');
+      if (!shouldQuietBuildLogs()) console.warn('[FIREBASE_ADMIN] Firebase was already initialized without proper credentials. Some operations may fail.');
     }
 
     return existingApp;
   }
 
-  console.log('[FIREBASE_ADMIN] Initializing Firebase Admin...');
+  if (!shouldQuietBuildLogs()) console.log('[FIREBASE_ADMIN] Initializing Firebase Admin...');
 
   // Method 1: Use service account from environment
   if (serviceAccount) {
@@ -146,11 +147,11 @@ function initializeFirebaseAdmin(): admin.app.App {
         credential: admin.credential.cert(serviceAccount),
         projectId: serviceAccount.projectId,
       });
-      console.log('[FIREBASE_ADMIN] Initialized with service account credentials');
+      if (!shouldQuietBuildLogs()) console.log('[FIREBASE_ADMIN] Initialized with service account credentials');
       initializedWithCredentials = true;
       return app;
     } catch (error) {
-      console.error('[FIREBASE_ADMIN] Failed to initialize with service account:', error);
+      if (!shouldQuietBuildLogs()) console.error('[FIREBASE_ADMIN] Failed to initialize with service account:', error);
     }
   }
 
@@ -162,17 +163,19 @@ function initializeFirebaseAdmin(): admin.app.App {
         credential: admin.credential.applicationDefault(),
         projectId: projectId || undefined,
       });
-      console.log('[FIREBASE_ADMIN] Initialized with GOOGLE_APPLICATION_CREDENTIALS');
+      if (!shouldQuietBuildLogs()) console.log('[FIREBASE_ADMIN] Initialized with GOOGLE_APPLICATION_CREDENTIALS');
       initializedWithCredentials = true;
       return app;
     } catch (error) {
-      console.error('[FIREBASE_ADMIN] Failed to initialize with application default:', error);
+      if (!shouldQuietBuildLogs()) console.error('[FIREBASE_ADMIN] Failed to initialize with application default:', error);
     }
   }
 
   // Method 3: Fallback - initialize without credentials (will fail on Firestore operations)
-  console.error('[FIREBASE_ADMIN] No valid credentials found! Firebase operations will fail.');
-  console.error('[FIREBASE_ADMIN] Please set GCP_SERVICE_ACCOUNT_KEY_JSON environment variable.');
+  if (!shouldQuietBuildLogs()) {
+    console.error('[FIREBASE_ADMIN] No valid credentials found! Firebase operations will fail.');
+    console.error('[FIREBASE_ADMIN] Please set GCP_SERVICE_ACCOUNT_KEY_JSON environment variable.');
+  }
 
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.GOOGLE_PROJECT_ID;
   if (projectId) {
@@ -222,7 +225,7 @@ export function reinitializeIfNeeded(): boolean {
 
   // Can't reinitialize if already initialized
   if (admin.apps.length > 0) {
-    console.warn('[FIREBASE_ADMIN] Cannot reinitialize - Firebase already initialized');
+    if (!shouldQuietBuildLogs()) console.warn('[FIREBASE_ADMIN] Cannot reinitialize - Firebase already initialized');
     return false;
   }
 
