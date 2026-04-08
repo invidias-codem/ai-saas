@@ -1,20 +1,34 @@
-name: Bluesky Engagement Agent Cron
+name: Bluesky Agent Cron
 
 on:
   schedule:
-    # Run every 5 minutes
+    # Mentions/replies every 5 minutes
     - cron: '*/5 * * * *'
-  workflow_dispatch: # Allow manual trigger from GitHub UI
+    # Proactive post every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 jobs:
-  ping-bluesky:
+  bluesky-engage:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/5 * * * *'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Vercel Endpoint
+      - name: Trigger Bluesky engagement endpoint
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          # Fetch the endpoint, failing the workflow if a non-200 HTTP code is returned
           curl -sS -w "\n%{http_code}" -X GET \
             "https://gen1e.xyz/api/cron/bluesky-engage" \
+            -H "Authorization: Bearer ${CRON_SECRET}"
+
+  bluesky-post:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 */6 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Bluesky proactive post endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -sS -w "\n%{http_code}" -X GET \
+            "https://gen1e.xyz/api/cron/bluesky-post" \
             -H "Authorization: Bearer ${CRON_SECRET}"
