@@ -222,8 +222,8 @@ async function buildGrounding(lane: BlueskyTopicLane): Promise<{ grounding: stri
   return { grounding: await fetchMemoryGrounding(lane), sourceKind: 'memory' };
 }
 
-export async function planProactiveBlueskyPost(): Promise<PlannedBlueskyPost> {
-  const lane = chooseLane();
+export async function planProactiveBlueskyPost(laneOverride?: BlueskyTopicLane): Promise<PlannedBlueskyPost> {
+  const lane = laneOverride ?? chooseLane();
   const { grounding, sourceKind } = await buildGrounding(lane);
   const prompt = buildPrompt(lane, grounding);
 
