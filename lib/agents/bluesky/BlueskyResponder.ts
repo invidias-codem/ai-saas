@@ -23,6 +23,8 @@ import { classifyQuery } from '@/lib/ucol/agentRouter';
 import { buildOllamaKnowledgeContext } from '@/lib/ucol/ollamaKnowledgeContext';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor';
+import { addNode, formatGraphContext, strengthenEdge, findRelatedEntities } from '@/lib/memory/graphStore';
+import { searchMemories, storeMemory } from '@/lib/memory/vectorStore';
 import type { BlueskyMention, EngagementResult } from './types';
 
 // ─── Inference Config ─────────────────────────────────────────────────────────
@@ -42,7 +44,14 @@ const NOUS_MODEL = process.env.HERMES_MODEL_ID || 'Hermes-4.3-36B';
 // 15 min window — allows back-and-forth conversation without killing threads
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RESPONSE_MAX_CHARS = 290; // Bluesky post limit with a small buffer
-const CTA_SUFFIX = ' — gen1e.xyz';
+const BLUESKY_MEMORY_USER_ID = process.env.BLUESKY_MEMORY_USER_ID || 'tech-genie-bluesky';
+const SITE_CTA = 'gen1e.xyz';
+const DONATION_URL = process.env.BLUESKY_DONATION_URL || process.env.KOFI_URL || '';
+const TOPIC_KEYWORDS = {
+  ai: ['ai', 'llm', 'llms', 'model', 'models', 'agent', 'agents', 'inference', 'reasoning'],
+  memory: ['memory', 'memory-native', 'context', 'knowledge graph', 'graph', 'rag'],
+  tech: ['tech', 'developer', 'devtools', 'startup', 'saas', 'infra', 'infrastructure', 'tooling', 'news'],
+};
 
 // Lazy-loaded system prompt: initialized on first use, cached for the process lifetime.
 // Uses the UCOL sudoLoader which handles file resolution, caching, and fallback automatically.
@@ -53,13 +62,14 @@ async function getTechGenieSystemPrompt(): Promise<string> {
 
   _techGenieSystemPrompt = await loadSudoPrompt('tech-genie-bluesky', {
     fallback: `TechGenieBlueskyAgent {
-  identity: "Tech Genie — AI that remembers, connects, and builds with you"
+  identity: "Tech Genie, an AI that remembers, connects ideas, and helps people build useful things"
   constraints {
-    response length <= ${RESPONSE_MAX_CHARS} characters including CTA
-    always append "${CTA_SUFFIX}"
+    response length <= ${RESPONSE_MAX_CHARS} characters including any CTA
+    never use em dashes
     never use hashtags | never hallucinate | never engage with spam
+    only mention ${SITE_CTA} when the topic is directly relevant to AI, memory-native software, agents, or the product
   }
-  response format: <useful answer> ${CTA_SUFFIX}
+  response format: <useful answer>
 }`,
   });
 
@@ -67,6 +77,63 @@ async function getTechGenieSystemPrompt(): Promise<string> {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function stripEmDashes(text: string): string {
+  return text.replace(/[—–]/g, '-');
+}
+
+function inferTopicLabels(text: string): string[] {
+  const lower = text.toLowerCase();
+  const labels = new Set<string>();
+
+  for (const [label, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+    if (keywords.some((keyword) => lower.includes(keyword))) {
+      labels.add(label);
+    }
+  }
+
+  return Array.from(labels);
+}
+
+function shouldIncludeSiteCta(text: string): boolean {
+  const labels = inferTopicLabels(text);
+  return labels.includes('ai') || labels.includes('memory');
+}
+
+function shouldIncludeDonationCta(text: string): boolean {
+  if (!DONATION_URL) return false;
+  const lower = text.toLowerCase();
+  return (
+    lower.includes('donate') ||
+    lower.includes('support') ||
+    lower.includes('tip jar') ||
+    lower.includes('how can i help') ||
+    lower.includes('how do i support')
+  );
+}
+
+function finalizeResponse(raw: string, sourceText: string): string {
+  let text = normalizeWhitespace(stripEmDashes(raw));
+
+  if (shouldIncludeDonationCta(sourceText)) {
+    const donationCta = ` Support the work: ${DONATION_URL}`.trim();
+    if (DONATION_URL && !text.includes(DONATION_URL) && text.length + donationCta.length + 1 <= RESPONSE_MAX_CHARS) {
+      text = `${text} ${donationCta}`.trim();
+    }
+  } else if (shouldIncludeSiteCta(sourceText) && !text.includes(SITE_CTA)) {
+    const siteCta = ` More at ${SITE_CTA}`;
+    if (text.length + siteCta.length + 1 <= RESPONSE_MAX_CHARS) {
+      text = `${text} ${siteCta}`.trim();
+    }
+  }
+
+  if (text.length <= RESPONSE_MAX_CHARS) return text;
+  return `${text.slice(0, RESPONSE_MAX_CHARS - 3).trim()}...`;
+}
 
 function getSupabaseClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -197,7 +264,7 @@ export class BlueskyResponder {
       try {
         const raw = await this.generateWithOllamaEndpoint(LAMBDA_OLLAMA_URL, context, enrichedSystem);
         console.log('[BlueskyResponder] Generated via Lambda Labs Ollama (self-hosted)');
-        return this.enforceCharLimit(raw);
+        return this.enforceCharLimit(raw, context);
       } catch (err) {
         console.warn('[BlueskyResponder] Lambda Labs Ollama failed, falling back to Nous API:', err);
       }
@@ -210,14 +277,15 @@ export class BlueskyResponder {
           apiKey: NOUS_API_KEY,
           model: NOUS_MODEL,
         });
-        return this.enforceCharLimit(raw);
+        return this.enforceCharLimit(raw, context);
       } catch (err) {
         console.warn('[BlueskyResponder] Nous API failed, falling back to Gemini:', err);
       }
     }
 
     // ── 3. Fallback: Gemini Flash ───────────────────────────────────────────
-    return this.generateWithGemini(context, enrichedSystem);
+    const geminiResponse = await this.generateWithGemini(context, enrichedSystem);
+    return this.enforceCharLimit(geminiResponse, context);
   }
 
   /** Shared OpenAI-compatible chat completion (non-streaming) for Ollama + Nous */
@@ -274,13 +342,147 @@ export class BlueskyResponder {
     return result.response.text().trim();
   }
 
-  private enforceCharLimit(raw: string): string {
-    if (raw.length <= RESPONSE_MAX_CHARS) return raw;
-    return (
-      raw.substring(0, RESPONSE_MAX_CHARS - CTA_SUFFIX.length - 3) +
-      '...' +
-      CTA_SUFFIX
+  private enforceCharLimit(raw: string, sourceText: string): string {
+    return finalizeResponse(raw, sourceText);
+  }
+
+  // ─── Memory Wiring ───────────────────────────────────────────────────────
+
+  private async persistKnowledgeFromMention(params: {
+    mention: BlueskyMention;
+    responseText: string;
+    facts: Array<{ topic: string; fact: string; confidence: number; sourceUrl?: string }>;
+  }): Promise<void> {
+    const { mention, responseText, facts } = params;
+    const topicLabels = inferTopicLabels(`${mention.text} ${responseText}`);
+
+    await storeMemory(
+      BLUESKY_MEMORY_USER_ID,
+      `Bluesky mention from @${mention.authorHandle}: ${mention.text}`,
+      'conversation_summary',
+      {
+        source: 'bluesky',
+        kind: 'mention',
+        authorHandle: mention.authorHandle,
+        authorDid: mention.authorDid,
+        mentionUri: mention.uri,
+        topics: topicLabels,
+      }
     );
+
+    await storeMemory(
+      BLUESKY_MEMORY_USER_ID,
+      `Bluesky reply to @${mention.authorHandle}: ${responseText}`,
+      'conversation_summary',
+      {
+        source: 'bluesky',
+        kind: 'reply',
+        authorHandle: mention.authorHandle,
+        authorDid: mention.authorDid,
+        mentionUri: mention.uri,
+        topics: topicLabels,
+      }
+    );
+
+    const authorNodeId = await addNode(
+      BLUESKY_MEMORY_USER_ID,
+      mention.authorHandle,
+      'person',
+      `Bluesky account ${mention.authorHandle}`,
+      { source: 'bluesky', did: mention.authorDid },
+      'bluesky-agent',
+      'SUPPORTED'
+    );
+
+    for (const label of topicLabels) {
+      const topicNodeId = await addNode(
+        BLUESKY_MEMORY_USER_ID,
+        label,
+        'concept',
+        `Topic inferred from Bluesky interaction: ${label}`,
+        { source: 'bluesky' },
+        'bluesky-agent',
+        'SUPPORTED'
+      );
+
+      if (authorNodeId && topicNodeId) {
+        await strengthenEdge(
+          BLUESKY_MEMORY_USER_ID,
+          authorNodeId,
+          topicNodeId,
+          'interested_in',
+          'bluesky-agent',
+          'SUPPORTED'
+        );
+      }
+    }
+
+    for (const fact of facts) {
+      await storeMemory(
+        BLUESKY_MEMORY_USER_ID,
+        `${fact.topic}: ${fact.fact}`,
+        'fact',
+        {
+          source: 'bluesky',
+          authorHandle: mention.authorHandle,
+          authorDid: mention.authorDid,
+          mentionUri: mention.uri,
+          confidence: fact.confidence,
+          topic: fact.topic,
+          sourceUrl: fact.sourceUrl ?? null,
+        }
+      );
+
+      const factNodeId = await addNode(
+        BLUESKY_MEMORY_USER_ID,
+        fact.topic,
+        'concept',
+        fact.fact,
+        {
+          source: 'bluesky',
+          mentionUri: mention.uri,
+          confidence: fact.confidence,
+        },
+        'bluesky-agent',
+        fact.confidence >= 0.9 ? 'CONFIRMED' : 'SUPPORTED'
+      );
+
+      if (authorNodeId && factNodeId) {
+        await strengthenEdge(
+          BLUESKY_MEMORY_USER_ID,
+          authorNodeId,
+          factNodeId,
+          'discussed',
+          'bluesky-agent',
+          'SUPPORTED'
+        );
+      }
+    }
+  }
+
+  private async buildMemoryContext(mention: BlueskyMention): Promise<string> {
+    try {
+      const memories = await searchMemories(BLUESKY_MEMORY_USER_ID, mention.text, 4);
+      const graph = await findRelatedEntities(BLUESKY_MEMORY_USER_ID, mention.authorHandle);
+      const memoryLines = memories
+        .slice(0, 4)
+        .map((memory) => `- ${memory.content}`)
+        .join('\n');
+      const graphContext = formatGraphContext(graph);
+
+      if (!memoryLines && !graphContext) return '';
+
+      return [
+        'Relevant Bluesky memory context:',
+        memoryLines || '',
+        graphContext || '',
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+    } catch (err) {
+      console.warn('[BlueskyResponder] Failed to build memory context (non-blocking):', err);
+      return '';
+    }
   }
 
   // ─── Log Interaction ─────────────────────────────────────────────────────
@@ -342,6 +544,11 @@ export class BlueskyResponder {
         }
       }
 
+      const memoryContext = await this.buildMemoryContext(mention);
+      if (memoryContext) {
+        contextText = `${memoryContext}\n\n${contextText}`;
+      }
+
       // ── Route through AgentRouter (UCOL) ──────────────────────────────
       const routing = await classifyQuery(
         mention.text,
@@ -369,6 +576,12 @@ export class BlueskyResponder {
 
       // ── Generate response via Gemini Flash ────────────────────────────
       const responseText = await this.generateResponse(contextText);
+
+      await this.persistKnowledgeFromMention({
+        mention,
+        responseText,
+        facts,
+      });
 
       // ── Build reply ref ───────────────────────────────────────────────
       // If the mention is itself a reply, reply into the same thread;
