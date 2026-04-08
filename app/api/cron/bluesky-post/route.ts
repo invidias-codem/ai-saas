@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BlueskyPoster } from '@/lib/agents/bluesky/BlueskyPoster';
-import { planProactiveBlueskyPost } from '@/lib/agents/bluesky/ProactivePostPlanner';
+import { logProactiveBlueskyPost, planProactiveBlueskyPost } from '@/lib/agents/bluesky/ProactivePostPlanner';
 
 export const maxDuration = 120;
 
@@ -23,11 +23,23 @@ export async function GET(req: NextRequest) {
       ctaMode: plan.ctaMode,
     });
 
+    await logProactiveBlueskyPost({
+      lane: plan.lane,
+      text: plan.text,
+      topics: plan.topics,
+      ctaMode: plan.ctaMode,
+      grounding: plan.grounding,
+      sourceKind: plan.sourceKind,
+      postUri: result.uri,
+      postCid: result.cid,
+    });
+
     return NextResponse.json({
       success: true,
       lane: plan.lane,
       topics: plan.topics,
       ctaMode: plan.ctaMode,
+      sourceKind: plan.sourceKind,
       post: result,
     });
   } catch (err: unknown) {

@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { createClient } from '@supabase/supabase-js';
 import { searchMemories } from '@/lib/memory/vectorStore';
 import { findRelatedEntities, formatGraphContext } from '@/lib/memory/graphStore';
 
@@ -9,6 +10,8 @@ export interface PlannedBlueskyPost {
   topics: string[];
   ctaMode: 'auto' | 'site' | 'donation' | 'none';
   lane: BlueskyTopicLane;
+  grounding: string;
+  sourceKind: 'memory' | 'news';
 }
 
 const BLUESKY_MEMORY_USER_ID = process.env.BLUESKY_MEMORY_USER_ID || 'tech-genie-bluesky';
@@ -71,6 +74,88 @@ function inferTopicsFromLane(lane: BlueskyTopicLane): string[] {
   }
 }
 
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error('[ProactivePostPlanner] Missing Supabase admin env vars');
+  }
+  return createClient(url, key, { auth: { persistSession: false } });
+}
+
+function normalizeForDedupe(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function isTooSimilarToRecentPosts(text: string): Promise<boolean> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('bluesky_proactive_posts')
+      .select('text, created_at')
+      .order('created_at', { ascending: false })
+      .limit(12);
+
+    if (error) {
+      console.warn('[ProactivePostPlanner] Recent post lookup failed (non-blocking):', error);
+      return false;
+    }
+
+    const candidate = normalizeForDedupe(text);
+    const candidateWords = new Set(candidate.split(' ').filter(Boolean));
+
+    return (data ?? []).some((row: { text: string }) => {
+      const existing = normalizeForDedupe(row.text);
+      if (!existing) return false;
+      if (existing === candidate) return true;
+
+      const existingWords = new Set(existing.split(' ').filter(Boolean));
+      const overlap = [...candidateWords].filter((word) => existingWords.has(word)).length;
+      const baseline = Math.max(1, Math.min(candidateWords.size, existingWords.size));
+      return overlap / baseline >= 0.8;
+    });
+  } catch (err) {
+    console.warn('[ProactivePostPlanner] Dedupe check failed (non-blocking):', err);
+    return false;
+  }
+}
+
+export async function logProactiveBlueskyPost(params: {
+  lane: BlueskyTopicLane;
+  text: string;
+  topics: string[];
+  ctaMode: 'auto' | 'site' | 'donation' | 'none';
+  grounding: string;
+  sourceKind: 'memory' | 'news';
+  postUri?: string;
+  postCid?: string;
+}): Promise<void> {
+  try {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('bluesky_proactive_posts').insert({
+      lane: params.lane,
+      text: params.text,
+      topics: params.topics,
+      cta_mode: params.ctaMode,
+      grounding: params.grounding,
+      source_kind: params.sourceKind,
+      post_uri: params.postUri ?? null,
+      post_cid: params.postCid ?? null,
+    });
+
+    if (error) {
+      console.error('[ProactivePostPlanner] Failed to log proactive post:', error);
+    }
+  } catch (err) {
+    console.error('[ProactivePostPlanner] Error logging proactive post:', err);
+  }
+}
+
 async function fetchTechNewsGrounding(): Promise<string> {
   try {
     const response = await fetch('https://news.ycombinator.com/', {
@@ -129,24 +214,33 @@ async function fetchMemoryGrounding(lane: BlueskyTopicLane): Promise<string> {
   }
 }
 
-async function buildGrounding(lane: BlueskyTopicLane): Promise<string> {
+async function buildGrounding(lane: BlueskyTopicLane): Promise<{ grounding: string; sourceKind: 'memory' | 'news' }> {
   if (lane === 'tech') {
-    return fetchTechNewsGrounding();
+    return { grounding: await fetchTechNewsGrounding(), sourceKind: 'news' };
   }
 
-  return fetchMemoryGrounding(lane);
+  return { grounding: await fetchMemoryGrounding(lane), sourceKind: 'memory' };
 }
 
 export async function planProactiveBlueskyPost(): Promise<PlannedBlueskyPost> {
   const lane = chooseLane();
-  const grounding = await buildGrounding(lane);
+  const { grounding, sourceKind } = await buildGrounding(lane);
   const prompt = buildPrompt(lane, grounding);
-  const text = await generateWithGemini(prompt);
 
-  return {
-    text,
-    topics: inferTopicsFromLane(lane),
-    ctaMode: lane === 'tech' ? 'none' : 'auto',
-    lane,
-  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const text = await generateWithGemini(prompt);
+    const tooSimilar = await isTooSimilarToRecentPosts(text);
+    if (!tooSimilar) {
+      return {
+        text,
+        topics: inferTopicsFromLane(lane),
+        ctaMode: lane === 'tech' ? 'none' : 'auto',
+        lane,
+        grounding,
+        sourceKind,
+      };
+    }
+  }
+
+  throw new Error('[ProactivePostPlanner] Generated posts were too similar to recent history');
 }
