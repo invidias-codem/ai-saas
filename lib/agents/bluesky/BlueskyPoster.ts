@@ -67,8 +67,24 @@ function inferTopicLabels(text: string): string[] {
 }
 
 function shouldIncludeSiteCta(text: string, topics?: string[]): boolean {
+  const lower = text.toLowerCase();
   const labels = new Set([...(topics ?? []), ...inferTopicLabels(text)]);
-  return labels.has('ai') || labels.has('memory');
+  const explicitlyProductRelated =
+    lower.includes('gen1e') ||
+    lower.includes('tech genie') ||
+    lower.includes('product') ||
+    lower.includes('app') ||
+    lower.includes('tool') ||
+    lower.includes('platform');
+
+  const explicitlyInvitesLink =
+    lower.includes('link in bio') ||
+    lower.includes('link below') ||
+    lower.includes('try it') ||
+    lower.includes('learn more') ||
+    lower.includes('see more');
+
+  return explicitlyProductRelated && explicitlyInvitesLink && (labels.has('ai') || labels.has('memory'));
 }
 
 function shouldIncludeDonationCta(text: string, topics?: string[]): boolean {
@@ -77,9 +93,13 @@ function shouldIncludeDonationCta(text: string, topics?: string[]): boolean {
   const labels = new Set([...(topics ?? []), ...inferTopicLabels(text)]);
   return labels.has('ai') && (
     lower.includes('support') ||
+    lower.includes('support this') ||
     lower.includes('donate') ||
+    lower.includes('donation') ||
     lower.includes('back this') ||
-    lower.includes('help keep this going')
+    lower.includes('help keep this going') ||
+    lower.includes('kofi') ||
+    lower.includes('ko-fi')
   );
 }
 
@@ -97,9 +117,9 @@ function finalizePostText(options: PostOptions): string {
       text = `${text} ${donationCta}`.trim();
     }
   } else if (mode !== 'none' && wantsSite && !text.includes(SITE_CTA)) {
-    const siteCta = ` More at ${SITE_CTA}`;
-    if (text.length + siteCta.length + 1 <= RESPONSE_MAX_CHARS) {
-      text = `${text} ${siteCta}`.trim();
+    const siteCta = ` ${SITE_CTA}`;
+    if (text.length + siteCta.length <= RESPONSE_MAX_CHARS) {
+      text = `${text}${siteCta}`.trim();
     }
   }
 

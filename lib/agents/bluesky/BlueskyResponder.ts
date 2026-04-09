@@ -100,8 +100,26 @@ function inferTopicLabels(text: string): string[] {
 }
 
 function shouldIncludeSiteCta(text: string): boolean {
-  const labels = inferTopicLabels(text);
-  return labels.includes('ai') || labels.includes('memory');
+  const lower = text.toLowerCase();
+  return (
+    lower.includes('gen1e') ||
+    lower.includes('tech genie') ||
+    lower.includes('your site') ||
+    lower.includes('your product') ||
+    lower.includes('your app') ||
+    lower.includes('where can i try') ||
+    lower.includes('where do i try') ||
+    lower.includes('where can i use') ||
+    lower.includes('where do i use') ||
+    lower.includes('where can i find') ||
+    lower.includes('where do i find') ||
+    lower.includes('link?') ||
+    lower.includes('send link') ||
+    lower.includes('learn more') ||
+    lower.includes('pricing') ||
+    lower.includes('plans') ||
+    lower.includes('website')
+  );
 }
 
 function shouldIncludeDonationCta(text: string): boolean {
@@ -109,10 +127,15 @@ function shouldIncludeDonationCta(text: string): boolean {
   const lower = text.toLowerCase();
   return (
     lower.includes('donate') ||
-    lower.includes('support') ||
+    lower.includes('donation') ||
+    lower.includes('support you') ||
+    lower.includes('support this') ||
     lower.includes('tip jar') ||
+    lower.includes('kofi') ||
+    lower.includes('ko-fi') ||
     lower.includes('how can i help') ||
-    lower.includes('how do i support')
+    lower.includes('how do i support') ||
+    lower.includes('how can i support')
   );
 }
 
@@ -125,9 +148,9 @@ function finalizeResponse(raw: string, sourceText: string): string {
       text = `${text} ${donationCta}`.trim();
     }
   } else if (shouldIncludeSiteCta(sourceText) && !text.includes(SITE_CTA)) {
-    const siteCta = ` More at ${SITE_CTA}`;
-    if (text.length + siteCta.length + 1 <= RESPONSE_MAX_CHARS) {
-      text = `${text} ${siteCta}`.trim();
+    const siteCta = ` ${SITE_CTA}`;
+    if (text.length + siteCta.length <= RESPONSE_MAX_CHARS) {
+      text = `${text}${siteCta}`.trim();
     }
   }
 
