@@ -1,7 +1,9 @@
 -- Migration: 20260419_bluesky_social_memory_and_planner_state.sql
--- Add richer proactive planner state plus follower/thread social memory for Bluesky.
+-- Patched to tolerate production schema drift where topic_cluster
+-- was not added in an earlier migration.
 
 ALTER TABLE IF EXISTS bluesky_proactive_posts
+  ADD COLUMN IF NOT EXISTS topic_cluster TEXT,
   ADD COLUMN IF NOT EXISTS audience_mode TEXT,
   ADD COLUMN IF NOT EXISTS rhetorical_pattern TEXT,
   ADD COLUMN IF NOT EXISTS freshness_score DOUBLE PRECISION,
@@ -54,6 +56,9 @@ CREATE TABLE IF NOT EXISTS bluesky_conversation_memory (
 
 CREATE INDEX IF NOT EXISTS idx_bluesky_conversation_memory_actor
   ON bluesky_conversation_memory (actor_did, updated_at DESC);
+
+COMMENT ON COLUMN bluesky_proactive_posts.topic_cluster IS
+  'Normalized topic cluster key used for diversity control and recency checks';
 
 COMMENT ON COLUMN bluesky_proactive_posts.audience_mode IS
   'Planner-selected audience mode for the proactive post';

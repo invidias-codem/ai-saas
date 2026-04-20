@@ -1,34 +1,12 @@
 name: Bluesky Agent Cron
 
 on:
-  schedule:
-    # Mentions/replies every 5 minutes
-    - cron: '*/5 * * * *'
-    # Proactive post every 6 hours
-    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
-  bluesky-engage:
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/5 * * * *'
+  cron-disabled:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Bluesky engagement endpoint
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Bluesky cron temporarily disabled
         run: |
-          curl -sS -w "\n%{http_code}" -X GET \
-            "https://gen1e.xyz/api/cron/bluesky-engage" \
-            -H "Authorization: Bearer ${CRON_SECRET}"
-
-  bluesky-post:
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 */6 * * *'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger Bluesky proactive post endpoint
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          curl -sS -w "\n%{http_code}" -X GET \
-            "https://gen1e.xyz/api/cron/bluesky-post" \
-            -H "Authorization: Bearer ${CRON_SECRET}"
+          echo "Bluesky cron is temporarily disabled pending dry-run safety deployment and host correction."
