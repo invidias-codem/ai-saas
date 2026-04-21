@@ -237,27 +237,9 @@ function normalizeForDedupe(text: string): string {
     .trim();
 }
 
-function decodeHtmlEntities(text: string): string {
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x2F;/gi, '/')
-    .replace(/&#x27;/gi, "'")
-    .replace(/&#(\d+);/g, (_match, code) => {
-      const value = Number(code);
-      return Number.isFinite(value) ? String.fromCodePoint(value) : '';
-    })
-    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => {
-      const value = Number.parseInt(code, 16);
-      return Number.isFinite(value) ? String.fromCodePoint(value) : '';
-    });
-}
-
 function sanitizeHeadlineText(text: string): string {
-  return decodeHtmlEntities(text)
+  return text
+    .replace(/<[^>]*>/g, ' ')
     .replace(/[<>]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
