@@ -5,13 +5,13 @@
  *   1. Build context (mention text + thread parent if available)
  *   2. Route through AgentRouter (UCOL) to classify query
  *   3. Extract facts via KnowledgeExtractor → push to graph
- *   4. Generate a response via Lambda Labs Ollama/Hermes3 (UCOL T-027)
+ *   4. Generate a response via Vast.ai Docker Model Runner/Qwen3.5 (UCOL T-027)
  *      — grounded via knowledge graph retrieval before generation
- *      — fallback chain: Lambda Labs Ollama → Nous API → Gemini Flash
+ *      — fallback chain: Vast.ai Docker Model Runner → Nous API → Gemini Flash
  *   5. Post the reply to Bluesky with proper reply ref
  *   6. Log the interaction to Supabase (with rate-limit check)
  *
- * T-027 change: Lambda Labs Ollama (self-hosted Hermes3) is now the primary inference
+ * T-027 change: Vast.ai Docker Model Runner (self-hosted Qwen3.5-35B) is now the primary inference
  * node for Bluesky content. Knowledge graph context is injected before
  * generation to prevent hallucination of platform metrics and user stats.
  */
@@ -26,7 +26,11 @@ import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor
 import { addNode, formatGraphContext, strengthenEdge, findRelatedEntities } from '@/lib/memory/graphStore';
 import { searchMemories, storeMemory } from '@/lib/memory/vectorStore';
 import type { BlueskyMention, EngagementResult } from './types';
+import { BlueskySafetyPolicy } from './BlueskySafetyPolicy';
 
+// ─── Inference Config ─────────────────────────────────────────────────────────
+
+// Vast.ai Docker Model Runner (primary) — self-hosted Qwen3.5-35B, zero API cost
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || '';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'hf.co/Qwen/Qwen3.5-35B-A3B';
 
@@ -212,6 +216,7 @@ export class BlueskyResponder {
   private agent: BskyAgent;
   private supabase: SupabaseClient;
   private authenticated = false;
+  private safety = new BlueskySafetyPolicy();
 
   constructor() {
     const handle = process.env.BLUESKY_HANDLE;
@@ -251,48 +256,48 @@ export class BlueskyResponder {
       return false;
     }
 
-    return (data?.length ?? 0) > 0;
+    return !!data && data.length > 0;
   }
 
   private async fetchParentText(parentUri: string): Promise<string | null> {
     try {
-      const thread = await this.agent.getPostThread({ uri: parentUri, depth: 0 });
-      const post = thread.data.thread.post as Record<string, unknown> | undefined;
-      const record = post?.['record'] as Record<string, unknown> | undefined;
-      return typeof record?.['text'] === 'string' ? record['text'] : null;
-    } catch {
+      await this.ensureAuth();
+      const { data } = await this.agent.getPosts({ uris: [parentUri] });
+      return data.posts?.[0]?.record?.text ?? null;
+    } catch (err) {
+      console.warn('[BlueskyResponder] Failed to fetch parent post:', err);
       return null;
     }
   }
 
   private async getActorMemory(actorDid: string): Promise<ActorMemoryRecord | null> {
-    try {
-      const { data, error } = await this.supabase
-        .from('bluesky_actor_memory')
-        .select('*')
-        .eq('actor_did', actorDid)
-        .maybeSingle();
+    const { data, error } = await this.supabase
+      .from('bluesky_actor_memory')
+      .select('*')
+      .eq('actor_did', actorDid)
+      .maybeSingle();
 
-      if (error || !data) return null;
-      return data as ActorMemoryRecord;
-    } catch {
+    if (error) {
+      console.error('[BlueskyResponder] Failed to fetch bluesky_actor_memory:', error);
       return null;
     }
+
+    return (data as ActorMemoryRecord | null) ?? null;
   }
 
   private async getConversationMemory(threadRootUri: string): Promise<ConversationMemoryRecord | null> {
-    try {
-      const { data, error } = await this.supabase
-        .from('bluesky_conversation_memory')
-        .select('*')
-        .eq('thread_root_uri', threadRootUri)
-        .maybeSingle();
+    const { data, error } = await this.supabase
+      .from('bluesky_conversation_memory')
+      .select('*')
+      .eq('thread_root_uri', threadRootUri)
+      .maybeSingle();
 
-      if (error || !data) return null;
-      return data as ConversationMemoryRecord;
-    } catch {
+    if (error) {
+      console.error('[BlueskyResponder] Failed to fetch bluesky_conversation_memory:', error);
       return null;
     }
+
+    return (data as ConversationMemoryRecord | null) ?? null;
   }
 
   private inferReplyIntent(
@@ -300,19 +305,17 @@ export class BlueskyResponder {
     actorMemory: ActorMemoryRecord | null,
     conversationMemory: ConversationMemoryRecord | null
   ): ReplyIntent {
-    const lower = mention.text.toLowerCase().trim();
+    const text = mention.text.toLowerCase();
 
-    if (!lower || lower.length < 3) return 'decline';
-    if (lower.includes('?')) return conversationMemory?.open_question ? 'follow_up' : 'answer';
-    if (lower.includes('what do you mean') || lower.includes('which one') || lower.includes('how so')) {
-      return 'clarify';
+    if (!text.trim()) return 'decline';
+    if (text.includes('spam') || text.includes('airdrop') || text.includes('dm me') || text.includes('promo')) {
+      return 'decline';
     }
-    if (lower.length < 18 || /^(nice|cool|wow|lol|thanks|thx|yep|same)[!. ]*$/i.test(lower)) {
-      return 'acknowledge';
-    }
-    if ((actorMemory?.engagement_count ?? 0) >= 2 || conversationMemory?.reply_depth) {
-      return 'follow_up';
-    }
+    if (text.includes('?')) return 'answer';
+    if (text.includes('what do you mean') || text.includes('can you clarify')) return 'clarify';
+    if (conversationMemory?.open_question) return 'follow_up';
+    if (actorMemory?.engagement_count && actorMemory.engagement_count > 2) return 'follow_up';
+    if (text.length < 24) return 'acknowledge';
     return 'answer';
   }
 
@@ -334,13 +337,14 @@ export class BlueskyResponder {
       }
     }
 
+    // ── 1. Vast.ai Docker Model Runner — self-hosted Qwen3.5-35B (primary, UCOL T-027) ──────────
     if (LAMBDA_OLLAMA_URL) {
       try {
         const raw = await this.generateWithOllamaEndpoint(LAMBDA_OLLAMA_URL, context, enrichedSystem);
-        console.log('[BlueskyResponder] Generated via Lambda Labs Ollama (self-hosted)');
+        console.log('[BlueskyResponder] Generated via Vast.ai Docker Model Runner (self-hosted)');
         return this.enforceCharLimit(raw, context);
       } catch (err) {
-        console.warn('[BlueskyResponder] Lambda Labs Ollama failed, falling back to Nous API:', err);
+        console.warn('[BlueskyResponder] Vast.ai Docker Model Runner failed, falling back to Nous API:', err);
       }
     }
 
@@ -685,7 +689,10 @@ export class BlueskyResponder {
     }
   }
 
-  async respond(mention: BlueskyMention): Promise<EngagementResult> {
+  /**
+   * Full pipeline: classify → extract facts → generate response → post reply → log.
+   */
+  async respond(mention: BlueskyMention, source: 'mention' | 'discovery' = 'mention'): Promise<EngagementResult> {
     const base: EngagementResult = {
       mentionUri: mention.uri,
       responded: false,
@@ -694,6 +701,19 @@ export class BlueskyResponder {
 
     try {
       await this.ensureAuth();
+
+      // ── Rate limit guard ──────────────────────────────────────────────
+      const policyCheck = this.safety.shouldAvoidText(mention.text);
+      if (policyCheck.blocked) {
+        console.log(`[BlueskyResponder] Safety policy blocked reply to ${mention.authorHandle}: ${policyCheck.reason}`);
+        return { ...base, error: policyCheck.reason };
+      }
+
+      const budget = await this.safety.canReply();
+      if (!budget.allowed) {
+        console.log(`[BlueskyResponder] Reply budget blocked reply to ${mention.authorHandle}: ${budget.reason}`);
+        return { ...base, error: budget.reason };
+      }
 
       const limited = await this.isRateLimited(mention.authorDid);
       if (limited) {
@@ -801,6 +821,16 @@ export class BlueskyResponder {
         responseUri,
         factsExtracted,
         routedTo: routing.targetNode,
+      });
+
+      await this.safety.logAction({
+        route: source === 'discovery' ? 'discovery-reply' : 'mention-reply',
+        authorHandle: mention.authorHandle,
+        authorDid: mention.authorDid,
+        mentionUri: mention.uri,
+        responseUri,
+        mentionText: mention.text,
+        responseText,
       });
 
       return {

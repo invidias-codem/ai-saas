@@ -1,6 +1,6 @@
-# Lambda Labs Infrastructure
+# Vast.ai GPU Infrastructure
 
-Self-hosted UCOL backend running on Lambda Labs A100 (40GB).
+Self-hosted UCOL backend running on Vast.ai (4x RTX 2080 Ti / Docker Model Runner).
 
 ## Services
 

@@ -14,7 +14,19 @@
         },
         {
             "path": "/api/cron/refresh-truth-scores",
-            "schedule": "0 * * * *"
+            "schedule": "0 6 * * *"
+        },
+        {
+            "path": "/api/cron/bluesky-post",
+            "schedule": "0 14 * * *"
+        },
+        {
+            "path": "/api/cron/bluesky-discover",
+            "schedule": "0 16 * * *"
+        },
+        {
+            "path": "/api/cron/bluesky-learn",
+            "schedule": "0 18 * * *"
         }
     ]
 }

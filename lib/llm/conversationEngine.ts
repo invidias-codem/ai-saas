@@ -672,7 +672,7 @@ export async function generateConversationReply(
               factsForRouting,
             );
 
-            // hermes-local: self-hosted Ollama on Lambda Labs — inject knowledge context
+            // hermes-local: self-hosted Docker Model Runner on Vast.ai — inject knowledge context
             if (decision.targetNode === 'hermes-local') {
               try {
                 const { buildOllamaKnowledgeContext } = await import('@/lib/ucol/ollamaKnowledgeContext');
@@ -682,7 +682,7 @@ export async function generateConversationReply(
                     `[UCOL/Ollama] Knowledge context injected — facts=${knowledgeCtx.factsUsed} nodes=${knowledgeCtx.graphNodesUsed}`
                   );
                 }
-                // HermesProvider picks up Lambda Labs Ollama automatically via LAMBDA_OLLAMA_URL env
+                // HermesProvider picks up Vast.ai Docker Model Runner automatically via LAMBDA_OLLAMA_URL env
                 // Knowledge context is surfaced in the next turn via the existing context pipeline
               } catch (e) {
                 console.warn('[UCOL/Ollama] Knowledge context injection failed (non-blocking):', e);

@@ -1,6 +1,6 @@
 # JKlaw Smart Instance Manager
 
-Keeps Lambda Labs GPU costs near zero by only running the instance when there's actual traffic.
+Keeps Vast.ai GPU costs near zero by only running the instance when there's actual traffic.
 
 ## Architecture
 

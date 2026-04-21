@@ -109,7 +109,7 @@ jobs:
             function extractPatterns(body: string): string[] {
               // Extract patterns from PR description
               const patterns: string[] = [];
-              const lines = body.split('\\n');
+              const lines = body.split('\n');
               
               for (const line of lines) {
                 if (line.includes('pattern') || line.includes('refactor')) {

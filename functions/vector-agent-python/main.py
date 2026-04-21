@@ -50,6 +50,13 @@ def vector_agent(request):
       post_geo — Generate + publish a localized post for a restricted-access region
     """
     try:
+        # ── API Key Auth ─────────────────────────────────────────────────────
+        api_key = os.environ.get("VECTOR_API_KEY")
+        if api_key:
+            provided = request.headers.get("X-Vector-Key") or request.headers.get("Authorization", "").replace("Bearer ", "")
+            if provided != api_key:
+                return jsonify({"error": "Unauthorized"}), 401
+
         data = request.get_json(silent=True)
         if not data:
             return jsonify({"error": "Invalid JSON"}), 400
