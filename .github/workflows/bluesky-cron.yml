@@ -1,12 +1,88 @@
 name: Bluesky Agent Cron
 
 on:
+  schedule:
+    # mentions / replies
+    - cron: '*/5 * * * *'
+    # proactive posting
+    - cron: '0 */6 * * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Which job to run'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - engage
+          - post
+      lane:
+        description: 'Optional proactive lane override (ai|memory|tech)'
+        required: false
+        type: string
+      dryRun:
+        description: 'Use dry-run for proactive post route'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
-  cron-disabled:
+  engage:
+    if: github.event_name == 'schedule' || github.event.inputs.mode == 'both' || github.event.inputs.mode == 'engage'
     runs-on: ubuntu-latest
     steps:
-      - name: Bluesky cron temporarily disabled
+      - name: Validate required secrets
+        env:
+          BLUESKY_CRON_BASE_URL: ${{ secrets.BLUESKY_CRON_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          echo "Bluesky cron is temporarily disabled pending dry-run safety deployment and host correction."
+          test -n "$BLUESKY_CRON_BASE_URL" || (echo "Missing BLUESKY_CRON_BASE_URL secret" && exit 1)
+          test -n "$CRON_SECRET" || (echo "Missing CRON_SECRET secret" && exit 1)
+
+      - name: Run Bluesky engage cron
+        env:
+          BLUESKY_CRON_BASE_URL: ${{ secrets.BLUESKY_CRON_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl --fail --show-error --silent \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${BLUESKY_CRON_BASE_URL}/api/cron/bluesky-engage"
+
+  proactive-post:
+    if: github.event_name == 'schedule' || github.event.inputs.mode == 'both' || github.event.inputs.mode == 'post'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required secrets
+        env:
+          BLUESKY_CRON_BASE_URL: ${{ secrets.BLUESKY_CRON_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$BLUESKY_CRON_BASE_URL" || (echo "Missing BLUESKY_CRON_BASE_URL secret" && exit 1)
+          test -n "$CRON_SECRET" || (echo "Missing CRON_SECRET secret" && exit 1)
+
+      - name: Run Bluesky proactive post cron
+        env:
+          BLUESKY_CRON_BASE_URL: ${{ secrets.BLUESKY_CRON_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          INPUT_LANE: ${{ github.event.inputs.lane }}
+          INPUT_DRY_RUN: ${{ github.event.inputs.dryRun }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ "${INPUT_DRY_RUN}" = "true" ]; then
+            URL="${BLUESKY_CRON_BASE_URL}/api/cron/bluesky-post?dryRun=true"
+            if [ -n "${INPUT_LANE}" ]; then
+              URL="${URL}&lane=${INPUT_LANE}"
+            fi
+            curl --fail --show-error --silent \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              "$URL"
+          else
+            URL="${BLUESKY_CRON_BASE_URL}/api/cron/bluesky-post?execute=true"
+            if [ -n "${INPUT_LANE}" ]; then
+              URL="${URL}&lane=${INPUT_LANE}"
+            fi
+            curl --fail --show-error --silent \
+              -X POST \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              "$URL"
+          fi
