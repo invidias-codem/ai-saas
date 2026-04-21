@@ -237,6 +237,32 @@ function normalizeForDedupe(text: string): string {
     .trim();
 }
 
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x2F;/gi, '/')
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#(\d+);/g, (_match, code) => {
+      const value = Number(code);
+      return Number.isFinite(value) ? String.fromCodePoint(value) : '';
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => {
+      const value = Number.parseInt(code, 16);
+      return Number.isFinite(value) ? String.fromCodePoint(value) : '';
+    });
+}
+
+function sanitizeHeadlineText(text: string): string {
+  return decodeHtmlEntities(text)
+    .replace(/[<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function fetchRecentPlannerState(): Promise<RecentPlannerState[]> {
   try {
     const supabase = getSupabaseAdmin();
@@ -642,7 +668,7 @@ async function fetchTechNewsGrounding(): Promise<{ grounding: string; sourceConf
     const html = await response.text();
     const matches = Array.from(html.matchAll(/<span class="titleline"><a [^>]*>(.*?)<\/a>/g))
       .slice(0, 5)
-      .map((match) => `- ${match[1].replace(/<[^>]+>/g, '').trim()}`)
+      .map((match) => `- ${sanitizeHeadlineText(match[1])}`)
       .filter(Boolean);
 
     return {
