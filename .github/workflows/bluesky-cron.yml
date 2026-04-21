@@ -1,44 +1,12 @@
-name: Bluesky Engagement Agent Cron
+name: Bluesky Agent Cron
 
 on:
-  schedule:
-    # Run every 5 minutes
-    - cron: '*/5 * * * *'
-  workflow_dispatch: # Allow manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
-  ping-bluesky:
+  cron-disabled:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Vercel Endpoint
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Bluesky cron temporarily disabled
         run: |
-          # Fetch the endpoint, failing the workflow if a non-200 HTTP code is returned
-          curl -sS -w "\n%{http_code}" -X GET \
-            "https://gen1e.xyz/api/cron/bluesky-engage" \
-            -H "Authorization: Bearer ${CRON_SECRET}"
-
-      - name: Trigger proactive post endpoint
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          curl -sS -w "\n%{http_code}" -X GET \
-            "https://gen1e.xyz/api/cron/bluesky-post" \
-            -H "Authorization: Bearer ${CRON_SECRET}"
-
-      - name: Trigger discovery engagement endpoint
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          curl -sS -w "\n%{http_code}" -X GET \
-            "https://gen1e.xyz/api/cron/bluesky-discover" \
-            -H "Authorization: Bearer ${CRON_SECRET}"
-
-      - name: Trigger learning loop endpoint
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          curl -sS -w "\n%{http_code}" -X GET \
-            "https://gen1e.xyz/api/cron/bluesky-learn" \
-            -H "Authorization: Bearer ${CRON_SECRET}"
+          echo "Bluesky cron is temporarily disabled pending dry-run safety deployment and host correction."

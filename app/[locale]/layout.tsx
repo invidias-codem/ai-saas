@@ -12,103 +12,93 @@ import { UserSyncProvider } from "@/components/user-sync-provider";
 import { ReferralCapture } from "@/components/ReferralCapture";
 
 import { NextIntlClientProvider } from 'next-intl';
-import { getMessages } from 'next-intl/server';
+import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-
-export function generateStaticParams() {
-    return [{ locale: 'en' }, { locale: 'th' }, { locale: 'vi' }, { locale: 'es' }, { locale: 'fr' }, { locale: 'de' }];
-}
+import { locales } from '@/i18n';
 
 const inter = Inter({
-    subsets: ["latin"],
-    variable: "--font-inter",
-    weight: ["300", "400", "500", "600", "700"],
-    display: "swap",
+  subsets: ["latin"],
+  variable: "--font-inter",
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
 });
 
-import { getTranslations } from 'next-intl/server';
+export function generateStaticParams() {
+  return locales.map((locale) => ({ locale }));
+}
 
 export async function generateMetadata({
-    params
+  params,
 }: {
-    params: Promise<{ locale: string }>;
-}) {
-    const { locale } = await params;
-    const t = await getTranslations({ locale, namespace: 'Metadata' });
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
 
-    return {
-        title: t('title'),
-        description: t('description'),
-        keywords: t('keywords'),
-        alternates: {
-            canonical: `/${locale}`,
-            languages: {
-                'en': '/en',
-                'th': '/th',
-                'vi': '/vi',
-                'es': '/es',
-                'fr': '/fr',
-                'de': '/de'
-            }
-        },
-        openGraph: {
-            title: t('title'),
-            description: t('description'),
-            type: 'website',
-        },
-        other: {
-            // Tell iOS Safari that this site supports both light and dark.
-            // Without this, Safari on iOS Dark Mode overrides class-based
-            // theming and forces dark rendering even when the toggle is in
-            // light mode.
-            'color-scheme': 'light dark',
-        }
-    };
+  if (!locales.includes(locale as any)) {
+    notFound();
+  }
+
+  const t = await getTranslations({ locale, namespace: 'Metadata' });
+
+  return {
+    title: t('title'),
+    description: t('description'),
+    keywords: t('keywords'),
+    alternates: {
+      canonical: `/${locale}`,
+      languages: Object.fromEntries(locales.map((l) => [l, `/${l}`])),
+    },
+    openGraph: {
+      title: t('title'),
+      description: t('description'),
+      type: 'website',
+    },
+    other: {
+      'color-scheme': 'light dark',
+    },
+  };
 }
 
 export default async function LocaleLayout({
-    children,
-    params
+  children,
+  params,
 }: Readonly<{
-    children: React.ReactNode;
-    params: Promise<{ locale: string }>;
+  children: React.ReactNode;
+  params: Promise<{ locale: string }>;
 }>) {
-    const { locale } = await params;
+  const { locale } = await params;
 
-    // Ensure that the incoming `locale` is valid
-    if (!['en', 'th', 'vi', 'es', 'fr', 'de'].includes(locale)) {
-        notFound();
-    }
+  if (!locales.includes(locale as any)) {
+    notFound();
+  }
 
-    // Providing all messages to the client
-    // side is the easiest way to get started
-    const messages = await getMessages();
+  const messages = (await import(`@/messages/${locale}.json`)).default;
 
-    return (
-        <html lang={locale} suppressHydrationWarning={true}>
-            <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
-                <ClerkProvider
-                    publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}
-                >
-                    <NextIntlClientProvider messages={messages}>
-                        <ThemeProvider
-                            attribute="class"
-                            defaultTheme="dark"
-                            enableSystem={false}
-                            disableTransitionOnChange={false}
-                        >
-                            <ThemeTransition />
-                            <ModalProvider>
-                                <UserSyncProvider>
-                                    <ReferralCapture />
-                                    {children}
-                                </UserSyncProvider>
-                                <Analytics />
-                            </ModalProvider>
-                        </ThemeProvider>
-                    </NextIntlClientProvider>
-                </ClerkProvider>
-            </body>
-        </html>
-    );
+  return (
+    <html lang={locale} suppressHydrationWarning={true}>
+      <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
+        <ClerkProvider
+          publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}
+        >
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="dark"
+              enableSystem={false}
+              disableTransitionOnChange={false}
+            >
+              <ThemeTransition />
+              <ModalProvider>
+                <UserSyncProvider>
+                  <ReferralCapture />
+                  {children}
+                </UserSyncProvider>
+                <Analytics />
+              </ModalProvider>
+            </ThemeProvider>
+          </NextIntlClientProvider>
+        </ClerkProvider>
+      </body>
+    </html>
+  );
 }

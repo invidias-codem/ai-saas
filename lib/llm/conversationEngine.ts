@@ -3,7 +3,7 @@ import { waitUntil } from "@vercel/functions";
 import { budgetKillSwitch } from "@/lib/budget/redisKillSwitch";
 import { tagMessagesForStorage, tagLLMMessage, extractWMRTMetadata } from "@/lib/world-model/trustTag";
 import { classifyQuery } from '@/lib/ucol/agentRouter';
-import { scoreContextForRouting } from '@/lib/memory/confidenceScoring';
+import { prepareContextBundle, layoutPromptContext } from '@/lib/context/preparedContext';
 
 import { ExtractedFact } from '../intelligentMemory';
 import { SearchResult } from '../integrations/anyCrawl';
@@ -17,23 +17,14 @@ import { ClaudeProvider } from "./providers/claude";
 import { DeepSeekProvider } from "./providers/deepseek";
 import { HermesProvider } from "./providers/hermes";
 import {
-  gatherUserContext,
-  formatUserContextForPrompt,
-  getHighConfidenceFacts,
-  formatFactsForPrompt,
-  getRAGMemoryContext,
   captureMemory,
   extractTags,
   generateSummary,
   estimateTokenCount,
 } from "@/lib/ragMemory";
-import { rankMemoriesIntelligently, synthesizeContextWithReasoning } from "@/lib/intelligentMemory";
 // import { sanitizeHistory } from "@/lib/gemini"; // Moved to provider
-import { findRelatedEntities, formatGraphContext, addNode, addEdge, strengthenEdge } from "@/lib/memory/graphStore";
+import { addNode, addEdge, strengthenEdge } from "@/lib/memory/graphStore";
 import { extractFactsFromConversation } from "@/lib/agents/factExtractor";
-import { generateEmbedding } from "@/lib/memory/embedding";
-import { performResearch, formatSearchResults } from "@/lib/agents/researcher";
-import { getUserProfile, formatUserProfileForPrompt } from "@/lib/memoryPromotion";
 import { SecurityAgent } from "@/lib/security/securityAgent";
 // ── World Model: Distribution Shift + Self-Benchmarking ──────────────────────
 import { createDistributionShiftDetector } from '@/lib/world-model/distribution-shift';
@@ -301,57 +292,29 @@ export async function generateConversationReply(
 
   const { messages, fileData, mimeType } = parsed;
 
-  // Gather user context
-  const userContext = await gatherUserContext(userId, clerkUser);
-  const userContextPrompt = formatUserContextForPrompt(userContext);
-
   const userQuery = messages[messages.length - 1]?.text || "";
 
-  // Tiered context gathering
-  let allFacts: ExtractedFact[] = [];
-  let researchResult: { results: SearchResult[] } = { results: [] };
-  let graphData: { centralNode: GraphNode | null; relatedNodes: any[] } = { centralNode: null, relatedNodes: [] }; // relatedNodes uses complex structure, keeping any for now/TODO
-  let userProfileMemories: PromotableMemory[] | null = null;
-
-  // Cost guard: set ENABLE_HEAVY_CONTEXT=false in Vercel env to disable the
-  // expensive per-conversation memory pipeline (fact ranking, embeddings, graph
-  // updates, fact extraction). Default is ON — the graph must be populated for
-  // the DeltaEngine to have anything to look up against.
   const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
   const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
 
-  // Full context gathering — all sources in parallel with graceful degradation.
-  // Individual failures are caught so one slow/broken source doesn't block the rest.
-  if (!effectivelyDisabled) {
-    const results = await Promise.allSettled([
-      getHighConfidenceFacts(userId),
-      // Web research is expensive (calls AnyCrawl → LLM extraction per page).
-      // Gate it: only run if ENABLE_WEB_RESEARCH=true AND user hasn't disabled it.
-      // Default: off. Enable per-user or per-session when needed.
-      (process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch)
-        ? Promise.resolve({ results: [] })
-        : performResearch(userQuery, userContextPrompt),
-      findRelatedEntities(userId, userQuery),
-      getUserProfile(userId),
-    ]);
+  const preparedContext = await prepareContextBundle({
+    userId,
+    clerkUser,
+    userQuery,
+    agentMode,
+    options: {
+      disableExternalContext: effectivelyDisabled,
+      skipWebResearch: process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch,
+    },
+  });
 
-    allFacts = results[0].status === 'fulfilled' ? results[0].value : [];
-    researchResult = results[1].status === 'fulfilled' ? results[1].value : { results: [] };
-    graphData = results[2].status === 'fulfilled' ? results[2].value : { centralNode: null, relatedNodes: [] };
-    userProfileMemories = results[3].status === 'fulfilled' ? results[3].value : null;
-
-    // Log any failures for debugging (non-blocking)
-    results.forEach((r, i) => {
-      if (r.status === 'rejected') {
-        const labels = ['facts', 'research', 'graph', 'userProfile'];
-        console.warn(`[ConversationEngine] Context source "${labels[i]}" failed:`, r.reason?.message || r.reason);
-      }
-    });
-  }
-
-  const searchContext = effectivelyDisabled ? "" : formatSearchResults(researchResult.results);
-  const graphContext = effectivelyDisabled ? "" : formatGraphContext(graphData);
-
+  const userContext = preparedContext.userContext;
+  const allFacts = preparedContext.raw.allFacts;
+  const intelligentFacts = preparedContext.raw.intelligentFacts;
+  const researchResult = { results: preparedContext.raw.researchResults };
+  const graphData = preparedContext.raw.graphData;
+  const userProfileMemories = preparedContext.raw.userProfileMemories;
+  const memorySources = preparedContext.raw.memorySources;
 
   // ---------------------------------------------------------
   // SPRINT 4: Security & Reasoning Integration
@@ -388,83 +351,11 @@ export async function generateConversationReply(
     }
   }
 
-  // Semantic similarity using embeddings — falls back to keyword matching if embedding fails
-  const similarities = new Map<string, number>();
-  let queryEmbedding: number[] | null = null;
-
-  if (!effectivelyDisabled && allFacts.length > 0) {
-    try {
-      queryEmbedding = await generateEmbedding(userQuery);
-    } catch (e: any) {
-      console.warn('[ConversationEngine] Query embedding failed, falling back to keyword matching:', e.message);
-    }
-  }
-
-  if (queryEmbedding && queryEmbedding.some(v => v !== 0)) {
-    // Semantic ranking: compute cosine similarity against fact embeddings
-    for (const fact of allFacts) {
-      try {
-        const factEmbedding = await generateEmbedding(fact.content ?? "");
-        if (factEmbedding.some(v => v !== 0)) {
-          // Cosine similarity
-          let dotProduct = 0, normA = 0, normB = 0;
-          for (let i = 0; i < queryEmbedding.length; i++) {
-            dotProduct += queryEmbedding[i] * (factEmbedding[i] || 0);
-            normA += queryEmbedding[i] * queryEmbedding[i];
-            normB += (factEmbedding[i] || 0) * (factEmbedding[i] || 0);
-          }
-          const cosineSim = normA && normB ? dotProduct / (Math.sqrt(normA) * Math.sqrt(normB)) : 0;
-          similarities.set(fact.id || "", Math.max(0, cosineSim));
-        }
-      } catch {
-        // Individual fact embedding failed — skip it
-        similarities.set(fact.id || "", 0);
-      }
-    }
-  } else {
-    // Fallback: keyword overlap (original behavior)
-    const queryWords = userQuery.toLowerCase().split(/\s+/);
-    for (const fact of allFacts) {
-      const factWords = (fact.content ?? "").toLowerCase().split(/\s+/);
-      const overlap = factWords.filter((w: string) => queryWords.includes(w)).length;
-      const similarity = overlap / Math.max(factWords.length, queryWords.length, 1);
-      similarities.set(fact.id || "", Math.min(1, similarity * 1.5));
-    }
-  }
-
-  // 2. Context Synthesis
-  let factContext = "";
-  let intelligentFacts = rankMemoriesIntelligently(allFacts, similarities, userQuery);
-
-  if (agentMode === 'reasoning' && !effectivelyDisabled) {
-    // Use DeepSeek to synthesize context
-    factContext = await synthesizeContextWithReasoning(intelligentFacts.slice(0, 15), userQuery);
-    // Prepend header as synthesizeContextWithReasoning returns raw summary
-    if (factContext) {
-      factContext = `\n## Synthesized Context (DeepSeek-R1)\n${factContext}\n`;
-    }
-  } else {
-    // Standard ranking
-    factContext = effectivelyDisabled ? "" : formatFactsForPrompt(intelligentFacts);
-  }
-
-  // ─── UCOL Confidence-Aware Provider Override ────────────────────────────────
-  // Only applies to 'standard' mode — explicit mode selections (quality, reasoning)
-  // represent the user's intent and are never overridden.
-  //
-  // Logic: score the top-5 retrieved facts. Low confidence → novel context →
-  // route to a more capable model. High confidence → known pattern → stay fast.
-  //
-  //   > 0.85  → Gemini Flash  (default, no change)
-  //   0.5–0.85 → DeepSeek R1  (moderate confidence — balanced reasoning)
-  //   < 0.5   → Claude Sonnet (low confidence — novel query, max capability)
-  let confidenceSignal: ReturnType<typeof scoreContextForRouting> | null = null;
+  let confidenceSignal = preparedContext.routing.confidenceSignal;
   let confidenceOverrideApplied = false;
 
-  if (agentMode === 'fast' && !effectivelyDisabled && intelligentFacts.length > 0) {
+  if (agentMode === 'fast' && confidenceSignal) {
     try {
-      confidenceSignal = scoreContextForRouting(intelligentFacts.slice(0, 5), 'minimum');
-
       if (confidenceSignal.recommendedTier !== 'gemini-flash') {
         const upgradeMode = confidenceSignal.recommendedTier === 'claude-sonnet'
           ? 'quality'
@@ -482,34 +373,14 @@ export async function generateConversationReply(
         );
       }
     } catch (e: any) {
-      // Non-blocking — confidence scoring failure falls back to default provider
       console.warn('[ConversationEngine] Confidence scoring failed (non-blocking):', e.message);
     }
   }
-  // ────────────────────────────────────────────────────────────────────────────
 
-  // RAG memory context — always attempt, graceful fallback on failure
-  let ragResult: { contextString: string; sources: Source[] } = { contextString: "", sources: [] };
-  if (!effectivelyDisabled) {
-    try {
-      ragResult = await getRAGMemoryContext(userId, userQuery, "conversation");
-    } catch (e: any) {
-      console.warn('[ConversationEngine] RAG context failed:', e.message || e);
-    }
-  }
-
-  const memoryContext = ragResult.contextString;
-  const memorySources = ragResult.sources;
-
-  const userProfileContext = effectivelyDisabled ? "" : formatUserProfileForPrompt(userProfileMemories);
+  const promptLayout = layoutPromptContext(getSystemInstruction(), preparedContext.sections, 6000);
 
   const enhancedSystemInstruction = getSystemInstruction() +
-    "\n\n" + userContextPrompt +
-    userProfileContext +
-    factContext +
-    graphContext +
-    searchContext +
-    memoryContext;
+    "\n\n" + promptLayout.packedContext;
 
   // Format history for provider
   const history: ChatMessage[] = [
@@ -872,8 +743,8 @@ export async function generateConversationReply(
       } : {}),
       context: {
         factsCount: intelligentFacts.length,
-        graphEntitiesCount: Array.isArray(graphData) ? graphData.length : undefined,
-        researchResultsCount: Array.isArray(researchResult?.results) ? researchResult.results.length : undefined,
+        graphEntitiesCount: preparedContext.metrics.graphRelatedCount,
+        researchResultsCount: preparedContext.metrics.researchResultsCount,
       },
     },
   };

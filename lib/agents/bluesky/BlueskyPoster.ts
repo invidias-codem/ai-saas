@@ -10,12 +10,25 @@
 import { BskyAgent, RichText } from '@atproto/api';
 import type { AppBskyEmbedImages } from '@atproto/api';
 
+const RESPONSE_MAX_CHARS = 290;
+const SITE_CTA = 'gen1e.xyz';
+const DONATION_URL = process.env.BLUESKY_DONATION_URL || process.env.KOFI_URL || '';
+const TOPIC_KEYWORDS = {
+  ai: ['ai', 'llm', 'llms', 'model', 'models', 'agent', 'agents', 'inference', 'reasoning'],
+  memory: ['memory', 'memory-native', 'context', 'knowledge graph', 'graph', 'rag'],
+  tech: ['tech', 'developer', 'devtools', 'startup', 'saas', 'infra', 'infrastructure', 'tooling', 'news'],
+};
+
 export interface PostOptions {
   text: string;
   /** Optional image URLs or base64 data URIs to embed (max 4) */
   images?: PostImage[];
   /** If set, reply into this thread */
   replyTo?: { rootUri: string; rootCid: string; parentUri: string; parentCid: string };
+  /** Optional explicit topic labels to bias CTA behavior */
+  topics?: string[];
+  /** Force a specific CTA strategy when needed */
+  ctaMode?: 'auto' | 'site' | 'donation' | 'none';
 }
 
 export interface PostImage {
@@ -30,6 +43,88 @@ export interface PostImage {
 export interface PostResult {
   uri: string;
   cid: string;
+}
+
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function stripEmDashes(text: string): string {
+  return text.replace(/[—–]/g, '-');
+}
+
+function inferTopicLabels(text: string): string[] {
+  const lower = text.toLowerCase();
+  const labels = new Set<string>();
+
+  for (const [label, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+    if (keywords.some((keyword) => lower.includes(keyword))) {
+      labels.add(label);
+    }
+  }
+
+  return Array.from(labels);
+}
+
+function shouldIncludeSiteCta(text: string, topics?: string[]): boolean {
+  const lower = text.toLowerCase();
+  const labels = new Set([...(topics ?? []), ...inferTopicLabels(text)]);
+  const explicitlyProductRelated =
+    lower.includes('gen1e') ||
+    lower.includes('tech genie') ||
+    lower.includes('product') ||
+    lower.includes('app') ||
+    lower.includes('tool') ||
+    lower.includes('platform');
+
+  const explicitlyInvitesLink =
+    lower.includes('link in bio') ||
+    lower.includes('link below') ||
+    lower.includes('try it') ||
+    lower.includes('learn more') ||
+    lower.includes('see more');
+
+  return explicitlyProductRelated && explicitlyInvitesLink && (labels.has('ai') || labels.has('memory'));
+}
+
+function shouldIncludeDonationCta(text: string, topics?: string[]): boolean {
+  if (!DONATION_URL) return false;
+  const lower = text.toLowerCase();
+  const labels = new Set([...(topics ?? []), ...inferTopicLabels(text)]);
+  return labels.has('ai') && (
+    lower.includes('support') ||
+    lower.includes('support this') ||
+    lower.includes('donate') ||
+    lower.includes('donation') ||
+    lower.includes('back this') ||
+    lower.includes('help keep this going') ||
+    lower.includes('kofi') ||
+    lower.includes('ko-fi')
+  );
+}
+
+function finalizePostText(options: PostOptions): string {
+  const mode = options.ctaMode ?? 'auto';
+  const topics = options.topics ?? inferTopicLabels(options.text);
+  let text = normalizeWhitespace(stripEmDashes(options.text));
+
+  const wantsDonation = mode === 'donation' || (mode === 'auto' && shouldIncludeDonationCta(text, topics));
+  const wantsSite = mode === 'site' || (mode === 'auto' && shouldIncludeSiteCta(text, topics));
+
+  if (mode !== 'none' && wantsDonation && DONATION_URL && !text.includes(DONATION_URL)) {
+    const donationCta = ` Support the work: ${DONATION_URL}`;
+    if (text.length + donationCta.length + 1 <= RESPONSE_MAX_CHARS) {
+      text = `${text} ${donationCta}`.trim();
+    }
+  } else if (mode !== 'none' && wantsSite && !text.includes(SITE_CTA)) {
+    const siteCta = ` ${SITE_CTA}`;
+    if (text.length + siteCta.length <= RESPONSE_MAX_CHARS) {
+      text = `${text}${siteCta}`.trim();
+    }
+  }
+
+  if (text.length <= RESPONSE_MAX_CHARS) return text;
+  return `${text.slice(0, RESPONSE_MAX_CHARS - 3).trim()}...`;
 }
 
 export class BlueskyPoster {
@@ -88,7 +183,8 @@ export class BlueskyPoster {
   async post(options: PostOptions): Promise<PostResult> {
     await this.ensureAuth();
 
-    const rt = new RichText({ text: options.text });
+    const finalText = finalizePostText(options);
+    const rt = new RichText({ text: finalText });
     await rt.detectFacets(this.agent);
 
     // Build embed if images provided
@@ -119,7 +215,7 @@ export class BlueskyPoster {
       createdAt: new Date().toISOString(),
     });
 
-    console.log(`[BlueskyPoster] Posted: ${result.uri}`);
+    console.log(`[BlueskyPoster] Posted: ${result.uri} topics=${(options.topics ?? inferTopicLabels(finalText)).join(',') || 'none'} ctaMode=${options.ctaMode ?? 'auto'}`);
     return { uri: result.uri, cid: result.cid };
   }
 

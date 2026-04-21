@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
+import { shouldQuietBuildLogs } from '@/lib/runtime/buildPhase';
 
 // In-memory fallback for development (when Upstash not configured)
 class InMemoryRateLimiter {
@@ -123,7 +124,9 @@ if (isUpstashConfigured) {
     analytics: true,
   });
 } else {
-  console.warn('[RATE_LIMIT] Upstash not configured - using in-memory fallback (not recommended for production)');
+  if (!shouldQuietBuildLogs()) {
+    console.warn('[RATE_LIMIT] Upstash not configured - using in-memory fallback (not recommended for production)');
+  }
 }
 
 export type RateLimitResult = {

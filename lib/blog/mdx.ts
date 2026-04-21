@@ -5,56 +5,37 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import readingTime from 'reading-time';
+import { cache } from 'react';
 import { BlogPost, BlogCategory, BlogPostMeta } from './types';
 import { getAuthor } from './authors';
 
 const BLOG_DIR = path.join(process.cwd(), 'content/blog');
 
-/**
- * Get all blog posts sorted by date (newest first)
- */
-export function getAllPosts(): BlogPost[] {
-  // Ensure directory exists
+type ParsedPostRecord = {
+  slug: string;
+  post: BlogPost;
+};
+
+const readBlogFilenames = cache((): string[] => {
   if (!fs.existsSync(BLOG_DIR)) {
     return [];
   }
 
-  const files = fs.readdirSync(BLOG_DIR);
+  return fs.readdirSync(BLOG_DIR).filter((file) => file.endsWith('.mdx'));
+});
 
-  const posts = files
-    .filter((file) => file.endsWith('.mdx'))
-    .map((file) => {
-      const slug = file.replace('.mdx', '');
-      return getPostBySlug(slug);
-    })
-    .filter((post): post is BlogPost => post !== null)
-    .sort((a, b) =>
-      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-    );
-
-  return posts;
-}
-
-/**
- * Get a single blog post by slug
- */
-export function getPostBySlug(slug: string): BlogPost | null {
+const parsePostFile = cache((slug: string): BlogPost | null => {
   try {
     const filePath = path.join(BLOG_DIR, `${slug}.mdx`);
 
-    console.log(`[BLOG] getPostBySlug: slug="${slug}", BLOG_DIR="${BLOG_DIR}", exists=${fs.existsSync(filePath)}`);
-
     if (!fs.existsSync(filePath)) {
-      console.log(`[BLOG] File not found: ${filePath}`);
       return null;
     }
 
     const fileContent = fs.readFileSync(filePath, 'utf-8');
 
-    // Manual frontmatter parsing using js-yaml to avoid gray-matter/js-yaml v4 conflict
     let data = {};
     let content = fileContent;
-    // Regex to match --- ... --- delimiters
     const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
     const match = fileContent.match(frontmatterRegex);
 
@@ -66,20 +47,19 @@ export function getPostBySlug(slug: string): BlogPost | null {
         console.error(`[BLOG] Invalid YAML frontmatter in ${slug}`, e);
       }
     } else {
-      // Fallback: splitting by --- if regex fails
       const parts = fileContent.split('---');
       if (parts.length >= 3) {
         const yamlContent = parts[1];
         try {
           data = yaml.load(yamlContent) as any;
           content = parts.slice(2).join('---').trim();
-        } catch (e) { }
+        } catch {
+          // ignore fallback parse failure
+        }
       }
     }
 
     const meta = data as BlogPostMeta;
-
-    // Calculate reading time
     const stats = readingTime(content);
 
     return {
@@ -101,6 +81,28 @@ export function getPostBySlug(slug: string): BlogPost | null {
     console.error(`[BLOG] Error reading post ${slug}:`, error);
     return null;
   }
+});
+
+const readAllPosts = cache((): BlogPost[] => {
+  return readBlogFilenames()
+    .map((file) => file.replace('.mdx', ''))
+    .map((slug) => parsePostFile(slug))
+    .filter((post): post is BlogPost => post !== null)
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+});
+
+/**
+ * Get all blog posts sorted by date (newest first)
+ */
+export function getAllPosts(): BlogPost[] {
+  return readAllPosts();
+}
+
+/**
+ * Get a single blog post by slug
+ */
+export function getPostBySlug(slug: string): BlogPost | null {
+  return parsePostFile(slug);
 }
 
 /**
@@ -136,25 +138,19 @@ export function getRelatedPosts(currentSlug: string, limit: number = 3): BlogPos
 
   const allPosts = getAllPosts().filter((post) => post.slug !== currentSlug);
 
-  // Score posts by relevance
   const scoredPosts = allPosts.map((post) => {
     let score = 0;
 
-    // Same category = +3
     if (post.category === currentPost.category) {
       score += 3;
     }
 
-    // Shared tags = +1 each
-    const sharedTags = post.tags.filter((tag) =>
-      currentPost.tags.includes(tag)
-    );
+    const sharedTags = post.tags.filter((tag) => currentPost.tags.includes(tag));
     score += sharedTags.length;
 
     return { post, score };
   });
 
-  // Sort by score and return top posts
   return scoredPosts
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
@@ -179,13 +175,7 @@ export function getAllTags(): string[] {
  * Get all post slugs (for static generation)
  */
 export function getAllPostSlugs(): string[] {
-  if (!fs.existsSync(BLOG_DIR)) {
-    return [];
-  }
-
-  return fs.readdirSync(BLOG_DIR)
-    .filter((file) => file.endsWith('.mdx'))
-    .map((file) => file.replace('.mdx', ''));
+  return readBlogFilenames().map((file) => file.replace('.mdx', ''));
 }
 
 /**

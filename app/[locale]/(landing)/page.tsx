@@ -15,6 +15,7 @@ import { motion } from "framer-motion";
 import { HeroSection } from "@/components/landing/hero-section";
 import { UCOLSection } from "@/components/landing/ucol-section";
 import { MemorySection } from "@/components/landing/memory-section";
+import { InfrastructureSection } from "@/components/landing/infrastructure-section";
 import { FeatureCard } from "@/components/landing/feature-card";
 import { Testimonials } from "@/components/landing/testimonials";
 import { useTranslations } from "next-intl";
@@ -24,44 +25,44 @@ const LandingPage = () => {
 
   const features = [
     {
-      label: t('features.conversation'),
+      label: t("features.conversation"),
       icon: ChatBubbleIcon,
-      description: t('features.conversationDesc'),
+      description: t("features.conversationDesc"),
       color: "text-sky-500",
       bgColor: "bg-sky-500/10",
     },
     {
-      label: t('features.image'),
-      icon: ImageIcon,
-      description: t('features.imageDesc'),
-      color: "text-violet-500",
-      bgColor: "bg-violet-500/10",
-    },
-    {
-      label: t('features.video'),
-      icon: VideoIcon,
-      description: t('features.videoDesc'),
-      color: "text-pink-600",
-      bgColor: "bg-pink-600/10",
-    },
-    {
-      label: t('features.music'),
-      icon: DiscIcon,
-      description: t('features.musicDesc'),
-      color: "text-orange-500",
-      bgColor: "bg-orange-500/10",
-    },
-    {
-      label: t('features.code'),
+      label: t("features.code"),
       icon: CodeIcon,
-      description: t('features.codeDesc'),
+      description: t("features.codeDesc"),
       color: "text-green-500",
       bgColor: "bg-green-500/10",
     },
     {
-      label: t('features.fast'),
+      label: t("features.research"),
       icon: RocketIcon,
-      description: t('features.fastDesc'),
+      description: t("features.researchDesc"),
+      color: "text-violet-500",
+      bgColor: "bg-violet-500/10",
+    },
+    {
+      label: t("features.hybrid"),
+      icon: VideoIcon,
+      description: t("features.hybridDesc"),
+      color: "text-pink-600",
+      bgColor: "bg-pink-600/10",
+    },
+    {
+      label: t("features.memoryLayer"),
+      icon: DiscIcon,
+      description: t("features.memoryLayerDesc"),
+      color: "text-orange-500",
+      bgColor: "bg-orange-500/10",
+    },
+    {
+      label: t("features.infrastructure"),
+      icon: ImageIcon,
+      description: t("features.infrastructureDesc"),
       color: "text-indigo-500 dark:text-white",
       bgColor: "bg-indigo-500/10 dark:bg-white/10",
     },
@@ -69,21 +70,21 @@ const LandingPage = () => {
 
   return (
     <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative selection:bg-purple-500/30 selection:text-slate-900 dark:selection:text-white">
-
       <main className="relative z-10 flex-grow pt-16">
-
-        {/* 1 — Hero: "forgotten. not anymore." */}
+        {/* 1 — Hero: Own your AI stack. */}
         <HeroSection />
 
-        {/* 2 — UCOL: Three minds. One answer. */}
+        {/* 2 — UCOL: Hybrid orchestration across open and frontier models. */}
         <UCOLSection />
 
-        {/* 3 — Memory: Genie learns you. */}
+        {/* 3 — Memory: Persistent context across every inference path. */}
         <MemorySection />
 
-        {/* 4 — Features Grid: One platform. Every capability. */}
+        {/* 4 — Infrastructure control: self-hosted OSS + premium fallback. */}
+        <InfrastructureSection />
+
+        {/* 5 — Features Grid: Platform capabilities built on memory-native AI. */}
         <section className="px-4 py-16 md:py-32 max-w-7xl mx-auto relative cursor-default">
-          {/* Ambient glow */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-violet-500/5 dark:bg-indigo-500/10 rounded-full blur-[100px] -z-10" />
 
           <motion.div
@@ -94,10 +95,10 @@ const LandingPage = () => {
             className="text-center mb-16"
           >
             <h2 className="text-3xl md:text-5xl font-bold text-slate-800 dark:text-white mb-6 font-heading">
-              {t('features.title')}
+              {t("features.title")}
             </h2>
             <p className="text-slate-500 dark:text-muted-foreground text-lg max-w-2xl mx-auto">
-              {t('features.subtitle')}
+              {t("features.subtitle")}
             </p>
           </motion.div>
 
@@ -114,11 +115,9 @@ const LandingPage = () => {
 
         <Testimonials />
 
-        {/* 5 — CTA: Meet the AI that remembers. */}
+        {/* 6 — CTA: Build on a context layer you can actually own. */}
         <section className="py-16 md:py-32 text-center px-4 relative overflow-hidden">
-          {/* Background: light mode = soft violet/indigo gradient. Dark = deep indigo-950. */}
           <div className="absolute inset-0 bg-gradient-to-br from-violet-100 via-indigo-50 to-violet-100 dark:from-indigo-950 dark:via-violet-950 dark:to-indigo-950 pointer-events-none" />
-          {/* Soft center glow */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-violet-400/15 dark:bg-violet-500/20 rounded-full blur-[100px] pointer-events-none" />
 
           <motion.div
@@ -132,24 +131,23 @@ const LandingPage = () => {
               className="font-bold text-slate-900 dark:text-white font-heading tracking-tight"
               style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)" }}
             >
-              {t('cta.title')}
+              {t("cta.title")}
             </h2>
             <p className="text-xl text-slate-600 dark:text-slate-300/80">
-              {t('cta.subtitle')}
+              {t("cta.subtitle")}
             </p>
             <Link href="/dashboard">
               <Button
                 size="lg"
                 className="rounded-full px-12 py-8 text-lg mt-4 bg-violet-700 dark:bg-white text-white dark:text-violet-900 font-bold hover:opacity-90 dark:hover:bg-white/90 shadow-[0_0_40px_-10px_rgba(124,58,237,0.5)] dark:shadow-[0_0_60px_-10px_rgba(255,255,255,0.3)] transition-all duration-300"
               >
-                {t('cta.button')}
+                {t("cta.button")}
               </Button>
             </Link>
           </motion.div>
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="py-12 border-t border-slate-200 dark:border-white/10 bg-background relative z-10">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-12">
@@ -157,7 +155,7 @@ const LandingPage = () => {
               <div className="relative w-8 h-8">
                 <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" sizes="(max-width: 768px) 32px, 32px" />
               </div>
-              <span className="text-xl font-bold text-slate-800 dark:text-foreground font-heading">Genie AI</span>
+              <span className="text-xl font-bold text-slate-800 dark:text-foreground font-heading">Tech Genie</span>
             </div>
 
             <div className="flex flex-wrap justify-center gap-8 text-sm text-slate-400 dark:text-muted-foreground">
@@ -167,14 +165,12 @@ const LandingPage = () => {
               <Link href="/privacy" className="hover:text-slate-700 dark:hover:text-white transition-colors">Privacy Policy</Link>
             </div>
 
-            <div className="flex gap-4">
-              {/* Social icons placeholder */}
-            </div>
+            <div className="flex gap-4" />
           </div>
 
           <div className="pt-8 border-t border-slate-100 dark:border-white/5 text-center">
             <p className="text-slate-400 dark:text-gray-500 text-sm">
-              {t('footer.rights', { year: new Date().getFullYear() })}
+              {t("footer.rights", { year: new Date().getFullYear() })}
             </p>
           </div>
         </div>
@@ -182,4 +178,5 @@ const LandingPage = () => {
     </div>
   );
 };
+
 export default LandingPage;

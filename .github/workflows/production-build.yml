@@ -1,0 +1,79 @@
+name: Production Build Validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  push:
+    branches:
+      - bluesky-agent-upgrades
+      - fix/workflow-setup-node-v6
+
+permissions:
+  contents: read
+
+jobs:
+  production-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: '1'
+      NEXT_DISABLE_ESLINT: '1'
+      NODE_OPTIONS: --max-old-space-size=8192
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_Y2xlcmsuZXhhbXBsZS5jb20k' }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY || 'sk_test_dummy' }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co' }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'dummy_key' }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy_anon_key' }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || 'dummy-google-key' }}
+      BLUESKY_GEMINI_API_KEY: ${{ secrets.BLUESKY_GEMINI_API_KEY || secrets.GOOGLE_API_KEY || 'dummy-google-key' }}
+      UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL || '' }}
+      UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN || '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Print runner resources
+        run: |
+          echo "CPU info:"
+          nproc || true
+          echo
+          echo "Memory info:"
+          free -h || true
+          echo
+          echo "Disk info:"
+          df -h || true
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps --no-audit
+
+      - name: Remove broken symlinks
+        run: find . -path ./node_modules -prune -o -type l -print | xargs -I{} sh -c 'test -e "{}" || rm -f "{}"' 2>/dev/null || true
+
+      - name: Production build (webpack)
+        run: npm run build -- --webpack 2>&1 | tee build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: production-build-log
+          path: build.log
+          retention-days: 14
+
+      - name: Upload Next build artifacts
+        if: success()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: next-build-output
+          path: .next/
+          retention-days: 7

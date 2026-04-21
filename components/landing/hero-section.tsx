@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { motion, AnimatePresence, useAnimationFrame } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowRightIcon } from "@radix-ui/react-icons";
 
 import { Button } from "@/components/ui/button";
 
-// ── Constellation particle field (pure CSS + Framer Motion, no canvas) ──────
 const STAR_COUNT = 55;
 
 interface Star {
@@ -41,7 +40,6 @@ const ParticleField = () => {
       {stars.map((star) => (
         <motion.div
           key={star.id}
-          // Dark: white dots. Light: dark slate dots so they read on ivory bg.
           className="absolute rounded-full bg-slate-600 dark:bg-white"
           style={{
             left: `${star.x}%`,
@@ -65,25 +63,24 @@ const ParticleField = () => {
   );
 };
 
-// ── Mini knowledge graph preview (hero visual) ───────────────────────────────
 const MiniGraph = () => {
   const nodes = [
     { id: "ucol", x: 200, y: 140, label: "UCOL", color: "#8b5cf6", r: 28 },
-    { id: "hermes", x: 80, y: 60, label: "Hermes ⚡", color: "#a855f7", r: 20 },
-    { id: "gemini", x: 320, y: 60, label: "Gemini 🧠", color: "#38bdf8", r: 20 },
-    { id: "claude", x: 200, y: 240, label: "Claude ✨", color: "#f59e0b", r: 20 },
-    { id: "mem1", x: 60, y: 210, label: "Memory", color: "#6366f1", r: 14 },
-    { id: "mem2", x: 340, y: 200, label: "Context", color: "#6366f1", r: 14 },
+    { id: "open", x: 80, y: 60, label: "Open", color: "#a855f7", r: 20 },
+    { id: "frontier", x: 320, y: 60, label: "Frontier", color: "#38bdf8", r: 20 },
+    { id: "router", x: 200, y: 240, label: "Router", color: "#f59e0b", r: 20 },
+    { id: "memory", x: 60, y: 210, label: "Memory", color: "#6366f1", r: 14 },
+    { id: "context", x: 340, y: 200, label: "Context", color: "#6366f1", r: 14 },
   ];
 
   const edges = [
-    ["ucol", "hermes"],
-    ["ucol", "gemini"],
-    ["ucol", "claude"],
-    ["ucol", "mem1"],
-    ["ucol", "mem2"],
-    ["hermes", "mem1"],
-    ["gemini", "mem2"],
+    ["ucol", "open"],
+    ["ucol", "frontier"],
+    ["ucol", "router"],
+    ["ucol", "memory"],
+    ["ucol", "context"],
+    ["open", "memory"],
+    ["frontier", "context"],
   ];
 
   const getNode = (id: string) => nodes.find((n) => n.id === id)!;
@@ -96,7 +93,6 @@ const MiniGraph = () => {
       className="relative mx-auto w-full max-w-[420px]"
     >
       <svg viewBox="0 0 400 290" className="w-full h-auto drop-shadow-2xl">
-        {/* Edges */}
         {edges.map(([a, b], i) => {
           const na = getNode(a);
           const nb = getNode(b);
@@ -113,8 +109,9 @@ const MiniGraph = () => {
           );
         })}
 
-        {/* Animated traveling dot on main edge */}
-        <motion.circle r="3" fill="#8b5cf6"
+        <motion.circle
+          r="3"
+          fill="#8b5cf6"
           animate={{
             cx: [80, 200, 320, 200, 80],
             cy: [60, 140, 60, 140, 60],
@@ -123,7 +120,6 @@ const MiniGraph = () => {
           opacity={0.9}
         />
 
-        {/* Nodes */}
         {nodes.map((node, i) => (
           <motion.g
             key={node.id}
@@ -132,9 +128,10 @@ const MiniGraph = () => {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 1.0 + i * 0.15, duration: 0.4, type: "spring", stiffness: 200 }}
           >
-            {/* Glow ring */}
             <motion.circle
-              cx={node.x} cy={node.y} r={node.r + 6}
+              cx={node.x}
+              cy={node.y}
+              r={node.r + 6}
               fill="none"
               stroke={node.color}
               strokeWidth="1"
@@ -142,17 +139,18 @@ const MiniGraph = () => {
               animate={{ r: [node.r + 6, node.r + 10, node.r + 6] }}
               transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.3 }}
             />
-            {/* Main circle */}
             <circle
-              cx={node.x} cy={node.y} r={node.r}
+              cx={node.x}
+              cy={node.y}
+              r={node.r}
               fill={node.color}
               fillOpacity={0.15}
               stroke={node.color}
               strokeWidth="1.5"
             />
-            {/* Label — fill-slate-800 in light mode, fill-white in dark */}
             <text
-              x={node.x} y={node.y + 4}
+              x={node.x}
+              y={node.y + 4}
               textAnchor="middle"
               fontSize={node.r > 20 ? "9" : "7"}
               className="fill-slate-800 dark:fill-white"
@@ -168,22 +166,17 @@ const MiniGraph = () => {
   );
 };
 
-// ── Hero Section ─────────────────────────────────────────────────────────────
 export const HeroSection = () => {
   const t = useTranslations("Landing.hero");
 
   return (
-    // Light: soft lavender-to-cream gradient. Dark: deep midnight #080b14.
     <section className="relative min-h-screen flex flex-col justify-center items-center overflow-hidden bg-gradient-to-br from-violet-50 via-slate-50 to-indigo-50 dark:from-[#080b14] dark:via-[#080b14] dark:to-[#080b14]">
-      {/* Particle constellation background */}
       <ParticleField />
 
-      {/* Ambient glows — softer in light mode */}
       <div className="absolute top-[-20%] left-[-10%] w-[700px] h-[700px] rounded-full bg-violet-300/15 dark:bg-violet-700/8 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-indigo-300/15 dark:bg-indigo-600/8 blur-[120px] pointer-events-none" />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[400px] rounded-full bg-violet-200/10 dark:bg-violet-900/10 blur-[100px] pointer-events-none" />
 
-      {/* Grid overlay — violet-tinted so it reads on both light and dark */}
       <div
         className="absolute inset-0 pointer-events-none opacity-[0.04] dark:opacity-[0.03]"
         style={{
@@ -194,7 +187,6 @@ export const HeroSection = () => {
       />
 
       <div className="container relative z-10 mx-auto px-4 text-center flex flex-col items-center pt-24 pb-16">
-        {/* Eyebrow badge */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -207,7 +199,6 @@ export const HeroSection = () => {
           </span>
         </motion.div>
 
-        {/* Headline — two acts */}
         <div className="mb-6 max-w-5xl mx-auto">
           <motion.h1
             initial={{ opacity: 0, y: 24 }}
@@ -234,7 +225,6 @@ export const HeroSection = () => {
           </motion.div>
         </div>
 
-        {/* Subhead */}
         <motion.p
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -244,7 +234,6 @@ export const HeroSection = () => {
           {t("subhead")}
         </motion.p>
 
-        {/* CTAs — stack vertically on mobile, side-by-side on sm+ */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -271,7 +260,6 @@ export const HeroSection = () => {
           </a>
         </motion.div>
 
-        {/* Knowledge graph preview */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -285,12 +273,10 @@ export const HeroSection = () => {
             </p>
             <MiniGraph />
           </div>
-          {/* Bottom fade — matches the section bg in both modes */}
           <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-violet-50/90 dark:from-[#080b14] to-transparent rounded-b-2xl pointer-events-none" />
         </motion.div>
       </div>
 
-      {/* Section fade to next — uses CSS variable so it matches both modes */}
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background/80 to-transparent pointer-events-none" />
     </section>
   );

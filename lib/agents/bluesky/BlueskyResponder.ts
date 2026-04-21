@@ -23,6 +23,8 @@ import { classifyQuery } from '@/lib/ucol/agentRouter';
 import { buildOllamaKnowledgeContext } from '@/lib/ucol/ollamaKnowledgeContext';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor';
+import { addNode, formatGraphContext, strengthenEdge, findRelatedEntities } from '@/lib/memory/graphStore';
+import { searchMemories, storeMemory } from '@/lib/memory/vectorStore';
 import type { BlueskyMention, EngagementResult } from './types';
 import { BlueskySafetyPolicy } from './BlueskySafetyPolicy';
 
@@ -32,21 +34,55 @@ import { BlueskySafetyPolicy } from './BlueskySafetyPolicy';
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || '';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'hf.co/Qwen/Qwen3.5-35B-A3B';
 
-// Nous Research (secondary fallback)
 const NOUS_API_KEY = process.env.NOUSE_API_KEY;
 const NOUS_BASE_URL =
   process.env.HERMES_BASE_URL || 'https://inference-api.nousresearch.com/v1';
 const NOUS_MODEL = process.env.HERMES_MODEL_ID || 'Hermes-4.3-36B';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-// 15 min window — allows back-and-forth conversation without killing threads
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
-const RESPONSE_MAX_CHARS = 290; // Bluesky post limit with a small buffer
-const CTA_SUFFIX = ' — gen1e.xyz';
+const RESPONSE_MAX_CHARS = 290;
+const BLUESKY_MEMORY_USER_ID = process.env.BLUESKY_MEMORY_USER_ID || 'tech-genie-bluesky';
+const SITE_CTA = 'gen1e.xyz';
+const DONATION_URL = process.env.BLUESKY_DONATION_URL || process.env.KOFI_URL || '';
+const TOPIC_KEYWORDS = {
+  ai: ['ai', 'llm', 'llms', 'model', 'models', 'agent', 'agents', 'inference', 'reasoning'],
+  memory: ['memory', 'memory-native', 'context', 'knowledge graph', 'graph', 'rag'],
+  tech: ['tech', 'developer', 'devtools', 'startup', 'saas', 'infra', 'infrastructure', 'tooling', 'news'],
+};
 
-// Lazy-loaded system prompt: initialized on first use, cached for the process lifetime.
-// Uses the UCOL sudoLoader which handles file resolution, caching, and fallback automatically.
+type ActorMemoryRecord = {
+  actor_did: string;
+  handle: string;
+  display_name?: string | null;
+  first_seen_at?: string;
+  last_interaction_at?: string;
+  last_reply_at?: string | null;
+  engagement_count?: number;
+  reply_count?: number;
+  topics_engaged?: unknown;
+  relationship_summary?: string | null;
+  tone_preference_guess?: string | null;
+  last_reply_summary?: string | null;
+  notes?: Record<string, unknown> | null;
+  updated_at?: string;
+};
+
+type ConversationMemoryRecord = {
+  thread_root_uri: string;
+  actor_did: string;
+  actor_handle?: string | null;
+  last_topic?: string | null;
+  last_agent_position?: string | null;
+  open_question?: string | null;
+  last_summary?: string | null;
+  reply_depth?: number;
+  last_mention_uri?: string | null;
+  last_reply_uri?: string | null;
+  updated_at?: string;
+};
+
+type ReplyIntent = 'answer' | 'clarify' | 'acknowledge' | 'follow_up' | 'decline';
+
 let _techGenieSystemPrompt: string | null = null;
 
 async function getTechGenieSystemPrompt(): Promise<string> {
@@ -54,20 +90,112 @@ async function getTechGenieSystemPrompt(): Promise<string> {
 
   _techGenieSystemPrompt = await loadSudoPrompt('tech-genie-bluesky', {
     fallback: `TechGenieBlueskyAgent {
-  identity: "Tech Genie — AI that remembers, connects, and builds with you"
+  identity: "Tech Genie, an AI that remembers, connects ideas, and helps people build useful things"
   constraints {
-    response length <= ${RESPONSE_MAX_CHARS} characters including CTA
-    always append "${CTA_SUFFIX}"
+    response length <= ${RESPONSE_MAX_CHARS} characters including any CTA
+    never use em dashes
     never use hashtags | never hallucinate | never engage with spam
+    only mention ${SITE_CTA} when the topic is directly relevant to AI, memory-native software, agents, or the product
   }
-  response format: <useful answer> ${CTA_SUFFIX}
+  response format: <useful answer>
 }`,
   });
 
   return _techGenieSystemPrompt;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function stripEmDashes(text: string): string {
+  return text.replace(/[—–]/g, '-');
+}
+
+function inferTopicLabels(text: string): string[] {
+  const lower = text.toLowerCase();
+  const labels = new Set<string>();
+
+  for (const [label, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+    if (keywords.some((keyword) => lower.includes(keyword))) {
+      labels.add(label);
+    }
+  }
+
+  return Array.from(labels);
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function mergeTopicLabels(existing: unknown, next: string[]): string[] {
+  return Array.from(new Set([...asStringArray(existing), ...next])).slice(0, 12);
+}
+
+function summarizeText(text: string, max = 180): string {
+  const normalized = normalizeWhitespace(stripEmDashes(text));
+  return normalized.length <= max ? normalized : `${normalized.slice(0, max - 3).trim()}...`;
+}
+
+function shouldIncludeSiteCta(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes('gen1e') ||
+    lower.includes('tech genie') ||
+    lower.includes('your site') ||
+    lower.includes('your product') ||
+    lower.includes('your app') ||
+    lower.includes('where can i try') ||
+    lower.includes('where do i try') ||
+    lower.includes('where can i use') ||
+    lower.includes('where do i use') ||
+    lower.includes('where can i find') ||
+    lower.includes('where do i find') ||
+    lower.includes('link?') ||
+    lower.includes('send link') ||
+    lower.includes('learn more') ||
+    lower.includes('pricing') ||
+    lower.includes('plans') ||
+    lower.includes('website')
+  );
+}
+
+function shouldIncludeDonationCta(text: string): boolean {
+  if (!DONATION_URL) return false;
+  const lower = text.toLowerCase();
+  return (
+    lower.includes('donate') ||
+    lower.includes('donation') ||
+    lower.includes('support you') ||
+    lower.includes('support this') ||
+    lower.includes('tip jar') ||
+    lower.includes('kofi') ||
+    lower.includes('ko-fi') ||
+    lower.includes('how can i help') ||
+    lower.includes('how do i support') ||
+    lower.includes('how can i support')
+  );
+}
+
+function finalizeResponse(raw: string, sourceText: string): string {
+  let text = normalizeWhitespace(stripEmDashes(raw));
+
+  if (shouldIncludeDonationCta(sourceText)) {
+    const donationCta = ` Support the work: ${DONATION_URL}`.trim();
+    if (DONATION_URL && !text.includes(DONATION_URL) && text.length + donationCta.length + 1 <= RESPONSE_MAX_CHARS) {
+      text = `${text} ${donationCta}`.trim();
+    }
+  } else if (shouldIncludeSiteCta(sourceText) && !text.includes(SITE_CTA)) {
+    const siteCta = ` ${SITE_CTA}`;
+    if (text.length + siteCta.length <= RESPONSE_MAX_CHARS) {
+      text = `${text}${siteCta}`.trim();
+    }
+  }
+
+  if (text.length <= RESPONSE_MAX_CHARS) return text;
+  return `${text.slice(0, RESPONSE_MAX_CHARS - 3).trim()}...`;
+}
 
 function getSupabaseClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -84,7 +212,12 @@ function getSupabaseClient(): SupabaseClient {
   });
 }
 
-// ─── BlueskyResponder ─────────────────────────────────────────────────────────
+function extractRecordText(record: unknown): string | null {
+  if (!record || typeof record !== 'object') return null;
+
+  const candidate = (record as Record<string, unknown>).text;
+  return typeof candidate === 'string' ? candidate : null;
+}
 
 export class BlueskyResponder {
   private agent: BskyAgent;
@@ -102,16 +235,9 @@ export class BlueskyResponder {
       );
     }
 
-    // Primary: Hermes via NOUSE_API_KEY (Nous Research portal)
-    // Fallback: Gemini via BLUESKY_GEMINI_API_KEY or GOOGLE_API_KEY
-    // At least one must be present at runtime (not validated at construction time
-    // to allow partial deployments to still start up).
-
     this.agent = new BskyAgent({ service: 'https://bsky.social' });
     this.supabase = getSupabaseClient();
   }
-
-  // ─── Auth ────────────────────────────────────────────────────────────────
 
   private async ensureAuth(): Promise<void> {
     if (this.authenticated) return;
@@ -122,11 +248,6 @@ export class BlueskyResponder {
     this.authenticated = true;
   }
 
-  // ─── Rate Limit Check ────────────────────────────────────────────────────
-
-  /**
-   * Returns true if we have already replied to this author within the last hour.
-   */
   private async isRateLimited(authorDid: string): Promise<boolean> {
     const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
 
@@ -139,46 +260,75 @@ export class BlueskyResponder {
 
     if (error) {
       console.error('[BlueskyResponder] Rate-limit check failed:', error);
-      // Fail open — don't block the reply on a DB error
       return false;
     }
 
-    return (data?.length ?? 0) > 0;
+    return !!data && data.length > 0;
   }
 
-  // ─── Thread Context ──────────────────────────────────────────────────────
-
-  /**
-   * Fetches the parent post text for additional context when the mention is a reply.
-   */
   private async fetchParentText(parentUri: string): Promise<string | null> {
     try {
-      const thread = await this.agent.getPostThread({ uri: parentUri, depth: 0 });
-      const post = thread.data.thread.post as Record<string, unknown> | undefined;
-      const record = post?.['record'] as Record<string, unknown> | undefined;
-      return typeof record?.['text'] === 'string' ? record['text'] : null;
-    } catch {
-      // Non-fatal — proceed without parent context
+      await this.ensureAuth();
+      const { data } = await this.agent.getPosts({ uris: [parentUri] });
+      return extractRecordText(data.posts?.[0]?.record);
+    } catch (err) {
+      console.warn('[BlueskyResponder] Failed to fetch parent post:', err);
       return null;
     }
   }
 
-  // ─── Response Generation ─────────────────────────────────────────────────
+  private async getActorMemory(actorDid: string): Promise<ActorMemoryRecord | null> {
+    const { data, error } = await this.supabase
+      .from('bluesky_actor_memory')
+      .select('*')
+      .eq('actor_did', actorDid)
+      .maybeSingle();
 
-  /**
-   * Primary: Hermes-4.3-36B via Nous Research inference API
-   * Fallback: Gemini Flash
-   *
-   * Hermes is used as primary because it has native chain-of-thought reasoning,
-   * 128k context, and is purpose-built for instruction following.
-   * Gemini is the always-available fallback if the Nous key is unavailable.
-   */
+    if (error) {
+      console.error('[BlueskyResponder] Failed to fetch bluesky_actor_memory:', error);
+      return null;
+    }
+
+    return (data as ActorMemoryRecord | null) ?? null;
+  }
+
+  private async getConversationMemory(threadRootUri: string): Promise<ConversationMemoryRecord | null> {
+    const { data, error } = await this.supabase
+      .from('bluesky_conversation_memory')
+      .select('*')
+      .eq('thread_root_uri', threadRootUri)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[BlueskyResponder] Failed to fetch bluesky_conversation_memory:', error);
+      return null;
+    }
+
+    return (data as ConversationMemoryRecord | null) ?? null;
+  }
+
+  private inferReplyIntent(
+    mention: BlueskyMention,
+    actorMemory: ActorMemoryRecord | null,
+    conversationMemory: ConversationMemoryRecord | null
+  ): ReplyIntent {
+    const text = mention.text.toLowerCase();
+
+    if (!text.trim()) return 'decline';
+    if (text.includes('spam') || text.includes('airdrop') || text.includes('dm me') || text.includes('promo')) {
+      return 'decline';
+    }
+    if (text.includes('?')) return 'answer';
+    if (text.includes('what do you mean') || text.includes('can you clarify')) return 'clarify';
+    if (conversationMemory?.open_question) return 'follow_up';
+    if (actorMemory?.engagement_count && actorMemory.engagement_count > 2) return 'follow_up';
+    if (text.length < 24) return 'acknowledge';
+    return 'answer';
+  }
+
   private async generateResponse(context: string, userId?: string): Promise<string> {
     const systemPrompt = await getTechGenieSystemPrompt();
 
-    // ── 0. Inject knowledge graph context (T-027) ───────────────────────────
-    // Ground the generation in Tech Genie's memory before any model call.
-    // This is the primary fix for hallucinated platform metrics (T-013).
     let enrichedSystem = systemPrompt;
     if (userId) {
       try {
@@ -199,30 +349,28 @@ export class BlueskyResponder {
       try {
         const raw = await this.generateWithOllamaEndpoint(LAMBDA_OLLAMA_URL, context, enrichedSystem);
         console.log('[BlueskyResponder] Generated via Vast.ai Docker Model Runner (self-hosted)');
-        return this.enforceCharLimit(raw);
+        return this.enforceCharLimit(raw, context);
       } catch (err) {
         console.warn('[BlueskyResponder] Vast.ai Docker Model Runner failed, falling back to Nous API:', err);
       }
     }
 
-    // ── 2. Nous Research (API fallback) ────────────────────────────────────
     if (NOUS_API_KEY) {
       try {
         const raw = await this.generateWithOllamaEndpoint(NOUS_BASE_URL, context, enrichedSystem, {
           apiKey: NOUS_API_KEY,
           model: NOUS_MODEL,
         });
-        return this.enforceCharLimit(raw);
+        return this.enforceCharLimit(raw, context);
       } catch (err) {
         console.warn('[BlueskyResponder] Nous API failed, falling back to Gemini:', err);
       }
     }
 
-    // ── 3. Fallback: Gemini Flash ───────────────────────────────────────────
-    return this.generateWithGemini(context, enrichedSystem);
+    const geminiResponse = await this.generateWithGemini(context, enrichedSystem);
+    return this.enforceCharLimit(geminiResponse, context);
   }
 
-  /** Shared OpenAI-compatible chat completion (non-streaming) for Ollama + Nous */
   private async generateWithOllamaEndpoint(
     baseUrl: string,
     context: string,
@@ -276,16 +424,181 @@ export class BlueskyResponder {
     return result.response.text().trim();
   }
 
-  private enforceCharLimit(raw: string): string {
-    if (raw.length <= RESPONSE_MAX_CHARS) return raw;
-    return (
-      raw.substring(0, RESPONSE_MAX_CHARS - CTA_SUFFIX.length - 3) +
-      '...' +
-      CTA_SUFFIX
-    );
+  private enforceCharLimit(raw: string, sourceText: string): string {
+    return finalizeResponse(raw, sourceText);
   }
 
-  // ─── Log Interaction ─────────────────────────────────────────────────────
+  private async persistKnowledgeFromMention(params: {
+    mention: BlueskyMention;
+    responseText: string;
+    facts: Array<{ topic: string; fact: string; confidence: number; sourceUrl?: string }>;
+  }): Promise<void> {
+    const { mention, responseText, facts } = params;
+    const topicLabels = inferTopicLabels(`${mention.text} ${responseText}`);
+
+    await storeMemory(
+      BLUESKY_MEMORY_USER_ID,
+      `Bluesky mention from @${mention.authorHandle}: ${mention.text}`,
+      'conversation_summary',
+      {
+        source: 'bluesky',
+        kind: 'mention',
+        authorHandle: mention.authorHandle,
+        authorDid: mention.authorDid,
+        mentionUri: mention.uri,
+        topics: topicLabels,
+      }
+    );
+
+    await storeMemory(
+      BLUESKY_MEMORY_USER_ID,
+      `Bluesky reply to @${mention.authorHandle}: ${responseText}`,
+      'conversation_summary',
+      {
+        source: 'bluesky',
+        kind: 'reply',
+        authorHandle: mention.authorHandle,
+        authorDid: mention.authorDid,
+        mentionUri: mention.uri,
+        topics: topicLabels,
+      }
+    );
+
+    const authorNodeId = await addNode(
+      BLUESKY_MEMORY_USER_ID,
+      mention.authorHandle,
+      'person',
+      `Bluesky account ${mention.authorHandle}`,
+      { source: 'bluesky', did: mention.authorDid },
+      'bluesky-agent',
+      'SUPPORTED'
+    );
+
+    for (const label of topicLabels) {
+      const topicNodeId = await addNode(
+        BLUESKY_MEMORY_USER_ID,
+        label,
+        'concept',
+        `Topic inferred from Bluesky interaction: ${label}`,
+        { source: 'bluesky' },
+        'bluesky-agent',
+        'SUPPORTED'
+      );
+
+      if (authorNodeId && topicNodeId) {
+        await strengthenEdge(
+          BLUESKY_MEMORY_USER_ID,
+          authorNodeId,
+          topicNodeId,
+          'interested_in',
+          'bluesky-agent',
+          'SUPPORTED'
+        );
+      }
+    }
+
+    for (const fact of facts) {
+      await storeMemory(
+        BLUESKY_MEMORY_USER_ID,
+        `${fact.topic}: ${fact.fact}`,
+        'fact',
+        {
+          source: 'bluesky',
+          authorHandle: mention.authorHandle,
+          authorDid: mention.authorDid,
+          mentionUri: mention.uri,
+          confidence: fact.confidence,
+          topic: fact.topic,
+          sourceUrl: fact.sourceUrl ?? null,
+        }
+      );
+
+      const factNodeId = await addNode(
+        BLUESKY_MEMORY_USER_ID,
+        fact.topic,
+        'concept',
+        fact.fact,
+        {
+          source: 'bluesky',
+          mentionUri: mention.uri,
+          confidence: fact.confidence,
+        },
+        'bluesky-agent',
+        fact.confidence >= 0.9 ? 'CONFIRMED' : 'SUPPORTED'
+      );
+
+      if (authorNodeId && factNodeId) {
+        await strengthenEdge(
+          BLUESKY_MEMORY_USER_ID,
+          authorNodeId,
+          factNodeId,
+          'discussed',
+          'bluesky-agent',
+          'SUPPORTED'
+        );
+      }
+    }
+  }
+
+  private async buildMemoryContext(
+    mention: BlueskyMention,
+    actorMemory: ActorMemoryRecord | null,
+    conversationMemory: ConversationMemoryRecord | null,
+    replyIntent: ReplyIntent
+  ): Promise<string> {
+    try {
+      const memories = await searchMemories(BLUESKY_MEMORY_USER_ID, mention.text, 4);
+      const graph = await findRelatedEntities(BLUESKY_MEMORY_USER_ID, mention.authorHandle);
+      const memoryLines = memories
+        .slice(0, 4)
+        .map((memory) => `- ${memory.content}`)
+        .join('\n');
+      const graphContext = formatGraphContext(graph);
+
+      const actorTopics = asStringArray(actorMemory?.topics_engaged);
+      const actorContext = actorMemory
+        ? [
+            `Recurring follower: @${actorMemory.handle}`,
+            actorMemory.relationship_summary ? `Relationship: ${actorMemory.relationship_summary}` : '',
+            actorMemory.last_reply_summary ? `Last reply summary: ${actorMemory.last_reply_summary}` : '',
+            actorTopics.length ? `Topics engaged: ${actorTopics.join(', ')}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n')
+        : '';
+
+      const threadContext = conversationMemory
+        ? [
+            `Thread memory root: ${conversationMemory.thread_root_uri}`,
+            conversationMemory.last_topic ? `Last topic: ${conversationMemory.last_topic}` : '',
+            conversationMemory.last_agent_position ? `Last agent position: ${conversationMemory.last_agent_position}` : '',
+            conversationMemory.open_question ? `Open question: ${conversationMemory.open_question}` : '',
+            conversationMemory.last_summary ? `Last summary: ${conversationMemory.last_summary}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n')
+        : '';
+
+      const intentContext = `Reply intent: ${replyIntent}`;
+
+      if (!memoryLines && !graphContext && !actorContext && !threadContext) {
+        return intentContext;
+      }
+
+      return [
+        intentContext,
+        actorContext ? `Social memory:\n${actorContext}` : '',
+        threadContext ? `Conversation memory:\n${threadContext}` : '',
+        memoryLines ? `Relevant Bluesky memory context:\n${memoryLines}` : '',
+        graphContext || '',
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+    } catch (err) {
+      console.warn('[BlueskyResponder] Failed to build memory context (non-blocking):', err);
+      return `Reply intent: ${replyIntent}`;
+    }
+  }
 
   private async logInteraction(params: {
     mention: BlueskyMention;
@@ -312,7 +625,76 @@ export class BlueskyResponder {
     }
   }
 
-  // ─── Respond ─────────────────────────────────────────────────────────────
+  private async upsertActorMemory(params: {
+    mention: BlueskyMention;
+    topicLabels: string[];
+    responseText?: string;
+    replied: boolean;
+  }): Promise<void> {
+    const current = await this.getActorMemory(params.mention.authorDid);
+    const now = new Date().toISOString();
+
+    const payload = {
+      actor_did: params.mention.authorDid,
+      handle: params.mention.authorHandle,
+      display_name: null,
+      first_seen_at: current?.first_seen_at ?? now,
+      last_interaction_at: now,
+      last_reply_at: params.replied ? now : current?.last_reply_at ?? null,
+      engagement_count: (current?.engagement_count ?? 0) + 1,
+      reply_count: (current?.reply_count ?? 0) + (params.replied ? 1 : 0),
+      topics_engaged: mergeTopicLabels(current?.topics_engaged, params.topicLabels),
+      relationship_summary: current?.relationship_summary ?? null,
+      tone_preference_guess: current?.tone_preference_guess ?? null,
+      last_reply_summary: params.replied && params.responseText ? summarizeText(params.responseText, 160) : current?.last_reply_summary ?? null,
+      notes: current?.notes ?? {},
+      updated_at: now,
+    };
+
+    const { error } = await this.supabase
+      .from('bluesky_actor_memory')
+      .upsert(payload, { onConflict: 'actor_did' });
+
+    if (error) {
+      console.error('[BlueskyResponder] Failed to upsert bluesky_actor_memory:', error);
+    }
+  }
+
+  private async upsertConversationMemory(params: {
+    threadRootUri: string;
+    mention: BlueskyMention;
+    responseText?: string;
+    topicLabels: string[];
+    responseUri?: string;
+    replyIntent: ReplyIntent;
+  }): Promise<void> {
+    const current = await this.getConversationMemory(params.threadRootUri);
+    const now = new Date().toISOString();
+    const lower = params.mention.text.toLowerCase();
+    const openQuestion = lower.includes('?') ? summarizeText(params.mention.text, 160) : null;
+
+    const payload = {
+      thread_root_uri: params.threadRootUri,
+      actor_did: params.mention.authorDid,
+      actor_handle: params.mention.authorHandle,
+      last_topic: params.topicLabels[0] ?? current?.last_topic ?? null,
+      last_agent_position: params.responseText ? summarizeText(params.responseText, 120) : current?.last_agent_position ?? null,
+      open_question: params.replyIntent === 'follow_up' || params.replyIntent === 'clarify' ? openQuestion : null,
+      last_summary: params.responseText ? summarizeText(params.responseText, 180) : current?.last_summary ?? null,
+      reply_depth: (current?.reply_depth ?? 0) + 1,
+      last_mention_uri: params.mention.uri,
+      last_reply_uri: params.responseUri ?? current?.last_reply_uri ?? null,
+      updated_at: now,
+    };
+
+    const { error } = await this.supabase
+      .from('bluesky_conversation_memory')
+      .upsert(payload, { onConflict: 'thread_root_uri' });
+
+    if (error) {
+      console.error('[BlueskyResponder] Failed to upsert bluesky_conversation_memory:', error);
+    }
+  }
 
   /**
    * Full pipeline: classify → extract facts → generate response → post reply → log.
@@ -346,7 +728,15 @@ export class BlueskyResponder {
         return { ...base, error: 'rate_limited' };
       }
 
-      // ── Build context string ──────────────────────────────────────────
+      const threadRootUri = mention.replyRef?.root.uri ?? mention.uri;
+      const actorMemory = await this.getActorMemory(mention.authorDid);
+      const conversationMemory = await this.getConversationMemory(threadRootUri);
+      const replyIntent = this.inferReplyIntent(mention, actorMemory, conversationMemory);
+
+      if (replyIntent === 'decline') {
+        return { ...base, error: 'declined_low_signal' };
+      }
+
       let contextText = mention.text;
 
       if (mention.replyRef) {
@@ -356,7 +746,11 @@ export class BlueskyResponder {
         }
       }
 
-      // ── Route through AgentRouter (UCOL) ──────────────────────────────
+      const memoryContext = await this.buildMemoryContext(mention, actorMemory, conversationMemory, replyIntent);
+      if (memoryContext) {
+        contextText = `${memoryContext}\n\n${contextText}`;
+      }
+
       const routing = await classifyQuery(
         mention.text,
         contextText,
@@ -369,7 +763,6 @@ export class BlueskyResponder {
         `${routing.targetNode} (${routing.taskType}, clf=${routing.confidence.toFixed(2)})`
       );
 
-      // ── Extract facts → push to knowledge graph ───────────────────────
       const contentType = detectContentType(mention.text);
       const facts = await extractFacts(contextText, contentType);
       const factsExtracted = facts.length;
@@ -381,12 +774,15 @@ export class BlueskyResponder {
         );
       }
 
-      // ── Generate response via Gemini Flash ────────────────────────────
-      const responseText = await this.generateResponse(contextText);
+      const responseText = await this.generateResponse(contextText, BLUESKY_MEMORY_USER_ID);
+      const topicLabels = inferTopicLabels(`${mention.text} ${responseText}`);
 
-      // ── Build reply ref ───────────────────────────────────────────────
-      // If the mention is itself a reply, reply into the same thread;
-      // otherwise start a new thread with the mention as root & parent.
+      await this.persistKnowledgeFromMention({
+        mention,
+        responseText,
+        facts,
+      });
+
       const replyRef = mention.replyRef
         ? {
             root: { uri: mention.replyRef.root.uri, cid: mention.replyRef.root.cid },
@@ -397,7 +793,6 @@ export class BlueskyResponder {
             parent: { uri: mention.uri, cid: mention.cid },
           };
 
-      // ── Post reply to Bluesky ─────────────────────────────────────────
       const rt = new RichText({ text: responseText });
       await rt.detectFacets(this.agent);
 
@@ -411,7 +806,22 @@ export class BlueskyResponder {
       const responseUri = postResult.uri;
       console.log(`[BlueskyResponder] Posted reply: ${responseUri}`);
 
-      // ── Log to Supabase ───────────────────────────────────────────────
+      await this.upsertActorMemory({
+        mention,
+        topicLabels,
+        responseText,
+        replied: true,
+      });
+
+      await this.upsertConversationMemory({
+        threadRootUri,
+        mention,
+        responseText,
+        topicLabels,
+        responseUri,
+        replyIntent,
+      });
+
       await this.logInteraction({
         mention,
         responseText,
