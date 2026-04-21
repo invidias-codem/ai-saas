@@ -160,7 +160,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         dryRun: false,
-        suppressed: true,
         ...serializePlan(plan),
       });
     }
