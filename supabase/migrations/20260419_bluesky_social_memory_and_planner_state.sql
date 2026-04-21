@@ -1,8 +1,16 @@
 -- Migration: 20260419_bluesky_social_memory_and_planner_state.sql
 -- Patched to tolerate production schema drift where topic_cluster
--- was not added in an earlier migration.
+-- was not added in an earlier migration, and to align fully with
+-- planner fields used by ProactivePostPlanner.
 
 ALTER TABLE IF EXISTS bluesky_proactive_posts
+  ADD COLUMN IF NOT EXISTS intent TEXT,
+  ADD COLUMN IF NOT EXISTS source_confidence DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS quality_score DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS suppressed BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS suppression_reason TEXT,
+  ADD COLUMN IF NOT EXISTS publication_url TEXT,
+  ADD COLUMN IF NOT EXISTS publication_title TEXT,
   ADD COLUMN IF NOT EXISTS topic_cluster TEXT,
   ADD COLUMN IF NOT EXISTS audience_mode TEXT,
   ADD COLUMN IF NOT EXISTS rhetorical_pattern TEXT,
@@ -19,6 +27,9 @@ CREATE INDEX IF NOT EXISTS idx_bluesky_proactive_posts_lane_created
 
 CREATE INDEX IF NOT EXISTS idx_bluesky_proactive_posts_topic_cluster_created
   ON bluesky_proactive_posts (topic_cluster, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_bluesky_proactive_posts_suppressed_created
+  ON bluesky_proactive_posts (suppressed, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS bluesky_actor_memory (
   actor_did TEXT PRIMARY KEY,
@@ -56,6 +67,27 @@ CREATE TABLE IF NOT EXISTS bluesky_conversation_memory (
 
 CREATE INDEX IF NOT EXISTS idx_bluesky_conversation_memory_actor
   ON bluesky_conversation_memory (actor_did, updated_at DESC);
+
+COMMENT ON COLUMN bluesky_proactive_posts.intent IS
+  'Planner-selected post intent such as thought, reaction, distribution, or journal';
+
+COMMENT ON COLUMN bluesky_proactive_posts.source_confidence IS
+  'Confidence score for the grounding/source packet used to generate the post';
+
+COMMENT ON COLUMN bluesky_proactive_posts.quality_score IS
+  'Planner quality score for the generated proactive post candidate';
+
+COMMENT ON COLUMN bluesky_proactive_posts.suppressed IS
+  'Whether the planner suppressed this candidate instead of publishing it';
+
+COMMENT ON COLUMN bluesky_proactive_posts.suppression_reason IS
+  'Reason why the planner suppressed the candidate';
+
+COMMENT ON COLUMN bluesky_proactive_posts.publication_url IS
+  'Publication URL used when the proactive post was planned in distribution mode';
+
+COMMENT ON COLUMN bluesky_proactive_posts.publication_title IS
+  'Publication title used when the proactive post was planned in distribution mode';
 
 COMMENT ON COLUMN bluesky_proactive_posts.topic_cluster IS
   'Normalized topic cluster key used for diversity control and recency checks';

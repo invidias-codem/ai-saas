@@ -212,6 +212,13 @@ function getSupabaseClient(): SupabaseClient {
   });
 }
 
+function extractRecordText(record: unknown): string | null {
+  if (!record || typeof record !== 'object') return null;
+
+  const candidate = (record as Record<string, unknown>).text;
+  return typeof candidate === 'string' ? candidate : null;
+}
+
 export class BlueskyResponder {
   private agent: BskyAgent;
   private supabase: SupabaseClient;
@@ -263,7 +270,7 @@ export class BlueskyResponder {
     try {
       await this.ensureAuth();
       const { data } = await this.agent.getPosts({ uris: [parentUri] });
-      return data.posts?.[0]?.record?.text ?? null;
+      return extractRecordText(data.posts?.[0]?.record);
     } catch (err) {
       console.warn('[BlueskyResponder] Failed to fetch parent post:', err);
       return null;

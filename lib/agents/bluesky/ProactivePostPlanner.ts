@@ -246,7 +246,17 @@ async function fetchRecentPlannerState(): Promise<RecentPlannerState[]> {
       .order('created_at', { ascending: false })
       .limit(15);
 
-    if (error || !data?.length) return [];
+    if (error) {
+      console.warn('[ProactivePostPlanner] Failed to fetch recent planner state:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+      return [];
+    }
+
+    if (!data?.length) return [];
 
     return (data ?? []).map((row) => ({
       intent: (row.intent as BlueskyPostIntent | null | undefined) ?? null,
@@ -254,7 +264,8 @@ async function fetchRecentPlannerState(): Promise<RecentPlannerState[]> {
       sourceKind: (row.source_kind as BlueskySourceKind | null | undefined) ?? null,
       topicCluster: (row.topic_cluster as string | null | undefined) ?? null,
     }));
-  } catch {
+  } catch (err) {
+    console.warn('[ProactivePostPlanner] Unexpected error fetching recent planner state:', err);
     return [];
   }
 }
@@ -268,7 +279,17 @@ async function fetchRecentPostContext(): Promise<string> {
       .order('created_at', { ascending: false })
       .limit(5);
 
-    if (error || !data?.length) return '';
+    if (error) {
+      console.warn('[ProactivePostPlanner] Failed to fetch recent post context:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+      return '';
+    }
+
+    if (!data?.length) return '';
 
     return data
       .map(
@@ -276,7 +297,8 @@ async function fetchRecentPostContext(): Promise<string> {
           `- [${row.intent ?? 'unknown'}/${row.lane ?? 'unknown'}] ${row.text}`
       )
       .join('\n');
-  } catch {
+  } catch (err) {
+    console.warn('[ProactivePostPlanner] Unexpected error fetching recent post context:', err);
     return '';
   }
 }
@@ -375,13 +397,26 @@ async function getTopicState(topic: string, lane: BlueskyTopicLane): Promise<{
       .eq('lane', lane)
       .maybeSingle();
 
-    if (error || !data) return { postCount7d: 0, postCount30d: 0 };
+    if (error) {
+      console.warn('[ProactivePostPlanner] Failed to fetch bluesky_topic_state:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+        topic,
+        lane,
+      });
+      return { postCount7d: 0, postCount30d: 0 };
+    }
+
+    if (!data) return { postCount7d: 0, postCount30d: 0 };
 
     return {
       postCount7d: data.post_count_7d ?? 0,
       postCount30d: data.post_count_30d ?? 0,
     };
-  } catch {
+  } catch (err) {
+    console.warn('[ProactivePostPlanner] Unexpected error fetching bluesky_topic_state:', err);
     return { postCount7d: 0, postCount30d: 0 };
   }
 }
