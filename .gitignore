@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+functions/node_modules
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -52,3 +53,19 @@ venv/
 functions/**/venv/
 functions/**/__pycache__/
 infrastructure/lambda-manager/.env
+
+# iCloud drive artifacts
+*.icloud
+# macOS iCloud duplicate files (filename with " 2" before extension or at end)
+*\ 2.*
+*\ 2
+*\ 2/
+
+# Supabase local temp
+supabase/.temp/
+
+# Python egg-info
+*.egg-info/
+
+# research scratch (machine-generated)
+research/lambda-labs-deployment/
