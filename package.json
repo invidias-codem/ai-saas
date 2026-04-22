@@ -107,7 +107,7 @@
     "zod": "^3.22.5"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.18",
+    "@tailwindcss/postcss": "^4.2.4",
     "@types/aws-lambda": "^8.10.161",
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
