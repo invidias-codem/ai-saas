@@ -8,12 +8,8 @@
  *   4. Generate a response via Vast.ai Docker Model Runner/Qwen3.5 (UCOL T-027)
  *      — grounded via knowledge graph retrieval before generation
  *      — fallback chain: Vast.ai Docker Model Runner → Nous API → Gemini Flash
- *   5. Post the reply to Bluesky with proper reply ref
+ *   5. Post the reply to Bluesky with proper reply ref or like when lightweight acknowledgment is enough
  *   6. Log the interaction to Supabase (with rate-limit check)
- *
- * T-027 change: Vast.ai Docker Model Runner (self-hosted Qwen3.5-35B) is now the primary inference
- * node for Bluesky content. Knowledge graph context is injected before
- * generation to prevent hallucination of platform metrics and user stats.
  */
 
 import { BskyAgent, RichText } from '@atproto/api';
@@ -25,18 +21,19 @@ import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor';
 import { addNode, formatGraphContext, strengthenEdge, findRelatedEntities } from '@/lib/memory/graphStore';
 import { searchMemories, storeMemory } from '@/lib/memory/vectorStore';
-import type { BlueskyMention, EngagementResult } from './types';
+import type {
+  BlueskyEngagementAction,
+  BlueskyMention,
+  BlueskyReplyIntent,
+  EngagementResult,
+} from './types';
 import { BlueskySafetyPolicy } from './BlueskySafetyPolicy';
 
-// ─── Inference Config ─────────────────────────────────────────────────────────
-
-// Vast.ai Docker Model Runner (primary) — self-hosted Qwen3.5-35B, zero API cost
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || '';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'hf.co/Qwen/Qwen3.5-35B-A3B';
 
 const NOUS_API_KEY = process.env.NOUSE_API_KEY;
-const NOUS_BASE_URL =
-  process.env.HERMES_BASE_URL || 'https://inference-api.nousresearch.com/v1';
+const NOUS_BASE_URL = process.env.HERMES_BASE_URL || 'https://inference-api.nousresearch.com/v1';
 const NOUS_MODEL = process.env.HERMES_MODEL_ID || 'Hermes-4.3-36B';
 
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
@@ -50,7 +47,28 @@ const TOPIC_KEYWORDS = {
   tech: ['tech', 'developer', 'devtools', 'startup', 'saas', 'infra', 'infrastructure', 'tooling', 'news'],
 };
 
-type ActorMemoryRecord = {
+const LIGHTWEIGHT_ACK_PATTERNS = [
+  /^this$/i,
+  /^true$/i,
+  /^exactly$/i,
+  /^agreed$/i,
+  /^nice$/i,
+  /^love this$/i,
+  /^great point$/i,
+  /^well said$/i,
+  /^100%$/i,
+  /^same$/i,
+];
+
+const PRAISE_MARKERS = ['love this', 'great point', 'well said', 'nice one', 'this rules', 'appreciate this'];
+const CHALLENGE_MARKERS = ['i disagree', 'not sure', 'that seems wrong', 'i think this is wrong', 'counterpoint'];
+const CORRECTION_MARKERS = ['actually', 'small correction', 'minor correction', 'to be precise', 'correction'];
+const CLARIFY_MARKERS = ['what do you mean', 'can you clarify', 'could you clarify', 'clarify this'];
+const THANKS_MARKERS = ['thank you', 'thanks', 'appreciate it'];
+
+const SELF_HANDLE = (process.env.BLUESKY_HANDLE || '').replace(/^@/, '').toLowerCase();
+
+interface ActorMemoryRecord {
   actor_did: string;
   handle: string;
   display_name?: string | null;
@@ -65,9 +83,9 @@ type ActorMemoryRecord = {
   last_reply_summary?: string | null;
   notes?: Record<string, unknown> | null;
   updated_at?: string;
-};
+}
 
-type ConversationMemoryRecord = {
+interface ConversationMemoryRecord {
   thread_root_uri: string;
   actor_did: string;
   actor_handle?: string | null;
@@ -79,9 +97,21 @@ type ConversationMemoryRecord = {
   last_mention_uri?: string | null;
   last_reply_uri?: string | null;
   updated_at?: string;
-};
+}
 
-type ReplyIntent = 'answer' | 'clarify' | 'acknowledge' | 'follow_up' | 'decline';
+interface ThreadContext {
+  parentText: string | null;
+  rootText: string | null;
+  parentAuthorHandle: string | null;
+  rootAuthorHandle: string | null;
+  replyToOwnPost: boolean;
+}
+
+interface EngagementDecision {
+  action: BlueskyEngagementAction;
+  replyIntent: BlueskyReplyIntent;
+  reason: string;
+}
 
 let _techGenieSystemPrompt: string | null = null;
 
@@ -202,9 +232,7 @@ function getSupabaseClient(): SupabaseClient {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
-    throw new Error(
-      '[BlueskyResponder] Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY'
-    );
+    throw new Error('[BlueskyResponder] Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY');
   }
 
   return createClient(url, key, {
@@ -214,9 +242,23 @@ function getSupabaseClient(): SupabaseClient {
 
 function extractRecordText(record: unknown): string | null {
   if (!record || typeof record !== 'object') return null;
-
   const candidate = (record as Record<string, unknown>).text;
   return typeof candidate === 'string' ? candidate : null;
+}
+
+function extractAuthorHandle(post: unknown): string | null {
+  if (!post || typeof post !== 'object') return null;
+  const author = (post as { author?: { handle?: string } }).author;
+  return typeof author?.handle === 'string' ? author.handle.toLowerCase() : null;
+}
+
+function isLightweightAcknowledgement(text: string): boolean {
+  const normalized = normalizeWhitespace(text);
+  return LIGHTWEIGHT_ACK_PATTERNS.some((pattern) => pattern.test(normalized)) || normalized.length < 18;
+}
+
+function includesAny(text: string, markers: string[]): boolean {
+  return markers.some((marker) => text.includes(marker));
 }
 
 export class BlueskyResponder {
@@ -230,9 +272,7 @@ export class BlueskyResponder {
     const appPassword = process.env.BLUESKY_APP_PASSWORD;
 
     if (!handle || !appPassword) {
-      throw new Error(
-        '[BlueskyResponder] Missing env vars: BLUESKY_HANDLE and/or BLUESKY_APP_PASSWORD'
-      );
+      throw new Error('[BlueskyResponder] Missing env vars: BLUESKY_HANDLE and/or BLUESKY_APP_PASSWORD');
     }
 
     this.agent = new BskyAgent({ service: 'https://bsky.social' });
@@ -266,15 +306,47 @@ export class BlueskyResponder {
     return !!data && data.length > 0;
   }
 
-  private async fetchParentText(parentUri: string): Promise<string | null> {
+  private async fetchPost(postUri: string): Promise<{ text: string | null; authorHandle: string | null }> {
     try {
       await this.ensureAuth();
-      const { data } = await this.agent.getPosts({ uris: [parentUri] });
-      return extractRecordText(data.posts?.[0]?.record);
+      const { data } = await this.agent.getPosts({ uris: [postUri] });
+      const post = data.posts?.[0];
+      return {
+        text: extractRecordText(post?.record),
+        authorHandle: extractAuthorHandle(post),
+      };
     } catch (err) {
-      console.warn('[BlueskyResponder] Failed to fetch parent post:', err);
-      return null;
+      console.warn('[BlueskyResponder] Failed to fetch post:', err);
+      return { text: null, authorHandle: null };
     }
+  }
+
+  private async buildThreadContext(mention: BlueskyMention): Promise<ThreadContext> {
+    if (!mention.replyRef) {
+      return {
+        parentText: null,
+        rootText: null,
+        parentAuthorHandle: null,
+        rootAuthorHandle: null,
+        replyToOwnPost: false,
+      };
+    }
+
+    const parent = await this.fetchPost(mention.replyRef.parent.uri);
+    const sameRootAndParent = mention.replyRef.parent.uri === mention.replyRef.root.uri;
+    const root = sameRootAndParent ? parent : await this.fetchPost(mention.replyRef.root.uri);
+
+    const replyToOwnPost = [parent.authorHandle, root.authorHandle].some(
+      (handle) => !!handle && handle === SELF_HANDLE
+    );
+
+    return {
+      parentText: parent.text,
+      rootText: root.text,
+      parentAuthorHandle: parent.authorHandle,
+      rootAuthorHandle: root.authorHandle,
+      replyToOwnPost,
+    };
   }
 
   private async getActorMemory(actorDid: string): Promise<ActorMemoryRecord | null> {
@@ -311,19 +383,71 @@ export class BlueskyResponder {
     mention: BlueskyMention,
     actorMemory: ActorMemoryRecord | null,
     conversationMemory: ConversationMemoryRecord | null
-  ): ReplyIntent {
-    const text = mention.text.toLowerCase();
+  ): BlueskyReplyIntent {
+    const text = mention.text.toLowerCase().trim();
 
-    if (!text.trim()) return 'decline';
+    if (!text) return 'decline';
     if (text.includes('spam') || text.includes('airdrop') || text.includes('dm me') || text.includes('promo')) {
       return 'decline';
     }
-    if (text.includes('?')) return 'answer';
-    if (text.includes('what do you mean') || text.includes('can you clarify')) return 'clarify';
-    if (conversationMemory?.open_question) return 'follow_up';
-    if (actorMemory?.engagement_count && actorMemory.engagement_count > 2) return 'follow_up';
-    if (text.length < 24) return 'acknowledge';
-    return 'answer';
+    if (includesAny(text, CORRECTION_MARKERS)) return 'correction';
+    if (includesAny(text, CHALLENGE_MARKERS)) return 'challenge';
+    if (includesAny(text, CLARIFY_MARKERS)) return 'clarification';
+    if (text.includes('?')) return 'question';
+    if (includesAny(text, THANKS_MARKERS) || includesAny(text, PRAISE_MARKERS)) return 'praise';
+    if (conversationMemory?.open_question || (actorMemory?.engagement_count ?? 0) > 2) return 'follow_up';
+    if (isLightweightAcknowledgement(mention.text)) return 'agreement';
+    if (text.includes('lol') || text.includes('lmao') || text.includes('haha')) return 'banter';
+    if (text.length < 20) return 'low_value';
+    return 'follow_up';
+  }
+
+  private decideEngagement(params: {
+    mention: BlueskyMention;
+    actorMemory: ActorMemoryRecord | null;
+    conversationMemory: ConversationMemoryRecord | null;
+    threadContext: ThreadContext;
+    replyIntent: BlueskyReplyIntent;
+    source: 'mention' | 'discovery';
+  }): EngagementDecision {
+    const { mention, actorMemory, conversationMemory, threadContext, replyIntent, source } = params;
+    const text = mention.text.toLowerCase();
+
+    if (replyIntent === 'decline') {
+      return { action: 'skip', replyIntent, reason: 'declined_low_signal' };
+    }
+
+    if (replyIntent === 'question' || replyIntent === 'clarification' || replyIntent === 'challenge' || replyIntent === 'correction') {
+      return {
+        action: threadContext.replyToOwnPost ? 'reply_full' : 'reply_short',
+        replyIntent,
+        reason: threadContext.replyToOwnPost ? 'reply_to_own_post_substantive' : 'direct_substantive_reply',
+      };
+    }
+
+    if (replyIntent === 'follow_up') {
+      return {
+        action: conversationMemory?.reply_depth && conversationMemory.reply_depth > 2 ? 'reply_short' : 'reply_full',
+        replyIntent,
+        reason: 'thread_follow_up',
+      };
+    }
+
+    if (replyIntent === 'praise' || replyIntent === 'agreement' || replyIntent === 'banter' || replyIntent === 'low_value') {
+      if (threadContext.replyToOwnPost || source === 'mention') {
+        return { action: 'like_only', replyIntent, reason: 'lightweight_acknowledgement' };
+      }
+
+      if ((actorMemory?.engagement_count ?? 0) > 3 && !text.includes('?')) {
+        return { action: 'like_only', replyIntent, reason: 'warm_repeat_engager' };
+      }
+    }
+
+    if (text.length < 8) {
+      return { action: 'skip', replyIntent, reason: 'too_short_to_engage' };
+    }
+
+    return { action: 'reply_short', replyIntent, reason: 'default_reply_path' };
   }
 
   private async generateResponse(context: string, userId?: string): Promise<string> {
@@ -344,7 +468,6 @@ export class BlueskyResponder {
       }
     }
 
-    // ── 1. Vast.ai Docker Model Runner — self-hosted Qwen3.5-35B (primary, UCOL T-027) ──────────
     if (LAMBDA_OLLAMA_URL) {
       try {
         const raw = await this.generateWithOllamaEndpoint(LAMBDA_OLLAMA_URL, context, enrichedSystem);
@@ -410,8 +533,7 @@ export class BlueskyResponder {
   }
 
   private async generateWithGemini(context: string, systemPrompt: string): Promise<string> {
-    const effectiveApiKey =
-      process.env.BLUESKY_GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
+    const effectiveApiKey = process.env.BLUESKY_GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
     const gemini = new GoogleGenerativeAI(effectiveApiKey);
     const model = gemini.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
 
@@ -426,6 +548,11 @@ export class BlueskyResponder {
 
   private enforceCharLimit(raw: string, sourceText: string): string {
     return finalizeResponse(raw, sourceText);
+  }
+
+  private async likePost(uri: string, cid: string): Promise<void> {
+    await this.ensureAuth();
+    await this.agent.like(uri, cid);
   }
 
   private async persistKnowledgeFromMention(params: {
@@ -544,15 +671,13 @@ export class BlueskyResponder {
     mention: BlueskyMention,
     actorMemory: ActorMemoryRecord | null,
     conversationMemory: ConversationMemoryRecord | null,
-    replyIntent: ReplyIntent
+    replyIntent: BlueskyReplyIntent,
+    threadContext?: ThreadContext
   ): Promise<string> {
     try {
       const memories = await searchMemories(BLUESKY_MEMORY_USER_ID, mention.text, 4);
       const graph = await findRelatedEntities(BLUESKY_MEMORY_USER_ID, mention.authorHandle);
-      const memoryLines = memories
-        .slice(0, 4)
-        .map((memory) => `- ${memory.content}`)
-        .join('\n');
+      const memoryLines = memories.slice(0, 4).map((memory) => `- ${memory.content}`).join('\n');
       const graphContext = formatGraphContext(graph);
 
       const actorTopics = asStringArray(actorMemory?.topics_engaged);
@@ -567,7 +692,7 @@ export class BlueskyResponder {
             .join('\n')
         : '';
 
-      const threadContext = conversationMemory
+      const threadMemoryContext = conversationMemory
         ? [
             `Thread memory root: ${conversationMemory.thread_root_uri}`,
             conversationMemory.last_topic ? `Last topic: ${conversationMemory.last_topic}` : '',
@@ -579,16 +704,27 @@ export class BlueskyResponder {
             .join('\n')
         : '';
 
+      const liveThreadContext = threadContext
+        ? [
+            threadContext.replyToOwnPost ? 'Replying to one of our own posts.' : '',
+            threadContext.rootText ? `Thread root text: ${summarizeText(threadContext.rootText, 160)}` : '',
+            threadContext.parentText ? `Parent text: ${summarizeText(threadContext.parentText, 160)}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n')
+        : '';
+
       const intentContext = `Reply intent: ${replyIntent}`;
 
-      if (!memoryLines && !graphContext && !actorContext && !threadContext) {
+      if (!memoryLines && !graphContext && !actorContext && !threadMemoryContext && !liveThreadContext) {
         return intentContext;
       }
 
       return [
         intentContext,
         actorContext ? `Social memory:\n${actorContext}` : '',
-        threadContext ? `Conversation memory:\n${threadContext}` : '',
+        threadMemoryContext ? `Conversation memory:\n${threadMemoryContext}` : '',
+        liveThreadContext ? `Live thread context:\n${liveThreadContext}` : '',
         memoryLines ? `Relevant Bluesky memory context:\n${memoryLines}` : '',
         graphContext || '',
       ]
@@ -607,18 +743,16 @@ export class BlueskyResponder {
     factsExtracted: number;
     routedTo: string;
   }): Promise<void> {
-    const { error } = await this.supabase
-      .from('bluesky_interactions')
-      .insert({
-        mention_uri: params.mention.uri,
-        author_handle: params.mention.authorHandle,
-        author_did: params.mention.authorDid,
-        mention_text: params.mention.text,
-        response_text: params.responseText,
-        response_uri: params.responseUri ?? null,
-        facts_extracted: params.factsExtracted,
-        routed_to: params.routedTo,
-      });
+    const { error } = await this.supabase.from('bluesky_interactions').insert({
+      mention_uri: params.mention.uri,
+      author_handle: params.mention.authorHandle,
+      author_did: params.mention.authorDid,
+      mention_text: params.mention.text,
+      response_text: params.responseText,
+      response_uri: params.responseUri ?? null,
+      facts_extracted: params.factsExtracted,
+      routed_to: params.routedTo,
+    });
 
     if (error) {
       console.error('[BlueskyResponder] Failed to log interaction to Supabase:', error);
@@ -646,14 +780,13 @@ export class BlueskyResponder {
       topics_engaged: mergeTopicLabels(current?.topics_engaged, params.topicLabels),
       relationship_summary: current?.relationship_summary ?? null,
       tone_preference_guess: current?.tone_preference_guess ?? null,
-      last_reply_summary: params.replied && params.responseText ? summarizeText(params.responseText, 160) : current?.last_reply_summary ?? null,
+      last_reply_summary:
+        params.replied && params.responseText ? summarizeText(params.responseText, 160) : current?.last_reply_summary ?? null,
       notes: current?.notes ?? {},
       updated_at: now,
     };
 
-    const { error } = await this.supabase
-      .from('bluesky_actor_memory')
-      .upsert(payload, { onConflict: 'actor_did' });
+    const { error } = await this.supabase.from('bluesky_actor_memory').upsert(payload, { onConflict: 'actor_did' });
 
     if (error) {
       console.error('[BlueskyResponder] Failed to upsert bluesky_actor_memory:', error);
@@ -666,7 +799,7 @@ export class BlueskyResponder {
     responseText?: string;
     topicLabels: string[];
     responseUri?: string;
-    replyIntent: ReplyIntent;
+    replyIntent: BlueskyReplyIntent;
   }): Promise<void> {
     const current = await this.getConversationMemory(params.threadRootUri);
     const now = new Date().toISOString();
@@ -679,7 +812,10 @@ export class BlueskyResponder {
       actor_handle: params.mention.authorHandle,
       last_topic: params.topicLabels[0] ?? current?.last_topic ?? null,
       last_agent_position: params.responseText ? summarizeText(params.responseText, 120) : current?.last_agent_position ?? null,
-      open_question: params.replyIntent === 'follow_up' || params.replyIntent === 'clarify' ? openQuestion : null,
+      open_question:
+        params.replyIntent === 'follow_up' || params.replyIntent === 'clarification' || params.replyIntent === 'question'
+          ? openQuestion
+          : null,
       last_summary: params.responseText ? summarizeText(params.responseText, 180) : current?.last_summary ?? null,
       reply_depth: (current?.reply_depth ?? 0) + 1,
       last_mention_uri: params.mention.uri,
@@ -696,30 +832,22 @@ export class BlueskyResponder {
     }
   }
 
-  /**
-   * Full pipeline: classify → extract facts → generate response → post reply → log.
-   */
   async respond(mention: BlueskyMention, source: 'mention' | 'discovery' = 'mention'): Promise<EngagementResult> {
     const base: EngagementResult = {
       mentionUri: mention.uri,
       responded: false,
+      liked: false,
+      action: 'skip',
       factsExtracted: 0,
     };
 
     try {
       await this.ensureAuth();
 
-      // ── Rate limit guard ──────────────────────────────────────────────
       const policyCheck = this.safety.shouldAvoidText(mention.text);
       if (policyCheck.blocked) {
-        console.log(`[BlueskyResponder] Safety policy blocked reply to ${mention.authorHandle}: ${policyCheck.reason}`);
+        console.log(`[BlueskyResponder] Safety policy blocked engagement to ${mention.authorHandle}: ${policyCheck.reason}`);
         return { ...base, error: policyCheck.reason };
-      }
-
-      const budget = await this.safety.canReply();
-      if (!budget.allowed) {
-        console.log(`[BlueskyResponder] Reply budget blocked reply to ${mention.authorHandle}: ${budget.reason}`);
-        return { ...base, error: budget.reason };
       }
 
       const limited = await this.isRateLimited(mention.authorDid);
@@ -731,36 +859,90 @@ export class BlueskyResponder {
       const threadRootUri = mention.replyRef?.root.uri ?? mention.uri;
       const actorMemory = await this.getActorMemory(mention.authorDid);
       const conversationMemory = await this.getConversationMemory(threadRootUri);
+      const threadContext = await this.buildThreadContext(mention);
       const replyIntent = this.inferReplyIntent(mention, actorMemory, conversationMemory);
+      const decision = this.decideEngagement({
+        mention,
+        actorMemory,
+        conversationMemory,
+        threadContext,
+        replyIntent,
+        source,
+      });
 
-      if (replyIntent === 'decline') {
-        return { ...base, error: 'declined_low_signal' };
+      if (decision.action === 'skip') {
+        return { ...base, action: 'skip', error: decision.reason };
+      }
+
+      const topicLabels = inferTopicLabels(mention.text);
+
+      if (decision.action === 'like_only') {
+        const likeBudget = await this.safety.canLike();
+        if (!likeBudget.allowed) {
+          return { ...base, action: 'skip', error: likeBudget.reason };
+        }
+
+        await this.likePost(mention.uri, mention.cid);
+        await this.upsertActorMemory({
+          mention,
+          topicLabels,
+          replied: false,
+        });
+        await this.upsertConversationMemory({
+          threadRootUri,
+          mention,
+          topicLabels,
+          replyIntent,
+        });
+        await this.safety.logAction({
+          route: source === 'discovery' ? 'discovery-like' : 'mention-like',
+          authorHandle: mention.authorHandle,
+          authorDid: mention.authorDid,
+          mentionUri: mention.uri,
+          mentionText: mention.text,
+          responseText: `like_only:${decision.reason}`,
+        });
+
+        return {
+          ...base,
+          liked: true,
+          action: 'like_only',
+        };
+      }
+
+      const replyBudget = await this.safety.canReply();
+      if (!replyBudget.allowed) {
+        console.log(`[BlueskyResponder] Reply budget blocked reply to ${mention.authorHandle}: ${replyBudget.reason}`);
+        return { ...base, action: 'skip', error: replyBudget.reason };
       }
 
       let contextText = mention.text;
-
-      if (mention.replyRef) {
-        const parentText = await this.fetchParentText(mention.replyRef.parent.uri);
-        if (parentText) {
-          contextText = `[Thread context: "${parentText}"]\n\nMention: ${mention.text}`;
-        }
+      if (threadContext.rootText || threadContext.parentText) {
+        const threadBits = [
+          threadContext.rootText ? `Root: "${threadContext.rootText}"` : '',
+          threadContext.parentText ? `Parent: "${threadContext.parentText}"` : '',
+          `Mention: ${mention.text}`,
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+        contextText = threadBits;
       }
 
-      const memoryContext = await this.buildMemoryContext(mention, actorMemory, conversationMemory, replyIntent);
+      const memoryContext = await this.buildMemoryContext(
+        mention,
+        actorMemory,
+        conversationMemory,
+        replyIntent,
+        threadContext
+      );
       if (memoryContext) {
         contextText = `${memoryContext}\n\n${contextText}`;
       }
 
-      const routing = await classifyQuery(
-        mention.text,
-        contextText,
-        undefined,
-        `bluesky:${mention.authorDid}`
-      );
+      const routing = await classifyQuery(mention.text, contextText, undefined, `bluesky:${mention.authorDid}`);
 
       console.log(
-        `[BlueskyResponder] Routed "${mention.text.substring(0, 60)}" → ` +
-        `${routing.targetNode} (${routing.taskType}, clf=${routing.confidence.toFixed(2)})`
+        `[BlueskyResponder] Routed "${mention.text.substring(0, 60)}" → ${routing.targetNode} (${routing.taskType}, clf=${routing.confidence.toFixed(2)})`
       );
 
       const contentType = detectContentType(mention.text);
@@ -768,14 +950,11 @@ export class BlueskyResponder {
       const factsExtracted = facts.length;
 
       if (factsExtracted > 0) {
-        console.log(
-          `[BlueskyResponder] Extracted ${factsExtracted} facts from mention ` +
-          `(${mention.uri})`
-        );
+        console.log(`[BlueskyResponder] Extracted ${factsExtracted} facts from mention (${mention.uri})`);
       }
 
       const responseText = await this.generateResponse(contextText, BLUESKY_MEMORY_USER_ID);
-      const topicLabels = inferTopicLabels(`${mention.text} ${responseText}`);
+      const responseTopicLabels = inferTopicLabels(`${mention.text} ${responseText}`);
 
       await this.persistKnowledgeFromMention({
         mention,
@@ -808,7 +987,7 @@ export class BlueskyResponder {
 
       await this.upsertActorMemory({
         mention,
-        topicLabels,
+        topicLabels: responseTopicLabels,
         responseText,
         replied: true,
       });
@@ -817,7 +996,7 @@ export class BlueskyResponder {
         threadRootUri,
         mention,
         responseText,
-        topicLabels,
+        topicLabels: responseTopicLabels,
         responseUri,
         replyIntent,
       });
@@ -843,6 +1022,8 @@ export class BlueskyResponder {
       return {
         mentionUri: mention.uri,
         responded: true,
+        liked: false,
+        action: decision.action,
         responseUri,
         factsExtracted,
       };

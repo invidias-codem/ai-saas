@@ -57,11 +57,33 @@ export interface BlueskyEngagementConfig {
 /**
  * Result of processing a single BlueskyMention through the engagement pipeline.
  */
+export type BlueskyReplyIntent =
+  | 'question'
+  | 'clarification'
+  | 'agreement'
+  | 'praise'
+  | 'banter'
+  | 'challenge'
+  | 'correction'
+  | 'follow_up'
+  | 'low_value'
+  | 'decline';
+
+export type BlueskyEngagementAction =
+  | 'reply_full'
+  | 'reply_short'
+  | 'like_only'
+  | 'skip';
+
 export interface EngagementResult {
   /** AT-URI of the mention that was processed */
   mentionUri: string;
   /** Whether the agent successfully posted a reply */
   responded: boolean;
+  /** Whether the agent liked the post without replying */
+  liked?: boolean;
+  /** Engagement action taken */
+  action?: BlueskyEngagementAction;
   /** AT-URI of the reply post, if one was created */
   responseUri?: string;
   /** Number of facts extracted from the mention and pushed to the knowledge graph */

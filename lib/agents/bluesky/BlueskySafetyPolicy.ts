@@ -4,6 +4,7 @@ const DEFAULT_WINDOW_HOURS = 24;
 const DEFAULT_MAX_LIKES = 15;
 const DEFAULT_MAX_REPLIES = 5;
 const DEFAULT_MAX_POSTS = 2;
+const LIKE_ROUTES = ['discovery-like', 'mention-like'];
 
 function getSupabaseClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -51,7 +52,8 @@ export class BlueskySafetyPolicy {
   }
 
   async canLike(): Promise<{ allowed: boolean; reason?: string }> {
-    const used = await this.countByRoute('discovery-like');
+    const counts = await Promise.all(LIKE_ROUTES.map((route) => this.countByRoute(route)));
+    const used = counts.reduce((sum, count) => sum + count, 0);
     const max = parseIntEnv('BLUESKY_MAX_LIKES_PER_DAY', DEFAULT_MAX_LIKES);
     return used >= max ? { allowed: false, reason: 'like_budget_exceeded' } : { allowed: true };
   }
@@ -83,13 +85,7 @@ export class BlueskySafetyPolicy {
       return { blocked: true, reason: 'spam_or_low_quality' };
     }
 
-    const offTopicPatterns = [
-      /politics/i,
-      /election/i,
-      /war/i,
-      /religion/i,
-      /celebrity drama/i,
-    ];
+    const offTopicPatterns = [/politics/i, /election/i, /war/i, /religion/i, /celebrity drama/i];
 
     if (offTopicPatterns.some((r) => r.test(text)) && !/ai|developer|saas|software|tech/i.test(lower)) {
       return { blocked: true, reason: 'off_topic' };
@@ -104,7 +100,7 @@ export class BlueskySafetyPolicy {
   }
 
   async logAction(params: {
-    route: 'proactive-post' | 'discovery-like' | 'discovery-reply' | 'mention-reply';
+    route: 'proactive-post' | 'discovery-like' | 'mention-like' | 'discovery-reply' | 'mention-reply';
     authorHandle?: string | null;
     authorDid?: string | null;
     mentionUri?: string | null;
