@@ -94,6 +94,7 @@ export async function GET(req: Request, { params }: RouteParams) {
 
         return NextResponse.json({
             id: conv.id,
+            workspaceId: conv.workspace_id ?? null,
             title: conv.title,
             messages: messages?.map((m: DbMessage) => ({
                 text: m.content,

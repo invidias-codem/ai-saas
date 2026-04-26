@@ -26,6 +26,7 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
   const t = useTranslations("Sidebar");
   const labelMap: Record<string, string> = {
     "Dashboard": "dashboard",
+    "Workspaces": "workspaces",
     "Conversation": "conversation",
     "Image Generation": "imageGeneration",
     "Video Generation": "videoGeneration",

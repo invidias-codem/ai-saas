@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic';
 
 export interface ConversationMeta {
     id: string;
+    workspaceId?: string | null;
     title: string;
     messageCount: number;
     createdAt: number;
@@ -89,6 +90,7 @@ export async function GET(req: Request) {
 
             return {
                 id: c.id,
+                workspaceId: c.workspace_id ?? null,
                 title: c.title,
                 messageCount: msgs.length,
                 createdAt: new Date(c.created_at).getTime(),

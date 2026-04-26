@@ -27,14 +27,18 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
         }
 
-        // Parse optional body for initial title
+        // Parse optional body for initial title and workspace
         let initialTitle = "New Conversation";
+        let workspaceId: string | null = null;
         try {
             const body = await req.json();
             if (body.title) {
                 const titleSchema = z.string().min(1).max(100);
                 const validatedTitle = titleSchema.parse(body.title);
                 initialTitle = validatedTitle;
+            }
+            if (typeof body.workspaceId === 'string' && body.workspaceId.trim()) {
+                workspaceId = body.workspaceId.trim();
             }
         } catch (error) {
             if (error instanceof z.ZodError) {
@@ -57,6 +61,7 @@ export async function POST(req: Request) {
             .from("conversations")
             .insert({
                 user_id: user.userId,
+                workspace_id: workspaceId,
                 title: initialTitle,
                 is_deleted: false,
                 is_archived: false,
