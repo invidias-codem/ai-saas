@@ -27,9 +27,10 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
         }
 
-        // Parse optional body for initial title and workspace
+        // Parse optional body for initial title, workspace, and operating profile
         let initialTitle = "New Conversation";
         let workspaceId: string | null = null;
+        let operatingProfileId: string | null = null;
         try {
             const body = await req.json();
             if (body.title) {
@@ -39,6 +40,9 @@ export async function POST(req: Request) {
             }
             if (typeof body.workspaceId === 'string' && body.workspaceId.trim()) {
                 workspaceId = body.workspaceId.trim();
+            }
+            if (typeof body.operatingProfileId === 'string' && body.operatingProfileId.trim()) {
+                operatingProfileId = body.operatingProfileId.trim();
             }
         } catch (error) {
             if (error instanceof z.ZodError) {
@@ -50,8 +54,6 @@ export async function POST(req: Request) {
         // Use supabaseAdmin to bypass RLS since we manage auth with Clerk
         const { supabaseAdmin } = await import("@/lib/supabaseClient");
 
-
-
         if (!supabaseAdmin) {
             console.error("Supabase client not initialized. Missing environment variables.");
             return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
@@ -62,6 +64,7 @@ export async function POST(req: Request) {
             .insert({
                 user_id: user.userId,
                 workspace_id: workspaceId,
+                operating_profile_id: operatingProfileId,
                 title: initialTitle,
                 is_deleted: false,
                 is_archived: false,

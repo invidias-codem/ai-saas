@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { ensureDefaultOperatingProfile } from '@/app/api/operating-profiles/route';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +19,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
     }
 
+    const defaultProfile = await ensureDefaultOperatingProfile(user.userId);
+
     let { data, error } = await supabaseAdmin
       .from('workspaces')
-      .select('*')
+      .select('*, default_operating_profile:operating_profiles(*)')
       .eq('user_id', user.userId)
       .eq('is_default', true)
       .maybeSingle();
@@ -39,8 +42,9 @@ export async function GET(req: Request) {
           status: 'active',
           is_default: true,
           onboarding_state: 'starter',
+          default_operating_profile_id: defaultProfile.id,
         })
-        .select()
+        .select('*, default_operating_profile:operating_profiles(*)')
         .single();
 
       if (createError) throw createError;

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { ensureDefaultOperatingProfile } from '@/app/api/operating-profiles/route';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,7 @@ const createWorkspaceSchema = z.object({
   name: z.string().min(1).max(80),
   description: z.string().max(280).optional(),
   kind: z.enum(['personal', 'project', 'research', 'operations', 'social', 'custom']).optional(),
+  defaultOperatingProfileId: z.string().uuid().optional(),
 });
 
 function slugify(input: string): string {
@@ -24,9 +26,11 @@ async function ensureDefaultWorkspace(userId: string) {
   const { supabaseAdmin } = await import('@/lib/supabaseClient');
   if (!supabaseAdmin) throw new Error('Database configuration missing');
 
+  const defaultProfile = await ensureDefaultOperatingProfile(userId);
+
   const { data: existing, error: existingError } = await supabaseAdmin
     .from('workspaces')
-    .select('*')
+    .select('*, default_operating_profile:operating_profiles(*)')
     .eq('user_id', userId)
     .eq('is_default', true)
     .maybeSingle();
@@ -48,8 +52,9 @@ async function ensureDefaultWorkspace(userId: string) {
       status: 'active',
       is_default: true,
       onboarding_state: 'starter',
+      default_operating_profile_id: defaultProfile.id,
     })
-    .select()
+    .select('*, default_operating_profile:operating_profiles(*)')
     .single();
 
   if (createError) throw createError;
@@ -80,7 +85,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabaseAdmin
       .from('workspaces')
-      .select('*')
+      .select('*, default_operating_profile:operating_profiles(*)')
       .eq('user_id', user.userId)
       .order('is_default', { ascending: false })
       .order('updated_at', { ascending: false });
@@ -111,13 +116,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid workspace payload' }, { status: 400 });
     }
 
-    const { name, description, kind = 'custom' } = parsed.data;
+    const { name, description, kind = 'custom', defaultOperatingProfileId } = parsed.data;
     const { supabaseAdmin } = await import('@/lib/supabaseClient');
     if (!supabaseAdmin) {
       return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
     }
 
     await ensureDefaultWorkspace(user.userId);
+    const fallbackProfile = await ensureDefaultOperatingProfile(user.userId);
 
     const slugBase = slugify(name);
     let slug = slugBase;
@@ -143,8 +149,9 @@ export async function POST(req: Request) {
         status: 'active',
         is_default: false,
         onboarding_state: 'starter',
+        default_operating_profile_id: defaultOperatingProfileId || fallbackProfile.id,
       })
-      .select()
+      .select('*, default_operating_profile:operating_profiles(*)')
       .single();
 
     if (error) throw error;
