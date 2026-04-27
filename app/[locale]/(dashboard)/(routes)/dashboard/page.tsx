@@ -1,31 +1,41 @@
-import { auth } from '@clerk/nextjs/server';
-import { redirect } from 'next/navigation';
-import { supabaseAdmin } from '@/lib/supabaseClient';
+"use client";
 
-export const dynamic = 'force-dynamic';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useLocale } from 'next-intl';
 
-export default async function DashboardPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
-  const { userId } = await auth();
+export default function DashboardPage() {
+  const router = useRouter();
+  const locale = useLocale();
 
-  if (!userId) {
-    redirect(`/${locale}/sign-in`);
-  }
+  useEffect(() => {
+    let cancelled = false;
 
-  if (!supabaseAdmin) {
-    redirect(`/${locale}/onboarding`);
-  }
+    const routeUser = async () => {
+      try {
+        const res = await fetch('/api/workspaces/default', { cache: 'no-store' });
+        const data = await res.json();
+        if (cancelled) return;
 
-  const { data: defaultWorkspace } = await supabaseAdmin
-    .from('workspaces')
-    .select('id, onboarding_state')
-    .eq('user_id', userId)
-    .eq('is_default', true)
-    .maybeSingle();
+        const workspace = data?.workspace;
+        if (!res.ok || !workspace || workspace.onboarding_state === 'starter') {
+          router.replace(`/${locale}/onboarding`);
+          return;
+        }
 
-  if (!defaultWorkspace || defaultWorkspace.onboarding_state === 'starter') {
-    redirect(`/${locale}/onboarding`);
-  }
+        router.replace(`/${locale}/workspaces/${workspace.id}`);
+      } catch {
+        if (!cancelled) {
+          router.replace(`/${locale}/onboarding`);
+        }
+      }
+    };
 
-  redirect(`/${locale}/workspaces/${defaultWorkspace.id}`);
+    routeUser();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, locale]);
+
+  return null;
 }

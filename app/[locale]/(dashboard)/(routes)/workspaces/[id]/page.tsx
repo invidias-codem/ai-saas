@@ -3,9 +3,16 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useLocale } from "next-intl";
-import { Brain, MessageSquare, FileText, Workflow, Layers3 } from "lucide-react";
+import { Brain, MessageSquare, FileText, Workflow, Layers3, Cpu, Search, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+
+interface OperatingProfile {
+  id: string;
+  mode: 'copilot' | 'research' | 'agentic' | 'drafting' | 'memory_native' | 'custom';
+  name: string;
+  description?: string | null;
+}
 
 interface Workspace {
   id: string;
@@ -15,6 +22,38 @@ interface Workspace {
   kind: string;
   is_default: boolean;
   onboarding_state: string;
+  default_operating_profile?: OperatingProfile | null;
+}
+
+function modeLabel(mode?: string) {
+  switch (mode) {
+    case 'research': return 'Research Analyst';
+    case 'agentic': return 'Agentic Operator';
+    case 'drafting': return 'Drafting Partner';
+    case 'memory_native': return 'Memory-Native Assistant';
+    case 'copilot': return 'Fast Copilot';
+    default: return 'Custom Profile';
+  }
+}
+
+function modeIcon(mode?: string) {
+  switch (mode) {
+    case 'research': return Search;
+    case 'agentic': return Zap;
+    case 'memory_native': return Brain;
+    default: return Cpu;
+  }
+}
+
+function modeSummary(mode?: string) {
+  switch (mode) {
+    case 'research': return 'Deeper retrieval, grounded outputs, and stronger source awareness.';
+    case 'agentic': return 'Structured tasks, tool use, workflow bias, and more review before action.';
+    case 'drafting': return 'Artifact-heavy output generation for plans, docs, and reusable drafts.';
+    case 'memory_native': return 'Stronger continuity, remembered context, and preference-aware assistance.';
+    case 'copilot': return 'Balanced speed, cost, and memory with lighter tool use.';
+    default: return 'A configurable operating profile for this workspace.';
+  }
 }
 
 export default function WorkspaceHomePage() {
@@ -37,6 +76,8 @@ export default function WorkspaceHomePage() {
     if (workspaceId) load();
   }, [workspaceId]);
 
+  const ModeIcon = modeIcon(workspace?.default_operating_profile?.mode);
+
   return (
     <div className="min-h-screen px-4 md:px-10 lg:px-16 py-8 space-y-8">
       <div className="space-y-3">
@@ -49,6 +90,21 @@ export default function WorkspaceHomePage() {
           {workspace?.description || 'This workspace will become the home for shared memory, prepared context, conversations, and durable outputs.'}
         </p>
       </div>
+
+      <Card className="p-6 border-sky-500/20 bg-sky-500/5">
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20">
+            <ModeIcon className="w-6 h-6 text-sky-600 dark:text-sky-300" />
+          </div>
+          <div className="space-y-2">
+            <div className="text-sm uppercase tracking-wide text-sky-700 dark:text-sky-300 font-medium">Operating mode</div>
+            <h2 className="text-xl font-semibold">{modeLabel(workspace?.default_operating_profile?.mode)}</h2>
+            <p className="text-sm text-muted-foreground max-w-2xl">
+              {workspace?.default_operating_profile?.description || modeSummary(workspace?.default_operating_profile?.mode)}
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <Link href={`/${locale}/workspaces/${workspaceId}/conversation`}>
@@ -91,7 +147,7 @@ export default function WorkspaceHomePage() {
       <Card className="p-6 space-y-4">
         <h3 className="text-lg font-semibold">Why this matters</h3>
         <p className="text-sm text-muted-foreground max-w-3xl">
-          Instead of dropping you into a generic AI tool grid, this workspace is the new container that connects memory, conversation, context, and outputs. It is the first step toward making the app match the landing-page promise.
+          Instead of dropping you into a generic AI tool grid, this workspace now carries both persistent context and a behavior profile. That means the system can shape retrieval, cost, tool use, and output style around the work you’re doing here.
         </p>
         <Link href={`/${locale}/workspaces/${workspaceId}/conversation`}>
           <Button className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:opacity-90">
