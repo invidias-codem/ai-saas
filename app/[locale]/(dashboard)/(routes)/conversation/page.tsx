@@ -1,24 +1,41 @@
-import { redirect } from 'next/navigation';
+"use client";
 
-async function getDefaultWorkspaceId(): Promise<string | null> {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3000';
-    const res = await fetch(`${baseUrl}/api/workspaces/default`, {
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.workspace?.id ?? null;
-  } catch {
-    return null;
-  }
-}
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useLocale } from 'next-intl';
 
-export default async function ConversationIndexPage() {
-  const workspaceId = await getDefaultWorkspaceId();
-  if (workspaceId) {
-    redirect(`/workspaces/${workspaceId}/conversation`);
-  }
-  redirect('/conversation/new');
+export default function ConversationIndexPage() {
+  const router = useRouter();
+  const locale = useLocale();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const routeUser = async () => {
+      try {
+        const res = await fetch('/api/workspaces/default', { cache: 'no-store' });
+        const data = await res.json();
+        if (cancelled) return;
+
+        const workspace = data?.workspace;
+        if (!res.ok || !workspace) {
+          router.replace(`/${locale}/conversation/new`);
+          return;
+        }
+
+        router.replace(`/${locale}/workspaces/${workspace.id}/conversation`);
+      } catch {
+        if (!cancelled) {
+          router.replace(`/${locale}/conversation/new`);
+        }
+      }
+    };
+
+    routeUser();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, locale]);
+
+  return null;
 }
