@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
-import { ensureDefaultOperatingProfile } from '@/app/api/operating-profiles/route';
+import { ensureDefaultOperatingProfile } from '@/lib/workspaces/operatingProfiles';
 
 export const dynamic = 'force-dynamic';
 
