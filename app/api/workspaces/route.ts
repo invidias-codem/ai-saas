@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { ensureDefaultOperatingProfile } from '@/lib/workspaces/operatingProfiles';
+import { attachOperatingProfiles } from '@/lib/workspaces/query';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +31,7 @@ async function ensureDefaultWorkspace(userId: string) {
 
   const { data: existing, error: existingError } = await supabaseAdmin
     .from('workspaces')
-    .select('*, default_operating_profile:operating_profiles(*)')
+    .select('*')
     .eq('user_id', userId)
     .eq('is_default', true)
     .maybeSingle();
@@ -54,7 +55,7 @@ async function ensureDefaultWorkspace(userId: string) {
       onboarding_state: 'starter',
       default_operating_profile_id: defaultProfile.id,
     })
-    .select('*, default_operating_profile:operating_profiles(*)')
+    .select('*')
     .single();
 
   if (createError) throw createError;
@@ -85,14 +86,16 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabaseAdmin
       .from('workspaces')
-      .select('*, default_operating_profile:operating_profiles(*)')
+      .select('*')
       .eq('user_id', user.userId)
       .order('is_default', { ascending: false })
       .order('updated_at', { ascending: false });
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true, workspaces: data || [] });
+    const workspaces = await attachOperatingProfiles(data || []);
+
+    return NextResponse.json({ success: true, workspaces });
   } catch (error) {
     const authResponse = handleAuthError(error);
     if (authResponse) return authResponse;
@@ -151,7 +154,7 @@ export async function POST(req: Request) {
         onboarding_state: 'starter',
         default_operating_profile_id: defaultOperatingProfileId || fallbackProfile.id,
       })
-      .select('*, default_operating_profile:operating_profiles(*)')
+      .select('*')
       .single();
 
     if (error) throw error;
@@ -161,7 +164,9 @@ export async function POST(req: Request) {
       last_open_tab: 'overview',
     });
 
-    return NextResponse.json({ success: true, workspace: data });
+    const [workspace] = await attachOperatingProfiles([data]);
+
+    return NextResponse.json({ success: true, workspace });
   } catch (error) {
     const authResponse = handleAuthError(error);
     if (authResponse) return authResponse;

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { ensureDefaultOperatingProfile } from '@/lib/workspaces/operatingProfiles';
+import { attachOperatingProfiles } from '@/lib/workspaces/query';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,7 @@ export async function GET(req: Request) {
 
     let { data, error } = await supabaseAdmin
       .from('workspaces')
-      .select('*, default_operating_profile:operating_profiles(*)')
+      .select('*')
       .eq('user_id', user.userId)
       .eq('is_default', true)
       .maybeSingle();
@@ -44,7 +45,7 @@ export async function GET(req: Request) {
           onboarding_state: 'starter',
           default_operating_profile_id: defaultProfile.id,
         })
-        .select('*, default_operating_profile:operating_profiles(*)')
+        .select('*')
         .single();
 
       if (createError) throw createError;
@@ -56,7 +57,9 @@ export async function GET(req: Request) {
       });
     }
 
-    return NextResponse.json({ success: true, workspace: data });
+    const [workspace] = await attachOperatingProfiles([data]);
+
+    return NextResponse.json({ success: true, workspace });
   } catch (error) {
     const authResponse = handleAuthError(error);
     if (authResponse) return authResponse;
