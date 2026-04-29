@@ -63,15 +63,25 @@ export function clearActiveConversation(): void {
  * Create a new conversation via API
  * Returns the new conversation ID or null on failure
  */
-export async function createNewConversation(title?: string): Promise<ActiveConversation | null> {
+export async function createNewConversation(options?: {
+    title?: string;
+    workspaceId?: string;
+    operatingProfileId?: string;
+}): Promise<ActiveConversation | null> {
     try {
+        const payload = {
+            ...(options?.title ? { title: options.title } : {}),
+            ...(options?.workspaceId ? { workspaceId: options.workspaceId } : {}),
+            ...(options?.operatingProfileId ? { operatingProfileId: options.operatingProfileId } : {}),
+        };
+
         const response = await fetch('/api/conversations/new', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             credentials: 'include', // Include cookies for Clerk auth
-            body: title ? JSON.stringify({ title }) : undefined,
+            body: Object.keys(payload).length ? JSON.stringify(payload) : undefined,
         });
 
         if (!response.ok) {
@@ -131,6 +141,7 @@ export async function deleteConversation(conversationId: string): Promise<boolea
 export async function fetchConversations(): Promise<{
     conversations: Array<{
         id: string;
+        workspaceId?: string | null;
         title: string;
         messageCount: number;
         createdAt: number;
