@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next-intl";
+import { useParams } from "next/navigation";
 import { Brain, Pin, Sparkles } from "lucide-react";
 import { Card } from "@/components/ui/card";
 

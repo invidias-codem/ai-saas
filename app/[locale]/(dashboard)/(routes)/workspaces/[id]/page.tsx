@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useLocale } from "next-intl";
+import { useParams } from "next/navigation";
+import { useLocale } from "next-intl";
 import { Brain, MessageSquare, FileText, Workflow, Layers3, Cpu, Search, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
