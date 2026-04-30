@@ -22,7 +22,7 @@
         "test:coverage": "NODE_OPTIONS=--experimental-vm-modules dotenv-run -r ../.. -- jest --coverage --detectOpenHandles --forceExit"
     },
     "dependencies": {
-        "axios": "^1.13.5"
+        "axios": "^1.15.0"
     },
     "devDependencies": {
         "typescript": "^5.7.2",
