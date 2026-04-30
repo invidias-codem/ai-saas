@@ -732,7 +732,7 @@ function ConversationPage({
               </div>
               <p className="text-sm text-muted-foreground">
                 {conversationContext.operatingProfileName
-                  ? `This conversation is running inside your workspace with the ${modeLabel(conversationContext.operatingProfileMode)} profile.`
+                  ? `This conversation is running inside your workspace with the ${modeLabel(conversationContext.operatingProfileMode)} profile. Per-task prompting can be shaped here instead of forcing a global chat mode.`
                   : 'This conversation is attached to your active workspace context.'}
               </p>
             </div>
