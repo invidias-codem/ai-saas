@@ -7,6 +7,7 @@ import {
   Code,
   Settings,
   Zap,
+  FolderKanban,
 } from "lucide-react";
 
 export const routes = [
@@ -15,6 +16,12 @@ export const routes = [
     icon: LayoutDashboard,
     href: "/dashboard",
     color: "text-sky-500",
+  },
+  {
+    label: "Workspaces",
+    icon: FolderKanban,
+    href: "/workspaces",
+    color: "text-fuchsia-500",
   },
   {
     label: "Conversation",

@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { MessageSquare, Trash2, Plus, Loader2, Calendar, MessageCircle } from "lucide-react";
+import { MessageSquare, Trash2, Plus, Loader2, MessageCircle, Layers3 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
     fetchConversations,
     deleteConversation,
-    createNewConversation,
     setActiveConversation,
-    getActiveConversationId,
 } from "@/lib/conversationManager";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
 import {
@@ -28,12 +26,19 @@ import {
 
 interface Conversation {
     id: string;
+    workspaceId?: string | null;
     title: string;
     messageCount: number;
     createdAt: number;
     lastUpdated: number;
     isArchived: boolean;
     preview?: string;
+}
+
+function extractWorkspaceId(pathname: string | null): string | null {
+    if (!pathname) return null;
+    const match = pathname.match(/\/workspaces\/([^/]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
 }
 
 export function ConversationHistory() {
@@ -45,9 +50,11 @@ export function ConversationHistory() {
     const [creatingNew, setCreatingNew] = useState(false);
     const [activeId, setActiveId] = useState<string | null>(null);
 
+    const activeWorkspaceId = useMemo(() => extractWorkspaceId(pathname), [pathname]);
+    const isWorkspaceScopedView = Boolean(activeWorkspaceId);
+
     useEffect(() => {
         loadConversations();
-        // Extract conversation ID from URL
         const match = pathname?.match(/\/conversation\/([^/]+)/);
         setActiveId(match ? match[1] : null);
     }, [pathname]);
@@ -66,16 +73,24 @@ export function ConversationHistory() {
         }
     };
 
+    const visibleConversations = useMemo(() => {
+        if (!activeWorkspaceId) return conversations;
+        return conversations.filter((conv) => conv.workspaceId === activeWorkspaceId);
+    }, [conversations, activeWorkspaceId]);
+
     const handleDelete = async (id: string) => {
         setDeletingId(id);
         try {
             const success = await deleteConversation(id);
             if (success) {
                 setConversations((prev) => prev.filter((c) => c.id !== id));
-                // If we're deleting the active conversation, redirect to new conversation
                 if (id === activeId) {
                     clearSessionMemoryStorage();
-                    router.push('/conversation/new');
+                    if (activeWorkspaceId) {
+                        router.push(`/workspaces/${activeWorkspaceId}/conversation`);
+                    } else {
+                        router.push('/conversation/new');
+                    }
                 }
             }
         } catch (error) {
@@ -89,8 +104,11 @@ export function ConversationHistory() {
         setCreatingNew(true);
         try {
             clearSessionMemoryStorage();
-            // Navigate to the new conversation route which will create and redirect
-            router.push('/conversation/new');
+            if (activeWorkspaceId) {
+                router.push(`/workspaces/${activeWorkspaceId}/conversation`);
+            } else {
+                router.push('/conversation/new');
+            }
         } catch (error) {
             console.error("Error creating conversation:", error);
         } finally {
@@ -105,7 +123,6 @@ export function ConversationHistory() {
             createdAt: conv.createdAt,
         });
         setActiveId(conv.id);
-        // Navigate to the specific conversation URL
         router.push(`/conversation/${conv.id}`);
     };
 
@@ -128,9 +145,19 @@ export function ConversationHistory() {
     return (
         <Card className="p-4 border-none bg-transparent shadow-none text-white">
             <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-sky-500" />
-                    <h3 className="text-sm font-semibold text-gray-200">History</h3>
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-sky-500" />
+                        <h3 className="text-sm font-semibold text-gray-200">
+                            {isWorkspaceScopedView ? 'Workspace History' : 'History'}
+                        </h3>
+                    </div>
+                    {isWorkspaceScopedView && (
+                        <div className="inline-flex items-center gap-1 text-[10px] text-sky-300/80">
+                            <Layers3 className="w-3 h-3" />
+                            Showing chats for this workspace
+                        </div>
+                    )}
                 </div>
                 <Button
                     onClick={handleNewConversation}
@@ -156,14 +183,16 @@ export function ConversationHistory() {
                 <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                 </div>
-            ) : conversations.length === 0 ? (
+            ) : visibleConversations.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                     <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">No conversations yet.</p>
+                    <p className="text-sm">
+                        {isWorkspaceScopedView ? 'No workspace conversations yet.' : 'No conversations yet.'}
+                    </p>
                 </div>
             ) : (
                 <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                    {conversations.map((conv) => (
+                    {visibleConversations.map((conv) => (
                         <div
                             key={conv.id}
                             className={cn(

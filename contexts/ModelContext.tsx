@@ -1,15 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
-
+import React, { createContext, useContext } from "react";
 import { AgentMode } from "@/lib/llm/types";
-
-// Valid agent modes - keep in sync with AgentMode type in lib/llm/types.ts
-const VALID_AGENT_MODES: AgentMode[] = ['fast', 'quality', 'agentic', 'reasoning'];
-
-function isValidAgentMode(value: string): value is AgentMode {
-    return VALID_AGENT_MODES.includes(value as AgentMode);
-}
 
 interface ModelContextType {
     agentMode: AgentMode;
@@ -19,19 +11,12 @@ interface ModelContextType {
 const ModelContext = createContext<ModelContextType | undefined>(undefined);
 
 export function ModelProvider({ children }: { children: React.ReactNode }) {
-    const [agentMode, setAgentModeState] = useState<AgentMode>("fast");
+    const agentMode: AgentMode = "quality";
 
-    useEffect(() => {
-        // Load from localStorage on mount
-        const saved = localStorage.getItem("agentMode");
-        if (saved && isValidAgentMode(saved)) {
-            setAgentModeState(saved);
-        }
-    }, []);
-
-    const setAgentMode = (mode: AgentMode) => {
-        setAgentModeState(mode);
-        localStorage.setItem("agentMode", mode);
+    const setAgentMode = (_mode: AgentMode) => {
+        // Intentionally no-op for now.
+        // Pre-workspace chat uses one general mode; richer per-task/runtime shaping
+        // should come from workspace operating profiles and UCOL routing instead.
     };
 
     return (

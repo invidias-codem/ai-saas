@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BlueskyDiscoveryEngine } from '@/lib/agents/bluesky/BlueskyDiscoveryEngine';
-import { BlueskyResponder } from '@/lib/agents/bluesky/BlueskyResponder';
 import { BlueskySafetyPolicy } from '@/lib/agents/bluesky/BlueskySafetyPolicy';
 
 export const maxDuration = 300;
+const MAX_EXTERNAL_LIKES_PER_RUN = 2;
 
 export async function GET(req: NextRequest) {
   const secret = process.env.BLUESKY_POST_SECRET ?? process.env.CRON_SECRET;
@@ -17,44 +17,84 @@ export async function GET(req: NextRequest) {
 
   try {
     const engine = new BlueskyDiscoveryEngine();
-    const responder = new BlueskyResponder();
     const safety = new BlueskySafetyPolicy();
     const candidates = await engine.discover();
 
     let liked = 0;
-    let replied = 0;
-    const actions: any[] = [];
+    let skipped = 0;
+    const actions: Array<Record<string, unknown>> = [];
 
-    for (const candidate of candidates.slice(0, 5)) {
-      const decision = engine.decide(candidate);
-      if (decision.action === 'like') {
-        const likeBudget = await safety.canLike();
-        const textCheck = safety.shouldAvoidText(candidate.text);
-        if (!likeBudget.allowed || textCheck.blocked) {
-          actions.push({ uri: candidate.uri, action: 'skip', reason: !likeBudget.allowed ? likeBudget.reason : textCheck.reason, author: candidate.authorHandle });
-          continue;
-        }
-        await engine.like(candidate.uri, candidate.cid);
-        await safety.logAction({ route: 'discovery-like', authorHandle: candidate.authorHandle, authorDid: candidate.authorDid, mentionUri: candidate.uri, mentionText: candidate.text });
-        liked++;
-        actions.push({ uri: candidate.uri, action: 'like', score: candidate.score, author: candidate.authorHandle });
-      } else if (decision.action === 'reply') {
-        const result = await responder.respond({
+    for (const candidate of candidates) {
+      if (liked >= MAX_EXTERNAL_LIKES_PER_RUN) {
+        actions.push({
           uri: candidate.uri,
-          cid: candidate.cid,
-          authorHandle: candidate.authorHandle,
-          authorDid: candidate.authorDid,
-          text: candidate.text,
-          indexedAt: new Date().toISOString(),
-        }, 'discovery');
-        if (result.responded) replied++;
-        actions.push({ uri: candidate.uri, action: 'reply', score: candidate.score, author: candidate.authorHandle, responded: result.responded, error: result.error });
+          action: 'skip',
+          author: candidate.authorHandle,
+          reason: 'run_like_cap_reached',
+          score: candidate.score,
+        });
+        skipped++;
+        continue;
       }
+
+      const decision = engine.decide(candidate);
+      if (decision.action !== 'like') {
+        actions.push({
+          uri: candidate.uri,
+          action: 'skip',
+          author: candidate.authorHandle,
+          reason: decision.reason,
+          score: candidate.score,
+        });
+        skipped++;
+        continue;
+      }
+
+      const likeBudget = await safety.canLike();
+      const textCheck = safety.shouldAvoidText(candidate.text);
+      if (!likeBudget.allowed || textCheck.blocked) {
+        actions.push({
+          uri: candidate.uri,
+          action: 'skip',
+          author: candidate.authorHandle,
+          reason: !likeBudget.allowed ? likeBudget.reason : textCheck.reason,
+          score: candidate.score,
+        });
+        skipped++;
+        continue;
+      }
+
+      await engine.like(candidate.uri, candidate.cid);
+      await safety.logAction({
+        route: 'discovery-like',
+        authorHandle: candidate.authorHandle,
+        authorDid: candidate.authorDid,
+        mentionUri: candidate.uri,
+        mentionText: candidate.text,
+        responseText: decision.reason,
+      });
+
+      liked++;
+      actions.push({
+        uri: candidate.uri,
+        action: 'like',
+        author: candidate.authorHandle,
+        score: candidate.score,
+        reason: decision.reason,
+      });
     }
 
-    return NextResponse.json({ success: true, discovered: candidates.length, liked, replied, actions });
-  } catch (error: any) {
-    console.error('[BlueskyDiscoverCron] Error:', error);
-    return NextResponse.json({ success: false, error: error?.message || 'Unknown error' }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      discovered: candidates.length,
+      liked,
+      skipped,
+      actions,
+      mode: 'external_like_only_strict_gating',
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[BlueskyDiscoverCron] Error:', message);
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

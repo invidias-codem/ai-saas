@@ -115,6 +115,7 @@
   },
   "Sidebar": {
     "dashboard": "Dashboard",
+    "workspaces": "Workspaces",
     "conversation": "Conversation",
     "imageGeneration": "Image Generation",
     "videoGeneration": "Video Generation",

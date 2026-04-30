@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 // but keeping the import if you use it elsewhere.
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Paperclip, AlertCircle, SendHorizontal, X, Plus, ArrowDown, Github, Code, Sparkles } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Plus, ArrowDown, Github, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain } from "lucide-react";
 import { GitHubConsentModal } from "@/components/github-consent-modal";
 import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
@@ -65,6 +65,14 @@ interface Message {
   role: "user" | "bot";
   timestamp: Date;
   sources?: Source[];
+}
+
+interface ConversationContext {
+  workspaceId: string | null;
+  workspaceName: string | null;
+  operatingProfileId: string | null;
+  operatingProfileName: string | null;
+  operatingProfileMode: string | null;
 }
 
 // Selected file structure
@@ -161,16 +169,58 @@ const RenderTableAsChart = ({ node, ...props }: any) => {
   );
 };
 
-function ConversationPageGlobalWrapper({ conversationId, initialMessages = [] }: { conversationId: string; initialMessages?: any[] }) {
+function modeLabel(mode?: string | null) {
+  switch (mode) {
+    case 'research': return 'Research Analyst';
+    case 'agentic': return 'Agentic Operator';
+    case 'drafting': return 'Drafting Partner';
+    case 'memory_native': return 'Memory-Native Assistant';
+    case 'copilot': return 'Fast Copilot';
+    default: return 'Custom Profile';
+  }
+}
+
+function modeIcon(mode?: string | null) {
+  switch (mode) {
+    case 'research': return Search;
+    case 'agentic': return Zap;
+    case 'drafting': return FileText;
+    case 'memory_native': return Brain;
+    case 'copilot': return Cpu;
+    default: return Cpu;
+  }
+}
+
+function ConversationPageGlobalWrapper({
+  conversationId,
+  initialMessages = [],
+  conversationContext,
+}: {
+  conversationId: string;
+  initialMessages?: any[];
+  conversationContext: ConversationContext;
+}) {
   return (
     <ModelProvider>
-      <ConversationPage conversationId={conversationId} initialMessages={initialMessages} />
+      <ConversationPage
+        conversationId={conversationId}
+        initialMessages={initialMessages}
+        conversationContext={conversationContext}
+      />
     </ModelProvider>
   )
 }
 
 // Internal Page Component
-function ConversationPage({ conversationId, initialMessages }: { conversationId: string; initialMessages: any[] }) {
+function ConversationPage({
+  conversationId,
+  initialMessages,
+  conversationContext,
+}: {
+  conversationId: string;
+  initialMessages: any[];
+  conversationContext: ConversationContext;
+}) {
   const t = useTranslations("Conversation");
 
   const convertedInitialMessages = React.useMemo(() => initialMessages.map(msg => ({
@@ -182,6 +232,7 @@ function ConversationPage({ conversationId, initialMessages }: { conversationId:
   })), [initialMessages]);
   const { messages: supabaseMessages } = useSupabaseChat(conversationId, convertedInitialMessages);
   const { agentMode } = useModel(); // Use Agentic Mode Context
+  const ProfileIcon = modeIcon(conversationContext.operatingProfileMode);
   const [messages, setMessages] = useState<Message[]>(() => 
     initialMessages.map(msg => ({
       ...msg,
@@ -662,6 +713,30 @@ function ConversationPage({ conversationId, initialMessages }: { conversationId:
       {/* Main Chat Area - Flex grow with native scroll for better mobile feel */}
       <div ref={chatContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden w-full scroll-smooth">
         <div className="max-w-3xl mx-auto w-full px-4 py-6 md:px-6 min-h-0">
+
+          {(conversationContext.workspaceName || conversationContext.operatingProfileName) && (
+            <div className="mb-6 rounded-2xl border border-sky-500/15 bg-sky-500/5 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-medium mb-2">
+                {conversationContext.workspaceName && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-violet-700 dark:text-violet-300">
+                    <Layers3 className="h-3.5 w-3.5" />
+                    {conversationContext.workspaceName}
+                  </span>
+                )}
+                {conversationContext.operatingProfileName && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-sky-700 dark:text-sky-300">
+                    <ProfileIcon className="h-3.5 w-3.5" />
+                    {conversationContext.operatingProfileName}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {conversationContext.operatingProfileName
+                  ? `This conversation is running inside your workspace with the ${modeLabel(conversationContext.operatingProfileMode)} profile. Per-task prompting can be shaped here instead of forcing a global chat mode.`
+                  : 'This conversation is attached to your active workspace context.'}
+              </p>
+            </div>
+          )}
 
           {/* Greeting */}
           {showGreeting && (
