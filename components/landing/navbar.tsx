@@ -69,12 +69,10 @@ export const LandingNavbar = () => {
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
 
-    // Close mobile menu on route change
     useEffect(() => {
         setIsOpen(false);
     }, [pathname]);
 
-    // Animation variants
     const menuVariants: Variants = {
         closed: {
             opacity: 0,
@@ -126,17 +124,15 @@ export const LandingNavbar = () => {
         );
     };
 
-    // Theme toggle button — Sun/Moon with smooth swap
     const ThemeToggle = ({ className }: { className?: string }) => (
         <button
             onClick={toggleTheme}
             aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
             className={cn(
-                "relative w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300",
-                "border",
+                "relative w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 border",
                 isDark
                     ? "border-white/10 bg-white/5 hover:bg-white/15 text-gray-300 hover:text-white"
-                    : "border-slate-200 bg-white/70 hover:bg-white shadow-sm text-slate-500 hover:text-slate-800",
+                    : "border-amber-200/80 bg-white/80 hover:bg-amber-50 text-amber-700 hover:text-amber-900 shadow-sm",
                 className
             )}
         >
@@ -166,7 +162,6 @@ export const LandingNavbar = () => {
         </button>
     );
 
-    // Check if current route should hide navbar on desktop
     const isHiddenOnDesktop = ["/blog", "/support", "/slack", "/privacy"].some(path => pathname.includes(path));
 
     return (
@@ -175,13 +170,10 @@ export const LandingNavbar = () => {
                 className={cn(
                     "fixed md:absolute top-0 left-0 right-0 z-50 transition-all duration-300 border-b",
                     isHiddenOnDesktop && "md:hidden",
-                    scrolled || isOpen
-                        ? "bg-white/90 dark:bg-[#0f1117]/90 backdrop-blur-xl border-slate-200/80 dark:border-white/10 shadow-sm dark:shadow-none"
-                        : "bg-white/60 dark:bg-transparent backdrop-blur-sm border-slate-100/80 dark:border-transparent"
+                    scrolled || isOpen ? "landing-nav-shell" : "landing-nav-shell-top"
                 )}
             >
                 <div className="max-w-7xl mx-auto px-4 md:px-10 flex justify-between items-center h-16">
-                    {/* Logo */}
                     <Link href="/" className="flex items-center gap-3 z-50 relative group">
                         <div className="relative w-9 h-9 flex-shrink-0 transition-transform group-hover:scale-110 duration-300">
                             <Image
@@ -191,19 +183,18 @@ export const LandingNavbar = () => {
                                 className="object-cover"
                             />
                         </div>
-                        <span className="text-xl font-bold text-slate-800 dark:text-white tracking-tight font-heading leading-none group-hover:text-violet-600 dark:group-hover:text-purple-400 transition-colors">
+                        <span className="landing-text-primary text-xl font-bold tracking-tight font-heading leading-none group-hover:text-amber-700 dark:group-hover:text-purple-400 transition-colors">
                             Genie AI
                         </span>
                     </Link>
 
-                    {/* Desktop Navigation */}
                     <nav className="hidden md:flex items-center gap-8">
-                        <div className="flex items-center gap-6 text-sm font-medium text-slate-500 dark:text-gray-300">
+                        <div className="flex items-center gap-6 text-sm font-medium">
                             {navLinks.map((link) => (
                                 <Link
                                     key={link.href}
                                     href={link.href}
-                                    className="hover:text-slate-900 dark:hover:text-white transition-colors"
+                                    className="landing-nav-link transition-colors"
                                 >
                                     {link.label}
                                 </Link>
@@ -214,29 +205,27 @@ export const LandingNavbar = () => {
                             <Button
                                 onClick={() => setIsPricingOpen(true)}
                                 variant="ghost"
-                                className="text-slate-500 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-full"
+                                className="landing-nav-ghost rounded-full"
                             >
                                 Pricing
                             </Button>
                             <Link href="/dashboard">
                                 <Button
                                     variant="ghost"
-                                    className="text-slate-700 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-full"
+                                    className="landing-nav-ghost rounded-full"
                                 >
                                     {tHero("login")}
                                 </Button>
                             </Link>
                             <Link href="/dashboard">
-                                <Button className="bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-white dark:to-white text-white dark:text-black hover:opacity-90 dark:hover:bg-gray-200 rounded-full font-semibold shadow-lg shadow-violet-500/20 dark:shadow-white/10 transition-all hover:scale-105">
+                                <Button className="landing-cta-primary rounded-full font-semibold shadow-lg dark:shadow-white/10 transition-all hover:scale-105">
                                     {tHero("cta")}
                                 </Button>
                             </Link>
-                            {/* Theme Toggle */}
                             {mounted && <ThemeToggle />}
                         </div>
                     </nav>
 
-                    {/* Mobile: Theme Toggle + Hamburger */}
                     <div className="md:hidden flex items-center gap-2 z-50">
                         {mounted && <ThemeToggle />}
                         <button
@@ -246,22 +235,21 @@ export const LandingNavbar = () => {
                         >
                             <motion.span
                                 animate={isOpen ? { rotate: 45, y: 7 } : { rotate: 0, y: 0 }}
-                                className="w-8 h-[3px] rounded-full bg-gradient-to-r from-indigo-500 to-purple-500"
+                                className="w-8 h-[3px] rounded-full bg-gradient-to-r from-amber-500 to-orange-400 dark:from-indigo-500 dark:to-purple-500"
                             />
                             <motion.span
                                 animate={isOpen ? { opacity: 0 } : { opacity: 1 }}
-                                className="w-5 h-[3px] bg-slate-600 dark:bg-white rounded-full group-hover:w-8 transition-all duration-300"
+                                className="landing-nav-burger-mid w-5 h-[3px] rounded-full group-hover:w-8 transition-all duration-300"
                             />
                             <motion.span
                                 animate={isOpen ? { rotate: -45, y: -7 } : { rotate: 0, y: 0 }}
-                                className="w-8 h-[3px] rounded-full bg-gradient-to-r from-purple-500 to-indigo-500"
+                                className="w-8 h-[3px] rounded-full bg-gradient-to-r from-orange-400 to-amber-500 dark:from-purple-500 dark:to-indigo-500"
                             />
                         </button>
                     </div>
                 </div>
             </header>
 
-            {/* Mobile Dropdown Menu (Portal) */}
             {mounted && createPortal(
                 <AnimatePresence>
                     {isOpen && (
@@ -271,11 +259,10 @@ export const LandingNavbar = () => {
                             animate="open"
                             exit="closed"
                             variants={menuVariants}
-                            className="fixed inset-0 bg-[#FAF9F7] dark:bg-[#0f1117] z-[40] flex flex-col pt-24 px-6 overflow-hidden"
+                            className="fixed inset-0 landing-bg-main z-[40] flex flex-col pt-24 px-6 overflow-hidden"
                         >
-                            {/* Background Elements */}
-                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(139,92,246,0.08),transparent_70%)] dark:bg-[radial-gradient(circle_at_50%_40%,rgba(76,29,149,0.15),transparent_70%)] pointer-events-none z-0" />
-                            <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-b from-violet-500/5 dark:from-purple-500/5 to-transparent pointer-events-none z-0" />
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(245,158,11,0.10),transparent_70%)] dark:bg-[radial-gradient(circle_at_50%_40%,rgba(76,29,149,0.15),transparent_70%)] pointer-events-none z-0" />
+                            <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-b from-amber-300/10 to-transparent dark:from-purple-500/5 pointer-events-none z-0" />
 
                             {isDark && (
                               <div className="z-10 relative w-full h-full">
@@ -283,7 +270,7 @@ export const LandingNavbar = () => {
                               </div>
                             )}
 
-                            <div className="absolute inset-0 flex flex-col items-center pt-24 w-full max-w-sm mx-auto z-50 pointer-events-auto">
+                            <div className="absolute inset-0 flex w-full max-w-sm flex-col items-center pt-24 mx-auto z-50 pointer-events-auto">
                                 <motion.div
                                     variants={{
                                         closed: {},
@@ -296,7 +283,7 @@ export const LandingNavbar = () => {
                                     }}
                                     initial="closed"
                                     animate="open"
-                                    className="flex flex-col items-center w-full space-y-3"
+                                    className="flex w-full flex-col items-center space-y-3"
                                 >
                                     {navLinks.map((link) => {
                                         const Icon = link.icon;
@@ -311,12 +298,12 @@ export const LandingNavbar = () => {
                                                     }}
                                                     className="group relative block w-full"
                                                 >
-                                                    <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-gradient-to-br dark:from-white/5 dark:to-white/[0.02] backdrop-blur-xl p-4 transition-all duration-300 hover:border-violet-300 dark:hover:border-purple-500/50 hover:bg-violet-50 dark:hover:bg-white/10 hover:shadow-[0_0_20px_-8px_rgba(139,92,246,0.4)] dark:hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.5)] hover:scale-[1.02] active:scale-[0.98]">
-                                                        <div className="absolute inset-0 bg-gradient-to-r from-violet-500/0 via-violet-500/5 to-indigo-500/0 dark:from-purple-500/0 dark:via-purple-500/10 dark:to-pink-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                                    <div className="relative overflow-hidden rounded-2xl border border-amber-100/80 dark:border-white/10 bg-white/85 dark:bg-gradient-to-br dark:from-white/5 dark:to-white/[0.02] backdrop-blur-xl p-4 transition-all duration-300 hover:border-amber-300 dark:hover:border-purple-500/50 hover:bg-amber-50 dark:hover:bg-white/10 hover:shadow-[0_0_20px_-8px_rgba(245,158,11,0.35)] dark:hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.5)] hover:scale-[1.02] active:scale-[0.98]">
+                                                        <div className="absolute inset-0 bg-gradient-to-r from-amber-500/0 via-amber-500/8 to-orange-500/0 dark:from-purple-500/0 dark:via-purple-500/10 dark:to-pink-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
                                                         <div className="relative flex items-center justify-center gap-3">
-                                                            <Icon className="w-6 h-6 text-violet-500 dark:text-purple-400 group-hover:text-indigo-600 dark:group-hover:text-pink-400 transition-colors duration-300" />
-                                                            <span className="text-2xl font-semibold text-slate-700 dark:text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-violet-600 group-hover:to-indigo-600 dark:group-hover:from-purple-400 dark:group-hover:to-pink-400 transition-all duration-300">
+                                                            <Icon className="h-6 w-6 text-amber-600 dark:text-purple-400 group-hover:text-orange-500 dark:group-hover:text-pink-400 transition-colors duration-300" />
+                                                            <span className="text-2xl font-semibold text-[#5C4A38] dark:text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-amber-600 group-hover:to-orange-500 dark:group-hover:from-purple-400 dark:group-hover:to-pink-400 transition-all duration-300">
                                                                 {link.label}
                                                             </span>
                                                         </div>
@@ -329,7 +316,7 @@ export const LandingNavbar = () => {
                                     })}
 
                                     <motion.div variants={itemVariants} className="w-full flex items-center justify-center my-2">
-                                        <div className="h-px bg-gradient-to-r from-transparent via-slate-200 dark:via-white/20 to-transparent w-full" />
+                                        <div className="h-px bg-gradient-to-r from-transparent via-amber-200 dark:via-white/20 to-transparent w-full" />
                                     </motion.div>
 
                                     <motion.div variants={itemVariants} className="w-full">
@@ -340,12 +327,12 @@ export const LandingNavbar = () => {
                                             }}
                                             className="group relative block w-full"
                                         >
-                                            <div className="relative overflow-hidden rounded-2xl border-2 border-violet-300/50 dark:border-purple-500/30 bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-purple-500/10 dark:to-pink-500/10 backdrop-blur-xl p-4 transition-all duration-300 hover:border-violet-500 dark:hover:border-purple-500 hover:shadow-[0_0_30px_-8px_rgba(139,92,246,0.4)] dark:hover:shadow-[0_0_40px_-5px_rgba(168,85,247,0.6)] hover:scale-[1.02] active:scale-[0.98]">
-                                                <div className="absolute inset-0 bg-gradient-to-r from-violet-500/10 via-indigo-500/10 to-violet-500/10 dark:from-purple-500/20 dark:via-pink-500/20 dark:to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                            <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200/80 dark:border-purple-500/30 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-purple-500/10 dark:to-pink-500/10 backdrop-blur-xl p-4 transition-all duration-300 hover:border-amber-400 dark:hover:border-purple-500 hover:shadow-[0_0_30px_-8px_rgba(245,158,11,0.35)] dark:hover:shadow-[0_0_40px_-5px_rgba(168,85,247,0.6)] hover:scale-[1.02] active:scale-[0.98]">
+                                                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 via-yellow-500/10 to-amber-500/10 dark:from-purple-500/20 dark:via-pink-500/20 dark:to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
                                                 <div className="relative flex items-center justify-center gap-3">
-                                                    <StarFilledIcon className="w-6 h-6 text-violet-500 dark:text-purple-400 group-hover:text-indigo-600 dark:group-hover:text-pink-400 transition-colors" />
-                                                    <span className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-purple-400 dark:to-pink-400">
+                                                    <StarFilledIcon className="h-6 w-6 text-amber-600 dark:text-purple-400 group-hover:text-orange-500 dark:group-hover:text-pink-400 transition-colors" />
+                                                    <span className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-amber-700 to-orange-500 dark:from-purple-400 dark:to-pink-400">
                                                         Pricing
                                                     </span>
                                                 </div>
@@ -365,10 +352,10 @@ export const LandingNavbar = () => {
                                             }}
                                             className="group relative block w-full"
                                         >
-                                            <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/80 dark:bg-white/5 backdrop-blur-xl p-4 transition-all duration-300 hover:border-slate-300 dark:hover:border-white/30 hover:bg-slate-50 dark:hover:bg-white/10 hover:shadow-[0_0_20px_-8px_rgba(0,0,0,0.15)] dark:hover:shadow-[0_0_25px_-5px_rgba(255,255,255,0.3)] hover:scale-[1.02] active:scale-[0.98]">
+                                            <div className="relative overflow-hidden rounded-2xl border border-amber-100/80 dark:border-white/10 bg-white/85 dark:bg-white/5 backdrop-blur-xl p-4 transition-all duration-300 hover:border-amber-300 dark:hover:border-white/30 hover:bg-amber-50 dark:hover:bg-white/10 hover:shadow-[0_0_20px_-8px_rgba(245,158,11,0.2)] dark:hover:shadow-[0_0_25px_-5px_rgba(255,255,255,0.3)] hover:scale-[1.02] active:scale-[0.98]">
                                                 <div className="relative flex items-center justify-center gap-3">
-                                                    <EnterIcon className="w-6 h-6 text-slate-400 dark:text-gray-300 group-hover:text-slate-700 dark:group-hover:text-white transition-colors" />
-                                                    <span className="text-2xl font-semibold text-slate-600 dark:text-gray-100 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
+                                                    <EnterIcon className="h-6 w-6 text-amber-500 dark:text-gray-300 group-hover:text-amber-700 dark:group-hover:text-white transition-colors" />
+                                                    <span className="text-2xl font-semibold text-[#5C4A38] dark:text-gray-100 group-hover:text-[#2C241B] dark:group-hover:text-white transition-colors">
                                                         {tHero("login")}
                                                     </span>
                                                 </div>
@@ -385,10 +372,10 @@ export const LandingNavbar = () => {
                                                 router.push("/dashboard");
                                             }}
                                         >
-                                            <Button className="group relative w-full overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white border-0 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 h-14 rounded-2xl text-lg font-bold shadow-2xl shadow-violet-500/30 hover:shadow-violet-500/50">
-                                                <div className="absolute inset-0 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                            <Button className="landing-cta-primary group relative h-14 w-full overflow-hidden rounded-2xl border-0 text-lg font-bold transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-2xl shadow-amber-400/30 dark:shadow-violet-500/30 hover:shadow-amber-400/45 dark:hover:shadow-violet-500/50">
+                                                <div className="absolute inset-0 bg-gradient-to-r from-orange-400 via-yellow-400 to-amber-400 opacity-0 group-hover:opacity-100 transition-opacity duration-500 dark:from-pink-500 dark:via-purple-500 dark:to-indigo-500" />
                                                 <span className="relative flex items-center justify-center gap-2">
-                                                    <RocketIcon className="w-5 h-5" />
+                                                    <RocketIcon className="h-5 w-5" />
                                                     {tHero("cta")}
                                                 </span>
                                                 <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-[2000ms] bg-gradient-to-r from-transparent via-white/30 to-transparent" />
@@ -403,76 +390,82 @@ export const LandingNavbar = () => {
                 document.body
             )}
 
-            {/* Pricing Modal */}
             <AnimatePresence>
                 {isPricingOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
-                        {/* Backdrop */}
+                    <div className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4">
                         <div
                             className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm transition-opacity"
                             onClick={() => setIsPricingOpen(false)}
                         />
 
-                        {/* Modal Content */}
-                        <div className="relative w-full max-w-lg bg-white dark:bg-[#0f1117] border border-slate-200 dark:border-white/10 sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-10 fade-in duration-300">
-                            <div className="p-6 border-b border-slate-100 dark:border-white/10 flex items-center justify-between">
+                        <div className="relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-2xl border border-amber-100/80 bg-white sm:rounded-2xl shadow-2xl dark:border-white/10 dark:bg-[#0f1117]">
+                            <div className="flex items-center justify-between border-b border-amber-100/80 dark:border-white/10 p-6">
                                 <div>
-                                    <h2 className="text-xl font-bold text-slate-800 dark:text-white font-heading">{t('pricing.title')}</h2>
-                                    <p className="text-sm text-slate-500 dark:text-gray-400">{t('pricing.subtitle')}</p>
+                                    <h2 className="text-xl font-bold text-[#2C241B] dark:text-white font-heading">{t('pricing.title')}</h2>
+                                    <p className="text-sm text-[#8A7867] dark:text-gray-400 mt-1">{t('pricing.subtitle')}</p>
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
+                                <button
                                     onClick={() => setIsPricingOpen(false)}
-                                    className="text-slate-400 dark:text-gray-400 hover:text-slate-700 dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-white/10"
+                                    className="w-8 h-8 rounded-full bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/20 transition-colors flex items-center justify-center"
+                                    aria-label="Close pricing modal"
                                 >
-                                    <Cross2Icon className="w-5 h-5" />
-                                </Button>
+                                    <Cross2Icon className="w-4 h-4" />
+                                </button>
                             </div>
 
-                            <div className="p-6 overflow-y-auto space-y-4 custom-scrollbar">
+                            <div className="overflow-y-auto p-6 space-y-4">
                                 {pricingTiers.map((tier, index) => (
                                     <div
-                                        key={index}
+                                        key={tier.name}
                                         className={cn(
-                                            "relative p-4 rounded-xl border cursor-pointer transition-all duration-300",
+                                            "relative rounded-2xl border p-5 transition-all duration-300",
                                             tier.popular
-                                                ? "border-violet-400 dark:border-purple-500 bg-violet-50 dark:bg-purple-500/10 shadow-[0_0_20px_-5px_rgba(139,92,246,0.3)] dark:shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)]"
-                                                : "border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 hover:border-slate-300 dark:hover:border-white/20"
+                                                ? "border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 shadow-lg shadow-amber-500/10 dark:border-purple-500 dark:from-purple-500/10 dark:to-pink-500/10 dark:shadow-purple-500/10"
+                                                : "border-amber-100 bg-[#FFF9EC] dark:border-white/10 dark:bg-white/5"
                                         )}
                                     >
                                         {tier.popular && (
-                                            <div className="absolute -top-3 right-4 px-2 py-0.5 bg-violet-600 text-white text-[10px] font-bold uppercase tracking-wide rounded-full shadow-lg">
+                                            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-400 dark:from-purple-500 dark:to-pink-500 text-[#2C241B] dark:text-white text-xs font-bold">
                                                 Most Popular
                                             </div>
                                         )}
-                                        <div className="flex justify-between items-center mb-2">
-                                            <h3 className="font-semibold text-slate-800 dark:text-white">{tier.name}</h3>
-                                            <div className="text-right">
-                                                <span className="text-lg font-bold text-slate-800 dark:text-white">{tier.price}</span>
-                                                <span className="text-xs text-slate-400 dark:text-gray-400 block">{tier.unit}</span>
+
+                                        <div className="text-center mb-4">
+                                            <h3 className="text-lg font-bold text-[#2C241B] dark:text-white mb-1">{tier.name}</h3>
+                                            <div className="flex items-baseline justify-center gap-1">
+                                                <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-700 to-orange-500 dark:from-purple-400 dark:to-pink-400">
+                                                    {tier.price}
+                                                </span>
+                                                <span className="text-sm text-[#8A7867] dark:text-gray-400">{tier.unit}</span>
                                             </div>
+                                            <p className="text-sm text-[#8A7867] dark:text-gray-400 mt-2">{tier.description}</p>
                                         </div>
-                                        <p className="text-sm text-slate-500 dark:text-gray-400 mb-3">{tier.description}</p>
-                                        <ul className="space-y-2">
-                                            {tier.features.map((feat, i) => (
-                                                <li key={i} className="flex items-center text-xs text-slate-600 dark:text-gray-300">
-                                                    <CheckIcon className="w-3.5 h-3.5 mr-2 text-green-500 dark:text-green-400" />
-                                                    {feat}
+
+                                        <ul className="space-y-2 mb-5">
+                                            {tier.features.map((feature) => (
+                                                <li key={feature} className="flex items-start gap-2 text-sm text-[#5C4A38] dark:text-gray-300">
+                                                    <CheckIcon className="w-4 h-4 text-amber-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                                                    <span>{feature}</span>
                                                 </li>
                                             ))}
                                         </ul>
+
+                                        <Button
+                                            className={cn(
+                                                "w-full rounded-xl font-semibold",
+                                                tier.popular
+                                                    ? "landing-cta-primary"
+                                                    : "landing-cta-secondary"
+                                            )}
+                                        >
+                                            {t('pricing.startCreating')}
+                                        </Button>
                                     </div>
                                 ))}
                             </div>
 
-                            <div className="p-6 border-t border-slate-100 dark:border-white/10 bg-slate-50/50 dark:bg-black/20 sm:rounded-b-2xl">
-                                <Link href="/dashboard" className="w-full">
-                                    <Button className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:opacity-90 text-white font-semibold py-6 rounded-xl text-lg shadow-lg shadow-violet-500/20">
-                                        {t('pricing.startCreating')}
-                                    </Button>
-                                </Link>
-                                <p className="text-center text-xs text-slate-400 dark:text-gray-500 mt-3">
+                            <div className="border-t border-amber-100/80 dark:border-white/10 px-6 py-4">
+                                <p className="text-xs text-[#8A7867] dark:text-gray-500 text-center">
                                     {t('pricing.disclaimer')}
                                 </p>
                             </div>
