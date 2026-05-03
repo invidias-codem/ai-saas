@@ -49,6 +49,14 @@ const flowNodes = [
   { id: "response", x: 660, y: 50, label: "Response", color: "#10b981" },
 ];
 
+const mobileFlowNodes = [
+  { id: "query", label: "Query", color: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-400/30" },
+  { id: "memory", label: "Memory", color: "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-500/15 dark:text-yellow-300 dark:border-yellow-400/30" },
+  { id: "router", label: "Router", color: "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-400/30" },
+  { id: "inference", label: "Inference", color: "bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/30" },
+  { id: "response", label: "Response", color: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30" },
+];
+
 const connectors = [
   { x1: 70, y1: 50, x2: 145, y2: 50 },
   { x1: 215, y1: 50, x2: 305, y2: 50 },
@@ -76,8 +84,8 @@ const TravelingDot = () => {
   );
 };
 
-const FlowDiagram = () => (
-  <div className="w-full overflow-x-auto">
+const DesktopFlowDiagram = () => (
+  <div className="hidden md:block w-full overflow-x-auto">
     <svg
       viewBox={`0 0 ${FLOW_W} ${FLOW_H}`}
       className="mx-auto h-24 w-full max-w-3xl"
@@ -152,6 +160,33 @@ const FlowDiagram = () => (
   </div>
 );
 
+const MobileFlowDiagram = () => (
+  <div className="md:hidden mx-auto max-w-sm">
+    <div className="flex flex-col items-center gap-3">
+      {mobileFlowNodes.map((node, index) => (
+        <motion.div
+          key={node.id}
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.15 + index * 0.08, duration: 0.35 }}
+          className="flex w-full flex-col items-center"
+        >
+          <div className={`w-full rounded-2xl border px-4 py-3 text-center text-sm font-semibold shadow-sm ${node.color}`}>
+            {node.label}
+          </div>
+          {index < mobileFlowNodes.length - 1 && (
+            <div className="flex h-8 flex-col items-center justify-center">
+              <div className="h-5 w-px bg-gradient-to-b from-amber-300 to-orange-400 dark:from-violet-400 dark:to-indigo-400" />
+              <div className="h-2 w-2 rotate-45 border-r border-b border-orange-400 dark:border-indigo-400" />
+            </div>
+          )}
+        </motion.div>
+      ))}
+    </div>
+  </div>
+);
+
 export const UCOLSection = () => {
   const t = useTranslations("Landing.ucol");
 
@@ -215,13 +250,14 @@ export const UCOLSection = () => {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="landing-card relative rounded-2xl border p-8"
+          className="landing-card relative rounded-2xl border p-6 md:p-8"
         >
           <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-amber-300/20 to-transparent dark:from-violet-400/10 pointer-events-none" />
-          <p className="landing-text-muted mb-8 text-center text-sm font-medium uppercase tracking-widest">
+          <p className="landing-text-muted mb-6 md:mb-8 text-center text-sm font-medium uppercase tracking-widest">
             {t("flowLabel")}
           </p>
-          <FlowDiagram />
+          <MobileFlowDiagram />
+          <DesktopFlowDiagram />
         </motion.div>
       </div>
     </section>
