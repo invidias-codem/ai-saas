@@ -3,14 +3,8 @@ import { Inter } from "next/font/google";
 import "../globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { env } from "@/lib/env";
-import { Analytics } from "@vercel/analytics/react";
 
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeTransition } from "@/components/theme-transition";
-import { ModalProvider } from "@/components/modal-provider";
-import { UserSyncProvider } from "@/components/user-sync-provider";
-import { ReferralCapture } from "@/components/ReferralCapture";
-
 import { NextIntlClientProvider } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { locales } from '@/i18n';
@@ -94,14 +88,7 @@ export default async function LocaleLayout({
               enableSystem={false}
               disableTransitionOnChange={false}
             >
-              <ThemeTransition />
-              <ModalProvider>
-                <UserSyncProvider>
-                  <ReferralCapture />
-                  {children}
-                </UserSyncProvider>
-                <Analytics />
-              </ModalProvider>
+              {children}
             </ThemeProvider>
           </NextIntlClientProvider>
         </ClerkProvider>
