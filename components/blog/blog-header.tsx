@@ -16,7 +16,7 @@ export function BlogHeader({ post }: BlogHeaderProps) {
   const category = BLOG_CATEGORIES[post.category] ?? {
     name: 'General',
     bgColor: 'bg-gray-500/10',
-    color: 'text-gray-400'
+    color: 'text-gray-600 dark:text-gray-400'
   };
   const [copied, setCopied] = useState(false);
 
@@ -47,16 +47,14 @@ export function BlogHeader({ post }: BlogHeaderProps) {
 
   return (
     <header className="mb-10">
-      {/* Back Link */}
       <Link
         href="/blog"
-        className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-8"
+        className="inline-flex items-center gap-2 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors mb-8"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Blog
       </Link>
 
-      {/* Category */}
       <div className="mb-4">
         <Link
           href={`/blog?category=${post.category}`}
@@ -71,19 +69,15 @@ export function BlogHeader({ post }: BlogHeaderProps) {
         </Link>
       </div>
 
-      {/* Title */}
-      <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-tight mb-4 sm:mb-6">
+      <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight mb-4 sm:mb-6">
         {post.title}
       </h1>
 
-      {/* Description */}
-      <p className="text-base sm:text-lg md:text-xl text-gray-400 mb-6 sm:mb-8 leading-relaxed">
+      <p className="text-base sm:text-lg md:text-xl text-slate-600 dark:text-gray-400 mb-6 sm:mb-8 leading-relaxed">
         {post.description}
       </p>
 
-      {/* Meta Row */}
-      <div className="flex flex-wrap items-center gap-3 sm:gap-6 pb-6 sm:pb-8 border-b border-white/10">
-        {/* Author */}
+      <div className="flex flex-wrap items-center gap-3 sm:gap-6 pb-6 sm:pb-8 border-b border-slate-200 dark:border-white/10">
         <div className="flex items-center gap-3">
           <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gradient-to-tr from-purple-500 to-blue-500">
             {post.author.avatar && (
@@ -96,41 +90,38 @@ export function BlogHeader({ post }: BlogHeaderProps) {
             )}
           </div>
           <div>
-            <p className="text-white font-medium">{post.author.name}</p>
-            <p className="text-gray-500 text-sm">{post.author.role}</p>
+            <p className="text-slate-900 dark:text-white font-medium">{post.author.name}</p>
+            <p className="text-slate-500 dark:text-gray-500 text-sm">{post.author.role}</p>
           </div>
         </div>
 
-        {/* Date */}
-        <div className="flex items-center gap-2 text-gray-400">
+        <div className="flex items-center gap-2 text-slate-600 dark:text-gray-400">
           <Calendar className="w-4 h-4" />
           <span>{formatDate(post.publishedAt)}</span>
           {post.updatedAt && post.updatedAt !== post.publishedAt && (
-            <span className="text-gray-500 text-sm">
+            <span className="text-slate-500 dark:text-gray-500 text-sm">
               (Updated {formatDate(post.updatedAt)})
             </span>
           )}
         </div>
 
-        {/* Reading Time */}
-        <div className="flex items-center gap-2 text-gray-400">
+        <div className="flex items-center gap-2 text-slate-600 dark:text-gray-400">
           <Clock className="w-4 h-4" />
           <span>{post.readingTime} min read</span>
         </div>
 
-        {/* Share Buttons */}
         <div className="flex items-center gap-2 ml-auto">
-          <span className="text-gray-500 text-sm mr-2">Share:</span>
+          <span className="text-slate-500 dark:text-gray-500 text-sm mr-2">Share:</span>
           <button
             onClick={shareOnTwitter}
-            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
             aria-label="Share on Twitter"
           >
             <Twitter className="w-4 h-4" />
           </button>
           <button
             onClick={shareOnLinkedIn}
-            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+            className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
             aria-label="Share on LinkedIn"
           >
             <Linkedin className="w-4 h-4" />
@@ -140,8 +131,8 @@ export function BlogHeader({ post }: BlogHeaderProps) {
             className={cn(
               "p-2 rounded-lg transition-colors",
               copied
-                ? "bg-green-500/20 text-green-400"
-                : "bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white"
+                ? "bg-green-500/20 text-green-600 dark:text-green-400"
+                : "bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
             )}
             aria-label="Copy link"
           >
@@ -150,14 +141,13 @@ export function BlogHeader({ post }: BlogHeaderProps) {
         </div>
       </div>
 
-      {/* Tags */}
       {post.tags.length > 0 && (
         <div className="flex flex-wrap gap-2 mt-6">
           {post.tags.map((tag) => (
             <Link
               key={tag}
               href={`/blog?tag=${encodeURIComponent(tag)}`}
-              className="px-3 py-1 rounded-full text-xs bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-colors"
+              className="px-3 py-1 rounded-full text-xs bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-gray-400 hover:bg-slate-200 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white transition-colors"
             >
               #{tag}
             </Link>

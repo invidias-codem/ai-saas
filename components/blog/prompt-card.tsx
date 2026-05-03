@@ -38,31 +38,31 @@ const categoryConfig: Record<PromptCategory, {
 }> = {
   content: {
     icon: FileText,
-    color: "text-blue-400",
+    color: "text-blue-600 dark:text-blue-400",
     bgColor: "bg-blue-500/10",
     label: "Content",
   },
   coding: {
     icon: Code,
-    color: "text-green-400",
+    color: "text-green-600 dark:text-green-400",
     bgColor: "bg-green-500/10",
     label: "Coding",
   },
   analysis: {
     icon: BarChart,
-    color: "text-purple-400",
+    color: "text-purple-600 dark:text-purple-400",
     bgColor: "bg-purple-500/10",
     label: "Analysis",
   },
   business: {
     icon: Briefcase,
-    color: "text-orange-400",
+    color: "text-orange-600 dark:text-orange-400",
     bgColor: "bg-orange-500/10",
     label: "Business",
   },
   creative: {
     icon: Palette,
-    color: "text-pink-400",
+    color: "text-pink-600 dark:text-pink-400",
     bgColor: "bg-pink-500/10",
     label: "Creative",
   },
@@ -74,17 +74,17 @@ const difficultyConfig: Record<Difficulty, {
   label: string;
 }> = {
   beginner: {
-    color: "text-green-400",
+    color: "text-green-600 dark:text-green-400",
     bgColor: "bg-green-500/20",
     label: "Beginner",
   },
   intermediate: {
-    color: "text-yellow-400",
+    color: "text-yellow-600 dark:text-yellow-400",
     bgColor: "bg-yellow-500/20",
     label: "Intermediate",
   },
   advanced: {
-    color: "text-red-400",
+    color: "text-red-600 dark:text-red-400",
     bgColor: "bg-red-500/20",
     label: "Advanced",
   },
@@ -120,19 +120,17 @@ export function PromptCard({
   return (
     <div 
       id={`prompt-${number}`}
-      className="my-8 rounded-xl border border-white/10 bg-white/5 overflow-hidden scroll-mt-24"
+      className="my-8 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 overflow-hidden scroll-mt-24 shadow-sm dark:shadow-none"
     >
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white/5 border-b border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
         <div className="flex items-center gap-3">
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 font-bold text-sm">
+          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/20 text-purple-600 dark:text-purple-400 font-bold text-sm">
             {number}
           </span>
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h3>
         </div>
         
         <div className="flex items-center gap-2">
-          {/* Category Badge */}
           <span className={cn(
             "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium",
             catConfig.bgColor,
@@ -142,7 +140,6 @@ export function PromptCard({
             {catConfig.label}
           </span>
           
-          {/* Difficulty Badge */}
           <span className={cn(
             "px-2.5 py-1 rounded-full text-xs font-medium",
             diffConfig.bgColor,
@@ -153,21 +150,19 @@ export function PromptCard({
         </div>
       </div>
 
-      {/* Prompt */}
       <div className="p-4">
         <div className="relative">
-          <div className="p-4 rounded-lg bg-[#1a1b26] border border-white/5 font-mono text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">
+          <div className="p-4 rounded-lg bg-slate-950 font-mono text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
             {prompt}
           </div>
           
-          {/* Copy Button */}
           <button
             onClick={handleCopy}
             className={cn(
               "absolute top-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
               copied
-                ? "bg-green-500/20 text-green-400"
-                : "bg-white/10 text-gray-400 hover:bg-white/20 hover:text-white"
+                ? "bg-green-500/20 text-green-600 dark:text-green-400"
+                : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
             )}
           >
             {copied ? (
@@ -184,21 +179,19 @@ export function PromptCard({
           </button>
         </div>
 
-        {/* Additional content from children */}
         {children && (
-          <div className="mt-4 text-gray-400 text-sm">
+          <div className="mt-4 text-slate-600 dark:text-gray-400 text-sm">
             {children}
           </div>
         )}
 
-        {/* Tips */}
         {tips && tips.length > 0 && (
           <div className="mt-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
-            <p className="text-purple-300 text-sm font-medium mb-2">💡 Pro Tips:</p>
+            <p className="text-purple-700 dark:text-purple-300 text-sm font-medium mb-2">💡 Pro Tips:</p>
             <ul className="space-y-1">
               {tips.map((tip, index) => (
-                <li key={index} className="text-gray-400 text-sm flex items-start gap-2">
-                  <span className="text-purple-400">•</span>
+                <li key={index} className="text-slate-600 dark:text-gray-400 text-sm flex items-start gap-2">
+                  <span className="text-purple-600 dark:text-purple-400">•</span>
                   {tip}
                 </li>
               ))}
@@ -206,12 +199,11 @@ export function PromptCard({
           </div>
         )}
 
-        {/* Example Toggle */}
         {example && (
           <div className="mt-4">
             <button
               onClick={() => setShowExample(!showExample)}
-              className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+              className="flex items-center gap-2 text-sm text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
             >
               {showExample ? (
                 <ChevronUp className="w-4 h-4" />
@@ -222,9 +214,9 @@ export function PromptCard({
             </button>
             
             {showExample && (
-              <div className="mt-3 p-4 rounded-lg bg-white/5 border border-white/10">
-                <p className="text-xs text-gray-500 mb-2 uppercase tracking-wide">Example Output:</p>
-                <div className="text-gray-300 text-sm whitespace-pre-wrap">
+              <div className="mt-3 p-4 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                <p className="text-xs text-slate-500 dark:text-gray-500 mb-2 uppercase tracking-wide">Example Output:</p>
+                <div className="text-slate-700 dark:text-gray-300 text-sm whitespace-pre-wrap">
                   {example}
                 </div>
               </div>
@@ -232,9 +224,8 @@ export function PromptCard({
           </div>
         )}
 
-        {/* Try in Genie CTA */}
-        <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
-          <p className="text-gray-500 text-sm">
+        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
+          <p className="text-slate-500 dark:text-gray-500 text-sm">
             Try this prompt with Genie AI
           </p>
           <Link
@@ -250,13 +241,12 @@ export function PromptCard({
   );
 }
 
-// Quick navigation component for the prompts page
 export function PromptNavigation() {
   const categories = Object.entries(categoryConfig);
 
   return (
-    <div className="my-8 p-4 rounded-xl border border-white/10 bg-white/5">
-      <p className="text-sm text-gray-400 mb-3">Jump to category:</p>
+    <div className="my-8 p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 shadow-sm dark:shadow-none">
+      <p className="text-sm text-slate-600 dark:text-gray-400 mb-3">Jump to category:</p>
       <div className="flex flex-wrap gap-2">
         {categories.map(([key, config]) => {
           const Icon = config.icon;
