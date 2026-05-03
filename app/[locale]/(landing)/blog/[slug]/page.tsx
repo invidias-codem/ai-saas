@@ -10,7 +10,7 @@ import { RelatedPosts } from "@/components/blog/related-posts";
 import { NewsletterCTA } from "@/components/blog/newsletter-cta";
 import { mdxComponents } from "@/components/blog/mdx-components";
 import {
-  getAllPosts,
+  getAllPostSlugs,
   getPostBySlug,
   getRelatedPosts,
   extractTableOfContents
@@ -26,7 +26,7 @@ interface BlogPostPageProps {
 }
 
 export function generateStaticParams() {
-  return getAllPosts().map((post) => ({ slug: post.slug }));
+  return getAllPostSlugs().map((slug) => ({ slug }));
 }
 
 export const dynamicParams = false;
