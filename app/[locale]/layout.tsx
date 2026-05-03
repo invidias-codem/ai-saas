@@ -3,14 +3,9 @@ import { Inter } from "next/font/google";
 import "../globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { env } from "@/lib/env";
-import { Analytics } from "@vercel/analytics/react";
 
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeTransition } from "@/components/theme-transition";
 import { ModalProvider } from "@/components/modal-provider";
-import { UserSyncProvider } from "@/components/user-sync-provider";
-import { ReferralCapture } from "@/components/ReferralCapture";
-
 import { NextIntlClientProvider } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { locales } from '@/i18n';
@@ -34,12 +29,12 @@ export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
 }
 
-export function generateMetadata({
+export async function generateMetadata({
   params,
 }: {
-  params: { locale: string };
-}): Metadata {
-  const { locale } = params;
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
 
   if (!locales.includes(locale as any)) {
     notFound();
@@ -71,9 +66,9 @@ export default async function LocaleLayout({
   params,
 }: Readonly<{
   children: React.ReactNode;
-  params: { locale: string };
+  params: Promise<{ locale: string }>;
 }>) {
-  const { locale } = params;
+  const { locale } = await params;
 
   if (!locales.includes(locale as any)) {
     notFound();
@@ -94,13 +89,8 @@ export default async function LocaleLayout({
               enableSystem={false}
               disableTransitionOnChange={false}
             >
-              <ThemeTransition />
               <ModalProvider>
-                <UserSyncProvider>
-                  <ReferralCapture />
-                  {children}
-                </UserSyncProvider>
-                <Analytics />
+                {children}
               </ModalProvider>
             </ThemeProvider>
           </NextIntlClientProvider>

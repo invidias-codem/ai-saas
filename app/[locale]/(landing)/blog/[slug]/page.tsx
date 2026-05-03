@@ -23,7 +23,7 @@ import remarkUnwrapImages from "remark-unwrap-images";
 import rehypeSlug from "rehype-slug";
 
 interface BlogPostPageProps {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 export function generateStaticParams() {
@@ -33,8 +33,9 @@ export function generateStaticParams() {
 export const dynamicParams = false;
 export const revalidate = 3600;
 
-export function generateMetadata({ params }: BlogPostPageProps): Metadata {
-  const post = getPostBySlug(params.slug);
+export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const post = getPostBySlug(slug);
 
   if (!post) {
     return {
@@ -80,14 +81,15 @@ export function generateMetadata({ params }: BlogPostPageProps): Metadata {
   };
 }
 
-export default function BlogPostPage({ params }: BlogPostPageProps) {
-  const post = getPostBySlug(params.slug);
+export default async function BlogPostPage({ params }: BlogPostPageProps) {
+  const { slug } = await params;
+  const post = getPostBySlug(slug);
 
   if (!post) {
     notFound();
   }
 
-  const relatedPosts = getRelatedPosts(params.slug, 3);
+  const relatedPosts = getRelatedPosts(slug, 3);
   const tableOfContents = extractTableOfContents(post.content);
   const siteUrl = getSiteUrl();
 
