@@ -56,7 +56,7 @@ export async function generateMetadata({
       type: 'website',
     },
     other: {
-      'color-scheme': 'light dark',
+      'color-scheme': 'dark',
     },
   };
 }
@@ -77,17 +77,18 @@ export default async function LocaleLayout({
   const messages = (await import(`@/messages/${locale}.json`)).default;
 
   return (
-    <html lang={locale} suppressHydrationWarning={true}>
-      <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
+    <html lang={locale} className="dark" suppressHydrationWarning={true}>
+      <body className={`${inter.variable} font-sans dark`} suppressHydrationWarning={true}>
         <ClerkProvider
           publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}
         >
           <NextIntlClientProvider locale={locale} messages={messages}>
             <ThemeProvider
               attribute="class"
+              forcedTheme="dark"
               defaultTheme="dark"
               enableSystem={false}
-              disableTransitionOnChange={false}
+              disableTransitionOnChange={true}
             >
               <ModalProvider>
                 {children}

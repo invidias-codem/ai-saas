@@ -10,10 +10,8 @@ import {
     SheetTitle
 } from "@/components/ui/sheet";
 import Sidebar from "@/components/sidebar";
-import { ConversationHistory } from "@/components/conversation-history";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 const MobileSidebar = () => {
     const [isMounted, setIsMounted] = useState(false);
@@ -24,7 +22,6 @@ const MobileSidebar = () => {
         setIsMounted(true);
     }, []);
 
-    // Close sidebar when route changes
     useEffect(() => {
         setIsOpen(false);
     }, [pathname]);
@@ -40,7 +37,7 @@ const MobileSidebar = () => {
                     <Menu className="h-5 w-5" />
                 </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-0 bg-white dark:bg-[#111827] text-slate-900 dark:text-white">
+            <SheetContent side="left" className="p-0 bg-[#111827] text-white">
                 <SheetTitle className="hidden">Navigation Menu</SheetTitle>
                 <div className="h-full flex flex-col">
                     <Sidebar onNavigate={() => setIsOpen(false)} />

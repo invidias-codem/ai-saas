@@ -64,37 +64,6 @@
 
 @layer base {
   :root {
-    --background: 40 33% 97%;
-    --foreground: 240 28% 14%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 240 28% 14%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 28% 14%;
-
-    --primary: 262 83% 58%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 250 40% 94%;
-    --secondary-foreground: 240 28% 14%;
-
-    --muted: 40 20% 93%;
-    --muted-foreground: 240 8% 46%;
-
-    --accent: 258 40% 92%;
-    --accent-foreground: 262 83% 40%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 240 8% 88%;
-    --input: 240 8% 88%;
-    --ring: 262 83% 58%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
     --background: 224 71% 4%;
     --foreground: 213 31% 91%;
 
@@ -122,6 +91,7 @@
     --border: 216 34% 17%;
     --input: 216 34% 17%;
     --ring: 216 34% 17%;
+    --radius: 0.5rem;
   }
 }
 
@@ -135,6 +105,7 @@
   :root {
     height: 100dvh;
     touch-action: manipulation;
+    color-scheme: dark;
   }
 
   body {
@@ -199,24 +170,18 @@
 
 @layer utilities {
   .glass-card {
-    background-color: rgba(255, 255, 255, 0.6);
+    background-color: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.8);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-  }
-
-  .dark .glass-card {
-    background-color: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: none;
   }
 
   .hero-gradient-light {
     background: linear-gradient(135deg,
-      rgba(255, 243, 199, 0.72) 0%,
-      rgba(250, 247, 240, 0.94) 42%,
-      rgba(255, 236, 179, 0.55) 100%
+      rgba(15, 17, 23, 0.96) 0%,
+      rgba(8, 11, 20, 0.98) 50%,
+      rgba(15, 23, 42, 0.96) 100%
     );
   }
 
@@ -225,7 +190,7 @@
   }
 
   .orb-cream {
-    background: radial-gradient(circle, rgba(253, 230, 138, 0.16), transparent 70%);
+    background: radial-gradient(circle, rgba(245, 158, 11, 0.10), transparent 70%);
   }
 
   .orb-indigo {
@@ -233,99 +198,93 @@
   }
 
   .landing-bg-main {
-    @apply bg-[#FAF7F0] dark:bg-[#080b14];
+    background-color: #080b14;
   }
 
   .landing-bg-alt {
-    @apply bg-[#FFF9EC] dark:bg-[#090d16];
+    background-color: #090d16;
   }
 
   .landing-bg-muted {
-    @apply bg-[#F5F1E8] dark:bg-[#070a12];
+    background-color: #070a12;
   }
 
   .landing-text-primary {
-    @apply text-[#2C241B] dark:text-white;
+    color: white;
   }
 
   .landing-text-secondary {
-    @apply text-[#6B5B4D] dark:text-slate-400;
+    color: rgb(148 163 184);
   }
 
   .landing-text-muted {
-    @apply text-[#8A7867] dark:text-slate-500;
+    color: rgb(100 116 139);
   }
 
   .landing-badge-primary {
-    @apply border border-amber-200/80 bg-amber-100/90 text-amber-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300;
+    @apply border border-violet-500/30 bg-violet-500/10 text-violet-300;
   }
 
   .landing-badge-secondary {
-    @apply border border-amber-100/80 bg-white/85 text-amber-900 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300;
+    @apply border border-sky-500/30 bg-sky-500/10 text-sky-300;
   }
 
   .landing-card {
-    @apply border border-amber-100/70 bg-white/80 backdrop-blur-md dark:border-white/[0.08] dark:bg-white/[0.04];
+    @apply border border-white/[0.08] bg-white/[0.04] backdrop-blur-md;
   }
 
   .landing-card-strong {
-    @apply border border-amber-200/80 bg-white/90 backdrop-blur-md dark:border-violet-500/20 dark:bg-white/[0.05];
+    @apply border border-violet-500/20 bg-white/[0.05] backdrop-blur-md;
   }
 
   .landing-cta-primary {
-    @apply bg-gradient-to-r from-amber-500 via-yellow-500 to-orange-400 text-[#2C241B] shadow-[0_0_32px_-8px_rgba(245,158,11,0.45)] hover:opacity-95 dark:from-violet-600 dark:via-purple-500 dark:to-indigo-600 dark:text-white dark:shadow-[0_0_32px_-8px_rgba(139,92,246,0.65)];
+    @apply bg-gradient-to-r from-violet-600 via-purple-500 to-indigo-600 text-white shadow-[0_0_32px_-8px_rgba(139,92,246,0.65)] hover:opacity-95;
   }
 
   .landing-cta-secondary {
-    @apply border border-amber-200/80 bg-white/80 text-[#5C4A38] hover:bg-amber-50 dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:bg-white/10;
+    @apply border border-white/15 bg-white/5 text-white hover:bg-white/10;
   }
 
   .landing-orb-primary {
-    @apply bg-amber-300/20 dark:bg-violet-700/10;
+    background-color: rgb(109 40 217 / 0.10);
   }
 
   .landing-orb-secondary {
-    @apply bg-orange-200/20 dark:bg-indigo-700/10;
+    background-color: rgb(67 56 202 / 0.10);
   }
 
   .landing-orb-tertiary {
-    @apply bg-yellow-100/35 dark:bg-sky-700/8;
+    background-color: rgb(3 105 161 / 0.08);
   }
 
   .landing-grid-overlay {
     background-image:
-      linear-gradient(rgba(245, 158, 11, 0.18) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(245, 158, 11, 0.18) 1px, transparent 1px);
+      linear-gradient(rgba(139, 92, 246, 0.4) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(139, 92, 246, 0.4) 1px, transparent 1px);
     background-size: 60px 60px;
   }
 
-  .dark .landing-grid-overlay {
-    background-image:
-      linear-gradient(rgba(139, 92, 246, 0.4) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(139, 92, 246, 0.4) 1px, transparent 1px);
-  }
-
   .landing-headline-gradient {
-    @apply bg-gradient-to-r from-amber-600 via-yellow-500 to-orange-500 bg-clip-text text-transparent dark:from-violet-400 dark:via-purple-300 dark:to-indigo-400;
+    @apply bg-gradient-to-r from-violet-400 via-purple-300 to-indigo-400 bg-clip-text text-transparent;
   }
 
   .landing-nav-shell {
-    @apply border-b border-amber-100/80 bg-[#FFF9EC]/85 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-[#0f1117]/90 dark:shadow-none;
+    @apply border-b border-white/10 bg-[#0f1117]/90 shadow-none backdrop-blur-xl;
   }
 
   .landing-nav-shell-top {
-    @apply border-b border-amber-50/80 bg-[#FFF9EC]/60 backdrop-blur-sm dark:border-transparent dark:bg-transparent;
+    @apply border-b border-transparent bg-transparent backdrop-blur-sm;
   }
 
   .landing-nav-link {
-    @apply text-[#6B5B4D] hover:text-[#2C241B] dark:text-gray-300 dark:hover:text-white;
+    @apply text-gray-300 hover:text-white;
   }
 
   .landing-nav-ghost {
-    @apply text-[#6B5B4D] hover:bg-amber-50 hover:text-[#2C241B] dark:text-gray-300 dark:hover:bg-white/10 dark:hover:text-white;
+    @apply text-gray-300 hover:bg-white/10 hover:text-white;
   }
 
   .landing-nav-burger-mid {
-    @apply bg-amber-700 dark:bg-white;
+    @apply bg-white;
   }
 }

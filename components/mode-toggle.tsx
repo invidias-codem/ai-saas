@@ -1,44 +1,19 @@
 "use client"
 
-import * as React from "react"
-import { MoonIcon, SunIcon } from "@radix-ui/react-icons"
-import { useTheme } from "next-themes"
-
+import { MoonIcon } from "@radix-ui/react-icons"
 import { Button } from "@/components/ui/button"
 
 export function ModeToggle() {
-  const [mounted, setMounted] = React.useState(false)
-  const { setTheme, theme } = useTheme()
-
-  // Avoid hydration mismatch by only rendering after mount
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) {
-    return (
-      <Button
-        variant="outline"
-        size="icon"
-        className="bg-transparent border-0"
-        disabled
-      >
-        <SunIcon className="h-[1.2rem] w-[1.2rem]" />
-        <span className="sr-only">Toggle theme</span>
-      </Button>
-    )
-  }
-
   return (
     <Button
       variant="outline"
       size="icon"
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      className="bg-transparent border-0"
+      className="bg-transparent border-0 text-white/70 hover:text-white hover:bg-white/5"
+      disabled
+      aria-label="Dark mode enabled"
     >
-      <SunIcon className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-      <MoonIcon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-      <span className="sr-only">Toggle theme</span>
+      <MoonIcon className="h-[1.2rem] w-[1.2rem]" />
+      <span className="sr-only">Dark mode enabled</span>
     </Button>
   )
 }
