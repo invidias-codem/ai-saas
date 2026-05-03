@@ -12,7 +12,6 @@ import { UserSyncProvider } from "@/components/user-sync-provider";
 import { ReferralCapture } from "@/components/ReferralCapture";
 
 import { NextIntlClientProvider } from 'next-intl';
-import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { locales } from '@/i18n';
 
@@ -23,34 +22,42 @@ const inter = Inter({
   display: "swap",
 });
 
+const metadataMessages: Record<string, { title: string; description: string; keywords: string }> = {
+  en: {
+    title: "Genie AI - Your AI Workspace",
+    description: "A memory-native AI workspace for conversations, tools, and context-aware execution.",
+    keywords: "AI workspace, memory-native AI, Tech Genie, AI assistant, AI productivity",
+  },
+};
+
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));
 }
 
-export async function generateMetadata({
+export function generateMetadata({
   params,
 }: {
-  params: Promise<{ locale: string }>;
-}): Promise<Metadata> {
-  const { locale } = await params;
+  params: { locale: string };
+}): Metadata {
+  const { locale } = params;
 
   if (!locales.includes(locale as any)) {
     notFound();
   }
 
-  const t = await getTranslations({ locale, namespace: 'Metadata' });
+  const t = metadataMessages[locale] ?? metadataMessages.en;
 
   return {
-    title: t('title'),
-    description: t('description'),
-    keywords: t('keywords'),
+    title: t.title,
+    description: t.description,
+    keywords: t.keywords,
     alternates: {
       canonical: `/${locale}`,
       languages: Object.fromEntries(locales.map((l) => [l, `/${l}`])),
     },
     openGraph: {
-      title: t('title'),
-      description: t('description'),
+      title: t.title,
+      description: t.description,
       type: 'website',
     },
     other: {
@@ -64,9 +71,9 @@ export default async function LocaleLayout({
   params,
 }: Readonly<{
   children: React.ReactNode;
-  params: Promise<{ locale: string }>;
+  params: { locale: string };
 }>) {
-  const { locale } = await params;
+  const { locale } = params;
 
   if (!locales.includes(locale as any)) {
     notFound();

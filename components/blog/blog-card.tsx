@@ -13,7 +13,6 @@ interface BlogCardProps {
   featured?: boolean;
 }
 
-// Placeholder component for missing images
 function ImagePlaceholder({ title, category }: { title: string; category: string }) {
   const categoryInfo = BLOG_CATEGORIES[category as keyof typeof BLOG_CATEGORIES];
   return (
@@ -29,7 +28,6 @@ function ImagePlaceholder({ title, category }: { title: string; category: string
   );
 }
 
-// Sanitize slug to prevent XSS via javascript: or data: URIs
 function sanitizeSlug(slug: string): string {
   return slug.replace(/[^a-z0-9-]/gi, '').toLowerCase();
 }
@@ -41,9 +39,8 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
   if (featured) {
     return (
       <Link href={`/blog/${sanitizeSlug(post.slug)}`} className="group block">
-        <article className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all duration-300">
+        <article className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition-all duration-300 shadow-sm dark:shadow-none">
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Image */}
             <div className="relative aspect-video md:aspect-auto md:h-full">
               {imageError ? (
                 <ImagePlaceholder title={post.title} category={post.category} />
@@ -60,9 +57,7 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent md:bg-gradient-to-r" />
             </div>
 
-            {/* Content */}
             <div className="p-6 md:p-8 flex flex-col justify-center">
-              {/* Category Badge */}
               <div className="flex items-center gap-3 mb-4">
                 <span className={cn(
                   "px-3 py-1 rounded-full text-xs font-medium",
@@ -71,24 +66,21 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
                 )}>
                   {category.name}
                 </span>
-                <span className="text-yellow-400 text-xs font-medium">★ Featured</span>
+                <span className="text-yellow-500 dark:text-yellow-400 text-xs font-medium">★ Featured</span>
               </div>
 
-              {/* Title */}
-              <h2 className="text-2xl md:text-3xl font-bold text-white mb-3 group-hover:text-purple-400 transition-colors line-clamp-2">
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-3 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors line-clamp-2">
                 {post.title}
               </h2>
 
-              {/* Description */}
-              <p className="text-gray-400 mb-4 line-clamp-2">
+              <p className="text-slate-600 dark:text-gray-400 mb-4 line-clamp-2">
                 {post.description}
               </p>
 
-              {/* Meta */}
-              <div className="flex items-center gap-4 text-sm text-gray-500">
+              <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-gray-500">
                 <div className="flex items-center gap-2">
                   <div className="relative w-6 h-6 rounded-full overflow-hidden bg-gradient-to-tr from-purple-500 to-blue-500" />
-                  <span className="text-gray-400">{post.author.name}</span>
+                  <span className="text-slate-600 dark:text-gray-400">{post.author.name}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Calendar className="w-4 h-4" />
@@ -108,8 +100,7 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
 
   return (
     <Link href={`/blog/${sanitizeSlug(post.slug)}`} className="group block h-full">
-      <article className="h-full flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all duration-300">
-        {/* Image */}
+      <article className="h-full flex flex-col overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition-all duration-300 shadow-sm dark:shadow-none">
         <div className="relative aspect-video overflow-hidden">
           {imageError ? (
             <ImagePlaceholder title={post.title} category={post.category} />
@@ -125,7 +116,6 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
 
-          {/* Category Badge */}
           <div className="absolute top-4 left-4 z-10">
             <span className={cn(
               "px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm",
@@ -137,23 +127,19 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 p-5 flex flex-col">
-          {/* Title */}
-          <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-purple-400 transition-colors line-clamp-2">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors line-clamp-2">
             {post.title}
           </h3>
 
-          {/* Description */}
-          <p className="text-gray-400 text-sm mb-4 line-clamp-2 flex-1">
+          <p className="text-slate-600 dark:text-gray-400 text-sm mb-4 line-clamp-2 flex-1">
             {post.description}
           </p>
 
-          {/* Meta */}
-          <div className="flex items-center justify-between text-xs text-gray-500 pt-4 border-t border-white/5">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-gray-500 pt-4 border-t border-slate-200 dark:border-white/5">
             <div className="flex items-center gap-2">
               <div className="relative w-5 h-5 rounded-full overflow-hidden bg-gradient-to-tr from-purple-500 to-blue-500" />
-              <span className="text-gray-400">{post.author.name}</span>
+              <span className="text-slate-600 dark:text-gray-400">{post.author.name}</span>
             </div>
             <div className="flex items-center gap-3">
               <span>{formatDate(post.publishedAt)}</span>
@@ -171,15 +157,15 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
 
 export function BlogCardSkeleton() {
   return (
-    <div className="h-full flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5 animate-pulse">
-      <div className="aspect-video bg-white/10" />
+    <div className="h-full flex flex-col overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 animate-pulse shadow-sm dark:shadow-none">
+      <div className="aspect-video bg-slate-200 dark:bg-white/10" />
       <div className="flex-1 p-5 flex flex-col">
-        <div className="h-6 bg-white/10 rounded mb-2" />
-        <div className="h-4 bg-white/10 rounded w-3/4 mb-4" />
+        <div className="h-6 bg-slate-200 dark:bg-white/10 rounded mb-2" />
+        <div className="h-4 bg-slate-200 dark:bg-white/10 rounded w-3/4 mb-4" />
         <div className="flex-1" />
-        <div className="flex items-center justify-between pt-4 border-t border-white/5">
-          <div className="h-4 bg-white/10 rounded w-24" />
-          <div className="h-4 bg-white/10 rounded w-20" />
+        <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-white/5">
+          <div className="h-4 bg-slate-200 dark:bg-white/10 rounded w-24" />
+          <div className="h-4 bg-slate-200 dark:bg-white/10 rounded w-20" />
         </div>
       </div>
     </div>

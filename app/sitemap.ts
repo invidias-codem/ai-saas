@@ -1,7 +1,8 @@
 import { MetadataRoute } from 'next';
+import { getSiteUrl } from '@/lib/site-url';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-    const baseUrl = 'https://genie-ai.com'; // Replace with actual domain
+    const baseUrl = getSiteUrl();
     const locales = ['en', 'th', 'vi', 'es', 'fr', 'de'];
     const routes = ['', '/dashboard', '/blog', '/pricing', '/support'];
 

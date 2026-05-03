@@ -32,7 +32,6 @@ export function TableOfContents({ items }: TableOfContentsProps) {
       }
     );
 
-    // Observe all headings
     items.forEach((item) => {
       const element = document.getElementById(item.id);
       if (element) {
@@ -70,10 +69,10 @@ export function TableOfContents({ items }: TableOfContentsProps) {
 
   return (
     <nav className="sticky top-24">
-      <div className="p-4 rounded-xl border border-white/10 bg-white/5">
-        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/10">
-          <List className="w-4 h-4 text-purple-400" />
-          <h3 className="text-sm font-semibold text-white">Table of Contents</h3>
+      <div className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 shadow-sm dark:shadow-none">
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-white/10">
+          <List className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Table of Contents</h3>
         </div>
         
         <ul className="space-y-2">
@@ -85,10 +84,10 @@ export function TableOfContents({ items }: TableOfContentsProps) {
               <button
                 onClick={() => handleClick(item.id)}
                 className={cn(
-                  "text-left text-sm transition-colors duration-200 hover:text-white w-full truncate",
+                  "text-left text-sm transition-colors duration-200 hover:text-slate-900 dark:hover:text-white w-full truncate",
                   activeId === item.id
-                    ? "text-purple-400 font-medium"
-                    : "text-gray-400"
+                    ? "text-purple-600 dark:text-purple-400 font-medium"
+                    : "text-slate-500 dark:text-gray-400"
                 )}
               >
                 {item.title}
@@ -101,7 +100,6 @@ export function TableOfContents({ items }: TableOfContentsProps) {
   );
 }
 
-// Mobile TOC (collapsible)
 export function MobileTableOfContents({ items }: TableOfContentsProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -128,17 +126,17 @@ export function MobileTableOfContents({ items }: TableOfContentsProps) {
     <div className="lg:hidden mb-8">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-4 rounded-xl border border-white/10 bg-white/5 text-white"
+        className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 text-slate-900 dark:text-white shadow-sm dark:shadow-none"
       >
         <div className="flex items-center gap-2">
-          <List className="w-4 h-4 text-purple-400" />
+          <List className="w-4 h-4 text-purple-500 dark:text-purple-400" />
           <span className="font-medium">Table of Contents</span>
         </div>
-        <span className="text-gray-400">{isOpen ? "−" : "+"}</span>
+        <span className="text-slate-500 dark:text-gray-400">{isOpen ? "−" : "+"}</span>
       </button>
 
       {isOpen && (
-        <div className="mt-2 p-4 rounded-xl border border-white/10 bg-white/5">
+        <div className="mt-2 p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 shadow-sm dark:shadow-none">
           <ul className="space-y-2">
             {items.map((item) => (
               <li
@@ -147,7 +145,7 @@ export function MobileTableOfContents({ items }: TableOfContentsProps) {
               >
                 <button
                   onClick={() => handleClick(item.id)}
-                  className="text-left text-sm text-gray-400 hover:text-white transition-colors w-full truncate"
+                  className="text-left text-sm text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors w-full truncate"
                 >
                   {item.title}
                 </button>

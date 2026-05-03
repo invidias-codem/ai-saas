@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@/lib/utils";
 import { Mail, Check, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +25,6 @@ export function NewsletterCTA({
 
     setStatus("loading");
     
-    // Simulate API call - replace with actual newsletter signup
     try {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       setStatus("success");
@@ -41,12 +39,12 @@ export function NewsletterCTA({
       <div className="my-8 p-6 rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-500/10 to-pink-500/10">
         <div className="flex flex-col sm:flex-row items-center gap-4">
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-white mb-1">{title}</h3>
-            <p className="text-gray-400 text-sm">{description}</p>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">{title}</h3>
+            <p className="text-slate-600 dark:text-gray-400 text-sm">{description}</p>
           </div>
           
           {status === "success" ? (
-            <div className="flex items-center gap-2 text-green-400">
+            <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
               <Check className="w-5 h-5" />
               <span>Subscribed!</span>
             </div>
@@ -57,7 +55,7 @@ export function NewsletterCTA({
                 placeholder="your@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 w-full sm:w-48"
+                className="bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500 w-full sm:w-48"
                 required
               />
               <Button
@@ -80,9 +78,9 @@ export function NewsletterCTA({
 
   if (variant === "inline") {
     return (
-      <div className="my-6 p-4 rounded-lg border border-white/10 bg-white/5">
+      <div className="my-6 p-4 rounded-lg border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 shadow-sm dark:shadow-none">
         {status === "success" ? (
-          <div className="flex items-center justify-center gap-2 text-green-400 py-2">
+          <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400 py-2">
             <Check className="w-5 h-5" />
             <span>Thanks for subscribing!</span>
           </div>
@@ -93,7 +91,7 @@ export function NewsletterCTA({
               placeholder="Get updates in your inbox"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 flex-1"
+              className="bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500 flex-1"
               required
             />
             <Button
@@ -117,23 +115,21 @@ export function NewsletterCTA({
     );
   }
 
-  // Default variant
   return (
     <div className="my-12 p-8 rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-blue-500/10 relative overflow-hidden">
-      {/* Background decoration */}
       <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
       <div className="absolute bottom-0 left-0 w-48 h-48 bg-pink-500/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
       
       <div className="relative z-10 text-center max-w-xl mx-auto">
         <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-purple-500/20 mb-4">
-          <Sparkles className="w-6 h-6 text-purple-400" />
+          <Sparkles className="w-6 h-6 text-purple-500 dark:text-purple-400" />
         </div>
         
-        <h3 className="text-2xl font-bold text-white mb-2">{title}</h3>
-        <p className="text-gray-400 mb-6">{description}</p>
+        <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{title}</h3>
+        <p className="text-slate-600 dark:text-gray-400 mb-6">{description}</p>
 
         {status === "success" ? (
-          <div className="flex items-center justify-center gap-2 text-green-400 py-4">
+          <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400 py-4">
             <Check className="w-6 h-6" />
             <span className="text-lg font-medium">You&apos;re subscribed! Check your inbox.</span>
           </div>
@@ -144,7 +140,7 @@ export function NewsletterCTA({
               placeholder="Enter your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 h-12 text-base flex-1"
+              className="bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500 h-12 text-base flex-1"
               required
             />
             <Button
@@ -165,12 +161,12 @@ export function NewsletterCTA({
         )}
 
         {status === "error" && (
-          <p className="mt-3 text-red-400 text-sm">
+          <p className="mt-3 text-red-600 dark:text-red-400 text-sm">
             Something went wrong. Please try again.
           </p>
         )}
 
-        <p className="mt-4 text-gray-500 text-xs">
+        <p className="mt-4 text-slate-500 dark:text-gray-500 text-xs">
           No spam, ever. Unsubscribe anytime.
         </p>
       </div>

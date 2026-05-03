@@ -160,19 +160,7 @@ jobs:
         run: |
           echo "## Security audit" >> "$GITHUB_STEP_SUMMARY"
           if [ -f audit-results.json ]; then
-            node - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
-const fs = require('fs');
-const data = JSON.parse(fs.readFileSync('audit-results.json', 'utf8'));
-const vulns = Object.entries(data.vulnerabilities || {})
-  .filter(([_, v]) => ['high', 'critical'].includes(v.severity))
-  .map(([name, v]) => `- ${name}: ${v.severity}`);
-if (vulns.length === 0) {
-  console.log('No high/critical vulnerabilities detected.');
-} else {
-  console.log('High/critical vulnerabilities still present:');
-  for (const line of vulns) console.log(line);
-}
-EOF
+            node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('audit-results.json','utf8')); const vulns=Object.entries(data.vulnerabilities || {}).filter(([_,v]) => ['high','critical'].includes(v.severity)).map(([name,v]) => '- ' + name + ': ' + v.severity); if (vulns.length === 0) { console.log('No high/critical vulnerabilities detected.'); } else { console.log('High/critical vulnerabilities still present:'); for (const line of vulns) console.log(line); }" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "No audit-results.json produced" >> "$GITHUB_STEP_SUMMARY"
           fi

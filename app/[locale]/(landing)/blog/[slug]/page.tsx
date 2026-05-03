@@ -10,11 +10,12 @@ import { RelatedPosts } from "@/components/blog/related-posts";
 import { NewsletterCTA } from "@/components/blog/newsletter-cta";
 import { mdxComponents } from "@/components/blog/mdx-components";
 import {
-  getPostBySlug,
   getAllPostSlugs,
+  getPostBySlug,
   getRelatedPosts,
   extractTableOfContents
 } from "@/lib/blog/mdx";
+import { getSiteUrl } from "@/lib/site-url";
 import { BookOpen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -22,25 +23,18 @@ import remarkUnwrapImages from "remark-unwrap-images";
 import rehypeSlug from "rehype-slug";
 
 interface BlogPostPageProps {
-  params: Promise<{ slug: string }>;
+  params: { slug: string };
 }
 
-// Avoid eagerly prebuilding every localized blog slug during production builds.
-// Blog posts can still be generated on demand via ISR.
-export async function generateStaticParams() {
-  return [];
+export function generateStaticParams() {
+  return getAllPostSlugs().map((slug) => ({ slug }));
 }
 
-// Allow on-demand generation of blog posts not in the initial build
-export const dynamicParams = true;
+export const dynamicParams = false;
+export const revalidate = 3600;
 
-// Revalidate blog posts every 60 seconds for ISR
-export const revalidate = 60;
-
-// Generate metadata for each post
-export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
-  const { slug } = await params;
-  const post = getPostBySlug(slug);
+export function generateMetadata({ params }: BlogPostPageProps): Metadata {
+  const post = getPostBySlug(params.slug);
 
   if (!post) {
     return {
@@ -48,7 +42,8 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
     };
   }
 
-  const url = `https://genieai.app/blog/${post.slug}`;
+  const siteUrl = getSiteUrl();
+  const url = `${siteUrl}/en/blog/${post.slug}`;
 
   return {
     title: `${post.title} | Genie AI Blog`,
@@ -85,18 +80,17 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
   };
 }
 
-export default async function BlogPostPage({ params }: BlogPostPageProps) {
-  const { slug } = await params;
-  const post = getPostBySlug(slug);
+export default function BlogPostPage({ params }: BlogPostPageProps) {
+  const post = getPostBySlug(params.slug);
 
   if (!post) {
     notFound();
   }
 
-  const relatedPosts = getRelatedPosts(slug, 3);
+  const relatedPosts = getRelatedPosts(params.slug, 3);
   const tableOfContents = extractTableOfContents(post.content);
+  const siteUrl = getSiteUrl();
 
-  // JSON-LD structured data
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
@@ -114,52 +108,49 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       name: "Genie AI",
       logo: {
         "@type": "ImageObject",
-        url: "https://genieai.app/Genie.png",
+        url: `${siteUrl}/Genie.png`,
       },
     },
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": `https://genieai.app/blog/${post.slug}`,
+      "@id": `${siteUrl}/en/blog/${post.slug}`,
     },
   };
 
   return (
     <>
-      {/* JSON-LD */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="bg-[#FAF9F7] dark:bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
-        {/* Background Gradients */}
+      <div className="bg-[#FAF9F7] dark:bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative text-slate-900 dark:text-white">
         <div className="fixed inset-0 z-0 pointer-events-none">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl" />
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 dark:bg-purple-500/20 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 dark:bg-blue-500/20 rounded-full blur-3xl" />
         </div>
 
-        {/* Header */}
         <header className="relative z-10 py-4 px-4 sm:py-6 sm:px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
           <Link href="/" className="flex items-center gap-2">
             <div className="relative w-7 h-7 sm:w-8 sm:h-8">
               <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
             </div>
-            <span className="text-xl sm:text-2xl font-bold text-white tracking-tight">Genie AI</span>
+            <span className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Genie AI</span>
           </Link>
           <div className="flex items-center gap-x-1 sm:gap-x-2">
             <Link href="/blog">
-              <Button variant="ghost" className="text-purple-400 hover:text-purple-300 hover:bg-white/10 rounded-full px-2 sm:px-4">
+              <Button variant="ghost" className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-slate-200/70 dark:hover:bg-white/10 rounded-full px-2 sm:px-4">
                 <BookOpen className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">Blog</span>
               </Button>
             </Link>
             <Link href="/dashboard" className="hidden sm:block">
-              <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10 rounded-full">
+              <Button variant="ghost" className="text-slate-700 dark:text-white hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-white/10 rounded-full">
                 Log in
               </Button>
             </Link>
             <Link href="/dashboard">
-              <Button className="bg-white text-black hover:bg-gray-200 rounded-full font-semibold text-sm sm:text-base px-3 sm:px-4">
+              <Button className="bg-slate-900 text-white dark:bg-white dark:text-black hover:bg-slate-800 dark:hover:bg-gray-200 rounded-full font-semibold text-sm sm:text-base px-3 sm:px-4">
                 Get Started
               </Button>
             </Link>
@@ -169,15 +160,11 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         <main className="relative z-10 flex-grow">
           <div className="max-w-7xl mx-auto px-4 py-8">
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8">
-              {/* Main Content */}
               <article className="max-w-3xl">
                 <BlogHeader post={post} />
-
-                {/* Mobile TOC */}
                 <MobileTableOfContents items={tableOfContents} />
 
-                {/* MDX Content */}
-                <div className="prose prose-invert max-w-none">
+                <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:scroll-mt-24 prose-a:text-purple-600 dark:prose-a:text-purple-400">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm, remarkUnwrapImages]}
                     rehypePlugins={[rehypeSlug]}
@@ -187,27 +174,22 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                   </ReactMarkdown>
                 </div>
 
-                {/* Author Card */}
                 <AuthorCard author={post.author} coAuthors={post.coAuthors} />
 
-                {/* Newsletter CTA */}
                 <div className="mt-12">
                   <NewsletterCTA variant="compact" />
                 </div>
               </article>
 
-              {/* Sidebar - Desktop TOC */}
               <aside className="hidden lg:block">
                 <TableOfContents items={tableOfContents} />
               </aside>
             </div>
 
-            {/* Related Posts */}
             <RelatedPosts posts={relatedPosts} />
           </div>
         </main>
 
-        {/* Footer */}
         <footer className="py-10 border-t border-slate-200 dark:border-white/10 bg-[#FAF9F7] dark:bg-[#111827]">
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
@@ -215,19 +197,19 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
                 <div className="relative w-6 h-6">
                   <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
                 </div>
-                <span className="text-lg font-bold text-white">Genie AI</span>
+                <span className="text-lg font-bold text-slate-900 dark:text-white">Genie AI</span>
               </div>
 
-              <div className="flex items-center gap-6 text-sm text-gray-400">
-                <Link href="/blog" className="hover:text-white transition">Blog</Link>
-                <Link href="/slack" className="hover:text-white transition">Slack Integration</Link>
-                <Link href="/support" className="hover:text-white transition">Support</Link>
-                <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
+              <div className="flex items-center gap-6 text-sm text-slate-500 dark:text-gray-400">
+                <Link href="/blog" className="hover:text-slate-900 dark:hover:text-white transition">Blog</Link>
+                <Link href="/slack" className="hover:text-slate-900 dark:hover:text-white transition">Slack Integration</Link>
+                <Link href="/support" className="hover:text-slate-900 dark:hover:text-white transition">Support</Link>
+                <Link href="/privacy" className="hover:text-slate-900 dark:hover:text-white transition">Privacy Policy</Link>
               </div>
             </div>
 
             <div className="mt-8 pt-8 border-t border-slate-200 dark:border-white/10 text-center">
-              <p className="text-gray-500 text-sm">
+              <p className="text-slate-500 text-sm dark:text-gray-500">
                 © {new Date().getFullYear()} Genie AI. All rights reserved.
               </p>
             </div>

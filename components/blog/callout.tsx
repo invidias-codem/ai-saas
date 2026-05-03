@@ -30,43 +30,43 @@ const calloutConfig: Record<CalloutType, {
     icon: Info,
     bgColor: "bg-blue-500/10",
     borderColor: "border-blue-500/30",
-    iconColor: "text-blue-400",
-    titleColor: "text-blue-300",
+    iconColor: "text-blue-500 dark:text-blue-400",
+    titleColor: "text-blue-700 dark:text-blue-300",
   },
   warning: {
     icon: AlertTriangle,
     bgColor: "bg-yellow-500/10",
     borderColor: "border-yellow-500/30",
-    iconColor: "text-yellow-400",
-    titleColor: "text-yellow-300",
+    iconColor: "text-yellow-500 dark:text-yellow-400",
+    titleColor: "text-yellow-700 dark:text-yellow-300",
   },
   success: {
     icon: CheckCircle,
     bgColor: "bg-green-500/10",
     borderColor: "border-green-500/30",
-    iconColor: "text-green-400",
-    titleColor: "text-green-300",
+    iconColor: "text-green-500 dark:text-green-400",
+    titleColor: "text-green-700 dark:text-green-300",
   },
   tip: {
     icon: Lightbulb,
     bgColor: "bg-purple-500/10",
     borderColor: "border-purple-500/30",
-    iconColor: "text-purple-400",
-    titleColor: "text-purple-300",
+    iconColor: "text-purple-500 dark:text-purple-400",
+    titleColor: "text-purple-700 dark:text-purple-300",
   },
   error: {
     icon: AlertCircle,
     bgColor: "bg-red-500/10",
     borderColor: "border-red-500/30",
-    iconColor: "text-red-400",
-    titleColor: "text-red-300",
+    iconColor: "text-red-500 dark:text-red-400",
+    titleColor: "text-red-700 dark:text-red-300",
   },
   note: {
     icon: Zap,
-    bgColor: "bg-white/5",
-    borderColor: "border-white/10",
-    iconColor: "text-gray-400",
-    titleColor: "text-gray-300",
+    bgColor: "bg-slate-100 dark:bg-white/5",
+    borderColor: "border-slate-200 dark:border-white/10",
+    iconColor: "text-slate-500 dark:text-gray-400",
+    titleColor: "text-slate-700 dark:text-gray-300",
   },
 };
 
@@ -90,7 +90,7 @@ export function Callout({ type = "info", title, children }: CalloutProps) {
               {title}
             </p>
           )}
-          <div className="text-gray-300 text-sm leading-relaxed [&>p]:mb-2 [&>p:last-child]:mb-0">
+          <div className="text-slate-700 dark:text-gray-300 text-sm leading-relaxed [&>p]:mb-2 [&>p:last-child]:mb-0">
             {children}
           </div>
         </div>
@@ -99,7 +99,6 @@ export function Callout({ type = "info", title, children }: CalloutProps) {
   );
 }
 
-// Quick variants for convenience
 export function InfoCallout({ title, children }: Omit<CalloutProps, "type">) {
   return <Callout type="info" title={title}>{children}</Callout>;
 }
