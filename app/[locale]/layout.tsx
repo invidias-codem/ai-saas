@@ -5,6 +5,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { env } from "@/lib/env";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { ModalProvider } from "@/components/modal-provider";
 import { NextIntlClientProvider } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { locales } from '@/i18n';
@@ -88,7 +89,9 @@ export default async function LocaleLayout({
               enableSystem={false}
               disableTransitionOnChange={false}
             >
-              {children}
+              <ModalProvider>
+                {children}
+              </ModalProvider>
             </ThemeProvider>
           </NextIntlClientProvider>
         </ClerkProvider>
