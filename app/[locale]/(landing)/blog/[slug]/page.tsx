@@ -15,6 +15,7 @@ import {
   getRelatedPosts,
   extractTableOfContents
 } from "@/lib/blog/mdx";
+import { getSiteUrl } from "@/lib/site-url";
 import { BookOpen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -41,7 +42,8 @@ export function generateMetadata({ params }: BlogPostPageProps): Metadata {
     };
   }
 
-  const url = `https://gen1e.xyz/en/blog/${post.slug}`;
+  const siteUrl = getSiteUrl();
+  const url = `${siteUrl}/en/blog/${post.slug}`;
 
   return {
     title: `${post.title} | Genie AI Blog`,
@@ -87,6 +89,7 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
 
   const relatedPosts = getRelatedPosts(params.slug, 3);
   const tableOfContents = extractTableOfContents(post.content);
+  const siteUrl = getSiteUrl();
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -105,12 +108,12 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
       name: "Genie AI",
       logo: {
         "@type": "ImageObject",
-        url: "https://gen1e.xyz/Genie.png",
+        url: `${siteUrl}/Genie.png`,
       },
     },
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": `https://gen1e.xyz/en/blog/${post.slug}`,
+      "@id": `${siteUrl}/en/blog/${post.slug}`,
     },
   };
 
