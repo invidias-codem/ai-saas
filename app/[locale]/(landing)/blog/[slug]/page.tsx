@@ -10,6 +10,7 @@ import { RelatedPosts } from "@/components/blog/related-posts";
 import { NewsletterCTA } from "@/components/blog/newsletter-cta";
 import { mdxComponents } from "@/components/blog/mdx-components";
 import {
+  getAllPosts,
   getPostBySlug,
   getRelatedPosts,
   extractTableOfContents
@@ -24,9 +25,14 @@ interface BlogPostPageProps {
   params: { slug: string };
 }
 
-export const dynamic = "force-dynamic";
+export function generateStaticParams() {
+  return getAllPosts().map((post) => ({ slug: post.slug }));
+}
 
-export async function generateMetadata({ params }: BlogPostPageProps): Promise<Metadata> {
+export const dynamicParams = false;
+export const revalidate = 3600;
+
+export function generateMetadata({ params }: BlogPostPageProps): Metadata {
   const post = getPostBySlug(params.slug);
 
   if (!post) {
@@ -35,7 +41,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
     };
   }
 
-  const url = `https://genieai.app/blog/${post.slug}`;
+  const url = `https://gen1e.xyz/en/blog/${post.slug}`;
 
   return {
     title: `${post.title} | Genie AI Blog`,
@@ -99,12 +105,12 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
       name: "Genie AI",
       logo: {
         "@type": "ImageObject",
-        url: "https://genieai.app/Genie.png",
+        url: "https://gen1e.xyz/Genie.png",
       },
     },
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": `https://genieai.app/blog/${post.slug}`,
+      "@id": `https://gen1e.xyz/en/blog/${post.slug}`,
     },
   };
 
