@@ -122,10 +122,10 @@ async function getTechGenieSystemPrompt(): Promise<string> {
     fallback: `TechGenieBlueskyAgent {
   identity: "Tech Genie, an AI that remembers, connects ideas, and helps people build useful things"
   constraints {
-    response length <= ${RESPONSE_MAX_CHARS} characters including any CTA
+    response length <= ${RESPONSE_MAX_CHARS} characters
     never use em dashes
     never use hashtags | never hallucinate | never engage with spam
-    only mention ${SITE_CTA} when the topic is directly relevant to AI, memory-native software, agents, or the product
+    never drop links blindly. Only include ${SITE_CTA} if the user EXPLICITLY expresses a pain point that Tech Genie solves (e.g., struggling with memory, context windows, or AI integration). Otherwise, provide value and let the profile link do the work.
   }
   response format: <useful answer>
 }`,
@@ -434,6 +434,10 @@ export class BlueskyResponder {
     }
 
     if (replyIntent === 'praise' || replyIntent === 'agreement' || replyIntent === 'banter' || replyIntent === 'low_value') {
+      if (replyIntent !== 'low_value' && threadContext.replyToOwnPost) {
+        return { action: 'reply_short', replyIntent, reason: 'proactive_marketing_acknowledgement' };
+      }
+
       if (threadContext.replyToOwnPost || source === 'mention') {
         return { action: 'like_only', replyIntent, reason: 'lightweight_acknowledgement' };
       }

@@ -58,15 +58,15 @@ function getSupabaseClient(): SupabaseClient {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-function normalize(text: string): string {
+export function normalize(text: string): string {
   return text.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function countKeywordHits(text: string, keywords: readonly string[]): number {
+export function countKeywordHits(text: string, keywords: readonly string[]): number {
   return keywords.reduce((count, keyword) => count + (text.includes(keyword) ? 1 : 0), 0);
 }
 
-function inferTopicLane(text: string): { lane: TopicLane | null; laneScore: number } {
+export function inferTopicLane(text: string): { lane: TopicLane | null; laneScore: number } {
   let bestLane: TopicLane | null = null;
   let bestScore = 0;
 
@@ -81,7 +81,7 @@ function inferTopicLane(text: string): { lane: TopicLane | null; laneScore: numb
   return { lane: bestLane, laneScore: bestScore };
 }
 
-function evaluateQuality(text: string, metrics?: { likeCount?: number; replyCount?: number; repostCount?: number }) {
+export function evaluateQuality(text: string, metrics?: { likeCount?: number; replyCount?: number; repostCount?: number }) {
   let qualityScore = 0;
   const reasons: string[] = [];
 
@@ -121,11 +121,11 @@ function evaluateQuality(text: string, metrics?: { likeCount?: number; replyCoun
   return { qualityScore, reasons };
 }
 
-function findRejectReason(text: string, laneScore: number): string | null {
+export function findRejectReason(text: string, laneScore: number): string | null {
   if (text.length < MIN_TEXT_LENGTH) return 'too_short';
   if (LOW_SIGNAL_PATTERNS.some((pattern) => pattern.test(text))) return 'low_signal_pattern';
   if (GENERIC_HYPE_PATTERNS.some((pattern) => pattern.test(text))) return 'generic_hype';
-  if (/politics|election|war|celebrity drama|sports betting/i.test(text)) return 'off_topic';
+  if (/politics|election|war|celebrity drama|sports betting|hate|angry|outrage|scam|furious|disgusting|boycott|racist|scandal/i.test(text)) return 'off_topic_or_sensitive';
   if (laneScore < 2) return 'weak_lane_match';
   return null;
 }
@@ -239,7 +239,9 @@ export class BlueskyDiscoveryEngine {
   }
 
   decide(candidate: BlueskyDiscoveryCandidate): BlueskyDiscoveryDecision {
-    if (candidate.score >= MIN_LIKE_SCORE) {
+    if (candidate.score >= 12) {
+      return { uri: candidate.uri, action: 'reply', score: candidate.score, reason: candidate.reason };
+    } else if (candidate.score >= MIN_LIKE_SCORE) {
       return { uri: candidate.uri, action: 'like', score: candidate.score, reason: candidate.reason };
     }
     return { uri: candidate.uri, action: 'skip', score: candidate.score, reason: candidate.reason };
