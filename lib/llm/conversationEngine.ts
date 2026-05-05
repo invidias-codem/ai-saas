@@ -439,12 +439,28 @@ export async function generateConversationReply(
   // rather than describing what it would do. Also forward any tools defined
   // for this mode so Hermes can make function calls when appropriate.
   const isHermesMode = agentMode === 'fast';
-  const streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
-    model: actualModelId,
-    temperature: 0.9,
-    maxTokens: 2048,
-    ...(isHermesMode ? { agentic: true } : {}),
-  });
+  let streamResult;
+  try {
+    streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
+      model: actualModelId,
+      temperature: 0.9,
+      maxTokens: 2048,
+      ...(isHermesMode ? { agentic: true } : {}),
+    });
+  } catch (err: any) {
+    if (err?.status === 429 || String(err).includes('429')) {
+      console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to fast mode`);
+      const fallback = getProviderForMode('fast');
+      actualModelId = fallback.modelId;
+      streamResult = await fallback.provider.generateStream(history, enhancedSystemInstruction, {
+        model: actualModelId,
+        temperature: 0.9,
+        maxTokens: 2048,
+      });
+    } else {
+      throw err;
+    }
+  }
 
   const { stream: originalStream } = streamResult;
 
