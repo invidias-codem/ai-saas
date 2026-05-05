@@ -17,7 +17,7 @@
     "ajv-formats": "^3.0.1",
     "bs58": "^6.0.0",
     "hono": "^4.12.14",
-    "uuid": "^9.0.0"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.0.0",
