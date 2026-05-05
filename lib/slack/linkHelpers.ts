@@ -34,7 +34,7 @@ export async function extractUrlContent(url: string): Promise<{ title: string; c
         });
 
         // Verify content type is text/html
-        const contentType = headers['content-type'] || '';
+        const contentType = String(headers['content-type'] || '');
         if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
             return null;
         }
