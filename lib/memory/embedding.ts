@@ -133,10 +133,23 @@ function setCache(key: string, embedding: number[]): void {
  *   LAMBDA_OLLAMA_URL — legacy: if set and LAMBDA_EMBED_URL is not, falls back to Ollama API
  *   OLLAMA_EMBEDDING_MODEL — model name (default: nomic-embed-text)
  */
+/**
+ * Ensures a base URL always has an https:// scheme prefix.
+ * Handles cases where the env var is set without a scheme (e.g. "llm.gen1e.xyz").
+ */
+function ensureHttps(rawUrl: string): string {
+    if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
+    return `https://${rawUrl}`;
+}
+
 async function embedWithLambda(text: string): Promise<number[]> {
     // Prefer the dedicated embedding server; fall back to Ollama-compat if needed
-    const embedUrl = process.env.LAMBDA_EMBED_URL;
-    const ollamaUrl = process.env.LAMBDA_OLLAMA_URL;
+    const embedUrl = process.env.LAMBDA_EMBED_URL
+        ? ensureHttps(process.env.LAMBDA_EMBED_URL)
+        : undefined;
+    const ollamaUrl = process.env.LAMBDA_OLLAMA_URL
+        ? ensureHttps(process.env.LAMBDA_OLLAMA_URL)
+        : undefined;
 
     if (embedUrl) {
         // OpenAI-compat format (our FastAPI embedding sidecar)
