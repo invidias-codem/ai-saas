@@ -119,6 +119,31 @@ export class EngagementLearningStore {
       .slice(0, limit);
   }
 
+  async getDeferredPacketCounts(): Promise<Record<string, number>> {
+    const { data, error } = await supabase
+      .from("bluesky_engagement_learning")
+      .select("packet_id")
+      .eq("action_taken", "skip")
+      .not("packet_id", "is", null)
+      .limit(500);
+
+    if (error || !data) {
+      if (error) {
+        console.error("[Bluesky] Failed to load deferred packet counts", error);
+      }
+      return {};
+    }
+
+    const counts: Record<string, number> = {};
+    for (const row of data) {
+      const packetId = String(row.packet_id || "");
+      if (!packetId) continue;
+      counts[packetId] = (counts[packetId] ?? 0) + 1;
+    }
+
+    return counts;
+  }
+
   private normalize(text: string): string {
     return text.toLowerCase().replace(/\s+/g, " ").trim();
   }

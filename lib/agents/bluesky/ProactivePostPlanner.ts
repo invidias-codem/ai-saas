@@ -1,4 +1,5 @@
 import { STARTER_BLUESKY_KNOWLEDGE_PACKETS, type BlueskyKnowledgePacket } from "./knowledgePackets";
+import { EngagementLearningStore } from "./EngagementLearningStore";
 
 export interface ProactivePostPlan {
   topic: string;
@@ -22,9 +23,10 @@ const DEFAULT_POST_ANGLES = [
 
 export class ProactivePostPlanner {
   private packetCursor = 0;
+  private readonly learningStore = new EngagementLearningStore();
 
-  planNextPost(existingTopics: string[] = []): ProactivePostPlan {
-    const packet = this.selectPacket(existingTopics);
+  async planNextPost(existingTopics: string[] = []): Promise<ProactivePostPlan> {
+    const packet = await this.selectPacket(existingTopics);
 
     if (packet) {
       const angle = this.selectAngle(packet);
@@ -82,20 +84,28 @@ export class ProactivePostPlanner {
     return parts.join("\n");
   }
 
-  private selectPacket(existingTopics: string[]): BlueskyKnowledgePacket | null {
+  private async selectPacket(existingTopics: string[]): Promise<BlueskyKnowledgePacket | null> {
     if (STARTER_BLUESKY_KNOWLEDGE_PACKETS.length === 0) {
       return null;
     }
 
+    const deferredCounts = await this.learningStore.getDeferredPacketCounts();
     const normalizedExisting = new Set(existingTopics.map((topic) => topic.toLowerCase()));
     const candidates = STARTER_BLUESKY_KNOWLEDGE_PACKETS.filter(
       (packet) => !normalizedExisting.has(packet.topicTitle.toLowerCase())
     );
 
     const pool = candidates.length > 0 ? candidates : STARTER_BLUESKY_KNOWLEDGE_PACKETS;
-    const packet = pool[this.packetCursor % pool.length];
+    const prioritized = [...pool].sort((a, b) => {
+      const aCount = deferredCounts[a.topicId] ?? 0;
+      const bCount = deferredCounts[b.topicId] ?? 0;
+      if (aCount !== bCount) return bCount - aCount;
+      return 0;
+    });
+
+    const packet = prioritized[this.packetCursor % prioritized.length];
     this.packetCursor += 1;
-    return packet;
+    return packet ?? null;
   }
 
   private selectAngle(packet: BlueskyKnowledgePacket): string {
