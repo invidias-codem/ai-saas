@@ -1,6 +1,7 @@
 import { ReplyDecisionEngine } from "./ReplyDecisionEngine";
 import type { BlueskyMention } from "./types";
 import { STARTER_BLUESKY_KNOWLEDGE_PACKETS, type BlueskyKnowledgePacket } from "./knowledgePackets";
+import { EngagementLearningStore } from "./EngagementLearningStore";
 
 export interface BlueskyResponderDeps {
   generateReply: (prompt: string) => Promise<string>;
@@ -10,12 +11,15 @@ export interface BlueskyResponderDeps {
 
 export class BlueskyResponder {
   private readonly decisionEngine = new ReplyDecisionEngine();
+  private readonly learningStore = new EngagementLearningStore();
 
   constructor(private readonly deps: BlueskyResponderDeps) {}
 
   async handleMention(mention: BlueskyMention): Promise<void> {
     const packet = this.findRelevantPacket(mention.text);
     const decision = this.decisionEngine.decide(mention.text, packet);
+
+    this.learningStore.capture({ mention, decision, packet });
 
     if (decision.action === "skip") {
       return;
@@ -31,6 +35,10 @@ export class BlueskyResponder {
     const prompt = this.buildReplyPrompt(mention, decision.suggestedReplyStyle ?? "direct", packet);
     const reply = await this.deps.generateReply(prompt);
     await this.deps.sendReply(mention, reply.trim());
+  }
+
+  getEngagementSummary() {
+    return this.learningStore.summarizeRecurringQuestions();
   }
 
   private buildReplyPrompt(
