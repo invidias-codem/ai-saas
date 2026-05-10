@@ -5,6 +5,11 @@ export type BlueskyMention = {
   uri: string;
   cid: string;
   createdAt?: string;
+  indexedAt?: string;
+  replyRef?: {
+    root: { uri: string; cid: string };
+    parent: { uri: string; cid: string };
+  };
 };
 
 export type BlueskyEngagementAction = "reply" | "like" | "skip";
@@ -26,3 +31,45 @@ export interface BlueskyReplyDecision {
 }
 
 export type BlueskyNotificationAction = "reply_now" | "like_only" | "skip" | "defer_for_topic" | "escalate";
+
+export type BlueskyReplyIntent =
+  | "answer"
+  | "clarification"
+  | "correction"
+  | "challenge"
+  | "praise"
+  | "thanks"
+  | "follow_up"
+  | "lightweight_ack";
+
+export type EngagementResult = {
+  mentionUri: string;
+  responded: boolean;
+  liked: boolean;
+  action: "reply" | "like_only" | "skip";
+  responseUri?: string;
+  responseCid?: string;
+  responseText?: string;
+  factsExtracted: number;
+  error?: string;
+};
+
+export type BlueskyDiscoveryCandidate = {
+  uri: string;
+  cid: string;
+  text: string;
+  authorHandle: string;
+  authorDid: string;
+  likeCount?: number;
+  replyCount?: number;
+  repostCount?: number;
+  score: number;
+  reason: string;
+};
+
+export type BlueskyDiscoveryDecision = {
+  uri: string;
+  action: "reply" | "like" | "skip";
+  score: number;
+  reason: string;
+};
