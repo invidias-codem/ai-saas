@@ -58,7 +58,7 @@ export type EngagementResult = {
   mentionUri: string;
   responded: boolean;
   liked: boolean;
-  action: "reply" | "like_only" | "skip";
+  action: BlueskyEngagementAction;
   responseUri?: string;
   responseCid?: string;
   responseText?: string;
