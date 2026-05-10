@@ -43,7 +43,10 @@ create index if not exists idx_bluesky_engagement_learning_author_handle
 
 alter table public.bluesky_engagement_learning enable row level security;
 
-create policy if not exists "service role can manage bluesky engagement learning"
+drop policy if exists "service role can manage bluesky engagement learning"
+on public.bluesky_engagement_learning;
+
+create policy "service role can manage bluesky engagement learning"
   on public.bluesky_engagement_learning
   for all
   using (auth.role() = 'service_role')
