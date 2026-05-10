@@ -19,13 +19,13 @@ export class BlueskyResponder {
     const packet = this.findRelevantPacket(mention.text);
     const decision = this.decisionEngine.decide(mention.text, packet);
 
-    this.learningStore.capture({ mention, decision, packet });
-
     if (decision.action === "skip") {
+      await this.learningStore.capture({ mention, decision, packet, sourceContext: "mention" });
       return;
     }
 
     if (decision.action === "like") {
+      await this.learningStore.capture({ mention, decision, packet, sourceContext: "mention" });
       if (this.deps.sendLike) {
         await this.deps.sendLike(mention);
       }
@@ -34,10 +34,20 @@ export class BlueskyResponder {
 
     const prompt = this.buildReplyPrompt(mention, decision.suggestedReplyStyle ?? "direct", packet);
     const reply = await this.deps.generateReply(prompt);
-    await this.deps.sendReply(mention, reply.trim());
+    const trimmedReply = reply.trim();
+    await this.deps.sendReply(mention, trimmedReply);
+
+    await this.learningStore.capture({
+      mention,
+      decision,
+      packet,
+      sourceContext: "mention",
+      replyText: trimmedReply,
+      postTopic: packet?.topicTitle,
+    });
   }
 
-  getEngagementSummary() {
+  async getEngagementSummary() {
     return this.learningStore.summarizeRecurringQuestions();
   }
 

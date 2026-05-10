@@ -53,11 +53,13 @@ begin
 end;
 $$;
 
+drop trigger if exists workspaces_touch_updated_at on public.workspaces;
 create trigger workspaces_touch_updated_at
 before update on public.workspaces
 for each row
 execute function public.touch_updated_at();
 
+drop trigger if exists workspace_state_touch_updated_at on public.workspace_state;
 create trigger workspace_state_touch_updated_at
 before update on public.workspace_state
 for each row

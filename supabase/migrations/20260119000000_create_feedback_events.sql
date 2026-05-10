@@ -48,6 +48,7 @@ create index if not exists idx_feedback_events_rating
 alter table public.feedback_events enable row level security;
 
 -- Users can view their own feedback (service role bypasses RLS for inserts)
+drop policy if exists "Users can view their own feedback" on public.feedback_events;
 create policy "Users can view their own feedback"
   on public.feedback_events
   for select

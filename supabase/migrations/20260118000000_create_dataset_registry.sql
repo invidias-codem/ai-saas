@@ -1,4 +1,4 @@
-npm run curate:dataset -- --since-days 30 --min-rating -1 --max-rating -1 --out datasets-- Dataset registry table (Phase 2.5 / optional but recommended)
+-- Dataset registry table (Phase 2.5 / optional but recommended)
 -- Tracks curated dataset versions and their generation parameters.
 
 -- Enable UUID extension if not present
