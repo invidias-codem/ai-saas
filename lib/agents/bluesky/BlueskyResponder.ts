@@ -1,7 +1,7 @@
-import { ReplyDecisionEngine } from "./ReplyDecisionEngine";
 import type { BlueskyMention } from "./types";
-import { STARTER_BLUESKY_KNOWLEDGE_PACKETS, type BlueskyKnowledgePacket } from "./knowledgePackets";
 import { EngagementLearningStore } from "./EngagementLearningStore";
+import { BlueskyNotificationPlanner } from "./BlueskyNotificationPlanner";
+import type { BlueskyKnowledgePacket } from "./knowledgePackets";
 
 export interface BlueskyResponderDeps {
   generateReply: (prompt: string) => Promise<string>;
@@ -10,40 +10,79 @@ export interface BlueskyResponderDeps {
 }
 
 export class BlueskyResponder {
-  private readonly decisionEngine = new ReplyDecisionEngine();
+  private readonly notificationPlanner = new BlueskyNotificationPlanner();
   private readonly learningStore = new EngagementLearningStore();
 
   constructor(private readonly deps: BlueskyResponderDeps) {}
 
   async handleMention(mention: BlueskyMention): Promise<void> {
-    const packet = this.findRelevantPacket(mention.text);
-    const decision = this.decisionEngine.decide(mention.text, packet);
+    const plan = this.notificationPlanner.plan(mention);
 
-    if (decision.action === "skip") {
-      await this.learningStore.capture({ mention, decision, packet, sourceContext: "mention" });
+    if (plan.action === "skip") {
+      await this.learningStore.capture({
+        mention,
+        decision: {
+          action: "skip",
+          commentClass: plan.commentClass,
+          rationale: plan.rationale,
+          suggestedReplyStyle: plan.responseStyle,
+        },
+        packet: plan.packet,
+        sourceContext: "mention",
+      });
       return;
     }
 
-    if (decision.action === "like") {
-      await this.learningStore.capture({ mention, decision, packet, sourceContext: "mention" });
+    if (plan.action === "like_only") {
+      await this.learningStore.capture({
+        mention,
+        decision: {
+          action: "like",
+          commentClass: plan.commentClass,
+          rationale: plan.rationale,
+          suggestedReplyStyle: plan.responseStyle,
+        },
+        packet: plan.packet,
+        sourceContext: "mention",
+      });
       if (this.deps.sendLike) {
         await this.deps.sendLike(mention);
       }
       return;
     }
 
-    const prompt = this.buildReplyPrompt(mention, decision.suggestedReplyStyle ?? "direct", packet);
+    if (plan.action === "defer_for_topic" || plan.action === "escalate") {
+      await this.learningStore.capture({
+        mention,
+        decision: {
+          action: "skip",
+          commentClass: plan.commentClass,
+          rationale: plan.rationale,
+          suggestedReplyStyle: plan.responseStyle,
+        },
+        packet: plan.packet,
+        sourceContext: "mention",
+      });
+      return;
+    }
+
+    const prompt = this.buildReplyPrompt(mention, plan.responseStyle ?? "direct", plan.packet);
     const reply = await this.deps.generateReply(prompt);
     const trimmedReply = reply.trim();
     await this.deps.sendReply(mention, trimmedReply);
 
     await this.learningStore.capture({
       mention,
-      decision,
-      packet,
+      decision: {
+        action: "reply",
+        commentClass: plan.commentClass,
+        rationale: plan.rationale,
+        suggestedReplyStyle: plan.responseStyle,
+      },
+      packet: plan.packet,
       sourceContext: "mention",
       replyText: trimmedReply,
-      postTopic: packet?.topicTitle,
+      postTopic: plan.packet?.topicTitle,
     });
   }
 
@@ -91,24 +130,5 @@ export class BlueskyResponder {
       "- no surrounding quotes",
       "- answer before branding",
     ].join("\n");
-  }
-
-  private findRelevantPacket(text: string): BlueskyKnowledgePacket | undefined {
-    const normalized = text.toLowerCase();
-
-    return STARTER_BLUESKY_KNOWLEDGE_PACKETS.find((packet) => {
-      const haystack = [
-        packet.topicTitle,
-        packet.summary,
-        packet.safeClaim,
-        ...packet.followUpQuestionsLikely,
-        ...packet.replySeeds,
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      const topicWords = packet.topicTitle.toLowerCase().split(/\s+/).filter(Boolean);
-      return topicWords.some((word) => word.length > 3 && normalized.includes(word)) || haystack.includes(normalized);
-    });
   }
 }

@@ -24,3 +24,5 @@ export interface BlueskyReplyDecision {
   rationale: string;
   suggestedReplyStyle?: "direct" | "clarifying" | "skeptical" | "curious" | "warm";
 }
+
+export type BlueskyNotificationAction = "reply_now" | "like_only" | "skip" | "defer_for_topic" | "escalate";
