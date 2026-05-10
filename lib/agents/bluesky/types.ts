@@ -12,7 +12,13 @@ export type BlueskyMention = {
   };
 };
 
-export type BlueskyEngagementAction = "reply" | "like" | "skip";
+export type BlueskyEngagementAction =
+  | "reply"
+  | "reply_full"
+  | "reply_short"
+  | "like"
+  | "like_only"
+  | "skip";
 
 export type BlueskyCommentClass =
   | "technical_question"
