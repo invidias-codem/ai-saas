@@ -40,7 +40,8 @@ export type BlueskyReplyIntent =
   | "praise"
   | "thanks"
   | "follow_up"
-  | "lightweight_ack";
+  | "lightweight_ack"
+  | "decline";
 
 export type EngagementResult = {
   mentionUri: string;
