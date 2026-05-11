@@ -1,3 +1,8 @@
+export type BlueskyReplyRef = {
+  root: { uri: string; cid: string };
+  parent: { uri: string; cid: string };
+};
+
 export type BlueskyMention = {
   authorDid: string;
   authorHandle: string;
@@ -6,10 +11,7 @@ export type BlueskyMention = {
   cid: string;
   createdAt?: string;
   indexedAt?: string;
-  replyRef?: {
-    root: { uri: string; cid: string };
-    parent: { uri: string; cid: string };
-  };
+  replyRef?: BlueskyReplyRef;
 };
 
 export type BlueskyEngagementAction =
