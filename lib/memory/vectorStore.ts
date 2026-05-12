@@ -1,6 +1,5 @@
-
 import { supabase } from '../supabaseClient';
-import { generateEmbedding } from './embedding';
+import { generateEmbeddingWithMetadata } from './embedding';
 
 export type MemoryType = 'conversation_summary' | 'fact' | 'preference';
 
@@ -12,6 +11,28 @@ export interface Memory {
     metadata?: any;
     similarity?: number;
     createdAt: string;
+}
+
+function buildEmbeddingColumnPatch(embeddingResult: Awaited<ReturnType<typeof generateEmbeddingWithMetadata>>) {
+    const now = new Date().toISOString();
+    return embeddingResult.dimension === 768
+        ? {
+            embedding: embeddingResult.vector,
+            embedding_768: embeddingResult.vector,
+            embedding_provider: embeddingResult.provider,
+            embedding_model: embeddingResult.model,
+            embedding_updated_at: now,
+        }
+        : {
+            embedding_3072: embeddingResult.vector,
+            embedding_provider: embeddingResult.provider,
+            embedding_model: embeddingResult.model,
+            embedding_updated_at: now,
+        };
+}
+
+function getMemoryRpcName(dimension: 768 | 3072): 'match_memories_768' | 'match_memories_3072' {
+    return dimension === 768 ? 'match_memories_768' : 'match_memories_3072';
 }
 
 /**
@@ -49,7 +70,7 @@ export async function listMemories(
 }
 
 /**
- * Stores a new memory in Supabase with its vector embedding.
+ * Stores a new memory in Supabase with provider/dimension-aware embeddings.
  */
 export async function storeMemory(
     userId: string,
@@ -58,9 +79,8 @@ export async function storeMemory(
     metadata: any = {}
 ): Promise<string | null> {
     try {
-        const embedding = await generateEmbedding(content);
+        const embeddingResult = await generateEmbeddingWithMetadata(content);
 
-        // Compress content for storage to save space
         const { compress } = await import('@/lib/compression');
         const compressedContent = compress(content);
 
@@ -69,9 +89,9 @@ export async function storeMemory(
             .insert({
                 user_id: userId,
                 content: compressedContent,
-                embedding, // Supabase pgvector handles array -> vector conversion
                 type,
-                metadata
+                metadata,
+                ...buildEmbeddingColumnPatch(embeddingResult),
             })
             .select('id')
             .single();
@@ -89,8 +109,7 @@ export async function storeMemory(
 }
 
 /**
- * Searches for relevant memories using vector similarity.
- * Calls RPC function 'match_memories'.
+ * Searches for relevant memories using dimension-aware vector similarity RPCs.
  */
 export async function searchMemories(
     userId: string,
@@ -99,15 +118,23 @@ export async function searchMemories(
     featureType?: string
 ): Promise<Memory[]> {
     try {
-        const queryEmbedding = await generateEmbedding(query);
+        const embeddingResult = await generateEmbeddingWithMetadata(query);
         const { safeDecompress } = await import('@/lib/compression');
+        const rpcName = getMemoryRpcName(embeddingResult.dimension);
 
-        const { data, error } = await supabase.rpc('match_memories', {
-            query_embedding: queryEmbedding,
-            match_threshold: 0.5, // Adjust threshold as needed
+        console.info('[VectorStore] Using retrieval lane', {
+            rpcName,
+            provider: embeddingResult.provider,
+            model: embeddingResult.model,
+            dimension: embeddingResult.dimension,
+        });
+
+        const { data, error } = await supabase.rpc(rpcName, {
+            query_embedding: embeddingResult.vector,
+            match_threshold: 0.5,
             match_count: limit,
             filter_user_id: userId,
-            filter_feature_type: featureType || null // Pass feature type filter
+            filter_feature_type: featureType || null
         });
 
         if (error) {
@@ -118,7 +145,7 @@ export async function searchMemories(
         return data.map((item: any) => ({
             id: item.id,
             userId: userId,
-            content: safeDecompress(item.content), // Safely decompress (handles legacy data)
+            content: safeDecompress(item.content),
             type: item.type,
             metadata: item.metadata,
             similarity: item.similarity,
@@ -131,16 +158,11 @@ export async function searchMemories(
     }
 }
 
-
-/**
- * Retrieves memory statistics for a user.
- */
 export async function getMemoryStats(userId: string): Promise<{
     totalMemories: number;
     lastInteractionDate: Date | undefined;
 }> {
     try {
-        // Get count
         const { count, error: countError } = await supabase
             .from('memory_bank')
             .select('*', { count: 'exact', head: true })
@@ -148,16 +170,13 @@ export async function getMemoryStats(userId: string): Promise<{
 
         if (countError) throw countError;
 
-        // Get last interaction
-        const { data: lastMemory, error: lastError } = await supabase
+        const { data: lastMemory } = await supabase
             .from('memory_bank')
             .select('created_at')
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .limit(1)
             .single();
-
-        // It's okay if no memory found (lastError might be 'Row not found')
 
         return {
             totalMemories: count || 0,
@@ -169,10 +188,6 @@ export async function getMemoryStats(userId: string): Promise<{
     }
 }
 
-
-/**
- * Retrieves the count of memories for a user.
- */
 export async function getMemoryCount(userId: string): Promise<number> {
     try {
         const { count, error } = await supabase
@@ -189,10 +204,6 @@ export async function getMemoryCount(userId: string): Promise<number> {
     }
 }
 
-
-/**
- * Deletes a memory by ID.
- */
 export async function deleteMemory(memoryId: string, userId: string): Promise<boolean> {
     try {
         const { error } = await supabase
@@ -209,12 +220,8 @@ export async function deleteMemory(memoryId: string, userId: string): Promise<bo
     }
 }
 
-const MAX_MEMORY_CONTENT_LENGTH = 50000; // ~50KB text limit
+const MAX_MEMORY_CONTENT_LENGTH = 50000;
 
-/**
- * Updates a memory by ID.
- * Re-generates embedding if content changes.
- */
 export async function updateMemory(
     memoryId: string,
     userId: string,
@@ -231,15 +238,13 @@ export async function updateMemory(
     try {
         const { compress } = await import('@/lib/compression');
         const compressedContent = compress(newContent);
-        const embedding = await generateEmbedding(newContent);
+        const embeddingResult = await generateEmbeddingWithMetadata(newContent);
 
         const { error } = await supabase
             .from('memory_bank')
             .update({
                 content: compressedContent,
-                embedding: embedding,
-                // created_at? No, keep original creation time. Maybe add updated_at if column exists?
-                // Assuming no updated_at column for now based on snippet.
+                ...buildEmbeddingColumnPatch(embeddingResult),
             })
             .eq('id', memoryId)
             .eq('user_id', userId);
@@ -251,5 +256,3 @@ export async function updateMemory(
         return false;
     }
 }
-
-

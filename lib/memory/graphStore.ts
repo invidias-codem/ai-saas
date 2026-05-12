@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient';
-import { generateEmbedding } from './embedding';
+import { generateEmbeddingWithMetadata } from './embedding';
 
 export type NodeType = 'person' | 'project' | 'technology' | 'organization' | 'concept' | 'event' | 'location' | 'other';
 export type WMEventType = 'ASSERTED' | 'CONTRADICTED' | 'OBSOLETED' | 'MERGED';
@@ -23,10 +23,28 @@ export interface GraphEdge {
     weight: number;
 }
 
-/**
- * Emits an immutable event to the World Model event log (wm_events).
- * This is the Step 1 DDIA implementation for Event Sourcing.
- */
+function buildGraphEmbeddingPatch(embeddingResult: Awaited<ReturnType<typeof generateEmbeddingWithMetadata>>) {
+    const now = new Date().toISOString();
+    return embeddingResult.dimension === 768
+        ? {
+            embedding: embeddingResult.vector,
+            embedding_768: embeddingResult.vector,
+            embedding_provider: embeddingResult.provider,
+            embedding_model: embeddingResult.model,
+            embedding_updated_at: now,
+        }
+        : {
+            embedding_3072: embeddingResult.vector,
+            embedding_provider: embeddingResult.provider,
+            embedding_model: embeddingResult.model,
+            embedding_updated_at: now,
+        };
+}
+
+function getGraphRpcName(dimension: 768 | 3072): 'match_wm_nodes_768' | 'match_wm_nodes_3072' {
+    return dimension === 768 ? 'match_wm_nodes_768' : 'match_wm_nodes_3072';
+}
+
 export async function emitWorldModelEvent(
     entityId: string,
     eventType: WMEventType,
@@ -56,9 +74,6 @@ export async function emitWorldModelEvent(
     }
 }
 
-/**
- * Adds or updates a node in the knowledge graph.
- */
 export async function addNode(
     userId: string,
     name: string,
@@ -69,11 +84,8 @@ export async function addNode(
     trustTier: TrustTier = 'UNVERIFIED'
 ): Promise<string | null> {
     try {
-        // 1. Generate embedding for semantic search
-        const embedding = await generateEmbedding(`${name}: ${description || ''}`);
+        const embeddingResult = await generateEmbeddingWithMetadata(`${name}: ${description || ''}`);
 
-        // 2. Legacy Projection Update (graph_nodes)
-        // TODO (T-032): Once wm_current_entities view supports vector search, remove this direct upsert.
         const { data, error } = await supabase
             .from('graph_nodes')
             .upsert({
@@ -81,9 +93,9 @@ export async function addNode(
                 name,
                 type,
                 description,
-                embedding,
                 metadata,
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
+                ...buildGraphEmbeddingPatch(embeddingResult),
             }, {
                 onConflict: 'user_id, name, type'
             })
@@ -92,7 +104,6 @@ export async function addNode(
 
         if (error) throw error;
 
-        // 3. Emit immutable event to the World Model Event Log
         await emitWorldModelEvent(
             data.id,
             'ASSERTED',
@@ -115,9 +126,6 @@ export async function addNode(
     }
 }
 
-/**
- * Adds a directed edge between two nodes.
- */
 export async function addEdge(
     userId: string,
     sourceId: string,
@@ -128,7 +136,6 @@ export async function addEdge(
     trustTier: TrustTier = 'UNVERIFIED'
 ): Promise<string | null> {
     try {
-        // Legacy Projection Update
         const { data, error } = await supabase
             .from('graph_edges')
             .upsert({
@@ -145,7 +152,6 @@ export async function addEdge(
 
         if (error) throw error;
 
-        // Emit immutable event
         await emitWorldModelEvent(
             data.id,
             'ASSERTED',
@@ -168,10 +174,6 @@ export async function addEdge(
     }
 }
 
-/**
- * Strengthens an existing edge or creates a new one.
- * Deprecates direct UPDATE on nodes; emits an ASSERTED event with the new weight instead.
- */
 export async function strengthenEdge(
     userId: string,
     sourceId: string,
@@ -196,8 +198,6 @@ export async function strengthenEdge(
 
         if (existing) {
             const newWeight = Math.min(10.0, (existing.weight || 1.0) + 0.5);
-            
-            // 1. Emit immutable event reflecting the new state (Event Sourcing)
             await emitWorldModelEvent(
                 existing.id,
                 'ASSERTED',
@@ -213,7 +213,6 @@ export async function strengthenEdge(
                 trustTier
             );
 
-            // 2. Legacy projection update (to keep current reads working)
             const { error: updateError } = await supabase
                 .from('graph_edges')
                 .update({ weight: newWeight, updated_at: new Date().toISOString() })
@@ -233,17 +232,12 @@ export async function strengthenEdge(
     }
 }
 
-/**
- * Invalidates a node or edge (Event Sourcing alternative to DELETE).
- */
 export async function invalidateEntity(
     entityId: string,
     entityType: 'node' | 'edge',
     sourceModel: string = 'system',
     trustTier: TrustTier = 'UNVERIFIED'
 ): Promise<boolean> {
-    // We emit an OBSOLETED event. The Materialized View (wm_current_entities) 
-    // will see this as the latest event and logically delete it from read queries.
     const success = await emitWorldModelEvent(
         entityId,
         'OBSOLETED',
@@ -252,9 +246,6 @@ export async function invalidateEntity(
         trustTier
     );
 
-    // If we wanted to keep the legacy projection in sync, we could hard-delete from 
-    // graph_nodes or graph_edges here, but ideally we stop doing that.
-    // For now, we do hard-delete on legacy tables just so it's fully gone from legacy reads.
     if (success) {
         const table = entityType === 'node' ? 'graph_nodes' : 'graph_edges';
         await supabase.from(table).delete().eq('id', entityId);
@@ -263,22 +254,24 @@ export async function invalidateEntity(
     return success;
 }
 
-/**
- * Finds nodes related to a specific entity name using semantic search + edge traversal.
- * Note: Still uses legacy `match_nodes` and `graph_edges` until the Materialized View
- * is fully mapped for embeddings.
- */
 export async function findRelatedEntities(
     userId: string,
     entityName: string
 ): Promise<{ centralNode: GraphNode | null; relatedNodes: any[] }> {
     try {
-        const embedding = await generateEmbedding(entityName);
+        const embeddingResult = await generateEmbeddingWithMetadata(entityName);
+        const rpcName = getGraphRpcName(embeddingResult.dimension);
 
-        // 1. Semantic Match using the new Event Sourced view (via RPC)
-        const { data: similarNodes, error } = await supabase.rpc('match_wm_nodes', {
-            query_embedding: embedding,
-            match_threshold: 0.85, 
+        console.info('[GraphStore] Using retrieval lane', {
+            rpcName,
+            provider: embeddingResult.provider,
+            model: embeddingResult.model,
+            dimension: embeddingResult.dimension,
+        });
+
+        const { data: similarNodes, error } = await supabase.rpc(rpcName, {
+            query_embedding: embeddingResult.vector,
+            match_threshold: 0.85,
             match_count: 1,
             p_user_id: userId
         });
@@ -288,7 +281,6 @@ export async function findRelatedEntities(
 
         const centralNode = similarNodes[0];
 
-        // 2. Traverse 1-hop using the new Event Sourced view (via RPC)
         const { data: interactions, error: traverseError } = await supabase.rpc('get_wm_related_entities', {
             p_central_node_id: centralNode.id
         });
@@ -298,7 +290,6 @@ export async function findRelatedEntities(
             return { centralNode, relatedNodes: [] };
         }
 
-        // Format the RPC output to match the legacy format expected by formatGraphContext
         const formattedRelatedNodes = (interactions || []).map((rel: any) => ({
             relation: rel.relation,
             direction: rel.direction,
