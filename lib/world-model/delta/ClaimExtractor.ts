@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ExtractedClaim } from "./types";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite" });
 
 function stripThoughtSignature(text: string): string {
   return text.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, "").trim();

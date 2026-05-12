@@ -15,7 +15,7 @@ export interface FactExtractionResult {
   storedCount: number;
 }
 
-const GEMINI_FLASH_MODEL = "gemini-3.1-flash-lite-preview";
+const GEMINI_FLASH_MODEL = "gemini-3.1-flash-lite";
 
 function stripThoughtSignature(text: string): string {
   return text.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim();
