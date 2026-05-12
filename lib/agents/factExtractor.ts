@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
-import { generateEmbedding } from '@/lib/memory/embedding';
+import { generateEmbeddingWithMetadata } from '@/lib/memory/embedding';
 import { shouldPromoteMemory, promoteToUserScope } from '@/lib/memoryPromotion';
 
 export interface ExtractedFact {
@@ -17,6 +17,48 @@ export interface FactExtractionResult {
 
 const GEMINI_FLASH_MODEL = "gemini-3.1-flash-lite-preview";
 
+function stripThoughtSignature(text: string): string {
+  return text.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim();
+}
+
+function extractFirstJsonPayload(text: string): string {
+  const cleaned = stripThoughtSignature(text).trim();
+  const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const source = fenced ? fenced[1].trim() : cleaned;
+
+  const firstArray = source.indexOf('[');
+  const lastArray = source.lastIndexOf(']');
+  if (firstArray !== -1 && lastArray !== -1 && lastArray > firstArray) {
+    return source.slice(firstArray, lastArray + 1);
+  }
+
+  const firstObj = source.indexOf('{');
+  const lastObj = source.lastIndexOf('}');
+  if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
+    return source.slice(firstObj, lastObj + 1);
+  }
+
+  return source;
+}
+
+function buildEmbeddingColumnPatch(embeddingResult: Awaited<ReturnType<typeof generateEmbeddingWithMetadata>>) {
+  const now = new Date().toISOString();
+  return embeddingResult.dimension === 768
+    ? {
+        embedding: embeddingResult.vector,
+        embedding_768: embeddingResult.vector,
+        embedding_provider: embeddingResult.provider,
+        embedding_model: embeddingResult.model,
+        embedding_updated_at: now,
+      }
+    : {
+        embedding_3072: embeddingResult.vector,
+        embedding_provider: embeddingResult.provider,
+        embedding_model: embeddingResult.model,
+        embedding_updated_at: now,
+      };
+}
+
 /**
  * Extracts structured facts from conversation using Gemini Flash
  */
@@ -26,7 +68,7 @@ export async function extractFactsFromConversation(
 ): Promise<ExtractedFact[]> {
   try {
     const geminiProvider = new GeminiProvider();
-    
+
     const systemPrompt = `You are a fact extraction agent. Analyze the conversation between a user and an AI assistant to extract structured facts about the user.
 
 Extract facts in these categories:
@@ -56,18 +98,17 @@ Return ONLY a valid JSON array of facts:
 Return empty array [] if no facts can be extracted.`;
 
     const conversationText = `User: ${userQuery}\n\nAssistant: ${assistantResponse}`;
-    
+
     const result = await geminiProvider.generateStream(
       [{ role: 'user', text: conversationText }],
       systemPrompt,
       {
         model: GEMINI_FLASH_MODEL,
-        temperature: 0.1, // Low temperature for consistent extraction
+        temperature: 0.1,
         maxTokens: 2048
       }
     );
 
-    // Collect the streamed response
     const reader = result.stream.getReader();
     const decoder = new TextDecoder();
     let fullResponse = '';
@@ -78,29 +119,21 @@ Return empty array [] if no facts can be extracted.`;
       fullResponse += decoder.decode(value, { stream: true });
     }
 
-    // Parse JSON response
     try {
-      const cleanResponse = fullResponse.trim();
-      // Handle potential markdown code blocks
-      const jsonMatch = cleanResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      const jsonText = jsonMatch ? jsonMatch[1] : cleanResponse;
-      
+      const jsonText = extractFirstJsonPayload(fullResponse);
       const facts = JSON.parse(jsonText) as ExtractedFact[];
-      
-      // Validate and filter facts
-      return facts.filter(fact => 
-        fact.type && 
-        fact.value && 
-        fact.confidence >= 0.3 && // Minimum confidence threshold
+
+      return facts.filter(fact =>
+        fact.type &&
+        fact.value &&
+        fact.confidence >= 0.3 &&
         fact.confidence <= 1.0
       );
-
     } catch (parseError) {
       console.error('[FactExtractor] Failed to parse JSON response:', parseError);
       console.error('[FactExtractor] Raw response:', fullResponse);
       return [];
     }
-
   } catch (error) {
     console.error('[FactExtractor] Error extracting facts:', error);
     return [];
@@ -121,11 +154,9 @@ export async function storeExtractedFacts(
 
   for (const fact of facts) {
     try {
-      // Generate embedding for the fact
-      const embedding = await generateEmbedding(fact.value);
-      
-      // Determine scope based on confidence and type
-      const scope = fact.confidence >= 0.85 && 
+      const embeddingResult = await generateEmbeddingWithMetadata(fact.value);
+
+      const scope = fact.confidence >= 0.85 &&
                     ['personal', 'skill', 'preference'].includes(fact.type) ? 'user' : 'conversation';
 
       const { data, error } = await supabase
@@ -135,9 +166,9 @@ export async function storeExtractedFacts(
           source_conversation_id: conversationId,
           type: fact.type,
           content: fact.value,
-          scope: scope,
+          scope,
           confidence: fact.confidence,
-          embedding: embedding,
+          ...buildEmbeddingColumnPatch(embeddingResult),
           metadata: {
             ...metadata,
             extractedAt: new Date().toISOString(),
@@ -154,7 +185,6 @@ export async function storeExtractedFacts(
         stored.push(data.id);
         console.log(`[FactExtractor] Stored fact: ${fact.value} (confidence: ${fact.confidence}, scope: ${scope})`);
       }
-
     } catch (error) {
       console.error(`[FactExtractor] Exception storing fact "${fact.value}":`, error);
       errors.push({ fact, error });
@@ -174,7 +204,6 @@ export async function promoteHighConfidenceFacts(
 ): Promise<number> {
   let promotedCount = 0;
 
-  // Get conversation-scoped memories that were just created
   const { data: memories, error } = await supabase
     .from('memory_bank')
     .select('*')
@@ -200,9 +229,7 @@ export async function promoteHighConfidenceFacts(
 
     if (shouldPromoteMemory(promotableMemory)) {
       const success = await promoteToUserScope(userId, memory.id);
-      if (success) {
-        promotedCount++;
-      }
+      if (success) promotedCount++;
     }
   }
 
@@ -223,7 +250,6 @@ export async function processConversationFacts(
   try {
     console.log(`[FactExtractor] Processing facts for conversation ${conversationId}`);
 
-    // 1. Extract facts using LLM
     const facts = await extractFactsFromConversation(userQuery, assistantResponse);
     console.log(`[FactExtractor] Extracted ${facts.length} facts`);
 
@@ -231,14 +257,12 @@ export async function processConversationFacts(
       return { facts: [], promotedCount: 0, storedCount: 0 };
     }
 
-    // 2. Store facts in database
     const { stored, errors } = await storeExtractedFacts(userId, conversationId, facts, metadata);
-    
+
     if (errors.length > 0) {
       console.warn(`[FactExtractor] ${errors.length} errors occurred while storing facts`);
     }
 
-    // 3. Promote high-confidence personal facts to user scope
     const promotedCount = await promoteHighConfidenceFacts(userId, conversationId, facts);
 
     return {
@@ -246,7 +270,6 @@ export async function processConversationFacts(
       promotedCount,
       storedCount: stored.length
     };
-
   } catch (error) {
     console.error('[FactExtractor] Error in processConversationFacts:', error);
     return { facts: [], promotedCount: 0, storedCount: 0 };
@@ -272,7 +295,7 @@ export async function getUserRecentFacts(
     }
 
     const { data, error } = await query
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
       .limit(limit);
 
     if (error) {
@@ -281,7 +304,6 @@ export async function getUserRecentFacts(
     }
 
     return data || [];
-
   } catch (error) {
     console.error('[FactExtractor] Exception fetching recent facts:', error);
     return [];

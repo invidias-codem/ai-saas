@@ -2,7 +2,31 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ExtractedClaim } from "./types";
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+
+function stripThoughtSignature(text: string): string {
+  return text.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, "").trim();
+}
+
+function extractFirstJsonPayload(text: string): string {
+  const cleaned = stripThoughtSignature(text).trim();
+  const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const source = fenced ? fenced[1].trim() : cleaned;
+
+  const firstArray = source.indexOf("[");
+  const lastArray = source.lastIndexOf("]");
+  if (firstArray !== -1 && lastArray !== -1 && lastArray > firstArray) {
+    return source.slice(firstArray, lastArray + 1);
+  }
+
+  const firstObj = source.indexOf("{");
+  const lastObj = source.lastIndexOf("}");
+  if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
+    return source.slice(firstObj, lastObj + 1);
+  }
+
+  return source;
+}
 
 export class ClaimExtractor {
   async extractClaims(
@@ -28,23 +52,24 @@ export class ClaimExtractor {
 
       const result = await model.generateContent(prompt);
       const response = await result.response;
-      const jsonText = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-      
+      const jsonText = extractFirstJsonPayload(response.text());
+
       try {
         const claims = JSON.parse(jsonText);
-        
+
         return claims.map((c: any) => ({
           id: crypto.randomUUID(),
           text: `${c.subject} ${c.predicate} ${c.object}`,
-          embedding: undefined, // Will be computed later
+          embedding: undefined,
           subject: c.subject,
           predicate: c.predicate,
           object: c.object,
           domain: c.domain,
-          confidence: c.confidence
+          confidence: c.confidence,
         }));
       } catch (e) {
         console.error("Failed to parse claims JSON", e);
+        console.error("Raw claims response:", response.text());
         return [];
       }
     } catch (error) {
