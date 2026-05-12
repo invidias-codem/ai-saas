@@ -8,6 +8,11 @@ export const maxDuration = 300;
 const MAX_EXTERNAL_LIKES_PER_RUN = 2;
 const MAX_EXTERNAL_REPLIES_PER_RUN = 1;
 
+function incrementReason(bucket: Record<string, number>, key: string | undefined) {
+  const normalized = key?.trim() || 'unknown';
+  bucket[normalized] = (bucket[normalized] ?? 0) + 1;
+}
+
 export async function GET(req: NextRequest) {
   const secret = process.env.BLUESKY_POST_SECRET ?? process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
@@ -28,6 +33,8 @@ export async function GET(req: NextRequest) {
     let replied = 0;
     let skipped = 0;
     const actions: Array<Record<string, unknown>> = [];
+    const skipReasons: Record<string, number> = {};
+    const actionReasons: Record<string, number> = {};
 
     for (const candidate of candidates) {
       if (liked >= MAX_EXTERNAL_LIKES_PER_RUN) {
@@ -39,10 +46,13 @@ export async function GET(req: NextRequest) {
           score: candidate.score,
         });
         skipped++;
+        incrementReason(skipReasons, 'run_like_cap_reached');
         continue;
       }
 
       const decision = engine.decide(candidate);
+      incrementReason(actionReasons, `engine_${decision.action}`);
+
       if (decision.action === 'reply') {
         if (replied >= MAX_EXTERNAL_REPLIES_PER_RUN) {
           actions.push({
@@ -53,6 +63,7 @@ export async function GET(req: NextRequest) {
             score: candidate.score,
           });
           skipped++;
+          incrementReason(skipReasons, 'run_reply_cap_reached');
           continue;
         }
 
@@ -66,9 +77,25 @@ export async function GET(req: NextRequest) {
         };
 
         const result = await responder.respond(mention, 'discovery');
-        
+
+        console.log('[BlueskyDiscoverCron] Candidate decision:', {
+          uri: candidate.uri,
+          author: candidate.authorHandle,
+          score: candidate.score,
+          engineAction: decision.action,
+          engineReason: decision.reason,
+          responderAction: result.action,
+          responded: result.responded,
+          liked: result.liked,
+          replyIntent: result.replyIntent,
+          decisionReason: result.decisionReason,
+          skipReason: result.skipReason,
+          error: result.error,
+        });
+
         if (result.responded) {
           replied++;
+          incrementReason(actionReasons, result.action);
           actions.push({
             uri: candidate.uri,
             action: 'reply',
@@ -76,24 +103,29 @@ export async function GET(req: NextRequest) {
             score: candidate.score,
             reason: decision.reason,
             responseUri: result.responseUri,
+            responderDecision: result.decisionReason,
+            replyIntent: result.replyIntent,
           });
         } else if (result.liked) {
           liked++;
+          incrementReason(actionReasons, result.action);
           actions.push({
             uri: candidate.uri,
             action: 'like_fallback',
             author: candidate.authorHandle,
             score: candidate.score,
-            reason: result.error || 'reply_failed_liked_instead',
+            reason: result.error || result.decisionReason || 'reply_failed_liked_instead',
           });
         } else {
           skipped++;
+          incrementReason(skipReasons, result.skipReason ?? result.error ?? result.decisionReason);
           actions.push({
             uri: candidate.uri,
             action: 'skip',
             author: candidate.authorHandle,
             score: candidate.score,
-            reason: result.error || 'reply_failed_skipped',
+            reason: result.error || result.skipReason || result.decisionReason || 'reply_failed_skipped',
+            replyIntent: result.replyIntent,
           });
         }
         continue;
@@ -108,20 +140,23 @@ export async function GET(req: NextRequest) {
           score: candidate.score,
         });
         skipped++;
+        incrementReason(skipReasons, decision.reason);
         continue;
       }
 
       const likeBudget = await safety.canLike();
       const textCheck = safety.shouldAvoidText(candidate.text);
       if (!likeBudget.allowed || textCheck.blocked) {
+        const reason = !likeBudget.allowed ? likeBudget.reason : textCheck.reason;
         actions.push({
           uri: candidate.uri,
           action: 'skip',
           author: candidate.authorHandle,
-          reason: !likeBudget.allowed ? likeBudget.reason : textCheck.reason,
+          reason,
           score: candidate.score,
         });
         skipped++;
+        incrementReason(skipReasons, reason);
         continue;
       }
 
@@ -136,6 +171,7 @@ export async function GET(req: NextRequest) {
       });
 
       liked++;
+      incrementReason(actionReasons, 'like');
       actions.push({
         uri: candidate.uri,
         action: 'like',
@@ -151,6 +187,8 @@ export async function GET(req: NextRequest) {
       liked,
       replied,
       skipped,
+      skipReasons,
+      actionReasons,
       actions,
       mode: 'proactive_discovery_with_replies',
     });

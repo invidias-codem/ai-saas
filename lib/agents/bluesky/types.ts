@@ -66,6 +66,10 @@ export type EngagementResult = {
   responseText?: string;
   factsExtracted: number;
   error?: string;
+  skipReason?: string;
+  replyIntent?: BlueskyReplyIntent;
+  decisionReason?: string;
+  source?: "mention" | "discovery";
 };
 
 export type BlueskyDiscoveryCandidate = {
