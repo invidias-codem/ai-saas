@@ -257,7 +257,8 @@ export async function generateConversationReply(
   const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
   const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
 
-  const plannedReadScopes: UcolMemoryScope[] = ['conversation', 'user', ...(agentMode === 'fast' ? [] : ['graph'])];
+  const graphReadScope: UcolMemoryScope[] = agentMode === 'fast' ? [] : ['graph'];
+  const plannedReadScopes: UcolMemoryScope[] = ['conversation', 'user', ...graphReadScope];
 
   const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan({
     readScopes: plannedReadScopes,
