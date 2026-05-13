@@ -6,47 +6,29 @@ import { logger } from "@/lib/logger";
  *
  * Routing priority (UCOL T-027):
  *   1. Vast.ai vLLM (self-hosted Qwen2.5-32B-Instruct, 4x RTX 2080 Ti) — primary, zero API cost
- *   2. Nous AI Cloud (Hermes-4.3-36B)        — fallback when Vast.ai unavailable
- *   3. Gemini Flash-Lite                       — always-available last resort
- *
- * Vast.ai vLLM endpoint: set LAMBDA_OLLAMA_URL env var to the Cloudflare tunnel URL
- *   e.g. https://jklaw-llm.gen1e.xyz  (Cloudflare tunnel → Vast.ai instance:8000)
- *
- * Instance: 4x RTX 2080 Ti | 88GB VRAM | CUDA 12.1 | Instance ID: 33457656
- * Model: Qwen/Qwen2.5-32B-Instruct (bf16, tensor_parallel=4)
- *
- * Nous AI docs: https://portal.nousresearch.com/api-docs
- * Rate: 100 req/min, 80k tokens/min
- *
- * Tool Calling (T-040):
- *   Hermes 3/4 fully supports OpenAI-format function calling. Tools are passed
- *   via the `tools` array in the request body. The model emits tool_calls in
- *   the delta when it decides to invoke a function. The caller is responsible
- *   for executing the tool and appending the result as a tool message.
+ *   2. Nous AI Cloud                            — fallback when Vast.ai unavailable
+ *   3. Local Ollama (development only)         — local dev fallback
+ *   4. Gemini Flash-Lite                        — always-available last resort
  */
 
 const NOUS_API_KEY = process.env.NOUSE_API_KEY;
 
 // ── Security: base URL is hardcoded — never env-overridable (CVE-2025-59536) ──
-// Allowing an env override would let an attacker exfiltrate NOUS_API_KEY by
-// pointing HERMES_BASE_URL at a controlled server. Model ID is safe to configure.
 const NOUS_BASE_URL = "https://inference-api.nousresearch.com/v1";
 
-const NOUS_MODEL = process.env.HERMES_MODEL_ID || "Hermes-4.3-36B";
+// Separate cloud fallback model id from local/self-hosted naming.
+const NOUS_MODEL = process.env.NOUS_MODEL_ID || "Hermes-4.3-70B";
 
-// Vast.ai vLLM (primary) — Cloudflare tunnel URL to the Vast.ai instance
-// Set LAMBDA_OLLAMA_URL in Vercel env vars to your tunnel URL (e.g. https://jklaw-llm.gen1e.xyz)
+// Vast.ai vLLM (primary)
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || "";
-// Local Ollama (dev) — fallback for local development
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
-// Model served by Docker Model Runner on Vast.ai
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "hf.co/Qwen/Qwen3.5-35B-A3B";
-const FALLBACK_MODEL = "gemini-3.1-flash-lite-preview";
 
-// ── Agentic System Prompt (T-040) ─────────────────────────────────────────────
-// Instructs Hermes to execute tools immediately rather than describing them.
-// This is the root fix for the "empty call to action" problem — without an
-// explicit directive, Hermes defaults to describing what it *would* do.
+// Local Ollama (development-only fallback)
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "hf.co/Qwen/Qwen3.5-35B-A3B";
+
+// Final cloud fallback must use the GA model id, not preview.
+const FALLBACK_MODEL = "gemini-3.1-flash-lite";
+
 const HERMES_AGENTIC_SYSTEM_PROMPT = `You are an autonomous AI agent with access to tools. When given a task:
 
 1. EXECUTE immediately — do not describe what you will do, just do it.
@@ -57,17 +39,15 @@ const HERMES_AGENTIC_SYSTEM_PROMPT = `You are an autonomous AI agent with access
 
 You are action-oriented. Bias toward execution over explanation.`;
 
-// Reasoning system prompt from Nous docs
 const HERMES_THINKING_SYSTEM_PROMPT =
   `You are a deep thinking AI, you may use extremely long chains of thought to deeply consider the problem and deliberate with yourself via systematic reasoning processes to help come to a correct solution prior to answering. You should enclose your thoughts and internal monologue inside <think> </think> tags, and then provide your solution or response to the problem.`;
 
-// ── OpenAI-format Tool Definition ────────────────────────────────────────────
 export interface HermesTool {
   type: "function";
   function: {
     name: string;
     description: string;
-    parameters: Record<string, unknown>; // JSON Schema object
+    parameters: Record<string, unknown>;
   };
 }
 
@@ -76,12 +56,16 @@ export interface HermesToolCall {
   type: "function";
   function: {
     name: string;
-    arguments: string; // JSON string
+    arguments: string;
   };
 }
 
 export interface HermesStreamResultWithTools extends StreamResult {
   toolCalls?: HermesToolCall[];
+}
+
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
 }
 
 export class HermesProvider implements LLMProvider {
@@ -94,13 +78,7 @@ export class HermesProvider implements LLMProvider {
     options: CompletionOptions & { thinking?: boolean; tools?: HermesTool[]; agentic?: boolean } = {}
   ): Promise<HermesStreamResultWithTools> {
     const formattedMessages: { role: string; content: string }[] = [];
-
-    // Reasoning is opt-in — Fast mode keeps it OFF for low latency.
-    // Pass options.thinking = true for deeper queries that benefit from CoT.
     const useThinking = options.thinking === true;
-
-    // Agentic mode: prepend the execution-focused system prompt so the model
-    // acts rather than describes. Only injected when tools are provided.
     const hasTools = options.tools && options.tools.length > 0;
     const useAgentic = (options.agentic === true || hasTools);
 
@@ -129,43 +107,46 @@ export class HermesProvider implements LLMProvider {
       });
     }
 
-    // 1. Vast.ai Docker Model Runner (self-hosted Qwen3.5-35B — zero API cost, primary for UCOL Fast tier)
+    // 1. Remote/self-hosted primary
     if (LAMBDA_OLLAMA_URL) {
       try {
-        const gkeUp = await this.pingOllamaEndpoint(LAMBDA_OLLAMA_URL);
-        if (gkeUp) {
-          logger.info("[HermesProvider] Routing to Vast.ai vLLM (Qwen2.5-32B, self-hosted)");
+        const remoteUp = await this.pingOllamaEndpoint(LAMBDA_OLLAMA_URL);
+        if (remoteUp) {
+          logger.info("[HermesProvider] Routing to Vast.ai/self-hosted fast model");
           return await this.streamFromOllamaEndpoint(LAMBDA_OLLAMA_URL, formattedMessages, options);
         }
       } catch (err) {
-        logger.warn("[HermesProvider] Vast.ai Docker Model Runner unavailable, falling back to Nous AI", err);
+        logger.warn("[HermesProvider] Remote fast model unavailable, falling back to Nous AI", err);
       }
     }
 
-    // 2. Nous AI Cloud (API fallback when Vast.ai unavailable)
+    // 2. Nous AI Cloud fallback
     if (NOUS_API_KEY) {
       try {
         return await this.streamFromNousAI(formattedMessages, options, useThinking);
       } catch (err) {
-        logger.warn("[HermesProvider] Nous AI request failed, trying local Ollama", err);
+        logger.warn("[HermesProvider] Nous AI request failed", err);
       }
     }
 
-    // 3. Local Ollama (dev fallback)
-    try {
-      const ollamaUp = await this.pingOllamaEndpoint(OLLAMA_BASE_URL);
-      if (ollamaUp) {
-        return await this.streamFromOllamaEndpoint(OLLAMA_BASE_URL, formattedMessages, options);
+    // 3. Local Ollama should only be attempted outside production runtimes.
+    if (!isProductionRuntime()) {
+      try {
+        const ollamaUp = await this.pingOllamaEndpoint(OLLAMA_BASE_URL);
+        if (ollamaUp) {
+          logger.info("[HermesProvider] Routing to local Ollama fallback");
+          return await this.streamFromOllamaEndpoint(OLLAMA_BASE_URL, formattedMessages, options);
+        }
+      } catch (err) {
+        logger.warn("[HermesProvider] Local Ollama unavailable, falling back to Gemini Flash-Lite", err);
       }
-    } catch (err) {
-      logger.warn("[HermesProvider] Local Ollama unavailable, falling back to Gemini Flash-Lite", err);
+    } else {
+      logger.info("[HermesProvider] Skipping local Ollama fallback in production runtime");
     }
 
-    // 4. Gemini Flash-Lite (always-available last resort)
+    // 4. Final cloud fallback
     return await this.streamFromGeminiFallback(formattedMessages, systemInstruction, options);
   }
-
-  // ─── Nous AI Cloud ────────────────────────────────────────────────────────
 
   private async streamFromNousAI(
     messages: { role: string; content: string }[],
@@ -180,7 +161,6 @@ export class HermesProvider implements LLMProvider {
       max_tokens: options.maxTokens ?? 2048,
     };
 
-    // Wire tools into Nous AI request (OpenAI-compatible format)
     if (options.tools && options.tools.length > 0) {
       body.tools = options.tools;
       body.tool_choice = "auto";
@@ -203,8 +183,6 @@ export class HermesProvider implements LLMProvider {
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
     const bodyStream = response.body;
-
-    // Accumulate tool calls across streaming chunks (they arrive fragmented)
     const accumulatedToolCalls: Map<number, HermesToolCall> = new Map();
 
     const stream = new ReadableStream<Uint8Array>({
@@ -231,7 +209,6 @@ export class HermesProvider implements LLMProvider {
                 const delta = json?.choices?.[0]?.delta;
                 if (!delta) continue;
 
-                // Accumulate tool_calls deltas
                 if (delta.tool_calls) {
                   for (const tc of delta.tool_calls) {
                     const idx: number = tc.index ?? 0;
@@ -249,183 +226,95 @@ export class HermesProvider implements LLMProvider {
                   }
                 }
 
-                // Stream text content (final answer after tool calls)
                 const text = delta.content ?? "";
                 if (text) controller.enqueue(encoder.encode(text));
-
               } catch {
                 // skip malformed chunk
               }
             }
           }
-        } finally {
+
           controller.close();
-          reader.releaseLock();
+        } catch (err) {
+          controller.error(err);
         }
       },
     });
 
-    const toolCalls = accumulatedToolCalls.size > 0
-      ? Array.from(accumulatedToolCalls.values())
-      : undefined;
-
     return {
       stream,
-      toolCalls,
+      toolCalls: Array.from(accumulatedToolCalls.values()),
       debug: {
-        model: `nous/${NOUS_MODEL}${useThinking ? " (thinking)" : ""}${toolCalls ? ` (${toolCalls.length} tool_calls)` : ""}`,
+        model: `nous/${NOUS_MODEL}${useThinking ? " (thinking)" : ""}`,
       },
     };
   }
 
-  // ─── Docker Model Runner (Vast.ai) or local Ollama ────────────────────────────────────────────────
-
   private async pingOllamaEndpoint(baseUrl: string): Promise<boolean> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
     try {
-      // Docker Model Runner (Vast.ai) uses /engines/v1/models
-      // Local Ollama uses /api/tags
-      const isVastAi = baseUrl === LAMBDA_OLLAMA_URL && !!LAMBDA_OLLAMA_URL;
-      const healthPath = isVastAi ? "/engines/v1/models" : "/api/tags";
-      const res = await fetch(`${baseUrl}${healthPath}`, {
-        signal: AbortSignal.timeout(2000),
+      const response = await fetch(`${baseUrl}/api/tags`, {
+        method: 'GET',
+        signal: controller.signal,
       });
-      return res.ok;
-    } catch {
-      return false;
+      return response.ok;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
   private async streamFromOllamaEndpoint(
     baseUrl: string,
     messages: { role: string; content: string }[],
-    options: CompletionOptions & { tools?: HermesTool[] }
+    options: CompletionOptions & { tools?: HermesTool[]; agentic?: boolean }
   ): Promise<HermesStreamResultWithTools> {
-    const isGke = baseUrl === LAMBDA_OLLAMA_URL && !!LAMBDA_OLLAMA_URL;
-
     const body: Record<string, unknown> = {
       model: OLLAMA_MODEL,
       messages,
       stream: true,
-      temperature: options.temperature ?? 0.7,
-      max_tokens: options.maxTokens ?? 2048,
+      options: {
+        temperature: options.temperature ?? 0.7,
+        num_predict: options.maxTokens ?? 2048,
+      },
     };
 
-    // Wire tools into request (OpenAI-compatible format)
     if (options.tools && options.tools.length > 0) {
       body.tools = options.tools;
-      body.tool_choice = "auto";
     }
 
-    // Docker Model Runner (Vast.ai) → /engines/v1/chat/completions
-    // Local Ollama → /v1/chat/completions
-    const isVastAi = baseUrl === LAMBDA_OLLAMA_URL && !!LAMBDA_OLLAMA_URL;
-    const completionsPath = isVastAi ? "/engines/v1/chat/completions" : "/v1/chat/completions";
-    const response = await fetch(`${baseUrl}${completionsPath}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 
     if (!response.ok || !response.body) {
-      throw new Error(`Ollama (${response.status}): ${response.statusText}`);
+      const errText = await response.text().catch(() => response.statusText);
+      throw new Error(`Ollama-compatible endpoint (${response.status}): ${errText}`);
     }
 
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-    const bodyStream = response.body;
-    const accumulatedToolCalls: Map<number, HermesToolCall> = new Map();
-
-    const stream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        const reader = bodyStream.getReader();
-        let buffer = "";
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || trimmed === "data: [DONE]") continue;
-              if (!trimmed.startsWith("data: ")) continue;
-
-              try {
-                const json = JSON.parse(trimmed.slice(6));
-                const delta = json?.choices?.[0]?.delta;
-                if (!delta) continue;
-
-                // Accumulate tool_calls
-                if (delta.tool_calls) {
-                  for (const tc of delta.tool_calls) {
-                    const idx: number = tc.index ?? 0;
-                    if (!accumulatedToolCalls.has(idx)) {
-                      accumulatedToolCalls.set(idx, {
-                        id: tc.id ?? `call_${idx}`,
-                        type: "function",
-                        function: { name: tc.function?.name ?? "", arguments: "" },
-                      });
-                    }
-                    const existing = accumulatedToolCalls.get(idx)!;
-                    if (tc.function?.name) existing.function.name = tc.function.name;
-                    if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
-                    if (tc.id) existing.id = tc.id;
-                  }
-                }
-
-                const delta_text = delta.content ?? "";
-                if (delta_text) controller.enqueue(encoder.encode(delta_text));
-              } catch {
-                // skip malformed chunk
-              }
-            }
-          }
-        } finally {
-          controller.close();
-          reader.releaseLock();
-        }
-      },
-    });
-
-    const toolCalls = accumulatedToolCalls.size > 0
-      ? Array.from(accumulatedToolCalls.values())
-      : undefined;
-
-    const source = isGke ? `vastai-vllm/${OLLAMA_MODEL}` : `ollama-local/${OLLAMA_MODEL}`;
     return {
-      stream,
-      toolCalls,
-      debug: { model: source + (toolCalls ? ` (${toolCalls.length} tool_calls)` : "") },
+      stream: response.body,
+      debug: {
+        model: `ollama/${OLLAMA_MODEL}`,
+      },
     };
   }
 
-  // ─── Gemini Flash-Lite Fallback ───────────────────────────────────────────
-
   private async streamFromGeminiFallback(
     messages: { role: string; content: string }[],
-    systemInstruction: string | undefined,
-    options: CompletionOptions
-  ): Promise<StreamResult> {
-    const { GeminiProvider } = await import("./gemini");
-    const gemini = new GeminiProvider();
-
-    const { ChatMessageSchema } = await import("../types");
-    const chatMessages = messages
-      .filter((m) => m.role !== "system")
-      .map((m) =>
-        ChatMessageSchema.parse({
-          role: m.role === "assistant" ? "model" : m.role,
-          text: m.content,
-        })
-      );
-
-    return gemini.generateStream(chatMessages, systemInstruction, {
-      ...options,
-      model: FALLBACK_MODEL,
-    });
+    systemInstruction?: string,
+    options: CompletionOptions = {}
+  ): Promise<HermesStreamResultWithTools> {
+    const gemini = new (await import('./gemini')).GeminiProvider();
+    return gemini.generateStream(
+      messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : m.role, text: m.content } as ChatMessage)),
+      systemInstruction,
+      {
+        ...options,
+        model: FALLBACK_MODEL,
+      }
+    );
   }
 }
