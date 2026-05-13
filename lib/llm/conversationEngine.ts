@@ -262,7 +262,7 @@ export async function generateConversationReply(
 
   const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan({
     readScopes: plannedReadScopes,
-    retrievalMode: agentMode === 'reasoning' || agentMode === 'agentic' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
+    retrievalMode: agentMode === 'reasoning' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
     usePreparedContext: true,
     useGraphRecall: agentMode !== 'fast',
     useRecentTaskState: false,
