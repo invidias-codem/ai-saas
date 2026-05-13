@@ -4,7 +4,7 @@ import { budgetKillSwitch } from "@/lib/budget/redisKillSwitch";
 import { tagMessagesForStorage, tagLLMMessage, extractWMRTMetadata } from "@/lib/world-model/trustTag";
 import { classifyQuery } from '@/lib/ucol/agentRouter';
 import { resolveProviderForMode } from '@/lib/ucol/routing/providerResolver';
-import { prepareContextBundle, layoutPromptContext } from '@/lib/context/preparedContext';
+import { createPreparedContextPlanFromMemoryPlan, prepareContextBundle, layoutPromptContext } from '@/lib/context/preparedContext';
 
 import { ExtractedFact } from '../intelligentMemory';
 import { SearchResult } from '../integrations/anyCrawl';
@@ -256,6 +256,14 @@ export async function generateConversationReply(
   const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
   const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
 
+  const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan({
+    readScopes: ['conversation', 'user', ...(agentMode === 'fast' ? [] : ['graph'])],
+    retrievalMode: agentMode === 'reasoning' || agentMode === 'agentic' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
+    usePreparedContext: true,
+    useGraphRecall: agentMode !== 'fast',
+    useRecentTaskState: false,
+  });
+
   const preparedContext = await prepareContextBundle({
     userId,
     clerkUser,
@@ -264,6 +272,7 @@ export async function generateConversationReply(
     options: {
       disableExternalContext: effectivelyDisabled,
       skipWebResearch: process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch,
+      plan: contextPreparationPlan,
     },
   });
 

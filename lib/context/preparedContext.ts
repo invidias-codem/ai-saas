@@ -1,5 +1,6 @@
 import type { UserResource } from '@clerk/types';
 import type { AgentMode } from '@/lib/llm/types';
+import type { UcolMemoryPlan, UcolMemoryScope, UcolRetrievalMode } from '@/lib/ucol/routing/types';
 import type { ExtractedFact } from '@/lib/intelligentMemory';
 import type { SearchResult } from '@/lib/integrations/anyCrawl';
 import type { GraphNode } from '@/lib/memory/graphStore';
@@ -19,9 +20,21 @@ import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotio
 import { generateEmbedding } from '@/lib/memory/embedding';
 import { scoreContextForRouting } from '@/lib/memory/confidenceScoring';
 
+export type PreparedContextPlan = {
+  retrievalMode?: UcolRetrievalMode;
+  readScopes?: UcolMemoryScope[];
+  useGraphRecall?: boolean;
+  usePreparedContext?: boolean;
+  useRecentTaskState?: boolean;
+  factLimit?: number;
+  memoryLimit?: number;
+  researchLimit?: number;
+};
+
 export type PreparedContextOptions = {
   disableExternalContext?: boolean;
   skipWebResearch?: boolean;
+  plan?: PreparedContextPlan;
 };
 
 export type PreparedContextSections = {
@@ -52,6 +65,7 @@ export type PreparedContextBundle = {
   };
   routing: {
     confidenceSignal: ReturnType<typeof scoreContextForRouting> | null;
+    appliedPlan: PreparedContextPlan;
   };
 };
 
@@ -90,6 +104,44 @@ function createPromptSection(
     estimatedTokens: estimateTokens(text),
     priority,
     ...(required ? { required: true } : {}),
+  };
+}
+
+function normalizePreparedContextPlan(plan?: PreparedContextPlan): Required<PreparedContextPlan> {
+  const retrievalMode = plan?.retrievalMode ?? 'standard';
+
+  return {
+    retrievalMode,
+    readScopes: plan?.readScopes ?? ['conversation', 'user'],
+    useGraphRecall: plan?.useGraphRecall ?? (retrievalMode === 'deep' || retrievalMode === 'standard'),
+    usePreparedContext: plan?.usePreparedContext ?? true,
+    useRecentTaskState: plan?.useRecentTaskState ?? false,
+    factLimit: plan?.factLimit ?? (retrievalMode === 'deep' ? 15 : retrievalMode === 'standard' ? 10 : 5),
+    memoryLimit: plan?.memoryLimit ?? (retrievalMode === 'deep' ? 8 : retrievalMode === 'standard' ? 5 : 3),
+    researchLimit: plan?.researchLimit ?? (retrievalMode === 'deep' ? 5 : retrievalMode === 'standard' ? 3 : 0),
+  };
+}
+
+export function createPreparedContextPlanFromMemoryPlan(memoryPlan?: UcolMemoryPlan | null): PreparedContextPlan {
+  if (!memoryPlan) {
+    return {
+      retrievalMode: 'standard',
+      readScopes: ['conversation', 'user'],
+      useGraphRecall: true,
+      usePreparedContext: true,
+      useRecentTaskState: false,
+    };
+  }
+
+  return {
+    retrievalMode: memoryPlan.retrievalMode,
+    readScopes: memoryPlan.readScopes,
+    useGraphRecall: memoryPlan.useGraphRecall,
+    usePreparedContext: memoryPlan.usePreparedContext,
+    useRecentTaskState: memoryPlan.useRecentTaskState,
+    factLimit: memoryPlan.retrievalMode === 'deep' ? 15 : memoryPlan.retrievalMode === 'standard' ? 10 : 5,
+    memoryLimit: memoryPlan.retrievalMode === 'deep' ? 8 : memoryPlan.retrievalMode === 'standard' ? 5 : 3,
+    researchLimit: memoryPlan.retrievalMode === 'deep' ? 5 : memoryPlan.retrievalMode === 'standard' ? 3 : 0,
   };
 }
 
@@ -148,7 +200,12 @@ export async function prepareContextBundle(args: {
   const userContext = await gatherUserContext(userId, clerkUser as any);
   const userContextPrompt = formatUserContextForPrompt(userContext);
 
-  const effectivelyDisabled = Boolean(options?.disableExternalContext);
+  const normalizedPlan = normalizePreparedContextPlan(options?.plan);
+  const effectivelyDisabled = Boolean(options?.disableExternalContext) || normalizedPlan.usePreparedContext === false;
+  const allowGraphRecall = normalizedPlan.useGraphRecall && normalizedPlan.readScopes.includes('graph');
+  const allowUserProfile = normalizedPlan.readScopes.includes('user');
+  const allowMemory = normalizedPlan.readScopes.some((scope) => scope === 'conversation' || scope === 'workspace' || scope === 'user');
+  const allowResearch = !options?.skipWebResearch && normalizedPlan.researchLimit > 0;
 
   let allFacts: ExtractedFact[] = [];
   let researchResults: SearchResult[] = [];
@@ -160,19 +217,19 @@ export async function prepareContextBundle(args: {
   if (!effectivelyDisabled) {
     const results = await Promise.allSettled([
       getHighConfidenceFacts(userId),
-      options?.skipWebResearch ? Promise.resolve({ results: [] }) : performResearch(userQuery, userContextPrompt),
-      findRelatedEntities(userId, userQuery),
-      getUserProfile(userId),
-      getRAGMemoryContext(userId, userQuery, 'conversation')
+      allowResearch ? performResearch(userQuery, userContextPrompt) : Promise.resolve({ results: [] }),
+      allowGraphRecall ? findRelatedEntities(userId, userQuery) : Promise.resolve({ centralNode: null, relatedNodes: [] }),
+      allowUserProfile ? getUserProfile(userId) : Promise.resolve(null),
+      allowMemory ? getRAGMemoryContext(userId, userQuery, 'conversation') : Promise.resolve({ contextString: '', sources: [] }),
     ]);
 
     allFacts = results[0].status === 'fulfilled' ? results[0].value : [];
-    researchResults = results[1].status === 'fulfilled' ? results[1].value.results : [];
+    researchResults = results[1].status === 'fulfilled' ? results[1].value.results.slice(0, normalizedPlan.researchLimit) : [];
     graphData = results[2].status === 'fulfilled' ? results[2].value : { centralNode: null, relatedNodes: [] };
     userProfileMemories = results[3].status === 'fulfilled' ? results[3].value : null;
     if (results[4].status === 'fulfilled') {
       memoryContext = results[4].value.contextString;
-      memorySources = results[4].value.sources;
+      memorySources = results[4].value.sources.slice(0, normalizedPlan.memoryLimit);
     }
 
     results.forEach((r, i) => {
@@ -184,23 +241,24 @@ export async function prepareContextBundle(args: {
   }
 
   const similarities = effectivelyDisabled ? new Map<string, number>() : await computeFactSimilarities(allFacts, userQuery);
-  const intelligentFacts = effectivelyDisabled ? [] : rankMemoriesIntelligently(allFacts, similarities, userQuery);
+  const rankedFacts = effectivelyDisabled ? [] : rankMemoriesIntelligently(allFacts, similarities, userQuery);
+  const intelligentFacts = rankedFacts.slice(0, normalizedPlan.factLimit);
 
   let factContext = '';
   if (!effectivelyDisabled) {
-    if (agentMode === 'reasoning') {
-      factContext = await synthesizeContextWithReasoning(intelligentFacts.slice(0, 15), userQuery);
+    if (agentMode === 'reasoning' || normalizedPlan.retrievalMode === 'deep') {
+      factContext = await synthesizeContextWithReasoning(intelligentFacts, userQuery);
       if (factContext) {
-        factContext = `\n## Synthesized Context (DeepSeek-R1)\n${factContext}\n`;
+        factContext = `\n## Synthesized Context\n${factContext}\n`;
       }
     } else {
       factContext = formatFactsForPrompt(intelligentFacts);
     }
   }
 
-  const userProfileContext = effectivelyDisabled ? '' : formatUserProfileForPrompt(userProfileMemories);
-  const graphContext = effectivelyDisabled ? '' : formatGraphContext(graphData);
-  const searchContext = effectivelyDisabled ? '' : formatSearchResults(researchResults);
+  const userProfileContext = effectivelyDisabled || !allowUserProfile ? '' : formatUserProfileForPrompt(userProfileMemories);
+  const graphContext = effectivelyDisabled || !allowGraphRecall ? '' : formatGraphContext(graphData);
+  const searchContext = effectivelyDisabled || !allowResearch ? '' : formatSearchResults(researchResults);
 
   const confidenceSignal = agentMode === 'fast' && !effectivelyDisabled && intelligentFacts.length > 0
     ? scoreContextForRouting(intelligentFacts.slice(0, 5), 'minimum')
@@ -232,6 +290,7 @@ export async function prepareContextBundle(args: {
     },
     routing: {
       confidenceSignal,
+      appliedPlan: normalizedPlan,
     },
   };
 }
