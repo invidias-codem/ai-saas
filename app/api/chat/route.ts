@@ -20,12 +20,14 @@ import type { UcolRequestPacket, UcolResolvedContext } from '@/lib/ucol/routing/
 type ResolvedChatContext = {
     mode: AgentMode;
     context: UcolResolvedContext;
+    profile: RuntimeProfileSignals | null;
 };
 
 async function resolveChatContext(userId: string, conversationId?: string): Promise<ResolvedChatContext> {
     if (!conversationId || !supabaseAdmin) {
         return {
             mode: 'quality',
+            profile: null,
             context: {
                 conversationId,
                 surface: 'web',
@@ -48,6 +50,7 @@ async function resolveChatContext(userId: string, conversationId?: string): Prom
     if (conversationError || !conversation) {
         return {
             mode: 'quality',
+            profile: null,
             context: {
                 conversationId,
                 surface: 'web',
@@ -78,6 +81,7 @@ async function resolveChatContext(userId: string, conversationId?: string): Prom
     if (!operatingProfileId) {
         return {
             mode: 'quality',
+            profile: null,
             context: {
                 workspaceId: conversation.workspace_id ?? undefined,
                 conversationId: conversation.id,
@@ -98,10 +102,12 @@ async function resolveChatContext(userId: string, conversationId?: string): Prom
         .eq('user_id', userId)
         .maybeSingle();
 
-    const mode = resolveAgentModeFromProfile(profile as RuntimeProfileSignals | null);
+    const resolvedProfile = (profile as RuntimeProfileSignals | null) ?? null;
+    const mode = resolveAgentModeFromProfile(resolvedProfile);
 
     return {
         mode,
+        profile: resolvedProfile,
         context: {
             workspaceId: conversation.workspace_id ?? undefined,
             operatingProfileId: profile?.id,
@@ -193,6 +199,11 @@ export async function POST(req: Request) {
             request: requestPacket,
             context: resolved.context,
             agentMode: effectiveMode,
+            signals: {
+                hasAttachments: Boolean(fileData),
+                messageHistoryCount: Array.isArray(messages) ? messages.length : 0,
+                profile: resolved.profile,
+            },
         });
 
         console.info('[UCOL] Initial routing decision', {
@@ -203,6 +214,7 @@ export async function POST(req: Request) {
             executionMode: routingDecision.executionPlan.mode,
             providerPlan: routingDecision.providerPlan,
             memoryPlan: routingDecision.memoryPlan,
+            rationale: routingDecision.debug.rationale,
         });
 
         const requestPayload = {
