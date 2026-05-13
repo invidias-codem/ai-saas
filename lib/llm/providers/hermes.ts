@@ -17,10 +17,11 @@ const NOUS_API_KEY = process.env.NOUSE_API_KEY;
 const NOUS_BASE_URL = "https://inference-api.nousresearch.com/v1";
 
 // Separate cloud fallback model id from local/self-hosted naming.
-const NOUS_MODEL = process.env.NOUS_MODEL_ID || "Hermes-4.3-70B";
+const NOUS_MODEL = process.env.NOUS_MODEL_ID || "";
 
 // Vast.ai vLLM (primary)
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || "";
+const ENABLE_REMOTE_FAST_PRIMARY = process.env.ENABLE_REMOTE_FAST_PRIMARY === "true";
 
 // Local Ollama (development-only fallback)
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
@@ -68,6 +69,12 @@ function isProductionRuntime(): boolean {
   return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
 }
 
+function normalizeHttpUrl(url?: string): string | null {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return null;
+}
+
 export class HermesProvider implements LLMProvider {
   id = "hermes";
   name = "Hermes4 (Fast)";
@@ -107,41 +114,78 @@ export class HermesProvider implements LLMProvider {
       });
     }
 
-    // 1. Remote/self-hosted primary
-    if (LAMBDA_OLLAMA_URL) {
+    const remoteFastUrl = normalizeHttpUrl(LAMBDA_OLLAMA_URL);
+    const production = isProductionRuntime();
+
+    // Production policy:
+    //   1. Nous primary if fully configured
+    //   2. Gemini fallback
+    //   3. Optional remote fast only if explicitly enabled + valid
+    // Development policy:
+    //   1. Optional remote fast if valid
+    //   2. Nous if configured
+    //   3. Local Ollama
+    //   4. Gemini fallback
+
+    if (production) {
+      if (NOUS_API_KEY && NOUS_MODEL) {
+        try {
+          logger.info("[HermesProvider] Routing to Nous AI primary in production");
+          return await this.streamFromNousAI(formattedMessages, options, useThinking);
+        } catch (err) {
+          logger.warn("[HermesProvider] Nous AI primary failed, falling back to Gemini", err);
+        }
+      } else {
+        logger.warn("[HermesProvider] Nous primary disabled in production: missing NOUSE_API_KEY or NOUS_MODEL_ID");
+      }
+
+      if (ENABLE_REMOTE_FAST_PRIMARY && remoteFastUrl) {
+        try {
+          const remoteUp = await this.pingOllamaEndpoint(remoteFastUrl);
+          if (remoteUp) {
+            logger.info("[HermesProvider] Routing to explicitly enabled remote fast model in production");
+            return await this.streamFromOllamaEndpoint(remoteFastUrl, formattedMessages, options);
+          }
+        } catch (err) {
+          logger.warn("[HermesProvider] Explicit remote fast production path failed, falling back to Gemini", err);
+        }
+      } else if (ENABLE_REMOTE_FAST_PRIMARY && !remoteFastUrl) {
+        logger.warn("[HermesProvider] Remote fast production path enabled but LAMBDA_OLLAMA_URL is invalid");
+      }
+
+      logger.info("[HermesProvider] Using Gemini Flash-Lite fallback in production");
+      return await this.streamFromGeminiFallback(formattedMessages, systemInstruction, options);
+    }
+
+    if (remoteFastUrl) {
       try {
-        const remoteUp = await this.pingOllamaEndpoint(LAMBDA_OLLAMA_URL);
+        const remoteUp = await this.pingOllamaEndpoint(remoteFastUrl);
         if (remoteUp) {
-          logger.info("[HermesProvider] Routing to Vast.ai/self-hosted fast model");
-          return await this.streamFromOllamaEndpoint(LAMBDA_OLLAMA_URL, formattedMessages, options);
+          logger.info("[HermesProvider] Routing to remote fast model in development");
+          return await this.streamFromOllamaEndpoint(remoteFastUrl, formattedMessages, options);
         }
       } catch (err) {
-        logger.warn("[HermesProvider] Remote fast model unavailable, falling back to Nous AI", err);
+        logger.warn("[HermesProvider] Remote fast dev path failed, continuing fallback chain", err);
       }
     }
 
-    // 2. Nous AI Cloud fallback
-    if (NOUS_API_KEY) {
+    if (NOUS_API_KEY && NOUS_MODEL) {
       try {
+        logger.info("[HermesProvider] Routing to Nous AI in development");
         return await this.streamFromNousAI(formattedMessages, options, useThinking);
       } catch (err) {
-        logger.warn("[HermesProvider] Nous AI request failed", err);
+        logger.warn("[HermesProvider] Nous AI dev path failed, continuing fallback chain", err);
       }
     }
 
-    // 3. Local Ollama should only be attempted outside production runtimes.
-    if (!isProductionRuntime()) {
-      try {
-        const ollamaUp = await this.pingOllamaEndpoint(OLLAMA_BASE_URL);
-        if (ollamaUp) {
-          logger.info("[HermesProvider] Routing to local Ollama fallback");
-          return await this.streamFromOllamaEndpoint(OLLAMA_BASE_URL, formattedMessages, options);
-        }
-      } catch (err) {
-        logger.warn("[HermesProvider] Local Ollama unavailable, falling back to Gemini Flash-Lite", err);
+    try {
+      const ollamaUp = await this.pingOllamaEndpoint(OLLAMA_BASE_URL);
+      if (ollamaUp) {
+        logger.info("[HermesProvider] Routing to local Ollama fallback in development");
+        return await this.streamFromOllamaEndpoint(OLLAMA_BASE_URL, formattedMessages, options);
       }
-    } else {
-      logger.info("[HermesProvider] Skipping local Ollama fallback in production runtime");
+    } catch (err) {
+      logger.warn("[HermesProvider] Local Ollama unavailable, falling back to Gemini Flash-Lite", err);
     }
 
     // 4. Final cloud fallback
