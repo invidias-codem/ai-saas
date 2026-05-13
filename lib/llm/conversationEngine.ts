@@ -244,12 +244,12 @@ export async function generateConversationReply(
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
+  const { messages, fileData, mimeType } = parsed;
+
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
   let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType) });
   let { provider, modelId: actualModelId } = providerResolution.execution;
-
-  const { messages, fileData, mimeType } = parsed;
 
   const userQuery = messages[messages.length - 1]?.text || "";
 
