@@ -35,7 +35,7 @@ import { supabase } from '@/lib/supabaseClient';
 import type { AIOutputAudit } from '@/lib/world-model/types';
 import { deltaEngine } from '@/lib/world-model/delta';
 import { critiqueLLMOutput } from '@/lib/ucol/critics/OutputCritic';
-import type { UcolMemoryScope } from '@/lib/ucol/routing/types';
+import type { UcolMemoryPlan, UcolMemoryScope } from '@/lib/ucol/routing/types';
 
 // ChatMessageSchema imported from types
 
@@ -76,6 +76,9 @@ export type ConversationEngineOptions = {
    * Recommended for internal agent calls (e.g. JKlaw) where graph facts should dominate.
    */
   skipWebResearch?: boolean;
+
+  /** Optional UCOL-resolved memory plan to drive prepared-context assembly. */
+  memoryPlan?: UcolMemoryPlan;
 };
 
 export type ConversationEngineResult = {
@@ -258,15 +261,15 @@ export async function generateConversationReply(
   const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
 
   const graphReadScope: UcolMemoryScope[] = agentMode === 'fast' ? [] : ['graph'];
-  const plannedReadScopes: UcolMemoryScope[] = ['conversation', 'user', ...graphReadScope];
-
-  const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan({
-    readScopes: plannedReadScopes,
+  const fallbackMemoryPlan: UcolMemoryPlan = {
+    readScopes: ['conversation', 'user', ...graphReadScope],
     retrievalMode: agentMode === 'reasoning' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
     usePreparedContext: true,
     useGraphRecall: agentMode !== 'fast',
     useRecentTaskState: false,
-  });
+  };
+
+  const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan(options.memoryPlan ?? fallbackMemoryPlan);
 
   const preparedContext = await prepareContextBundle({
     userId,

@@ -247,7 +247,8 @@ export async function POST(req: Request) {
                 request: validationResult.data
             },
             {
-                mode: effectiveMode
+                mode: effectiveMode,
+                memoryPlan: routingDecision.memoryPlan,
             }
         );
 
