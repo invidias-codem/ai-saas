@@ -1,5 +1,6 @@
 import type { AgentMode } from '@/lib/llm/types';
 import type { RuntimeProfileSignals } from '@/lib/workspaces/runtimeMode';
+import { resolveProviderForMode } from './providerResolver';
 import type {
   UcolRequestPacket,
   UcolResolvedContext,
@@ -74,42 +75,6 @@ function inferIntent(args: {
   };
 }
 
-function providerPlanFromAgentMode(mode: AgentMode, hasAttachments: boolean): UcolRoutingDecision['providerPlan'] {
-  if (mode === 'agentic') {
-    return {
-      selectionStrategy: 'single_model',
-      preferredModelRefs: ['claude.agentic'],
-      fallbackModelRefs: ['gemini.quality'],
-      embeddingLanePreference: ['primary_768', 'secondary_3072'],
-    };
-  }
-
-  if (mode === 'reasoning') {
-    return {
-      selectionStrategy: 'single_model',
-      preferredModelRefs: ['deepseek.reasoning'],
-      fallbackModelRefs: ['gemini.quality'],
-      embeddingLanePreference: ['primary_768', 'secondary_3072'],
-    };
-  }
-
-  if (mode === 'fast') {
-    return {
-      selectionStrategy: 'primary_plus_fallback',
-      preferredModelRefs: ['hermes.fast'],
-      fallbackModelRefs: hasAttachments ? ['gemini.quality'] : ['gemini.fast_fallback'],
-      embeddingLanePreference: ['primary_768', 'secondary_3072'],
-    };
-  }
-
-  return {
-    selectionStrategy: 'single_model',
-    preferredModelRefs: ['gemini.quality'],
-    fallbackModelRefs: ['claude.agentic'],
-    embeddingLanePreference: ['primary_768', 'secondary_3072'],
-  };
-}
-
 function buildCapabilityRequirements(intent: UcolRoutingDecision['intent']['category'], context: UcolResolvedContext, signals: InitialRoutingSignals): string[] {
   const base = context.workspaceBacked ? ['memory.summarization'] : [];
 
@@ -175,12 +140,14 @@ function buildRationale(args: {
   agentMode: AgentMode;
   intent: UcolRoutingDecision['intent'];
   signals: InitialRoutingSignals;
+  providerReason: string;
 }): string[] {
-  const { context, agentMode, intent, signals } = args;
+  const { context, agentMode, intent, signals, providerReason } = args;
   const rationale = [
     'initial routing decision built from chat route context',
     `intent inferred as ${intent.category}`,
     `agent mode resolved server-side: ${agentMode}`,
+    providerReason,
   ];
 
   if (context.workspaceBacked) rationale.push('workspace-backed conversation influenced memory scope');
@@ -206,6 +173,7 @@ export function buildInitialRoutingDecision(args: {
   };
   const intent = inferIntent({ request, context, agentMode, signals });
   const isAgentic = agentMode === 'agentic';
+  const providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: signals.hasAttachments });
 
   return {
     requestId: request.requestId,
@@ -221,7 +189,7 @@ export function buildInitialRoutingDecision(args: {
       createArtifact: false,
       createTaskRecord: false,
     },
-    providerPlan: providerPlanFromAgentMode(agentMode, signals.hasAttachments),
+    providerPlan: providerResolution.routing,
     toolPlan: {
       allowed: isAgentic,
       candidateTools: isAgentic ? ['agent_registry'] : [],
@@ -237,7 +205,7 @@ export function buildInitialRoutingDecision(args: {
       telemetryRequired: true,
     },
     debug: {
-      rationale: buildRationale({ context, agentMode, intent, signals }),
+      rationale: buildRationale({ context, agentMode, intent, signals, providerReason: providerResolution.reason }),
       policyFlags: context.notes || [],
     },
   };

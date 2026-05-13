@@ -3,6 +3,7 @@ import { waitUntil } from "@vercel/functions";
 import { budgetKillSwitch } from "@/lib/budget/redisKillSwitch";
 import { tagMessagesForStorage, tagLLMMessage, extractWMRTMetadata } from "@/lib/world-model/trustTag";
 import { classifyQuery } from '@/lib/ucol/agentRouter';
+import { resolveProviderForMode } from '@/lib/ucol/routing/providerResolver';
 import { prepareContextBundle, layoutPromptContext } from '@/lib/context/preparedContext';
 
 import { ExtractedFact } from '../intelligentMemory';
@@ -106,51 +107,8 @@ function getGoogleApiKey(): string {
   return key;
 }
 
-/**
- * UCOL Provider Routing Table
- *
- * fast     → Hermes3 (Ollama) / fallback: Gemini Flash-Lite
- *            Zero API cost, lowest latency, great for quick Q&A.
- *
- * quality  → Gemini Pro (google/gemini-3.1-pro-preview)
- *            Best reasoning, analysis, structured output, full memory context.
- *
- * agentic  → Claude Sonnet (latest)
- *            Autonomous multi-step execution via ReAct loop.
- *            Tools: web_search, write_research_paper, write_creative_content.
- *
- * reasoning → DeepSeek R1 (Vertex AI)
- *            Chain-of-thought reasoning for complex analytical tasks.
- */
 const FAST_MODEL = process.env.HERMES_MODEL_ID || "hermes3";
-const QUALITY_MODEL = "gemini-3.1-pro-preview";
 const AGENTIC_MODEL = "claude-sonnet-4-6"; // Claude drives the agentic ReAct loop
-const REASONING_MODEL = "deepseek-r1";
-
-function getProviderForMode(mode: AgentMode): { provider: LLMProvider, modelId: string } {
-  if (mode === 'quality') {
-    return {
-      provider: new GeminiProvider(),
-      modelId: QUALITY_MODEL
-    };
-  } else if (mode === 'agentic') {
-    return {
-      provider: new ClaudeProvider(),
-      modelId: AGENTIC_MODEL
-    };
-  } else if (mode === 'reasoning') {
-    return {
-      provider: new DeepSeekProvider(),
-      modelId: REASONING_MODEL
-    };
-  } else {
-    // fast (default)
-    return {
-      provider: new HermesProvider(),
-      modelId: FAST_MODEL
-    };
-  }
-}
 
 function getSystemInstruction() {
   return `You are 'Genie', a highly capable AI assistant equipped with dynamic tool integrations.
@@ -288,7 +246,8 @@ export async function generateConversationReply(
 
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
-  let { provider, modelId: actualModelId } = getProviderForMode(agentMode);
+  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType) });
+  let { provider, modelId: actualModelId } = providerResolution.execution;
 
   const { messages, fileData, mimeType } = parsed;
 
@@ -360,9 +319,9 @@ export async function generateConversationReply(
         const upgradeMode = confidenceSignal.recommendedTier === 'claude-sonnet'
           ? 'quality'
           : 'reasoning';
-        const upgraded = getProviderForMode(upgradeMode);
-        provider = upgraded.provider;
-        actualModelId = upgraded.modelId;
+        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments: Boolean(fileData && mimeType) });
+        provider = providerResolution.execution.provider;
+        actualModelId = providerResolution.execution.modelId;
         confidenceOverrideApplied = true;
 
         console.log(
