@@ -422,9 +422,9 @@ export async function generateConversationReply(
   } catch (err: any) {
     if (err?.status === 429 || String(err).includes('429')) {
       console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to fast mode`);
-      const fallback = getProviderForMode('fast');
-      actualModelId = fallback.modelId;
-      streamResult = await fallback.provider.generateStream(history, enhancedSystemInstruction, {
+      const fallback = resolveProviderForMode({ mode: 'fast', hasAttachments: Boolean(fileData && mimeType) });
+      actualModelId = fallback.execution.modelId;
+      streamResult = await fallback.execution.provider.generateStream(history, enhancedSystemInstruction, {
         model: actualModelId,
         temperature: 0.9,
         maxTokens: 2048,
