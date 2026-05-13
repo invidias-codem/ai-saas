@@ -35,6 +35,7 @@ import { supabase } from '@/lib/supabaseClient';
 import type { AIOutputAudit } from '@/lib/world-model/types';
 import { deltaEngine } from '@/lib/world-model/delta';
 import { critiqueLLMOutput } from '@/lib/ucol/critics/OutputCritic';
+import type { UcolMemoryScope } from '@/lib/ucol/routing/types';
 
 // ChatMessageSchema imported from types
 
@@ -256,8 +257,10 @@ export async function generateConversationReply(
   const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
   const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
 
+  const plannedReadScopes: UcolMemoryScope[] = ['conversation', 'user', ...(agentMode === 'fast' ? [] : ['graph'])];
+
   const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan({
-    readScopes: ['conversation', 'user', ...(agentMode === 'fast' ? [] : ['graph'])],
+    readScopes: plannedReadScopes,
     retrievalMode: agentMode === 'reasoning' || agentMode === 'agentic' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
     usePreparedContext: true,
     useGraphRecall: agentMode !== 'fast',
