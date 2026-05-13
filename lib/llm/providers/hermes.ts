@@ -17,7 +17,7 @@ const NOUS_API_KEY = process.env.NOUSE_API_KEY;
 const NOUS_BASE_URL = "https://inference-api.nousresearch.com/v1";
 
 // Separate cloud fallback model id from local/self-hosted naming.
-const NOUS_MODEL = process.env.NOUS_MODEL_ID || "";
+const NOUS_MODEL = process.env.NOUS_MODEL_ID || "Hermes-4-70B";
 
 // Vast.ai vLLM (primary)
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || "";
