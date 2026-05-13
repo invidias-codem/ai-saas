@@ -1,4 +1,5 @@
 // app/api/chat/route.ts
+import { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
@@ -11,11 +12,30 @@ import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAut
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { promptSchema, validateRequestSize, ValidationError } from '@/lib/security/inputValidation';
 import { resolveAgentModeFromProfile } from '@/lib/workspaces/runtimeMode';
+import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
 import type { AgentMode } from '@/lib/llm/types';
+import type { RuntimeProfileSignals } from '@/lib/workspaces/runtimeMode';
+import type { UcolRequestPacket, UcolResolvedContext } from '@/lib/ucol/routing/types';
 
-async function resolveRuntimeMode(userId: string, conversationId?: string): Promise<AgentMode> {
+type ResolvedChatContext = {
+    mode: AgentMode;
+    context: UcolResolvedContext;
+};
+
+async function resolveChatContext(userId: string, conversationId?: string): Promise<ResolvedChatContext> {
     if (!conversationId || !supabaseAdmin) {
-        return 'quality';
+        return {
+            mode: 'quality',
+            context: {
+                conversationId,
+                surface: 'web',
+                preWorkspace: true,
+                workspaceBacked: false,
+                operatingProfileResolved: false,
+                allowedMemoryScopes: ['conversation', 'user'],
+                notes: ['no conversation id or admin client available; defaulted to general context'],
+            },
+        };
     }
 
     const { data: conversation, error: conversationError } = await supabaseAdmin
@@ -26,10 +46,22 @@ async function resolveRuntimeMode(userId: string, conversationId?: string): Prom
         .maybeSingle();
 
     if (conversationError || !conversation) {
-        return 'quality';
+        return {
+            mode: 'quality',
+            context: {
+                conversationId,
+                surface: 'web',
+                preWorkspace: true,
+                workspaceBacked: false,
+                operatingProfileResolved: false,
+                allowedMemoryScopes: ['conversation', 'user'],
+                notes: ['conversation lookup failed or returned no row; defaulted to general context'],
+            },
+        };
     }
 
     let operatingProfileId = conversation.operating_profile_id ?? null;
+    let workspaceDefaultProfileId: string | null = null;
 
     if (!operatingProfileId && conversation.workspace_id) {
         const { data: workspace } = await supabaseAdmin
@@ -39,21 +71,52 @@ async function resolveRuntimeMode(userId: string, conversationId?: string): Prom
             .eq('user_id', userId)
             .maybeSingle();
 
-        operatingProfileId = workspace?.default_operating_profile_id ?? null;
+        workspaceDefaultProfileId = workspace?.default_operating_profile_id ?? null;
+        operatingProfileId = workspaceDefaultProfileId;
     }
 
     if (!operatingProfileId) {
-        return 'quality';
+        return {
+            mode: 'quality',
+            context: {
+                workspaceId: conversation.workspace_id ?? undefined,
+                conversationId: conversation.id,
+                surface: 'web',
+                preWorkspace: !conversation.workspace_id,
+                workspaceBacked: Boolean(conversation.workspace_id),
+                operatingProfileResolved: false,
+                allowedMemoryScopes: conversation.workspace_id ? ['conversation', 'workspace', 'user'] : ['conversation', 'user'],
+                notes: ['no operating profile resolved from conversation or workspace'],
+            },
+        };
     }
 
     const { data: profile } = await supabaseAdmin
         .from('operating_profiles')
-        .select('mode, latency_preference, allow_agentic_runs, tool_use_level, retrieval_depth, default_output_style')
+        .select('id, mode, latency_preference, allow_agentic_runs, tool_use_level, retrieval_depth, default_output_style')
         .eq('id', operatingProfileId)
         .eq('user_id', userId)
         .maybeSingle();
 
-    return resolveAgentModeFromProfile(profile);
+    const mode = resolveAgentModeFromProfile(profile as RuntimeProfileSignals | null);
+
+    return {
+        mode,
+        context: {
+            workspaceId: conversation.workspace_id ?? undefined,
+            operatingProfileId: profile?.id,
+            conversationId: conversation.id,
+            surface: 'web',
+            preWorkspace: !conversation.workspace_id,
+            workspaceBacked: Boolean(conversation.workspace_id),
+            operatingProfileResolved: Boolean(profile?.id),
+            allowedMemoryScopes: conversation.workspace_id ? ['conversation', 'workspace', 'user'] : ['conversation', 'user'],
+            notes: [
+                conversation.operating_profile_id ? 'conversation-specific operating profile resolved' : 'workspace default operating profile resolved',
+                workspaceDefaultProfileId ? 'workspace default profile fallback used' : 'no workspace default fallback needed',
+            ],
+        },
+    };
 }
 
 export async function POST(req: Request) {
@@ -102,7 +165,45 @@ export async function POST(req: Request) {
             );
         }
 
-        const effectiveMode = await resolveRuntimeMode(user.userId, conversationId);
+        const resolved = await resolveChatContext(user.userId, conversationId);
+        const effectiveMode = resolved.mode;
+
+        const requestPacket: UcolRequestPacket = {
+            requestId: randomUUID(),
+            userId: user.userId,
+            workspaceId: resolved.context.workspaceId,
+            conversationId,
+            surface: 'web',
+            rawInput: prompt,
+            attachments: fileData ? [{
+                id: 'primary-upload',
+                type: 'document',
+                mimeType: fileData.type,
+                metadata: { providedByChatRoute: true },
+            }] : [],
+            trustContext: {
+                canUseExternalActions: false,
+                canUseSensitiveTools: false,
+                requestSourceTrust: 'direct_user',
+            },
+            createdAt: new Date().toISOString(),
+        };
+
+        const routingDecision = buildInitialRoutingDecision({
+            request: requestPacket,
+            context: resolved.context,
+            agentMode: effectiveMode,
+        });
+
+        console.info('[UCOL] Initial routing decision', {
+            requestId: routingDecision.requestId,
+            workspaceId: routingDecision.resolvedWorkspaceId,
+            operatingProfileId: routingDecision.operatingProfileId,
+            intent: routingDecision.intent,
+            executionMode: routingDecision.executionPlan.mode,
+            providerPlan: routingDecision.providerPlan,
+            memoryPlan: routingDecision.memoryPlan,
+        });
 
         const requestPayload = {
             messages: [...(messages || []), { role: 'user', text: prompt }],
@@ -172,6 +273,8 @@ export async function POST(req: Request) {
                 'Content-Type': 'text/plain; charset=utf-8',
                 'X-Debug-Model': result.debug?.model || 'unknown',
                 'X-Debug-Agent-Mode': effectiveMode,
+                'X-Debug-Execution-Mode': routingDecision.executionPlan.mode,
+                'X-Debug-Intent': routingDecision.intent.category,
             }
         });
 
