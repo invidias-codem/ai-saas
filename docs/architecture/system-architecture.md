@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document provides a high-level explanation of Genie AI’s current system architecture.
+This document provides a high-level explanation of Lattice OS’s current system architecture.
 
 It is intended to answer:
 - what the major system layers are
@@ -17,7 +17,7 @@ This document is a backbone architecture overview, not a full subsystem spec.
 
 ## High-Level View
 
-At a broad level, Genie AI consists of five major architectural layers:
+At a broad level, Lattice OS consists of five major architectural layers:
 
 1. **Public web surface**
 2. **Authenticated application surface**

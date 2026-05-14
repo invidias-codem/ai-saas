@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the core technologies, infrastructure surfaces, and major runtime layers used by Genie AI.
+This document describes the core technologies, infrastructure surfaces, and major runtime layers used by Lattice OS.
 
 It exists to make the platform easier to understand for:
 - developers
@@ -17,7 +17,7 @@ This is not a marketing page. It is a practical technology disclosure and orient
 
 ## Product Shape
 
-Genie AI is a web-based AI workspace platform that combines:
+Lattice OS is a memory-native AI workspace platform that combines:
 - conversational AI
 - workspace-aware routing
 - operating-profile-based runtime behavior
@@ -87,7 +87,7 @@ The local repository may contain schema/migration drift during active developmen
 ## AI / LLM Layer
 
 ### Model Provider Strategy
-Genie AI supports a provider-based architecture rather than a single hardcoded model path.
+Lattice OS uses a provider-based architecture rather than a single hardcoded model path.
 
 ### Current Role of the AI Layer
 The AI subsystem is used for:

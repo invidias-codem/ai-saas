@@ -1,6 +1,6 @@
-# Genie AI Documentation
+# Lattice OS Documentation
 
-This documentation is intended to make the Genie AI codebase and platform behavior legible to developers, collaborators, reviewers, and future maintainers.
+This documentation is intended to make the Lattice OS codebase and platform behavior legible to developers, collaborators, reviewers, and future maintainers.
 
 The goal is clarity over marketing.
 
@@ -16,6 +16,7 @@ The goal is clarity over marketing.
 
 ### Overview
 - `overview/technology-transparency.md` — explicit technology stack and platform surfaces
+- `overview/seo-strategy.md` — brand-aligned SEO positioning, metadata direction, and content architecture for Lattice OS
 
 ### Architecture
 - `architecture/system-architecture.md` — high-level system structure, major components, and data/control flow

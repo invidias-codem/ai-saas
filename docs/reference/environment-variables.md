@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the major environment variables used by Genie AI / `ai-saas`.
+This document describes the major environment variables used by Lattice OS / `ai-saas`.
 
 It is intended to make the platform more transparent for:
 - developers

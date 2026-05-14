@@ -33,13 +33,18 @@ const docSections = [
                 path: "docs/overview/technology-transparency.md",
                 description: "Explicit explanation of the stack, hosting surfaces, AI/runtime layers, and major product boundaries.",
             },
+            {
+                title: "SEO Strategy",
+                path: "docs/overview/seo-strategy.md",
+                description: "How Lattice OS should talk about memory-native AI, hybrid inference, and workspace intelligence for search and discovery.",
+            },
         ],
     },
     {
         id: "architecture",
         title: "Architecture",
         icon: Boxes,
-        description: "Understand how Genie AI is structured and where the platform is headed.",
+        description: "Understand how Lattice OS is structured and where the platform is headed.",
         items: [
             {
                 title: "System Architecture",
@@ -188,9 +193,9 @@ export default function DocsPage() {
             <header className="relative z-10 py-6 px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full border-b border-slate-200 dark:border-white/5 bg-[#FAF9F7] dark:bg-[#111827]/80 backdrop-blur-md sticky top-0">
                 <Link href="/" className="flex items-center gap-2">
                     <div className="relative w-8 h-8">
-                        <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
+                        <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" />
                     </div>
-                    <span className="text-2xl font-bold tracking-tight">Genie AI</span>
+                    <span className="text-2xl font-bold tracking-tight">Lattice OS</span>
                 </Link>
                 <div className="flex items-center gap-x-4">
                     <Link href="/support" className="text-sm text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition hidden sm:block">
@@ -231,7 +236,7 @@ export default function DocsPage() {
                         <div>
                             <h3 className="text-sm font-semibold text-slate-500 dark:text-gray-400 uppercase tracking-wider mb-4">Use This Docs Set For</h3>
                             <ul className="space-y-3 border-l border-slate-200 dark:border-white/10">
-                                <li className="block pl-4 text-slate-500 dark:text-gray-400">Platform orientation</li>
+                                <li className="block pl-4 text-slate-500 dark:text-gray-400">Lattice OS platform orientation</li>
                                 <li className="block pl-4 text-slate-500 dark:text-gray-400">Runtime behavior clarity</li>
                                 <li className="block pl-4 text-slate-500 dark:text-gray-400">Operational debugging</li>
                                 <li className="block pl-4 text-slate-500 dark:text-gray-400">Security boundary review</li>
@@ -346,9 +351,9 @@ export default function DocsPage() {
                     <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                         <div className="flex items-center gap-2">
                             <div className="relative w-6 h-6">
-                                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
+                                <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" />
                             </div>
-                            <span className="text-lg font-bold text-slate-900 dark:text-white">Genie AI</span>
+                            <span className="text-lg font-bold text-slate-900 dark:text-white">Lattice OS</span>
                         </div>
 
                         <div className="flex items-center gap-6 text-sm text-slate-500 dark:text-gray-400">

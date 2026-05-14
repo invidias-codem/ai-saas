@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines which sources of evidence should be trusted for different kinds of questions in Genie AI / `ai-saas`.
+This document defines which sources of evidence should be trusted for different kinds of questions in Lattice OS / `ai-saas`.
 
 It exists because this codebase already has a recurring operational reality:
 local output, CI output, deploy logs, and live runtime behavior do not always agree.
