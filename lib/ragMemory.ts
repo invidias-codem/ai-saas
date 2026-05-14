@@ -189,6 +189,9 @@ export async function captureMemory(
   metadata?: Record<string, any>
 ): Promise<{ success: boolean; memoryId?: string; error?: string }> {
   try {
+    const workspaceId = typeof metadata?.workspaceId === 'string' ? metadata.workspaceId : null;
+    const scope = workspaceId ? 'workspace' : 'conversation';
+
     // Replaced Cloud Function with Supabase Store
     const memoryId = await storeMemory(userId, summary, 'conversation_summary', {
       title,
@@ -196,6 +199,9 @@ export async function captureMemory(
       tags,
       ...metadata,
       tokensUsed
+    }, {
+      scope,
+      workspaceId,
     });
 
     if (memoryId) {

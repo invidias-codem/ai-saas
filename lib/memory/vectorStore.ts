@@ -2,6 +2,12 @@ import { supabase } from '../supabaseClient';
 import { generateEmbeddingWithMetadata } from './embedding';
 
 export type MemoryType = 'conversation_summary' | 'fact' | 'preference';
+export type MemoryScope = 'conversation' | 'user' | 'workspace';
+
+export interface MemoryWriteOptions {
+    scope?: MemoryScope;
+    workspaceId?: string | null;
+}
 
 export interface Memory {
     id: string;
@@ -76,13 +82,21 @@ export async function storeMemory(
     userId: string,
     content: string,
     type: MemoryType,
-    metadata: any = {}
+    metadata: any = {},
+    options: MemoryWriteOptions = {}
 ): Promise<string | null> {
     try {
         const embeddingResult = await generateEmbeddingWithMetadata(content);
 
         const { compress } = await import('@/lib/compression');
         const compressedContent = compress(content);
+        const scope: MemoryScope = options.scope || 'conversation';
+        const normalizedMetadata = {
+            ...metadata,
+            ...(scope === 'workspace' && options.workspaceId
+                ? { workspaceId: options.workspaceId, scopeHint: 'workspace', scopeLocked: true, allowUserPromotion: false }
+                : {}),
+        };
 
         const { data, error } = await supabase
             .from('memory_bank')
@@ -90,7 +104,8 @@ export async function storeMemory(
                 user_id: userId,
                 content: compressedContent,
                 type,
-                metadata,
+                scope,
+                metadata: normalizedMetadata,
                 ...buildEmbeddingColumnPatch(embeddingResult),
             })
             .select('id')
