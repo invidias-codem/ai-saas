@@ -1,13 +1,15 @@
 import { supabase } from '@/lib/supabaseClient';
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
 import { generateEmbeddingWithMetadata } from '@/lib/memory/embedding';
-import { shouldPromoteMemory, promoteToUserScope } from '@/lib/memoryPromotion';
+import { determineMemoryScopeForFact, shouldPromoteMemory, promoteToUserScope } from '@/lib/memoryPromotion';
 
 export interface ExtractedFact {
   type: "skill" | "preference" | "goal" | "personal" | "project" | "tool";
   value: string;
   confidence: number;
 }
+
+export type FactStorageScope = 'conversation' | 'user' | 'workspace';
 
 export interface FactExtractionResult {
   facts: ExtractedFact[];
@@ -156,8 +158,12 @@ export async function storeExtractedFacts(
     try {
       const embeddingResult = await generateEmbeddingWithMetadata(fact.value);
 
-      const scope = fact.confidence >= 0.85 &&
-                    ['personal', 'skill', 'preference'].includes(fact.type) ? 'user' : 'conversation';
+      const workspaceId = typeof metadata?.workspaceId === 'string' ? metadata.workspaceId : null;
+      const scope: FactStorageScope = determineMemoryScopeForFact({
+        type: fact.type,
+        confidence: fact.confidence,
+        workspaceId,
+      });
 
       const { data, error } = await supabase
         .from('memory_bank')
@@ -172,7 +178,10 @@ export async function storeExtractedFacts(
           metadata: {
             ...metadata,
             extractedAt: new Date().toISOString(),
-            extractionMethod: 'llm-powered'
+            extractionMethod: 'llm-powered',
+            scopeHint: scope,
+            allowUserPromotion: scope !== 'workspace',
+            scopeLocked: scope === 'workspace',
           }
         })
         .select('id')

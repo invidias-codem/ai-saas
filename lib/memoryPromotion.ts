@@ -1,25 +1,28 @@
 /**
  * Memory Promotion Logic
- * 
+ *
  * Handles promoting high-confidence facts from conversation scope to user scope.
  * This enables Genie to learn lasting personality traits and personal info.
  */
 
 import { supabase } from '@/lib/supabaseClient';
 
+export type MemoryScope = 'conversation' | 'user' | 'workspace';
+export type ExtractedFactType = 'skill' | 'preference' | 'goal' | 'personal' | 'project' | 'tool';
+
 export interface PromotableMemory {
     id: string;
     content: string;
     type: string;
     confidence: number;
-    scope: 'conversation' | 'user';
+    scope: MemoryScope;
     source_conversation_id: string;
+    metadata?: Record<string, any> | null;
 }
 
-// Patterns that indicate personal/lasting information
 const PERSONAL_INFO_PATTERNS = [
     /my name is\s+(\w+)/i,
-    /i('m| am)\s+(a|an)\s+(\w+)/i,  // "I'm a developer"
+    /i('m| am)\s+(a|an)\s+(\w+)/i,
     /i work (at|for|as)\s+/i,
     /i live in\s+/i,
     /my (favorite|preferred|go-to)/i,
@@ -28,28 +31,73 @@ const PERSONAL_INFO_PATTERNS = [
     /call me\s+(\w+)/i,
 ];
 
-// Types that should always be promoted
-const PROMOTABLE_TYPES = ['personal_info', 'preference', 'user_fact'];
+const USER_PROMOTABLE_FACT_TYPES: ExtractedFactType[] = ['personal', 'preference'];
+const USER_REVIEWABLE_FACT_TYPES: ExtractedFactType[] = ['skill', 'goal'];
+
+function normalizeMemoryMetadata(metadata: Record<string, any> | null | undefined) {
+    return metadata && typeof metadata === 'object' ? metadata : {};
+}
+
+function isExtractedFactType(type: string): type is ExtractedFactType {
+    return ['skill', 'preference', 'goal', 'personal', 'project', 'tool'].includes(type);
+}
+
+function isDurableUserMemoryType(type: string): boolean {
+    if (isExtractedFactType(type)) {
+        return USER_PROMOTABLE_FACT_TYPES.includes(type) || USER_REVIEWABLE_FACT_TYPES.includes(type);
+    }
+
+    return ['personal_info', 'preference', 'user_fact'].includes(type);
+}
+
+function isWorkspaceCandidateType(type: string): boolean {
+    return type === 'project' || type === 'tool';
+}
 
 /**
  * Check if a memory should be promoted to user scope
  */
 export function shouldPromoteMemory(memory: PromotableMemory): boolean {
-    // Already user-scoped
-    if (memory.scope === 'user') return false;
+    if (memory.scope === 'user' || memory.scope === 'workspace') return false;
+    if (memory.confidence < 0.9) return false;
 
-    // High confidence threshold for auto-promotion
-    if (memory.confidence < 0.85) return false;
+    const metadata = normalizeMemoryMetadata(memory.metadata);
+    if (metadata.scopeLocked === true) return false;
+    if (metadata.allowUserPromotion === false) return false;
+    if (metadata.scopeHint === 'workspace') return false;
 
-    // Check if type is promotable
-    if (PROMOTABLE_TYPES.includes(memory.type)) return true;
+    if (isExtractedFactType(memory.type)) {
+        if (USER_PROMOTABLE_FACT_TYPES.includes(memory.type)) return true;
+        if (USER_REVIEWABLE_FACT_TYPES.includes(memory.type)) {
+            return PERSONAL_INFO_PATTERNS.some((pattern) => pattern.test(memory.content));
+        }
+        return false;
+    }
 
-    // Check content patterns
+    if (isDurableUserMemoryType(memory.type)) return true;
+
     for (const pattern of PERSONAL_INFO_PATTERNS) {
         if (pattern.test(memory.content)) return true;
     }
 
     return false;
+}
+
+export function determineMemoryScopeForFact(args: {
+    type: ExtractedFactType;
+    confidence: number;
+    workspaceId?: string | null;
+}): MemoryScope {
+    const { type, confidence, workspaceId } = args;
+
+    if (type === 'personal' && confidence >= 0.9) return 'user';
+    if (type === 'preference' && confidence >= 0.9) return 'user';
+
+    if (workspaceId && isWorkspaceCandidateType(type) && confidence >= 0.85) {
+        return 'workspace';
+    }
+
+    return 'conversation';
 }
 
 /**
@@ -60,16 +108,30 @@ export async function promoteToUserScope(
     memoryId: string
 ): Promise<boolean> {
     try {
+        const { data: memory, error: fetchError } = await supabase
+            .from('memory_bank')
+            .select('metadata')
+            .eq('id', memoryId)
+            .eq('user_id', userId)
+            .single();
+
+        if (fetchError) {
+            console.error('[MemoryPromotion] Error fetching memory before promotion:', fetchError);
+            return false;
+        }
+
+        const existingMetadata = normalizeMemoryMetadata(memory?.metadata);
         const { error } = await supabase
             .from('memory_bank')
             .update({
                 scope: 'user',
                 promoted_at: new Date().toISOString(),
-                metadata: supabase.rpc('jsonb_set', {
-                    target: 'metadata',
-                    path: '{promotedFrom}',
-                    new_value: '"conversation"'
-                })
+                metadata: {
+                    ...existingMetadata,
+                    promotedFrom: 'conversation',
+                    promotedTo: 'user',
+                    promotionSource: 'memoryPromotion',
+                }
             })
             .eq('id', memoryId)
             .eq('user_id', userId);
@@ -95,7 +157,6 @@ export async function processConversationForPromotion(
     conversationId: string
 ): Promise<{ promoted: number; checked: number }> {
     try {
-        // Get all conversation-scoped memories from this chat
         const { data: memories, error } = await supabase
             .from('memory_bank')
             .select('*')
@@ -181,7 +242,7 @@ export async function getConversationMemories(
             .eq('user_id', userId)
             .eq('source_conversation_id', conversationId)
             .eq('scope', 'conversation')
-            .order('created_at', { ascending: false })
+            .order('updated_at', { ascending: false })
             .limit(10);
 
         if (error) {
