@@ -8,6 +8,7 @@ import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
 import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/graphStore';
 import { Message } from './schemas';
 import { searchMemories, storeMemory, getMemoryStats } from '@/lib/memory/vectorStore';
+import { supabase } from '@/lib/supabaseClient';
 
 export interface Source {
   id: string;
@@ -87,6 +88,62 @@ export async function getRAGMemoryContext(
     return { contextString: '', sources: [] }; // Fail gracefully - don't block main request
   }
 
+}
+
+
+export async function getWorkspaceMemoryContext(
+  userId: string,
+  workspaceId: string,
+  query: string,
+  limit: number = 10
+): Promise<RAGContext> {
+  try {
+    const { safeDecompress } = await import('@/lib/compression');
+
+    const { data, error } = await supabase
+      .from('memory_bank')
+      .select('id, content, type, metadata, updated_at')
+      .eq('user_id', userId)
+      .eq('scope', 'workspace')
+      .eq('metadata->>workspaceId', workspaceId)
+      .order('updated_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    if (!data || data.length === 0) return { contextString: '', sources: [] };
+
+    const facts = data.map((m: any) => ({
+      id: m.id,
+      content: safeDecompress(m.content),
+      type: m.type as any,
+      confidence: 0.85,
+      extractedAt: new Date(m.updated_at),
+      metadata: m.metadata,
+    }));
+
+    const similarities = new Map<string, number>();
+    const queryWords = query.toLowerCase().split(/\s+/);
+    for (const fact of facts) {
+      const factWords = (fact.content ?? '').toLowerCase().split(/\s+/);
+      const overlap = factWords.filter((w: string) => queryWords.includes(w)).length;
+      similarities.set(fact.id || '', overlap / Math.max(factWords.length, queryWords.length, 1));
+    }
+
+    const ranked = rankMemoriesIntelligently(facts, similarities, query).slice(0, 5);
+    const contextString = formatMemoriesForPrompt(ranked);
+    const sources: Source[] = ranked.map((m: any) => ({
+      id: m.id,
+      title: m.metadata?.title || m.content.substring(0, 50) + '...',
+      type: m.type || 'workspace_memory',
+      similarity: m.contextRelevance,
+      content: m.content
+    }));
+
+    return { contextString, sources };
+  } catch (error) {
+    console.error('Error retrieving workspace memory context:', error);
+    return { contextString: '', sources: [] };
+  }
 }
 
 /**

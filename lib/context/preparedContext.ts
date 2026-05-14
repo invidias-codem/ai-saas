@@ -12,6 +12,7 @@ import {
   getHighConfidenceFacts,
   formatFactsForPrompt,
   getRAGMemoryContext,
+  getWorkspaceMemoryContext,
 } from '@/lib/ragMemory';
 import { rankMemoriesIntelligently, synthesizeContextWithReasoning } from '@/lib/intelligentMemory';
 import { findRelatedEntities, formatGraphContext } from '@/lib/memory/graphStore';
@@ -221,10 +222,11 @@ export async function prepareContextBundle(args: {
   userId: string;
   clerkUser: UserResource | null;
   userQuery: string;
+  workspaceId?: string | null;
   agentMode: AgentMode;
   options?: PreparedContextOptions;
 }): Promise<PreparedContextBundle> {
-  const { userId, clerkUser, userQuery, agentMode, options } = args;
+  const { userId, clerkUser, userQuery, workspaceId, agentMode, options } = args;
 
   const userContext = await gatherUserContext(userId, clerkUser as any);
   const userContextPrompt = formatUserContextForPrompt(userContext);
@@ -242,6 +244,7 @@ export async function prepareContextBundle(args: {
   let graphData: { centralNode: GraphNode | null; relatedNodes: any[] } = { centralNode: null, relatedNodes: [] };
   let userProfileMemories: PromotableMemory[] | null = null;
   let memoryContext = '';
+  let workspaceMemoryContext = '';
   let memorySources: Source[] = [];
 
   if (!effectivelyDisabled) {
@@ -251,6 +254,7 @@ export async function prepareContextBundle(args: {
       allowGraphRecall ? findRelatedEntities(userId, userQuery) : Promise.resolve({ centralNode: null, relatedNodes: [] }),
       allowUserProfile ? getUserProfile(userId) : Promise.resolve(null),
       readEnforcement.conversationMemoryReadAllowed ? getRAGMemoryContext(userId, userQuery, 'conversation') : Promise.resolve({ contextString: '', sources: [] }),
+      readEnforcement.workspaceMemoryReadAllowed && workspaceId ? getWorkspaceMemoryContext(userId, workspaceId, userQuery) : Promise.resolve({ contextString: '', sources: [] }),
     ]);
 
     allFacts = results[0].status === 'fulfilled' ? results[0].value : [];
@@ -261,10 +265,14 @@ export async function prepareContextBundle(args: {
       memoryContext = results[4].value.contextString;
       memorySources = results[4].value.sources.slice(0, normalizedPlan.memoryLimit);
     }
+    if (results[5] && results[5].status === 'fulfilled') {
+      workspaceMemoryContext = results[5].value.contextString;
+      memorySources = [...memorySources, ...results[5].value.sources].slice(0, normalizedPlan.memoryLimit);
+    }
 
     results.forEach((r, i) => {
       if (r.status === 'rejected') {
-        const labels = ['facts', 'research', 'graph', 'userProfile', 'rag'];
+        const labels = ['facts', 'research', 'graph', 'userProfile', 'conversationRag', 'workspaceRag'];
         console.warn(`[PreparedContext] Context source "${labels[i]}" failed:`, r.reason?.message || r.reason);
       }
     });
@@ -302,7 +310,7 @@ export async function prepareContextBundle(args: {
       factContext,
       graphContext,
       searchContext,
-      memoryContext,
+      memoryContext: [memoryContext, workspaceMemoryContext].filter(Boolean).join('\n\n'),
     },
     raw: {
       allFacts,
