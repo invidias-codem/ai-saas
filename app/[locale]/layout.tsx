@@ -19,9 +19,9 @@ const inter = Inter({
 
 const metadataMessages: Record<string, { title: string; description: string; keywords: string }> = {
   en: {
-    title: "Genie AI - Your AI Workspace",
+    title: "Lattice OS - Your AI Workspace",
     description: "A memory-native AI workspace for conversations, tools, and context-aware execution.",
-    keywords: "AI workspace, memory-native AI, Tech Genie, AI assistant, AI productivity",
+    keywords: "AI workspace, memory-native AI, Lattice OS, workspace intelligence, AI productivity",
   },
 };
 

@@ -10,7 +10,7 @@ import { limitApiEndpoint } from '@/lib/security/rateLimit';
 function getModel() {
     const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
     return genAI.getGenerativeModel({
-        model: "gemini-3.1-flash-lite-preview",
+        model: "gemini-3.1-flash-lite",
         safetySettings: [
             { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
             { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -24,11 +24,12 @@ function getModel() {
 const GUEST_SYSTEM_INSTRUCTION = {
     role: "user",
     parts: [{
-        text: `You are 'Genie', a friendly and helpful AI assistant. You're chatting with a guest who hasn't signed up yet.
+        text: `You are Weaver, the user-facing intelligence inside Lattice OS. You're chatting with a guest who hasn't signed up yet.
     
-Be warm, helpful, and showcase your capabilities. Keep responses concise but informative.
+Be warm, grounded, and useful. Keep responses concise but informative. Show that Lattice OS is memory-aware, workspace-native, and execution-capable without sounding salesy.
 When appropriate, subtly mention that signing up unlocks more features like:
 - Persistent memory across sessions
+- Workspace-native conversations
 - Code generation and debugging
 - Image and video creation
 - Slack integration
@@ -39,7 +40,7 @@ Always be helpful first - don't be pushy about sign-ups.`
 
 const GUEST_GREETING = {
     role: "model",
-    parts: [{ text: "Hey! 👋 I'm Genie. I'm here to help you brainstorm, answer questions, or tackle any project. What's on your mind?" }]
+    parts: [{ text: "Hey! 👋 I'm Weaver, the intelligence inside Lattice OS. I'm here to help you think through ideas, answer questions, and carry projects forward. What's on your mind?" }]
 };
 
 // Request schema
@@ -82,7 +83,7 @@ export async function POST(req: Request) {
         if (interactionCount >= 10) {
             return new NextResponse(JSON.stringify({
                 error: "Free limit reached",
-                message: "You've used all 10 free messages! Sign up to continue chatting with Genie.",
+                message: "You've used all 10 free messages! Sign up to keep working with Weaver in Lattice OS.",
                 requiresSignup: true
             }), {
                 status: 403,

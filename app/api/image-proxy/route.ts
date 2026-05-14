@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
     // Fetch image from Replicate
     const upstream = await fetch(imageUrl, {
-      headers: { 'User-Agent': 'TechGenie/1.0 ImageProxy' },
+      headers: { 'User-Agent': 'LatticeOS/1.0 ImageProxy' },
     });
 
     if (!upstream.ok) {

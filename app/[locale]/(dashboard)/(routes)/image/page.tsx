@@ -319,8 +319,8 @@ const ImagePage = () => {
                   <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 pointer-events-none">
                     <ShareIconButton
                       content={{
-                        title: "AI Generated Image by Genie",
-                        text: `Check out this AI-generated image I created with Genie! 🎨`,
+                        title: "AI Generated Image by Weaver",
+                        text: `Check out this AI-generated image I created with Weaver in Lattice OS! 🎨`,
                         url: src,
                       }}
                       className="bg-background/90 backdrop-blur-md shadow-lg border-violet-500/20 hover:bg-background hover:scale-110 transition-all pointer-events-auto"
@@ -336,7 +336,7 @@ const ImagePage = () => {
                         const url = window.URL.createObjectURL(blob);
                         const link = document.createElement("a");
                         link.href = url;
-                        link.download = `genie-image-${Date.now()}.png`;
+                        link.download = `weaver-image-${Date.now()}.png`;
                         document.body.appendChild(link);
                         link.click();
                         document.body.removeChild(link);
@@ -354,8 +354,8 @@ const ImagePage = () => {
                   </Button>
                   <ShareIconButton
                     content={{
-                      title: "AI Generated Image by Genie",
-                      text: `Check out this AI-generated image I created with Genie! 🎨`,
+                      title: "AI Generated Image by Weaver",
+                      text: `Check out this AI-generated image I created with Weaver in Lattice OS! 🎨`,
                       url: src,
                     }}
                     className="md:hidden bg-background/90 backdrop-blur-md border-violet-500/20"

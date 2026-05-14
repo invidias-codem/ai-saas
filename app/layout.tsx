@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Tech Genie',
+  title: 'Lattice OS',
   description: 'Memory-native AI with hybrid orchestration across self-hosted and frontier models.',
 };
 

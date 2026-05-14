@@ -521,7 +521,7 @@ function ConversationPage({
       }
 
       // Finalize message
-      const sourcesHeader = response.headers.get("X-Genie-Sources");
+      const sourcesHeader = response.headers.get("X-Weaver-Sources") || response.headers.get("X-Genie-Sources");
       let sources: Source[] = [];
       if (sourcesHeader) {
         try {
@@ -625,7 +625,7 @@ function ConversationPage({
       return (
         <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
           <Avatar className="h-8 w-8 ring-1 ring-border/50">
-            <AvatarImage src="/Genie.png" />
+            <AvatarImage src="/Genie.png" alt="Weaver avatar" />
             <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
           </Avatar>
           <div className="flex items-center space-x-2 text-indigo-500 text-sm font-medium animate-pulse">
@@ -638,7 +638,7 @@ function ConversationPage({
     return (
       <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
         <Avatar className="h-8 w-8 ring-1 ring-border/50">
-          <AvatarImage src="/Genie.png" />
+          <AvatarImage src="/Genie.png" alt="Weaver avatar" />
           <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
         </Avatar>
         <div className="flex items-center space-x-1.5 h-8">
@@ -662,7 +662,7 @@ function ConversationPage({
             <ChatBubbleIcon className="h-4 w-4 text-sky-600 dark:text-sky-400" />
           </div>
           <div>
-            <h1 className="text-sm font-semibold leading-tight">Genie</h1>
+            <h1 className="text-sm font-semibold leading-tight">Weaver</h1>
             {/* Added Model Toggle here */}
             <div className="mt-1">
               <ModelToggle disabled={loading || streaming} />
@@ -767,7 +767,7 @@ function ConversationPage({
                 <div className="flex-shrink-0 mt-1">
                   {msg.role === "bot" ? (
                     <Avatar className="h-8 w-8 ring-1 ring-border/50 bg-background">
-                      <AvatarImage src="/Genie.png" />
+                      <AvatarImage src="/Genie.png" alt="Weaver avatar" />
                       <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
                     </Avatar>
                   ) : (
@@ -826,7 +826,7 @@ function ConversationPage({
                       <div className="mt-2 flex gap-2 items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <ShareIconButton
                           content={{
-                            title: "Genie AI Response",
+                            title: "Weaver Response",
                             text: msg.text.substring(0, 300),
                             url: typeof window !== "undefined" ? window.location.href : undefined,
                           }}
@@ -892,7 +892,7 @@ function ConversationPage({
               <div className="flex max-w-[90%] md:max-w-[85%] gap-3 flex-row">
                 <div className="flex-shrink-0 mt-1">
                   <Avatar className="h-8 w-8 ring-1 ring-border/50 bg-background">
-                    <AvatarImage src="/Genie.png" />
+                    <AvatarImage src="/Genie.png" alt="Weaver avatar" />
                     <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
                   </Avatar>
                 </div>
