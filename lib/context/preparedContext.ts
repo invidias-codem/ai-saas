@@ -46,6 +46,17 @@ export type PreparedContextSections = {
   memoryContext: string;
 };
 
+export type PreparedContextReadEnforcement = {
+  allowedScopes: UcolMemoryScope[];
+  factsReadAllowed: boolean;
+  userProfileReadAllowed: boolean;
+  graphReadAllowed: boolean;
+  conversationMemoryReadAllowed: boolean;
+  workspaceMemoryReadAllowed: boolean;
+  taskMemoryReadAllowed: boolean;
+  researchReadAllowed: boolean;
+};
+
 export type PreparedContextBundle = {
   userContext: Awaited<ReturnType<typeof gatherUserContext>>;
   sections: PreparedContextSections;
@@ -66,6 +77,7 @@ export type PreparedContextBundle = {
   routing: {
     confidenceSignal: ReturnType<typeof scoreContextForRouting> | null;
     appliedPlan: PreparedContextPlan;
+    readEnforcement: PreparedContextReadEnforcement;
   };
 };
 
@@ -145,6 +157,23 @@ export function createPreparedContextPlanFromMemoryPlan(memoryPlan?: UcolMemoryP
   };
 }
 
+
+function buildReadEnforcement(plan: Required<PreparedContextPlan>, options?: PreparedContextOptions): PreparedContextReadEnforcement {
+  const allowedScopes = [...plan.readScopes];
+  const effectivelyDisabled = Boolean(options?.disableExternalContext) || plan.usePreparedContext === false;
+
+  return {
+    allowedScopes,
+    factsReadAllowed: !effectivelyDisabled && allowedScopes.some((scope) => scope === 'conversation' || scope === 'workspace' || scope === 'user'),
+    userProfileReadAllowed: !effectivelyDisabled && allowedScopes.includes('user'),
+    graphReadAllowed: !effectivelyDisabled && plan.useGraphRecall && allowedScopes.includes('graph'),
+    conversationMemoryReadAllowed: !effectivelyDisabled && allowedScopes.includes('conversation'),
+    workspaceMemoryReadAllowed: !effectivelyDisabled && allowedScopes.includes('workspace'),
+    taskMemoryReadAllowed: !effectivelyDisabled && plan.useRecentTaskState && allowedScopes.includes('task'),
+    researchReadAllowed: !effectivelyDisabled && !options?.skipWebResearch && plan.researchLimit > 0,
+  };
+}
+
 async function computeFactSimilarities(allFacts: ExtractedFact[], userQuery: string): Promise<Map<string, number>> {
   const similarities = new Map<string, number>();
   if (!allFacts.length) return similarities;
@@ -201,11 +230,12 @@ export async function prepareContextBundle(args: {
   const userContextPrompt = formatUserContextForPrompt(userContext);
 
   const normalizedPlan = normalizePreparedContextPlan(options?.plan);
+  const readEnforcement = buildReadEnforcement(normalizedPlan, options);
   const effectivelyDisabled = Boolean(options?.disableExternalContext) || normalizedPlan.usePreparedContext === false;
-  const allowGraphRecall = normalizedPlan.useGraphRecall && normalizedPlan.readScopes.includes('graph');
-  const allowUserProfile = normalizedPlan.readScopes.includes('user');
-  const allowMemory = normalizedPlan.readScopes.some((scope) => scope === 'conversation' || scope === 'workspace' || scope === 'user');
-  const allowResearch = !options?.skipWebResearch && normalizedPlan.researchLimit > 0;
+  const allowGraphRecall = readEnforcement.graphReadAllowed;
+  const allowUserProfile = readEnforcement.userProfileReadAllowed;
+  const allowMemory = readEnforcement.conversationMemoryReadAllowed || readEnforcement.workspaceMemoryReadAllowed || readEnforcement.userProfileReadAllowed;
+  const allowResearch = readEnforcement.researchReadAllowed;
 
   let allFacts: ExtractedFact[] = [];
   let researchResults: SearchResult[] = [];
@@ -216,11 +246,11 @@ export async function prepareContextBundle(args: {
 
   if (!effectivelyDisabled) {
     const results = await Promise.allSettled([
-      getHighConfidenceFacts(userId),
+      readEnforcement.factsReadAllowed ? getHighConfidenceFacts(userId) : Promise.resolve([]),
       allowResearch ? performResearch(userQuery, userContextPrompt) : Promise.resolve({ results: [] }),
       allowGraphRecall ? findRelatedEntities(userId, userQuery) : Promise.resolve({ centralNode: null, relatedNodes: [] }),
       allowUserProfile ? getUserProfile(userId) : Promise.resolve(null),
-      allowMemory ? getRAGMemoryContext(userId, userQuery, 'conversation') : Promise.resolve({ contextString: '', sources: [] }),
+      readEnforcement.conversationMemoryReadAllowed ? getRAGMemoryContext(userId, userQuery, 'conversation') : Promise.resolve({ contextString: '', sources: [] }),
     ]);
 
     allFacts = results[0].status === 'fulfilled' ? results[0].value : [];
@@ -291,6 +321,7 @@ export async function prepareContextBundle(args: {
     routing: {
       confidenceSignal,
       appliedPlan: normalizedPlan,
+      readEnforcement,
     },
   };
 }
