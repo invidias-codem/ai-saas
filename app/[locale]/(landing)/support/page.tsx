@@ -77,7 +77,7 @@ const SupportPage = () => {
           </div>
 
           <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.1] text-slate-900 dark:text-white">
-            Need help with Genie AI?
+            Need help with Lattice OS?
           </h1>
 
           <p className="text-lg text-slate-600 dark:text-gray-400 max-w-2xl mx-auto">

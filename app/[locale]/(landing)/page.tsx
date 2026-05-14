@@ -153,9 +153,9 @@ const LandingPage = () => {
           <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-12">
             <div className="flex items-center gap-2">
               <div className="relative w-8 h-8">
-                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" sizes="(max-width: 768px) 32px, 32px" />
+                <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" sizes="(max-width: 768px) 32px, 32px" />
               </div>
-              <span className="text-xl font-bold text-slate-800 dark:text-foreground font-heading">Tech Genie</span>
+              <span className="text-xl font-bold text-slate-800 dark:text-foreground font-heading">Lattice OS</span>
             </div>
 
             <div className="flex flex-wrap justify-center gap-8 text-sm text-slate-400 dark:text-muted-foreground">

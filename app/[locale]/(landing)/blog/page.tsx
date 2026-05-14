@@ -10,25 +10,25 @@ import { cn } from "@/lib/utils";
 import { BookOpen, Sparkles } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Blog | Genie AI - AI Tips, Tutorials & Insights",
-  description: "Learn how to harness the power of AI with tutorials, guides, and insights from the Genie AI team. Discover prompts, integrations, and productivity tips.",
+  title: "Blog | Lattice OS - Memory-Native AI, Routing & Workflow Insights",
+  description: "Explore memory-native AI, model routing, hybrid inference, and workflow design from the team building Lattice OS.",
   openGraph: {
-    title: "Genie AI Blog - AI Tips, Tutorials & Insights",
-    description: "Learn how to harness the power of AI with tutorials, guides, and insights from the Genie AI team.",
+    title: "Lattice OS Blog - Memory-Native AI, Routing & Workflow Insights",
+    description: "Explore memory-native AI, model routing, hybrid inference, and workflow design from the team building Lattice OS.",
     type: "website",
     images: [
       {
         url: "/blog/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Genie AI Blog",
+        alt: "Lattice OS Blog",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Genie AI Blog - AI Tips, Tutorials & Insights",
-    description: "Learn how to harness the power of AI with tutorials, guides, and insights.",
+    title: "Lattice OS Blog - Memory-Native AI, Routing & Workflow Insights",
+    description: "Explore memory-native AI, model routing, hybrid inference, and workflow design.",
     images: ["/blog/og-image.png"],
   },
 };
@@ -83,16 +83,16 @@ export default function BlogPage({ searchParams }: BlogPageProps) {
         <section className="pt-16 pb-12 px-4 text-center space-y-6 max-w-4xl mx-auto">
           <div className="inline-flex items-center rounded-full border border-purple-500/50 bg-purple-500/20 px-4 py-2 text-sm text-white backdrop-blur-xl">
             <Sparkles className="w-4 h-4 mr-2" />
-            AI Tips, Tutorials & Insights
+            Memory-Native AI, Routing & Workflow Insights
           </div>
 
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-white tracking-tight leading-[1.1]">
-            The Genie AI Blog
+            The Lattice OS Blog
           </h1>
 
           <p className="text-lg text-gray-400 max-w-2xl mx-auto">
-            Discover AI prompts, tutorials, and insights to supercharge your productivity.
-            Learn from the team building intelligent AI assistants.
+            Explore memory-native AI, hybrid inference, model routing, and practical workflow design.
+            Learn from the team building Lattice OS.
           </p>
         </section>
 
@@ -193,9 +193,9 @@ export default function BlogPage({ searchParams }: BlogPageProps) {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="relative w-6 h-6">
-                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
+                <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" />
               </div>
-              <span className="text-lg font-bold text-white">Genie AI</span>
+              <span className="text-lg font-bold text-white">Lattice OS</span>
             </div>
 
             <div className="flex items-center gap-6 text-sm text-gray-400">
@@ -208,7 +208,7 @@ export default function BlogPage({ searchParams }: BlogPageProps) {
 
           <div className="mt-8 pt-8 border-t border-slate-200 dark:border-white/10 text-center">
             <p className="text-gray-500 text-sm">
-              © {new Date().getFullYear()} Genie AI. All rights reserved.
+              © {new Date().getFullYear()} Lattice OS. All rights reserved.
             </p>
           </div>
         </div>
