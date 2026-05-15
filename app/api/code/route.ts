@@ -14,7 +14,8 @@ import {
   formatUserContextForPrompt,
   getHighConfidenceFacts,
   formatFactsForPrompt,
-  getGitHubContext
+  getGitHubContext,
+  getWorkspaceMemoryContext
 } from '@/lib/ragMemory';
 import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
 import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/graphStore';
@@ -31,6 +32,7 @@ import { ChatMessage } from '@/lib/llm/types';
 import { checkCredits, deductCredits, spendCreditsAtomic, CREDIT_COSTS } from "@/lib/credits";
 import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 import { logger } from "@/lib/logger";
+import { resolveAgentModeFromProfile } from '@/lib/workspaces/runtimeMode';
 
 export const runtime = 'nodejs';
 
@@ -107,8 +109,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     validateRequestSize(body, 10 * 1024 * 1024); // 10MB for code files
 
-    const { messages, currentUserPrompt, fileData, model = 'fast', activeRepo } = body;
-    const modelConfig = CODE_MODELS[model] || CODE_MODELS.fast;
+    const { messages, currentUserPrompt, fileData, model = 'fast', activeRepo, workspaceId, operatingProfileId, operatingProfileMode } = body;
+    let modelConfig = CODE_MODELS[model] || CODE_MODELS.fast;
 
     // 4. Input Validation
     if (!messages && (!currentUserPrompt && !fileData)) {
@@ -171,12 +173,28 @@ export async function POST(req: Request) {
       allFacts,
       researchResult,
       graphData,
-      userProfileMemories  // User-scoped memories (coding preferences, patterns)
+      userProfileMemories,  // User-scoped memories (coding preferences, patterns)
+      workspaceMemoryContext,
+      operatingProfile
     ] = await Promise.all([
       getHighConfidenceFacts(user.userId),
       performResearch(userQuery, userContextPrompt, { hasFileAttachment: !!(fileData && fileData.base64Data) }), // Web Search for latest docs/libraries
       findRelatedEntities(user.userId, userQuery),         // Knowledge Graph (projects, technologies)
-      getUserProfile(user.userId)                          // User profile (coding style, preferences)
+      getUserProfile(user.userId),                         // User profile (coding style, preferences)
+      workspaceId ? getWorkspaceMemoryContext(user.userId, workspaceId, userQuery) : Promise.resolve({ contextString: '', sources: [] }),
+      operatingProfileId
+        ? (async () => {
+            const { supabaseAdmin } = await import('@/lib/supabaseClient');
+            if (!supabaseAdmin) return null;
+            const { data } = await supabaseAdmin
+              .from('operating_profiles')
+              .select('id, name, mode, latency_preference, allow_agentic_runs, tool_use_level, retrieval_depth, default_output_style')
+              .eq('id', operatingProfileId)
+              .eq('user_id', user.userId)
+              .maybeSingle();
+            return data;
+          })()
+        : Promise.resolve(null)
     ]);
 
     // Format new contexts
@@ -204,6 +222,7 @@ export async function POST(req: Request) {
 
     // Retrieve relevant memories for context
     const memoryContext = (await getRAGMemoryContext(user.userId, userQuery, 'code')).contextString;
+    const workspaceMemoryPrompt = workspaceMemoryContext.contextString || '';
 
     // GitHub Context
     let githubContext = '';
@@ -218,6 +237,41 @@ export async function POST(req: Request) {
 
     // Format user profile context
     const userProfileContext = formatUserProfileForPrompt(userProfileMemories);
+
+    const effectiveProfile: {
+      id?: string | null;
+      name?: string | null;
+      mode?: string | null;
+      latency_preference?: string | null;
+      allow_agentic_runs?: boolean | null;
+      tool_use_level?: string | null;
+      retrieval_depth?: string | null;
+      default_output_style?: string | null;
+    } | null = operatingProfile ?? (operatingProfileMode ? { mode: operatingProfileMode } : null);
+
+    if (effectiveProfile) {
+      const resolvedMode = resolveAgentModeFromProfile(effectiveProfile);
+      if (resolvedMode === 'agentic' && CODE_MODELS.agentic) {
+        modelConfig = CODE_MODELS.agentic;
+      } else if (resolvedMode === 'fast' && CODE_MODELS.fast) {
+        modelConfig = CODE_MODELS.fast;
+      }
+    }
+
+    const operatingProfileName = effectiveProfile?.name ?? operatingProfileId ?? 'resolved';
+    const operatingProfileResolvedMode = effectiveProfile?.mode ?? operatingProfileMode ?? 'quality';
+
+    const operatingProfileContext = effectiveProfile
+      ? `
+## Coding Runtime Context
+Workspace: ${workspaceId || 'none'}
+Operating Profile: ${operatingProfileName}
+Mode: ${operatingProfileResolvedMode}
+Use this as the active execution context for coding assistance.
+
+---
+`
+      : '';
 
     // Construct the current user message parts
     const currentUserParts: Part[] = [];
@@ -235,7 +289,9 @@ export async function POST(req: Request) {
       graphContext +          // Knowledge Graph (projects, technologies)
       searchContext +         // Web Search (latest docs/libraries)
       memoryContext +         // RAG memories from past code sessions
+      workspaceMemoryPrompt + // Workspace-scoped memory aligned with conversation path
       githubContext +         // GitHub repository context
+      operatingProfileContext + // Workspace/profile runtime context
       baseInstruction;
 
     currentUserParts.push({ text: enhancedPromptText });
@@ -441,6 +497,9 @@ export async function POST(req: Request) {
         userEmail: userContext.email,
         responseLength: responseText.length,
         interactionStyle: userContext.interactionStyle,
+        workspaceId: workspaceId || null,
+        operatingProfileId: operatingProfileId || null,
+        operatingProfileMode: operatingProfileMode || effectiveProfile?.mode || null,
         hasFileAttachment: !!fileData,
         fileName: fileData?.name,
         ...wmrtMeta,

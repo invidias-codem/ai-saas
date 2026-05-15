@@ -38,6 +38,14 @@ import {
 
 // Content Component (Inner)
 
+interface CodeContext {
+  workspaceId: string | null;
+  workspaceName: string | null;
+  operatingProfileId: string | null;
+  operatingProfileName: string | null;
+  operatingProfileMode: string | null;
+}
+
 interface SelectedFile {
   name: string;
   type: string;
@@ -96,6 +104,7 @@ const CodeBlock = ({ codeString, language }: { codeString: string, language: str
 function CodePageContent() {
   const { codeModel } = useCodeModel(); // Hook used inside provider
   const [messages, setMessages] = useState<Message[]>([]);
+  const [codeContext, setCodeContext] = useState<CodeContext>({ workspaceId: null, workspaceName: null, operatingProfileId: null, operatingProfileName: null, operatingProfileMode: null });
   const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -172,6 +181,32 @@ function CodePageContent() {
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
   }, [messages.length]);
+
+  useEffect(() => {
+    const loadCodeContext = async () => {
+      try {
+        const [workspaceRes, profileRes] = await Promise.all([
+          axios.get('/api/workspaces/default'),
+          axios.get('/api/operating-profiles/default'),
+        ]);
+
+        const workspace = workspaceRes.data?.workspace ?? null;
+        const profile = profileRes.data?.operatingProfile ?? null;
+
+        setCodeContext({
+          workspaceId: workspace?.id ?? null,
+          workspaceName: workspace?.name ?? null,
+          operatingProfileId: profile?.id ?? workspace?.default_operating_profile_id ?? null,
+          operatingProfileName: profile?.name ?? null,
+          operatingProfileMode: profile?.mode ?? null,
+        });
+      } catch (err) {
+        console.error('[CODE_CONTEXT_LOAD_ERROR]', err);
+      }
+    };
+
+    loadCodeContext();
+  }, []);
 
   // Persistence for Code Session
   const CODE_CONVERSATION_ID = 'local-code-session';
@@ -286,7 +321,10 @@ function CodePageContent() {
         fileData: selectedFile,
         saveToMemory: saveToMemory, // Pass memory flag
         model: codeModel, // Pass selected model
-        activeRepo: activeRepo // Pass active GitHub repo context
+        activeRepo: activeRepo, // Pass active GitHub repo context
+        workspaceId: codeContext.workspaceId,
+        operatingProfileId: codeContext.operatingProfileId,
+        operatingProfileMode: codeContext.operatingProfileMode
       });
 
       const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
@@ -374,12 +412,18 @@ function CodePageContent() {
               <CodeIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold leading-tight">Genie Code</h1>
-              <div className="flex items-center gap-2">
+              <h1 className="text-sm font-semibold leading-tight">Weaver Code</h1>
+              <div className="flex items-center gap-2 flex-wrap">
                 <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-green-500 font-bold scale-105")}>
                   <span className={cn("w-1.5 h-1.5 rounded-full bg-green-500", isMemoryPulsing && "animate-ping")} />
                   {memoryCount} memories
                 </div>
+                {(codeContext.workspaceName || codeContext.operatingProfileName) && (
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground rounded-full bg-muted px-2 py-0.5">
+                    <span>{codeContext.workspaceName ?? "Workspace"}</span>
+                    {codeContext.operatingProfileName && <span>· {codeContext.operatingProfileName}</span>}
+                  </div>
+                )}
               </div>
             </div>
           </div>
