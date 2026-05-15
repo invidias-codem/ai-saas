@@ -33,6 +33,7 @@ import { checkCredits, deductCredits, spendCreditsAtomic, CREDIT_COSTS } from "@
 import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 import { logger } from "@/lib/logger";
 import { resolveAgentModeFromProfile } from '@/lib/workspaces/runtimeMode';
+import type { RuntimeProfileSignals, OperatingProfileMode } from '@/lib/workspaces/runtimeMode';
 
 export const runtime = 'nodejs';
 
@@ -238,16 +239,24 @@ export async function POST(req: Request) {
     // Format user profile context
     const userProfileContext = formatUserProfileForPrompt(userProfileMemories);
 
-    const effectiveProfile: {
-      id?: string | null;
-      name?: string | null;
-      mode?: string | null;
-      latency_preference?: string | null;
-      allow_agentic_runs?: boolean | null;
-      tool_use_level?: string | null;
-      retrieval_depth?: string | null;
-      default_output_style?: string | null;
-    } | null = operatingProfile ?? (operatingProfileMode ? { mode: operatingProfileMode } : null);
+    const normalizedProfileMode = (['copilot', 'research', 'agentic', 'drafting', 'memory_native', 'custom'] as const).includes(operatingProfileMode)
+      ? (operatingProfileMode as OperatingProfileMode)
+      : null;
+
+    const effectiveProfile: (RuntimeProfileSignals & { id?: string | null; name?: string | null }) | null = operatingProfile
+      ? {
+          id: operatingProfile.id ?? null,
+          name: operatingProfile.name ?? null,
+          mode: operatingProfile.mode ?? null,
+          latency_preference: operatingProfile.latency_preference ?? null,
+          allow_agentic_runs: operatingProfile.allow_agentic_runs ?? null,
+          tool_use_level: operatingProfile.tool_use_level ?? null,
+          retrieval_depth: operatingProfile.retrieval_depth ?? null,
+          default_output_style: operatingProfile.default_output_style ?? null,
+        }
+      : normalizedProfileMode
+        ? { mode: normalizedProfileMode }
+        : null;
 
     if (effectiveProfile) {
       const resolvedMode = resolveAgentModeFromProfile(effectiveProfile);
