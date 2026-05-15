@@ -29,7 +29,7 @@ import { CODE_MODELS } from '@/lib/llm/codeModels';
 import { ClaudeProvider } from '@/lib/llm/providers/claude';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { ChatMessage } from '@/lib/llm/types';
-import { checkCredits, deductCredits, spendCreditsAtomic, CREDIT_COSTS } from "@/lib/credits";
+import { checkCredits, deductCredits, spendCreditsAtomic, CREDIT_COSTS, hasUnlimitedUsageAccess } from "@/lib/credits";
 import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 import { logger } from "@/lib/logger";
 import { resolveAgentModeFromProfile } from '@/lib/workspaces/runtimeMode';
@@ -110,8 +110,33 @@ export async function POST(req: Request) {
     const body = await req.json();
     validateRequestSize(body, 10 * 1024 * 1024); // 10MB for code files
 
-    const { messages, currentUserPrompt, fileData, model = 'fast', activeRepo, workspaceId, operatingProfileId, operatingProfileMode } = body;
+    const { messages, currentUserPrompt, fileData, model = 'fast', activeRepo, workspaceId, operatingProfileId, operatingProfileMode, conversationId } = body;
     let modelConfig = CODE_MODELS[model] || CODE_MODELS.fast;
+
+    if (conversationId !== undefined && conversationId !== null && typeof conversationId !== 'string') {
+      return NextResponse.json({ error: 'Invalid conversationId' }, { status: 400 });
+    }
+
+    let validatedConversationId: string | null = null;
+    if (typeof conversationId === 'string' && conversationId.trim()) {
+      const { supabaseAdmin } = await import('@/lib/supabaseClient');
+      if (!supabaseAdmin) {
+        return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
+      }
+
+      const { data: conversation, error: conversationError } = await supabaseAdmin
+        .from('conversations')
+        .select('id, user_id, workspace_id, operating_profile_id, is_deleted')
+        .eq('id', conversationId)
+        .eq('user_id', user.userId)
+        .maybeSingle();
+
+      if (conversationError || !conversation || conversation.is_deleted) {
+        return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+      }
+
+      validatedConversationId = conversation.id;
+    }
 
     // 4. Input Validation
     if (!messages && (!currentUserPrompt && !fileData)) {
@@ -287,6 +312,7 @@ Use this as the active execution context for coding assistance.
 
     // ✅ Add TEXT part FIRST with enhanced context
     const promptText = (currentUserPrompt || '').trim();
+    const messageText = promptText || (fileData ? `[Analysing File: ${fileData?.name || 'attached file'}]` : '');
     // Use a default instruction if only a file is attached
     const baseInstruction = promptText || `Please analyze the attached file: ${fileData?.name || 'attached file'}`;
 
@@ -321,17 +347,49 @@ Use this as the active execution context for coding assistance.
       return new NextResponse("Invalid prompt or file data", { status: 400 });
     }
 
+    if (validatedConversationId) {
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabaseClient');
+        if (supabaseAdmin) {
+          const { error: persistUserError } = await supabaseAdmin
+            .from('messages')
+            .insert({
+              conversation_id: validatedConversationId,
+              role: 'user',
+              content: messageText || baseInstruction,
+              metadata: {
+                fileData: fileData ? {
+                  name: fileData.name,
+                  type: fileData.type,
+                  base64Data: fileData.base64Data,
+                } : null,
+                featureType: 'code',
+              },
+            });
+
+          if (persistUserError) {
+            console.error('[CODE_API] Failed to persist user message:', persistUserError);
+          }
+        }
+      } catch (persistErr) {
+        console.error('[CODE_API] Exception persisting user message:', persistErr);
+      }
+    }
+
     // 4. Rate/Credit Check (Atomic)
     const cost = CREDIT_COSTS.CODE_GENERATION;
     const idempotencyKey = req.headers.get('idempotency-key') || `code-${user.userId}-${Date.now()}`;
+    const bypassCredits = hasUnlimitedUsageAccess(user.userId);
 
-    const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Code generation", { model: modelConfig.modelId, activeRepo });
+    if (!bypassCredits) {
+      const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Code generation", { model: modelConfig.modelId, activeRepo });
 
-    if (!spendResult.success && !spendResult.duplicate) {
-      return NextResponse.json(
-        { error: 'Insufficient credits', message: `You need ${cost} credits for this request.`, remaining: spendResult.remaining },
-        { status: 402 }
-      );
+      if (!spendResult.success && !spendResult.duplicate) {
+        return NextResponse.json(
+          { error: 'Insufficient credits', message: `You need ${cost} credits for this request.`, remaining: spendResult.remaining },
+          { status: 402 }
+        );
+      }
     }
 
     logger.debug("Sending to Gemini - History:", JSON.stringify(history.map((h: { parts: { text: any; }[]; }) => h.parts[0].text))); // Log history text only for brevity
@@ -578,6 +636,28 @@ Use this as the active execution context for coding assistance.
       }
     })();
 
+    if (validatedConversationId) {
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabaseClient');
+        if (supabaseAdmin) {
+          const { error: persistAssistantError } = await supabaseAdmin
+            .from('messages')
+            .insert({
+              conversation_id: validatedConversationId,
+              role: 'assistant',
+              content: responseText,
+              metadata: { featureType: 'code' },
+            });
+
+          if (persistAssistantError) {
+            console.error('[CODE_API] Failed to persist assistant message:', persistAssistantError);
+          }
+        }
+      } catch (persistErr) {
+        console.error('[CODE_API] Exception persisting assistant message:', persistErr);
+      }
+    }
+
     // Log successful code interaction
     console.log(`[CODE] User: ${userContext.fullName} (${user.userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
 
@@ -585,7 +665,9 @@ Use this as the active execution context for coding assistance.
     // await deductCredits(user.userId, CREDIT_COSTS.CODE_GENERATION, "Code generation");
 
     void trackAIGeneration({ tool: 'code', userId: user.userId, success: true });
-    void trackCreditsDeducted({ tool: 'code', credits: cost, userId: user.userId });
+    if (!bypassCredits) {
+      void trackCreditsDeducted({ tool: 'code', credits: cost, userId: user.userId });
+    }
     return NextResponse.json({ text: responseText });
 
   } catch (error: any) {

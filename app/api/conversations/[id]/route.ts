@@ -27,6 +27,7 @@ interface DbMessage {
     created_at: string;
     conversation_id: string;
     user_id: string;
+    metadata?: Record<string, any> | null;
 }
 
 export async function GET(req: Request, { params }: RouteParams) {
@@ -97,9 +98,11 @@ export async function GET(req: Request, { params }: RouteParams) {
             workspaceId: conv.workspace_id ?? null,
             title: conv.title,
             messages: messages?.map((m: DbMessage) => ({
+                id: m.id,
                 text: m.content,
                 role: m.role,
-                timestamp: new Date(m.created_at).getTime()
+                timestamp: new Date(m.created_at).getTime(),
+                fileData: m.metadata?.fileData ?? undefined
             })) || [],
             createdAt: new Date(conv.created_at).getTime(),
             lastUpdated: new Date(conv.updated_at).getTime(),

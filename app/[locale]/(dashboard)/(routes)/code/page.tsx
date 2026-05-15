@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
+import { safeLocalStorage } from "@/lib/safeStorage";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -33,6 +34,7 @@ import {
   saveSessionMemoryToStorage,
   SessionMessage
 } from "@/lib/sessionClientMemory";
+import { createNewConversation } from "@/lib/conversationManager";
 
 // ... (keep existing imports)
 
@@ -53,6 +55,7 @@ interface SelectedFile {
 }
 
 interface Message {
+  id?: string;
   role: "user" | "bot";
   text: string;
   timestamp: Date;
@@ -101,9 +104,12 @@ const CodeBlock = ({ codeString, language }: { codeString: string, language: str
   );
 };
 
+const codeConversationRowKey = (workspaceId?: string | null) => `weaver_code_conversation_id:${workspaceId || "global"}`;
+
 function CodePageContent() {
   const { codeModel } = useCodeModel(); // Hook used inside provider
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [codeContext, setCodeContext] = useState<CodeContext>({ workspaceId: null, workspaceName: null, operatingProfileId: null, operatingProfileName: null, operatingProfileMode: null });
   const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -211,20 +217,65 @@ function CodePageContent() {
   // Persistence for Code Session
   const CODE_CONVERSATION_ID = 'local-code-session';
 
-  // Initialize session from storage
   useEffect(() => {
-    const savedMessages = getSessionMemoryFromStorage(CODE_CONVERSATION_ID);
-    if (savedMessages.length > 0) {
-      const restoredMessages: Message[] = savedMessages.map(msg => ({
-        text: msg.text,
-        role: msg.role,
-        timestamp: new Date(msg.timestamp),
-        fileData: msg.fileData
-      }));
-      setMessages(restoredMessages);
-      setShowGreeting(false);
+    const bootstrapCodeConversation = async () => {
+      try {
+        const conversationRowKey = codeConversationRowKey(codeContext.workspaceId);
+        let resolvedConversationId = safeLocalStorage.getItem(conversationRowKey);
+
+        if (!resolvedConversationId && codeContext.workspaceId) {
+          const created = await createNewConversation({
+            title: codeContext.workspaceName ? `${codeContext.workspaceName} Code` : 'Code Conversation',
+            workspaceId: codeContext.workspaceId ?? undefined,
+            operatingProfileId: codeContext.operatingProfileId ?? undefined,
+          });
+
+          if (created?.id) {
+            resolvedConversationId = created.id;
+            safeLocalStorage.setItem(conversationRowKey, created.id);
+          }
+        }
+
+        if (resolvedConversationId) {
+          setConversationId(resolvedConversationId);
+          const response = await fetch(`/api/conversations/${resolvedConversationId}`, { credentials: 'include' });
+          if (response.ok) {
+            const data = await response.json();
+            const restoredMessages: Message[] = (data.messages || []).map((msg: any) => ({
+              id: msg.id,
+              text: msg.text,
+              role: msg.role,
+              timestamp: new Date(msg.timestamp),
+              fileData: msg.fileData,
+            }));
+            if (restoredMessages.length > 0) {
+              setMessages(restoredMessages);
+              setShowGreeting(false);
+            }
+            return;
+          }
+        }
+
+        const savedMessages = getSessionMemoryFromStorage(CODE_CONVERSATION_ID);
+        if (savedMessages.length > 0) {
+          const restoredMessages: Message[] = savedMessages.map(msg => ({
+            text: msg.text,
+            role: msg.role,
+            timestamp: new Date(msg.timestamp),
+            fileData: msg.fileData
+          }));
+          setMessages(restoredMessages);
+          setShowGreeting(false);
+        }
+      } catch (err) {
+        console.error('[CODE_CONVERSATION_BOOTSTRAP_ERROR]', err);
+      }
+    };
+
+    if (codeContext.workspaceId || codeContext.operatingProfileId) {
+      bootstrapCodeConversation();
     }
-  }, []);
+  }, [codeContext.workspaceId, codeContext.operatingProfileId, codeContext.workspaceName]);
 
   // Save to storage on change
   useEffect(() => {
@@ -324,7 +375,8 @@ function CodePageContent() {
         activeRepo: activeRepo, // Pass active GitHub repo context
         workspaceId: codeContext.workspaceId,
         operatingProfileId: codeContext.operatingProfileId,
-        operatingProfileMode: codeContext.operatingProfileMode
+        operatingProfileMode: codeContext.operatingProfileMode,
+        conversationId
       });
 
       const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };

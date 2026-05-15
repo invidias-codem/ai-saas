@@ -60,6 +60,16 @@ export async function deductCredits(userId: string, cost: number, description: s
     return true;
 }
 
+
+export function hasUnlimitedUsageAccess(userId?: string | null): boolean {
+    if (!userId) return false;
+    const allowlist = (process.env.UNLIMITED_USAGE_USER_IDS || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+    return allowlist.includes(userId);
+}
+
 export interface SpendResult {
     success: boolean;
     duplicate: boolean;
