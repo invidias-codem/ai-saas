@@ -1,50 +1,50 @@
 {
   "Navbar": {
-    "supportGenie": "Support Genie",
+    "supportGenie": "Support Lattice",
     "credits": "Credits"
   },
   "KoFiNudge": {
-    "enjoyingGenie": "Enjoying Genie?",
-    "supportProject": "Support the project & keep servers running!",
+    "enjoyingGenie": "Enjoying Lattice OS?",
+    "supportProject": "Support the project and help fund the next layer of work.",
     "supportOnKoFi": "Support on Ko-fi"
   },
   "SupportGenie": {
-    "title": "Support Genie",
-    "description": "Unlock automated credits by supporting the project on Ko-fi.",
-    "important": "Important: Use the same email address on Ko-fi as your Genie account so we can automatically credit you!",
-    "donatedWithDifferentEmail": "Donated with a different email?",
+    "title": "Support Lattice OS",
+    "description": "Support the project and help fund future development.",
+    "important": "Important: Use the same email address on Ko-fi as your Lattice OS account so we can match your support correctly.",
+    "donatedWithDifferentEmail": "Supported with a different email?",
     "contactSupport": "Contact Support"
   },
   "DashboardSupport": {
-    "title": "A personal appeal",
-    "p1": "We generally don't ask, but today we need your help. Genie AI is an independent project, built to provide you with the most advanced AI tools without the big corporate price tag.",
-    "p2": "It takes a lot of resources to keep our servers running and to develop new innovative features. If everyone reading this gave a small amount, we could keep Genie AI thriving for years to come.",
-    "p3": "If you find value in what we do, please consider supporting us. It only takes a minute, and it makes a huge difference.",
-    "button": "Support Genie AI ❤️"
+    "title": "Support the mission",
+    "p1": "We generally don't ask, but today we need your help. Lattice OS is an independent project built to give people a memory-native AI operating layer without forcing them into a single provider.",
+    "p2": "It takes real resources to keep the system running, improve routing and memory, and build the next generation of the product.",
+    "p3": "If you find value in what we're building, consider supporting the project or picking up future merch when it launches.",
+    "button": "Support Lattice OS ❤️"
   },
   "Metadata": {
-    "title": "Genie AI: OpenAI, Gemini & Claude All-in-One Platform",
-    "description": "Unlock your creativity with Genie AI. The ultimate AI SaaS platform integrating OpenAI, Google Gemini, and Anthropic Claude for text, code, image, video, and music generation.",
-    "keywords": "Genie AI, AI Platform, Gemini AI, Claude AI, AI SaaS, Memory System, Slack Integration, Content Creation, Smartest AI Assistant"
+    "title": "Lattice OS: Memory-Native AI Operating Layer",
+    "description": "Lattice OS gives you persistent memory, model-aware routing, and hybrid inference across AI workspaces, tools, and workflows.",
+    "keywords": "Lattice OS, memory-native AI, AI operating layer, model routing, hybrid inference, persistent memory, workspace AI, UCOL"
   },
   "Landing": {
     "hero": {
       "badge": "Memory-native AI · Hybrid Inference · Infrastructure You Control",
-      "headline1": "Own your AI stack.",
+      "headline1": "Own the context.",
       "headline2": "Keep the memory.",
       "headline3": "Route the model.",
-      "subhead": "Tech Genie gives you persistent memory, model-aware routing, and flexible inference across self-hosted open-source models and premium frontier APIs — all behind one shared intelligence layer.",
+      "subhead": "Lattice OS gives you persistent memory, model-aware routing, and flexible inference across self-hosted open-source models and premium frontier APIs — all behind one shared intelligence layer.",
       "cta": "Start Building",
       "ctaSecondary": "See how routing works",
       "graphLabel": "Shared Context Layer",
-      "title": "The Smartest AI Assistant Ever Built",
-      "description": "Streamline your workflow with our advanced Memory System, Slack Integration, and Content Creation tools. Powered by Gemini and Anthropic models for the best results.",
+      "title": "The memory-native operating layer for AI work",
+      "description": "Build with persistent context, shared memory, and model routing that compounds across every session.",
       "login": "Log in"
     },
     "ucol": {
       "eyebrow": "Hybrid Orchestration",
       "title": "One intelligence layer. Multiple inference paths.",
-      "subtitle": "Tech Genie routes requests across self-hosted open models and premium frontier APIs using task type, memory confidence, latency, and cost — while preserving the same context layer underneath.",
+      "subtitle": "Lattice OS routes requests across self-hosted open models and premium frontier APIs using task type, memory confidence, latency, and cost — while preserving the same context layer underneath.",
       "flowLabel": "Query → Memory → Routing → Inference → Response",
       "card1Title": "Open Models",
       "card1Body": "Self-host efficient open-source inference on Lambda GPU infrastructure for fast, cost-controlled responses.",
@@ -58,7 +58,7 @@
     "memory": {
       "eyebrow": "Persistent Memory",
       "title": "Context that compounds across every model",
-      "subtitle": "Tech Genie stores user preferences, project history, technical context, and prior interactions in a shared memory layer that every model can read from and contribute to.",
+      "subtitle": "Lattice OS stores user preferences, project history, technical context, and prior interactions in a shared memory layer that every model can read from and contribute to.",
       "stat1Value": "Persistent",
       "stat1Label": "Memory across sessions and models",
       "stat2Value": "Shared",
@@ -84,8 +84,8 @@
     },
     "cta": {
       "title": "Build on a context layer you can actually own",
-      "subtitle": "Tech Genie gives you persistent memory, hybrid inference, and model routing designed to evolve with your product — not trap it inside one provider.",
-      "button": "Start Building with Tech Genie"
+      "subtitle": "Lattice OS gives you persistent memory, hybrid inference, and model routing designed to evolve with your product — not trap it inside one provider.",
+      "button": "Start Building with Lattice OS"
     },
     "pricing": {
       "title": "Flexible Pricing",
@@ -97,12 +97,12 @@
       "disclaimer": "Prices are estimated based on standard usage."
     },
     "footer": {
-      "rights": "© {year} Tech Genie. All rights reserved."
+      "rights": "© {year} Lattice OS. All rights reserved."
     },
     "infrastructure": {
       "eyebrow": "Infrastructure Control",
       "title": "Run the models you want on infrastructure you control",
-      "subtitle": "Start with hosted inference, move high-volume paths to self-hosted open models, and keep premium APIs as selective fallback. Tech Genie is built for hybrid deployment from day one.",
+      "subtitle": "Start with hosted inference, move high-volume paths to self-hosted open models, and keep premium APIs as selective fallback. Lattice OS is built for hybrid deployment from day one.",
       "card1Title": "Lambda-hosted inference",
       "card1Body": "Deploy open-source models on your own Lambda Labs GPU infrastructure for predictable cost and lower vendor dependence.",
       "card2Title": "Bring your own models",
@@ -110,7 +110,7 @@
       "card3Title": "Premium fallback",
       "card3Body": "Use frontier APIs only where they deliver a clear quality advantage — not as the default path for every request.",
       "card4Title": "Future-proof architecture",
-      "card4Body": "As models improve and prices shift, Tech Genie lets you adapt the inference layer without rewriting the product."
+      "card4Body": "As models improve and prices shift, Lattice OS lets you adapt the inference layer without rewriting the product."
     }
   },
   "Sidebar": {
@@ -126,7 +126,7 @@
   },
   "Dashboard": {
     "exploreTitle": "Explore the power of AI",
-    "exploreSubtitle": "Chat with the smartest AI - Experience the power of AI",
+    "exploreSubtitle": "Work with memory-native AI across your workspace",
     "tools": {
       "conversation": {
         "label": "Conversation",
@@ -178,12 +178,12 @@
   },
   "Conversation": {
     "title": "Conversation",
-    "description": "Chat with the smartest AI - Experience the power of AI",
+    "description": "Work with Weaver across your memory-native workspace",
     "placeholder": "How do I calculate the radius of a circle?",
     "generateBtn": "Generate",
     "placeholderAgentic": "Agentic Mode active — try: search the web, write a research paper...",
     "placeholderQuality": "Quality Mode — ask anything complex...",
-    "placeholderFast": "Ask Genie anything..."
+    "placeholderFast": "Ask Weaver anything..."
   },
   "Settings": {
     "title": "Settings",

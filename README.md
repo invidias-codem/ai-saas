@@ -1,19 +1,23 @@
-# Tech Genie 🧞
+# Lattice OS
 
-> **AI that remembers, reasons, and routes — across every model.**
+> **Own the context. Route the model.**
 
-Tech Genie is a multi-model AI SaaS platform built on a **Unified Context Orchestration Layer (UCOL)**. Unlike traditional AI wrappers that treat each conversation in isolation, Tech Genie maintains a persistent knowledge graph across all interactions — so your AI gets smarter every time you use it, regardless of which model is responding.
+Lattice OS is a memory-native AI platform built on a **Unified Context Orchestration Layer (UCOL)**. Unlike traditional AI wrappers that treat each conversation in isolation, Lattice OS maintains a shared knowledge and memory layer across interactions — so your AI work gains continuity over time, regardless of which model is responding.
+
+At the product surface, users work with **Weaver**, the customer-facing intelligence layer of Lattice OS. Behind the scenes, **Relay** handles internal workspace orchestration, routing, and coordination.
 
 ---
 
-## What Makes Tech Genie Different
+## What Makes Lattice OS Different
 
-Most AI platforms give you a chat box connected to a single model. Tech Genie gives you a **shared memory layer** that every model reads from and writes to.
+Most AI platforms give you a chat box connected to a single model. Lattice OS gives you a **shared context layer** that every model reads from and writes to.
 
 - **Gemini** handles fast responses, research, and fact extraction
 - **Claude** handles high-quality reasoning and nuanced output
-- **DeepSeek** handles deep analytical synthesis
+- **DeepSeek** handles deeper analytical synthesis
 - **Your knowledge graph** persists across all of them — context learned in one conversation enriches every future one
+- **Relay** routes work internally across models, memory, and tools
+- **Weaver** gives users a coherent, memory-aware intelligence surface
 
 ---
 
@@ -170,7 +174,7 @@ npm run test:security:unit  # Security unit tests only
 
 ## Architecture: UCOL
 
-The **Unified Context Orchestration Layer** is the core architectural concept behind Tech Genie. Traditional AI platforms treat each model as a separate product. UCOL treats them as **nodes in a shared reasoning network**.
+The **Unified Context Orchestration Layer** is the core architectural concept behind Lattice OS. Traditional AI platforms treat each model as a separate product. UCOL treats them as **nodes in a shared reasoning network**.
 
 ```
 User Query
@@ -207,10 +211,10 @@ Every conversation writes facts back into the graph. Every future conversation r
 
 ## License
 
-Proprietary — © Genie, Inc. / JJEM Global Technology, Inc. All rights reserved.
+Proprietary — © JJEM Global Technology, Inc. All rights reserved.
 
 ---
 
 ## Built by
 
-**Invidious** · Founder, [Tech Genie](https://gen1e.xyz) · Part of the JJEM Global Technology enterprise
+**Invidious** · Founder, Lattice OS · Part of the JJEM Global Technology enterprise

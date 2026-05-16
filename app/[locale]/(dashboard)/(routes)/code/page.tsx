@@ -104,7 +104,11 @@ const CodeBlock = ({ codeString, language }: { codeString: string, language: str
   );
 };
 
-const codeConversationRowKey = (workspaceId?: string | null) => `weaver_code_conversation_id:${workspaceId || "global"}`;
+const codeConversationRowKey = (workspaceId?: string | null, operatingProfileId?: string | null) => 
+  `weaver_code_conversation_id:${workspaceId || "global"}:${operatingProfileId || "global"}`;
+
+const getLocalCodeSessionId = (workspaceId?: string | null, operatingProfileId?: string | null) => 
+  `local-code-session:${workspaceId || "global"}:${operatingProfileId || "global"}`;
 
 function CodePageContent() {
   const { codeModel } = useCodeModel(); // Hook used inside provider
@@ -215,12 +219,11 @@ function CodePageContent() {
   }, []);
 
   // Persistence for Code Session
-  const CODE_CONVERSATION_ID = 'local-code-session';
 
   useEffect(() => {
     const bootstrapCodeConversation = async () => {
       try {
-        const conversationRowKey = codeConversationRowKey(codeContext.workspaceId);
+        const conversationRowKey = codeConversationRowKey(codeContext.workspaceId, codeContext.operatingProfileId);
         let resolvedConversationId = safeLocalStorage.getItem(conversationRowKey);
 
         if (!resolvedConversationId && codeContext.workspaceId) {
@@ -248,15 +251,19 @@ function CodePageContent() {
               timestamp: new Date(msg.timestamp),
               fileData: msg.fileData,
             }));
+            
+            // Authoritative rule: Row-backed history wins.
+            setMessages(restoredMessages);
             if (restoredMessages.length > 0) {
-              setMessages(restoredMessages);
               setShowGreeting(false);
             }
             return;
           }
         }
 
-        const savedMessages = getSessionMemoryFromStorage(CODE_CONVERSATION_ID);
+        // Only fall back to local storage if we absolutely could not establish or fetch a conversation
+        const localSessionId = getLocalCodeSessionId(codeContext.workspaceId, codeContext.operatingProfileId);
+        const savedMessages = getSessionMemoryFromStorage(localSessionId);
         if (savedMessages.length > 0) {
           const restoredMessages: Message[] = savedMessages.map(msg => ({
             text: msg.text,
@@ -286,9 +293,10 @@ function CodePageContent() {
         timestamp: msg.timestamp.getTime(),
         fileData: msg.fileData
       }));
-      saveSessionMemoryToStorage(sessionMessages, 'current-user', 'code-session', CODE_CONVERSATION_ID);
+      const localSessionId = getLocalCodeSessionId(codeContext.workspaceId, codeContext.operatingProfileId);
+      saveSessionMemoryToStorage(sessionMessages, 'current-user', 'code-session', localSessionId);
     }
-  }, [messages]);
+  }, [messages, codeContext.workspaceId, codeContext.operatingProfileId]);
 
   // Fetch Memory Count
   const fetchMemoryCount = async () => {

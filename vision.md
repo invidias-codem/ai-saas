@@ -1,19 +1,19 @@
-# Tech Genie — Project Vision
+# Lattice OS — Project Vision
 
 ## Overview
 
-Tech Genie (gen1e.xyz) is an AI SaaS platform evolving from a multi-model chat interface
+Lattice OS is a memory-native AI platform evolving from a multi-model chat interface
 into the **Unified Context Orchestration Layer (UCOL)** — a protocol that enables AI models
 to collaborate, share knowledge, and compound intelligence across interactions.
 
-Built by JJEM Global Technology, Inc. (Genie, Inc. subsidiary). This is the R&D and
-innovation arm of the FluxTrust LLC holding company.
+Built by JJEM Global Technology, Inc. This is the R&D and innovation arm of the
+FluxTrust LLC holding company.
 
 **Current state:** Multi-model chat (Gemini, Claude, DeepSeek) with conversation memory,
 knowledge graph, RAG integration, fact extraction, and Code Builder (AI debate loop).
 
-**Destination:** The truth layer and context protocol for AI — a strategic moat that
-compounds with use while model quality is commoditized.
+**Destination:** The operating layer for AI work — a shared intelligence substrate that
+preserves context, routes models, and compounds with use while model quality is commoditized.
 
 ---
 
@@ -28,13 +28,14 @@ and enables cross-model learning at scale.
 - Ship Bluesky engagement agent (social → knowledge flywheel)
 - Stabilize Code Builder (UCOL debate loop: Gemini plans → Claude codes → Gemini reviews)
 - World model Phase 1-3: temporal graph + causal edges + delta engine
-- Grow gen1e.xyz user base to PMF signal
+- Grow the Lattice OS user base to PMF signal
 
 ### Business Goals
 - $47.5M ARR by Year 5 (2030)
 - Series A: $10M ($5M TradeFlow + $5M Journey Financial)
 - Non-dilutive: NSF SBIR ($275k), Delaware EDGE Grant ($100k), R&D Tax Credits
 - UCOL becomes shared AI infrastructure for all JJEM subsidiaries
+- Merchandise supports brand growth and helps fund future product development
 
 ---
 
@@ -70,11 +71,12 @@ and enables cross-model learning at scale.
 - Human gate on all AI-generated code — agents propose, humans approve
 - Knowledge graph writes are append-only with temporal validity (valid_from / valid_until)
 - All LLM calls must be traceable (Langfuse integration — planned)
+- Brand architecture should stay coherent: **Lattice OS** is the product, **Weaver** is the customer-facing agent, **Relay** is the internal workspace/orchestration agent
 
 ### Business
 - GDPR/privacy compliance required (user data export, deletion)
 - QSBS eligibility must be preserved (Delaware C-Corp structure)
-- UCOL IP stays in Genie, Inc. — not shared across subsidiaries without licensing
+- UCOL IP stays within the JJEM entity structure unless explicitly licensed
 
 ---
 
@@ -114,6 +116,7 @@ tokens, typed interfaces, continuous constraints, composable. Stored in
 - **Multi-model without friction**: Model switching is seamless, not a settings menu
 - **Progressive complexity**: Simple chat UI on the surface, UCOL depth underneath
 - **Trust through accuracy**: World model layer means fewer hallucinations over time
+- **Brand coherence**: Users should experience Lattice OS as the product, Weaver as the helpful face, and Relay as the invisible orchestration layer
 
 ---
 
@@ -127,10 +130,11 @@ tokens, typed interfaces, continuous constraints, composable. Stored in
 - [ ] Zero critical/high CodeQL findings on main
 
 ### Business
-- [ ] 1,000 active users on gen1e.xyz (PMF signal)
-- [ ] Bluesky agent driving measurable traffic to gen1e.xyz
+- [ ] 1,000 active users on the new Lattice OS domain (PMF signal)
+- [ ] Bluesky agent driving measurable traffic to the new Lattice OS domain
 - [ ] Series A deck ready with UCOL demo
 - [ ] At least one JJEM subsidiary using UCOL infrastructure
+- [ ] Initial merch line (tees, long sleeves, hoodies) established as a viable support channel
 
 ### Quality
 - [ ] Test coverage >70% on core UCOL paths
@@ -156,5 +160,4 @@ tokens, typed interfaces, continuous constraints, composable. Stored in
 
 6. **Check `lib/env.ts` before adding env vars.** All new vars need Zod validation.
 
-7. **JKlaw is the orchestrator.** For research, strategy, or architecture questions,
-   the UCOL router will dispatch to JKlaw (gen1e.xyz internal API). Trust that routing.
+7. **Weaver is the customer-facing intelligence layer, Relay is the internal orchestration layer, and Lattice OS is the product surface. Keep those roles distinct in copy and implementation.**

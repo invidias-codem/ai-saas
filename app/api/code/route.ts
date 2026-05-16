@@ -355,34 +355,6 @@ Use this as the active execution context for coding assistance.
       return new NextResponse("Invalid prompt or file data", { status: 400 });
     }
 
-    if (validatedConversationId) {
-      try {
-        const { supabaseAdmin } = await import('@/lib/supabaseClient');
-        if (supabaseAdmin) {
-          const { error: persistUserError } = await supabaseAdmin
-            .from('messages')
-            .insert({
-              conversation_id: validatedConversationId,
-              role: 'user',
-              content: messageText || baseInstruction,
-              metadata: {
-                fileData: fileData ? {
-                  name: fileData.name,
-                  type: fileData.type,
-                  base64Data: fileData.base64Data,
-                } : null,
-                featureType: 'code',
-              },
-            });
-
-          if (persistUserError) {
-            console.error('[CODE_API] Failed to persist user message:', persistUserError);
-          }
-        }
-      } catch (persistErr) {
-        console.error('[CODE_API] Exception persisting user message:', persistErr);
-      }
-    }
 
     // 4. Rate/Credit Check (Atomic)
     const cost = CREDIT_COSTS.CODE_GENERATION;
@@ -648,6 +620,27 @@ Use this as the active execution context for coding assistance.
       try {
         const { supabaseAdmin } = await import('@/lib/supabaseClient');
         if (supabaseAdmin) {
+          // Persist both messages in one go or sequentially after success
+          const { error: persistUserError } = await supabaseAdmin
+            .from('messages')
+            .insert({
+              conversation_id: validatedConversationId,
+              role: 'user',
+              content: messageText,
+              metadata: {
+                fileData: fileData ? {
+                  name: fileData.name,
+                  type: fileData.type,
+                  base64Data: fileData.base64Data,
+                } : null,
+                featureType: 'code',
+              },
+            });
+
+          if (persistUserError) {
+            console.error('[CODE_API] Failed to persist user message:', persistUserError);
+          }
+
           const { error: persistAssistantError } = await supabaseAdmin
             .from('messages')
             .insert({
@@ -662,7 +655,7 @@ Use this as the active execution context for coding assistance.
           }
         }
       } catch (persistErr) {
-        console.error('[CODE_API] Exception persisting assistant message:', persistErr);
+        console.error('[CODE_API] Exception persisting messages:', persistErr);
       }
     }
 

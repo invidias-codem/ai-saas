@@ -102,7 +102,8 @@ export async function GET(req: Request, { params }: RouteParams) {
                 text: m.content,
                 role: m.role,
                 timestamp: new Date(m.created_at).getTime(),
-                fileData: m.metadata?.fileData ?? undefined
+                fileData: m.metadata?.fileData ?? undefined,
+                metadata: m.metadata
             })) || [],
             createdAt: new Date(conv.created_at).getTime(),
             lastUpdated: new Date(conv.updated_at).getTime(),
