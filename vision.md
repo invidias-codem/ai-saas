@@ -107,6 +107,28 @@ All UCOL agent system prompts are written in SudoLang (`.sudo.md`) — 20-30% fe
 tokens, typed interfaces, continuous constraints, composable. Stored in
 `lib/ucol/agents/prompts/`.
 
+### Anti-Addiction & High-Utility Routing
+The platform actively penalizes addictive loops and optimizes for high-utility outcomes, inverting the traditional "Meaningful Social Interactions" (MSI) model.
+
+1. **Algorithmic Paradigm Shift (The Facebook MSI Inversion)**
+   - Inverts traditional engagement metrics (Time x Interactions).
+   - Optimizes for task utility and positive user connotation, actively penalizing frustrating workflows or repeated error corrections.
+
+2. **The Reward Function ($R$)**
+   - Composite utility score evaluated asynchronously.
+   - **Positive Signals:** Direct user confirmation ($F_{explicit}$) and high-utility semantic sentiment ($S_{semantic}$).
+   - **Negative Signals:** Heavy penalty for genuine negative connotation ($C_{negative}$).
+
+3. **Two-Tiered Orchestration Layer**
+   - **Real-Time Router (Gateway):** Uses a Contextual Bandit algorithm before LLM inference. Evaluates user state (prompt + workspace) and routes to the action with the highest predicted reward.
+   - **Background Optimizer (Asynchronous):** Processes the full interaction post-response, calculates the definitive $R$, and upserts to the vector database to update historical weights via RLS.
+
+4. **Persistent Memory & State Management**
+   - **The "Next Session" Heuristic:** Pre-write gatekeeper. Only writes meaningful state changes that alter what the agent should do in the next session.
+   - **Semantic Deduplication:** Drops duplicates and instead reinforces existing vectors (updating reward score and timestamp).
+   - **Dynamic Thresholding:** Similarity threshold tightens automatically as the workspace's memory bank grows to keep the vector space concentrated.
+   - **Memory Decay:** Vectors without recent access or reinforcement undergo exponential decay on their reward score, pruning "useful-once" context.
+
 ---
 
 ## User Experience Principles
