@@ -13,65 +13,77 @@ export type InitialRoutingSignals = {
   profile?: RuntimeProfileSignals | null;
 };
 
+// Features: [Length, HasAttachments, WorkspaceBacked, DeepRetrieval, CodeKeywords, ResearchKeywords, Frustration, ExplicitAgentic, ExplicitReasoning]
+type ContextVector = [number, number, number, number, number, number, number, number, number];
+
+// These weights are normally fetched/cached from the database (updated by the Background Optimizer).
+// For now, they serve as the baseline contextual bandit weights.
+const BANDIT_WEIGHTS: Record<string, ContextVector> = {
+  'agentic_task':    [0.2, 0.1, 0.8, 0.4, 0.3, 0.1, 0.0, 5.0, 0.0],
+  'research_task':   [0.5, 0.4, 0.5, 0.9, 0.0, 0.9, 0.1, 0.0, 5.0],
+  'coding_task':     [0.4, 0.3, 0.6, 0.2, 0.9, 0.1, 0.5, 0.0, 0.0],
+  'knowledge_query': [0.1, 0.9, 0.7, 0.3, 0.0, 0.2, 0.0, 0.0, 0.0],
+  'general_chat':    [0.1, 0.0, 0.2, 0.0, 0.0, 0.0, -0.5, 0.0, 0.0], // Heavily penalize generic chat on frustration to avoid toxic loops
+};
+
+function computeContextVector(args: {
+  request: UcolRequestPacket;
+  context: UcolResolvedContext;
+  agentMode: AgentMode;
+  signals: InitialRoutingSignals;
+}): ContextVector {
+  const rawInput = args.request.rawInput.toLowerCase();
+  return [
+    rawInput.length > 200 ? 1 : 0,
+    args.signals.hasAttachments ? 1 : 0,
+    args.context.workspaceBacked ? 1 : 0,
+    args.signals.profile?.retrieval_depth === 'deep' ? 1 : 0,
+    /(build|implement|fix|refactor|debug|patch|code)/i.test(rawInput) ? 1 : 0,
+    /(research|compare|analyze|architecture|strategy|plan)/i.test(rawInput) ? 1 : 0,
+    /(wrong|fail|error|suck|stupid|again|not working|bad)/i.test(rawInput) ? 1 : 0, // Frustration signal
+    args.agentMode === 'agentic' ? 1 : 0,
+    args.agentMode === 'reasoning' ? 1 : 0,
+  ];
+}
+
+function selectActionBandit(stateVector: ContextVector): { action: string, predictedReward: number } {
+  let bestAction = 'general_chat';
+  let maxReward = -Infinity;
+
+  for (const [action, weights] of Object.entries(BANDIT_WEIGHTS)) {
+    // Dot product of State Vector and Action Weights
+    const reward = stateVector.reduce((sum, val, idx) => sum + val * weights[idx], 0);
+    
+    if (reward > maxReward) {
+      maxReward = reward;
+      bestAction = action;
+    }
+  }
+
+  // Baseline minimum confidence for routing
+  return { action: bestAction, predictedReward: Math.max(0.5, Math.min(0.99, maxReward / 5.0)) };
+}
+
 function inferIntent(args: {
   request: UcolRequestPacket;
   context: UcolResolvedContext;
   agentMode: AgentMode;
   signals: InitialRoutingSignals;
 }): UcolRoutingDecision['intent'] {
-  const { request, context, agentMode, signals } = args;
-  const rawInput = request.rawInput.toLowerCase();
+  const stateVector = computeContextVector(args);
+  const { action, predictedReward } = selectActionBandit(stateVector);
 
-  if (agentMode === 'agentic') {
-    return {
-      category: 'agentic_task',
-      confidence: 0.82,
-      subtypes: ['tool_orchestrated', context.workspaceBacked ? 'workspace_backed' : 'general'],
-      urgency: 'normal',
-    };
+  let subtypes = [args.context.workspaceBacked ? 'workspace_backed' : 'general'];
+  if (args.agentMode !== 'quality' && args.agentMode !== 'fast') {
+    subtypes.push(args.agentMode);
   }
-
-  if (agentMode === 'reasoning' || signals.profile?.retrieval_depth === 'deep') {
-    return {
-      category: 'research_task',
-      confidence: 0.74,
-      subtypes: ['deep_reasoning'],
-      urgency: 'normal',
-    };
-  }
-
-  if (signals.hasAttachments) {
-    return {
-      category: 'knowledge_query',
-      confidence: 0.68,
-      subtypes: ['attachment_present'],
-      urgency: 'normal',
-    };
-  }
-
-  if (/(build|implement|fix|refactor|debug|patch|code)/i.test(rawInput)) {
-    return {
-      category: 'coding_task',
-      confidence: 0.66,
-      subtypes: ['code_or_implementation'],
-      urgency: 'normal',
-    };
-  }
-
-  if (/(research|compare|analyze|architecture|strategy|plan)/i.test(rawInput)) {
-    return {
-      category: 'research_task',
-      confidence: 0.61,
-      subtypes: ['analysis_or_strategy'],
-      urgency: 'normal',
-    };
-  }
+  if (args.signals.hasAttachments) subtypes.push('attachment_present');
 
   return {
-    category: 'general_chat',
-    confidence: context.workspaceBacked ? 0.58 : 0.55,
-    subtypes: [agentMode, context.workspaceBacked ? 'workspace_backed' : 'general'],
-    urgency: 'normal',
+    category: action as any,
+    confidence: Number(predictedReward.toFixed(2)),
+    subtypes,
+    urgency: stateVector[6] === 1 ? 'high' : 'normal', // Frustration triggers high urgency routing
   };
 }
 

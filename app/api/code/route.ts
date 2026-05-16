@@ -22,6 +22,8 @@ import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/g
 import { performResearch, formatSearchResults } from '@/lib/agents/researcher';
 import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotion';
 import { storeMemory } from '@/lib/memory/vectorStore';
+import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
+import { runBackgroundOptimization, InteractionFeedback } from '@/lib/ucol/routing/backgroundOptimizer';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
@@ -302,6 +304,40 @@ export async function POST(req: Request) {
 
     const operatingProfileName = effectiveProfile?.name ?? operatingProfileId ?? 'resolved';
     const operatingProfileResolvedMode = effectiveProfile?.mode ?? operatingProfileMode ?? 'quality';
+
+    // [Phase C] Inject UCOL Bandit Router
+    const requestId = req.headers.get('x-request-id') || `req-${Date.now()}`;
+    const routingDecision = buildInitialRoutingDecision({
+      request: {
+        requestId,
+        rawInput: userQuery,
+        userId: user.userId,
+        attachments: fileData && fileData.base64Data ? [{ filename: fileData.name, mimeType: fileData.type, sizeBytes: fileData.base64Data.length }] : [],
+      },
+      context: {
+        workspaceId: workspaceId || null,
+        operatingProfileId: operatingProfileId || null,
+        workspaceBacked: !!workspaceId,
+        operatingProfileResolved: !!effectiveProfile,
+        allowedMemoryScopes: ['conversation', 'user', workspaceId ? 'workspace' : null].filter(Boolean) as any,
+      },
+      agentMode: operatingProfileResolvedMode as any,
+      signals: {
+        hasAttachments: !!(fileData && fileData.base64Data),
+        messageHistoryCount: messages?.length || 0,
+        profile: effectiveProfile,
+      }
+    });
+
+    console.log(`[UCOL Gateway] Code API Routing Intent: ${routingDecision.intent.category} (Confidence: ${routingDecision.intent.confidence}, Urgency: ${routingDecision.intent.urgency})`);
+
+    // Optionally adjust modelConfig based on providerPlan if needed, though profile overrides usually win.
+    if (routingDecision.providerPlan?.modelId && CODE_MODELS[routingDecision.providerPlan.modelId as keyof typeof CODE_MODELS]) {
+        // If UCOL strongly prefers a specific model based on intent and confidence is high
+        if (routingDecision.intent.confidence > 0.8) {
+             modelConfig = CODE_MODELS[routingDecision.providerPlan.modelId as keyof typeof CODE_MODELS];
+        }
+    }
 
     const operatingProfileContext = effectiveProfile
       ? `
@@ -597,6 +633,40 @@ Use this as the active execution context for coding assistance.
         }
       })();
     }
+
+    // [Phase B] Background Optimizer: Update historical weights & compute reward
+    (async () => {
+      try {
+        const usedMemoryIds = intelligentFacts.map((f: any) => f.id).filter(Boolean);
+        
+        const feedback: InteractionFeedback = {
+          frustrationSignal: routingDecision.intent.urgency === 'high',
+          // Could extract explicit semantic sentiment using a fast sentiment check,
+          // for now we set neutral or mild positive if it completed successfully without errors.
+          semanticSentiment: 0.1, 
+        };
+
+        const newMemories = [];
+        if (summary) {
+            newMemories.push({
+                content: summary,
+                type: 'conversation_summary' as any,
+                scope: 'conversation' as any,
+                metadata: { source: 'code_api', requestId }
+            });
+        }
+
+        await runBackgroundOptimization({
+           userId: user.userId,
+           workspaceId: workspaceId || undefined,
+           usedMemoryIds,
+           feedback,
+           newMemories
+        });
+      } catch (err) {
+        console.error('[BackgroundOptimizer] Fire-and-forget optimization failed:', err);
+      }
+    })();
 
     // [New] Knowledge Graph Extraction for Code (Async)
     // Extract programming languages, frameworks, and concepts
