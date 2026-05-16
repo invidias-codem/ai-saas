@@ -135,6 +135,14 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
       }
 
+      if (workspaceId && conversation.workspace_id && conversation.workspace_id !== workspaceId) {
+        return NextResponse.json({ error: 'Conversation/workspace mismatch' }, { status: 409 });
+      }
+
+      if (operatingProfileId && conversation.operating_profile_id && conversation.operating_profile_id !== operatingProfileId) {
+        return NextResponse.json({ error: 'Conversation/profile mismatch' }, { status: 409 });
+      }
+
       validatedConversationId = conversation.id;
     }
 
