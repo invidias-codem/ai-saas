@@ -325,8 +325,10 @@ export async function POST(req: Request) {
         }] : [],
       },
       context: {
-        workspaceId: workspaceId || null,
-        operatingProfileId: operatingProfileId || null,
+        surface: 'api' as const,
+        preWorkspace: !workspaceId,
+        workspaceId: workspaceId || undefined,
+        operatingProfileId: operatingProfileId || undefined,
         workspaceBacked: !!workspaceId,
         operatingProfileResolved: !!effectiveProfile,
         allowedMemoryScopes: ['conversation', 'user', workspaceId ? 'workspace' : null].filter(Boolean) as any,
