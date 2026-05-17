@@ -1,18 +1,19 @@
 import { NextResponse } from 'next/server';
-import { requireAuth, handleAuthError } from '@/lib/security/apiAuth';
+import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
 export async function GET(req: Request) {
   try {
-    // 1. Rate Limiting
-    const rateLimit = await limitApiEndpoint(req, 'relay_poll', 100, 60); // 100 requests per minute
+    // 1. Authentication
+    const user = await requireAuth();
+    const ip = getClientIP(req);
+
+    // 2. Rate Limiting
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'query');
     if (!rateLimit.success) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
-
-    // 2. Authentication
-    const auth = await requireAuth(req);
     const url = new URL(req.url);
     const deviceId = url.searchParams.get('deviceId');
 
@@ -24,7 +25,7 @@ export async function GET(req: Request) {
     const { data: commands, error } = await supabaseAdmin
       .from('relay_commands')
       .select('*')
-      .eq('user_id', auth.user.id)
+      .eq('user_id', user.userId)
       .eq('device_id', deviceId)
       .eq('status', 'pending')
       .order('created_at', { ascending: true })

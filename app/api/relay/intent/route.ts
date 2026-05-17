@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const user = await requireAuth();
     const ip = getClientIP(req);
 
-    const rateLimit = await limitApiEndpoint(user.userId, ip, 'api');
+    const rateLimit = await limitApiEndpoint(user.userId, ip, 'mutation');
     if (!rateLimit.success) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
