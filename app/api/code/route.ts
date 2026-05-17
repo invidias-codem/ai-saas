@@ -312,7 +312,15 @@ export async function POST(req: Request) {
         requestId,
         rawInput: userQuery,
         userId: user.userId,
-        attachments: fileData && fileData.base64Data ? [{ filename: fileData.name, mimeType: fileData.type, sizeBytes: fileData.base64Data.length }] : [],
+        attachments: fileData && fileData.base64Data ? [{
+          id: fileData.name || 'attachment-0',
+          type: (fileData.type?.startsWith('image/') ? 'image'
+            : fileData.type?.startsWith('audio/') ? 'audio'
+            : fileData.type?.startsWith('video/') ? 'video'
+            : 'document') as import('@/lib/ucol/routing/types').UcolAttachmentType,
+          mimeType: fileData.type,
+          metadata: { filename: fileData.name, sizeBytes: fileData.base64Data.length },
+        }] : [],
       },
       context: {
         workspaceId: workspaceId || null,
