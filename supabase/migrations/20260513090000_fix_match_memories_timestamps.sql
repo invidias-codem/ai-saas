@@ -39,7 +39,7 @@ AS $$
     mb.updated_at AS created_at
   FROM memory_bank mb
   WHERE
-    mb.user_id = filter_user_id
+    mb.user_id = filter_user_id::text
     AND mb.embedding_768 IS NOT NULL
     AND (
       filter_feature_type IS NULL
@@ -79,7 +79,7 @@ AS $$
     mb.updated_at AS created_at
   FROM memory_bank mb
   WHERE
-    mb.user_id = filter_user_id
+    mb.user_id = filter_user_id::text
     AND mb.embedding_3072 IS NOT NULL
     AND (
       filter_feature_type IS NULL

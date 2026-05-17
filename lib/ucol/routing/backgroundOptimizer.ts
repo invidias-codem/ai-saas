@@ -48,6 +48,11 @@ export interface OptimizationArgs {
         scope: MemoryScope;
         metadata?: any;
     }>;
+    
+    // Relay Harness Phase 1
+    taskDescription?: string;
+    trajectory?: any;
+    userProfileSummary?: string;
 }
 
 /**
@@ -85,6 +90,26 @@ export async function runBackgroundOptimization(args: OptimizationArgs): Promise
         // Asynchronous non-blocking call to prune stale context
         // In a high-scale production setting, this might be triggered less frequently or via a scheduled job.
         await executeMemoryDecay(userId, now);
+
+        // 4. Relay Harness: Skill Extraction
+        if (args.taskDescription && args.trajectory) {
+            try {
+                const { processTrajectoryForSkill } = await import('@/lib/relay/skillExtractor');
+                const result = await processTrajectoryForSkill(
+                    userId, 
+                    args.taskDescription, 
+                    args.trajectory, 
+                    reward, 
+                    args.userProfileSummary || ''
+                );
+                
+                if (result.passedGate && result.skillId) {
+                    console.info(`[BackgroundOptimizer] Successfully extracted new skill: ${result.skillId}`);
+                }
+            } catch (skillErr) {
+                console.error('[BackgroundOptimizer] Skill extraction failed:', skillErr);
+            }
+        }
 
     } catch (err) {
         console.error('[BackgroundOptimizer] Optimization process failed:', err);
