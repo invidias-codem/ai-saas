@@ -131,7 +131,7 @@ async function reinforceMemories(userId: string, memoryIds: string[], rewardDelt
 async function processNewMemoryWithDeduplication(
     userId: string, 
     workspaceId: string | undefined, 
-    mem: OptimizationArgs['newMemories'][0], 
+    mem: NonNullable<OptimizationArgs['newMemories']>[0], 
     rewardDelta: number, 
     now: string,
     threshold: number
