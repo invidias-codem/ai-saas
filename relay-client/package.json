@@ -1,0 +1,21 @@
+{
+  "name": "relay-client",
+  "version": "1.0.0",
+  "description": "Lattice OS Relay Agent Client",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && electron ."
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.12",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/node-fetch": "^2.6.13",
+    "@types/uuid": "^9.0.2",
+    "electron": "^25.0.0",
+    "typescript": "^5.1.3"
+  }
+}

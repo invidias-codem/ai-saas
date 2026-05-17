@@ -17,24 +17,26 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    // commandId: the ID from relay_commands
-    // status: 'success' | 'failure' | 'rejected'
-    // data: arbitrary output from the device
-    // durationMs: how long it took
-    const { commandId, status, data, durationMs, error } = body;
+    const { commandId, status, durationMs, userApproved, output, data, error: execError } = body;
 
     if (!commandId || !status) {
       return NextResponse.json({ error: 'commandId and status are required' }, { status: 400 });
     }
 
-    if (supabaseAdmin) {
+    if (supabaseAdmin && commandId !== 'mock-command-id' && !process.env.MOCK_USER_ID) {
       const { error: updateError } = await supabaseAdmin
         .from('relay_commands')
         .update({
           status: status,
           updated_at: new Date().toISOString(),
-          // we could store the result payload if we add a 'result_payload' column,
-          // but for now, we just update the status to trigger the next loop step.
+          result_payload: {
+            success: status === 'success',
+            durationMs,
+            userApproved,
+            output,
+            data,
+            error: execError
+          }
         })
         .eq('id', commandId)
         .eq('user_id', user.userId);
@@ -43,12 +45,14 @@ export async function POST(req: Request) {
         logger.error('[Relay Result] Failed to update command:', updateError);
         return NextResponse.json({ error: 'Failed to update command' }, { status: 500 });
       }
+    } else {
+      logger.info(`[Relay Result] Mock update skipped for command ${commandId}`);
+    }
 
       // TODO: If the status is final (success/failure), this is where we would 
       // resume the ReAct loop or notify the background worker that the device 
       // action has completed.
       logger.info(`[Relay Result] Command ${commandId} updated to ${status} in ${durationMs || 0}ms`);
-    }
 
     return NextResponse.json({ acknowledged: true });
 

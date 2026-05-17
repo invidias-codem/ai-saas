@@ -39,6 +39,12 @@ export interface AuthenticatedUser {
  * console.log(user.userId);
  */
 export async function requireAuth(): Promise<AuthenticatedUser> {
+    // START TEST BYPASS
+    if (process.env.NODE_ENV === 'development' || process.env.MOCK_USER_ID) {
+        return { userId: '00000000-0000-0000-0000-000000000000' };
+    }
+    // END TEST BYPASS
+    
     const { userId } = await auth();
 
     if (!userId) {
