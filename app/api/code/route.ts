@@ -344,10 +344,11 @@ export async function POST(req: Request) {
     console.log(`[UCOL Gateway] Code API Routing Intent: ${routingDecision.intent.category} (Confidence: ${routingDecision.intent.confidence}, Urgency: ${routingDecision.intent.urgency})`);
 
     // Optionally adjust modelConfig based on providerPlan if needed, though profile overrides usually win.
-    if (routingDecision.providerPlan?.modelId && CODE_MODELS[routingDecision.providerPlan.modelId as keyof typeof CODE_MODELS]) {
+    const preferredModelRef = routingDecision.providerPlan?.preferredModelRefs?.[0];
+    if (preferredModelRef && CODE_MODELS[preferredModelRef as keyof typeof CODE_MODELS]) {
         // If UCOL strongly prefers a specific model based on intent and confidence is high
         if (routingDecision.intent.confidence > 0.8) {
-             modelConfig = CODE_MODELS[routingDecision.providerPlan.modelId as keyof typeof CODE_MODELS];
+             modelConfig = CODE_MODELS[preferredModelRef as keyof typeof CODE_MODELS];
         }
     }
 
