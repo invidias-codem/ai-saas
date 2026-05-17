@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
 
     // Instantiate Supabase client
     const supabase = createServerClient(
