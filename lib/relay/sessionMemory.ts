@@ -48,5 +48,5 @@ export async function recallRelevantSessions(userId: string, taskDescription: st
         return [];
     }
 
-    return data?.map(row => row.response_summary) || [];
+    return data?.map((row: { response_summary: string }) => row.response_summary) || [];
 }
