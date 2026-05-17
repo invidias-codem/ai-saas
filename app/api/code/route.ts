@@ -312,6 +312,8 @@ export async function POST(req: Request) {
         requestId,
         rawInput: userQuery,
         userId: user.userId,
+        surface: 'api' as const,
+        createdAt: new Date().toISOString(),
         attachments: fileData && fileData.base64Data ? [{
           id: fileData.name || 'attachment-0',
           type: (fileData.type?.startsWith('image/') ? 'image'
