@@ -43,6 +43,9 @@
     "functions",
     "packages",
     "tools",
-    "scripts"
+    "scripts",
+    "relay-client",
+    "**/* 2.ts",
+    "**/* 2.tsx"
   ]
 }
