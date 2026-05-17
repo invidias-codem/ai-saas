@@ -22,6 +22,10 @@ export async function GET(req: Request) {
     }
 
     // 3. Fetch Pending Commands
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
+    }
+
     const { data: commands, error } = await supabaseAdmin
       .from('relay_commands')
       .select('*')
