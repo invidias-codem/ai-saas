@@ -197,7 +197,27 @@ export async function POST(req: Request) {
       };
     });
 
-    // 5. Gather comprehensive user context
+    // 5. Pre-generation Credit Check (Atomic)
+    const cost = CREDIT_COSTS.CODE_GENERATION;
+    const idempotencyKey = req.headers.get('idempotency-key') || `code-${user.userId}-${Date.now()}`;
+    const bypassCredits = hasUnlimitedUsageAccess(user.userId);
+
+    if (!bypassCredits) {
+      const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Code generation", { model: modelConfig.modelId, activeRepo });
+
+      if (!spendResult.success && !spendResult.duplicate) {
+        return NextResponse.json(
+          {
+            error: 'Insufficient credits',
+            message: `Weaver Code requires ${cost} credits before generation starts.`,
+            remaining: spendResult.remaining,
+          },
+          { status: 402 }
+        );
+      }
+    }
+
+    // 6. Gather comprehensive user context
     const userContext = await gatherUserContext(user.userId, clerkUser);
     const userContextPrompt = formatUserContextForPrompt(userContext);
 
@@ -404,22 +424,6 @@ Use this as the active execution context for coding assistance.
       return new NextResponse("Invalid prompt or file data", { status: 400 });
     }
 
-
-    // 4. Rate/Credit Check (Atomic)
-    const cost = CREDIT_COSTS.CODE_GENERATION;
-    const idempotencyKey = req.headers.get('idempotency-key') || `code-${user.userId}-${Date.now()}`;
-    const bypassCredits = hasUnlimitedUsageAccess(user.userId);
-
-    if (!bypassCredits) {
-      const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Code generation", { model: modelConfig.modelId, activeRepo });
-
-      if (!spendResult.success && !spendResult.duplicate) {
-        return NextResponse.json(
-          { error: 'Insufficient credits', message: `You need ${cost} credits for this request.`, remaining: spendResult.remaining },
-          { status: 402 }
-        );
-      }
-    }
 
     logger.debug("Sending to Gemini - History:", JSON.stringify(history.map((h: { parts: { text: any; }[]; }) => h.parts[0].text))); // Log history text only for brevity
     logger.debug("Sending to Gemini - Current Turn Parts:", JSON.stringify(currentUserParts.map(p => p.text ? `Text: ${p.text.substring(0, 50)}...` : `File: ${p.inlineData?.mimeType}`))); // Log structure summary

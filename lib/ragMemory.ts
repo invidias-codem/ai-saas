@@ -105,7 +105,7 @@ export async function getWorkspaceMemoryContext(
       .select('id, content, type, metadata, updated_at')
       .eq('user_id', userId)
       .eq('scope', 'workspace')
-      .eq('metadata->>workspaceId', workspaceId)
+      .contains('metadata', { workspaceId })
       .order('updated_at', { ascending: false })
       .limit(limit);
 
