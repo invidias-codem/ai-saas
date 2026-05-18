@@ -85,6 +85,20 @@ export async function storeMemory(
     metadata: any = {},
     options: MemoryWriteOptions = {}
 ): Promise<string | null> {
+    const normalizedUserId = typeof userId === 'string' ? userId.trim() : '';
+
+    if (!normalizedUserId) {
+        console.warn('[MemoryStore] Skipping memory_bank insert without userId', {
+            type,
+            scope: options.scope || 'conversation',
+            workspaceId: options.workspaceId ?? null,
+            source: metadata?.source ?? null,
+            featureType: metadata?.featureType ?? null,
+            title: metadata?.title ?? null,
+        });
+        return null;
+    }
+
     try {
         const embeddingResult = await generateEmbeddingWithMetadata(content);
 
@@ -101,7 +115,7 @@ export async function storeMemory(
         const { data, error } = await supabase
             .from('memory_bank')
             .insert({
-                user_id: userId,
+                user_id: normalizedUserId,
                 content: compressedContent,
                 type,
                 scope,

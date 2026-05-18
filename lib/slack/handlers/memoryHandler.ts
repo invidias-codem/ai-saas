@@ -41,7 +41,19 @@ export async function handleMemoryOperation(
     // Default to SAVE if action not specific.
     const action = extractedInfo?.memoryAction || 'SAVE';
     const content = extractedInfo?.memoryContent || userMessage;
-    const userId = config.userId;
+    const userId = typeof config.userId === 'string' ? config.userId.trim() : '';
+
+    if (!userId) {
+        console.warn('[SLACK_MEMORY] Missing linked userId for memory operation', {
+            action,
+            teamId: config.teamId ?? null,
+            channelId: config.channelId ?? null,
+            slackUserId: event?.user ?? null,
+            threadTs: event?.ts ?? null,
+        });
+        await postMessage('⚠️ Memory is unavailable for this Slack workspace until it is linked to an app user.');
+        return;
+    }
 
     try {
         await postMessage(`🧠 Processing memory request: *${action}*...`);
