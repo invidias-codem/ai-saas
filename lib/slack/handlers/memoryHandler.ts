@@ -9,7 +9,8 @@ const SLACK_API_BASE = 'https://slack.com/api';
 interface SlackConfig {
     botToken: string;
     channelId: string;
-    userId: string;
+    userId?: string;
+    teamId?: string;
 }
 
 export async function handleMemoryOperation(
