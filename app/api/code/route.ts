@@ -200,7 +200,7 @@ export async function POST(req: Request) {
     // 5. Pre-generation Credit Check (Atomic)
     const cost = CREDIT_COSTS.CODE_GENERATION;
     const idempotencyKey = req.headers.get('idempotency-key') || `code-${user.userId}-${Date.now()}`;
-    const bypassCredits = hasUnlimitedUsageAccess(user.userId);
+    const bypassCredits = await hasUnlimitedUsageAccess(user.userId);
 
     if (!bypassCredits) {
       const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Code generation", { model: modelConfig.modelId, activeRepo });

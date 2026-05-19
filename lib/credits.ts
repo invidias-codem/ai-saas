@@ -61,13 +61,39 @@ export async function deductCredits(userId: string, cost: number, description: s
 }
 
 
-export function hasUnlimitedUsageAccess(userId?: string | null): boolean {
+export async function hasUnlimitedUsageAccess(userId?: string | null): Promise<boolean> {
     if (!userId) return false;
+
     const allowlist = (process.env.UNLIMITED_USAGE_USER_IDS || '')
         .split(',')
         .map((value) => value.trim())
         .filter(Boolean);
-    return allowlist.includes(userId);
+
+    if (allowlist.includes(userId)) {
+        return true;
+    }
+
+    if (!supabaseAdmin) {
+        return false;
+    }
+
+    try {
+        const { data, error } = await supabaseAdmin
+            .from('supporter_credits')
+            .select('tier')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (error) {
+            console.error(`[Credits] Failed to resolve tier for unlimited access ${userId}:`, error);
+            return false;
+        }
+
+        return data?.tier === 'enterprise';
+    } catch (error) {
+        console.error(`[Credits] Exception resolving unlimited access for ${userId}:`, error);
+        return false;
+    }
 }
 
 export interface SpendResult {
