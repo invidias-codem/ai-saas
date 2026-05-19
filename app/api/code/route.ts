@@ -3,84 +3,22 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Part } from "@google/generative-ai";
 import { requireEnv } from '@/lib/env';
-import { tagMessagesForStorage, tagLLMMessage, extractWMRTMetadata } from '@/lib/world-model/trustTag';
-import {
-  getRAGMemoryContext,
-  captureMemory,
-  extractTags,
-  generateSummary,
-  estimateTokenCount,
-  gatherUserContext,
-  formatUserContextForPrompt,
-  getHighConfidenceFacts,
-  formatFactsForPrompt,
-  getGitHubContext,
-  getWorkspaceMemoryContext
-} from '@/lib/ragMemory';
-import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
-import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/graphStore';
-import { performResearch, formatSearchResults } from '@/lib/agents/researcher';
-import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotion';
-import { storeMemory } from '@/lib/memory/vectorStore';
-import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
-import { runBackgroundOptimization, InteractionFeedback } from '@/lib/ucol/routing/backgroundOptimizer';
+import { waitUntil } from '@vercel/functions';
+import { runPostGenerationPipeline } from '@/lib/ucol/postGenerationPipeline';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
 import { CODE_MODELS } from '@/lib/llm/codeModels';
-import { ClaudeProvider } from '@/lib/llm/providers/claude';
-import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
-import { ChatMessage } from '@/lib/llm/types';
+import { runCodeEngine } from '@/lib/llm/codeEngine';
 import { checkCredits, deductCredits, spendCreditsAtomic, CREDIT_COSTS, hasUnlimitedUsageAccess } from "@/lib/credits";
-import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
+import { trackAIError } from "@/lib/analytics/track";
 import { logger } from "@/lib/logger";
-import { resolveAgentModeFromProfile } from '@/lib/workspaces/runtimeMode';
+import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import type { RuntimeProfileSignals, OperatingProfileMode } from '@/lib/workspaces/runtimeMode';
 
 export const runtime = 'nodejs';
 
-// Initialize lazily
-function getGeminiModel(modelId: string) {
-  const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
-  return genAI.getGenerativeModel({
-    model: modelId, // Use the passed model ID
-    safetySettings: [
-      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
-    ],
-  });
-}
 
-// System instruction - slightly refined to emphasize using provided content
-const CODE_SYSTEM_INSTRUCTION_TEXT = "You are 'Genie Code', an expert coding assistant. Analyze provided code snippets or file content, explain concepts, generate code, and answer questions related to programming. **If file content data is provided along with a text prompt, focus your analysis on the file data based on the instructions in the text prompt.** Use markdown code blocks with language identifiers. For non-coding questions, politely decline.";
-
-const CODE_SYSTEM_INSTRUCTION = {
-  role: "user",
-  parts: [{
-    text: CODE_SYSTEM_INSTRUCTION_TEXT
-  }],
-};
-
-// Greeting message (Optional)
-const CODE_GREETING = {
-  role: "model",
-  parts: [{
-    text: "Ready to code! Ask a question or attach a file."
-  }]
-};
-
-export const maxDuration = 60; // Set max duration for long running RAG ops
-
-// Helper to chunk text
-function chunkText(text: string, size: number = 2000): string[] {
-  const chunks = [];
-  for (let i = 0; i < text.length; i += size) {
-    chunks.push(text.slice(i, i + size));
-  }
-  return chunks;
-}
 
 export async function POST(req: Request) {
   try {
@@ -115,38 +53,28 @@ export async function POST(req: Request) {
     const { messages, currentUserPrompt, fileData, model = 'fast', activeRepo, workspaceId, operatingProfileId, operatingProfileMode, conversationId } = body;
     let modelConfig = CODE_MODELS[model] || CODE_MODELS.fast;
 
-    if (conversationId !== undefined && conversationId !== null && typeof conversationId !== 'string') {
-      return NextResponse.json({ error: 'Invalid conversationId' }, { status: 400 });
+    const resolved = await resolveRuntimeContext({ 
+      userId: user.userId, 
+      surface: 'api', 
+      conversationId, 
+      workspaceId, 
+      operatingProfileId, 
+      fallbackMode: operatingProfileMode,
+      strictValidation: true 
+    });
+
+    if (resolved.error) {
+      return NextResponse.json({ error: resolved.error.message }, { status: resolved.error.status });
     }
 
-    let validatedConversationId: string | null = null;
-    if (typeof conversationId === 'string' && conversationId.trim()) {
-      const { supabaseAdmin } = await import('@/lib/supabaseClient');
-      if (!supabaseAdmin) {
-        return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
-      }
-
-      const { data: conversation, error: conversationError } = await supabaseAdmin
-        .from('conversations')
-        .select('id, user_id, workspace_id, operating_profile_id, is_deleted')
-        .eq('id', conversationId)
-        .eq('user_id', user.userId)
-        .maybeSingle();
-
-      if (conversationError || !conversation || conversation.is_deleted) {
-        return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
-      }
-
-      if (workspaceId && conversation.workspace_id && conversation.workspace_id !== workspaceId) {
-        return NextResponse.json({ error: 'Conversation/workspace mismatch' }, { status: 409 });
-      }
-
-      if (operatingProfileId && conversation.operating_profile_id && conversation.operating_profile_id !== operatingProfileId) {
-        return NextResponse.json({ error: 'Conversation/profile mismatch' }, { status: 409 });
-      }
-
-      validatedConversationId = conversation.id;
-    }
+    const validatedConversationId = resolved.conversationId;
+    const effectiveProfile = resolved.profile;
+    const operatingProfileResolvedMode = resolved.mode;
+    const operatingProfileName = resolved.operatingProfileName ?? resolved.operatingProfileId ?? 'resolved';
+    
+    // Fallback if needed for workspaceId, operatingProfileId locally
+    const effectiveWorkspaceId = resolved.workspaceId;
+    const effectiveOperatingProfileId = resolved.operatingProfileId;
 
     // 4. Input Validation
     if (!messages && (!currentUserPrompt && !fileData)) {
@@ -217,545 +145,58 @@ export async function POST(req: Request) {
       }
     }
 
-    // 6. Gather comprehensive user context
-    const userContext = await gatherUserContext(user.userId, clerkUser);
-    const userContextPrompt = formatUserContextForPrompt(userContext);
-
-    // Get current user query for context retrieval
     const userQuery = currentUserPrompt || 'code assistance';
 
-    // [Step 1] Parallel Context Gathering (Tiered Memory for Code)
-    const [
-      allFacts,
-      researchResult,
-      graphData,
-      userProfileMemories,  // User-scoped memories (coding preferences, patterns)
-      workspaceMemoryContext,
-      operatingProfile
-    ] = await Promise.all([
-      getHighConfidenceFacts(user.userId),
-      performResearch(userQuery, userContextPrompt, { hasFileAttachment: !!(fileData && fileData.base64Data) }), // Web Search for latest docs/libraries
-      findRelatedEntities(user.userId, userQuery),         // Knowledge Graph (projects, technologies)
-      getUserProfile(user.userId),                         // User profile (coding style, preferences)
-      workspaceId ? getWorkspaceMemoryContext(user.userId, workspaceId, userQuery) : Promise.resolve({ contextString: '', sources: [] }),
-      operatingProfileId
-        ? (async () => {
-            const { supabaseAdmin } = await import('@/lib/supabaseClient');
-            if (!supabaseAdmin) return null;
-            const { data } = await supabaseAdmin
-              .from('operating_profiles')
-              .select('id, name, mode, latency_preference, allow_agentic_runs, tool_use_level, retrieval_depth, default_output_style')
-              .eq('id', operatingProfileId)
-              .eq('user_id', user.userId)
-              .maybeSingle();
-            return data;
-          })()
-        : Promise.resolve(null)
-    ]);
-
-    // Format new contexts
-    const searchContext = formatSearchResults(researchResult.results);
-    const graphContext = formatGraphContext(graphData);
-
-    // Create mock vector similarities based on keyword matching
-    const similarities = new Map<string, number>();
-    const queryWords = userQuery.toLowerCase().split(/\s+/);
-    for (const fact of allFacts) {
-      const factWords = fact.content.toLowerCase().split(/\s+/);
-      const overlap = factWords.filter((w: string) => queryWords.includes(w)).length;
-      const similarity = overlap / Math.max(factWords.length, queryWords.length, 1);
-      similarities.set(fact.id || '', Math.min(1, similarity * 1.5)); // Scale up slightly
-    }
-
-    const intelligentFacts = rankMemoriesIntelligently(
-      allFacts,
-      similarities,
-      userQuery
-    );
-
-    console.log(`[Code Memory Intelligence] Retrieved ${intelligentFacts.length} intelligently ranked facts for user ${user.userId}`);
-    const factContext = formatFactsForPrompt(intelligentFacts);
-
-    // Retrieve relevant memories for context
-    const memoryContext = (await getRAGMemoryContext(user.userId, userQuery, 'code')).contextString;
-    const workspaceMemoryPrompt = workspaceMemoryContext.contextString || '';
-
-    // GitHub Context
-    let githubContext = '';
-    if (activeRepo) {
-      try {
-        logger.debug(`[Code API] Fetching GitHub context for ${activeRepo}`);
-        githubContext = await getGitHubContext(user.userId, userQuery, activeRepo);
-      } catch (err) {
-        logger.error("[Code API] Failed to fetch GitHub context:", err);
-      }
-    }
-
-    // Format user profile context
-    const userProfileContext = formatUserProfileForPrompt(userProfileMemories);
-
-    const normalizedProfileMode = (['copilot', 'research', 'agentic', 'drafting', 'memory_native', 'custom'] as const).includes(operatingProfileMode)
-      ? (operatingProfileMode as OperatingProfileMode)
-      : null;
-
-    const effectiveProfile: (RuntimeProfileSignals & { id?: string | null; name?: string | null }) | null = operatingProfile
-      ? {
-          id: operatingProfile.id ?? null,
-          name: operatingProfile.name ?? null,
-          mode: operatingProfile.mode ?? null,
-          latency_preference: operatingProfile.latency_preference ?? null,
-          allow_agentic_runs: operatingProfile.allow_agentic_runs ?? null,
-          tool_use_level: operatingProfile.tool_use_level ?? null,
-          retrieval_depth: operatingProfile.retrieval_depth ?? null,
-          default_output_style: operatingProfile.default_output_style ?? null,
-        }
-      : normalizedProfileMode
-        ? { mode: normalizedProfileMode }
-        : null;
-
-    if (effectiveProfile) {
-      const resolvedMode = resolveAgentModeFromProfile(effectiveProfile);
-      if (resolvedMode === 'agentic' && CODE_MODELS.agentic) {
-        modelConfig = CODE_MODELS.agentic;
-      } else if (resolvedMode === 'fast' && CODE_MODELS.fast) {
-        modelConfig = CODE_MODELS.fast;
-      }
-    }
-
-    const operatingProfileName = effectiveProfile?.name ?? operatingProfileId ?? 'resolved';
-    const operatingProfileResolvedMode = effectiveProfile?.mode ?? operatingProfileMode ?? 'quality';
-
-    // [Phase C] Inject UCOL Bandit Router
-    const requestId = req.headers.get('x-request-id') || `req-${Date.now()}`;
-    const routingDecision = buildInitialRoutingDecision({
-      request: {
-        requestId,
-        rawInput: userQuery,
-        userId: user.userId,
-        surface: 'api' as const,
-        createdAt: new Date().toISOString(),
-        attachments: fileData && fileData.base64Data ? [{
-          id: fileData.name || 'attachment-0',
-          type: (fileData.type?.startsWith('image/') ? 'image'
-            : fileData.type?.startsWith('audio/') ? 'audio'
-            : fileData.type?.startsWith('video/') ? 'video'
-            : 'document') as import('@/lib/ucol/routing/types').UcolAttachmentType,
-          mimeType: fileData.type,
-          metadata: { filename: fileData.name, sizeBytes: fileData.base64Data.length },
-        }] : [],
-      },
-      context: {
-        surface: 'api' as const,
-        preWorkspace: !workspaceId,
-        workspaceId: workspaceId || undefined,
-        operatingProfileId: operatingProfileId || undefined,
-        workspaceBacked: !!workspaceId,
-        operatingProfileResolved: !!effectiveProfile,
-        allowedMemoryScopes: ['conversation', 'user', workspaceId ? 'workspace' : null].filter(Boolean) as any,
-      },
-      agentMode: operatingProfileResolvedMode as any,
-      signals: {
-        hasAttachments: !!(fileData && fileData.base64Data),
-        messageHistoryCount: messages?.length || 0,
-        profile: effectiveProfile,
-      }
+    const {
+      responseText,
+      modelConfig: finalModelConfig,
+      routingDecision,
+      intelligentFacts,
+      userContext
+    } = await runCodeEngine({
+      userId: user.userId,
+      clerkUser,
+      userQuery,
+      history,
+      fileData,
+      activeRepo,
+      initialModelConfig: modelConfig,
+      resolvedContext: resolved,
+      requestId: req.headers.get('x-request-id') || `req-${Date.now()}`,
+      messagesLength: messages?.length || 0
     });
+    
+    // Ensure we use the possibly updated modelConfig from the engine
+    modelConfig = finalModelConfig;
 
-    console.log(`[UCOL Gateway] Code API Routing Intent: ${routingDecision.intent.category} (Confidence: ${routingDecision.intent.confidence}, Urgency: ${routingDecision.intent.urgency})`);
-
-    // Optionally adjust modelConfig based on providerPlan if needed, though profile overrides usually win.
-    const preferredModelRef = routingDecision.providerPlan?.preferredModelRefs?.[0];
-    if (preferredModelRef && CODE_MODELS[preferredModelRef as keyof typeof CODE_MODELS]) {
-        // If UCOL strongly prefers a specific model based on intent and confidence is high
-        if (routingDecision.intent.confidence > 0.8) {
-             modelConfig = CODE_MODELS[preferredModelRef as keyof typeof CODE_MODELS];
-        }
-    }
-
-    const operatingProfileContext = effectiveProfile
-      ? `
-## Coding Runtime Context
-Workspace: ${workspaceId || 'none'}
-Operating Profile: ${operatingProfileName}
-Mode: ${operatingProfileResolvedMode}
-Use this as the active execution context for coding assistance.
-
----
-`
-      : '';
-
-    // Construct the current user message parts
-    const currentUserParts: Part[] = [];
-
-    // ✅ Add TEXT part FIRST with enhanced context
-    const promptText = (currentUserPrompt || '').trim();
-    const messageText = promptText || (fileData ? `[Analysing File: ${fileData?.name || 'attached file'}]` : '');
-    // Use a default instruction if only a file is attached
-    const baseInstruction = promptText || `Please analyze the attached file: ${fileData?.name || 'attached file'}`;
-
-    // Inject user context + profile + facts + graph + search + memory into the prompt
-    const enhancedPromptText =
-      userContextPrompt +
-      userProfileContext +    // User coding preferences and patterns
-      factContext +           // High-confidence facts
-      graphContext +          // Knowledge Graph (projects, technologies)
-      searchContext +         // Web Search (latest docs/libraries)
-      memoryContext +         // RAG memories from past code sessions
-      workspaceMemoryPrompt + // Workspace-scoped memory aligned with conversation path
-      githubContext +         // GitHub repository context
-      operatingProfileContext + // Workspace/profile runtime context
-      baseInstruction;
-
-    currentUserParts.push({ text: enhancedPromptText });
-
-    // ✅ Add FILE data SECOND if present
-    if (fileData && fileData.base64Data && fileData.type) {
-      // Log the MIME type being sent
-      console.log(`Attaching file ${fileData.name} with MIME type: ${fileData.type}`);
-      currentUserParts.push({
-        inlineData: {
-          mimeType: fileData.type, // Ensure this is accurate (e.g., 'text/plain', 'text/javascript')
-          data: fileData.base64Data
-        }
-      });
-    }
-
-    if (currentUserParts.length === 0 || (currentUserParts.length === 1 && !currentUserParts[0].text && !currentUserParts[0].inlineData)) {
-      return new NextResponse("Invalid prompt or file data", { status: 400 });
-    }
-
-
-    logger.debug("Sending to Gemini - History:", JSON.stringify(history.map((h: { parts: { text: any; }[]; }) => h.parts[0].text))); // Log history text only for brevity
-    logger.debug("Sending to Gemini - Current Turn Parts:", JSON.stringify(currentUserParts.map(p => p.text ? `Text: ${p.text.substring(0, 50)}...` : `File: ${p.inlineData?.mimeType}`))); // Log structure summary
-
-    // ... generation logic ...
-
-    let responseText = "";
-
-    // --- Provider Dispatch ---
-
-    if (modelConfig.provider === 'claude') {
-      // Claude Provider Logic
-      const provider = new ClaudeProvider();
-
-      // Prepare History
-      const chatHistory: ChatMessage[] = (messages || []).map((msg: any) => ({
-        role: msg.role === 'bot' ? 'assistant' : 'user',
-        text: msg.text
-      }));
-
-      // Append current turn
-      let currentText = enhancedPromptText;
-      if (fileData && fileData.base64Data) {
-        // Decode and append file content for Claude (since provider is text-only)
-        try {
-          const decoded = Buffer.from(fileData.base64Data, 'base64').toString('utf-8');
-          // Naive check for binary vs text
-          if (!/[\x00-\x08\x0E-\x1F]/.test(decoded.substring(0, 100))) {
-            currentText += `\n\n[Attached File: ${fileData.name}]\n\`\`\`${fileData.type || ''}\n${decoded}\n\`\`\``;
-          } else {
-            currentText += `\n\n[Attached File: ${fileData.name}] (Binary file attached, content omitted for text model)`;
-          }
-        } catch (e) {
-          console.error("Failed to decode file for Claude:", e);
-        }
-      }
-
-      chatHistory.push({ role: 'user', text: currentText });
-
-      const streamResult = await provider.generateStream(chatHistory, CODE_SYSTEM_INSTRUCTION_TEXT, {
-        model: modelConfig.modelId,
-        maxTokens: modelConfig.maxTokens,
-        temperature: 0.7
-      });
-
-      // Consume stream
-      const textDecoder = new TextDecoder();
-      const reader = streamResult.stream.getReader();
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          responseText += textDecoder.decode(value, { stream: true });
-        }
-        responseText += textDecoder.decode(); // flush
-      } catch (streamError) {
-        console.error('[Code API] Stream read error:', streamError);
-        if (!responseText) {
-          throw new Error('Failed to read response from Claude');
-        }
-        // If we have partial content, continue with what we have
-      } finally {
-        reader.releaseLock();
-      }
-
-    } else if (modelConfig.provider === 'deepseek') {
-      // DeepSeek Provider Logic (Reasoning)
-      const provider = new DeepSeekProvider();
-
-      // Prepare History
-      const chatHistory: ChatMessage[] = (messages || []).map((msg: any) => ({
-        role: msg.role === 'bot' ? 'assistant' : 'user',
-        text: msg.text
-      }));
-
-      // Append current turn
-      let currentText = enhancedPromptText;
-      if (fileData && fileData.base64Data) {
-        // For DeepSeek (text-only reasoning), append file content as text block
-        try {
-          const decoded = Buffer.from(fileData.base64Data, 'base64').toString('utf-8');
-          // Limit file size for context window if needed, but R1 has 64k/128k context
-          if (!/[\x00-\x08\x0E-\x1F]/.test(decoded.substring(0, 100))) {
-            currentText += `\n\n[Attached File: ${fileData.name}]\n\`\`\`${fileData.type || ''}\n${decoded}\n\`\`\``;
-          } else {
-            currentText += `\n\n[Attached File: ${fileData.name}] (Binary file attached, content omitted)`;
-          }
-        } catch (e) {
-          console.error("Failed to decode file for DeepSeek:", e);
-        }
-      }
-
-      chatHistory.push({ role: 'user', text: currentText });
-
-      const streamResult = await provider.generateStream(chatHistory, CODE_SYSTEM_INSTRUCTION_TEXT, {
-        model: modelConfig.modelId,
-        maxTokens: modelConfig.maxTokens,
-        temperature: 0.6 // Slightly lower for reasoning
-      });
-
-      // Consume stream
-      const textDecoder = new TextDecoder();
-      const reader = streamResult.stream.getReader();
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          responseText += textDecoder.decode(value, { stream: true });
-        }
-        responseText += textDecoder.decode(); // flush
-      } finally {
-        reader.releaseLock();
-      }
-
-    } else {
-      // Gemini Logic (Existing robust implementation)
-      // Re-use current logic but with getGeminiModel(modelConfig.modelId)
-
-      const chat = getGeminiModel(modelConfig.modelId).startChat({
-        history: [CODE_SYSTEM_INSTRUCTION, CODE_GREETING, ...history],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.7,
-          maxOutputTokens: modelConfig.maxTokens,
+    waitUntil(
+      runPostGenerationPipeline({
+        userId: user.userId,
+        conversationId: validatedConversationId,
+        workspaceId: effectiveWorkspaceId,
+        operatingProfileId: effectiveOperatingProfileId,
+        operatingProfileMode: operatingProfileResolvedMode,
+        requestId: req.headers.get('x-request-id') || `req-${Date.now()}`,
+        userQuery,
+        responseText,
+        history: messages || [],
+        fileData: fileData || null,
+        modelId: modelConfig.modelId,
+        cost,
+        bypassCredits,
+        featureType: 'code',
+        intelligentFacts,
+        routingDecision,
+        userContext: {
+          fullName: userContext?.fullName || clerkUser?.fullName || 'Unknown User',
+          email: userContext?.email || clerkUser?.emailAddresses?.[0]?.emailAddress || 'unknown@example.com',
+          interactionStyle: userContext?.interactionStyle
         },
-      });
-
-      const result = await chat.sendMessage(currentUserParts);
-      if (!result.response) {
-        throw new Error("No response received from the model.");
-      }
-      responseText = result.response.text();
-    }
-
-    // Capture this interaction for future context
-    const tokensUsed = estimateTokenCount(userQuery + responseText);
-    const tags = extractTags(userQuery);
-    const summary = generateSummary([
-      { role: 'user', content: userQuery },
-      { role: 'assistant', content: responseText }
-    ]);
-
-    // ── RFC-001 WMRT: Tag all messages with trust tier before storage ──
-    // Raw LLM output is always UNVERIFIED at write time.
-    // Only DeltaEngine can promote to CONFIRMED/SUPPORTED after scoring.
-    const rawHistory = (messages || []).map((msg: { role: string; text: string }) => ({
-      role: (msg.role === 'bot' ? 'assistant' : 'user') as "user" | "assistant" | "system",
-      content: msg.text,
-    }));
-    const taggedHistory = tagMessagesForStorage(rawHistory, modelConfig.modelId);
-    // Append the current turn — assistant response tagged as UNVERIFIED
-    taggedHistory.push(
-      { role: 'user', content: userQuery, trust_tier: 'UNVERIFIED' as const, tagged_at: new Date().toISOString() },
-      tagLLMMessage(responseText, modelConfig.modelId),
+        saveToMemory: body.saveToMemory,
+        persistUserMessage: true,
+      })
     );
-    const wmrtMeta = extractWMRTMetadata(taggedHistory, modelConfig.modelId);
-    // ──────────────────────────────────────────────────────────────────
 
-    // Send to memory capture (async, fire-and-forget)
-    captureMemory(
-      user.userId,
-      'code',
-      userQuery.substring(0, 50) || 'Code Assistance',
-      summary,
-      taggedHistory,
-      tokensUsed,
-      tags,
-      {
-        userName: userContext.fullName,
-        userEmail: userContext.email,
-        responseLength: responseText.length,
-        interactionStyle: userContext.interactionStyle,
-        workspaceId: workspaceId || null,
-        operatingProfileId: operatingProfileId || null,
-        operatingProfileMode: operatingProfileMode || effectiveProfile?.mode || null,
-        hasFileAttachment: !!fileData,
-        fileName: fileData?.name,
-        ...wmrtMeta,
-      }
-    ).catch(err => console.error('[WMRT] Memory capture failed:', err));
-
-    // [New] Code RAG Indexing (Explicit Save)
-    const { saveToMemory } = body;
-    if (saveToMemory && fileData && fileData.base64Data) {
-      (async () => {
-        try {
-          // Decode file
-          const decodedContent = Buffer.from(fileData.base64Data, 'base64').toString('utf-8');
-          const fileName = fileData.name || 'uploaded_file';
-
-          // Basic check to avoid indexing binary garbage if someone uploads an image as "code"
-          // Mime type check is good but not foolproof. Heuristic check:
-          if (/[\x00-\x08\x0E-\x1F]/.test(decodedContent.substring(0, 100))) {
-            console.warn(`[Code RAG] Skipping indexing for ${fileName} - appears binary.`);
-            return;
-          }
-
-          const chunks = chunkText(decodedContent, 3000); // ~750 tokens
-          console.log(`[Code RAG] Indexing ${fileName} into ${chunks.length} chunks...`);
-
-          let indexedCount = 0;
-          for (let i = 0; i < chunks.length; i++) {
-            const chunk = chunks[i];
-            const contextPrefix = `[File: ${fileName} | Part ${i + 1}/${chunks.length}]\n`;
-
-            await storeMemory(
-              user.userId,
-              contextPrefix + chunk,
-              'fact', // storing as 'fact' for now, or could use a new type if migration allowed
-              {
-                featureType: 'code', // CRITICAL: This enables the filtering we added
-                fileName: fileName,
-                chunkIndex: i,
-                totalChunks: chunks.length,
-                language: fileData.type
-              }
-            );
-            indexedCount++;
-          }
-          console.log(`[Code RAG] Successfully indexed ${indexedCount} chunks for ${fileName}`);
-        } catch (err) {
-          console.error('[Code RAG] Indexing failed:', err);
-        }
-      })();
-    }
-
-    // [Phase B] Background Optimizer: Update historical weights & compute reward
-    (async () => {
-      try {
-        const usedMemoryIds = intelligentFacts.map((f: any) => f.id).filter(Boolean);
-        
-        const feedback: InteractionFeedback = {
-          frustrationSignal: routingDecision.intent.urgency === 'high',
-          // Could extract explicit semantic sentiment using a fast sentiment check,
-          // for now we set neutral or mild positive if it completed successfully without errors.
-          semanticSentiment: 0.1, 
-        };
-
-        const newMemories = [];
-        if (summary) {
-            newMemories.push({
-                content: summary,
-                type: 'conversation_summary' as any,
-                scope: 'conversation' as any,
-                metadata: { source: 'code_api', requestId }
-            });
-        }
-
-        await runBackgroundOptimization({
-           userId: user.userId,
-           workspaceId: workspaceId || undefined,
-           usedMemoryIds,
-           feedback,
-           newMemories
-        });
-      } catch (err) {
-        console.error('[BackgroundOptimizer] Fire-and-forget optimization failed:', err);
-      }
-    })();
-
-    // [New] Knowledge Graph Extraction for Code (Async)
-    // Extract programming languages, frameworks, and concepts
-    (async () => {
-      try {
-        if (tags.length > 0) {
-          // Auto-add top coding-related tag as a technology/concept node
-          const codeRelatedTags = tags.filter(tag =>
-            /react|node|python|javascript|typescript|java|api|database|framework|library/i.test(tag)
-          );
-          if (codeRelatedTags.length > 0) {
-            await addNode(user.userId, codeRelatedTags[0], 'technology', `Extracted from code session: ${userQuery.substring(0, 30)}`);
-          }
-        }
-      } catch (e) {
-        console.error('Graph update failed', e);
-      }
-    })();
-
-    if (validatedConversationId) {
-      try {
-        const { supabaseAdmin } = await import('@/lib/supabaseClient');
-        if (supabaseAdmin) {
-          // Persist both messages in one go or sequentially after success
-          const { error: persistUserError } = await supabaseAdmin
-            .from('messages')
-            .insert({
-              conversation_id: validatedConversationId,
-              role: 'user',
-              content: messageText,
-              metadata: {
-                fileData: fileData ? {
-                  name: fileData.name,
-                  type: fileData.type,
-                  base64Data: fileData.base64Data,
-                } : null,
-                featureType: 'code',
-              },
-            });
-
-          if (persistUserError) {
-            console.error('[CODE_API] Failed to persist user message:', persistUserError);
-          }
-
-          const { error: persistAssistantError } = await supabaseAdmin
-            .from('messages')
-            .insert({
-              conversation_id: validatedConversationId,
-              role: 'assistant',
-              content: responseText,
-              metadata: { featureType: 'code' },
-            });
-
-          if (persistAssistantError) {
-            console.error('[CODE_API] Failed to persist assistant message:', persistAssistantError);
-          }
-        }
-      } catch (persistErr) {
-        console.error('[CODE_API] Exception persisting messages:', persistErr);
-      }
-    }
-
-    // Log successful code interaction
-    console.log(`[CODE] User: ${userContext.fullName} (${user.userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
-
-    // Deduct credits handled atomically at start
-    // await deductCredits(user.userId, CREDIT_COSTS.CODE_GENERATION, "Code generation");
-
-    void trackAIGeneration({ tool: 'code', userId: user.userId, success: true });
-    if (!bypassCredits) {
-      void trackCreditsDeducted({ tool: 'code', credits: cost, userId: user.userId });
-    }
     return NextResponse.json({ text: responseText });
 
   } catch (error: any) {

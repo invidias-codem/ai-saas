@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import WebSocket from "ws";
 
 // Load environment variables from .env.local for local runs
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
@@ -86,7 +87,11 @@ async function main() {
 
   const sinceDate = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
 
-  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+  const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    realtime: {
+      transport: WebSocket,
+    },
+  });
 
   // Query feedback events with coarse filters.
   // Note: Supabase-js filters are applied server-side.

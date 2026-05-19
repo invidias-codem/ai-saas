@@ -2,8 +2,8 @@
 import { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
-import { supabaseAdmin } from '@/lib/supabaseClient';
 import { waitUntil } from '@vercel/functions';
+import { runPostGenerationPipeline } from '@/lib/ucol/postGenerationPipeline';
 import {
     generateConversationReply,
     ConversationRequestSchema
@@ -11,119 +11,12 @@ import {
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { promptSchema, validateRequestSize, ValidationError } from '@/lib/security/inputValidation';
-import { resolveAgentModeFromProfile } from '@/lib/workspaces/runtimeMode';
+import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
 import type { AgentMode } from '@/lib/llm/types';
 import type { RuntimeProfileSignals } from '@/lib/workspaces/runtimeMode';
 import type { UcolRequestPacket, UcolResolvedContext } from '@/lib/ucol/routing/types';
 
-type ResolvedChatContext = {
-    mode: AgentMode;
-    context: UcolResolvedContext;
-    profile: RuntimeProfileSignals | null;
-};
-
-async function resolveChatContext(userId: string, conversationId?: string): Promise<ResolvedChatContext> {
-    if (!conversationId || !supabaseAdmin) {
-        return {
-            mode: 'quality',
-            profile: null,
-            context: {
-                conversationId,
-                surface: 'web',
-                preWorkspace: true,
-                workspaceBacked: false,
-                operatingProfileResolved: false,
-                allowedMemoryScopes: ['conversation', 'user'],
-                notes: ['no conversation id or admin client available; defaulted to general context'],
-            },
-        };
-    }
-
-    const { data: conversation, error: conversationError } = await supabaseAdmin
-        .from('conversations')
-        .select('id, user_id, operating_profile_id, workspace_id')
-        .eq('id', conversationId)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-    if (conversationError || !conversation) {
-        return {
-            mode: 'quality',
-            profile: null,
-            context: {
-                conversationId,
-                surface: 'web',
-                preWorkspace: true,
-                workspaceBacked: false,
-                operatingProfileResolved: false,
-                allowedMemoryScopes: ['conversation', 'user'],
-                notes: ['conversation lookup failed or returned no row; defaulted to general context'],
-            },
-        };
-    }
-
-    let operatingProfileId = conversation.operating_profile_id ?? null;
-    let workspaceDefaultProfileId: string | null = null;
-
-    if (!operatingProfileId && conversation.workspace_id) {
-        const { data: workspace } = await supabaseAdmin
-            .from('workspaces')
-            .select('default_operating_profile_id')
-            .eq('id', conversation.workspace_id)
-            .eq('user_id', userId)
-            .maybeSingle();
-
-        workspaceDefaultProfileId = workspace?.default_operating_profile_id ?? null;
-        operatingProfileId = workspaceDefaultProfileId;
-    }
-
-    if (!operatingProfileId) {
-        return {
-            mode: 'quality',
-            profile: null,
-            context: {
-                workspaceId: conversation.workspace_id ?? undefined,
-                conversationId: conversation.id,
-                surface: 'web',
-                preWorkspace: !conversation.workspace_id,
-                workspaceBacked: Boolean(conversation.workspace_id),
-                operatingProfileResolved: false,
-                allowedMemoryScopes: conversation.workspace_id ? ['conversation', 'workspace', 'user'] : ['conversation', 'user'],
-                notes: ['no operating profile resolved from conversation or workspace'],
-            },
-        };
-    }
-
-    const { data: profile } = await supabaseAdmin
-        .from('operating_profiles')
-        .select('id, mode, latency_preference, allow_agentic_runs, tool_use_level, retrieval_depth, default_output_style')
-        .eq('id', operatingProfileId)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-    const resolvedProfile = (profile as RuntimeProfileSignals | null) ?? null;
-    const mode = resolveAgentModeFromProfile(resolvedProfile);
-
-    return {
-        mode,
-        profile: resolvedProfile,
-        context: {
-            workspaceId: conversation.workspace_id ?? undefined,
-            operatingProfileId: profile?.id,
-            conversationId: conversation.id,
-            surface: 'web',
-            preWorkspace: !conversation.workspace_id,
-            workspaceBacked: Boolean(conversation.workspace_id),
-            operatingProfileResolved: Boolean(profile?.id),
-            allowedMemoryScopes: conversation.workspace_id ? ['conversation', 'workspace', 'user'] : ['conversation', 'user'],
-            notes: [
-                conversation.operating_profile_id ? 'conversation-specific operating profile resolved' : 'workspace default operating profile resolved',
-                workspaceDefaultProfileId ? 'workspace default profile fallback used' : 'no workspace default fallback needed',
-            ],
-        },
-    };
-}
 
 export async function POST(req: Request) {
     try {
@@ -171,13 +64,13 @@ export async function POST(req: Request) {
             );
         }
 
-        const resolved = await resolveChatContext(user.userId, conversationId);
+        const resolved = await resolveRuntimeContext({ userId: user.userId, surface: 'web', conversationId, strictValidation: false });
         const effectiveMode = resolved.mode;
 
         const requestPacket: UcolRequestPacket = {
             requestId: randomUUID(),
             userId: user.userId,
-            workspaceId: resolved.context.workspaceId,
+            workspaceId: resolved.ucolContext.workspaceId,
             conversationId,
             surface: 'web',
             rawInput: prompt,
@@ -197,7 +90,7 @@ export async function POST(req: Request) {
 
         const routingDecision = buildInitialRoutingDecision({
             request: requestPacket,
-            context: resolved.context,
+            context: resolved.ucolContext,
             agentMode: effectiveMode,
             signals: {
                 hasAttachments: Boolean(fileData),
@@ -225,19 +118,8 @@ export async function POST(req: Request) {
         };
 
         const validationResult = ConversationRequestSchema.safeParse(requestPayload);
-        if (!validationResult.success) {
+        if (validationResult.success === false) {
             return NextResponse.json({ error: 'Validation Error', details: validationResult.error.flatten() }, { status: 400 });
-        }
-
-        if (conversationId && supabaseAdmin) {
-            const { error: dbError } = await supabaseAdmin
-                .from('messages')
-                .insert({
-                    conversation_id: conversationId,
-                    role: 'user',
-                    content: prompt
-                });
-            if (dbError) console.error('Failed to persist user message:', dbError);
         }
 
         const result = await generateConversationReply(
@@ -266,15 +148,30 @@ export async function POST(req: Request) {
                     fullText += decoder.decode(value, { stream: true });
                 }
 
-                if (conversationId && supabaseAdmin && fullText) {
-                    const { error: botDbError } = await supabaseAdmin
-                        .from('messages')
-                        .insert({
-                            conversation_id: conversationId,
-                            role: 'bot',
-                            content: fullText
-                        });
-                    if (botDbError) console.error('Failed to persist bot response:', botDbError);
+                if (fullText) {
+                    await runPostGenerationPipeline({
+                        userId: user.userId,
+                        conversationId,
+                        workspaceId: resolved.ucolContext.workspaceId,
+                        operatingProfileId: resolved.ucolContext.operatingProfileId,
+                        operatingProfileMode: effectiveMode,
+                        requestId: requestPacket.requestId,
+                        userQuery: prompt,
+                        responseText: fullText,
+                        history: messages || [],
+                        fileData: fileData || null,
+                        modelId: result.debug?.model || 'unknown',
+                        cost: 0,
+                        bypassCredits: false,
+                        featureType: 'chat',
+                        routingDecision,
+                        userContext: {
+                            fullName: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || clerkUser.username || 'User',
+                            email: clerkUser.emailAddresses?.[0]?.emailAddress || '',
+                        },
+                        saveToMemory: false,
+                        persistUserMessage: true,
+                    });
                 }
             } catch (err) {
                 console.error('Background DB persistence failed:', err);
