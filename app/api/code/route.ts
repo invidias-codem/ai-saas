@@ -187,10 +187,11 @@ export async function POST(req: Request) {
         featureType: 'code',
         intelligentFacts,
         routingDecision,
-        userContext: userContext ? {
-          ...userContext,
-          fullName: userContext.fullName || 'Unknown User'
-        } : undefined,
+        userContext: {
+          fullName: userContext?.fullName || clerkUser?.fullName || 'Unknown User',
+          email: userContext?.email || clerkUser?.emailAddresses?.[0]?.emailAddress || 'unknown@example.com',
+          interactionStyle: userContext?.interactionStyle
+        },
         saveToMemory: body.saveToMemory,
         persistUserMessage: true,
       })
