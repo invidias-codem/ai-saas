@@ -187,7 +187,10 @@ export async function POST(req: Request) {
         featureType: 'code',
         intelligentFacts,
         routingDecision,
-        userContext,
+        userContext: userContext ? {
+          ...userContext,
+          fullName: userContext.fullName || 'Unknown User'
+        } : undefined,
         saveToMemory: body.saveToMemory,
         persistUserMessage: true,
       })
