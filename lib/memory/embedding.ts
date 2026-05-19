@@ -200,13 +200,13 @@ export async function generateEmbeddingWithMetadata(text: string): Promise<Embed
 
   const l1Hit = getL1Cached(cacheKey);
   if (l1Hit) {
-    console.log('[Embedding] L1 cache hit', { provider: l1Hit.provider, dimension: l1Hit.dimension });
+
     return l1Hit;
   }
 
   const l2Hit = await getL2Cached(cacheKey);
   if (l2Hit) {
-    console.log('[Embedding] L2 cache hit', { provider: l2Hit.provider, dimension: l2Hit.dimension });
+
     setL1Cache(cacheKey, l2Hit);
     return l2Hit;
   }
@@ -216,11 +216,6 @@ export async function generateEmbeddingWithMetadata(text: string): Promise<Embed
   if (process.env.LAMBDA_EMBED_URL || process.env.LAMBDA_OLLAMA_URL) {
     try {
       result = await embedWithLambda(text);
-      console.log('[Embedding] Self-hosted OK', {
-        provider: result.provider,
-        model: result.model,
-        dimension: result.dimension,
-      });
     } catch (err) {
       console.warn('[Embedding] Vast.ai / self-hosted failed, trying fallback:', err);
     }
@@ -229,12 +224,6 @@ export async function generateEmbeddingWithMetadata(text: string): Promise<Embed
   if (!result && process.env.GOOGLE_API_KEY) {
     try {
       result = await embedWithGemini(text);
-      console.log('[Embedding] Gemini OK', {
-        provider: result.provider,
-        model: result.model,
-        dimension: result.dimension,
-        lane: result.dimension === PRIMARY_EMBEDDING_DIM ? 'primary_768' : 'secondary_3072',
-      });
     } catch (err: any) {
       if (err?.status === 429 || String(err).includes('429')) {
         console.warn('[Embedding] Gemini rate limited');
