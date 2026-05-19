@@ -186,7 +186,8 @@ async function embedWithGemini(text: string): Promise<EmbeddingResult> {
 
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-  const modelName = 'gemini-embedding-001';
+  // Using the latest multimodal embedding model which natively outputs 3072 dimensions
+  const modelName = 'gemini-embedding-2-preview';
   const model = genAI.getGenerativeModel({ model: modelName });
   const result = await model.embedContent(text);
   const values = result.embedding?.values ?? [];
