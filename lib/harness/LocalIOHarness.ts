@@ -106,7 +106,7 @@ export class LocalIOHarness implements IOHarness {
         };
       }
 
-      const newContent = content.replace(searchBlock, replaceBlock);
+      const newContent = content.replace(searchBlock, () => replaceBlock);
       await fs.writeFile(safePath, newContent, 'utf8');
 
       return { ok: true, output: `Successfully patched ${filePath}` };
@@ -183,8 +183,8 @@ export class LocalIOHarness implements IOHarness {
         } else {
           let reason = `Command failed with code ${code}`;
           if (isTimedOut) reason = 'Command timed out';
-          else if (signal) reason = `Command terminated by signal ${signal}`;
           else if (isTruncated) reason = 'Command terminated due to output size limit';
+          else if (signal) reason = `Command terminated by signal ${signal}`;
 
           resolve({ 
             ok: false, 

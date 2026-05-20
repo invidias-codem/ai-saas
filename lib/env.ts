@@ -25,6 +25,11 @@ const envSchema = z.object({
   GOOGLE_LOCATION: z.string().min(1).default("us-central1"), // e.g., "us-central1"
 
   GCP_SERVICE_ACCOUNT_KEY_JSON: z.string().min(1, { message: "GCP_SERVICE_ACCOUNT_KEY_JSON (raw JSON) is required for Google Cloud APIs" }).optional(),
+  GCP_PROJECT_ID: z.string().min(1).optional(),
+  FIREBASE_PROJECT_ID: z.string().min(1).optional(),
+  FIREBASE_CLIENT_EMAIL: z.string().min(1).optional(),
+  FIREBASE_PRIVATE_KEY: z.string().min(1).optional(),
+  GOOGLE_APPLICATION_CREDENTIALS: z.string().min(1).optional(),
 
   // RAG Memory Configuration
   NEXT_PUBLIC_RAG_ENABLED: z.string().optional().default("true"),

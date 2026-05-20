@@ -1,4 +1,5 @@
 import type { ToolExecutionResult } from './types';
+import { LocalIOHarness } from './LocalIOHarness';
 
 /**
  * The IOHarness is the abstract execution boundary for all tool actions.
@@ -36,3 +37,25 @@ export interface IOHarness {
    */
   runCommand(command: string, timeoutMs?: number): Promise<ToolExecutionResult>;
 }
+
+export interface HarnessConfig {
+  env: 'local' | 'antigravity';
+  workspaceRoot: string;
+  antigravityEndpoint?: string;
+  antigravityToken?: string;
+}
+
+export class HarnessFactory {
+  public static async create(config: HarnessConfig): Promise<IOHarness> {
+    if (config.env === 'local') {
+      const harness = new LocalIOHarness(config.workspaceRoot);
+      await harness.initialize();
+      return harness;
+    }
+    if (config.env === 'antigravity') {
+      throw new Error('Antigravity harness not yet implemented.');
+    }
+    throw new Error(`Unsupported harness environment: ${(config as any).env}`);
+  }
+}
+
