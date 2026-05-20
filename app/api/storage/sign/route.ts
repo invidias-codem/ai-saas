@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { getStorageClient, getStorageProjectId, GCPConfigurationError } from '@/lib/gcp/storage';
+import { getStorageClient, getStorageProjectId, GCPConfigurationError } from '../../../../lib/gcp/storage';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
