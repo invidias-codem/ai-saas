@@ -15,7 +15,7 @@ function logDebug(message: string, data?: any) {
     return;
   }
   try {
-    const logPath = path.join(process.cwd(), 'debug_slack.log');
+    const logPath = path.join(/*turbopackIgnore: true*/ process.cwd(), 'debug_slack.log');
     const timestamp = new Date().toISOString();
     const logEntry = `[${timestamp}] ${message}\n${data ? JSON.stringify(data, null, 2) + '\n' : ''}`;
     fs.appendFileSync(logPath, logEntry);

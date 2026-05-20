@@ -40,14 +40,14 @@ describe('Genie Kindness & Context Logic', () => {
 
     describe('KINDNESS_SYSTEM_PROMPT', () => {
         it('contains key persona traits', () => {
-            expect(KINDNESS_SYSTEM_PROMPT).toContain('Killer Kindness');
-            expect(KINDNESS_SYSTEM_PROMPT).toContain('empathetic');
-            expect(KINDNESS_SYSTEM_PROMPT).toContain('positive');
+            expect(KINDNESS_SYSTEM_PROMPT).toContain('Friendly Professional');
+            expect(KINDNESS_SYSTEM_PROMPT).toContain('direct');
+            expect(KINDNESS_SYSTEM_PROMPT).toContain('supportive');
         });
 
-        it('contains defusal instructions', () => {
-            expect(KINDNESS_SYSTEM_PROMPT.toLowerCase()).toContain('defusal');
-            expect(KINDNESS_SYSTEM_PROMPT).toContain('negative');
+        it('contains negativity handling instructions', () => {
+            expect(KINDNESS_SYSTEM_PROMPT.toLowerCase()).toContain('negativity');
+            expect(KINDNESS_SYSTEM_PROMPT).toContain('Pivot');
         });
     });
 

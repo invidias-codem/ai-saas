@@ -711,7 +711,7 @@ async function handleBlockActions(
           try {
             // Dynamic path construction to bypass Turbopack static analysis
     const scriptSegments = ['.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs'];
-    const scriptPath = path.join(process.cwd(), ...scriptSegments);
+    const scriptPath = path.join(/*turbopackIgnore: true*/ process.cwd(), ...scriptSegments);
             // Security fix (CodeQL #31, #23): use execFileSync with array args —
             // never interpolate user-controlled values into a shell command string.
             execFileSync('node', [scriptPath, task, '--execute-plan', JSON.stringify(plan)], {
@@ -909,7 +909,7 @@ async function handleViewSubmission(
                 elements: [
                   {
                     type: 'mrkdwn',
-                    text: `🧞 * Genie * • Asked by < @${user.id} > `,
+                    text: `\uD83E\uDDDE * Genie * • Asked by < @${user.id} > `,
                   },
                 ],
               },
@@ -1021,7 +1021,7 @@ async function handleShortcut(
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: `📝 * Summary * • Requested by < @${user.id}> `,
+                  text: `\uD83D\uDCDD * Summary * • Requested by < @${user.id}> `,
                 },
               ],
             },
@@ -1056,7 +1056,7 @@ async function handleShortcut(
               elements: [
                 {
                   type: 'mrkdwn',
-                  text: `💡 * Explanation * • Requested by < @${user.id}> `,
+                  text: `\uD83D\uDCA1 * Explanation * • Requested by < @${user.id}> `,
                 },
               ],
             },
