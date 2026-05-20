@@ -15,12 +15,13 @@ import { CODE_MODELS } from '@/lib/llm/codeModels';
 import { logger } from "@/lib/logger";
 import { ContextTokenManager } from '@/lib/context/ContextTokenManager';
 import { PreparedContextSections } from '@/lib/context/types';
+import type { FileAttachmentInput } from '@/lib/types/attachments';
 
 export interface ContextAggregatorParams {
   userId: string;
   clerkUser: any;
   userQuery: string;
-  fileData?: { name?: string; type?: string; base64Data: string; mimeType?: string };
+  fileData?: FileAttachmentInput;
   activeRepo?: string;
   resolvedContext: any;
   routingDecision: any;
@@ -36,11 +37,9 @@ export async function gatherCodeContext(params: ContextAggregatorParams) {
   const operatingProfileName = resolvedContext.operatingProfileName ?? resolvedContext.operatingProfileId ?? 'resolved';
   const effectiveWorkspaceId = resolvedContext.workspaceId;
 
-  // 1. Gather comprehensive user context
   const userContext = await gatherUserContext(userId, clerkUser);
   const userContextPrompt = formatUserContextForPrompt(userContext);
 
-  // 2. Parallel Context Gathering (Tiered Memory for Code)
   const [
     allFacts,
     researchResult,
@@ -49,7 +48,7 @@ export async function gatherCodeContext(params: ContextAggregatorParams) {
     workspaceMemoryContext,
   ] = await Promise.all([
     getHighConfidenceFacts(userId),
-    performResearch(userQuery, userContextPrompt, { hasFileAttachment: !!(fileData && fileData.base64Data) }),
+    performResearch(userQuery, userContextPrompt, { hasFileAttachment: !!fileData }),
     findRelatedEntities(userId, userQuery),
     getUserProfile(userId),
     effectiveWorkspaceId ? getWorkspaceMemoryContext(userId, effectiveWorkspaceId, userQuery) : Promise.resolve({ contextString: '', sources: [] })
@@ -126,14 +125,13 @@ export async function gatherCodeContext(params: ContextAggregatorParams) {
     };
 
     const allocation = ContextTokenManager.assembleContext(
-      '', // No system instruction context computed here, it resides in codeEngine.ts
+      '',
       sections,
       { modelId: modelConfig.modelId, userQuery }
     );
     enhancedPromptText = allocation.packedContext + '\n\n' + operatingProfileContext + baseInstruction;
   } catch (err) {
     console.warn("[ContextAggregator] Token allocation failed, falling back:", err);
-    // Fallback to raw concatenation
     enhancedPromptText =
       userContextPrompt +
       userProfileContext +

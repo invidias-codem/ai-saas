@@ -15,14 +15,12 @@ import { trackAIError } from "@/lib/analytics/track";
 import { logger } from "@/lib/logger";
 import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import type { RuntimeProfileSignals, OperatingProfileMode } from '@/lib/workspaces/runtimeMode';
+import type { FileAttachmentInput } from '@/lib/types/attachments';
 
 export const runtime = 'nodejs';
 
-
-
 export async function POST(req: Request) {
   try {
-    // 1. Authentication
     const user = await requireAuth();
     const clerkUser = await currentUser();
     const ip = getClientIP(req);
@@ -31,7 +29,6 @@ export async function POST(req: Request) {
       return new NextResponse("User profile not found", { status: 401 });
     }
 
-    // 2. Rate Limiting (AI endpoint - strict limits)
     const rateLimit = await limitApiEndpoint(user.userId, ip, 'ai');
     if (!rateLimit.success) {
       return NextResponse.json(
@@ -46,9 +43,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Validate Request Size
     const body = await req.json();
-    validateRequestSize(body, 10 * 1024 * 1024); // 10MB for code files
+    validateRequestSize(body, 10 * 1024 * 1024);
 
     const { messages, currentUserPrompt, fileData, model = 'fast', activeRepo, workspaceId, operatingProfileId, operatingProfileMode, conversationId } = body;
     let modelConfig = CODE_MODELS[model] || CODE_MODELS.fast;
@@ -71,17 +67,13 @@ export async function POST(req: Request) {
     const effectiveProfile = resolved.profile;
     const operatingProfileResolvedMode = resolved.mode;
     const operatingProfileName = resolved.operatingProfileName ?? resolved.operatingProfileId ?? 'resolved';
-    
-    // Fallback if needed for workspaceId, operatingProfileId locally
     const effectiveWorkspaceId = resolved.workspaceId;
     const effectiveOperatingProfileId = resolved.operatingProfileId;
 
-    // 4. Input Validation
     if (!messages && (!currentUserPrompt && !fileData)) {
       return new NextResponse("Messages or prompt/file are required", { status: 400 });
     }
 
-    // Validate file if provided
     if (fileData) {
       const fileValidation = fileUploadSchema.safeParse(fileData);
       if (!fileValidation.success) {
@@ -90,26 +82,24 @@ export async function POST(req: Request) {
           { status: 400 }
         );
       }
-      // Size check for base64 data (rough estimate: base64 is ~1.33x original)
-      const estimatedSize = fileData.base64Data.length * 0.75;
-      if (estimatedSize > 5 * 1024 * 1024) { // 5MB file limit
-        return NextResponse.json(
-          { error: 'File too large', details: 'Maximum file size is 5MB' },
-          { status: 400 }
-        );
+      if (fileData.base64Data) {
+        const estimatedSize = fileData.base64Data.length * 0.75;
+        if (estimatedSize > 5 * 1024 * 1024) {
+          return NextResponse.json(
+            { error: 'File too large', details: 'Maximum inline file size is 5MB' },
+            { status: 400 }
+          );
+        }
       }
     }
 
-    // Adapt history (strip file placeholders)
-    // Adapt history (restore files from persistent history)
     const history = (messages || []).slice(0, -1).map((msg: {
       role: string;
       text: string;
-      fileData?: { mimeType?: string; type?: string; base64Data: string; name: string }
+      fileData?: FileAttachmentInput
     }) => {
       const parts: Part[] = [{ text: msg.text || '' }];
 
-      // Re-attach file if present in history
       if (msg.fileData && msg.fileData.base64Data) {
         parts.push({
           inlineData: {
@@ -125,7 +115,6 @@ export async function POST(req: Request) {
       };
     });
 
-    // 5. Pre-generation Credit Check (Atomic)
     const cost = CREDIT_COSTS.CODE_GENERATION;
     const idempotencyKey = req.headers.get('idempotency-key') || `code-${user.userId}-${Date.now()}`;
     const bypassCredits = await hasUnlimitedUsageAccess(user.userId);
@@ -166,7 +155,6 @@ export async function POST(req: Request) {
       messagesLength: messages?.length || 0
     });
     
-    // Ensure we use the possibly updated modelConfig from the engine
     modelConfig = finalModelConfig;
 
     waitUntil(
@@ -202,7 +190,6 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[CODE_API_ERROR]", error);
 
-    // Handle auth/validation errors
     const authResponse = handleAuthError(error);
     if (authResponse) return authResponse;
 

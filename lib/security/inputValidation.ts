@@ -20,17 +20,26 @@ export const shortString = z.string().min(1).max(100);
 export const mediumString = z.string().min(1).max(500);
 export const longString = z.string().min(1).max(10000);
 
+// Shared attachment schema
+export const fileUploadSchema = z.object({
+    base64Data: z.string().min(1).optional(),
+    fileUri: z.string().max(1024).optional(),
+    type: z.string().regex(/^[a-z]+\/[a-z0-9\-\+\.]+$/i, 'Invalid MIME type'),
+    mimeType: z.string().regex(/^[a-z]+\/[a-z0-9\-\+\.]+$/i, 'Invalid MIME type').optional(),
+    name: z.string().min(1).max(255).optional(),
+    sizeBytes: z.number().int().positive().optional(),
+    storageProvider: z.enum(['gcs']).optional(),
+}).refine(
+    value => Boolean(value.base64Data || value.fileUri),
+    'Either base64Data or fileUri is required'
+);
+
 // Message/prompt schemas
 export const promptSchema = z.string().min(1).max(50000); // 50k character limit
 export const messageSchema = z.object({
     role: z.enum(['user', 'assistant', 'bot', 'system']),
     text: z.string().min(1),
-    fileData: z.object({
-        base64Data: z.string(),
-        type: z.string(),
-        name: z.string().optional(),
-        mimeType: z.string().optional(),
-    }).optional(),
+    fileData: fileUploadSchema.optional(),
 });
 
 // Conversation schemas
@@ -40,13 +49,6 @@ export const messageIdSchema = uuidSchema;
 // Memory operation schemas
 export const memoryTypeSchema = z.enum(['fact', 'preference', 'event', 'context']);
 export const featureTypeSchema = z.enum(['conversation', 'code', 'image', 'video', 'music']);
-
-// File upload schemas
-export const fileUploadSchema = z.object({
-    base64Data: z.string().min(1),
-    type: z.string().regex(/^[a-z]+\/[a-z0-9\-\+\.]+$/i, 'Invalid MIME type'),
-    name: z.string().min(1).max(255).optional(),
-});
 
 // Image generation schemas
 export const aspectRatioSchema = z.enum([
