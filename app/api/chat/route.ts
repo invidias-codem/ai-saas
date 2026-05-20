@@ -10,12 +10,13 @@ import {
 } from '@/lib/llm/conversationEngine';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
-import { promptSchema, validateRequestSize, ValidationError } from '@/lib/security/inputValidation';
+import { promptSchema, validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
 import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
 import type { AgentMode } from '@/lib/llm/types';
 import type { RuntimeProfileSignals } from '@/lib/workspaces/runtimeMode';
 import type { UcolRequestPacket, UcolResolvedContext } from '@/lib/ucol/routing/types';
+import type { FileAttachmentInput } from '@/lib/types/attachments';
 
 
 export async function POST(req: Request) {
@@ -47,7 +48,12 @@ export async function POST(req: Request) {
         const body = await req.json();
         validateRequestSize(body, 5 * 1024 * 1024);
 
-        const { prompt, conversationId, fileData, messages } = body;
+        const { prompt, conversationId, fileData, messages } = body as {
+            prompt: string;
+            conversationId?: string;
+            fileData?: FileAttachmentInput;
+            messages?: Array<{ role: string; text: string }>;
+        };
 
         const promptValidation = promptSchema.safeParse(prompt);
         if (!promptValidation.success) {
@@ -64,6 +70,26 @@ export async function POST(req: Request) {
             );
         }
 
+        if (fileData) {
+            const fileValidation = fileUploadSchema.safeParse(fileData);
+            if (!fileValidation.success) {
+                return NextResponse.json(
+                    { error: 'Validation Error', details: fileValidation.error.flatten() },
+                    { status: 400 }
+                );
+            }
+
+            if (fileData.base64Data) {
+                const estimatedSize = fileData.base64Data.length * 0.75;
+                if (estimatedSize > 5 * 1024 * 1024) {
+                    return NextResponse.json(
+                        { error: 'File too large', details: 'Maximum inline file size is 5MB' },
+                        { status: 400 }
+                    );
+                }
+            }
+        }
+
         const resolved = await resolveRuntimeContext({ userId: user.userId, surface: 'web', conversationId, strictValidation: false });
         const effectiveMode = resolved.mode;
 
@@ -77,8 +103,14 @@ export async function POST(req: Request) {
             attachments: fileData ? [{
                 id: 'primary-upload',
                 type: 'document',
-                mimeType: fileData.type,
-                metadata: { providedByChatRoute: true },
+                mimeType: fileData.mimeType || fileData.type,
+                metadata: {
+                    providedByChatRoute: true,
+                    name: fileData.name,
+                    fileUri: fileData.fileUri,
+                    sizeBytes: fileData.sizeBytes,
+                    storageProvider: fileData.storageProvider,
+                },
             }] : [],
             trustContext: {
                 canUseExternalActions: false,
@@ -112,8 +144,15 @@ export async function POST(req: Request) {
 
         const requestPayload = {
             messages: [...(messages || []), { role: 'user', text: prompt }],
-            fileData: fileData?.base64Data,
-            mimeType: fileData?.type,
+            fileData: fileData ? {
+                name: fileData.name,
+                type: fileData.type,
+                mimeType: fileData.mimeType || fileData.type,
+                sizeBytes: fileData.sizeBytes,
+                base64Data: fileData.base64Data,
+                fileUri: fileData.fileUri,
+                storageProvider: fileData.storageProvider,
+            } : undefined,
             mode: effectiveMode
         };
 

@@ -10,6 +10,8 @@ import { runBackgroundOptimization, InteractionFeedback } from '@/lib/ucol/routi
 import { addNode } from '@/lib/memory/graphStore';
 import { trackAIGeneration, trackCreditsDeducted } from "@/lib/analytics/track";
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import type { FileAttachmentInput } from '@/lib/types/attachments';
+import { resolveAttachmentForAnalysis } from '@/lib/gcp/fileResolver';
 
 export interface PostGenerationPipelineParams {
   userId: string;
@@ -22,7 +24,7 @@ export interface PostGenerationPipelineParams {
   userQuery: string;
   responseText: string;
   history: { role: string; text: string }[];
-  fileData?: { name?: string; type?: string; base64Data: string; mimeType?: string } | null;
+  fileData?: FileAttachmentInput | null;
   
   modelId: string;
   cost?: number;
@@ -40,9 +42,6 @@ export interface PostGenerationPipelineParams {
   };
   
   saveToMemory?: boolean;
-  
-  // If true, the pipeline will persist BOTH user and assistant messages.
-  // If false, it only persists the assistant message (e.g., if user message was already saved).
   persistUserMessage?: boolean; 
 }
 
@@ -52,6 +51,18 @@ function chunkText(text: string, size: number = 2000): string[] {
     chunks.push(text.slice(i, i + size));
   }
   return chunks;
+}
+
+function toPersistedFileData(fileData?: FileAttachmentInput | null) {
+  if (!fileData) return null;
+  return {
+    name: fileData.name,
+    type: fileData.type,
+    mimeType: fileData.mimeType,
+    sizeBytes: fileData.sizeBytes,
+    fileUri: fileData.fileUri,
+    storageProvider: fileData.storageProvider,
+  };
 }
 
 export async function runPostGenerationPipeline(params: PostGenerationPipelineParams) {
@@ -85,23 +96,18 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
       { role: 'assistant', content: responseText }
     ]);
 
-    // ── RFC-001 WMRT: Tag all messages with trust tier before storage ──
     const rawHistory = history.map(msg => ({
       role: (msg.role === 'bot' || msg.role === 'model' || msg.role === 'assistant' ? 'assistant' : 'user') as "user" | "assistant" | "system",
       content: msg.text,
     }));
     
     const taggedHistory = tagMessagesForStorage(rawHistory, modelId);
-    
-    // Append the current turn
     taggedHistory.push(
       { role: 'user', content: userQuery, trust_tier: 'UNVERIFIED' as const, tagged_at: new Date().toISOString() },
       tagLLMMessage(responseText, modelId),
     );
     const wmrtMeta = extractWMRTMetadata(taggedHistory, modelId);
-    // ──────────────────────────────────────────────────────────────────
 
-    // 1. Memory Capture
     captureMemory(
       userId,
       featureType,
@@ -120,25 +126,24 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
         operatingProfileMode: operatingProfileMode || null,
         hasFileAttachment: !!fileData,
         fileName: fileData?.name,
+        fileUri: fileData?.fileUri,
         ...wmrtMeta,
       }
     ).catch(err => console.error('[WMRT] Memory capture failed:', err));
 
-    // 2. RAG Indexing for Attached Files (Explicit Save)
-    if (saveToMemory && fileData && fileData.base64Data) {
+    if (saveToMemory && fileData) {
       (async () => {
         try {
-          const decodedContent = Buffer.from(fileData.base64Data, 'base64').toString('utf-8');
-          const fileName = fileData.name || 'uploaded_file';
+          const resolvedAttachment = await resolveAttachmentForAnalysis(fileData);
+          const decodedContent = resolvedAttachment.textContent;
+          const fileName = resolvedAttachment.name || 'uploaded_file';
 
-          // Heuristic check to avoid binary indexing
-          if (/[\x00-\x08\x0E-\x1F]/.test(decodedContent.substring(0, 100))) {
-            console.warn(`[Code RAG] Skipping indexing for ${fileName} - appears binary.`);
+          if (!decodedContent) {
+            console.warn(`[Code RAG] Skipping indexing for ${fileName} - no text content available.`);
             return;
           }
 
           const chunks = chunkText(decodedContent, 3000); 
-          let indexedCount = 0;
           for (let i = 0; i < chunks.length; i++) {
             const chunk = chunks[i];
             const contextPrefix = `[File: ${fileName} | Part ${i + 1}/${chunks.length}]\n`;
@@ -149,13 +154,13 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
               'fact', 
               {
                 featureType,
-                fileName: fileName,
+                fileName,
                 chunkIndex: i,
                 totalChunks: chunks.length,
-                language: fileData.type
+                language: resolvedAttachment.mimeType,
+                fileUri: resolvedAttachment.fileUri,
               }
             );
-            indexedCount++;
           }
         } catch (err) {
           console.error('[Code RAG] Indexing failed:', err);
@@ -163,11 +168,9 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
       })();
     }
 
-    // 3. Background Optimizer
     (async () => {
       try {
         const usedMemoryIds = intelligentFacts.map((f: any) => f.id).filter(Boolean);
-        
         const feedback: InteractionFeedback = {
           frustrationSignal: routingDecision?.intent?.urgency === 'high',
           semanticSentiment: 0.1, 
@@ -195,7 +198,6 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
       }
     })();
 
-    // 4. Knowledge Graph Extraction
     (async () => {
       try {
         if (tags.length > 0) {
@@ -211,7 +213,6 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
       }
     })();
 
-    // 5. Database Message Persistence
     if (conversationId && supabaseAdmin) {
       try {
         if (persistUserMessage) {
@@ -222,11 +223,7 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
               role: 'user',
               content: userQuery.trim() || (fileData ? `[Analysing File: ${fileData?.name || 'attached file'}]` : ''),
               metadata: {
-                fileData: fileData ? {
-                  name: fileData.name,
-                  type: fileData.type,
-                  base64Data: fileData.base64Data,
-                } : null,
+                fileData: toPersistedFileData(fileData),
                 featureType,
               },
             });
@@ -238,7 +235,7 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
           .from('messages')
           .insert({
             conversation_id: conversationId,
-            role: 'bot', // We usually store bot/assistant here.
+            role: 'bot',
             content: responseText,
             metadata: { featureType, ...wmrtMeta },
           });
@@ -249,7 +246,6 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
       }
     }
 
-    // 6. Analytics & Logging
     console.log(`[${featureType.toUpperCase()}] User: ${userContext.fullName} (${userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
 
     void trackAIGeneration({ tool: featureType, userId, success: true });

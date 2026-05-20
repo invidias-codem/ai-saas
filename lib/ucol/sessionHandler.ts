@@ -9,12 +9,13 @@ import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
 import type { UcolRequestPacket, UcolRoutingDecision } from '@/lib/ucol/routing/types';
 import type { RuntimeContextResult } from '@/lib/ucol/runtimeContextResolver';
 import type { User } from '@clerk/nextjs/server';
+import type { FileAttachmentInput } from '@/lib/types/attachments';
 
 export interface SessionSetupOptions {
     req: Request;
     maxRequestSizeBytes: number;
     surface: 'web' | 'api';
-    rateLimitFeature?: 'ai' | 'query' | 'mutation' | 'webhook'; // defaults to 'ai'
+    rateLimitFeature?: 'ai' | 'query' | 'mutation' | 'webhook';
     strictValidation?: boolean;
 }
 
@@ -36,7 +37,6 @@ export async function setupUcolSession({
     rateLimitFeature = 'ai',
     strictValidation = false
 }: SessionSetupOptions): Promise<SessionSetupResult> {
-    // 1. Authentication
     const user = await requireAuth();
     const clerkUser = await currentUser();
     const ip = getClientIP(req);
@@ -45,7 +45,6 @@ export async function setupUcolSession({
         return { errorResponse: NextResponse.json({ error: 'User profile not found' }, { status: 401 }) };
     }
 
-    // 2. Rate Limiting
     const rateLimit = await limitApiEndpoint(user.userId, ip, rateLimitFeature);
     if (!rateLimit.success) {
         return {
@@ -64,13 +63,11 @@ export async function setupUcolSession({
         };
     }
 
-    // 3. Request Body Parsing & Size Validation
     const body = await req.json();
     validateRequestSize(body, maxRequestSizeBytes);
 
-    // 4. Basic Input Validation
     const rawInput = body.prompt || body.currentUserPrompt || '';
-    const fileData = body.fileData;
+    const fileData = body.fileData as FileAttachmentInput | undefined;
     const messages = body.messages || [];
 
     if (rawInput && (typeof rawInput !== 'string' || rawInput.length > 50000)) {
@@ -81,7 +78,6 @@ export async function setupUcolSession({
         return { errorResponse: NextResponse.json({ error: 'Validation Error', details: 'Maximum 100 messages allowed in history' }, { status: 400 }) };
     }
 
-    // 5. Runtime Context Resolution
     const conversationId = body.conversationId;
     const workspaceId = body.workspaceId;
     const operatingProfileId = body.operatingProfileId;
@@ -101,7 +97,6 @@ export async function setupUcolSession({
         return { errorResponse: NextResponse.json({ error: resolvedContext.error.message }, { status: resolvedContext.error.status || 400 }) };
     }
 
-    // 6. Packet Construction
     const requestPacket: UcolRequestPacket = {
         requestId: req.headers.get('x-request-id') || randomUUID(),
         userId: user.userId,
@@ -113,7 +108,13 @@ export async function setupUcolSession({
             id: 'primary-upload',
             type: 'document',
             mimeType: fileData.mimeType || fileData.type || 'text/plain',
-            metadata: { providedByRoute: true, name: fileData.name },
+            metadata: {
+                providedByRoute: true,
+                name: fileData.name,
+                fileUri: fileData.fileUri,
+                sizeBytes: fileData.sizeBytes,
+                storageProvider: fileData.storageProvider,
+            },
         }] : [],
         trustContext: {
             canUseExternalActions: false,
@@ -123,7 +124,6 @@ export async function setupUcolSession({
         createdAt: new Date().toISOString(),
     };
 
-    // 7. Initial Routing Decision
     const routingDecision = buildInitialRoutingDecision({
         request: requestPacket,
         context: resolvedContext.ucolContext,
