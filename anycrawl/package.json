@@ -39,7 +39,7 @@
         "knip": "^5.47.0",
         "prettier": "^3.5.3",
         "tsx": "^4.19.4",
-        "turbo": "^2.4.4",
+        "turbo": "^2.9.14",
         "typescript": "5.8.2"
     },
     "packageManager": "pnpm@10.12.4",
