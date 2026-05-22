@@ -7,6 +7,7 @@ export const COST_ESTIMATES = {
     QODO_PR_REVIEW: 0.10,           // OpenAI embeddings per PR
     GENIE_PR_REVIEW: 0.05,          // Gemini embeddings per PR
     CODEBASE_INDEX_PER_FILE: 0.002, // Per file indexed
+    CODEBASE_INDEX_PER_CHUNK: 0.0005, // Per AST chunk indexed
     KNOWLEDGE_SYNC: 0.01,           // Per sync operation
 } as const;
 

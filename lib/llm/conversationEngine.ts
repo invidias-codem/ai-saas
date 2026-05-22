@@ -5,6 +5,7 @@ import { tagMessagesForStorage, tagLLMMessage, extractWMRTMetadata } from "@/lib
 import { classifyQuery } from '@/lib/ucol/agentRouter';
 import { resolveProviderForMode } from '@/lib/ucol/routing/providerResolver';
 import { createPreparedContextPlanFromMemoryPlan, prepareContextBundle, layoutPromptContext } from '@/lib/context/preparedContext';
+import { ContextTokenManager } from '@/lib/context/ContextTokenManager';
 
 import { ExtractedFact } from '../intelligentMemory';
 import { SearchResult } from '../integrations/anyCrawl';
@@ -79,6 +80,12 @@ export type ConversationEngineOptions = {
 
   /** Optional UCOL-resolved memory plan to drive prepared-context assembly. */
   memoryPlan?: UcolMemoryPlan;
+
+  /** Local workspace execution harness */
+  ioHarness?: import('@/lib/harness/IOHarness').IOHarness;
+
+  /** Slack UI update callback for agent loops */
+  slackStreamCallback?: (step: import('@/lib/agents/core/types').TrajectoryStep) => void;
 };
 
 export type ConversationEngineResult = {
@@ -163,6 +170,8 @@ export async function generateConversationReply(
     const { webSearchTool } = await import('@/lib/agents/tools/webSearch');
     const { researchWriterTool } = await import('@/lib/agents/tools/researchWriter');
     const { novelWriterTool } = await import('@/lib/agents/tools/novelWriter');
+    const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
+    const { readFileTool, writeFileTool, patchFileTool, runCommandTool } = await import('@/lib/agents/tools/harnessTools');
 
     // 1. Initialize Registry with all agentic tools
     const registry = new ToolRegistry();
@@ -170,6 +179,13 @@ export async function generateConversationReply(
     registry.register(webSearchTool);
     registry.register(researchWriterTool);
     registry.register(novelWriterTool);
+    registry.register(searchCodebaseTool);
+    if (options.ioHarness) {
+      registry.register(readFileTool);
+      registry.register(writeFileTool);
+      registry.register(patchFileTool);
+      registry.register(runCommandTool);
+    }
 
     // 2. Construct Prompt (Multimodal support)
     const userQuery = parsed.messages[parsed.messages.length - 1]?.text || "";
@@ -204,7 +220,9 @@ export async function generateConversationReply(
       userId,
       sessionId: 'session-' + Date.now(), // specific session tracking if needed
       history: [], // We could map `parsed.messages` to history if desired
-      enableTelemetry: true
+      enableTelemetry: true,
+      ioHarness: options.ioHarness,
+      onStep: options.slackStreamCallback
     }, registry);
 
     // 4. Wrap result in ReadableStream to match expected output
@@ -352,10 +370,28 @@ export async function generateConversationReply(
     }
   }
 
-  const promptLayout = layoutPromptContext(getSystemInstruction(), preparedContext.sections, 6000);
+  const modelLimits = ContextTokenManager.getModelLimits(actualModelId);
+  const GENERATION_HEADROOM = 16000;
+  const TOOL_SCHEMA_ESTIMATE = 3000;
+  const maxContextBudget = Math.max(0, modelLimits.totalMax - GENERATION_HEADROOM - TOOL_SCHEMA_ESTIMATE);
 
-  const enhancedSystemInstruction = getSystemInstruction() +
-    "\n\n" + promptLayout.packedContext;
+  const allocation = ContextTokenManager.assembleContext(
+    getSystemInstruction(),
+    preparedContext.sections,
+    {
+      modelId: actualModelId,
+      userQuery,
+      customBudget: maxContextBudget
+    }
+  );
+
+  let enhancedSystemInstruction = getSystemInstruction() +
+    "\n\n" + allocation.packedContext;
+
+  if (allocation.omittedSections && allocation.omittedSections.length > 0) {
+    const droppedCount = allocation.omittedSections.length;
+    enhancedSystemInstruction += `\n\n[SYSTEM WARNING: ${droppedCount} context blocks were omitted due to length limits. Ask the user for clarification if you lack context.]`;
+  }
 
   // Format history for provider
   const history: ChatMessage[] = [

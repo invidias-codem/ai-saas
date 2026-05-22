@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
         }
 
         // 3. Filter to code files
-        const codeFiles = treeData.tree.filter((item) => {
+        const codeFiles = treeData.tree.filter((item: any) => {
             if (item.type !== "blob") return false;
             if (!item.path) return false;
 
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
         const BATCH_SIZE = 5;
         for (let i = 0; i < codeFiles.length; i += BATCH_SIZE) {
             const batch = codeFiles.slice(i, i + BATCH_SIZE);
-            await Promise.all(batch.map(async (file) => {
+            await Promise.all(batch.map(async (file: any) => {
                 try {
                     // Skip large files (if size is known in tree)
                     if (file.size && file.size > MAX_FILE_SIZE) {

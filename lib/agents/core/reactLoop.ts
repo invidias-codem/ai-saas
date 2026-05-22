@@ -104,6 +104,10 @@ export async function runReActLoop(
                 action: { type: functionCallPart ? 'tool_use' : 'final_answer' }
             });
 
+            if (context.onStep) {
+                context.onStep(trajectory[trajectory.length - 1]);
+            }
+
             // Case A: Final Answer
             if (!functionCallPart) {
                 return {
@@ -131,6 +135,7 @@ export async function runReActLoop(
                     status: 'pending_approval',
                     summary: 'Halted for user approval'
                 };
+                if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
                 return {
                     answer: "I need your approval to proceed with this action.",
                     trajectory,
@@ -151,6 +156,7 @@ export async function runReActLoop(
                     status: 'success',
                     data: execResult.data
                 };
+                if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
 
                 // Construct FunctionResponse for Vertex AI
                 promptToSend = [{
@@ -170,6 +176,7 @@ export async function runReActLoop(
                     status: 'error',
                     error: execResult.error
                 };
+                if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
 
                 // Send error back as function response so model knows it failed
                 promptToSend = [{

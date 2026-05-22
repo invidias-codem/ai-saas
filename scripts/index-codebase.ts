@@ -6,8 +6,6 @@ const envPath = path.resolve(process.cwd(), '.env.local');
 console.log(`📡 Loading env from: ${envPath}`);
 config({ path: envPath });
 
-import { codebaseIndexer } from '../lib/rag/codebaseIndexer';
-
 async function main() {
     const args = process.argv.slice(2);
     const options = {
@@ -24,7 +22,7 @@ async function main() {
             options.dryRun = true;
         } else if (arg === '--help') {
             console.log(`
-Genie Codebase Indexer CLI 🚀
+Backup Genie Codebase Indexer CLI 🚀
 
 Usage:
   npx tsx scripts/index-codebase.ts [options]
@@ -40,12 +38,15 @@ Options:
 
     try {
         console.log('🏗️  Initializing Genie Codebase Indexer...');
+        
+        // Dynamically import codebaseIndexer after dotenv setup is complete
+        const { codebaseIndexer } = await import('../lib/rag/codebaseIndexer');
 
         const result = await codebaseIndexer.index({
             basePath: options.basePath,
             dryRun: options.dryRun,
             excludePatterns: [], // Uses defaults in service
-            includeExtensions: ['.ts', '.tsx', '.js', '.jsx', '.sql', '.md']
+            includeExtensions: ['.ts', '.tsx', '.js', '.jsx', '.go', '.sql', '.md']
         });
 
         if (options.dryRun) {
