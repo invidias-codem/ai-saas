@@ -123,61 +123,100 @@ export async function POST(req: Request) {
       .eq('is_default', true)
       .maybeSingle();
 
-    const { data: profile, error: profileError } = await supabaseAdmin
+    let { data: profile, error: profileFetchError } = await supabaseAdmin
       .from('operating_profiles')
-      .insert({
-        user_id: user.userId,
-        name: profileName,
-        slug: profileSlug,
-        mode: operatingMode,
-        description: `Generated from onboarding for ${workIntent}`,
-        is_default: !existingDefault,
-        is_system_preset: false,
-        ...profileConfig,
-      })
       .select()
-      .single();
+      .eq('user_id', user.userId)
+      .eq('slug', profileSlug)
+      .maybeSingle();
 
-    if (profileError) throw profileError;
+    if (profileFetchError) throw profileFetchError;
+
+    if (!profile) {
+      const { data: newProfile, error: profileError } = await supabaseAdmin
+        .from('operating_profiles')
+        .insert({
+          user_id: user.userId,
+          name: profileName,
+          slug: profileSlug,
+          mode: operatingMode,
+          description: `Generated from onboarding for ${workIntent}`,
+          is_default: !existingDefault,
+          is_system_preset: false,
+          ...profileConfig,
+        })
+        .select()
+        .single();
+
+      if (profileError) throw profileError;
+      profile = newProfile;
+    }
 
     const workspaceSlug = slugify(workspaceName);
-    const { data: workspace, error: workspaceError } = await supabaseAdmin
+    
+    let { data: workspace, error: workspaceFetchError } = await supabaseAdmin
       .from('workspaces')
-      .insert({
-        user_id: user.userId,
-        name: workspaceName,
-        slug: workspaceSlug,
-        description: workspaceDescription || null,
-        kind: workIntent === 'coding' ? 'project' : workIntent === 'research' ? 'research' : 'personal',
-        status: 'active',
-        is_default: !existingDefault,
-        onboarding_state: 'configured',
-        default_operating_profile_id: profile.id,
-      })
       .select()
-      .single();
+      .eq('user_id', user.userId)
+      .eq('slug', workspaceSlug)
+      .maybeSingle();
 
-    if (workspaceError) throw workspaceError;
+    if (workspaceFetchError) throw workspaceFetchError;
+
+    if (!workspace) {
+      const { data: newWorkspace, error: workspaceError } = await supabaseAdmin
+        .from('workspaces')
+        .insert({
+          user_id: user.userId,
+          name: workspaceName,
+          slug: workspaceSlug,
+          description: workspaceDescription || null,
+          kind: workIntent === 'coding' ? 'project' : workIntent === 'research' ? 'research' : 'personal',
+          status: 'active',
+          is_default: !existingDefault,
+          onboarding_state: 'configured',
+          default_operating_profile_id: profile.id,
+        })
+        .select()
+        .single();
+
+      if (workspaceError) throw workspaceError;
+      workspace = newWorkspace;
+    }
 
     await supabaseAdmin.from('workspace_state').upsert({
       workspace_id: workspace.id,
       last_open_tab: 'overview',
     });
 
-    const { data: conversation, error: conversationError } = await supabaseAdmin
+    const conversationTitle = `Welcome to ${workspaceName}`;
+    
+    let { data: conversation, error: conversationFetchError } = await supabaseAdmin
       .from('conversations')
-      .insert({
-        user_id: user.userId,
-        workspace_id: workspace.id,
-        operating_profile_id: profile.id,
-        title: `Welcome to ${workspaceName}`,
-        is_deleted: false,
-        is_archived: false,
-      })
       .select()
-      .single();
+      .eq('workspace_id', workspace.id)
+      .eq('title', conversationTitle)
+      .maybeSingle();
 
-    if (conversationError) throw conversationError;
+    if (conversationFetchError) throw conversationFetchError;
+
+    if (!conversation) {
+      const { data: newConversation, error: conversationError } = await supabaseAdmin
+        .from('conversations')
+        .insert({
+          user_id: user.userId,
+          workspace_id: workspace.id,
+          operating_profile_id: profile.id,
+          title: conversationTitle,
+          is_deleted: false,
+          is_archived: false,
+        })
+        .select()
+        .single();
+
+      if (conversationError) throw conversationError;
+      conversation = newConversation;
+    }
 
     await supabaseAdmin.from('workspace_state').upsert({
       workspace_id: workspace.id,

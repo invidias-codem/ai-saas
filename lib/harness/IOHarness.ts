@@ -1,5 +1,6 @@
 import type { ToolExecutionResult } from './types';
 import { LocalIOHarness } from './LocalIOHarness';
+import { GoIOHarness } from './GoIOHarness';
 
 /**
  * The IOHarness is the abstract execution boundary for all tool actions.
@@ -36,6 +37,11 @@ export interface IOHarness {
    * Implementation must enforce timeouts, output capping, and policy limits.
    */
   runCommand(command: string, timeoutMs?: number): Promise<ToolExecutionResult>;
+
+  /**
+   * Optional shutdown to gracefully terminate the persistent harness process if it's stateful.
+   */
+  shutdown?: () => void;
 }
 
 export interface HarnessConfig {
@@ -48,7 +54,7 @@ export interface HarnessConfig {
 export class HarnessFactory {
   public static async create(config: HarnessConfig): Promise<IOHarness> {
     if (config.env === 'local') {
-      const harness = new LocalIOHarness(config.workspaceRoot);
+      const harness = new GoIOHarness(config.workspaceRoot);
       await harness.initialize();
       return harness;
     }

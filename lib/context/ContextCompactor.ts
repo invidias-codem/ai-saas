@@ -13,7 +13,7 @@ export class ContextCompactor {
     text: string,
     tokenLimit: number,
     options: {
-      mode?: 'truncate' | 'outline' | 'summary' | 'auto';
+      mode?: 'truncate' | 'outline' | 'summary' | 'auto' | 'atomic';
       language?: string;
     } = {}
   ): ContextCompactionResult {
@@ -35,7 +35,10 @@ export class ContextCompactor {
     let compactedText = text;
     let method: 'truncate' | 'outline' | 'summary' = 'truncate';
 
-    if (mode === 'outline' || (mode === 'auto' && this.isCode(text, options.language))) {
+    if (mode === 'atomic') {
+      compactedText = this.compactAtomicBlocks(text, limitChars);
+      method = 'truncate';
+    } else if (mode === 'outline' || (mode === 'auto' && this.isCode(text, options.language))) {
       compactedText = this.compactToCodeOutline(text, limitChars);
       method = 'outline';
     } else if (mode === 'summary') {
@@ -239,5 +242,26 @@ export class ContextCompactor {
     const truncatedCount = text.length - maxChars;
 
     return `${start}\n\n... [TRUNCATED ${truncatedCount} CHARACTERS FOR CONTEXT WINDOW BUDGET] ...\n\n${end}`;
+  }
+
+  /**
+   * Safely drops blocks from the end to fit the token budget without mid-string mutilation.
+   */
+  private static compactAtomicBlocks(text: string, limitChars: number): string {
+    // Split by common memory chunk headers, keeping the delimiter attached
+    const blocks = text.split(/(?=^\*\*Previous Interaction\*\*|^\*\*File:|^## |\n\*\*Previous Interaction\*\*|\n\*\*File:|\n## )/m);
+    
+    let result = '';
+    let currentLen = 0;
+    
+    for (const block of blocks) {
+      if (currentLen + block.length > limitChars) {
+        break;
+      }
+      result += block;
+      currentLen += block.length;
+    }
+    
+    return result.trim() || this.middleTruncate(text, limitChars); // fallback to truncate if single block is too large
   }
 }

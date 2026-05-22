@@ -1,6 +1,8 @@
+process.env.SLACK_TOKEN_ENCRYPTION_KEY = 'test-encryption-key';
+
 /**
  * Token Manager Tests
- * Tests for multi-tenant Slack token resolution
+ * Tests for multi-tenant Slack token resolution (Supabase Edition)
  */
 
 import {
@@ -8,108 +10,92 @@ import {
   saveSlackInstallation,
   removeSlackInstallation,
   hasInstallation,
-  // getInstallationsForUser,
-  // getInstallation,
-  // linkInstallationToUser,
-  // validateInstallation,
 } from '@/lib/slack/tokenManager';
 
-// Mock Firebase Admin
-jest.mock('firebase-admin', () => {
-  const mockDoc = {
-    exists: true,
-    data: jest.fn(),
-    id: 'T123ABC456',
-  };
+const mockFrom = jest.fn();
+const mockRpc = jest.fn();
+const mockSelect = jest.fn();
+const mockDelete = jest.fn();
+const mockEq = jest.fn();
+const mockSingle = jest.fn();
 
-  const mockDocRef = {
-    get: jest.fn().mockResolvedValue(mockDoc),
-    set: jest.fn().mockResolvedValue(undefined),
-    update: jest.fn().mockResolvedValue(undefined),
-    delete: jest.fn().mockResolvedValue(undefined),
-  };
-
-  const mockCollection = {
-    doc: jest.fn().mockReturnValue(mockDocRef),
-    where: jest.fn().mockReturnThis(),
-    get: jest.fn().mockResolvedValue({ docs: [] }),
-    add: jest.fn().mockResolvedValue({ id: 'event_123' }),
-  };
-
-  const mockFirestore = {
-    collection: jest.fn().mockReturnValue(mockCollection),
-  };
-
-  return {
-    apps: [],
-    initializeApp: jest.fn(),
-    firestore: jest.fn().mockReturnValue(mockFirestore),
-  };
-});
-
-// Mock fetch for API calls
-global.fetch = jest.fn();
+jest.mock('@/lib/supabaseClient', () => ({
+  supabase: {
+    from: (...args: any[]) => mockFrom(...args),
+    rpc: (...args: any[]) => mockRpc(...args),
+  }
+}));
 
 describe('Token Manager', () => {
-  const mockInstallation = {
-    teamId: 'T123ABC456',
-    teamName: 'Test Workspace',
-    botToken: 'xoxb-test-token-123',
-    botUserId: 'U987XYZ',
-    installedBy: {
-      slackUserId: 'U111AAA',
-      clerkUserId: 'user_abc123',
-    },
-    scopes: ['chat:write', 'commands', 'app_mentions:read'],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  };
-
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Setup default mock behavior
-    const admin = require('firebase-admin');
-    const mockDocRef = admin.firestore().collection().doc();
-    mockDocRef.get.mockResolvedValue({
-      exists: true,
-      data: () => mockInstallation,
+    // Setup fluent chain defaults
+    mockRpc.mockReturnValue({
+      single: mockSingle,
     });
+    mockFrom.mockReturnValue({
+      select: mockSelect,
+      delete: mockDelete,
+    });
+    mockSelect.mockReturnValue({
+      eq: mockEq,
+    });
+    mockDelete.mockReturnValue({
+      eq: mockEq,
+    });
+    mockEq.mockReturnValue(Promise.resolve({ data: null, error: null, count: 0 }));
+    mockSingle.mockReturnValue(Promise.resolve({ data: null, error: null }));
   });
 
   describe('getSlackConfig', () => {
     it('should return config for existing installation', async () => {
+      mockSingle.mockResolvedValueOnce({
+        data: {
+          slack_team_id: 'T123ABC456',
+          access_token: 'xoxb-test-token-123',
+          bot_user_id: 'U987XYZ',
+          user_id: 'user_123_supabase',
+        },
+        error: null,
+      });
+
       const config = await getSlackConfig('T123ABC456');
 
       expect(config).toEqual({
         teamId: 'T123ABC456',
-        teamName: 'Test Workspace',
+        teamName: 'Workspace',
         botToken: 'xoxb-test-token-123',
         botUserId: 'U987XYZ',
-        scopes: ['chat:write', 'commands', 'app_mentions:read'],
+        scopes: [],
+        userId: 'user_123_supabase',
+      });
+
+      expect(mockRpc).toHaveBeenCalledWith('get_slack_integration', {
+        p_slack_team_id: 'T123ABC456',
+        p_encryption_key: 'test-encryption-key',
       });
     });
 
     it('should throw error for non-existent installation', async () => {
-      const admin = require('firebase-admin');
-      const mockDocRef = admin.firestore().collection().doc();
-      mockDocRef.get.mockResolvedValue({ exists: false });
+      mockSingle.mockResolvedValueOnce({
+        data: null,
+        error: { message: 'Not found' },
+      });
 
       await expect(getSlackConfig('T_NONEXISTENT')).rejects.toThrow(
         'No Slack installation found for team T_NONEXISTENT'
       );
     });
 
-    // it('should throw error for empty team ID', async () => {
-    //   await expect(getSlackConfig('')).rejects.toThrow('Team ID is required');
-    // });
-
     it('should throw error for invalid installation data', async () => {
-      const admin = require('firebase-admin');
-      const mockDocRef = admin.firestore().collection().doc();
-      mockDocRef.get.mockResolvedValue({
-        exists: true,
-        data: () => ({ teamId: 'T123', teamName: 'Test' }), // Missing botToken and botUserId
+      mockSingle.mockResolvedValueOnce({
+        data: {
+          slack_team_id: 'T123',
+          access_token: '',
+          bot_user_id: '',
+        },
+        error: null,
       });
 
       await expect(getSlackConfig('T123')).rejects.toThrow(
@@ -119,49 +105,40 @@ describe('Token Manager', () => {
   });
 
   describe('saveSlackInstallation', () => {
-    it('should create new installation', async () => {
-      const admin = require('firebase-admin');
-      const mockDocRef = admin.firestore().collection().doc();
-      mockDocRef.get.mockResolvedValue({ exists: false });
+    it('should upsert installation', async () => {
+      mockRpc.mockResolvedValueOnce({ error: null });
 
       await saveSlackInstallation({
         teamId: 'T_NEW',
         teamName: 'New Workspace',
         botToken: 'xoxb-new-token',
         botUserId: 'U_NEW',
-        // installedBy: { slackUserId: 'U111' },
-        // scopes: ['chat:write'],
+        userId: 'user_new_supabase',
       });
 
-      expect(mockDocRef.set).toHaveBeenCalledWith(
-        expect.objectContaining({
+      expect(mockRpc).toHaveBeenCalledWith('upsert_slack_integration', {
+        p_slack_team_id: 'T_NEW',
+        p_slack_team_name: 'New Workspace',
+        p_access_token: 'xoxb-new-token',
+        p_bot_user_id: 'U_NEW',
+        p_user_id: 'user_new_supabase',
+        p_encryption_key: 'test-encryption-key',
+      });
+    });
+
+    it('should throw error if upsert RPC fails', async () => {
+      mockRpc.mockResolvedValueOnce({
+        error: { message: 'Database error upserting' },
+      });
+
+      await expect(
+        saveSlackInstallation({
           teamId: 'T_NEW',
           teamName: 'New Workspace',
           botToken: 'xoxb-new-token',
+          botUserId: 'U_NEW',
         })
-      );
-    });
-
-    it('should update existing installation', async () => {
-      const admin = require('firebase-admin');
-      const mockDocRef = admin.firestore().collection().doc();
-      mockDocRef.get.mockResolvedValue({ exists: true });
-
-      await saveSlackInstallation({
-        teamId: 'T123ABC456',
-        teamName: 'Updated Workspace',
-        botToken: 'xoxb-updated-token',
-        botUserId: 'U987XYZ',
-        // installedBy: { slackUserId: 'U111AAA' },
-        // scopes: ['chat:write', 'commands'],
-      });
-
-      expect(mockDocRef.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          teamName: 'Updated Workspace',
-          botToken: 'xoxb-updated-token',
-        })
-      );
+      ).rejects.toThrow('Failed to save installation: Database error upserting');
     });
 
     it('should throw error for empty team ID', async () => {
@@ -171,8 +148,6 @@ describe('Token Manager', () => {
           teamName: 'Test',
           botToken: 'token',
           botUserId: 'U123',
-          // installedBy: { slackUserId: 'U111' },
-          // scopes: [],
         })
       ).rejects.toThrow('Team ID is required');
     });
@@ -180,22 +155,21 @@ describe('Token Manager', () => {
 
   describe('removeSlackInstallation', () => {
     it('should delete existing installation', async () => {
-      const admin = require('firebase-admin');
-      const mockDocRef = admin.firestore().collection().doc();
-      mockDocRef.get.mockResolvedValue({ exists: true });
+      mockEq.mockResolvedValueOnce({ error: null });
 
       await removeSlackInstallation('T123ABC456');
 
-      expect(mockDocRef.delete).toHaveBeenCalled();
+      expect(mockFrom).toHaveBeenCalledWith('slack_integrations');
+      expect(mockDelete).toHaveBeenCalled();
+      expect(mockEq).toHaveBeenCalledWith('slack_team_id', 'T123ABC456');
     });
 
-    it('should handle non-existent installation gracefully', async () => {
-      const admin = require('firebase-admin');
-      const mockDocRef = admin.firestore().collection().doc();
-      mockDocRef.get.mockResolvedValue({ exists: false });
+    it('should throw error if database deletion fails', async () => {
+      mockEq.mockResolvedValueOnce({ error: { message: 'Delete failed' } });
 
-      // Should not throw
-      await expect(removeSlackInstallation('T_NONEXISTENT')).resolves.not.toThrow();
+      await expect(removeSlackInstallation('T123ABC456')).rejects.toThrow(
+        'Failed to remove installation'
+      );
     });
 
     it('should throw error for empty team ID', async () => {
@@ -205,20 +179,35 @@ describe('Token Manager', () => {
 
   describe('hasInstallation', () => {
     it('should return true for existing installation', async () => {
-      const admin = require('firebase-admin');
-      const mockDocRef = admin.firestore().collection().doc();
-      mockDocRef.get.mockResolvedValue({ exists: true });
+      mockEq.mockResolvedValueOnce({
+        count: 1,
+        error: null,
+      });
 
       const result = await hasInstallation('T123ABC456');
       expect(result).toBe(true);
+      expect(mockFrom).toHaveBeenCalledWith('slack_integrations');
+      expect(mockSelect).toHaveBeenCalledWith('*', { count: 'exact', head: true });
+      expect(mockEq).toHaveBeenCalledWith('slack_team_id', 'T123ABC456');
     });
 
     it('should return false for non-existent installation', async () => {
-      const admin = require('firebase-admin');
-      const mockDocRef = admin.firestore().collection().doc();
-      mockDocRef.get.mockResolvedValue({ exists: false });
+      mockEq.mockResolvedValueOnce({
+        count: 0,
+        error: null,
+      });
 
       const result = await hasInstallation('T_NONEXISTENT');
+      expect(result).toBe(false);
+    });
+
+    it('should return false if database error occurs', async () => {
+      mockEq.mockResolvedValueOnce({
+        count: null,
+        error: { message: 'DB Error' },
+      });
+
+      const result = await hasInstallation('T123');
       expect(result).toBe(false);
     });
 
@@ -227,107 +216,4 @@ describe('Token Manager', () => {
       expect(result).toBe(false);
     });
   });
-
-  /*
-  describe('getInstallationsForUser', () => {
-    it('should return installations for user', async () => {
-      const admin = require('firebase-admin');
-      const mockCollection = admin.firestore().collection();
-      mockCollection.get.mockResolvedValue({
-        docs: [
-          { data: () => mockInstallation },
-          { data: () => ({ ...mockInstallation, teamId: 'T_SECOND', teamName: 'Second Workspace' }) },
-        ],
-      });
-
-      const installations = await getInstallationsForUser('user_abc123');
-
-      expect(installations).toHaveLength(2);
-      expect(installations[0].teamId).toBe('T123ABC456');
-      expect(installations[1].teamId).toBe('T_SECOND');
-    });
-
-    it('should return empty array for user with no installations', async () => {
-      const admin = require('firebase-admin');
-      const mockCollection = admin.firestore().collection();
-      mockCollection.get.mockResolvedValue({ docs: [] });
-
-      const installations = await getInstallationsForUser('user_no_installs');
-      expect(installations).toEqual([]);
-    });
-
-    it('should return empty array for empty user ID', async () => {
-      const installations = await getInstallationsForUser('');
-      expect(installations).toEqual([]);
-    });
-  });
-
-  describe('linkInstallationToUser', () => {
-    it('should link installation to user', async () => {
-      const admin = require('firebase-admin');
-      const mockDocRef = admin.firestore().collection().doc();
-      mockDocRef.get.mockResolvedValue({ exists: true });
-
-      await linkInstallationToUser('T123ABC456', 'user_new');
-
-      expect(mockDocRef.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          'installedBy.clerkUserId': 'user_new',
-        })
-      );
-    });
-
-    it('should throw error for non-existent installation', async () => {
-      const admin = require('firebase-admin');
-      const mockDocRef = admin.firestore().collection().doc();
-      mockDocRef.get.mockResolvedValue({ exists: false });
-
-      await expect(linkInstallationToUser('T_NONEXISTENT', 'user_123')).rejects.toThrow(
-        'No installation found for team T_NONEXISTENT'
-      );
-    });
-
-    it('should throw error for missing parameters', async () => {
-      await expect(linkInstallationToUser('', 'user_123')).rejects.toThrow(
-        'Team ID and Clerk User ID are required'
-      );
-      await expect(linkInstallationToUser('T123', '')).rejects.toThrow(
-        'Team ID and Clerk User ID are required'
-      );
-    });
-  });
-
-  describe('validateInstallation', () => {
-    it('should return valid for working token', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
-        json: () => Promise.resolve({ ok: true, team: 'Test' }),
-      });
-
-      const result = await validateInstallation('T123ABC456');
-
-      expect(result.valid).toBe(true);
-      expect(result.error).toBeUndefined();
-    });
-
-    it('should return invalid for revoked token', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
-        json: () => Promise.resolve({ ok: false, error: 'token_revoked' }),
-      });
-
-      const result = await validateInstallation('T123ABC456');
-
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe('token_revoked');
-    });
-
-    it('should handle network errors', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
-
-      const result = await validateInstallation('T123ABC456');
-
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe('Network error');
-    });
-  });
-  */
 });

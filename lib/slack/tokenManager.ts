@@ -25,6 +25,7 @@ export interface SlackConfig {
   botUserId: string;
   scopes: string[];
   userId?: string; // Linked Supabase User ID (owner of the integration)
+  workspacePath?: string;
 }
 
 export interface SlackInstallation {
@@ -68,6 +69,10 @@ export async function getSlackConfig(teamId: string): Promise<SlackConfig> {
     throw new Error(`No Slack installation found for team ${sanitizeForLog(teamId)}`);
   }
 
+  if (!data.access_token || !data.bot_user_id) {
+    throw new Error(`Invalid Slack installation for team ${sanitizeForLog(teamId)}`);
+  }
+
   return {
     teamId: data.slack_team_id,
     teamName: 'Workspace', // RPC might not return name to keep it light, or we can add it
@@ -75,6 +80,7 @@ export async function getSlackConfig(teamId: string): Promise<SlackConfig> {
     botUserId: data.bot_user_id,
     scopes: [], // We might store scopes in DB if needed, currently optional
     userId: data.user_id, // Return the linked Supabase user ID
+    workspacePath: data.workspace_path, // Map workspace path for GoIOHarness
   };
 }
 
@@ -121,6 +127,10 @@ export async function saveSlackInstallation(installation: {
   botUserId: string;
   userId?: string;
 }): Promise<void> {
+  if (!installation.teamId) {
+    throw new Error('Team ID is required');
+  }
+
   const { error } = await supabase.rpc('upsert_slack_integration', {
     p_slack_team_id: installation.teamId,
     p_slack_team_name: installation.teamName,
@@ -134,3 +144,4 @@ export async function saveSlackInstallation(installation: {
     throw new Error(`Failed to save installation: ${error.message}`);
   }
 }
+

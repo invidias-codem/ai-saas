@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { storeMemory } from '../memory/vectorStore';
+import { storeMemory, deleteCodeChunks, storeMemoriesBulk } from '../memory/vectorStore';
 import { rateLimiter, COST_ESTIMATES } from './rateLimiter';
+import { chunkFile } from './astChunker';
 
 export interface IndexResult {
     indexedFiles: string[];
@@ -37,7 +38,7 @@ export class CodebaseIndexer {
             '*.test.tsx',
             '__tests__/**'
         ];
-        this.includeExtensions = options.includeExtensions || ['.ts', '.tsx', '.js', '.jsx', '.sql', '.md'];
+        this.includeExtensions = options.includeExtensions || ['.ts', '.tsx', '.js', '.jsx', '.go', '.sql', '.md'];
     }
 
     /**
@@ -58,11 +59,7 @@ export class CodebaseIndexer {
 
         for (const file of files) {
             if (this.shouldInclude(file, basePath)) {
-                if (dryRun) {
-                    result.indexedFiles.push(file);
-                    continue;
-                }
-
+                const relativePath = path.relative(basePath, file);
                 try {
                     const content = fs.readFileSync(file, 'utf-8');
                     if (!content || content.trim().length === 0) {
@@ -70,34 +67,72 @@ export class CodebaseIndexer {
                         continue;
                     }
 
-                    // Check budget before proceeding
-                    const cost = COST_ESTIMATES.CODEBASE_INDEX_PER_FILE;
-                    const canProceed = await rateLimiter.checkBudget(cost);
+                    const chunks = chunkFile(content, file);
+                    if (chunks.length === 0) {
+                        result.skippedFiles.push(file);
+                        continue;
+                    }
+
+                    if (dryRun) {
+                        console.log(`🧪 [Dry Run] Plan to index ${relativePath} as ${chunks.length} chunks:`);
+                        chunks.slice(0, 5).forEach(c => {
+                            console.log(`   - [${c.chunkType}] ${c.logicalName} (lines ${c.startLine}-${c.endLine})`);
+                        });
+                        if (chunks.length > 5) {
+                            console.log(`   - ... and ${chunks.length - 5} more chunks`);
+                        }
+                        result.indexedFiles.push(file);
+                        continue;
+                    }
+
+                    console.log(`📄 Indexing: ${relativePath} (${chunks.length} chunks)`);
+                    const totalCost = chunks.length * COST_ESTIMATES.CODEBASE_INDEX_PER_CHUNK;
+                    const canProceed = await rateLimiter.checkBudget(totalCost);
 
                     if (!canProceed) {
-                        console.warn('🛑 Budget limit reached. Stopping indexing.');
+                        console.warn(`🛑 Budget limit reached. Skipping file indexing for ${relativePath}.`);
+                        result.skippedFiles.push(file);
                         break;
                     }
 
-                    const relativePath = path.relative(basePath, file);
-                    console.log(`📄 Indexing: ${relativePath}`);
+                    // 1. Derive unique workspace credentials
+                    const workspaceId = process.cwd();
+                    const workspaceName = path.basename(workspaceId);
 
-                    const memoryId = await storeMemory(
-                        'system', // Indexed code is system-level context
-                        content,
-                        'fact', // Or a new type 'code_file'? For now 'fact'
-                        {
+                    // 2. Perform stale chunk sweep atomically
+                    await deleteCodeChunks(relativePath, workspaceId);
+
+                    // 3. Prepare bulk insert payload
+                    const memoriesToStore = chunks.map(chunk => ({
+                        content: chunk.content,
+                        type: 'code_chunk' as const,
+                        metadata: {
                             path: relativePath,
+                            logicalName: chunk.logicalName,
+                            chunkType: chunk.chunkType,
+                            startLine: chunk.startLine,
+                            endLine: chunk.endLine,
+                            dependencies: chunk.dependencies || [],
                             source: 'codebase_index',
-                            indexedAt: new Date().toISOString()
+                            indexedAt: new Date().toISOString(),
+                            workspaceId,
+                            workspaceName
                         }
+                    }));
+
+                    // 4. Store chunks in bulk batch
+                    const memoryIds = await storeMemoriesBulk(
+                        'system',
+                        memoriesToStore,
+                        { scope: 'workspace', workspaceId }
                     );
 
-                    if (memoryId) {
+                    if (memoryIds && memoryIds.length === chunks.length) {
+                        result.totalCost += totalCost;
+                        await rateLimiter.recordUsage('codebase_indexing_chunk', totalCost);
                         result.indexedFiles.push(file);
-                        result.totalCost += cost;
-                        await rateLimiter.recordUsage('codebase_indexing', cost);
                     } else {
+                        console.error(`❌ Failed to bulk index file ${relativePath}`);
                         result.skippedFiles.push(file);
                     }
                 } catch (error) {
@@ -133,7 +168,6 @@ export class CodebaseIndexer {
             const excludedSegments = ['node_modules', '.next', 'dist', 'build', '.git', '.venv', 'venv', 'env', '__tests__'];
             if (stat && stat.isDirectory()) {
                 if (excludedSegments.some(seg => relativePath === seg || relativePath.includes(path.sep + seg))) {
-                    // console.log(`⏩ Skipping directory: ${relativePath}`);
                     continue;
                 }
                 results = results.concat(this.walkDir(fullPath, rootDir));
@@ -158,8 +192,7 @@ export class CodebaseIndexer {
             return false;
         }
 
-        // 2. Check hardcoded exclusions (simple path segment check)
-        // In a real app we'd use minimatch or glob patterns
+        // 2. Check hardcoded exclusions
         const excludedSegments = ['node_modules', '.next', 'dist', 'build', '.git', '__tests__'];
         if (excludedSegments.some(seg => relativePath.includes(seg))) {
             return false;

@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { HarnessFactory, HarnessConfig } from '@/lib/harness/IOHarness';
-import { LocalIOHarness } from '@/lib/harness/LocalIOHarness';
+import { GoIOHarness } from '@/lib/harness/GoIOHarness';
 
 describe('HarnessFactory', () => {
   const tempDir = path.resolve(__dirname, 'temp-factory-test');
@@ -15,14 +15,15 @@ describe('HarnessFactory', () => {
   });
 
   describe('Local Environment Instantiation', () => {
-    it('should successfully instantiate a LocalIOHarness when env is "local"', async () => {
+    it('should successfully instantiate a GoIOHarness when env is "local"', async () => {
       const config: HarnessConfig = {
         env: 'local',
         workspaceRoot: tempDir,
       };
 
       const harness = await HarnessFactory.create(config);
-      expect(harness).toBeInstanceOf(LocalIOHarness);
+      expect(harness).toBeInstanceOf(GoIOHarness);
+      harness.shutdown?.();
     });
   });
 

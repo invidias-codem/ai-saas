@@ -247,8 +247,10 @@ export class ContextTokenManager {
           // Determine language heuristic for code outline mode
           const language = alloc.key === 'memoryContext' ? 'typescript' : undefined;
           
+          const mode = alloc.key === 'memoryContext' ? 'atomic' : 'auto';
+
           const compaction = ContextCompactor.compact(alloc.text, targetBudgetLimit, {
-            mode: 'auto',
+            mode,
             language,
           });
 
