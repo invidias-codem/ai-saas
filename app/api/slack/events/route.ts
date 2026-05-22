@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
                     const ioHarness = new GoIOHarness(slackConfig.workspacePath);
                     await ioHarness.initialize();
 
-                    const userQuery = event.text.replace(/<@[^>]+>/g, '').trim();
+                    const userQuery = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
 
                     const agentRes = await generateConversationReply({
                         userId: slackConfig.userId || `slack-${teamId}`,

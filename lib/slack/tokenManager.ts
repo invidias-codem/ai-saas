@@ -65,7 +65,7 @@ export async function getSlackConfig(teamId: string): Promise<SlackConfig> {
     .single();
 
   if (error || !data) {
-    console.error(`[TOKEN_MANAGER] Failed to fetch token for team ${sanitizeForLog(teamId)}:`, error?.message); // lgtm[js/tainted-format-string]
+    console.error("[TOKEN_MANAGER] Failed to fetch token for team %s:", sanitizeForLog(teamId), error?.message); // lgtm[js/tainted-format-string]
     throw new Error(`No Slack installation found for team ${sanitizeForLog(teamId)}`);
   }
 
@@ -110,7 +110,7 @@ export async function removeSlackInstallation(teamId: string): Promise<void> {
     .eq('slack_team_id', teamId);
 
   if (error) {
-    console.error(`[TOKEN_MANAGER] Failed to remove team ${sanitizeForLog(teamId)}:`, error);
+    console.error("[TOKEN_MANAGER] Failed to remove team %s:", sanitizeForLog(teamId), error);
     throw new Error('Failed to remove installation');
   }
 
