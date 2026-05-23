@@ -142,17 +142,28 @@ export async function POST(req: Request) {
             rationale: routingDecision.debug.rationale,
         });
 
+        const normalizedFileData = fileData
+            ? fileData.fileUri
+                ? {
+                    name: fileData.name,
+                    type: fileData.type,
+                    mimeType: fileData.mimeType || fileData.type,
+                    sizeBytes: fileData.sizeBytes,
+                    fileUri: fileData.fileUri,
+                    storageProvider: fileData.storageProvider,
+                }
+                : {
+                    name: fileData.name,
+                    type: fileData.type,
+                    mimeType: fileData.mimeType || fileData.type,
+                    sizeBytes: fileData.sizeBytes,
+                    base64Data: fileData.base64Data,
+                }
+            : undefined;
+
         const requestPayload = {
             messages: [...(messages || []), { role: 'user', text: prompt }],
-            fileData: fileData ? {
-                name: fileData.name,
-                type: fileData.type,
-                mimeType: fileData.mimeType || fileData.type,
-                sizeBytes: fileData.sizeBytes,
-                base64Data: fileData.base64Data,
-                fileUri: fileData.fileUri,
-                storageProvider: fileData.storageProvider,
-            } : undefined,
+            fileData: normalizedFileData,
             mode: effectiveMode
         };
 
