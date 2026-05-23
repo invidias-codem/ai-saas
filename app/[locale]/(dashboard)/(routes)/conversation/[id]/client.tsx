@@ -81,6 +81,9 @@ interface SelectedFile {
   preview: string;
   name: string;
   type: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  storageProvider?: string;
   base64Data?: string;
   fileUri?: string; // GCS URI for large files
   isUploading?: boolean;
@@ -473,12 +476,26 @@ function ConversationPage({
     setStreamingContent("");
 
     // Capture file data before clearing state
-    const filePayload = selectedFile ? {
-      name: selectedFile.name,
-      type: selectedFile.type,
-      base64Data: selectedFile.base64Data, // Small files
-      fileUri: selectedFile.fileUri         // Large files (GCS)
-    } : undefined;
+    const filePayload = selectedFile
+      ? selectedFile.fileUri
+        ? {
+            name: selectedFile.name,
+            type: selectedFile.type,
+            mimeType: selectedFile.mimeType || selectedFile.type,
+            sizeBytes: selectedFile.sizeBytes,
+            fileUri: selectedFile.fileUri,
+            storageProvider: selectedFile.storageProvider || 'gcs',
+          }
+        : selectedFile.base64Data
+          ? {
+              name: selectedFile.name,
+              type: selectedFile.type,
+              mimeType: selectedFile.mimeType || selectedFile.type,
+              sizeBytes: selectedFile.sizeBytes,
+              base64Data: selectedFile.base64Data,
+            }
+          : undefined
+      : undefined;
 
     setSelectedFile(null);
 
@@ -562,6 +579,8 @@ function ConversationPage({
         preview: objectUrl,
         name: file.name,
         type: file.type,
+        mimeType: file.type,
+        sizeBytes: file.size,
         isUploading: isLargeFile
       };
 
@@ -594,7 +613,13 @@ function ConversationPage({
           console.log(`[SmartUpload] Success! URI: ${fileUri}`);
 
           // 3. Update State
-          setSelectedFile(prev => prev ? { ...prev, fileUri, isUploading: false } : null);
+          setSelectedFile(prev => prev ? {
+            ...prev,
+            fileUri,
+            storageProvider: 'gcs',
+            base64Data: undefined,
+            isUploading: false
+          } : null);
 
         } catch (err: any) {
           console.error("Smart Upload Failed:", err);
