@@ -4,6 +4,10 @@ import { enqueueArchivalTask } from '@/lib/queue/archivalQueue';
 
 export async function GET(req: Request) {
   try {
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Supabase admin client not initialized' }, { status: 500 });
+    }
+
     // Determine the decay threshold for WARM documents (e.g., 7 days)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
