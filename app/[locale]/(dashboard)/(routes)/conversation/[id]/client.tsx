@@ -994,7 +994,8 @@ function ConversationPage({
             
             <NeuralArchivalUploader 
               workspaceId={conversationContext.workspaceId || null} 
-              onUploadComplete={(doc) => setUploadedDocs(prev => [...prev, doc])} 
+              docs={uploadedDocs}
+              setDocs={setUploadedDocs}
             />
 
             <Textarea

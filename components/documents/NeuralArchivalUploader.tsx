@@ -15,11 +15,11 @@ export interface UploadedDoc {
 
 interface NeuralArchivalUploaderProps {
   workspaceId?: string | null;
-  onUploadComplete?: (doc: UploadedDoc) => void;
+  docs: UploadedDoc[];
+  setDocs: React.Dispatch<React.SetStateAction<UploadedDoc[]>>;
 }
 
-export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: NeuralArchivalUploaderProps) {
-  const [docs, setDocs] = useState<UploadedDoc[]>([]);
+export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArchivalUploaderProps) {
   const [previewDoc, setPreviewDoc] = useState<{ id: string; filename: string } | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -68,9 +68,6 @@ export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: Neural
 
       // 5. Replace the temp optimistic card with the real WARM card
       setDocs(prev => prev.map(d => d.id === tempId ? completedDoc : d));
-
-      // 6. Notify parent so it can attach this doc to the next message
-      onUploadComplete?.(completedDoc);
 
     } catch (err) {
       console.error('[Uploader] Upload failed:', err);
