@@ -428,7 +428,7 @@ export async function generateConversationReply(
         .in('id', documentIds);
 
       if (docs) {
-        const imageDocs = docs.filter(d => d.mime_type.startsWith('image/'));
+        const imageDocs = docs.filter((d: any) => d.mime_type.startsWith('image/'));
         if (imageDocs.length > 0) {
           const lastMsg = history[history.length - 1];
           if (lastMsg && lastMsg.role === 'user') {

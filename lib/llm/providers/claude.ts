@@ -27,34 +27,55 @@ export class ClaudeProvider implements LLMProvider {
 
         // Convert to Anthropic format
         // Anthropic expects roles: 'user' | 'assistant'
-        const anthropicMessages = messages.map(msg => {
+        const anthropicMessages = await Promise.all(messages.map(async (msg) => {
             const content: Anthropic.ContentBlockParam[] = [{ type: 'text', text: msg.text }];
             if (msg.attachments) {
-                msg.attachments.forEach((att: { mimeType: string; base64Data: string; name?: string; }) => {
-                    if (att.mimeType.startsWith('image/')) {
-                        content.push({
-                            type: 'image',
-                            source: {
-                                type: 'base64',
-                                media_type: att.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-                                data: att.base64Data
-                            }
-                        });
-                    } else {
-                        // Text file fallback
-                        const text = Buffer.from(att.base64Data, 'base64').toString('utf-8');
-                        content.push({
-                            type: 'text',
-                            text: `\n[Attachment: ${att.name || 'file'}]\n${text}\n`
-                        });
+                for (const att of msg.attachments) {
+                    if (att.base64Data) {
+                        if (att.mimeType.startsWith('image/')) {
+                            content.push({
+                                type: 'image',
+                                source: {
+                                    type: 'base64',
+                                    media_type: att.mimeType as any,
+                                    data: att.base64Data
+                                }
+                            });
+                        } else {
+                            const text = Buffer.from(att.base64Data, 'base64').toString('utf-8');
+                            content.push({
+                                type: 'text',
+                                text: `\n[Attachment: ${att.name || 'file'}]\n${text}\n`
+                            });
+                        }
+                    } else if (att.fileUri && att.fileUri.startsWith('gs://')) {
+                        // Claude requires base64 images. We fetch GCS similar to AI Studio
+                        const { getStorageClient, getStorageProjectId } = require('@/lib/gcp/storage');
+                        const storage = getStorageClient();
+                        const projectId = getStorageProjectId();
+                        const bucketName = `genie-uploads-${projectId}`;
+                        const filePath = att.fileUri.replace(`gs://${bucketName}/`, '');
+                        try {
+                            const [fileContents] = await storage.bucket(bucketName).file(filePath).download();
+                            content.push({
+                                type: 'image',
+                                source: {
+                                    type: 'base64',
+                                    media_type: att.mimeType as any,
+                                    data: fileContents.toString('base64')
+                                }
+                            });
+                        } catch (e) {
+                            console.error(`[ClaudeProvider] Failed to download GCS attachment: ${att.fileUri}`, e);
+                        }
                     }
-                });
+                }
             }
             return {
                 role: (msg.role === 'model' || msg.role === 'assistant' || msg.role === 'bot') ? 'assistant' : 'user',
                 content
             };
-        }) as Anthropic.MessageParam[];
+        })) as Anthropic.MessageParam[];
 
         const anthropic = getAnthropicClient();
         const result = await anthropic.messages.create({
