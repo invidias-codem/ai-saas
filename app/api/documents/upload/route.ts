@@ -97,15 +97,25 @@ export async function POST(req: Request) {
     // 5. Generate Embeddings and Save Chunks
     // We batch process embeddings to avoid hitting rate limits instantly, but for now map sequentially or in small parallel batches.
     const chunksToSave = [];
+    let embeddingFailed = false;
+
     for (const chunk of textChunks) {
-      const embedding = await embedDocumentChunk(chunk.content, tier);
+      let embedding;
+      try {
+        if (!embeddingFailed) {
+          embedding = await embedDocumentChunk(chunk.content, tier);
+        }
+      } catch (err) {
+        console.warn('[UploadRoute] Embedding failed for chunk, saving without embedding:', err);
+        embeddingFailed = true; // Stop trying if we hit a 429 or 404
+      }
       
       chunksToSave.push({
         document_id: doc.id,
         chunk_index: chunk.chunk_index,
         content: chunk.content,
-        embedding_768: tier === EmbeddingTier.STANDARD_768 ? embedding : undefined,
-        embedding_3076: tier === EmbeddingTier.HIGH_RES_3076 ? embedding : undefined,
+        embedding_768: tier === EmbeddingTier.STANDARD_768 && embedding ? embedding : undefined,
+        embedding_3076: tier === EmbeddingTier.HIGH_RES_3076 && embedding ? embedding : undefined,
       });
     }
 

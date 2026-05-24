@@ -25,7 +25,7 @@ export async function getAttachedDocumentContext(
   workspaceId: string | null | undefined,
   documentIds: string[]
 ): Promise<string> {
-  // Return early only if there are no document IDs — workspaceId can be null for personal docs
+  // Return early only if there are no document IDs
   if (!documentIds || !documentIds.length) return '';
   if (!supabaseAdmin) {
     console.error('[DocumentContext] supabaseAdmin is null');
@@ -33,104 +33,28 @@ export async function getAttachedDocumentContext(
   }
 
   try {
-     const [embed768, embed3076] = await Promise.all([
-         embedDocumentChunk(userQuery, EmbeddingTier.STANDARD_768).catch(() => null),
-         embedDocumentChunk(userQuery, EmbeddingTier.HIGH_RES_3076).catch(() => null)
-     ]);
+    const { data: documents, error } = await supabaseAdmin
+      .from('workspace_documents')
+      .select('id, filename, content_raw')
+      .in('id', documentIds);
 
-     let allChunks: any[] = [];
+    if (error) {
+      console.error('[DocumentContext] Error fetching attached documents:', error);
+      return '';
+    }
 
-     if (embed768 && supabaseAdmin) {
-       const { data, error: rpcError } = await supabaseAdmin.rpc('match_document_chunks_768', {
-           query_embedding: embed768,
-           match_threshold: 0.1,
-           match_count: 10,
-           // workspaceId null = personal doc; RPC handles NULL with IS NULL OR = clause
-           filter_workspace_id: workspaceId ?? null,
-           filter_document_ids: documentIds
-       });
-       if (rpcError) console.warn('[DocumentContext] 768-rail RPC error:', rpcError.message);
-       if (data) allChunks = [...allChunks, ...data];
-     }
+    if (!documents || documents.length === 0) {
+      return '';
+    }
 
-     if (embed3076 && supabaseAdmin) {
-       const { data, error: rpcError3076 } = await supabaseAdmin.rpc('match_document_chunks_3076', {
-           query_embedding: embed3076,
-           match_threshold: 0.1,
-           match_count: 10,
-           filter_workspace_id: workspaceId ?? null,
-           filter_document_ids: documentIds
-       });
-       if (rpcError3076) console.warn('[DocumentContext] 3076-rail RPC error:', rpcError3076.message);
-       if (data) allChunks = [...allChunks, ...data];
-     }
-     
-     // Deduplicate chunks by ID
-     const uniqueChunks = new Map();
-     allChunks.forEach(c => uniqueChunks.set(c.id, c));
+    const contextParts = documents.map(doc => {
+      if (doc.content_raw) {
+         return `Document: ${doc.filename}\n\n${doc.content_raw}`;
+      }
+      return `Document: ${doc.filename}\n[Content is missing or cold]`;
+    });
 
-     // Group by document to hydrate exactly once per document if COLD
-     const chunksByDocument = new Map<string, any[]>();
-     uniqueChunks.forEach((chunk) => {
-       if (!chunksByDocument.has(chunk.document_id)) chunksByDocument.set(chunk.document_id, []);
-       chunksByDocument.get(chunk.document_id)!.push(chunk);
-     });
-
-     const contextParts: string[] = [];
-
-     for (const [docId, chunks] of chunksByDocument.entries()) {
-       const firstChunk = chunks[0];
-       
-       if (firstChunk.storage_state === 'COLD' && firstChunk.storage_uri) {
-         try {
-           let hydratedText: string | null = null;
-           const cacheKey = `doc_hydrate:${docId}`;
-           
-           // Optional: import Redis for caching
-           const { Redis } = await import('@upstash/redis');
-           const redis = process.env.UPSTASH_REDIS_REST_URL 
-              ? new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN || '' }) 
-              : null;
-              
-           if (redis) {
-             hydratedText = await redis.get<string>(cacheKey);
-           }
-
-           if (!hydratedText) {
-             console.log(`[Hydration] Fetching COLD blob for doc ${docId} from ${firstChunk.storage_uri}`);
-             const { data: blobData, error: blobError } = await supabaseAdmin
-               .storage
-               .from('archived_documents')
-               .download(firstChunk.storage_uri);
-               
-             if (blobError || !blobData) throw blobError || new Error("Blob missing");
-
-             const buffer = Buffer.from(await blobData.arrayBuffer());
-             const { LLMArithmeticCompressor } = await import('@/lib/documents/compressor');
-             hydratedText = await LLMArithmeticCompressor.decompress(buffer);
-             
-             if (redis && hydratedText) {
-               // Cache for 1 hour to prevent redundant decompressions
-               await redis.set(cacheKey, hydratedText, { ex: 3600 });
-             }
-           } else {
-             console.log(`[Hydration] Cache HIT for doc ${docId}`);
-           }
-
-           contextParts.push(`[System: Accessing archived memories...]\n\nDocument ID: ${docId}\nDecompressed Content:\n${hydratedText}`);
-         } catch (e) {
-           console.error(`[Hydration] Failed to decompress doc ${docId}`, e);
-         }
-       } else {
-         for (const chunk of chunks) {
-           if (chunk.content) contextParts.push(chunk.content);
-         }
-       }
-     }
-
-     if (contextParts.length === 0) return '';
-
-     return `## Attached Documents Context\n${contextParts.join('\n\n---\n\n')}`;
+    return `## Explicitly Attached Documents Context\n${contextParts.join('\n\n---\n\n')}`;
   } catch (err) {
      console.error('[DocumentContext] Failed to retrieve document context', err);
      return '';
