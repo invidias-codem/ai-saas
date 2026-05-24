@@ -32,16 +32,13 @@ async function extractPdfText(buffer: Buffer): Promise<ExtractedDocument> {
   try {
     const data = new Uint8Array(buffer);
     const pdf = await getDocumentProxy(data);
-    const { text, info } = await extractText(pdf);
+    const { text } = await extractText(pdf);
+    const joinedText = Array.isArray(text) ? text.join('\n') : text;
 
     return {
-      text,
+      text: joinedText as string,
       metadata: {
-        pages: pdf.numPages,
-        author: info?.Author,
-        creator: info?.Creator,
-        producer: info?.Producer,
-        creationDate: info?.CreationDate
+        pages: pdf.numPages
       }
     };
   } catch (error: any) {
