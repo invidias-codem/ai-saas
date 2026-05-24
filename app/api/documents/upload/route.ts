@@ -110,8 +110,10 @@ export async function POST(req: Request) {
     // PHASE 3: Audit Lineage if parent exists
     if (parentId) {
        try {
+         const { supabaseAdmin } = await import('@/lib/supabaseClient');
+         if (!supabaseAdmin) throw new Error("Supabase admin client not initialized");
          const { computeSemanticDrift } = await import('@/lib/documents/delta/vectorDiff');
-         const driftedChunks = await computeSemanticDrift(parentId, doc.id, workspaceId);
+         const driftedChunks = await computeSemanticDrift(supabaseAdmin, parentId, doc.id);
          
          if (driftedChunks.length > 0) {
             const { Client } = await import("@upstash/qstash");
