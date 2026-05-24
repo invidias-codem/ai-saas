@@ -60,13 +60,21 @@ export async function POST(req: Request) {
     // 1. Check if media (image, video, audio)
     const isMedia = mimeType.startsWith('image/') || mimeType.startsWith('video/') || mimeType.startsWith('audio/');
     
-    // 2. Extract Text (if not media)
+    // 2. Extract Text (if extractable)
+    const isTextExtractable = mimeType === 'application/pdf' || 
+                              mimeType === 'text/plain' || 
+                              mimeType === 'text/markdown' || 
+                              mimeType === 'text/csv' || 
+                              mimeType === 'application/json';
+
     let rawText = '';
     let textChunks: any[] = [];
-    if (!isMedia) {
+    if (isTextExtractable) {
       const extracted = await extractDocumentText(buffer, mimeType);
       rawText = extracted.text;
       textChunks = chunkDocumentText(rawText, { maxTokens: 512, overlapPercentage: 0.1 });
+    } else if (!isMedia && !isTextExtractable) {
+      console.log(`[UploadRoute] Skipping text extraction for unsupported mime type: ${mimeType}`);
     }
 
     // 3. Determine Embedding Tier

@@ -142,7 +142,7 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
         type="file"
         ref={fileInputRef}
         className="hidden"
-        accept=".pdf,.txt,.md,.csv,.json,image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/webm,video/quicktime,video/x-m4v,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a,audio/aac"
+        accept=".pdf,.txt,.md,.csv,.json,image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/webm,video/quicktime,video/x-m4v,video/3gpp,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a,audio/aac,audio/amr,audio/ogg,audio/flac,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.pages,.numbers,.key,.rtf,.vcf"
         onChange={handleFileChange}
       />
 

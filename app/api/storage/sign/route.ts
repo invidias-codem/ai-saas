@@ -84,10 +84,14 @@ export async function POST(req: Request) {
         const allowedTypes = [
             'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
             'application/pdf',
-            'text/plain', 'text/csv',
-            'application/json',
-            'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v',
-            'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/x-m4a', 'audio/aac'
+            'text/plain', 'text/csv', 'text/markdown', 'text/rtf', 'text/vcard',
+            'application/json', 'application/rtf',
+            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/vnd.apple.pages', 'application/vnd.apple.numbers', 'application/vnd.apple.keynote',
+            'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v', 'video/3gpp',
+            'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/amr', 'audio/ogg', 'audio/flac'
         ];
         if (!allowedTypes.includes(contentType)) {
             return NextResponse.json({ error: 'File type not allowed' }, { status: 400 });

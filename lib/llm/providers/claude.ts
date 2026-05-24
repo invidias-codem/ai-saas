@@ -79,6 +79,11 @@ export class ClaudeProvider implements LLMProvider {
                                 type: 'text',
                                 text: `\n[Media Attachment: ${att.name || 'media'} - Not supported by this model]\n`
                             });
+                        } else if (att.mimeType !== 'application/pdf') {
+                            content.push({
+                                type: 'text',
+                                text: `\n[Document Attachment: ${att.name || 'file'} - Binary format not supported natively. Extract text first.]\n`
+                            });
                         }
                     }
                 }

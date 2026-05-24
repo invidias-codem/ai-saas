@@ -63,16 +63,30 @@ export class GeminiProvider implements LLMProvider {
                         const projectId = getStorageProjectId();
                         const bucketName = `genie-uploads-${projectId}`;
                         const filePath = att.fileUri.replace(`gs://${bucketName}/`, '');
-                        try {
-                            const [fileContents] = await storage.bucket(bucketName).file(filePath).download();
+                        const unsupportedMimeTypes = [
+                            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                            'application/vnd.apple.pages', 'application/vnd.apple.numbers', 'application/vnd.apple.keynote',
+                            'application/rtf', 'text/rtf', 'text/vcard'
+                        ];
+
+                        if (unsupportedMimeTypes.includes(att.mimeType)) {
                             parts.push({
-                                inlineData: {
-                                    mimeType: att.mimeType,
-                                    data: fileContents.toString('base64')
-                                }
+                                text: `\n[Attached Document: ${att.name || 'file'}] (Binary format not natively supported by this model. To analyze, convert to PDF or extract text first.)\n`
                             });
-                        } catch (e) {
-                            logger.error(`[Gemini] Failed to download GCS attachment: ${att.fileUri}`, e);
+                        } else {
+                            try {
+                                const [fileContents] = await storage.bucket(bucketName).file(filePath).download();
+                                parts.push({
+                                    inlineData: {
+                                        mimeType: att.mimeType,
+                                        data: fileContents.toString('base64')
+                                    }
+                                });
+                            } catch (e) {
+                                logger.error(`[Gemini] Failed to download GCS attachment: ${att.fileUri}`, e);
+                            }
                         }
                     } else if (att.base64Data) {
                         parts.push({
