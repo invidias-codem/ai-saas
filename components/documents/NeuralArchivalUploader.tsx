@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import { StorageState } from '@/lib/types/documents';
 import { FileItem } from './FileItem';
+import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { Button } from '@/components/ui/button';
 import { Paperclip } from 'lucide-react';
 
@@ -19,6 +20,8 @@ interface NeuralArchivalUploaderProps {
 
 export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: NeuralArchivalUploaderProps) {
   const [docs, setDocs] = useState<UploadedDoc[]>([]);
+  const [previewDoc, setPreviewDoc] = useState<{ id: string; filename: string } | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,6 +83,11 @@ export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: Neural
     setDocs(prev => prev.filter(d => d.id !== id));
   };
 
+  const handlePreview = (id: string, filename: string) => {
+    setPreviewDoc({ id, filename });
+    setIsPreviewOpen(true);
+  };
+
   return (
     <div className="relative">
       {/* Attached documents tray — shows above the button when docs exist */}
@@ -92,6 +100,7 @@ export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: Neural
               filename={doc.filename}
               storageState={doc.storageState as any}
               onRemove={doc.storageState !== 'INGESTING' ? () => removeDoc(doc.id) : undefined}
+              onPreview={doc.storageState !== 'INGESTING' && doc.storageState !== 'ERROR' ? () => handlePreview(doc.id, doc.filename) : undefined}
             />
           ))}
         </div>
@@ -118,6 +127,13 @@ export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: Neural
         className="hidden"
         accept=".pdf,.txt,.md,.csv,.json"
         onChange={handleFileChange}
+      />
+
+      <DocumentPreviewModal
+        isOpen={isPreviewOpen}
+        onOpenChange={setIsPreviewOpen}
+        documentId={previewDoc?.id || null}
+        filename={previewDoc?.filename || ''}
       />
     </div>
   );

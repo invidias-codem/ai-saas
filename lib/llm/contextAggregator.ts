@@ -22,10 +22,11 @@ import { EmbeddingTier } from '@/lib/types/documents';
 
 export async function getAttachedDocumentContext(
   userQuery: string,
-  workspaceId: string,
+  workspaceId: string | null | undefined,
   documentIds: string[]
 ): Promise<string> {
-  if (!documentIds || !documentIds.length || !workspaceId) return '';
+  // Return early only if there are no document IDs — workspaceId can be null for personal docs
+  if (!documentIds || !documentIds.length) return '';
   if (!supabaseAdmin) {
     console.error('[DocumentContext] supabaseAdmin is null');
     return '';
@@ -40,24 +41,27 @@ export async function getAttachedDocumentContext(
      let allChunks: any[] = [];
 
      if (embed768 && supabaseAdmin) {
-       const { data } = await supabaseAdmin.rpc('match_document_chunks_768', {
+       const { data, error: rpcError } = await supabaseAdmin.rpc('match_document_chunks_768', {
            query_embedding: embed768,
            match_threshold: 0.1,
            match_count: 10,
-           filter_workspace_id: workspaceId,
+           // workspaceId null = personal doc; RPC handles NULL with IS NULL OR = clause
+           filter_workspace_id: workspaceId ?? null,
            filter_document_ids: documentIds
        });
+       if (rpcError) console.warn('[DocumentContext] 768-rail RPC error:', rpcError.message);
        if (data) allChunks = [...allChunks, ...data];
      }
 
      if (embed3076 && supabaseAdmin) {
-       const { data } = await supabaseAdmin.rpc('match_document_chunks_3076', {
+       const { data, error: rpcError3076 } = await supabaseAdmin.rpc('match_document_chunks_3076', {
            query_embedding: embed3076,
            match_threshold: 0.1,
            match_count: 10,
-           filter_workspace_id: workspaceId,
+           filter_workspace_id: workspaceId ?? null,
            filter_document_ids: documentIds
        });
+       if (rpcError3076) console.warn('[DocumentContext] 3076-rail RPC error:', rpcError3076.message);
        if (data) allChunks = [...allChunks, ...data];
      }
      

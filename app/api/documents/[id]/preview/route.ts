@@ -7,13 +7,8 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   try {
     const user = await requireAuth();
     
-    // We expect workspaceId to be passed as a search param for scope validation
     const { searchParams } = new URL(req.url);
-    const workspaceId = searchParams.get('workspaceId');
-
-    if (!workspaceId) {
-      return NextResponse.json({ error: 'Missing workspaceId' }, { status: 400 });
-    }
+    const workspaceId = searchParams.get('workspaceId') || null;
 
     const doc = await getDocument(params.id, workspaceId);
 

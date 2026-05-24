@@ -37,8 +37,10 @@ export async function computeSemanticDrift(
   // If chunks exceed 50+, consider batching these to avoid connection pool exhaustion.
   const driftChecks = newChunks.map(async (newChunk) => {
     
-    // Call the dual-rail RPC specifically constrained to the old document's ID
-    const { data: matches, error: matchError } = await supabase.rpc('match_document_chunks_3076', {
+    // Call the delta-specific RPC constrained to the old document's ID.
+    // NOTE: Uses match_document_chunks_3076_delta — a separate function from the
+    // chat-RAG match_document_chunks_3076 — so schema changes to one don't break the other.
+    const { data: matches, error: matchError } = await supabase.rpc('match_document_chunks_3076_delta', {
       query_embedding: newChunk.embedding_3076,
       match_threshold: 0.0, // Set to 0 to guarantee we get the absolute closest neighbor, even if bad
       match_count: 1,

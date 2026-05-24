@@ -46,8 +46,8 @@ export const ConversationRequestSchema = z.object({
   fileName: z.string().max(255).optional(),
   mimeType: z.string().max(100).optional(),
   fileUri: z.string().max(1024).optional(),
-  documentIds: z.array(z.string().uuid()).optional(),
-  workspaceId: z.string().uuid().optional(),
+  documentIds: z.array(z.string()).optional(),
+  workspaceId: z.string().nullable().optional(),
   mode: z.enum(['fast', 'quality', 'agentic', 'reasoning']).optional(),
 });
 

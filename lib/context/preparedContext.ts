@@ -306,7 +306,7 @@ export async function prepareContextBundle(args: {
     : null;
 
   let attachedDocumentContext = '';
-  if (documentIds && documentIds.length > 0 && workspaceId) {
+  if (documentIds && documentIds.length > 0) {
     attachedDocumentContext = await getAttachedDocumentContext(userQuery, workspaceId, documentIds);
   }
 
