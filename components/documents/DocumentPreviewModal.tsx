@@ -34,7 +34,7 @@ export function DocumentPreviewModal({
   const [data, setData] = useState<PreviewData | null>(null);
 
   useEffect(() => {
-    if (isOpen && documentId) {
+    if (isOpen && documentId && documentId !== 'undefined' && documentId !== 'null') {
       setLoading(true);
       setError(null);
       setData(null);
