@@ -82,12 +82,12 @@ export async function POST(req: Request) {
 
         // 4. Validate Content Type (Security Boundary)
         const allowedTypes = [
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
             'application/pdf',
             'text/plain', 'text/csv',
             'application/json',
-            'video/mp4', 'video/webm',
-            'audio/mpeg', 'audio/wav'
+            'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v',
+            'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/x-m4a', 'audio/aac'
         ];
         if (!allowedTypes.includes(contentType)) {
             return NextResponse.json({ error: 'File type not allowed' }, { status: 400 });

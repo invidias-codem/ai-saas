@@ -428,17 +428,17 @@ export async function generateConversationReply(
         .in('id', documentIds);
 
       if (docs) {
-        const imageDocs = docs.filter((d: any) => d.mime_type.startsWith('image/'));
-        if (imageDocs.length > 0) {
+        const mediaDocs = docs.filter((d: any) => d.mime_type.startsWith('image/') || d.mime_type.startsWith('video/') || d.mime_type.startsWith('audio/'));
+        if (mediaDocs.length > 0) {
           const lastMsg = history[history.length - 1];
           if (lastMsg && lastMsg.role === 'user') {
             lastMsg.attachments = lastMsg.attachments || [];
-            for (const imgDoc of imageDocs) {
-              if (imgDoc.storage_uri) {
+            for (const mediaDoc of mediaDocs) {
+              if (mediaDoc.storage_uri) {
                 lastMsg.attachments.push({
-                  name: imgDoc.filename || 'image',
-                  mimeType: imgDoc.mime_type,
-                  fileUri: imgDoc.storage_uri
+                  name: mediaDoc.filename || 'media',
+                  mimeType: mediaDoc.mime_type,
+                  fileUri: mediaDoc.storage_uri
                 });
               }
             }

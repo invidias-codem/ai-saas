@@ -43,12 +43,15 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
       let finalFilename = file.name;
 
       if (file.type.startsWith('image/')) {
-        // Scrub EXIF and resize image
-        const scrubbedBlob = await scrubImageMetadata(file);
-        uploadPayload = scrubbedBlob;
-        finalMimeType = 'image/jpeg'; // scrubber currently outputs jpeg
-        if (!finalFilename.toLowerCase().endsWith('.jpg') && !finalFilename.toLowerCase().endsWith('.jpeg')) {
-           finalFilename = finalFilename.replace(/\.[^/.]+$/, "") + ".jpeg";
+        // Only scrub natively supported web images. HEIC/HEIF cannot be drawn to canvas on most browsers.
+        if (['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+          // Scrub EXIF and resize image
+          const scrubbedBlob = await scrubImageMetadata(file);
+          uploadPayload = scrubbedBlob;
+          finalMimeType = 'image/jpeg'; // scrubber currently outputs jpeg
+          if (!finalFilename.toLowerCase().endsWith('.jpg') && !finalFilename.toLowerCase().endsWith('.jpeg')) {
+             finalFilename = finalFilename.replace(/\.[^/.]+$/, "") + ".jpeg";
+          }
         }
       }
       // 2. Get GCS signed URL
@@ -139,7 +142,7 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
         type="file"
         ref={fileInputRef}
         className="hidden"
-        accept=".pdf,.txt,.md,.csv,.json,image/jpeg,image/png,image/webp"
+        accept=".pdf,.txt,.md,.csv,.json,image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/webm,video/quicktime,video/x-m4v,audio/mp4,audio/mpeg,audio/wav,audio/x-m4a,audio/aac"
         onChange={handleFileChange}
       />
 

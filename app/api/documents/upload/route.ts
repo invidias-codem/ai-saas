@@ -57,13 +57,13 @@ export async function POST(req: Request) {
       }
     }
 
-    // 1. Check if Image
-    const isImage = mimeType.startsWith('image/');
+    // 1. Check if media (image, video, audio)
+    const isMedia = mimeType.startsWith('image/') || mimeType.startsWith('video/') || mimeType.startsWith('audio/');
     
-    // 2. Extract Text (if not image)
+    // 2. Extract Text (if not media)
     let rawText = '';
     let textChunks: any[] = [];
-    if (!isImage) {
+    if (!isMedia) {
       const extracted = await extractDocumentText(buffer, mimeType);
       rawText = extracted.text;
       textChunks = chunkDocumentText(rawText, { maxTokens: 512, overlapPercentage: 0.1 });
@@ -103,7 +103,7 @@ export async function POST(req: Request) {
     const chunksToSave = [];
     let embeddingFailed = false;
 
-    if (!isImage) {
+    if (!isMedia) {
       for (const chunk of textChunks) {
       let embedding;
       try {
