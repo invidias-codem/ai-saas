@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Paperclip, Loader2 } from 'lucide-react';
 
 interface NeuralArchivalUploaderProps {
-  workspaceId: string;
-  onUploadComplete: (doc: any) => void;
+  workspaceId?: string | null;
+  onUploadComplete?: (doc: any) => void;
 }
 
 export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: NeuralArchivalUploaderProps) {

@@ -1,0 +1,171 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.novelWriterTool = void 0;
+const zod_1 = require("zod");
+const logger_1 = require("@/lib/logger");
+/**
+ * Novel / Creative Writing Tool — Agentic Mode
+ *
+ * Generates long-form creative writing: novels, short stories, screenplays,
+ * poetry collections, and creative non-fiction. Claude (Agentic toggle) uses
+ * this tool when the user requests creative writing beyond a simple chat response.
+ *
+ * Handles: chapters, multi-act structures, character sheets, plot outlines,
+ * and complete short stories.
+ */
+const NovelWriterInputSchema = zod_1.z.object({
+    title: zod_1.z.string().describe("Title of the work (or working title)"),
+    genre: zod_1.z
+        .enum([
+        "literary-fiction",
+        "sci-fi",
+        "fantasy",
+        "thriller",
+        "romance",
+        "horror",
+        "mystery",
+        "historical-fiction",
+        "short-story",
+        "screenplay",
+        "poetry",
+        "creative-nonfiction",
+    ])
+        .describe("Genre of the creative work"),
+    premise: zod_1.z.string().describe("The core premise, plot summary, or creative brief"),
+    format: zod_1.z
+        .enum(["full-chapter", "short-story", "outline-only", "character-sheet", "scene", "poem"])
+        .default("short-story")
+        .describe("What to generate: a full chapter, short story, outline, character sheet, scene, or poem"),
+    pov: zod_1.z
+        .enum(["first-person", "third-person-limited", "third-person-omniscient", "second-person"])
+        .optional()
+        .default("third-person-limited")
+        .describe("Point of view / narrative perspective"),
+    tone: zod_1.z
+        .enum(["dark", "hopeful", "comedic", "suspenseful", "romantic", "melancholic", "epic", "intimate"])
+        .optional()
+        .default("intimate")
+        .describe("Emotional tone of the writing"),
+    characters: zod_1.z
+        .array(zod_1.z.string())
+        .optional()
+        .describe("Optional: list of character names or brief descriptions to include"),
+    targetLength: zod_1.z
+        .enum(["short", "medium", "long"])
+        .optional()
+        .default("medium")
+        .describe("short (~800 words), medium (~2000 words), long (~4000 words)"),
+});
+const LENGTH_GUIDANCE = {
+    short: "~800 words. Be tight, punchy, every sentence earning its place.",
+    medium: "~2000 words. Full arc with setup, rising tension, and resolution.",
+    long: "~4000 words. Rich world-building, deep character interiority, multiple scenes.",
+};
+exports.novelWriterTool = {
+    name: "write_creative_content",
+    description: "Write long-form creative content: novels, short stories, screenplays, chapters, scenes, or poetry. " +
+        "Handles full narratives with plot structure, character development, and world-building. " +
+        "Use this when the user asks you to write a story, novel, chapter, screenplay, or creative piece " +
+        "that requires more than a brief conversational response.",
+    schema: NovelWriterInputSchema,
+    risk: "read-only",
+    requiresApproval: false,
+    timeoutMs: 120000, // 2 min for long-form
+    async execute(input, _context) {
+        try {
+            const lengthGuide = LENGTH_GUIDANCE[input.targetLength ?? "medium"];
+            const characterContext = input.characters?.length
+                ? `\n\n**Characters to feature:** ${input.characters.join(", ")}`
+                : "";
+            const formatInstructions = {
+                "full-chapter": "Write a complete chapter with: opening hook, scene-setting, character interiority, dialogue, rising action, and a chapter-ending hook.",
+                "short-story": "Write a complete short story with a clear beginning, middle, and end. Include a satisfying arc.",
+                "outline-only": "Write a detailed outline: premise, 3-act structure, chapter breakdowns, character arcs, and key plot beats.",
+                "character-sheet": "Create rich character sheets with: name, background, personality, goals, fears, voice, and narrative role.",
+                scene: "Write a single vivid scene with strong sensory detail, subtext in dialogue, and clear emotional stakes.",
+                poem: "Write a complete poem or poetry collection piece with intentional form, imagery, and rhythm.",
+            };
+            const formatGuide = formatInstructions[input.format ?? "short-story"];
+            const systemPrompt = `You are a masterful creative writer with the craft of the best contemporary literary authors. 
+You write with specificity, emotional truth, and a distinctive voice. 
+You never use clichés or purple prose. You show, don't tell. 
+Your dialogue reveals character. Your descriptions earn their place.`;
+            const prompt = `Write the following creative work:
+
+**Title:** ${input.title}
+**Genre:** ${input.genre.replace(/-/g, " ")}
+**Premise:** ${input.premise}${characterContext}
+
+**Format:** ${formatGuide}
+**Point of View:** ${(input.pov ?? "third-person-limited").replace(/-/g, " ")}
+**Tone:** ${input.tone ?? "intimate"}
+**Length Guidance:** ${lengthGuide}
+
+Craft this with full literary intentionality. Begin immediately — no preamble.`;
+            // Use Gemini Pro for creative generation
+            const { GeminiProvider } = await Promise.resolve().then(() => __importStar(require("@/lib/llm/providers/gemini")));
+            const gemini = new GeminiProvider();
+            const result = await gemini.generateStream([{ role: "user", text: prompt, attachments: undefined }], systemPrompt, {
+                temperature: 0.85, // Higher temp for creative writing
+                maxTokens: input.targetLength === "long" ? 8192 : input.targetLength === "medium" ? 4096 : 2048,
+            });
+            // Collect full stream
+            const reader = result.stream.getReader();
+            const decoder = new TextDecoder();
+            let fullContent = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done)
+                    break;
+                fullContent += decoder.decode(value, { stream: true });
+            }
+            return {
+                success: true,
+                data: {
+                    content: fullContent,
+                    title: input.title,
+                    genre: input.genre,
+                    format: input.format,
+                    wordCount: fullContent.split(/\s+/).length,
+                },
+            };
+        }
+        catch (error) {
+            logger_1.logger.error("[novelWriterTool] Error", error);
+            return { success: false, error: error.message ?? "Creative writing failed" };
+        }
+    },
+};

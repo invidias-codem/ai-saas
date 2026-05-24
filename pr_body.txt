@@ -1,0 +1,14 @@
+## Description
+
+This PR introduces the **Neural Archival Uploader** and the complete Phase 1-3 document pipeline. It is intentionally scoped **only** to the archival document ingestion workflows and their related context retrieval layers.
+
+It does **NOT** include the `fileUri`-only upload hotfix from the previous branch, ensuring those changes remain isolated.
+
+### What's Included:
+- **Neural Archival Uploader Component:** Handles frontend `WARM` ingestion.
+- **Dual-Rail Embedding Architecture:** Natively supports both 768 and 3076 dimension embedding schemas (`pgvector`).
+- **QStash Workers:** Background pipeline to handle transition from `WARM` -> `COMPRESSING` -> `COLD` storage states safely within serverless environments.
+- **Vector-First Audit (Delta Engine):** Subsystem to map chronological lineage via nearest-neighbor embedding alignment, producing drift-analytics via deterministic re-chunking.
+- **Context Aggregator & Engine Updates:** Minor changes to `preparedContext` and `conversationEngine` to pass `documentIds` natively instead of passing large inline base64 blobs into LLM prompts.
+
+All SQL migrations (Archival Storage, RPC fixes, and Version tracking schemas) have been included and verified against the remote staging database.
