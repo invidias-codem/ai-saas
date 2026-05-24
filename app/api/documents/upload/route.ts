@@ -57,12 +57,20 @@ export async function POST(req: Request) {
       }
     }
 
-    // 1. Extract Text
-    const extracted = await extractDocumentText(buffer, mimeType);
-    const rawText = extracted.text;
+    // 1. Check if Image
+    const isImage = mimeType.startsWith('image/');
+    
+    // 2. Extract Text (if not image)
+    let rawText = '';
+    let textChunks: any[] = [];
+    if (!isImage) {
+      const extracted = await extractDocumentText(buffer, mimeType);
+      rawText = extracted.text;
+      textChunks = chunkDocumentText(rawText, { maxTokens: 512, overlapPercentage: 0.1 });
+    }
 
-    // 2. Determine Embedding Tier
-    // High res for PDFs or large documents, Standard for small text.
+    // 3. Determine Embedding Tier
+    // High res for PDFs or large documents, Standard for small text, none needed for images (but we store WARM)
     let tier = EmbeddingTier.STANDARD_768;
     if (mimeType === 'application/pdf' || rawText.length > 20000) {
       tier = EmbeddingTier.HIGH_RES_3076;
@@ -91,15 +99,12 @@ export async function POST(req: Request) {
       version: nextVersion
     });
 
-    // 4. Chunk Text
-    const textChunks = chunkDocumentText(rawText, { maxTokens: 512, overlapPercentage: 0.1 });
-
-    // 5. Generate Embeddings and Save Chunks
-    // We batch process embeddings to avoid hitting rate limits instantly, but for now map sequentially or in small parallel batches.
+    // 5. Generate Embeddings and Save Chunks (only if text exists)
     const chunksToSave = [];
     let embeddingFailed = false;
 
-    for (const chunk of textChunks) {
+    if (!isImage) {
+      for (const chunk of textChunks) {
       let embedding;
       try {
         if (!embeddingFailed) {
@@ -117,6 +122,7 @@ export async function POST(req: Request) {
         embedding_768: tier === EmbeddingTier.STANDARD_768 && embedding ? embedding : undefined,
         embedding_3076: tier === EmbeddingTier.HIGH_RES_3076 && embedding ? embedding : undefined,
       });
+    }
     }
 
     if (chunksToSave.length > 0) {

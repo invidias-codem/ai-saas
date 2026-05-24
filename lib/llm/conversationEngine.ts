@@ -406,15 +406,47 @@ export async function generateConversationReply(
     } as ChatMessage))
   ];
 
-  // Attach file to the last message if present
+  // Attach explicit files to the last message if present
   if (fileData && mimeType) {
     const lastMsg = history[history.length - 1];
     if (lastMsg && lastMsg.role === 'user') {
-      lastMsg.attachments = [{
+      lastMsg.attachments = lastMsg.attachments || [];
+      lastMsg.attachments.push({
         name: parsed.fileName || 'attached_file',
         mimeType: mimeType,
         base64Data: fileData
-      }];
+      });
+    }
+  }
+
+  // Attach explicitly selected document images
+  if (documentIds && documentIds.length > 0 && supabase) {
+    try {
+      const { data: docs } = await supabase
+        .from('workspace_documents')
+        .select('filename, mime_type, storage_uri')
+        .in('id', documentIds);
+
+      if (docs) {
+        const imageDocs = docs.filter(d => d.mime_type.startsWith('image/'));
+        if (imageDocs.length > 0) {
+          const lastMsg = history[history.length - 1];
+          if (lastMsg && lastMsg.role === 'user') {
+            lastMsg.attachments = lastMsg.attachments || [];
+            for (const imgDoc of imageDocs) {
+              if (imgDoc.storage_uri) {
+                lastMsg.attachments.push({
+                  name: imgDoc.filename || 'image',
+                  mimeType: imgDoc.mime_type,
+                  fileUri: imgDoc.storage_uri
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[ConversationEngine] Failed to fetch image attachments', e);
     }
   }
 

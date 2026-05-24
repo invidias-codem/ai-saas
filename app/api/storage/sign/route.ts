@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { getClientIP } from '@/lib/security/apiAuth';
 import { getStorageClient, getStorageProjectId, GCPConfigurationError } from '../../../../lib/gcp/storage';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -31,6 +33,20 @@ export async function POST(req: Request) {
         const { userId } = await auth();
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const ip = getClientIP(req);
+        const rateLimit = await limitApiEndpoint(userId, ip, 'api');
+        if (!rateLimit.success) {
+            return NextResponse.json(
+                { error: 'Too many requests' },
+                {
+                    status: 429,
+                    headers: {
+                        'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
+                    }
+                }
+            );
         }
 
         // 2. Resolve & Instantiate GCP Storage Client
@@ -93,6 +109,9 @@ export async function POST(req: Request) {
             action: 'write',
             expires: Date.now() + 15 * 60 * 1000, // 15 minutes
             contentType,
+            extensionHeaders: {
+                'x-goog-content-length-range': '0,10485760' // Enforce 10MB limit for PUT
+            }
         });
 
         // 7. Return Details

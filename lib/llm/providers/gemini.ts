@@ -1,8 +1,8 @@
-
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ChatMessage, CompletionOptions, LLMProvider, StreamResult } from "../types";
 import { sanitizeHistory } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
+import { getStorageClient, getStorageProjectId } from '@/lib/gcp/storage';
 
 // Lazy initialisation — validate at first use, not at module load.
 // Module-level throws break integration tests that import routes without setting env vars.
@@ -36,7 +36,8 @@ export class GeminiProvider implements LLMProvider {
 
         // Convert internal message format to Gemini format
         // Convert internal message format to Gemini format
-                const history = messages.map(msg => {
+        const history = [];
+        for (const msg of messages) {
             const parts: any[] = [];
             let textToProcess = msg.text;
 
@@ -55,20 +56,39 @@ export class GeminiProvider implements LLMProvider {
             }
 
             if (msg.attachments) {
-                msg.attachments.forEach((att: { mimeType: any; base64Data: any; }) => {
-                    parts.push({
-                        inlineData: {
-                            mimeType: att.mimeType,
-                            data: att.base64Data
+                for (const att of msg.attachments) {
+                    if (att.fileUri && att.fileUri.startsWith('gs://')) {
+                        // AI Studio doesn't accept gs:// URIs natively, so we fetch and inline it
+                        const storage = getStorageClient();
+                        const projectId = getStorageProjectId();
+                        const bucketName = `genie-uploads-${projectId}`;
+                        const filePath = att.fileUri.replace(`gs://${bucketName}/`, '');
+                        try {
+                            const [fileContents] = await storage.bucket(bucketName).file(filePath).download();
+                            parts.push({
+                                inlineData: {
+                                    mimeType: att.mimeType,
+                                    data: fileContents.toString('base64')
+                                }
+                            });
+                        } catch (e) {
+                            logger.error(`[Gemini] Failed to download GCS attachment: ${att.fileUri}`, e);
                         }
-                    });
-                });
+                    } else if (att.base64Data) {
+                        parts.push({
+                            inlineData: {
+                                mimeType: att.mimeType,
+                                data: att.base64Data
+                            }
+                        });
+                    }
+                }
             }
-            return {
+            history.push({
                 role: (msg.role === 'assistant' || msg.role === 'model' || msg.role === 'bot') ? 'model' : 'user',
                 parts
-            };
-        });
+            });
+        }
 
         // Handle System Instruction (Gemini supports it natively or via prepend)
         // For agentic, we might need to be explicit

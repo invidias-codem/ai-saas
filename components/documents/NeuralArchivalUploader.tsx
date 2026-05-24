@@ -5,6 +5,7 @@ import { FileItem } from './FileItem';
 import { DocumentPreviewModal } from './DocumentPreviewModal';
 import { Button } from '@/components/ui/button';
 import { Paperclip } from 'lucide-react';
+import { scrubImageMetadata } from '@/lib/utils/imageScrubber';
 
 export interface UploadedDoc {
   id: string;
@@ -37,23 +38,39 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
     setDocs(prev => [...prev, { id: tempId, filename: file.name, storageState: 'INGESTING', mimeType: file.type }]);
 
     try {
+      let uploadPayload: Blob | File = file;
+      let finalMimeType = file.type;
+      let finalFilename = file.name;
+
+      if (file.type.startsWith('image/')) {
+        // Scrub EXIF and resize image
+        const scrubbedBlob = await scrubImageMetadata(file);
+        uploadPayload = scrubbedBlob;
+        finalMimeType = 'image/jpeg'; // scrubber currently outputs jpeg
+        if (!finalFilename.toLowerCase().endsWith('.jpg') && !finalFilename.toLowerCase().endsWith('.jpeg')) {
+           finalFilename = finalFilename.replace(/\.[^/.]+$/, "") + ".jpeg";
+        }
+      }
       // 2. Get GCS signed URL
       const signRes = await axios.post('/api/storage/sign', {
-        filename: file.name,
-        contentType: file.type,
+        filename: finalFilename,
+        contentType: finalMimeType,
       });
       const { uploadUrl, fileUri } = signRes.data;
 
       // 3. Upload binary directly to GCS
-      await axios.put(uploadUrl, file, {
-        headers: { 'Content-Type': file.type },
+      await axios.put(uploadUrl, uploadPayload, {
+        headers: { 
+          'Content-Type': finalMimeType,
+          'x-goog-content-length-range': '0,10485760' // Enforce 10MB limit as discussed
+        },
       });
 
       // 4. Trigger server-side ingestion (extract → chunk → embed → store)
       const uploadRes = await axios.post('/api/documents/upload', {
         workspaceId: workspaceId || null,
-        filename: file.name,
-        mimeType: file.type,
+        filename: finalFilename,
+        mimeType: finalMimeType,
         storageUri: fileUri,
       });
 
@@ -61,9 +78,9 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
 
       const completedDoc: UploadedDoc = {
         id: serverDoc.id,
-        filename: serverDoc.filename ?? file.name,
+        filename: serverDoc.filename ?? finalFilename,
         storageState: StorageState.WARM,
-        mimeType: file.type,
+        mimeType: finalMimeType,
       };
 
       // 5. Replace the temp optimistic card with the real WARM card
@@ -122,7 +139,7 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
         type="file"
         ref={fileInputRef}
         className="hidden"
-        accept=".pdf,.txt,.md,.csv,.json"
+        accept=".pdf,.txt,.md,.csv,.json,image/jpeg,image/png,image/webp"
         onChange={handleFileChange}
       />
 
