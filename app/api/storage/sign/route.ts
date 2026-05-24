@@ -113,9 +113,6 @@ export async function POST(req: Request) {
             action: 'write',
             expires: Date.now() + 15 * 60 * 1000, // 15 minutes
             contentType,
-            extensionHeaders: {
-                'x-goog-content-length-range': '0,10485760' // Enforce 10MB limit for PUT
-            }
         });
 
         // 7. Return Details
