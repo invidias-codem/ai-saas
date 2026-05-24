@@ -18,10 +18,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
     }
 
-    const { workspaceId, filename, mimeType, storageUri, base64Data, parentId } = body;
+    let { workspaceId, filename, mimeType, storageUri, base64Data, parentId } = body;
 
-    if (!workspaceId || !filename || !mimeType) {
+    if (!filename || !mimeType) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // Normalise: frontend sends 'default' when no workspace is selected;
+    // null is what the DB column (now nullable) expects.
+    if (!workspaceId || workspaceId === 'default') {
+      workspaceId = null;
     }
 
     if (!storageUri && !base64Data) {

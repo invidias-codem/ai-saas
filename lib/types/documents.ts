@@ -11,7 +11,7 @@ export enum EmbeddingTier {
 
 export interface WorkspaceDocument {
   id: string;
-  workspace_id: string;
+  workspace_id: string | null;
   user_id: string;
   filename: string;
   mime_type: string;
@@ -36,7 +36,7 @@ export interface DocumentChunk {
 }
 
 export interface UploadDocumentRequest {
-  workspaceId: string;
+  workspaceId?: string | null;
   filename: string;
   mimeType: string;
   storageUri?: string;
