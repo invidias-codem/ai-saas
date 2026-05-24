@@ -59,7 +59,7 @@ export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: Neural
       const finalDoc = uploadRes.data;
 
       setOptimisticDocs(prev => prev.filter(d => d.id !== tempId));
-      onUploadComplete(finalDoc);
+      onUploadComplete?.(finalDoc);
 
     } catch (err) {
       console.error('[Uploader] Upload failed:', err);
