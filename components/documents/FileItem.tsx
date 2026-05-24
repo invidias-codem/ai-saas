@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 interface FileItemProps {
   id: string;
   filename: string;
-  storageState: StorageState | 'INGESTING';
+  storageState: StorageState | 'INGESTING' | 'ERROR';
   onPreview?: () => void;
   onRemove?: () => void;
 }
@@ -21,11 +21,13 @@ export function FileItem({ id, filename, storageState, onPreview, onRemove }: Fi
           storageState === 'COMPRESSING' && "bg-gradient-to-br from-amber-400 to-amber-600 animate-pulse",
           storageState === 'COLD' && "bg-gradient-to-br from-slate-400 to-slate-600",
           storageState === 'INGESTING' && "bg-gradient-to-br from-indigo-400 to-indigo-600 animate-pulse",
+          storageState === 'ERROR' && "bg-gradient-to-br from-red-400 to-red-600",
         )}>
           {storageState === 'WARM' && <Zap className="h-5 w-5" />}
           {storageState === 'COMPRESSING' && <Loader2 className="h-5 w-5 animate-spin" />}
           {storageState === 'COLD' && <Database className="h-5 w-5" />}
           {storageState === 'INGESTING' && <Loader2 className="h-5 w-5 animate-spin" />}
+          {storageState === 'ERROR' && <span className="text-lg font-bold">!</span>}
         </div>
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{filename}</p>
@@ -48,9 +50,12 @@ export function FileItem({ id, filename, storageState, onPreview, onRemove }: Fi
   );
 }
 
-function StatusBadge({ state }: { state: StorageState | 'INGESTING' }) {
+function StatusBadge({ state }: { state: StorageState | 'INGESTING' | 'ERROR' }) {
   if (state === 'INGESTING') {
     return <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full">Uploading & Indexing...</span>;
+  }
+  if (state === 'ERROR') {
+    return <span className="text-[10px] uppercase font-bold tracking-wider text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full">Upload Failed</span>;
   }
   if (state === 'WARM') {
     return <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">Warm Storage</span>;

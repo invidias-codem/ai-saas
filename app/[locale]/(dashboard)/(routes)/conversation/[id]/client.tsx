@@ -24,7 +24,8 @@ import { cn } from "@/lib/utils";
 import EmptyState from "@/components/empty";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
 import { submitFeedback } from "@/lib/feedback/submitFeedback";
-import { NeuralArchivalUploader } from "@/components/documents/NeuralArchivalUploader";
+import { NeuralArchivalUploader, UploadedDoc } from "@/components/documents/NeuralArchivalUploader";
+import { FileItem } from "@/components/documents/FileItem";
 import {
   getSessionMemoryFromStorage,
   saveSessionMemoryToStorage,
@@ -269,7 +270,7 @@ function ConversationPage({
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
-  const [documentIds, setDocumentIds] = useState<string[]>([]);
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const [sessionId, setSessionId] = useState("");
   const [sessionRestored, setSessionRestored] = useState(false);
   const [deviceId, setDeviceId] = useState("");
@@ -460,7 +461,7 @@ function ConversationPage({
 
   const handleSendMessage = async () => {
     const trimmedInput = userInput.trim();
-    if (!trimmedInput && !selectedFile && documentIds.length === 0) return;
+    if (!trimmedInput && !selectedFile && uploadedDocs.length === 0) return;
     if (selectedFile?.isUploading) {
       setError("Please wait for file upload to complete.");
       return;
@@ -513,14 +514,14 @@ function ConversationPage({
           userId,
           prompt: messageText,
           fileData: filePayload,
-          documentIds, // Send the document IDs reference
+          documentIds: uploadedDocs.map(d => d.id), // Send the document IDs reference
           messages: newMessages.map(m => ({ role: m.role, text: m.text })), // Send history for context
           mode: agentMode, // Pass the active agent mode
         })
       });
 
-      // Clear document IDs after successful send
-      setDocumentIds([]);
+      // Clear uploaded docs after successful send
+      setUploadedDocs([]);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -992,8 +993,8 @@ function ConversationPage({
           <div className="relative flex items-end gap-2 bg-muted/40 hover:bg-muted/60 focus-within:bg-background focus-within:ring-2 focus-within:ring-indigo-500/20 border border-border/50 rounded-[26px] p-2 transition-all duration-200 shadow-sm">
             
             <NeuralArchivalUploader 
-              workspaceId={conversationContext.workspaceId || 'default'} 
-              onUploadComplete={(doc) => setDocumentIds(prev => [...prev, doc.id])} 
+              workspaceId={conversationContext.workspaceId || null} 
+              onUploadComplete={(doc) => setUploadedDocs(prev => [...prev, doc])} 
             />
 
             <Textarea
@@ -1007,10 +1008,10 @@ function ConversationPage({
 
             <Button
               onClick={handleSendMessage}
-              disabled={loading || (!userInput.trim() && !selectedFile && documentIds.length === 0)}
+              disabled={loading || (!userInput.trim() && !selectedFile && uploadedDocs.length === 0)}
               className={cn(
                 "rounded-full h-9 w-9 transition-all duration-300 shadow-sm",
-                (userInput.trim() || selectedFile || documentIds.length > 0)
+                (userInput.trim() || selectedFile || uploadedDocs.length > 0)
                   ? "bg-indigo-600 hover:bg-indigo-700 text-white scale-100"
                   : "bg-muted text-muted-foreground opacity-50 scale-95 pointer-events-none"
               )}

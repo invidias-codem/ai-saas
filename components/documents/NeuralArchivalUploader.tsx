@@ -3,73 +3,101 @@ import axios from 'axios';
 import { StorageState } from '@/lib/types/documents';
 import { FileItem } from './FileItem';
 import { Button } from '@/components/ui/button';
-import { Paperclip, Loader2 } from 'lucide-react';
+import { Paperclip } from 'lucide-react';
+
+export interface UploadedDoc {
+  id: string;
+  filename: string;
+  storageState: StorageState | 'INGESTING' | 'ERROR';
+  mimeType?: string;
+}
 
 interface NeuralArchivalUploaderProps {
-  workspaceId: string;
-  onUploadComplete: (doc: any) => void;
+  workspaceId?: string | null;
+  onUploadComplete?: (doc: UploadedDoc) => void;
 }
 
 export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: NeuralArchivalUploaderProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [optimisticDocs, setOptimisticDocs] = useState<any[]>([]);
+  const [docs, setDocs] = useState<UploadedDoc[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    // Reset input so the same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = '';
 
     const tempId = `temp_${Date.now()}`;
-    const newDoc = {
-      id: tempId,
-      filename: file.name,
-      storageState: 'INGESTING' as const,
-    };
 
-    setOptimisticDocs(prev => [...prev, newDoc]);
-    setIsOpen(false);
+    // 1. Show optimistic INGESTING card immediately
+    setDocs(prev => [...prev, { id: tempId, filename: file.name, storageState: 'INGESTING', mimeType: file.type }]);
 
     try {
-      // 1. Get signed URL
+      // 2. Get GCS signed URL
       const signRes = await axios.post('/api/storage/sign', {
         filename: file.name,
-        contentType: file.type
+        contentType: file.type,
       });
-
       const { uploadUrl, fileUri } = signRes.data;
 
-      // 2. Upload to GCS directly
+      // 3. Upload binary directly to GCS
       await axios.put(uploadUrl, file, {
-        headers: { 'Content-Type': file.type }
+        headers: { 'Content-Type': file.type },
       });
 
-      // 3. Trigger ingestion
+      // 4. Trigger server-side ingestion (extract → chunk → embed → store)
       const uploadRes = await axios.post('/api/documents/upload', {
-        workspaceId,
+        workspaceId: workspaceId || null,
         filename: file.name,
         mimeType: file.type,
-        storageUri: fileUri
+        storageUri: fileUri,
       });
 
-      const finalDoc = uploadRes.data;
+      const serverDoc = uploadRes.data;
 
-      setOptimisticDocs(prev => prev.filter(d => d.id !== tempId));
-      onUploadComplete(finalDoc);
+      const completedDoc: UploadedDoc = {
+        id: serverDoc.id,
+        filename: serverDoc.filename ?? file.name,
+        storageState: StorageState.WARM,
+        mimeType: file.type,
+      };
+
+      // 5. Replace the temp optimistic card with the real WARM card
+      setDocs(prev => prev.map(d => d.id === tempId ? completedDoc : d));
+
+      // 6. Notify parent so it can attach this doc to the next message
+      onUploadComplete?.(completedDoc);
 
     } catch (err) {
       console.error('[Uploader] Upload failed:', err);
-      // In a real app, update state to ERROR
-      setOptimisticDocs(prev => prev.filter(d => d.id !== tempId));
+      // Show error state on the card instead of silently disappearing
+      setDocs(prev => prev.map(d => d.id === tempId ? { ...d, storageState: 'ERROR' } : d));
     }
+  };
+
+  const removeDoc = (id: string) => {
+    setDocs(prev => prev.filter(d => d.id !== id));
   };
 
   return (
     <div className="relative">
+      {/* Attached documents tray — shows above the button when docs exist */}
+      {docs.length > 0 && (
+        <div className="absolute bottom-full left-0 mb-3 w-72 z-50 space-y-1">
+          {docs.map(doc => (
+            <FileItem
+              key={doc.id}
+              id={doc.id}
+              filename={doc.filename}
+              storageState={doc.storageState as any}
+              onRemove={doc.storageState !== 'INGESTING' ? () => removeDoc(doc.id) : undefined}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Upload trigger button */}
       <div className="flex items-center gap-2">
         <Button
           variant="ghost"
@@ -77,7 +105,8 @@ export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: Neural
           type="button"
           onClick={() => fileInputRef.current?.click()}
           className="h-10 w-10 text-muted-foreground hover:text-foreground shrink-0 rounded-full bg-secondary/50 hover:bg-secondary"
-          title="Upload Document"
+          title="Attach Document"
+          aria-label="Attach document"
         >
           <Paperclip className="h-5 w-5" />
         </Button>
@@ -90,19 +119,6 @@ export function NeuralArchivalUploader({ workspaceId, onUploadComplete }: Neural
         accept=".pdf,.txt,.md,.csv,.json"
         onChange={handleFileChange}
       />
-
-      {optimisticDocs.length > 0 && (
-        <div className="absolute bottom-full left-0 mb-4 w-72 z-50">
-          {optimisticDocs.map(doc => (
-            <FileItem
-              key={doc.id}
-              id={doc.id}
-              filename={doc.filename}
-              storageState={doc.storageState}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
