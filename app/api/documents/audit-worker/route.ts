@@ -14,6 +14,9 @@ const receiver = process.env.QSTASH_CURRENT_SIGNING_KEY
 
 export async function POST(req: Request) {
   try {
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Supabase admin client not initialized' }, { status: 500 });
+    }
     const rawBody = await req.text();
     
     // 1. Webhook Security: Verify QStash Signature

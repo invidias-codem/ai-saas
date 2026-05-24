@@ -45,6 +45,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
         if (!hydratedText) {
           const { supabaseAdmin } = await import('@/lib/supabaseClient');
+          if (!supabaseAdmin) throw new Error("Supabase admin client not initialized");
           const { LLMArithmeticCompressor } = await import('@/lib/documents/compressor');
 
           const { data: blobData, error: blobError } = await supabaseAdmin
