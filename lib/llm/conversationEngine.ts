@@ -268,7 +268,10 @@ export async function generateConversationReply(
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const { messages, fileData, mimeType, workspaceId, documentIds } = parsed;
+  const { messages, fileData, mimeType, workspaceId, documentIds: rawDocumentIds } = parsed;
+
+  // Filter out optimistic temp_ IDs that haven't been persisted to DB yet
+  const documentIds = rawDocumentIds?.filter((id: string) => id && !id.startsWith('temp_'));
 
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.

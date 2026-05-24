@@ -27,6 +27,12 @@ export async function getAttachedDocumentContext(
 ): Promise<string> {
   // Return early only if there are no document IDs
   if (!documentIds || !documentIds.length) return '';
+
+  // Defensive: filter out any optimistic temp_ IDs that weren't stripped upstream.
+  // These are client-side placeholders that have no corresponding DB row.
+  const validDocumentIds = documentIds.filter(id => id && !id.startsWith('temp_'));
+  if (!validDocumentIds.length) return '';
+
   if (!supabaseAdmin) {
     console.error('[DocumentContext] supabaseAdmin is null');
     return '';
@@ -36,7 +42,7 @@ export async function getAttachedDocumentContext(
     const { data: documents, error } = await supabaseAdmin
       .from('workspace_documents')
       .select('id, filename, content_raw')
-      .in('id', documentIds);
+      .in('id', validDocumentIds);
 
     if (error) {
       console.error('[DocumentContext] Error fetching attached documents:', error);
