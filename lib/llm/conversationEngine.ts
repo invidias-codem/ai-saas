@@ -42,10 +42,12 @@ import type { UcolMemoryPlan, UcolMemoryScope } from '@/lib/ucol/routing/types';
 
 export const ConversationRequestSchema = z.object({
   messages: z.array(ChatMessageSchema).min(1).max(100),
-  fileData: z.string().max(30 * 1024 * 1024, "File too large (max 20MB)").optional(),
+  fileData: z.any().optional(), // updated to any to support the normalizedFileData object
   fileName: z.string().max(255).optional(),
   mimeType: z.string().max(100).optional(),
   fileUri: z.string().max(1024).optional(),
+  documentIds: z.array(z.string().uuid()).optional(),
+  workspaceId: z.string().uuid().optional(),
   mode: z.enum(['fast', 'quality', 'agentic', 'reasoning']).optional(),
 });
 
@@ -266,7 +268,7 @@ export async function generateConversationReply(
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const { messages, fileData, mimeType } = parsed;
+  const { messages, fileData, mimeType, workspaceId, documentIds } = parsed;
 
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
@@ -294,6 +296,8 @@ export async function generateConversationReply(
     clerkUser,
     userQuery,
     agentMode,
+    workspaceId,
+    documentIds,
     options: {
       disableExternalContext: effectivelyDisabled,
       skipWebResearch: process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch,

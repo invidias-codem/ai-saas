@@ -48,10 +48,11 @@ export async function POST(req: Request) {
         const body = await req.json();
         validateRequestSize(body, 5 * 1024 * 1024);
 
-        const { prompt, conversationId, fileData, messages } = body as {
+        const { prompt, conversationId, fileData, documentIds, messages } = body as {
             prompt: string;
             conversationId?: string;
             fileData?: FileAttachmentInput;
+            documentIds?: string[];
             messages?: Array<{ role: string; text: string }>;
         };
 
@@ -164,6 +165,8 @@ export async function POST(req: Request) {
         const requestPayload = {
             messages: [...(messages || []), { role: 'user', text: prompt }],
             fileData: normalizedFileData,
+            documentIds,
+            workspaceId: resolved.ucolContext.workspaceId,
             mode: effectiveMode
         };
 
