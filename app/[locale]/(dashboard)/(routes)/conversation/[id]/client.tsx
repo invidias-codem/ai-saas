@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import EmptyState from "@/components/empty";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
 import { submitFeedback } from "@/lib/feedback/submitFeedback";
+import { NeuralArchivalUploader } from "@/components/documents/NeuralArchivalUploader";
 import {
   getSessionMemoryFromStorage,
   saveSessionMemoryToStorage,
