@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { StorageState } from '@/lib/types/documents';
 import { Loader2 } from 'lucide-react';
@@ -61,6 +62,7 @@ export function DocumentPreviewModal({
       <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="truncate pr-8">{filename}</DialogTitle>
+          <DialogDescription className="sr-only">Document preview text</DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto mt-4 rounded-md border bg-muted/30 p-4 relative">
