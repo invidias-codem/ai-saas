@@ -26,6 +26,10 @@ export async function getAttachedDocumentContext(
   documentIds: string[]
 ): Promise<string> {
   if (!documentIds || !documentIds.length || !workspaceId) return '';
+  if (!supabaseAdmin) {
+    console.error('[DocumentContext] supabaseAdmin is null');
+    return '';
+  }
 
   try {
      const [embed768, embed3076] = await Promise.all([
