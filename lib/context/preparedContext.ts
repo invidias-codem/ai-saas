@@ -20,6 +20,7 @@ import { performResearch, formatSearchResults } from '@/lib/agents/researcher';
 import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotion';
 import { generateEmbedding } from '@/lib/memory/embedding';
 import { scoreContextForRouting } from '@/lib/memory/confidenceScoring';
+import { getAttachedDocumentContext } from '@/lib/llm/contextAggregator';
 
 export type PreparedContextPlan = {
   retrievalMode?: UcolRetrievalMode;
@@ -45,6 +46,7 @@ export type PreparedContextSections = {
   graphContext: string;
   searchContext: string;
   memoryContext: string;
+  attachedDocumentContext?: string;
 };
 
 export type PreparedContextReadEnforcement = {
@@ -223,10 +225,11 @@ export async function prepareContextBundle(args: {
   clerkUser: UserResource | null;
   userQuery: string;
   workspaceId?: string | null;
+  documentIds?: string[];
   agentMode: AgentMode;
   options?: PreparedContextOptions;
 }): Promise<PreparedContextBundle> {
-  const { userId, clerkUser, userQuery, workspaceId, agentMode, options } = args;
+  const { userId, clerkUser, userQuery, workspaceId, documentIds, agentMode, options } = args;
 
   const userContext = await gatherUserContext(userId, clerkUser as any);
   const userContextPrompt = formatUserContextForPrompt(userContext);
@@ -302,6 +305,11 @@ export async function prepareContextBundle(args: {
     ? scoreContextForRouting(intelligentFacts.slice(0, 5), 'minimum')
     : null;
 
+  let attachedDocumentContext = '';
+  if (documentIds && documentIds.length > 0 && workspaceId) {
+    attachedDocumentContext = await getAttachedDocumentContext(userQuery, workspaceId, documentIds);
+  }
+
   return {
     userContext,
     sections: {
@@ -311,6 +319,7 @@ export async function prepareContextBundle(args: {
       graphContext,
       searchContext,
       memoryContext: [memoryContext, workspaceMemoryContext].filter(Boolean).join('\n\n'),
+      attachedDocumentContext,
     },
     raw: {
       allFacts,
@@ -346,6 +355,7 @@ export function layoutPromptContext(
     createPromptSection('graphContext', 'Graph Context', sections.graphContext, 80),
     createPromptSection('searchContext', 'Search Context', sections.searchContext, 60),
     createPromptSection('memoryContext', 'Memory Context', sections.memoryContext, 85),
+    createPromptSection('attachedDocumentContext', 'Attached Documents', sections.attachedDocumentContext || '', 98),
   ].filter((section) => section.text && section.text.trim().length > 0);
 
   const includedSections: PromptSection[] = [];

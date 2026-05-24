@@ -27,7 +27,30 @@
     "rag:index": "tsx scripts/index-codebase.ts",
     "rag:index:dry": "tsx scripts/index-codebase.ts --dry-run",
     "rag:test": "tsx scripts/test-rag-integration.ts",
-    "prebuild": "rm -rf functions/vector-agent-python/venv && echo prebuild: cleaned venv symlinks"
+    "prebuild": "rm -rf functions/vector-agent-python/venv && echo prebuild: cleaned venv symlinks",
+    "dev:electron": "tsc -p electron/tsconfig.json && concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
+    "build:electron:main": "tsc -p electron/tsconfig.json",
+    "build:electron": "npm run build:electron:main && electron-builder"
+  },
+  "build": {
+    "appId": "xyz.gen1e.latticeos",
+    "productName": "Lattice OS",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "go-harness/bin/lattice-harness-${os}-${arch}",
+        "to": "bin/lattice-harness${ext}",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
@@ -58,6 +81,7 @@
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.90.1",
     "@swc/helpers": "^0.5.18",
+    "@upstash/qstash": "^2.11.0",
     "@upstash/ratelimit": "^2.0.6",
     "@upstash/redis": "^1.35.3",
     "@vercel/analytics": "^1.6.1",
@@ -70,6 +94,7 @@
     "clsx": "^2.1.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.3.1",
+    "electron-store": "^11.0.2",
     "esm": "^3.2.25",
     "firebase-admin": "^13.7.0",
     "firebase-functions": "^7.2.2",
@@ -120,6 +145,9 @@
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.18.1",
     "autoprefixer": "^10.4.24",
+    "concurrently": "^9.2.1",
+    "electron": "^42.2.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.24.0",
     "eslint-config-next": "^16.2.1",
     "jest": "^30.3.0",
@@ -128,11 +156,11 @@
     "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.0.10"
   },
-  "description": "This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).",
-  "main": "next.config.mjs",
-  "module": "next.config.mjs",
+  "description": "Lattice OS Desktop App",
+  "main": "dist-electron/main.js",
   "directories": {
     "lib": "lib"
   },

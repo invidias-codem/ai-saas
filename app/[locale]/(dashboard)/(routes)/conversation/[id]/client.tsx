@@ -268,6 +268,7 @@ function ConversationPage({
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
   const [sessionId, setSessionId] = useState("");
   const [sessionRestored, setSessionRestored] = useState(false);
   const [deviceId, setDeviceId] = useState("");
@@ -458,7 +459,7 @@ function ConversationPage({
 
   const handleSendMessage = async () => {
     const trimmedInput = userInput.trim();
-    if (!trimmedInput && !selectedFile) return;
+    if (!trimmedInput && !selectedFile && documentIds.length === 0) return;
     if (selectedFile?.isUploading) {
       setError("Please wait for file upload to complete.");
       return;
@@ -511,10 +512,14 @@ function ConversationPage({
           userId,
           prompt: messageText,
           fileData: filePayload,
+          documentIds, // Send the document IDs reference
           messages: newMessages.map(m => ({ role: m.role, text: m.text })), // Send history for context
           mode: agentMode, // Pass the active agent mode
         })
       });
+
+      // Clear document IDs after successful send
+      setDocumentIds([]);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -984,18 +989,11 @@ function ConversationPage({
 
           {/* Input Container */}
           <div className="relative flex items-end gap-2 bg-muted/40 hover:bg-muted/60 focus-within:bg-background focus-within:ring-2 focus-within:ring-indigo-500/20 border border-border/50 rounded-[26px] p-2 transition-all duration-200 shadow-sm">
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} />
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loading}
-              className="rounded-full h-9 w-9 text-muted-foreground hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
-            >
-              <Paperclip className="h-5 w-5" />
-            </Button>
+            
+            <NeuralArchivalUploader 
+              workspaceId={conversationContext.workspaceId || 'default'} 
+              onUploadComplete={(doc) => setDocumentIds(prev => [...prev, doc.id])} 
+            />
 
             <Textarea
               value={userInput}
@@ -1008,10 +1006,10 @@ function ConversationPage({
 
             <Button
               onClick={handleSendMessage}
-              disabled={loading || (!userInput.trim() && !selectedFile)}
+              disabled={loading || (!userInput.trim() && !selectedFile && documentIds.length === 0)}
               className={cn(
                 "rounded-full h-9 w-9 transition-all duration-300 shadow-sm",
-                (userInput.trim() || selectedFile)
+                (userInput.trim() || selectedFile || documentIds.length > 0)
                   ? "bg-indigo-600 hover:bg-indigo-700 text-white scale-100"
                   : "bg-muted text-muted-foreground opacity-50 scale-95 pointer-events-none"
               )}
