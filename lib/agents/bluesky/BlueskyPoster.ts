@@ -9,6 +9,7 @@
 
 import { BskyAgent, RichText } from '@atproto/api';
 import type { AppBskyEmbedImages } from '@atproto/api';
+import { validateExternalUrl } from '@/lib/security/urlValidator';
 
 const RESPONSE_MAX_CHARS = 290;
 const SITE_CTA = 'gen1e.xyz';
@@ -181,6 +182,12 @@ export class BlueskyPoster {
       mimeType = matches[1];
       buffer = Buffer.from(matches[2], 'base64');
     } else {
+      // Validate external URL to prevent SSRF
+      const ssrfCheck = await validateExternalUrl(image.url);
+      if (!ssrfCheck.valid) {
+        throw new Error(`[BlueskyPoster] Invalid image URL (SSRF blocked): ${ssrfCheck.reason}`);
+      }
+
       // Fetch from URL
       const res = await this.withRetry(() => fetch(image.url), runId);
       if (!res.ok) throw new Error(`[BlueskyPoster] Failed to fetch image: ${res.status} ${image.url}`);
