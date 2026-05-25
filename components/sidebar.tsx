@@ -4,7 +4,9 @@ import { Montserrat } from "next/font/google";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { useLocale, useTranslations } from "next-intl";
-import { MessageSquare, Plus } from "lucide-react";
+import { MessageSquare, Plus, Zap } from "lucide-react";
+import { useEffect } from "react";
+import { useSubscriptionStore } from "@/lib/store/subscription-store";
 
 import { cn } from "@/lib/utils";
 import { routes } from "@/app/constants";
@@ -44,6 +46,23 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
     }
     router.push(localHref(href));
   };
+
+  const { computeCredits, setCredits, triggerPaywall } = useSubscriptionStore();
+
+  useEffect(() => {
+    fetch('/api/user/credits')
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data.computeCredits === 'number') {
+          setCredits(data.computeCredits);
+        }
+      })
+      .catch(console.error);
+  }, [setCredits]);
+
+  const maxCredits = 200;
+  const creditsPercentage = Math.min(100, Math.max(0, (computeCredits / maxCredits) * 100));
+
 
   const isHistoryRoute = pathname?.startsWith(localHref("/conversation")) || pathname?.includes("/workspaces/");
 
@@ -110,6 +129,32 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
 
           <div className="hidden md:block mt-6 border-t border-slate-200 dark:border-white/10 pt-4 px-2">
             <ConversationHistory />
+          </div>
+
+          <div className="mt-4 px-3 mb-2">
+            <div 
+              className="bg-slate-100 dark:bg-white/5 rounded-lg p-3 cursor-pointer hover:bg-slate-200 dark:hover:bg-white/10 transition"
+              onClick={triggerPaywall}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400 flex items-center">
+                  <Zap className="w-3 h-3 mr-1 text-amber-500" />
+                  Premium Credits
+                </span>
+                <span className="text-xs font-bold text-slate-700 dark:text-zinc-200">
+                  {computeCredits}/{maxCredits}
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 dark:bg-zinc-800 rounded-full h-2">
+                <div 
+                  className={cn(
+                    "h-2 rounded-full transition-all duration-300",
+                    computeCredits > 50 ? "bg-amber-500" : "bg-rose-500"
+                  )}
+                  style={{ width: `${creditsPercentage}%` }}
+                ></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

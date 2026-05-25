@@ -13,6 +13,7 @@ import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { promptSchema, validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
 import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
+import { calculateInteractionCost, deductUserCredits } from '@/lib/subscription/credits';
 import type { AgentMode } from '@/lib/llm/types';
 import type { RuntimeProfileSignals } from '@/lib/workspaces/runtimeMode';
 import type { UcolRequestPacket, UcolResolvedContext } from '@/lib/ucol/routing/types';
@@ -94,8 +95,27 @@ export async function POST(req: Request) {
             }
         }
 
-        const resolved = await resolveRuntimeContext({ userId: user.userId, surface: 'web', conversationId, strictValidation: false });
-        const effectiveMode = resolved.mode;
+        let effectiveMode = resolved.mode;
+        
+        // --- CREDIT ENFORCEMENT & GRACEFUL DEGRADATION ---
+        let computeCredits = typeof clerkUser.privateMetadata.computeCredits === 'number' 
+            ? clerkUser.privateMetadata.computeCredits 
+            : 200; // Default grant
+            
+        let finalCost = calculateInteractionCost({ 
+            hasAttachments: Boolean(fileData), 
+            mode: effectiveMode 
+        });
+
+        if (computeCredits <= 0) {
+            // Graceful Degradation
+            fileData = undefined; // Strip premium attachments
+            if (effectiveMode === 'agentic' || effectiveMode === 'reasoning') {
+                effectiveMode = 'fast'; // Fallback to cheaper model for basic chat
+            }
+            finalCost = 0; // Free degraded chat
+        }
+        // --------------------------------------------------
 
         const requestPacket: UcolRequestPacket = {
             requestId: randomUUID(),
@@ -234,6 +254,12 @@ export async function POST(req: Request) {
             }
         })());
 
+        // Deduct credits asynchronously
+        if (finalCost > 0) {
+            waitUntil(deductUserCredits(user.userId, computeCredits, finalCost));
+            computeCredits = Math.max(0, computeCredits - finalCost);
+        }
+
         return new NextResponse(clientStream, {
             headers: {
                 'Content-Type': 'text/plain; charset=utf-8',
@@ -241,6 +267,7 @@ export async function POST(req: Request) {
                 'X-Debug-Agent-Mode': effectiveMode,
                 'X-Debug-Execution-Mode': routingDecision.executionPlan.mode,
                 'X-Debug-Intent': routingDecision.intent.category,
+                'X-Remaining-Credits': String(computeCredits),
             }
         });
 

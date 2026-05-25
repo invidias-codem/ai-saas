@@ -126,7 +126,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="bg-[#FAF9F7] dark:bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative text-slate-900 dark:text-white">
+      <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
         <div className="fixed inset-0 z-0 pointer-events-none">
           <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 dark:bg-purple-500/20 rounded-full blur-3xl" />
           <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 dark:bg-blue-500/20 rounded-full blur-3xl" />
@@ -137,7 +137,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             <div className="relative w-7 h-7 sm:w-8 sm:h-8">
               <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" />
             </div>
-            <span className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Lattice OS</span>
+            <span className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Lattice OS</span>
           </Link>
           <div className="flex items-center gap-x-1 sm:gap-x-2">
             <Link href="/blog">
@@ -147,12 +147,12 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               </Button>
             </Link>
             <Link href="/dashboard" className="hidden sm:block">
-              <Button variant="ghost" className="text-slate-700 dark:text-white hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-white/10 rounded-full">
+              <Button variant="ghost" className="text-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 rounded-full">
                 Log in
               </Button>
             </Link>
             <Link href="/dashboard">
-              <Button className="bg-slate-900 text-white dark:bg-white dark:text-black hover:bg-slate-800 dark:hover:bg-gray-200 rounded-full font-semibold text-sm sm:text-base px-3 sm:px-4">
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full font-semibold text-sm sm:text-base px-3 sm:px-4">
                 Get Started
               </Button>
             </Link>
@@ -192,26 +192,26 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
           </div>
         </main>
 
-        <footer className="py-10 border-t border-slate-200 dark:border-white/10 bg-[#FAF9F7] dark:bg-[#111827]">
+        <footer className="py-10 border-t border-border bg-background">
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="flex items-center gap-2">
                 <div className="relative w-6 h-6">
                   <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" />
                 </div>
-                <span className="text-lg font-bold text-slate-900 dark:text-white">Lattice OS</span>
+                <span className="text-lg font-bold text-foreground">Lattice OS</span>
               </div>
 
-              <div className="flex items-center gap-6 text-sm text-slate-500 dark:text-gray-400">
-                <Link href="/blog" className="hover:text-slate-900 dark:hover:text-white transition">Blog</Link>
-                <Link href="/slack" className="hover:text-slate-900 dark:hover:text-white transition">Slack Integration</Link>
-                <Link href="/support" className="hover:text-slate-900 dark:hover:text-white transition">Support</Link>
-                <Link href="/privacy" className="hover:text-slate-900 dark:hover:text-white transition">Privacy Policy</Link>
+              <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                <Link href="/blog" className="hover:text-foreground transition">Blog</Link>
+                <Link href="/slack" className="hover:text-foreground transition">Slack Integration</Link>
+                <Link href="/support" className="hover:text-foreground transition">Support</Link>
+                <Link href="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
               </div>
             </div>
 
-            <div className="mt-8 pt-8 border-t border-slate-200 dark:border-white/10 text-center">
-              <p className="text-slate-500 text-sm dark:text-gray-500">
+            <div className="mt-8 pt-8 border-t border-border text-center">
+              <p className="text-muted-foreground text-sm">
                 © {new Date().getFullYear()} Lattice OS. All rights reserved.
               </p>
             </div>
