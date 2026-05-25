@@ -144,7 +144,7 @@ export const LandingNavbar = () => {
                             />
                         </div>
                         <span className="landing-text-primary text-xl font-bold tracking-tight font-heading leading-none transition-colors group-hover:text-purple-400">
-                            Genie AI
+                            Lattice OS
                         </span>
                     </Link>
 
