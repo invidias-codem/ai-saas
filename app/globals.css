@@ -135,7 +135,6 @@
   :root {
     height: 100dvh;
     touch-action: manipulation;
-    color-scheme: dark;
   }
 
   body {
@@ -200,10 +199,10 @@
 
 @layer utilities {
   .glass-card {
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: hsl(var(--card) / 0.6);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid hsl(var(--border) / 0.5);
     box-shadow: none;
   }
 
@@ -252,11 +251,11 @@
   }
 
   .landing-badge-primary {
-    @apply border border-violet-500/30 bg-violet-500/10 text-violet-300;
+    @apply border border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-300;
   }
 
   .landing-badge-secondary {
-    @apply border border-sky-500/30 bg-sky-500/10 text-sky-300;
+    @apply border border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300;
   }
 
   .landing-card {
@@ -299,7 +298,7 @@
   }
 
   .landing-nav-shell {
-    @apply border-b border-white/10 bg-[#0f1117]/90 shadow-none backdrop-blur-xl;
+    @apply border-b border-border/50 bg-background/90 shadow-none backdrop-blur-xl;
   }
 
   .landing-nav-shell-top {
@@ -307,14 +306,14 @@
   }
 
   .landing-nav-link {
-    @apply text-gray-300 hover:text-white;
+    @apply text-muted-foreground hover:text-foreground;
   }
 
   .landing-nav-ghost {
-    @apply text-gray-300 hover:bg-white/10 hover:text-white;
+    @apply text-muted-foreground hover:bg-foreground/5 hover:text-foreground;
   }
 
   .landing-nav-burger-mid {
-    @apply bg-white;
+    @apply bg-foreground;
   }
 }

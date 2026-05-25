@@ -56,9 +56,6 @@ export async function generateMetadata({
       description: t.description,
       type: 'website',
     },
-    other: {
-      'color-scheme': 'dark',
-    },
   };
 }
 
