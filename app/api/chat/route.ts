@@ -49,13 +49,13 @@ export async function POST(req: Request) {
         const body = await req.json();
         validateRequestSize(body, 5 * 1024 * 1024);
 
-        const { prompt, conversationId, fileData, documentIds: rawDocumentIds, messages } = body as {
+        const { prompt, conversationId, documentIds: rawDocumentIds, messages } = body as {
             prompt: string;
             conversationId?: string;
-            fileData?: FileAttachmentInput;
             documentIds?: string[];
             messages?: Array<{ role: string; text: string }>;
         };
+        let fileData = body.fileData as FileAttachmentInput | undefined;
 
         // Filter out optimistic temp_ IDs that haven't been persisted to the DB yet
         const documentIds = rawDocumentIds?.filter(id => id && !id.startsWith('temp_'));
