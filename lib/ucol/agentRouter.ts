@@ -331,7 +331,7 @@ export class AgentRouter {
             const result = await this.gemini.generateStream(
                 [{ role: 'user', text: `Query: ${task.query}${task.context ? `\n\nContext: ${task.context.substring(0, 500)}` : ''}` }],
                 CLASSIFIER_SYSTEM_PROMPT,
-                { model: 'gemini-3.1-flash-lite-preview', temperature: 0.1, maxTokens: 256 }
+                { model: 'gemini-2.5-flash', temperature: 0.1, maxTokens: 256 }
             );
 
             const reader = result.stream.getReader();

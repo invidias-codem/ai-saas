@@ -225,7 +225,7 @@ async function generateWithGemini(prompt: string): Promise<string> {
   }
 
   const gemini = new GoogleGenerativeAI(apiKey);
-  const model = gemini.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
+  const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: 120, temperature: 0.85 },

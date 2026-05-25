@@ -90,7 +90,7 @@ async function generatePresentationStructure(topic: string, fileContent?: string
         console.log('[SLIDE_HANDLER] Using file content length:', fileContent.length);
     }
 
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-3.1-flash-lite-preview" });
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-flash" });
 
     let prompt = `Create a professional presentation outline about "${topic}".`;
 

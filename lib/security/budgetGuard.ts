@@ -13,7 +13,7 @@
  *   enterprise → Unlimited (soft-warned at 10M)
  *
  * TOKEN COSTS (approximate, based on provider pricing):
- *   gemini-3.1-flash-lite-preview        →  0.075 / 1M tokens  (cheapest)
+ *   gemini-2.5-flash        →  0.075 / 1M tokens  (cheapest)
  *   deepseek-r1             →  0.55  / 1M tokens
  *   claude-sonnet-*         →  3.00  / 1M tokens  (most expensive)
  *
@@ -44,7 +44,7 @@ const ENTERPRISE_SOFT_WARN_THRESHOLD = 10_000_000;
 // Used for weighted budget accounting: expensive models consume budget faster.
 
 export const MODEL_COST_WEIGHTS: Record<string, number> = {
-  'gemini-3.1-flash-lite-preview':               1.0,
+  'gemini-2.5-flash':               1.0,
   'gemini-1.5-pro-preview-0409':    4.0,
   'claude-sonnet-4-5-20250929':     8.0,   // Claude Sonnet ~8x Flash cost
   'claude-opus':                   30.0,
@@ -151,7 +151,7 @@ async function getMonthlyTokensUsed(userId: string): Promise<number> {
 export async function checkTokenBudget(
   userId: string,
   estimatedTokens: number,
-  modelId: string = 'gemini-3.1-flash-lite-preview'
+  modelId: string = 'gemini-2.5-flash'
 ): Promise<BudgetCheckResult> {
   const tier = await getUserTier(userId);
   const budget = MONTHLY_TOKEN_BUDGETS[tier];
@@ -208,7 +208,7 @@ export async function checkTokenBudget(
 export async function recordTokenUsage(
   userId: string,
   tokensUsed: number,
-  modelId: string = 'gemini-3.1-flash-lite-preview'
+  modelId: string = 'gemini-2.5-flash'
 ): Promise<void> {
   if (!supabaseAdmin || tokensUsed <= 0) return;
 

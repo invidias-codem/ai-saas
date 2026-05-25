@@ -5,7 +5,7 @@ export const CODE_MODELS: Record<string, CodeModelConfig> = {
         id: 'fast',
         name: 'Fast',
         provider: 'gemini',
-        modelId: 'gemini-3.1-flash-lite-preview',
+        modelId: 'gemini-2.5-flash',
         description: 'Fastest response time for quick iterations',
         maxTokens: 8192,
     },

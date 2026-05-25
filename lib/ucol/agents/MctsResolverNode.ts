@@ -156,7 +156,7 @@ export class MctsResolverAgent {
     
     // Use Gemini (Fast/Policy) to brainstorm distinct approaches
     const gemini = getGemini();
-    const model = gemini.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview', generationConfig: { responseMimeType: 'application/json' } });
+    const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash', generationConfig: { responseMimeType: 'application/json' } });
     
     const prompt = `
       You are the Policy Network for an MCTS error resolver.

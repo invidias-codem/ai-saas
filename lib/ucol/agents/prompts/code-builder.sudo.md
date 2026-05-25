@@ -17,7 +17,7 @@ CodeBuilderAgent {
   }
 
   interface Planner {
-    model: gemini-3.1-flash-lite-preview
+    model: gemini-2.5-flash
     role: software architect
     inputs: prompt + availableDependencies
     output: ProjectPlan { appName, components[], pages[], techStack[], dataModel[], apiRoutes[] }
@@ -29,7 +29,7 @@ CodeBuilderAgent {
   }
 
   interface Coder {
-    model: claude-sonnet-4 (primary) | gemini-3.1-flash-lite-preview (fallback)
+    model: claude-sonnet-4 (primary) | gemini-2.5-flash (fallback)
     role: expert React/Next.js developer
     timeout: 25_000ms per component
     inputs: component spec + fullPlan + existingFiles + techStack + discoveredPatterns
@@ -45,7 +45,7 @@ CodeBuilderAgent {
   }
 
   interface Reviewer {
-    model: gemini-3.1-flash-lite-preview
+    model: gemini-2.5-flash
     role: Lead QA Engineer + Chief Architect
     inputs: generatedFiles + componentSpec + projectPlan
     output: ReviewFeedback {

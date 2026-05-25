@@ -100,7 +100,7 @@ async function readJsonl(filePath: string): Promise<DatasetExample[]> {
 async function main() {
   const datasetPath = parseArg("dataset");
   const outDir = parseArg("out", "eval") ?? "eval";
-  const modelOverride = parseArg("model", "gemini-3.1-flash-lite-preview") ?? "gemini-3.1-flash-lite-preview";
+  const modelOverride = parseArg("model", "gemini-2.5-flash") ?? "gemini-2.5-flash";
 
   const disableSideEffects = parseArg("disable-side-effects", "true") === "true";
   const disableExternalContext = parseArg("disable-external-context", "true") === "true";
