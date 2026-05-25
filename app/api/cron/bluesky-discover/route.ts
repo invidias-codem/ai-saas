@@ -186,7 +186,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({
+    const summary = {
       success: true,
       discovered: candidates.length,
       liked,
@@ -196,7 +196,7 @@ export async function GET(req: NextRequest) {
       actionReasons,
       actions,
       mode: 'proactive_discovery_with_replies',
-    });
+    };
 
     console.log(JSON.stringify({ runId, event: 'discover_run_complete', summary }));
     return NextResponse.json(summary);
