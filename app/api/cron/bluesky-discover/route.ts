@@ -5,8 +5,8 @@ import { BlueskyResponder } from '@/lib/agents/bluesky/BlueskyResponder';
 import type { BlueskyMention } from '@/lib/agents/bluesky/types';
 
 export const maxDuration = 300;
-const MAX_EXTERNAL_LIKES_PER_RUN = 2;
-const MAX_EXTERNAL_REPLIES_PER_RUN = 1;
+const MAX_EXTERNAL_LIKES_PER_RUN = 3;
+const MAX_EXTERNAL_REPLIES_PER_RUN = 2;
 
 function incrementReason(bucket: Record<string, number>, key: string | undefined) {
   const normalized = key?.trim() || 'unknown';
@@ -22,6 +22,9 @@ export async function GET(req: NextRequest) {
   if (secret && provided !== secret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const runId = crypto.randomUUID();
+  console.log(JSON.stringify({ runId, event: 'discover_run_start' }));
 
   try {
     const engine = new BlueskyDiscoveryEngine();
@@ -78,7 +81,9 @@ export async function GET(req: NextRequest) {
 
         const result = await responder.respond(mention, 'discovery');
 
-        console.log('[BlueskyDiscoverCron] Candidate decision:', {
+        console.log(JSON.stringify({
+          runId,
+          event: 'discover_candidate_decision',
           uri: candidate.uri,
           author: candidate.authorHandle,
           score: candidate.score,
@@ -91,7 +96,7 @@ export async function GET(req: NextRequest) {
           decisionReason: result.decisionReason,
           skipReason: result.skipReason,
           error: result.error,
-        });
+        }));
 
         if (result.responded) {
           replied++;
@@ -192,9 +197,12 @@ export async function GET(req: NextRequest) {
       actions,
       mode: 'proactive_discovery_with_replies',
     });
+
+    console.log(JSON.stringify({ runId, event: 'discover_run_complete', summary }));
+    return NextResponse.json(summary);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[BlueskyDiscoverCron] Error:', message);
+    console.error(JSON.stringify({ runId, event: 'discover_error', error: message }));
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

@@ -87,7 +87,7 @@ export class MentionPoller {
     return data?.value ?? undefined;
   }
 
-  private async saveLastCursor(cursor: string): Promise<void> {
+  public async saveLastCursor(cursor: string): Promise<void> {
     const { error } = await this.supabase
       .from('bluesky_poll_state')
       .upsert(
@@ -122,16 +122,18 @@ export class MentionPoller {
    * Filters to `mention` and `reply` notification reasons only.
    * Deduplicates against previously logged interactions.
    */
-  async poll(): Promise<BlueskyMention[]> {
+  async poll(runId?: string): Promise<{ mentions: BlueskyMention[], newCursor?: string }> {
     await this.ensureAuth();
 
     const lastCursor = await this.getLastCursor();
     const processedUris = await this.getAlreadyProcessedUris();
 
-    console.log(
-      `[MentionPoller] Polling notifications (cursor=${lastCursor ?? 'none'}, ` +
-      `already_processed=${processedUris.size})`
-    );
+    console.log(JSON.stringify({
+      runId,
+      event: 'mention_poller_start',
+      cursorIn: lastCursor ?? 'none',
+      alreadyProcessedCount: processedUris.size
+    }));
 
     let newCursor: string | undefined;
     const mentions: BlueskyMention[] = [];
@@ -145,7 +147,7 @@ export class MentionPoller {
       newCursor = response.data.cursor;
       const notifications = response.data.notifications;
 
-      console.log(`[MentionPoller] Received ${notifications.length} notifications`);
+      console.log(JSON.stringify({ runId, event: 'mention_poller_received', count: notifications.length }));
 
       for (const notif of notifications) {
         // Only process mentions and replies
@@ -186,16 +188,17 @@ export class MentionPoller {
         });
       }
     } catch (err) {
-      console.error('[MentionPoller] Failed to fetch notifications:', err);
+      console.error(JSON.stringify({ runId, event: 'mention_poller_error', error: String(err) }));
       throw err;
     }
 
-    // Persist the new cursor so next run starts from here
-    if (newCursor) {
-      await this.saveLastCursor(newCursor);
-    }
+    console.log(JSON.stringify({
+      runId,
+      event: 'mention_poller_complete',
+      mentionsFound: mentions.length,
+      cursorOut: newCursor ?? 'none'
+    }));
 
-    console.log(`[MentionPoller] Found ${mentions.length} new unprocessed mentions`);
-    return mentions;
+    return { mentions, newCursor };
   }
 }

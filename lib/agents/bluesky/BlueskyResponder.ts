@@ -442,7 +442,7 @@ export class BlueskyResponder {
         return { action: 'like_only', replyIntent, reason: 'lightweight_acknowledgement' };
       }
 
-      if ((actorMemory?.engagement_count ?? 0) > 3 && !text.includes('?')) {
+      if ((actorMemory?.engagement_count ?? 0) > 2 && !text.includes('?')) {
         return { action: 'like_only', replyIntent, reason: 'warm_repeat_engager' };
       }
     }
@@ -475,10 +475,10 @@ export class BlueskyResponder {
     if (LAMBDA_OLLAMA_URL) {
       try {
         const raw = await this.generateWithOllamaEndpoint(LAMBDA_OLLAMA_URL, context, enrichedSystem);
-        console.log('[BlueskyResponder] Generated via Vast.ai Docker Model Runner (self-hosted)');
+        console.log(JSON.stringify({ event: 'responder_generate_ollama_success', source: 'lambda' }));
         return this.enforceCharLimit(raw, context);
-      } catch (err) {
-        console.warn('[BlueskyResponder] Vast.ai Docker Model Runner failed, falling back to Nous API:', err);
+      } catch (err: any) {
+        console.warn(JSON.stringify({ event: 'responder_generate_ollama_error', error: err.message }));
       }
     }
 
@@ -489,8 +489,8 @@ export class BlueskyResponder {
           model: NOUS_MODEL,
         });
         return this.enforceCharLimit(raw, context);
-      } catch (err) {
-        console.warn('[BlueskyResponder] Nous API failed, falling back to Gemini:', err);
+      } catch (err: any) {
+        console.warn(JSON.stringify({ event: 'responder_generate_nous_error', error: err.message }));
       }
     }
 
@@ -836,7 +836,7 @@ export class BlueskyResponder {
     }
   }
 
-  async respond(mention: BlueskyMention, source: 'mention' | 'discovery' = 'mention'): Promise<EngagementResult> {
+  async respond(mention: BlueskyMention, source: 'mention' | 'discovery' = 'mention', runId?: string): Promise<EngagementResult> {
     const base: EngagementResult = {
       mentionUri: mention.uri,
       responded: false,
@@ -850,13 +850,13 @@ export class BlueskyResponder {
 
       const policyCheck = this.safety.shouldAvoidText(mention.text);
       if (policyCheck.blocked) {
-        console.log(`[BlueskyResponder] Safety policy blocked engagement to ${mention.authorHandle}: ${policyCheck.reason}`);
+        console.log(JSON.stringify({ runId, event: 'responder_safety_blocked', author: mention.authorHandle, reason: policyCheck.reason }));
         return { ...base, error: policyCheck.reason };
       }
 
       const limited = await this.isRateLimited(mention.authorDid);
       if (limited) {
-        console.log(`[BlueskyResponder] Rate-limited: skipping reply to ${mention.authorHandle}`);
+        console.log(JSON.stringify({ runId, event: 'responder_rate_limited', author: mention.authorHandle }));
         return { ...base, error: 'rate_limited' };
       }
 
@@ -916,7 +916,7 @@ export class BlueskyResponder {
 
       const replyBudget = await this.safety.canReply();
       if (!replyBudget.allowed) {
-        console.log(`[BlueskyResponder] Reply budget blocked reply to ${mention.authorHandle}: ${replyBudget.reason}`);
+        console.log(JSON.stringify({ runId, event: 'responder_budget_blocked', type: 'reply', reason: replyBudget.reason }));
         return { ...base, action: 'skip', error: replyBudget.reason };
       }
 
@@ -945,9 +945,14 @@ export class BlueskyResponder {
 
       const routing = await classifyQuery(mention.text, contextText, undefined, `bluesky:${mention.authorDid}`);
 
-      console.log(
-        `[BlueskyResponder] Routed "${mention.text.substring(0, 60)}" → ${routing.targetNode} (${routing.taskType}, clf=${routing.confidence.toFixed(2)})`
-      );
+      console.log(JSON.stringify({
+        runId,
+        event: 'responder_routed',
+        textPreview: mention.text.substring(0, 60),
+        targetNode: routing.targetNode,
+        taskType: routing.taskType,
+        confidence: routing.confidence
+      }));
 
       const contentType = detectContentType(mention.text);
       const facts = await extractFacts(contextText, contentType);
@@ -987,7 +992,7 @@ export class BlueskyResponder {
       });
 
       const responseUri = postResult.uri;
-      console.log(`[BlueskyResponder] Posted reply: ${responseUri}`);
+      console.log(JSON.stringify({ runId, event: 'responder_replied', uri: responseUri }));
 
       await this.upsertActorMemory({
         mention,
@@ -1033,7 +1038,7 @@ export class BlueskyResponder {
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`[BlueskyResponder] Failed to respond to ${mention.uri}:`, message);
+      console.error(JSON.stringify({ runId, event: 'responder_fatal_error', uri: mention.uri, error: message }));
       return { ...base, error: message };
     }
   }

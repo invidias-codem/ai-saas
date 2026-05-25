@@ -40,8 +40,9 @@ export async function GET(req: NextRequest) {
     console.warn('[BlueskyEngageCron] CRON_SECRET is not set — endpoint is unprotected');
   }
 
+  const runId = crypto.randomUUID();
   const startTime = Date.now();
-  console.log('[BlueskyEngageCron] Starting engagement run...');
+  console.log(JSON.stringify({ runId, event: 'engage_run_start' }));
 
   let processed = 0;
   let responded = 0;
@@ -54,10 +55,15 @@ export async function GET(req: NextRequest) {
 
   try {
     const poller = new MentionPoller();
-    const mentions = await poller.poll();
+    const { mentions, newCursor } = await poller.poll(runId);
 
     const toProcess = mentions.slice(0, MAX_MENTIONS_PER_RUN);
-    console.log(`[BlueskyEngageCron] Found ${mentions.length} mentions, processing ${toProcess.length}`);
+    console.log(JSON.stringify({
+      runId,
+      event: 'engage_mentions_fetched',
+      found: mentions.length,
+      processing: toProcess.length
+    }));
 
     if (toProcess.length === 0) {
       return NextResponse.json({
@@ -78,7 +84,7 @@ export async function GET(req: NextRequest) {
     const results: EngagementResult[] = [];
 
     for (const mention of toProcess) {
-      const result = await responder.respond(mention);
+      const result = await responder.respond(mention, 'mention', runId);
       results.push(result);
       processed++;
 
@@ -94,7 +100,9 @@ export async function GET(req: NextRequest) {
         incrementReason(skipReasons, result.skipReason ?? result.error ?? result.decisionReason);
       }
 
-      console.log('[BlueskyEngageCron] Mention decision:', {
+      console.log(JSON.stringify({
+        runId,
+        event: 'engage_mention_decision',
         uri: mention.uri,
         author: mention.authorHandle,
         action: result.action,
@@ -104,7 +112,7 @@ export async function GET(req: NextRequest) {
         decisionReason: result.decisionReason,
         skipReason: result.skipReason,
         error: result.error,
-      });
+      }));
 
       if (result.error && result.error !== 'rate_limited') {
         errors.push(`${mention.uri}: ${result.error}`);
@@ -125,11 +133,16 @@ export async function GET(req: NextRequest) {
       durationMs: Date.now() - startTime,
     };
 
-    console.log('[BlueskyEngageCron] Run complete:', summary);
+    if (newCursor) {
+      await poller.saveLastCursor(newCursor);
+      console.log(JSON.stringify({ runId, event: 'engage_cursor_saved', cursor: newCursor }));
+    }
+
+    console.log(JSON.stringify({ runId, event: 'engage_run_complete', summary }));
     return NextResponse.json(summary);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[BlueskyEngageCron] Fatal error:', message);
+    console.error(JSON.stringify({ runId, event: 'engage_fatal_error', error: message }));
     return NextResponse.json(
       {
         success: false,
