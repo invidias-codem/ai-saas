@@ -135,13 +135,13 @@ export const LandingNavbar = () => {
                         <div className="relative w-9 h-9 flex-shrink-0 transition-transform group-hover:scale-110 duration-300">
                             <Image
                                 src="/Genie.png"
-                                alt="Genie Logo"
+                                alt="Lattice OS logo"
                                 fill
                                 className="object-cover"
                             />
                         </div>
                         <span className="landing-text-primary text-xl font-bold tracking-tight font-heading leading-none transition-colors group-hover:text-purple-400">
-                            Genie AI
+                            Lattice OS
                         </span>
                     </Link>
 

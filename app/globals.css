@@ -135,7 +135,6 @@
   :root {
     height: 100dvh;
     touch-action: manipulation;
-    color-scheme: dark;
   }
 
   body {
@@ -200,10 +199,10 @@
 
 @layer utilities {
   .glass-card {
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: hsl(var(--card) / 0.6);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid hsl(var(--border) / 0.5);
     box-shadow: none;
   }
 

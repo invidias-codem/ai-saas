@@ -143,12 +143,12 @@ export function ConversationHistory() {
     };
 
     return (
-        <Card className="p-4 border-none bg-transparent shadow-none text-white">
+        <Card className="p-4 border-none bg-transparent shadow-none text-foreground">
             <div className="flex items-center justify-between mb-4">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2">
                         <MessageSquare className="w-4 h-4 text-sky-500" />
-                        <h3 className="text-sm font-semibold text-gray-200">
+                        <h3 className="text-sm font-semibold text-foreground/80">
                             {isWorkspaceScopedView ? 'Workspace History' : 'History'}
                         </h3>
                     </div>
@@ -181,10 +181,10 @@ export function ConversationHistory() {
 
             {loading ? (
                 <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 </div>
             ) : visibleConversations.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-muted-foreground">
                     <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-30" />
                     <p className="text-sm">
                         {isWorkspaceScopedView ? 'No workspace conversations yet.' : 'No conversations yet.'}
@@ -196,8 +196,8 @@ export function ConversationHistory() {
                         <div
                             key={conv.id}
                             className={cn(
-                                "flex items-start gap-3 p-3 rounded-lg border transition cursor-pointer hover:bg-white/10 border-white/5",
-                                conv.id === activeId ? "bg-white/10 border-sky-500/30" : "bg-transparent"
+                                "flex items-start gap-3 p-3 rounded-lg border transition cursor-pointer hover:bg-foreground/5 border-border/30",
+                                conv.id === activeId ? "bg-foreground/5 border-sky-500/30" : "bg-transparent"
                             )}
                             onClick={() => handleSelectConversation(conv)}
                         >
@@ -205,23 +205,23 @@ export function ConversationHistory() {
                                 <MessageCircle
                                     className={cn(
                                         "w-4 h-4",
-                                        conv.id === activeId ? "text-sky-400" : "text-gray-400"
+                                        conv.id === activeId ? "text-sky-400" : "text-muted-foreground"
                                     )}
                                 />
                             </div>
 
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2">
-                                    <p className={cn("text-sm font-medium truncate", conv.id === activeId ? "text-white" : "text-gray-300")}>
+                                    <p className={cn("text-sm font-medium truncate", conv.id === activeId ? "text-foreground" : "text-foreground/80")}>
                                         {conv.title}
                                     </p>
-                                    <span className="text-[10px] text-gray-500 whitespace-nowrap">
+                                    <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap">
                                         {formatDate(conv.lastUpdated)}
                                     </span>
                                 </div>
 
                                 {conv.preview && (
-                                    <p className="text-xs text-gray-500 truncate mt-1">{conv.preview}</p>
+                                    <p className="text-xs text-muted-foreground/60 truncate mt-1">{conv.preview}</p>
                                 )}
                             </div>
 
@@ -236,15 +236,15 @@ export function ConversationHistory() {
                                         <Trash2 className={cn("w-3 h-3", deletingId === conv.id && "opacity-50")} />
                                     </Button>
                                 </AlertDialogTrigger>
-                                <AlertDialogContent className="bg-gray-900 border-gray-800 text-white">
+                                <AlertDialogContent className="bg-card border-border text-foreground">
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Delete Conversation?</AlertDialogTitle>
-                                        <AlertDialogDescription className="text-gray-400">
+                                        <AlertDialogDescription className="text-muted-foreground">
                                             This will permanently delete &quot;{conv.title}&quot;. This action cannot be undone.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                        <AlertDialogCancel className="bg-gray-800 hover:bg-gray-700 text-white border-gray-700">Cancel</AlertDialogCancel>
+                                        <AlertDialogCancel className="bg-secondary hover:bg-secondary/80 text-foreground border-border">Cancel</AlertDialogCancel>
                                         <AlertDialogAction
                                             onClick={() => handleDelete(conv.id)}
                                             className="bg-red-600 hover:bg-red-700"
