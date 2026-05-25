@@ -1,108 +1,94 @@
-// app/api/webhooks/kofi/route.ts — UPDATED
-// Adds referral conversion tracking after successful donation.
-// ~15 lines added vs original; all existing logic preserved.
+import { NextRequest, NextResponse } from "next/server";
+import { clerkClient } from "@clerk/nextjs/server";
+import { createClient } from "@supabase/supabase-js";
 
-import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabaseClient';
-import { logReferralEvent, getReferralCodeForEmail } from '@/lib/referral';
+// Initialize Supabase Admin Client to bypass RLS for server-side inserts
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-export async function POST(req: Request) {
-    try {
-        const formData = await req.formData();
-        const payload  = formData.get('data');
+const KOFI_WEBHOOK_SECRET = process.env.KOFI_WEBHOOK_SECRET!;
+const CREDITS_PER_DOLLAR = 50; // Configure your exchange rate
 
-        if (!payload) {
-            return NextResponse.json({ error: 'Missing data' }, { status: 400 });
-        }
+export async function POST(req: NextRequest) {
+  try {
+    // 1. Parse Ko-Fi's unique payload structure
+    // Ko-Fi sends application/x-www-form-urlencoded with a stringified 'data' field
+    const formData = await req.formData();
+    const rawData = formData.get("data");
 
-        const data = JSON.parse(payload as string);
-
-        const verificationToken = process.env.KOFI_VERIFICATION_TOKEN;
-        if (!verificationToken || data.verification_token !== verificationToken) {
-            console.warn('[Ko-fi] Unauthorized webhook attempt');
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const amount = parseFloat(data.amount);
-        let creditsToAdd = 0;
-
-        if (amount >= 50) creditsToAdd = 1000;
-        else if (amount >= 15) creditsToAdd = 200;
-        else if (amount >= 5)  creditsToAdd = 50;
-        else creditsToAdd = Math.floor(amount * 10);
-
-        console.log(`[Ko-fi] Processing donation: ${amount} ${data.currency} from ${data.email}. Adding ${creditsToAdd} credits.`);
-
-        if (!supabaseAdmin) {
-            console.error('[Ko-fi] Supabase Admin not configured');
-            return NextResponse.json({ error: 'Server Error' }, { status: 500 });
-        }
-
-        const metadata = {
-            kofi_transaction_id: data.message_id,
-            email:               data.email,
-            tier_name:           data.tier_name,
-            kofi_data:           data
-        };
-
-        const { data: result, error } = await supabaseAdmin.rpc('process_kofi_donation', {
-            p_kofi_transaction_id: data.message_id,
-            p_email:               data.email,
-            p_amount_usd:          amount,
-            p_credits_to_add:      creditsToAdd,
-            p_tier_name:           data.tier_name || 'Donation',
-            p_metadata:            metadata
-        });
-
-        if (error) {
-            console.error('[Ko-fi] RPC Error:', error);
-            return NextResponse.json({ error: 'Database Error' }, { status: 500 });
-        }
-
-        const { success, duplicate, user_found } = result as any;
-
-        if (duplicate) {
-            console.log(`[Ko-fi] Duplicate transaction ${data.message_id} ignored.`);
-            return NextResponse.json({ received: true, status: 'duplicate' });
-        }
-
-        // ─── REFERRAL TRACKING: log upgrade event ──────────────────────────────
-        if (user_found && !duplicate) {
-            try {
-                const referral = await getReferralCodeForEmail(data.email);
-
-                if (referral) {
-                    await logReferralEvent({
-                        code:      referral.code,
-                        eventType: 'upgrade',
-                        userId:    referral.userId,
-                        amountUsd: amount,
-                        platform:  'kofi',
-                        metadata: {
-                            kofi_transaction_id: data.message_id,
-                            tier_name:           data.tier_name || 'Donation',
-                            credits_added:       creditsToAdd,
-                        },
-                    });
-                    console.log(`[Ko-fi] Referral upgrade logged: code=${referral.code} amount=$${amount}`);
-                }
-            } catch (refErr) {
-                // Never let referral tracking failure break the payment flow
-                console.error('[Ko-fi] Referral tracking error (non-fatal):', refErr);
-            }
-        }
-        // ───────────────────────────────────────────────────────────────────────
-
-        if (user_found) {
-            console.log(`[Ko-fi] Successfully credited ${creditsToAdd} to user (via email: ${data.email})`);
-        } else {
-            console.log(`[Ko-fi] User not found for email ${data.email}. Donation recorded for manual claim.`);
-        }
-
-        return NextResponse.json({ received: true, processed: user_found });
-
-    } catch (error: any) {
-        console.error('[Ko-fi] Webhook Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    if (!rawData || typeof rawData !== "string") {
+      return NextResponse.json({ error: "Invalid payload format" }, { status: 400 });
     }
+
+    const payload = JSON.parse(rawData);
+
+    // 2. Token Verification
+    if (payload.verification_token !== KOFI_WEBHOOK_SECRET) {
+      console.error("Ko-Fi Webhook Error: Invalid verification token");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const transactionId = payload.kofi_transaction_id;
+    const buyerEmail = payload.email;
+    const amount = parseFloat(payload.amount);
+
+    // 3. Idempotency Check
+    // Attempt to insert the transaction. If it fails due to the UNIQUE constraint, 
+    // it means we've already processed it.
+    const { error: insertError } = await supabaseAdmin
+      .from("payment_events")
+      .insert({
+        transaction_id: transactionId,
+        email: buyerEmail,
+        amount: payload.amount,
+      });
+
+    if (insertError) {
+      if (insertError.code === "23505") { // Postgres unique violation code
+        console.log(`Webhook ignored: Transaction ${transactionId} already processed.`);
+        return NextResponse.json({ status: "Already processed" }, { status: 200 });
+      }
+      throw insertError;
+    }
+
+    // 4. Find the Clerk User by Email
+    const client = await clerkClient();
+    const users = await client.users.getUserList({
+      emailAddress: [buyerEmail],
+    });
+
+    if (users.data.length === 0) {
+      // CRITICAL: The payment succeeded, but the user used a different email on Ko-Fi.
+      // We return 200 so Ko-Fi stops retrying, but you should log this to an 
+      // "unmatched_payments" table to manually credit the user later.
+      console.error(`Paid but unmatched email: ${buyerEmail} for TX: ${transactionId}`);
+      return NextResponse.json({ status: "Unmatched user email" }, { status: 200 });
+    }
+
+    const user = users.data[0];
+
+    // 5. Calculate and Update Credits
+    const currentCredits = (user.privateMetadata.computeCredits as number) || 0;
+    const creditsToAdd = Math.floor(amount * CREDITS_PER_DOLLAR);
+    const newCreditBalance = currentCredits + creditsToAdd;
+
+    await client.users.updateUserMetadata(user.id, {
+      privateMetadata: {
+        ...user.privateMetadata,
+        computeCredits: newCreditBalance,
+      },
+    });
+
+    console.log(`Successfully added ${creditsToAdd} credits to ${buyerEmail}`);
+
+    // 6. Acknowledge Receipt
+    return NextResponse.json({ status: "Success" }, { status: 200 });
+
+  } catch (error) {
+    console.error("Ko-Fi Webhook Processing Error:", error);
+    // Return 500 so Ko-Fi knows to retry the webhook later
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
 }

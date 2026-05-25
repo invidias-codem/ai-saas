@@ -154,7 +154,7 @@ const MiniGraph = () => {
               y={node.y + 4}
               textAnchor="middle"
               fontSize={node.r > 20 ? "9" : "7"}
-              className="fill-[#3f3125] dark:fill-white"
+              className="fill-current text-foreground"
               fontWeight="600"
               fontFamily="system-ui"
             >
@@ -174,11 +174,11 @@ export const HeroSection = () => {
     <section className="landing-bg-main relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
       <ParticleField />
 
-      <div className="landing-orb-primary absolute top-[-20%] left-[-10%] h-[700px] w-[700px] rounded-full blur-[120px] pointer-events-none" />
-      <div className="landing-orb-secondary absolute bottom-[-10%] right-[-5%] h-[500px] w-[500px] rounded-full blur-[120px] pointer-events-none" />
-      <div className="landing-orb-tertiary absolute top-1/2 left-1/2 h-[400px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[100px] pointer-events-none" />
+      <div className="landing-orb-primary absolute top-[-20%] left-[-10%] h-[700px] w-[700px] rounded-full blur-[60px] dark:blur-[120px] opacity-20 dark:opacity-100 pointer-events-none" />
+      <div className="landing-orb-secondary absolute bottom-[-10%] right-[-5%] h-[500px] w-[500px] rounded-full blur-[60px] dark:blur-[120px] opacity-20 dark:opacity-100 pointer-events-none" />
+      <div className="landing-orb-tertiary absolute top-1/2 left-1/2 h-[400px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[60px] dark:blur-[100px] opacity-20 dark:opacity-100 pointer-events-none" />
 
-      <div className="landing-grid-overlay absolute inset-0 pointer-events-none opacity-[0.04] dark:opacity-[0.03]" />
+      <div className="landing-grid-overlay absolute inset-0 pointer-events-none opacity-[0.02] dark:opacity-[0.03]" />
 
       <div className="container relative z-10 mx-auto flex flex-col items-center px-4 pt-24 pb-16 text-center">
         <motion.div
@@ -261,13 +261,13 @@ export const HeroSection = () => {
           className="relative mx-auto w-full max-w-lg"
         >
           <div className="landing-card-strong relative rounded-2xl p-6">
-            <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-amber-300/20 to-transparent dark:from-violet-500/10 pointer-events-none" />
-            <p className="text-xs tracking-widest uppercase mb-4 font-medium text-amber-700 dark:text-violet-400/80">
+            <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
+            <p className="text-xs tracking-widest uppercase mb-4 font-medium text-primary">
               {t("graphLabel")}
             </p>
             <MiniGraph />
           </div>
-          <div className="absolute bottom-0 left-0 right-0 h-16 rounded-b-2xl bg-gradient-to-t from-[#FAF7F0]/95 to-transparent dark:from-[#080b14] pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-16 rounded-b-2xl bg-gradient-to-t from-background to-transparent pointer-events-none" />
         </motion.div>
       </div>
 

@@ -63,8 +63,8 @@ const LandingPage = () => {
       label: t("features.infrastructure"),
       icon: ImageIcon,
       description: t("features.infrastructureDesc"),
-      color: "text-indigo-500 dark:text-white",
-      bgColor: "bg-indigo-500/10 dark:bg-white/10",
+      color: "text-primary",
+      bgColor: "bg-primary/10",
     },
   ];
 
@@ -94,10 +94,10 @@ const LandingPage = () => {
             transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl md:text-5xl font-bold text-slate-800 dark:text-white mb-6 font-heading">
+            <h2 className="text-3xl md:text-5xl font-bold text-foreground mb-6 font-heading">
               {t("features.title")}
             </h2>
-            <p className="text-slate-500 dark:text-muted-foreground text-lg max-w-2xl mx-auto">
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
               {t("features.subtitle")}
             </p>
           </motion.div>
@@ -128,12 +128,12 @@ const LandingPage = () => {
             className="max-w-3xl mx-auto relative z-10 space-y-8"
           >
             <h2
-              className="font-bold text-slate-900 dark:text-white font-heading tracking-tight"
+              className="font-bold text-foreground font-heading tracking-tight"
               style={{ fontSize: "clamp(2rem, 5vw, 3.5rem)" }}
             >
               {t("cta.title")}
             </h2>
-            <p className="text-xl text-slate-600 dark:text-slate-300/80">
+            <p className="text-xl text-muted-foreground">
               {t("cta.subtitle")}
             </p>
             <Link href="/dashboard">
@@ -148,7 +148,7 @@ const LandingPage = () => {
         </section>
       </main>
 
-      <footer className="py-12 border-t border-slate-200 dark:border-white/10 bg-background relative z-10">
+      <footer className="py-12 border-t border-border bg-background relative z-10">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-12">
             <div className="flex items-center gap-2">
@@ -158,18 +158,18 @@ const LandingPage = () => {
               <span className="text-xl font-bold text-slate-800 dark:text-foreground font-heading">Lattice OS</span>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-8 text-sm text-slate-400 dark:text-muted-foreground">
-              <Link href="/blog" className="hover:text-slate-700 dark:hover:text-white transition-colors">Blog</Link>
-              <Link href="/slack" className="hover:text-slate-700 dark:hover:text-white transition-colors">Slack Integration</Link>
-              <Link href="/support" className="hover:text-slate-700 dark:hover:text-white transition-colors">Support</Link>
-              <Link href="/privacy" className="hover:text-slate-700 dark:hover:text-white transition-colors">Privacy Policy</Link>
+            <div className="flex flex-wrap justify-center gap-8 text-sm text-muted-foreground">
+              <Link href="/blog" className="hover:text-foreground transition-colors">Blog</Link>
+              <Link href="/slack" className="hover:text-foreground transition-colors">Slack Integration</Link>
+              <Link href="/support" className="hover:text-foreground transition-colors">Support</Link>
+              <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
             </div>
 
             <div className="flex gap-4" />
           </div>
 
-          <div className="pt-8 border-t border-slate-100 dark:border-white/5 text-center">
-            <p className="text-slate-400 dark:text-gray-500 text-sm">
+          <div className="pt-8 border-t border-border text-center">
+            <p className="text-muted-foreground text-sm">
               {t("footer.rights", { year: new Date().getFullYear() })}
             </p>
           </div>
