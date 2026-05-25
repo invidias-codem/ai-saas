@@ -95,6 +95,7 @@ export async function POST(req: Request) {
             }
         }
 
+        const resolved = await resolveRuntimeContext({ userId: user.userId, surface: 'web', conversationId, strictValidation: false });
         let effectiveMode = resolved.mode;
         
         // --- CREDIT ENFORCEMENT & GRACEFUL DEGRADATION ---
