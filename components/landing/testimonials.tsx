@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 
 const testimonials = [
     {
-        quote: "Genie has completely transformed how I create content for my social media channels.",
+        quote: "Lattice OS has completely transformed how I create content for my social media channels.",
         name: "Alex R.",
         role: "Content Creator",
         initials: "AR",
@@ -43,7 +43,7 @@ export const Testimonials = () => {
                     className="text-center mb-16"
                 >
                     <h2 className="text-3xl md:text-5xl font-bold text-foreground mb-4 font-heading">Trusted by Creators</h2>
-                    <p className="text-muted-foreground text-lg">Join thousands of professionals using Genie AI.</p>
+                    <p className="text-muted-foreground text-lg">Join thousands of professionals using Lattice OS.</p>
                 </motion.div>
 
                 <div className="grid md:grid-cols-3 gap-8">
