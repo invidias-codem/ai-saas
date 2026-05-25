@@ -60,8 +60,10 @@ export interface PlannedBlueskyPost {
     | 'weak_grounding'
     | 'promo_heavy'
     | 'oversaturated_topic'
+    | 'draft_borderline'
     | 'stale_mix';
   decisionNotes?: string[];
+  runId?: string;
 }
 
 type RecentPlannerState = {
@@ -453,9 +455,9 @@ async function getTopicState(topic: string, lane: BlueskyTopicLane): Promise<{
   }
 }
 
-async function isOversaturatedTopic(topic: string, lane: BlueskyTopicLane): Promise<boolean> {
+async function getRecencyPenalty(topic: string, lane: BlueskyTopicLane): Promise<number> {
   const state = await getTopicState(topic, lane);
-  return state.postCount7d >= 2;
+  return state.postCount7d * 0.15;
 }
 
 function scoreFreshness(
@@ -805,7 +807,7 @@ export async function planDistributionBlueskyPost(params: {
   url: string;
   lane?: BlueskyTopicLane;
   topics?: string[];
-}): Promise<PlannedBlueskyPost> {
+}, runId?: string): Promise<PlannedBlueskyPost> {
   const lane = params.lane ?? 'ai';
   const recent = await fetchRecentPlannerState();
   const intent: BlueskyPostIntent = 'distribution';
@@ -850,125 +852,37 @@ export async function planDistributionBlueskyPost(params: {
   const prompt = buildPrompt(packet);
   const text = await generateWithGemini(prompt);
   const tooSimilar = await isTooSimilarToRecentPosts(text);
-  const oversaturated = await isOversaturatedTopic(topicCluster, lane);
+  const recencyPenalty = await getRecencyPenalty(topicCluster, lane);
   const publicationAlreadyShared = await hasRecentPublicationMatch(params.url, 168);
   const recentCooldown = await hasRecentPostCooldown(12);
-  const { qualityScore, usefulnessScore, suppressionReason } = scoreCandidate(text, packet);
+  let { qualityScore, usefulnessScore, suppressionReason } = scoreCandidate(text, packet);
+
+  if (recencyPenalty > 0) {
+    qualityScore = Math.max(0, qualityScore - recencyPenalty);
+    decisionNotes.push(`applied recency penalty -${recencyPenalty.toFixed(2)} to quality score`);
+  }
 
   if (tooSimilar) decisionNotes.push('suppressed: too similar to recent posts');
-  if (oversaturated) decisionNotes.push('suppressed: oversaturated topic cluster');
   if (publicationAlreadyShared) decisionNotes.push('suppressed: publication already shared recently');
   if (recentCooldown) decisionNotes.push('suppressed: recent proactive cooldown still active');
   if (freshness.stalenessFlags.length) decisionNotes.push(`freshness flags: ${freshness.stalenessFlags.join(', ')}`);
-  if (suppressionReason && !tooSimilar && !oversaturated && !publicationAlreadyShared && !recentCooldown) {
+  
+  let finalSuppressionReason = suppressionReason;
+  let suppressed = false;
+  
+  if (tooSimilar || publicationAlreadyShared || recentCooldown) {
+    suppressed = true;
+    finalSuppressionReason = tooSimilar ? 'too_similar' : publicationAlreadyShared ? 'too_similar' : 'oversaturated_topic';
+  } else if (qualityScore >= 0.45 && qualityScore < 0.55 && !suppressionReason) {
+    suppressed = true;
+    finalSuppressionReason = 'draft_borderline';
+    decisionNotes.push('suppressed: draft_borderline');
+  } else if (suppressionReason && qualityScore < 0.55) {
+    suppressed = true;
     decisionNotes.push(`suppressed: ${suppressionReason}`);
   }
 
-  if (publicationAlreadyShared) {
-    return {
-      text,
-      topics,
-      ctaMode: 'site',
-      lane,
-      intent,
-      grounding: packet.grounding,
-      groundingPacket: packet,
-      sourceKind: packet.sourceKind,
-      sourceConfidence: packet.sourceConfidence,
-      qualityScore: 0.15,
-      freshnessScore: freshness.freshnessScore,
-      usefulnessScore: 0.1,
-      stalenessFlags: freshness.stalenessFlags,
-      audienceMode,
-      rhetoricalPattern,
-      topicCluster,
-      publicationUrl: params.url,
-      publicationTitle: params.title,
-      suppressed: true,
-      suppressionReason: 'too_similar',
-      decisionNotes,
-    };
-  }
-
-  if (recentCooldown) {
-    return {
-      text,
-      topics,
-      ctaMode: 'site',
-      lane,
-      intent,
-      grounding: packet.grounding,
-      groundingPacket: packet,
-      sourceKind: packet.sourceKind,
-      sourceConfidence: packet.sourceConfidence,
-      qualityScore: Math.min(0.35, qualityScore),
-      freshnessScore: freshness.freshnessScore,
-      usefulnessScore: Math.min(0.2, usefulnessScore),
-      stalenessFlags: freshness.stalenessFlags,
-      audienceMode,
-      rhetoricalPattern,
-      topicCluster,
-      publicationUrl: params.url,
-      publicationTitle: params.title,
-      suppressed: true,
-      suppressionReason: 'oversaturated_topic',
-      decisionNotes,
-    };
-  }
-
-  if (tooSimilar) {
-    return {
-      text,
-      topics,
-      ctaMode: 'site',
-      lane,
-      intent,
-      grounding: packet.grounding,
-      groundingPacket: packet,
-      sourceKind: packet.sourceKind,
-      sourceConfidence: packet.sourceConfidence,
-      qualityScore: 0.2,
-      freshnessScore: freshness.freshnessScore,
-      usefulnessScore: 0.15,
-      stalenessFlags: freshness.stalenessFlags,
-      audienceMode,
-      rhetoricalPattern,
-      topicCluster,
-      publicationUrl: params.url,
-      publicationTitle: params.title,
-      suppressed: true,
-      suppressionReason: 'too_similar',
-      decisionNotes,
-    };
-  }
-
-  if (oversaturated) {
-    return {
-      text,
-      topics,
-      ctaMode: 'site',
-      lane,
-      intent,
-      grounding: packet.grounding,
-      groundingPacket: packet,
-      sourceKind: packet.sourceKind,
-      sourceConfidence: packet.sourceConfidence,
-      qualityScore: Math.min(0.45, qualityScore),
-      freshnessScore: freshness.freshnessScore,
-      usefulnessScore: usefulnessScore,
-      stalenessFlags: freshness.stalenessFlags,
-      audienceMode,
-      rhetoricalPattern,
-      topicCluster,
-      publicationUrl: params.url,
-      publicationTitle: params.title,
-      suppressed: true,
-      suppressionReason: 'oversaturated_topic',
-      decisionNotes,
-    };
-  }
-
-  if (suppressionReason && qualityScore < 0.55) {
+  if (suppressed) {
     return {
       text,
       topics,
@@ -989,8 +903,9 @@ export async function planDistributionBlueskyPost(params: {
       publicationUrl: params.url,
       publicationTitle: params.title,
       suppressed: true,
-      suppressionReason,
+      suppressionReason: finalSuppressionReason,
       decisionNotes,
+      runId,
     };
   }
 
@@ -1016,11 +931,13 @@ export async function planDistributionBlueskyPost(params: {
     publicationUrl: params.url,
     publicationTitle: params.title,
     decisionNotes,
+    runId,
   };
 }
 
 export async function planProactiveBlueskyPost(
-  laneOverride?: BlueskyTopicLane
+  laneOverride?: BlueskyTopicLane,
+  runId?: string
 ): Promise<PlannedBlueskyPost> {
   const lane = laneOverride ?? chooseLane();
   const recent = await fetchRecentPlannerState();
@@ -1034,7 +951,7 @@ export async function planProactiveBlueskyPost(
     inferTopicCluster(lane, packet.topics)
   );
   packet.topicCluster = topicCluster;
-  const oversaturated = await isOversaturatedTopic(topicCluster, lane);
+  const recencyPenalty = await getRecencyPenalty(topicCluster, lane);
   const recentCooldown = await hasRecentPostCooldown(12);
   const freshness = scoreFreshness(packet, recent);
   packet.freshnessContext = buildFreshnessGuidance({
@@ -1051,7 +968,6 @@ export async function planProactiveBlueskyPost(
   decisionNotes.push(`selected audienceMode=${audienceMode}`);
   decisionNotes.push(`selected rhetoricalPattern=${rhetoricalPattern}`);
 
-  if (oversaturated) decisionNotes.push('topic currently saturated in last 7 days');
   if (recentCooldown) decisionNotes.push('recent proactive cooldown still active');
   if (freshness.stalenessFlags.length) {
     decisionNotes.push(`freshness flags: ${freshness.stalenessFlags.join(', ')}`);
@@ -1089,14 +1005,24 @@ export async function planProactiveBlueskyPost(
       continue;
     }
 
-    const { qualityScore, usefulnessScore, suppressionReason } = scoreCandidate(text, packet);
+    let { qualityScore, usefulnessScore, suppressionReason } = scoreCandidate(text, packet);
+
+    if (recencyPenalty > 0) {
+      qualityScore = Math.max(0, qualityScore - recencyPenalty);
+      decisionNotes.push(`attempt ${attempt + 1}: applied recency penalty -${recencyPenalty.toFixed(2)}`);
+    }
+
     const staleMix = freshness.freshnessScore < 0.45;
-    const suppressed = Boolean((suppressionReason && qualityScore < 0.55) || oversaturated || staleMix);
-    const finalSuppressionReason = oversaturated
-      ? 'oversaturated_topic'
-      : staleMix
-        ? 'stale_mix'
-        : suppressionReason;
+    let suppressed = false;
+    let finalSuppressionReason = suppressionReason;
+
+    if (qualityScore >= 0.45 && qualityScore < 0.55 && !suppressionReason) {
+      suppressed = true;
+      finalSuppressionReason = 'draft_borderline';
+    } else if ((suppressionReason && qualityScore < 0.55) || staleMix) {
+      suppressed = true;
+      finalSuppressionReason = staleMix ? 'stale_mix' : suppressionReason;
+    }
 
     if (!suppressed) {
       decisionNotes.push(`approved on attempt ${attempt + 1}`);
@@ -1118,6 +1044,7 @@ export async function planProactiveBlueskyPost(
         rhetoricalPattern,
         topicCluster,
         decisionNotes,
+        runId,
       };
     }
 
