@@ -47,7 +47,7 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
 
 // General assistant model
 const generalModel = genAI.getGenerativeModel({
-  model: "gemini-3.1-flash-lite-preview",
+  model: "gemini-2.5-flash",
   safetySettings: [
     { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
     { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -59,7 +59,7 @@ const generalModel = genAI.getGenerativeModel({
 
 // Code-specific model
 const codeModel = genAI.getGenerativeModel({
-  model: "gemini-3.1-flash-lite-preview",
+  model: "gemini-2.5-flash",
   systemInstruction: {
     role: "user",
     parts: [{ text: CODE_SYSTEM_PROMPT }],

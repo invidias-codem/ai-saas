@@ -108,7 +108,7 @@ async function getSlackUserEmail(botToken: string, userId: string): Promise<stri
 async function extractMeetingDetails(userMessage: string): Promise<MeetingDetails> {
     console.log('[CALENDAR_HANDLER] Extracting meeting details from:', userMessage);
 
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-3.1-flash-lite-preview" });
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-flash" });
 
     const prompt = `Extract meeting details from this message: "${userMessage}"
 

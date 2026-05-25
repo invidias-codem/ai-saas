@@ -9,7 +9,7 @@ import { requireEnv } from '@/lib/env';
 // Lazy initialize
 function getModel() {
     const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
-    return genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    return genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 }
 
 export interface ExtractedFact {

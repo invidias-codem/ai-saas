@@ -22,7 +22,7 @@ export interface UserConversation {
   metadata?: any;
 }
 
-const GEMINI_FLASH_MODEL = "gemini-3.1-flash-lite-preview";
+const GEMINI_FLASH_MODEL = "gemini-2.5-flash";
 
 /**
  * Queries recent conversations (last 7 days) for a user from Supabase

@@ -18,7 +18,7 @@ function getGenAI(): GoogleGenerativeAI {
   return _genAI;
 }
 
-const DEFAULT_MODEL = "gemini-3.1-flash-lite-preview";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 const AGENTIC_MODEL = "gemini-3-flash-preview";
 
 export class GeminiProvider implements LLMProvider {
