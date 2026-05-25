@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { clerkClient } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Initialize Supabase Admin Client to bypass RLS for server-side inserts
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Helper to lazily initialize Supabase Admin Client
+const getSupabaseAdmin = () => {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+};
 
 const KOFI_WEBHOOK_SECRET = process.env.KOFI_WEBHOOK_SECRET!;
 const CREDITS_PER_DOLLAR = 50; // Configure your exchange rate
@@ -37,6 +39,7 @@ export async function POST(req: NextRequest) {
     // 3. Idempotency Check
     // Attempt to insert the transaction. If it fails due to the UNIQUE constraint, 
     // it means we've already processed it.
+    const supabaseAdmin = getSupabaseAdmin();
     const { error: insertError } = await supabaseAdmin
       .from("payment_events")
       .insert({
