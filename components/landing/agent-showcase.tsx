@@ -116,14 +116,14 @@ export const AgentShowcase = () => {
         <div className="w-full max-w-5xl mx-auto p-4">
             {/* Scenario Toggle */}
             <div className="flex justify-center mb-8">
-                <div className="inline-flex bg-slate-100 dark:bg-white/5 backdrop-blur-md rounded-full p-1 border border-slate-200 dark:border-white/10">
+                <div className="inline-flex bg-secondary backdrop-blur-md rounded-full p-1 border border-border">
                     {(Object.values(SCENARIOS) as Scenario[]).map((s) => (
                         <button
                             key={s.id}
                             onClick={() => setActiveScenario(s.id)}
                             className={`
                                 relative flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium transition-all duration-300
-                                ${activeScenario === s.id ? "text-slate-900 dark:text-white" : "text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"}
+                                ${activeScenario === s.id ? "text-foreground" : "text-muted-foreground hover:text-slate-700 dark:hover:text-gray-200"}
                             `}
                         >
                             {activeScenario === s.id && (
@@ -141,7 +141,7 @@ export const AgentShowcase = () => {
             </div>
 
             {/* Main Showcase Card */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-white/80 dark:bg-[#0f1117]/80 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-3xl overflow-hidden shadow-2xl ring-1 ring-slate-200 dark:ring-white/5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-card/80 backdrop-blur-xl border border-border rounded-3xl overflow-hidden shadow-2xl ring-1 ring-slate-200 dark:ring-white/5">
 
                 {/* LEFT: Input / Setup */}
                 <div className="relative p-8 flex flex-col justify-between min-h-[400px] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-white/5 bg-gradient-to-br from-slate-50 dark:from-white/5 to-transparent">
@@ -151,13 +151,13 @@ export const AgentShowcase = () => {
                                 <scenario.icon className="w-5 h-5" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{scenario.label} Agent</h3>
-                                <p className="text-sm text-slate-500 dark:text-gray-400">{scenario.description}</p>
+                                <h3 className="text-lg font-semibold text-foreground">{scenario.label} Agent</h3>
+                                <p className="text-sm text-muted-foreground">{scenario.description}</p>
                             </div>
                         </div>
 
                         {/* Mock Input Bubble */}
-                        <div className="bg-slate-100 dark:bg-white/5 rounded-2xl p-4 border border-slate-200 dark:border-white/10 mb-6">
+                        <div className="bg-secondary rounded-2xl p-4 border border-border mb-6">
                             <div className="flex items-start gap-3">
                                 <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center mt-1">
                                     <span className="text-xs font-bold text-purple-700 dark:text-purple-400">YOU</span>
@@ -168,7 +168,7 @@ export const AgentShowcase = () => {
                                     {/* Mock Attachment */}
                                     <div className="flex items-center gap-3 p-3 bg-slate-100 dark:bg-black/40 rounded-xl border border-slate-200 dark:border-white/5 group cursor-pointer hover:border-indigo-500/30 transition-colors">
                                         <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-slate-200 to-slate-300 dark:from-gray-800 dark:to-gray-900 flex items-center justify-center">
-                                            <FileTextIcon className="text-slate-500 dark:text-gray-400" />
+                                            <FileTextIcon className="text-muted-foreground" />
                                         </div>
                                         <div>
                                             <p className="text-xs font-medium text-slate-600 dark:text-gray-300">
@@ -267,7 +267,7 @@ export const AgentShowcase = () => {
                                         <Badge variant="outline" className="border-green-500/30 text-green-400 bg-green-500/10 mb-2">
                                             Analysis Complete
                                         </Badge>
-                                        <h4 className="text-xl font-bold text-slate-900 dark:text-white shadow-slate-200 dark:shadow-black drop-shadow-sm">
+                                        <h4 className="text-xl font-bold text-foreground shadow-slate-200 dark:shadow-black drop-shadow-sm">
                                             {scenario.finalResult.title}
                                         </h4>
                                     </div>
@@ -291,7 +291,7 @@ export const AgentShowcase = () => {
                                     <Button
                                         variant="outline"
                                         onClick={() => { setStatus("idle"); setCurrentStep(0); }}
-                                        className="border-slate-200 dark:border-white/10 hover:bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:text-white"
+                                        className="border-border hover:bg-slate-200 dark:bg-white/10 text-muted-foreground hover:text-foreground"
                                     >
                                         <ReloadIcon className="w-4 h-4" />
                                     </Button>

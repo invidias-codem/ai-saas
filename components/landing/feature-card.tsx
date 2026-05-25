@@ -22,16 +22,13 @@ export const FeatureCard = ({ label, description, icon: Icon, color, bgColor, de
             viewport={{ once: true, margin: "-50px" }}
             className={cn(
                 "group relative p-6 rounded-2xl overflow-hidden transition-all duration-300",
-                // Light mode: frosted glass — white/60 bg, white/80 border, subtle shadow
-                "bg-white/60 backdrop-blur-sm border border-white/80 shadow-sm",
-                "hover:bg-white/80 hover:shadow-md hover:border-white",
-                // Dark mode overrides
-                "dark:bg-white/5 dark:border-white/5 dark:shadow-none",
-                "dark:hover:bg-white/10 dark:hover:shadow-none dark:hover:border-white/10",
+                // Semantic token styling
+                "bg-card/60 backdrop-blur-sm border border-border shadow-sm",
+                "hover:bg-accent/50 hover:shadow-md hover:border-accent-foreground/20",
             )}
         >
             {/* Hover gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-50/50 to-transparent dark:from-white/5 dark:to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
             {/* Icon container */}
             <div className={cn(
@@ -42,12 +39,12 @@ export const FeatureCard = ({ label, description, icon: Icon, color, bgColor, de
             </div>
 
             {/* Title */}
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2 relative z-10 font-heading">
+            <h3 className="text-xl font-bold text-foreground mb-2 relative z-10 font-heading">
                 {label}
             </h3>
 
             {/* Description */}
-            <p className="text-slate-500 dark:text-muted-foreground text-sm leading-relaxed relative z-10 group-hover:text-slate-600 dark:group-hover:text-gray-300 transition-colors">
+            <p className="text-muted-foreground text-sm leading-relaxed relative z-10 group-hover:text-foreground transition-colors">
                 {description}
             </p>
         </motion.div>

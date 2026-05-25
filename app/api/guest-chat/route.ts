@@ -49,7 +49,9 @@ const guestChatSchema = z.object({
         role: z.enum(["user", "bot"]),
         text: z.string()
     })).min(1, "At least one message is required"),
-    interactionCount: z.number().min(0).max(10)
+    interactionCount: z.number().min(0).max(10),
+    turnstileToken: z.string().optional(),
+    guestSessionId: z.string().optional()
 });
 
 export async function POST(req: Request) {
@@ -77,7 +79,28 @@ export async function POST(req: Request) {
             });
         }
 
-        const { messages, interactionCount } = validationResult.data;
+        const { messages, interactionCount, turnstileToken, guestSessionId } = validationResult.data;
+
+        // Verify Turnstile token if it's provided in production
+        if (process.env.NODE_ENV === 'production' || turnstileToken) {
+            if (!turnstileToken) {
+                return new NextResponse(JSON.stringify({ error: "Missing Turnstile token" }), { status: 400 });
+            }
+            const verifyFormData = new FormData();
+            verifyFormData.append('secret', process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA');
+            verifyFormData.append('response', turnstileToken);
+            verifyFormData.append('remoteip', ip || '');
+
+            const turnstileResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+                method: 'POST',
+                body: verifyFormData
+            });
+            const turnstileResult = await turnstileResponse.json();
+            
+            if (!turnstileResult.success) {
+                return new NextResponse(JSON.stringify({ error: "CAPTCHA verification failed" }), { status: 403 });
+            }
+        }
 
         // Check if guest has exceeded free limit
         if (interactionCount >= 10) {
