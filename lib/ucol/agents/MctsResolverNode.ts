@@ -226,7 +226,7 @@ export class MctsResolverAgent {
       } else {
         // Fallback to Gemini if no Anthropic key
         const gemini = getGemini();
-        const model = gemini.getGenerativeModel({ model: 'gemini-1.5-pro', generationConfig: { responseMimeType: 'application/json' } });
+        const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash', generationConfig: { responseMimeType: 'application/json' } });
         const res = await model.generateContent(prompt);
         text = res.response.text();
       }

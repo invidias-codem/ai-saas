@@ -33,7 +33,7 @@ const MODEL_PRICING: Record<
   "gemini-1.5-flash":            { inputPer1k: 0.000075, outputPer1k: 0.000300 },
   // Gemini Pro family
   "gemini-1.5-pro":              { inputPer1k: 0.001250, outputPer1k: 0.005000 },
-  "gemini-1.5-pro-preview-0409": { inputPer1k: 0.001250, outputPer1k: 0.005000 },
+  "gemini-2.5-pro":              { inputPer1k: 0.001250, outputPer1k: 0.010000 },
   "gemini-3-flash-preview":      { inputPer1k: 0.000075, outputPer1k: 0.000300 }, // placeholder
   // Claude Sonnet family
   "claude-sonnet-4-5-20250929":  { inputPer1k: 0.003000, outputPer1k: 0.015000 },
