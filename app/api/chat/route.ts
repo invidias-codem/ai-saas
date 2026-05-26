@@ -203,7 +203,8 @@ export async function POST(req: Request) {
             {
                 userId: user.userId,
                 clerkUser,
-                request: validationResult.data
+                request: validationResult.data,
+                conversationId,
             },
             {
                 mode: effectiveMode,
@@ -224,6 +225,13 @@ export async function POST(req: Request) {
                     if (done) break;
                     fullText += decoder.decode(value, { stream: true });
                 }
+
+                // Await the signature only after the stream has fully drained.
+                // Promise.resolve wraps the optional promise safely; the catch
+                // ensures a network/parse error never prevents message persistence.
+                const thoughtSignature = await Promise.resolve(
+                    result.thoughtSignaturePromise ?? Promise.resolve(null)
+                ).catch(() => null);
 
                 if (fullText) {
                     await runPostGenerationPipeline({
@@ -248,6 +256,7 @@ export async function POST(req: Request) {
                         },
                         saveToMemory: false,
                         persistUserMessage: true,
+                        thoughtSignature,
                     });
                 }
             } catch (err) {
