@@ -41,7 +41,7 @@ function extractWorkspaceId(pathname: string | null): string | null {
     return match ? decodeURIComponent(match[1]) : null;
 }
 
-export function ConversationHistory() {
+export function ConversationHistory({ onNavigate }: { onNavigate?: () => void }) {
     const router = useRouter();
     const pathname = usePathname();
     const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -86,6 +86,7 @@ export function ConversationHistory() {
                 setConversations((prev) => prev.filter((c) => c.id !== id));
                 if (id === activeId) {
                     clearSessionMemoryStorage();
+                    onNavigate?.();
                     if (activeWorkspaceId) {
                         router.push(`/workspaces/${activeWorkspaceId}/conversation`);
                     } else {
@@ -123,6 +124,7 @@ export function ConversationHistory() {
             createdAt: conv.createdAt,
         });
         setActiveId(conv.id);
+        onNavigate?.();
         router.push(`/conversation/${conv.id}`);
     };
 
@@ -143,8 +145,8 @@ export function ConversationHistory() {
     };
 
     return (
-        <Card className="p-4 border-none bg-transparent shadow-none text-foreground">
-            <div className="flex items-center justify-between mb-4">
+        <Card className="p-0 border-none bg-transparent shadow-none text-foreground">
+            <div className="flex items-center justify-between mb-3 pt-1 pb-1 border-b border-slate-200 dark:border-white/10">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2">
                         <MessageSquare className="w-4 h-4 text-sky-500" />
@@ -191,7 +193,8 @@ export function ConversationHistory() {
                     </p>
                 </div>
             ) : (
-                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                // No max-h here — the parent scroll container controls height
+                <div className="space-y-1 pb-2">
                     {visibleConversations.map((conv) => (
                         <div
                             key={conv.id}
