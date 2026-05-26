@@ -45,7 +45,8 @@ const ENTERPRISE_SOFT_WARN_THRESHOLD = 10_000_000;
 
 export const MODEL_COST_WEIGHTS: Record<string, number> = {
   'gemini-2.5-flash':               1.0,
-  'gemini-1.5-pro-preview-0409':    4.0,
+  'gemini-2.5-pro':                 4.0,
+  'gemini-1.5-pro':                 4.0,
   'claude-sonnet-4-5-20250929':     8.0,   // Claude Sonnet ~8x Flash cost
   'claude-opus':                   30.0,
   'deepseek-r1':                    2.0,

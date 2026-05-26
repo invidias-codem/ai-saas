@@ -21,7 +21,7 @@ export const CODE_MODELS: Record<string, CodeModelConfig> = {
         id: 'agentic',
         name: 'Agentic',
         provider: 'gemini',
-        modelId: 'gemini-1.5-pro-preview-0409',
+        modelId: 'gemini-2.5-pro',
         description: 'Autonomous code execution and tool use',
         maxTokens: 8192,
         supportsCodeExecution: true,
