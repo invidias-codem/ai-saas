@@ -421,7 +421,7 @@ export async function generateConversationReply(
       const { data: lastBotMsg } = await supabase
         .from('messages')
         .select('metadata')
-        .eq('conversation_id', parsed.conversationId)
+        .eq('conversation_id', conversationId)
         .eq('role', 'bot')
         .order('created_at', { ascending: false })
         .limit(1)
