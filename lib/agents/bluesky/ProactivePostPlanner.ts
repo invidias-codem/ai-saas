@@ -360,9 +360,12 @@ async function isTooSimilarToRecentPosts(text: string): Promise<boolean> {
       if (existing === candidate) return true;
 
       const existingWords = new Set(existing.split(' ').filter(Boolean));
-      const overlap = [...candidateWords].filter((word) => existingWords.has(word)).length;
-      const baseline = Math.max(1, Math.min(candidateWords.size, existingWords.size));
-      return overlap / baseline >= 0.8;
+      // Only consider words ≥4 chars to avoid false matches on common short words ("ai", "the", etc.)
+      const meaningfulCandidate = [...candidateWords].filter((w) => w.length >= 4);
+      const overlap = meaningfulCandidate.filter((word) => existingWords.has(word)).length;
+      const baseline = Math.max(1, Math.min(meaningfulCandidate.length, existingWords.size));
+      // Reduced threshold: 0.65 (was 0.80). Short posts share too many words by coincidence.
+      return meaningfulCandidate.length >= 5 && overlap / baseline >= 0.65;
     });
   } catch (err) {
     console.warn('[ProactivePostPlanner] Dedupe check failed (non-blocking):', err);
@@ -457,7 +460,9 @@ async function getTopicState(topic: string, lane: BlueskyTopicLane): Promise<{
 
 async function getRecencyPenalty(topic: string, lane: BlueskyTopicLane): Promise<number> {
   const state = await getTopicState(topic, lane);
-  return state.postCount7d * 0.15;
+  // Reduced coefficient: 0.08 per post in 7d (was 0.15) to prevent nuking quality scores
+  // on active topics. Two posts in a week → 0.16 penalty, not 0.30.
+  return state.postCount7d * 0.08;
 }
 
 function scoreFreshness(
