@@ -3,6 +3,9 @@ import { z } from "zod";
 
 
 const envSchema = z.object({
+  DEPLOYMENT_MODE: z.string().optional(),
+  PREFLIGHT_SECRET: z.string().optional(),
+
   // Clerk keys (publicly exposed to browser)
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1, { message: "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required" }).optional(),
   NEXT_PUBLIC_CLERK_SIGN_IN_URL: z.string().min(1).optional(),
@@ -67,6 +70,28 @@ const envSchema = z.object({
   VERCEL_LOG_WEBHOOK_SECRET: z.string().optional(),
   CLERK_WEBHOOK_SECRET: z.string().optional(),
   CRON_SECRET: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.DEPLOYMENT_MODE === "A") {
+    const requiredModeAVars = [
+      "PREFLIGHT_SECRET",
+      "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+      "CLERK_SECRET_KEY",
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "GOOGLE_API_KEY", // Assuming Gemini is the baseline provider
+    ] as const;
+
+    for (const key of requiredModeAVars) {
+      if (!data[key]) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `[Mode A Requirement] Missing required environment variable: ${key}`,
+          path: [key],
+        });
+      }
+    }
+  }
 });
 
 // Parse the environment variables and export the result

@@ -1,0 +1,36 @@
+# Mode A (Standard Internal Deployment) - Baseline Topology
+#
+# This docker-compose file provides the runtime for the Lattice OS application.
+# 
+# IMPORTANT - DATABASE ORCHESTRATION:
+# Lattice OS relies on the @supabase/supabase-js client, which requires the PostgREST API.
+# It CANNOT connect to a vanilla PostgreSQL database.
+# 
+# For this Mode A baseline, you MUST provide connection keys to a managed Supabase project
+# or run the official Supabase Local Development Stack in a separate orchestration.
+# 
+# Supply these in your .env file:
+# - NEXT_PUBLIC_SUPABASE_URL
+# - NEXT_PUBLIC_SUPABASE_ANON_KEY
+# - SUPABASE_SERVICE_ROLE_KEY
+
+version: '3.8'
+
+services:
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - DEPLOYMENT_MODE=A
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/preflight?secret=${PREFLIGHT_SECRET}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
