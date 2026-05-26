@@ -4,11 +4,26 @@
  * Polls the Bluesky notification stream for new mentions and replies directed
  * at the Tech Genie account. Tracks the last processed cursor in Supabase and
  * deduplicates against previously logged interactions.
+ *
+ * Viral write-storm protection (guardrail #2):
+ * Likes and reposts are aggregated in-memory during the poll pass into an
+ * actorEngagementBatch map. Call flushActorBatch() once at the end of the
+ * cron execution to write a single bulk upsert instead of one row per like.
  */
 
 import { BskyAgent } from '@atproto/api';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { BlueskyMention, BlueskyReplyRef } from './types';
+
+// ─── Engagement Batch Types ───────────────────────────────────────────────────
+
+interface ActorEngagementDelta {
+  handle: string;
+  interactionDelta: number; // +N engagements to add
+  quoteTexts: string[];      // any quote post texts to add
+}
+
+type ActorBatch = Map<string, ActorEngagementDelta>;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -43,6 +58,9 @@ export class MentionPoller {
   private handle: string;
   private appPassword: string;
   private authenticated = false;
+
+  // In-memory batch — populated during poll(), flushed once at end of cron run
+  private actorBatch: ActorBatch = new Map();
 
   constructor() {
     const handle = process.env.BLUESKY_HANDLE;
@@ -154,7 +172,36 @@ export class MentionPoller {
       console.log(JSON.stringify({ runId, event: 'mention_poller_received', count: notifications.length }));
 
       for (const notif of notifications) {
-        // Only process mentions and replies
+        // ── Batch-aggregate likes and reposts (guardrail: no per-notification DB writes) ──
+        if (notif.reason === 'like' || notif.reason === 'repost') {
+          const did = notif.author.did;
+          const existing = this.actorBatch.get(did) ?? {
+            handle: notif.author.handle,
+            interactionDelta: 0,
+            quoteTexts: [],
+          };
+          existing.interactionDelta += 1;
+          this.actorBatch.set(did, existing);
+          continue;
+        }
+
+        // ── Batch-aggregate quote posts (index their text for topic awareness) ──
+        if (notif.reason === 'quote') {
+          const record = notif.record as Record<string, unknown>;
+          const text = typeof record?.['text'] === 'string' ? record['text'] : '';
+          const did = notif.author.did;
+          const existing = this.actorBatch.get(did) ?? {
+            handle: notif.author.handle,
+            interactionDelta: 0,
+            quoteTexts: [],
+          };
+          existing.interactionDelta += 1;
+          if (text) existing.quoteTexts.push(text);
+          this.actorBatch.set(did, existing);
+          continue;
+        }
+
+        // Only process mentions and replies for full engagement pipeline
         if (notif.reason !== 'mention' && notif.reason !== 'reply') continue;
 
         // Ensure the post record exists and has text
@@ -204,5 +251,71 @@ export class MentionPoller {
     }));
 
     return { mentions, newCursor };
+  }
+
+  // ─── Flush Actor Batch ──────────────────────────────────────────────────────
+
+  /**
+   * Bulk-upserts all aggregated like/repost/quote engagement deltas from this
+   * poll run into bluesky_actor_memory. Call this ONCE at the end of the cron
+   * handler after all mentions have been processed.
+   *
+   * This is the viral write-storm fix: no matter how many likes arrive in one
+   * cron tick, we make exactly one upsert per unique actor — not one per like.
+   */
+  async flushActorBatch(runId?: string): Promise<{ flushed: number }> {
+    if (this.actorBatch.size === 0) return { flushed: 0 };
+
+    const now = new Date().toISOString();
+    let flushed = 0;
+
+    for (const [did, delta] of this.actorBatch.entries()) {
+      try {
+        // Fetch current record to merge
+        const { data: current } = await this.supabase
+          .from('bluesky_actor_memory')
+          .select('engagement_count, topics_engaged, notes')
+          .eq('actor_did', did)
+          .maybeSingle();
+
+        const existingCount = (current?.engagement_count ?? 0) as number;
+        const existingTopics = Array.isArray(current?.topics_engaged) ? current.topics_engaged as string[] : [];
+
+        // Merge quote texts into notes for superfan topic awareness
+        const existingNotes = (current?.notes ?? {}) as Record<string, unknown>;
+        if (delta.quoteTexts.length > 0) {
+          const prevQuotes = Array.isArray(existingNotes['quote_samples']) ? existingNotes['quote_samples'] as string[] : [];
+          existingNotes['quote_samples'] = [...prevQuotes, ...delta.quoteTexts].slice(-10); // keep last 10
+        }
+
+        const { error } = await this.supabase
+          .from('bluesky_actor_memory')
+          .upsert(
+            {
+              actor_did: did,
+              handle: delta.handle,
+              first_seen_at: current ? undefined : now,
+              last_interaction_at: now,
+              engagement_count: existingCount + delta.interactionDelta,
+              topics_engaged: existingTopics,
+              notes: existingNotes,
+              updated_at: now,
+            },
+            { onConflict: 'actor_did' }
+          );
+
+        if (error) {
+          console.error(JSON.stringify({ runId, event: 'poller_flush_batch_error', did, error: { message: error.message } }));
+        } else {
+          flushed++;
+        }
+      } catch (err) {
+        console.warn(JSON.stringify({ runId, event: 'poller_flush_batch_actor_error', did, error: err instanceof Error ? err.message : err }));
+      }
+    }
+
+    console.log(JSON.stringify({ runId, event: 'poller_flush_batch_complete', flushed, totalActors: this.actorBatch.size }));
+    this.actorBatch.clear();
+    return { flushed };
   }
 }

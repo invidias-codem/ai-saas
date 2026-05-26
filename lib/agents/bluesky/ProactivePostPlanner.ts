@@ -36,6 +36,7 @@ export interface GroundingPacket {
   rhetoricalPattern?: BlueskyRhetoricalPattern;
   freshnessContext?: string;
   engagementHint?: string;
+  communityContext?: string; // <- injected from TimelineDiscoveryEngine
 }
 
 export interface PlannedBlueskyPost {
@@ -194,6 +195,14 @@ async function maybePrioritizeDeferredTopicCluster(
 }
 
 function buildPrompt(packet: GroundingPacket): string {
+  const communityBlock = packet.communityContext
+    ? [
+        `Community context (what your followers are discussing right now):`,
+        packet.communityContext,
+        `IMPORTANT: Only engage with community topics if they intersect naturally with your core persona (AI, memory-native systems, developer tools). If they don't align, ignore them or pivot the framing to your expertise. Do NOT write off-brand content just to fit in.`,
+      ].join('\n')
+    : '';
+
   return [
     'Write one original Bluesky post for Tech Genie.',
     LANE_BRIEFS[packet.lane],
@@ -218,6 +227,7 @@ function buildPrompt(packet: GroundingPacket): string {
     packet.grounding,
     packet.recentContext ? `\nRecent post context:\n${packet.recentContext}` : '',
     packet.freshnessContext ? `\nFreshness guidance:\n${packet.freshnessContext}` : '',
+    communityBlock ? `\n${communityBlock}` : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -714,6 +724,52 @@ async function fetchMemoryGrounding(
   }
 }
 
+/**
+ * Fetches recent ephemeral timeline memories and returns a community context summary.
+ * These are the posts written by TimelineDiscoveryEngine, tagged with memory_type: ephemeral_timeline.
+ * If no timeline memories exist yet, returns an empty string (graceful degradation).
+ */
+async function fetchCommunityContext(lane: BlueskyTopicLane, runId?: string): Promise<string> {
+  try {
+    const query = lane === 'ai'
+      ? 'AI agent LLM inference reasoning community'
+      : lane === 'memory'
+      ? 'memory context retrieval knowledge graph persistent'
+      : 'developer tools infrastructure SaaS architecture';
+
+    // Search specifically in ephemeral timeline memories
+    const memories = await searchMemories(BLUESKY_MEMORY_USER_ID, query, 6);
+
+    const timelineMemories = memories.filter(
+      (m) => m.metadata?.memory_type === 'ephemeral_timeline'
+    );
+
+    if (timelineMemories.length === 0) return '';
+
+    // Extract dominant topics from metadata
+    const topicCounts = new Map<string, number>();
+    for (const mem of timelineMemories) {
+      const topics = Array.isArray(mem.metadata?.topics) ? mem.metadata.topics as string[] : [];
+      for (const topic of topics) {
+        topicCounts.set(topic, (topicCounts.get(topic) ?? 0) + 1);
+      }
+    }
+
+    const ranked = Array.from(topicCounts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([topic, count]) => `${topic} (${count} posts)`);
+
+    if (ranked.length === 0) return '';
+
+    console.log(JSON.stringify({ runId, event: 'planner_community_context_fetched', topics: ranked }));
+    return `Followers are currently discussing: ${ranked.join(', ')}.`;
+  } catch (err) {
+    console.warn(JSON.stringify({ runId, event: 'planner_community_context_error', error: formatError(err) }));
+    return '';
+  }
+}
+
 async function buildGroundingPacket(
   lane: BlueskyTopicLane,
   intent: BlueskyPostIntent,
@@ -724,6 +780,7 @@ async function buildGroundingPacket(
   runId?: string
 ): Promise<GroundingPacket> {
   const recentContext = await fetchRecentPostContext(runId);
+  const communityContext = await fetchCommunityContext(lane, runId);
   const topicCluster = inferTopicCluster(lane, inferTopicsFromLane(lane));
   const freshness = scoreFreshness(
     {
@@ -760,6 +817,7 @@ async function buildGroundingPacket(
       audienceMode,
       rhetoricalPattern,
       freshnessContext,
+      communityContext,
     };
   }
 
@@ -779,6 +837,7 @@ async function buildGroundingPacket(
       audienceMode,
       rhetoricalPattern,
       freshnessContext,
+      communityContext,
     };
   }
 
@@ -794,6 +853,7 @@ async function buildGroundingPacket(
     audienceMode,
     rhetoricalPattern,
     freshnessContext,
+    communityContext,
   };
 }
 
