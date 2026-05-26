@@ -4,6 +4,10 @@ import { searchMemories } from '@/lib/memory/vectorStore';
 import { findRelatedEntities, formatGraphContext } from '@/lib/memory/graphStore';
 import { EngagementLearningStore } from './EngagementLearningStore';
 
+function formatError(err: unknown) {
+  return err instanceof Error ? { message: err.message, stack: err.stack } : err;
+}
+
 export type BlueskyTopicLane = 'ai' | 'memory' | 'tech';
 export type BlueskyPostIntent = 'thought' | 'reaction' | 'distribution' | 'journal';
 export type BlueskySourceKind = 'memory' | 'news' | 'hybrid';
@@ -168,7 +172,8 @@ function inferTopicCluster(lane: BlueskyTopicLane, topics: string[]): string {
 
 async function maybePrioritizeDeferredTopicCluster(
   lane: BlueskyTopicLane,
-  fallbackCluster: string
+  fallbackCluster: string,
+  runId?: string
 ): Promise<string> {
   try {
     const deferredCounts = await engagementLearningStore.getDeferredPacketCounts();
@@ -183,7 +188,7 @@ async function maybePrioritizeDeferredTopicCluster(
 
     return fallbackCluster;
   } catch (err) {
-    console.warn('[ProactivePostPlanner] Deferred-topic prioritization failed (non-blocking):', err);
+    console.warn(JSON.stringify({ runId, event: 'planner_deferred_prioritization_error', error: formatError(err) }));
     return fallbackCluster;
   }
 }
@@ -271,7 +276,7 @@ function sanitizeHeadlineText(text: string): string {
     .trim();
 }
 
-async function fetchRecentPlannerState(): Promise<RecentPlannerState[]> {
+async function fetchRecentPlannerState(runId?: string): Promise<RecentPlannerState[]> {
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -281,12 +286,7 @@ async function fetchRecentPlannerState(): Promise<RecentPlannerState[]> {
       .limit(15);
 
     if (error) {
-      console.warn('[ProactivePostPlanner] Failed to fetch recent planner state:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      });
+      console.warn(JSON.stringify({ runId, event: 'planner_fetch_recent_state_db_error', error: formatError(error) }));
       return [];
     }
 
@@ -299,12 +299,12 @@ async function fetchRecentPlannerState(): Promise<RecentPlannerState[]> {
       topicCluster: (row.topic_cluster as string | null | undefined) ?? null,
     }));
   } catch (err) {
-    console.warn('[ProactivePostPlanner] Unexpected error fetching recent planner state:', err);
+    console.warn(JSON.stringify({ runId, event: 'planner_fetch_recent_state_error', error: formatError(err) }));
     return [];
   }
 }
 
-async function fetchRecentPostContext(): Promise<string> {
+async function fetchRecentPostContext(runId?: string): Promise<string> {
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -314,12 +314,7 @@ async function fetchRecentPostContext(): Promise<string> {
       .limit(5);
 
     if (error) {
-      console.warn('[ProactivePostPlanner] Failed to fetch recent post context:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      });
+      console.warn(JSON.stringify({ runId, event: 'planner_fetch_recent_context_db_error', error: formatError(error) }));
       return '';
     }
 
@@ -332,12 +327,12 @@ async function fetchRecentPostContext(): Promise<string> {
       )
       .join('\n');
   } catch (err) {
-    console.warn('[ProactivePostPlanner] Unexpected error fetching recent post context:', err);
+    console.warn(JSON.stringify({ runId, event: 'planner_fetch_recent_context_error', error: formatError(err) }));
     return '';
   }
 }
 
-async function isTooSimilarToRecentPosts(text: string): Promise<boolean> {
+async function isTooSimilarToRecentPosts(text: string, runId?: string): Promise<boolean> {
   try {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
@@ -347,7 +342,7 @@ async function isTooSimilarToRecentPosts(text: string): Promise<boolean> {
       .limit(12);
 
     if (error) {
-      console.warn('[ProactivePostPlanner] Recent post lookup failed (non-blocking):', error);
+      console.warn(JSON.stringify({ runId, event: 'planner_dedupe_lookup_db_error', error: formatError(error) }));
       return false;
     }
 
@@ -368,12 +363,12 @@ async function isTooSimilarToRecentPosts(text: string): Promise<boolean> {
       return meaningfulCandidate.length >= 5 && overlap / baseline >= 0.65;
     });
   } catch (err) {
-    console.warn('[ProactivePostPlanner] Dedupe check failed (non-blocking):', err);
+    console.warn(JSON.stringify({ runId, event: 'planner_dedupe_lookup_error', error: formatError(err) }));
     return false;
   }
 }
 
-async function hasRecentPostCooldown(hours = 12): Promise<boolean> {
+async function hasRecentPostCooldown(hours = 12, runId?: string): Promise<boolean> {
   try {
     const supabase = getSupabaseAdmin();
     const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
@@ -386,18 +381,18 @@ async function hasRecentPostCooldown(hours = 12): Promise<boolean> {
       .limit(1);
 
     if (error) {
-      console.warn('[ProactivePostPlanner] Cooldown lookup failed (non-blocking):', error);
+      console.warn(JSON.stringify({ runId, event: 'planner_cooldown_lookup_db_error', error: formatError(error) }));
       return false;
     }
 
     return (data?.length ?? 0) > 0;
   } catch (err) {
-    console.warn('[ProactivePostPlanner] Cooldown check failed (non-blocking):', err);
+    console.warn(JSON.stringify({ runId, event: 'planner_cooldown_lookup_error', error: formatError(err) }));
     return false;
   }
 }
 
-async function hasRecentPublicationMatch(url: string, hours = 72): Promise<boolean> {
+async function hasRecentPublicationMatch(url: string, hours = 72, runId?: string): Promise<boolean> {
   try {
     const supabase = getSupabaseAdmin();
     const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
@@ -410,18 +405,18 @@ async function hasRecentPublicationMatch(url: string, hours = 72): Promise<boole
       .limit(1);
 
     if (error) {
-      console.warn('[ProactivePostPlanner] Publication dedupe lookup failed (non-blocking):', error);
+      console.warn(JSON.stringify({ runId, event: 'planner_publication_dedupe_db_error', error: formatError(error) }));
       return false;
     }
 
     return (data?.length ?? 0) > 0;
   } catch (err) {
-    console.warn('[ProactivePostPlanner] Publication dedupe check failed (non-blocking):', err);
+    console.warn(JSON.stringify({ runId, event: 'planner_publication_dedupe_error', error: formatError(err) }));
     return false;
   }
 }
 
-async function getTopicState(topic: string, lane: BlueskyTopicLane): Promise<{
+async function getTopicState(topic: string, lane: BlueskyTopicLane, runId?: string): Promise<{
   postCount7d: number;
   postCount30d: number;
 }> {
@@ -435,14 +430,7 @@ async function getTopicState(topic: string, lane: BlueskyTopicLane): Promise<{
       .maybeSingle();
 
     if (error) {
-      console.warn('[ProactivePostPlanner] Failed to fetch bluesky_topic_state:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-        topic,
-        lane,
-      });
+      console.warn(JSON.stringify({ runId, event: 'planner_fetch_topic_state_db_error', error: formatError(error), topic, lane }));
       return { postCount7d: 0, postCount30d: 0 };
     }
 
@@ -453,16 +441,15 @@ async function getTopicState(topic: string, lane: BlueskyTopicLane): Promise<{
       postCount30d: data.post_count_30d ?? 0,
     };
   } catch (err) {
-    console.warn('[ProactivePostPlanner] Unexpected error fetching bluesky_topic_state:', err);
+    console.warn(JSON.stringify({ runId, event: 'planner_fetch_topic_state_error', error: formatError(err), topic, lane }));
     return { postCount7d: 0, postCount30d: 0 };
   }
 }
 
-async function getRecencyPenalty(topic: string, lane: BlueskyTopicLane): Promise<number> {
-  const state = await getTopicState(topic, lane);
-  // Reduced coefficient: 0.08 per post in 7d (was 0.15) to prevent nuking quality scores
-  // on active topics. Two posts in a week → 0.16 penalty, not 0.30.
-  return state.postCount7d * 0.08;
+async function getRecencyPenalty(topic: string, lane: BlueskyTopicLane, runId?: string): Promise<number> {
+  const state = await getTopicState(topic, lane, runId);
+  // Adjusted coefficient: 0.15 per post in 7d to heavily penalize over-indexed topics.
+  return state.postCount7d * 0.15;
 }
 
 function scoreFreshness(
@@ -598,6 +585,7 @@ export async function logProactiveBlueskyPost(params: {
   topicCluster?: string;
   postUri?: string;
   postCid?: string;
+  runId?: string;
 }): Promise<void> {
   try {
     const supabase = getSupabaseAdmin();
@@ -627,10 +615,10 @@ export async function logProactiveBlueskyPost(params: {
     });
 
     if (error) {
-      console.error('[ProactivePostPlanner] Failed to log proactive post:', error);
+      console.error(JSON.stringify({ runId: params.runId, event: 'planner_log_post_db_error', error: formatError(error) }));
     }
   } catch (err) {
-    console.error('[ProactivePostPlanner] Error logging proactive post:', err);
+    console.error(JSON.stringify({ runId: params.runId, event: 'planner_log_post_error', error: formatError(err) }));
   }
 }
 
@@ -638,11 +626,12 @@ export async function updateBlueskyTopicState(params: {
   topic: string;
   lane: BlueskyTopicLane;
   posted: boolean;
+  runId?: string;
 }): Promise<void> {
   try {
     const supabase = getSupabaseAdmin();
     const now = new Date().toISOString();
-    const current = await getTopicState(params.topic, params.lane);
+    const current = await getTopicState(params.topic, params.lane, params.runId);
 
     const next7d = params.posted ? current.postCount7d + 1 : current.postCount7d;
     const next30d = params.posted ? current.postCount30d + 1 : current.postCount30d;
@@ -660,14 +649,14 @@ export async function updateBlueskyTopicState(params: {
     );
 
     if (error) {
-      console.error('[ProactivePostPlanner] Failed to update bluesky_topic_state:', error);
+      console.error(JSON.stringify({ runId: params.runId, event: 'planner_update_topic_state_db_error', error: formatError(error) }));
     }
   } catch (err) {
-    console.error('[ProactivePostPlanner] Error updating bluesky_topic_state:', err);
+    console.error(JSON.stringify({ runId: params.runId, event: 'planner_update_topic_state_error', error: formatError(err) }));
   }
 }
 
-async function fetchTechNewsGrounding(): Promise<{ grounding: string; sourceConfidence: number }> {
+async function fetchTechNewsGrounding(runId?: string): Promise<{ grounding: string; sourceConfidence: number }> {
   try {
     const response = await fetch('https://news.ycombinator.com/', {
       headers: { 'User-Agent': 'Mozilla/5.0 TechGenieBlueskyBot/1.0' },
@@ -692,13 +681,14 @@ async function fetchTechNewsGrounding(): Promise<{ grounding: string; sourceConf
       sourceConfidence: matches.length > 0 ? 0.7 : 0.35,
     };
   } catch (err) {
-    console.warn('[ProactivePostPlanner] Tech news grounding failed (non-blocking):', err);
+    console.warn(JSON.stringify({ runId, event: 'planner_fetch_news_grounding_error', error: formatError(err) }));
     return { grounding: 'No current headline grounding available.', sourceConfidence: 0.3 };
   }
 }
 
 async function fetchMemoryGrounding(
-  lane: BlueskyTopicLane
+  lane: BlueskyTopicLane,
+  runId?: string
 ): Promise<{ grounding: string; sourceConfidence: number }> {
   try {
     const query =
@@ -719,7 +709,7 @@ async function fetchMemoryGrounding(
       sourceConfidence: memoryLines ? 0.8 : 0.45,
     };
   } catch (err) {
-    console.warn('[ProactivePostPlanner] Memory grounding failed (non-blocking):', err);
+    console.warn(JSON.stringify({ runId, event: 'planner_fetch_memory_grounding_error', error: formatError(err) }));
     return { grounding: 'No memory grounding available.', sourceConfidence: 0.35 };
   }
 }
@@ -730,9 +720,10 @@ async function buildGroundingPacket(
   sourceKind: BlueskySourceKind,
   audienceMode: BlueskyAudienceMode,
   rhetoricalPattern: BlueskyRhetoricalPattern,
-  recent: RecentPlannerState[]
+  recent: RecentPlannerState[],
+  runId?: string
 ): Promise<GroundingPacket> {
-  const recentContext = await fetchRecentPostContext();
+  const recentContext = await fetchRecentPostContext(runId);
   const topicCluster = inferTopicCluster(lane, inferTopicsFromLane(lane));
   const freshness = scoreFreshness(
     {
@@ -756,7 +747,7 @@ async function buildGroundingPacket(
   });
 
   if (sourceKind === 'news') {
-    const result = await fetchTechNewsGrounding();
+    const result = await fetchTechNewsGrounding(runId);
     return {
       lane,
       intent,
@@ -772,10 +763,10 @@ async function buildGroundingPacket(
     };
   }
 
-  const memoryResult = await fetchMemoryGrounding(lane);
+  const memoryResult = await fetchMemoryGrounding(lane, runId);
 
   if (sourceKind === 'hybrid' && lane !== 'tech') {
-    const newsResult = await fetchTechNewsGrounding();
+    const newsResult = await fetchTechNewsGrounding(runId);
     return {
       lane,
       intent,
@@ -814,14 +805,15 @@ export async function planDistributionBlueskyPost(params: {
   topics?: string[];
 }, runId?: string): Promise<PlannedBlueskyPost> {
   const lane = params.lane ?? 'ai';
-  const recent = await fetchRecentPlannerState();
+  const recent = await fetchRecentPlannerState(runId);
   const intent: BlueskyPostIntent = 'distribution';
   const topics = params.topics?.length ? params.topics : inferTopicsFromLane(lane);
   const topicCluster = await maybePrioritizeDeferredTopicCluster(
     lane,
-    inferTopicCluster(lane, topics)
+    inferTopicCluster(lane, topics),
+    runId
   );
-  const recentContext = await fetchRecentPostContext();
+  const recentContext = await fetchRecentPostContext(runId);
   const audienceMode = chooseAudienceMode(lane);
   const rhetoricalPattern = chooseRhetoricalPattern(lane, intent);
   const decisionNotes: string[] = [];
@@ -856,11 +848,13 @@ export async function planDistributionBlueskyPost(params: {
 
   const prompt = buildPrompt(packet);
   const text = await generateWithGemini(prompt);
-  const tooSimilar = await isTooSimilarToRecentPosts(text);
-  const recencyPenalty = await getRecencyPenalty(topicCluster, lane);
-  const publicationAlreadyShared = await hasRecentPublicationMatch(params.url, 168);
-  const recentCooldown = await hasRecentPostCooldown(12);
+  const tooSimilar = await isTooSimilarToRecentPosts(text, runId);
+  const recencyPenalty = await getRecencyPenalty(topicCluster, lane, runId);
+  const publicationAlreadyShared = await hasRecentPublicationMatch(params.url, 168, runId);
+  const recentCooldown = await hasRecentPostCooldown(12, runId);
   let { qualityScore, usefulnessScore, suppressionReason } = scoreCandidate(text, packet);
+
+  console.log(JSON.stringify({ runId, event: 'planner_score_evaluated', qualityScore, usefulnessScore, suppressionReason }));
 
   if (recencyPenalty > 0) {
     qualityScore = Math.max(0, qualityScore - recencyPenalty);
@@ -915,6 +909,7 @@ export async function planDistributionBlueskyPost(params: {
   }
 
   decisionNotes.push('approved: distribution candidate passed quality and saturation checks');
+  console.log(JSON.stringify({ runId, event: 'planner_decision_notes', decisionNotes }));
 
   return {
     text,
@@ -945,19 +940,20 @@ export async function planProactiveBlueskyPost(
   runId?: string
 ): Promise<PlannedBlueskyPost> {
   const lane = laneOverride ?? chooseLane();
-  const recent = await fetchRecentPlannerState();
+  const recent = await fetchRecentPlannerState(runId);
   const intent = chooseIntent(lane, recent);
   const sourceKind = chooseSourceKind(lane, recent);
   const audienceMode = chooseAudienceMode(lane);
   const rhetoricalPattern = chooseRhetoricalPattern(lane, intent);
-  const packet = await buildGroundingPacket(lane, intent, sourceKind, audienceMode, rhetoricalPattern, recent);
+  const packet = await buildGroundingPacket(lane, intent, sourceKind, audienceMode, rhetoricalPattern, recent, runId);
   const topicCluster = await maybePrioritizeDeferredTopicCluster(
     lane,
-    inferTopicCluster(lane, packet.topics)
+    inferTopicCluster(lane, packet.topics),
+    runId
   );
   packet.topicCluster = topicCluster;
-  const recencyPenalty = await getRecencyPenalty(topicCluster, lane);
-  const recentCooldown = await hasRecentPostCooldown(12);
+  const recencyPenalty = await getRecencyPenalty(topicCluster, lane, runId);
+  const recentCooldown = await hasRecentPostCooldown(12, runId);
   const freshness = scoreFreshness(packet, recent);
   packet.freshnessContext = buildFreshnessGuidance({
     lane,
@@ -979,6 +975,7 @@ export async function planProactiveBlueskyPost(
   }
 
   if (recentCooldown) {
+    console.log(JSON.stringify({ runId, event: 'planner_decision_notes', decisionNotes }));
     return {
       text: 'Suppressed proactive post candidate',
       topics: packet.topics,
@@ -1004,13 +1001,15 @@ export async function planProactiveBlueskyPost(
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const text = await generateWithGemini(prompt);
-    const tooSimilar = await isTooSimilarToRecentPosts(text);
+    const tooSimilar = await isTooSimilarToRecentPosts(text, runId);
     if (tooSimilar) {
       decisionNotes.push(`attempt ${attempt + 1}: too similar to recent posts`);
       continue;
     }
 
     let { qualityScore, usefulnessScore, suppressionReason } = scoreCandidate(text, packet);
+
+    console.log(JSON.stringify({ runId, event: 'planner_score_evaluated', attempt: attempt + 1, qualityScore, usefulnessScore, suppressionReason }));
 
     if (recencyPenalty > 0) {
       qualityScore = Math.max(0, qualityScore - recencyPenalty);
@@ -1031,6 +1030,7 @@ export async function planProactiveBlueskyPost(
 
     if (!suppressed) {
       decisionNotes.push(`approved on attempt ${attempt + 1}`);
+      console.log(JSON.stringify({ runId, event: 'planner_decision_notes', decisionNotes }));
       return {
         text,
         topics: packet.topics,
@@ -1055,6 +1055,7 @@ export async function planProactiveBlueskyPost(
 
     if (attempt === 2) {
       decisionNotes.push(`final suppression on attempt ${attempt + 1}: ${finalSuppressionReason}`);
+      console.log(JSON.stringify({ runId, event: 'planner_decision_notes', decisionNotes }));
       return {
         text,
         topics: packet.topics,
@@ -1080,6 +1081,7 @@ export async function planProactiveBlueskyPost(
   }
 
   decisionNotes.push('suppressed after repeated similarity with recent posts');
+  console.log(JSON.stringify({ runId, event: 'planner_decision_notes', decisionNotes }));
   return {
     text: 'Suppressed proactive post candidate',
     topics: inferTopicsFromLane(lane),

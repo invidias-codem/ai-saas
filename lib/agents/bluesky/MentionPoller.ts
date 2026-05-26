@@ -16,6 +16,10 @@ const POLL_STATE_KEY = 'last_cursor';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function formatError(err: unknown) {
+  return err instanceof Error ? { message: err.message, stack: err.stack } : err;
+}
+
 function getSupabaseClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -67,12 +71,12 @@ export class MentionPoller {
     });
 
     this.authenticated = true;
-    console.log(`[MentionPoller] Authenticated as ${this.handle}`);
+    console.log(JSON.stringify({ event: 'mention_poller_authenticated', handle: this.handle }));
   }
 
   // ─── Cursor State ────────────────────────────────────────────────────────
 
-  private async getLastCursor(): Promise<string | undefined> {
+  private async getLastCursor(runId?: string): Promise<string | undefined> {
     const { data, error } = await this.supabase
       .from('bluesky_poll_state')
       .select('value')
@@ -81,13 +85,13 @@ export class MentionPoller {
 
     if (error && error.code !== 'PGRST116') {
       // PGRST116 = row not found, which is expected on first run
-      console.error('[MentionPoller] Failed to read cursor from Supabase:', error);
+      console.error(JSON.stringify({ runId, event: 'poller_db_read_cursor_error', error: formatError(error) }));
     }
 
     return data?.value ?? undefined;
   }
 
-  public async saveLastCursor(cursor: string): Promise<void> {
+  public async saveLastCursor(cursor: string, runId?: string): Promise<void> {
     const { error } = await this.supabase
       .from('bluesky_poll_state')
       .upsert(
@@ -96,19 +100,19 @@ export class MentionPoller {
       );
 
     if (error) {
-      console.error('[MentionPoller] Failed to save cursor to Supabase:', error);
+      console.error(JSON.stringify({ runId, event: 'poller_db_save_cursor_error', error: formatError(error) }));
     }
   }
 
   // ─── Deduplication ───────────────────────────────────────────────────────
 
-  private async getAlreadyProcessedUris(): Promise<Set<string>> {
+  private async getAlreadyProcessedUris(runId?: string): Promise<Set<string>> {
     const { data, error } = await this.supabase
       .from('bluesky_interactions')
       .select('mention_uri');
 
     if (error) {
-      console.error('[MentionPoller] Failed to fetch processed URIs:', error);
+      console.error(JSON.stringify({ runId, event: 'poller_db_fetch_uris_error', error: formatError(error) }));
       return new Set();
     }
 
@@ -125,8 +129,8 @@ export class MentionPoller {
   async poll(runId?: string): Promise<{ mentions: BlueskyMention[], newCursor?: string }> {
     await this.ensureAuth();
 
-    const lastCursor = await this.getLastCursor();
-    const processedUris = await this.getAlreadyProcessedUris();
+    const lastCursor = await this.getLastCursor(runId);
+    const processedUris = await this.getAlreadyProcessedUris(runId);
 
     console.log(JSON.stringify({
       runId,
@@ -188,7 +192,7 @@ export class MentionPoller {
         });
       }
     } catch (err) {
-      console.error(JSON.stringify({ runId, event: 'mention_poller_error', error: String(err) }));
+      console.error(JSON.stringify({ runId, event: 'mention_poller_error', error: formatError(err) }));
       throw err;
     }
 
