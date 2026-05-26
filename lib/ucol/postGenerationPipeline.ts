@@ -42,7 +42,8 @@ export interface PostGenerationPipelineParams {
   };
   
   saveToMemory?: boolean;
-  persistUserMessage?: boolean; 
+  persistUserMessage?: boolean;
+  thoughtSignature?: string | null;
 }
 
 function chunkText(text: string, size: number = 2000): string[] {
@@ -86,6 +87,7 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
     userContext,
     saveToMemory = false,
     persistUserMessage = true,
+    thoughtSignature = null,
   } = params;
 
   try {
@@ -237,7 +239,13 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
             conversation_id: conversationId,
             role: 'bot',
             content: responseText,
-            metadata: { featureType, ...wmrtMeta },
+            metadata: {
+              featureType,
+              ...wmrtMeta,
+              // Episodic reasoning state — used to resume Gemini's scratchpad on the next turn.
+              // Stored here only; never written to memory_bank (long-term semantic store).
+              last_thought_signature: thoughtSignature ?? null,
+            },
           });
 
         if (persistAssistantError) console.error('[API] Failed to persist assistant message:', persistAssistantError);

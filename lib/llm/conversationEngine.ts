@@ -92,6 +92,7 @@ export type ConversationEngineOptions = {
 
 export type ConversationEngineResult = {
   stream: ReadableStream;
+  thoughtSignaturePromise?: Promise<string | null>;
   sources?: Source[];
   debug?: {
     promptVersion?: string | null;
@@ -154,10 +155,11 @@ export async function generateConversationReply(
     userId: string;
     clerkUser: any;
     request: ConversationRequest;
+    conversationId?: string | null;
   },
   options: ConversationEngineOptions = {}
 ): Promise<ConversationEngineResult> {
-  const { userId, clerkUser, request } = args;
+  const { userId, clerkUser, request, conversationId } = args;
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
 
@@ -409,6 +411,50 @@ export async function generateConversationReply(
     } as ChatMessage))
   ];
 
+  // ── Step 5: Tip-of-context thought signature injection ───────────────────────
+  // Load the most recent bot message's stored thought signature and append it
+  // ONLY to the last model turn. The Gemini API accepts exactly one active
+  // scratchpad at the tip of the context window — injecting into older turns
+  // causes a 400 Bad Request. This is a no-op for non-Gemini providers.
+  if (conversationId && supabase) {
+    try {
+      const { data: lastBotMsg } = await supabase
+        .from('messages')
+        .select('metadata')
+        .eq('conversation_id', parsed.conversationId)
+        .eq('role', 'bot')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const lastSignature = lastBotMsg?.metadata?.last_thought_signature as string | null | undefined;
+
+      if (lastSignature) {
+        // Find the last assistant turn in the constructed history array
+        let lastAssistantIdx = -1;
+        for (let i = history.length - 1; i >= 0; i--) {
+          if (history[i].role === 'assistant') { lastAssistantIdx = i; break; }
+        }
+
+        if (lastAssistantIdx >= 0) {
+          // Encode the signature back into the text field using the XML wrapper
+          // that gemini.ts's history serializer already knows how to parse.
+          // This is safe: the stream processor strips it before display.
+          const existingText = history[lastAssistantIdx].text || '';
+          history[lastAssistantIdx] = {
+            ...history[lastAssistantIdx],
+            text: existingText + `\n<thought_signature>${lastSignature}</thought_signature>`,
+          };
+          console.info('[ConversationEngine] Injected thought signature onto last model turn for reasoning continuity');
+        }
+      }
+    } catch (sigErr) {
+      // Non-fatal — a missing signature means Gemini starts a fresh scratchpad, which is fine.
+      console.warn('[ConversationEngine] Thought signature injection failed (non-blocking):', sigErr);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Attach explicit files to the last message if present
   if (fileData && mimeType) {
     const lastMsg = history[history.length - 1];
@@ -512,7 +558,7 @@ export async function generateConversationReply(
     }
   }
 
-  const { stream: originalStream } = streamResult;
+  const { stream: originalStream, thoughtSignaturePromise } = streamResult;
 
   // Wrap stream to capture full text for side effects
   const textEncoder = new TextEncoder();
@@ -792,6 +838,7 @@ export async function generateConversationReply(
 
   return {
     stream,
+    thoughtSignaturePromise,
     sources: [
       ...intelligentFacts.map(f => ({ id: f.id || `fact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
       ...(memorySources || [])

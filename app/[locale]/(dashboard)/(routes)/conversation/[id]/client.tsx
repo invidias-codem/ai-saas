@@ -555,7 +555,8 @@ function ConversationPage({
         }
       }
 
-      setMessages(prev => [...prev, { text: accum, role: "bot", timestamp: new Date(), sources }]);
+      const cleanedAccum = accum.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim();
+      setMessages(prev => [...prev, { text: cleanedAccum, role: "bot", timestamp: new Date(), sources }]);
       setStreamingContent("");
       setStreaming(false);
 

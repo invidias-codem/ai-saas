@@ -61,6 +61,7 @@ export interface CompletionOptions {
 export interface StreamResult {
     stream: ReadableStream;
     debug?: any;
+    thoughtSignaturePromise?: Promise<string | null>;
 }
 
 export interface LLMProvider {

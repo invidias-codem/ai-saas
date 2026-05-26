@@ -148,18 +148,21 @@ export class GeminiProvider implements LLMProvider {
         const result = await chat.sendMessageStream(lastMessage.parts);
         const textEncoder = new TextEncoder();
 
-                const stream = new ReadableStream({
+        let capturedSignature: string | null = null;
+        let resolveSignature!: (v: string | null) => void;
+        const thoughtSignaturePromise = new Promise<string | null>(r => { resolveSignature = r; });
+
+        const stream = new ReadableStream({
             async start(controller) {
                 for await (const chunk of result.stream) {
                     if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
                         for (const part of chunk.candidates[0].content.parts) {
                             if ((part as any).thoughtSignature) {
-                                controller.enqueue(textEncoder.encode(`\n<thought_signature>${(part as any).thoughtSignature}</thought_signature>\n`));
-                            }
-                            if ((part as any).thought) {
+                                // Capture silently — do not enqueue to the text stream
+                                capturedSignature = (part as any).thoughtSignature;
+                            } else if ((part as any).thought) {
                                 controller.enqueue(textEncoder.encode(`<thought>${(part as any).thought}</thought>`));
-                            }
-                            if (part.text) {
+                            } else if (part.text) {
                                 controller.enqueue(textEncoder.encode(part.text));
                             }
                         }
@@ -171,12 +174,14 @@ export class GeminiProvider implements LLMProvider {
                     }
                 }
                 controller.close();
+                resolveSignature(capturedSignature); // Resolve only after stream fully drains
             }
         });
 
         return {
             stream,
-            debug: { model: modelId }
+            debug: { model: modelId },
+            thoughtSignaturePromise,
         };
     }
 }
