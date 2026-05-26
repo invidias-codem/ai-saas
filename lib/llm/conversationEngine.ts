@@ -575,11 +575,13 @@ export async function generateConversationReply(
       controller.enqueue(chunk);
     },
     flush() {
+      // Clean fullText once before any side effects
+      const cleanedFullText = fullText ? fullText.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim() : '';
+
       // Side effects after stream completes
       if (!options.disableSideEffects && fullText) {
         waitUntil((async () => {
           try {
-            const cleanedFullText = fullText.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim();
             const tokensUsed = estimateTokenCount(userQuery + cleanedFullText);
 
             // ── Budget Kill Switch: record actual spend (fire-and-forget) ────
