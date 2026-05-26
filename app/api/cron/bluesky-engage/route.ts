@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MentionPoller } from '@/lib/agents/bluesky/MentionPoller';
 import { BlueskyResponder } from '@/lib/agents/bluesky/BlueskyResponder';
+import { TimelineDiscoveryEngine } from '@/lib/agents/bluesky/TimelineDiscoveryEngine';
 import type { EngagementResult } from '@/lib/agents/bluesky/types';
 
 export const maxDuration = 300;
@@ -132,6 +133,21 @@ export async function GET(req: NextRequest) {
       results,
       durationMs: Date.now() - startTime,
     };
+
+    // ── Batch-flush actor engagement deltas (1 upsert per unique actor) ──
+    const { flushed: actorsFlushed } = await poller.flushActorBatch(runId);
+    console.log(JSON.stringify({ runId, event: 'engage_actor_batch_flushed', actorsFlushed }));
+
+    // ── Timeline discovery: ingest community context for next proactive post run ──
+    try {
+      const timeline = new TimelineDiscoveryEngine();
+      const tlResult = await timeline.run(runId);
+      console.log(JSON.stringify({ runId, event: 'engage_timeline_discovery_done', ...tlResult }));
+    } catch (tlErr) {
+      // Non-fatal: timeline discovery failure must never break the engage cron
+      const tlMsg = tlErr instanceof Error ? tlErr.message : String(tlErr);
+      console.warn(JSON.stringify({ runId, event: 'engage_timeline_discovery_error', error: tlMsg }));
+    }
 
     if (newCursor) {
       await poller.saveLastCursor(newCursor);

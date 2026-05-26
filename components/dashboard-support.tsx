@@ -3,12 +3,12 @@
 import { Heart } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
-import { useProModal } from "@/hooks/use-pro-modal";
+import { KoFiWidget } from "@/components/kofi-widget";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const DashboardSupport = () => {
     const t = useTranslations("DashboardSupport");
-    const proModal = useProModal();
+
 
     return (
         <Card className="bg-card border-border shadow-lg mb-8">
@@ -23,13 +23,9 @@ export const DashboardSupport = () => {
                     <p>{t('p1')}</p>
                     <p>{t('p2')}</p>
                     <p>{t('p3')}</p>
-                    <Button
-                        onClick={proModal.onOpen}
-                        variant="premium"
-                        className="text-sm font-bold bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 border-0 mt-2"
-                    >
-                        {t('button')}
-                    </Button>
+                    <div className="mt-6 w-full max-w-2xl">
+                        <KoFiWidget />
+                    </div>
                 </div>
             </CardContent>
         </Card>
