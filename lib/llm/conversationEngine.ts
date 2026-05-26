@@ -579,7 +579,8 @@ export async function generateConversationReply(
       if (!options.disableSideEffects && fullText) {
         waitUntil((async () => {
           try {
-            const tokensUsed = estimateTokenCount(userQuery + fullText);
+            const cleanedFullText = fullText.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim();
+            const tokensUsed = estimateTokenCount(userQuery + cleanedFullText);
 
             // ── Budget Kill Switch: record actual spend (fire-and-forget) ────
             // Uses estimated token counts since providers stream without usage metadata.
@@ -596,7 +597,7 @@ export async function generateConversationReply(
             const tags = extractTags(userQuery);
             const summary = generateSummary([
               { role: 'user', content: userQuery },
-              { role: 'assistant', content: fullText },
+              { role: 'assistant', content: cleanedFullText },
             ]);
 
             // ── RFC-001 WMRT: Tag all messages with trust tier before storage ──
@@ -610,7 +611,7 @@ export async function generateConversationReply(
             // Append the current turn — assistant response tagged as UNVERIFIED
             taggedHistory.push(
               { role: 'user', content: userQuery, trust_tier: 'UNVERIFIED', tagged_at: new Date().toISOString() },
-              tagLLMMessage(fullText, actualModelId),
+              tagLLMMessage(cleanedFullText, actualModelId),
             );
             const wmrtMeta = extractWMRTMetadata(taggedHistory, actualModelId);
             // ──────────────────────────────────────────────────────────────────
@@ -626,7 +627,7 @@ export async function generateConversationReply(
               {
                 userName: userContext.fullName,
                 userEmail: userContext.email,
-                responseLength: fullText.length,
+                responseLength: cleanedFullText.length,
                 interactionStyle: userContext.interactionStyle,
                 agentMode,
                 ...wmrtMeta,
@@ -637,7 +638,7 @@ export async function generateConversationReply(
             // These populate the knowledge graph that the DeltaEngine queries.
             if (process.env.ENABLE_HEAVY_CONTEXT !== 'false') {
               try {
-                const extractedFacts = await extractFactsFromConversation(userQuery, fullText);
+                const extractedFacts = await extractFactsFromConversation(userQuery, cleanedFullText);
                 console.log(`[ConversationEngine] Extracted ${extractedFacts.length} structured facts`);
               } catch (factErr) {
                 console.warn('[ConversationEngine] Fact extraction failed (non-blocking):', factErr);
@@ -754,7 +755,7 @@ export async function generateConversationReply(
             // ── OutputCritic: async quality gate (fire-and-forget) ───────────────
             // Never awaited — critic must never add latency to the hot path.
             // block verdicts → console.error; warn verdicts → console.warn.
-            critiqueLLMOutput(fullText, { userId, taskType: agentMode }).then(verdict => {
+            critiqueLLMOutput(cleanedFullText, { userId, taskType: agentMode }).then(verdict => {
               if (verdict.severity === 'block') {
                 console.error('[OutputCritic] BLOCK verdict:', verdict.overallReason);
                 // TODO: persist to ucol_critic_verdicts Supabase table (next PR)
@@ -780,7 +781,7 @@ export async function generateConversationReply(
             // Pass factsForRouting — enables the two-axis (task + confidence) routing
             const decision = await classifyQuery(
               userQuery,
-              fullText.substring(0, 400),
+              cleanedFullText.substring(0, 400),
               factsForRouting,
             );
 
@@ -807,7 +808,7 @@ export async function generateConversationReply(
               await router.dispatchToJKlaw(
                 {
                   query: userQuery,
-                  context: fullText.substring(0, 400),
+                  context: cleanedFullText.substring(0, 400),
                   userId, // tenant scope — required
                   goalContext: {
                     // Surface the "why" behind this task to JKlaw (T-007)

@@ -343,7 +343,8 @@ export class AgentRouter {
                 raw += decoder.decode(value, { stream: true });
             }
 
-            const match = raw.match(/\{[\s\S]*\}/);
+            const cleanedRaw = raw.replace(/<thought_signature>[\s\S]*/gi, '').trim();
+            const match = cleanedRaw.match(/\{[\s\S]*\}/);
             if (!match) throw new Error('No JSON in classifier response');
 
             const parsed = JSON.parse(match[0]);
