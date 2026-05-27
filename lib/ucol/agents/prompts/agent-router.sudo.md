@@ -60,7 +60,7 @@ AgentRouterClassifierAgent {
       ? scoreContextForRouting(memoryFacts, strategy="minimum")
       : null
 
-    # Classify via Gemini Flash (model: gemini-3.1-flash-lite-preview, temp: 0.1, maxTokens: 256)
+    # Classify via Gemini Flash (model: gemini-2.5-flash, temp: 0.1, maxTokens: 256)
     { taskType, confidence, reasoning } = Gemini.classify(query, context.substring(0, 500))
 
     staticTarget = routingTable[taskType] ?? "gemini-flash"

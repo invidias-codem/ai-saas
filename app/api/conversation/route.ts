@@ -100,7 +100,7 @@ export async function POST(req: Request) {
           throw error;
         }
 
-        const modelUsed = result.debug?.model ?? "gemini-3.1-flash-lite-preview";
+        const modelUsed = result.debug?.model ?? "gemini-2.5-flash";
         void recordTokenUsage(userId, estimatedTokens, modelUsed);
         void trackAIGeneration({ tool: "chat", model: modelUsed, userId, tokenCount: estimatedTokens, success: true });
         void trackCreditsDeducted({ tool: "chat", credits: cost, userId });

@@ -122,14 +122,11 @@ export const LandingNavbar = () => {
         );
     };
 
-    const isHiddenOnDesktop = ["/blog", "/support", "/slack", "/privacy"].some(path => pathname.includes(path));
-
     return (
         <>
             <header
                 className={cn(
                     "fixed md:absolute top-0 left-0 right-0 z-50 transition-all duration-300 border-b",
-                    isHiddenOnDesktop && "md:hidden",
                     scrolled || isOpen ? "landing-nav-shell" : "landing-nav-shell-top"
                 )}
             >
@@ -138,13 +135,13 @@ export const LandingNavbar = () => {
                         <div className="relative w-9 h-9 flex-shrink-0 transition-transform group-hover:scale-110 duration-300">
                             <Image
                                 src="/Genie.png"
-                                alt="Genie Logo"
+                                alt="Lattice OS logo"
                                 fill
                                 className="object-cover"
                             />
                         </div>
                         <span className="landing-text-primary text-xl font-bold tracking-tight font-heading leading-none transition-colors group-hover:text-purple-400">
-                            Genie AI
+                            Lattice OS
                         </span>
                     </Link>
 
@@ -217,9 +214,9 @@ export const LandingNavbar = () => {
                             animate="open"
                             exit="closed"
                             variants={menuVariants}
-                            className="fixed inset-0 landing-bg-main z-[40] flex flex-col pt-24 px-6 overflow-hidden"
+                            className="fixed inset-0 bg-background/95 backdrop-blur-md z-[40] flex flex-col pt-24 px-6 overflow-hidden"
                         >
-                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(76,29,149,0.15),transparent_70%)] pointer-events-none z-0" />
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(168,85,247,0.15),transparent_70%)] pointer-events-none z-0" />
                             <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-b from-purple-500/5 to-transparent pointer-events-none z-0" />
 
                             <div className="z-10 relative w-full h-full">
@@ -254,17 +251,17 @@ export const LandingNavbar = () => {
                                                     }}
                                                     className="group relative block w-full"
                                                 >
-                                                    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl p-4 transition-all duration-300 hover:border-purple-500/50 hover:bg-white/10 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.5)] hover:scale-[1.02] active:scale-[0.98]">
-                                                        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/10 to-pink-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                                    <div className="relative overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-xl p-4 transition-all duration-300 hover:border-purple-500/50 hover:bg-accent/50 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.3)] hover:scale-[1.02] active:scale-[0.98]">
+                                                        <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/5 to-pink-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
                                                         <div className="relative flex items-center justify-center gap-3">
-                                                            <Icon className="h-6 w-6 text-purple-400 group-hover:text-pink-400 transition-colors duration-300" />
-                                                            <span className="text-2xl font-semibold text-white group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-pink-400 transition-all duration-300">
+                                                            <Icon className="h-6 w-6 text-purple-500 dark:text-purple-400 group-hover:text-pink-500 dark:group-hover:text-pink-400 transition-colors duration-300" />
+                                                            <span className="text-2xl font-semibold text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-500 group-hover:to-pink-500 transition-all duration-300">
                                                                 {link.label}
                                                             </span>
                                                         </div>
 
-                                                        <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                                                        <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-foreground/5 to-transparent" />
                                                     </div>
                                                 </Link>
                                             </motion.div>
@@ -283,17 +280,17 @@ export const LandingNavbar = () => {
                                             }}
                                             className="group relative block w-full"
                                         >
-                                            <div className="relative overflow-hidden rounded-2xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-xl p-4 transition-all duration-300 hover:border-purple-500 hover:shadow-[0_0_40px_-5px_rgba(168,85,247,0.6)] hover:scale-[1.02] active:scale-[0.98]">
-                                                <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                            <div className="relative overflow-hidden rounded-2xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-pink-500/5 backdrop-blur-xl p-4 transition-all duration-300 hover:border-purple-500 hover:shadow-[0_0_40px_-5px_rgba(168,85,247,0.4)] hover:scale-[1.02] active:scale-[0.98]">
+                                                <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
                                                 <div className="relative flex items-center justify-center gap-3">
-                                                    <StarFilledIcon className="h-6 w-6 text-purple-400 group-hover:text-pink-400 transition-colors" />
-                                                    <span className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
+                                                    <StarFilledIcon className="h-6 w-6 text-purple-500 dark:text-purple-400 group-hover:text-pink-500 dark:group-hover:text-pink-400 transition-colors" />
+                                                    <span className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400">
                                                         Pricing
                                                     </span>
                                                 </div>
 
-                                                <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+                                                <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-foreground/5 to-transparent" />
                                             </div>
                                         </button>
                                     </motion.div>
@@ -308,10 +305,10 @@ export const LandingNavbar = () => {
                                             }}
                                             className="group relative block w-full"
                                         >
-                                            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-4 transition-all duration-300 hover:border-white/30 hover:bg-white/10 hover:shadow-[0_0_25px_-5px_rgba(255,255,255,0.3)] hover:scale-[1.02] active:scale-[0.98]">
+                                            <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 transition-all duration-300 hover:border-muted-foreground/30 hover:bg-accent hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]">
                                                 <div className="relative flex items-center justify-center gap-3">
-                                                    <EnterIcon className="h-6 w-6 text-gray-300 group-hover:text-white transition-colors" />
-                                                    <span className="text-2xl font-semibold text-gray-100 group-hover:text-white transition-colors">
+                                                    <EnterIcon className="h-6 w-6 text-muted-foreground group-hover:text-foreground transition-colors" />
+                                                    <span className="text-2xl font-semibold text-foreground group-hover:text-foreground transition-colors">
                                                         {tHero("login")}
                                                     </span>
                                                 </div>
@@ -354,15 +351,15 @@ export const LandingNavbar = () => {
                             onClick={() => setIsPricingOpen(false)}
                         />
 
-                        <div className="relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-2xl border border-white/10 bg-[#0f1117] shadow-2xl sm:rounded-2xl">
-                            <div className="flex items-center justify-between border-b border-white/10 p-6">
+                        <div className="relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-2xl border border-border bg-background shadow-2xl sm:rounded-2xl">
+                            <div className="flex items-center justify-between border-b border-border p-6">
                                 <div>
-                                    <h2 className="text-xl font-bold text-white font-heading">{t('pricing.title')}</h2>
-                                    <p className="text-sm text-gray-400 mt-1">{t('pricing.subtitle')}</p>
+                                    <h2 className="text-xl font-bold text-foreground font-heading">{t('pricing.title')}</h2>
+                                    <p className="text-sm text-muted-foreground mt-1">{t('pricing.subtitle')}</p>
                                 </div>
                                 <button
                                     onClick={() => setIsPricingOpen(false)}
-                                    className="w-8 h-8 rounded-full bg-white/10 text-gray-300 hover:bg-white/20 transition-colors flex items-center justify-center"
+                                    className="w-8 h-8 rounded-full bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-colors flex items-center justify-center"
                                     aria-label="Close pricing modal"
                                 >
                                     <Cross2Icon className="w-4 h-4" />
@@ -376,8 +373,8 @@ export const LandingNavbar = () => {
                                         className={cn(
                                             "relative rounded-2xl border p-5 transition-all duration-300",
                                             tier.popular
-                                                ? "border-purple-500 bg-gradient-to-br from-purple-500/10 to-pink-500/10 shadow-lg shadow-purple-500/10"
-                                                : "border-white/10 bg-white/5"
+                                                ? "border-purple-500 bg-gradient-to-br from-purple-500/5 to-pink-500/5 shadow-lg shadow-purple-500/10"
+                                                : "border-border bg-card"
                                         )}
                                     >
                                         {tier.popular && (
@@ -387,20 +384,20 @@ export const LandingNavbar = () => {
                                         )}
 
                                         <div className="text-center mb-4">
-                                            <h3 className="text-lg font-bold text-white mb-1">{tier.name}</h3>
+                                            <h3 className="text-lg font-bold text-foreground mb-1">{tier.name}</h3>
                                             <div className="flex items-baseline justify-center gap-1">
-                                                <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">
+                                                <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400">
                                                     {tier.price}
                                                 </span>
-                                                <span className="text-sm text-gray-400">{tier.unit}</span>
+                                                <span className="text-sm text-muted-foreground">{tier.unit}</span>
                                             </div>
-                                            <p className="text-sm text-gray-400 mt-2">{tier.description}</p>
+                                            <p className="text-sm text-muted-foreground mt-2">{tier.description}</p>
                                         </div>
 
                                         <ul className="space-y-2 mb-5">
                                             {tier.features.map((feature) => (
-                                                <li key={feature} className="flex items-start gap-2 text-sm text-gray-300">
-                                                    <CheckIcon className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0" />
+                                                <li key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
+                                                    <CheckIcon className="w-4 h-4 text-purple-500 dark:text-purple-400 mt-0.5 flex-shrink-0" />
                                                     <span>{feature}</span>
                                                 </li>
                                             ))}
@@ -420,8 +417,8 @@ export const LandingNavbar = () => {
                                 ))}
                             </div>
 
-                            <div className="border-t border-white/10 px-6 py-4">
-                                <p className="text-xs text-gray-500 text-center">
+                            <div className="border-t border-border px-6 py-4">
+                                <p className="text-xs text-muted-foreground text-center">
                                     {t('pricing.disclaimer')}
                                 </p>
                             </div>

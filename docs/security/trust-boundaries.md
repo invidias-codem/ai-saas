@@ -175,7 +175,63 @@ This is especially important when product architecture evolves faster than polic
 
 ---
 
-## 7. Local Development / Operator Zone
+## 7. Scoping Model: Users, Workspaces, Documents, and Retrieval
+
+Many failures that look like “AI bugs” are actually scoping or trust-boundary bugs.
+
+The most important scoping layers are:
+
+### User boundary
+A missing workspace does not mean missing scope.
+Personal documents and personal conversations still belong to a user boundary and must never be treated as globally unscoped.
+
+### Workspace boundary
+When a workspace exists, it is the primary collaborative/project scope for:
+- documents
+- conversations
+- retrieval
+- memory/context assembly
+
+A document attached to Workspace A should not silently influence Workspace B.
+
+### Document boundary
+Documents are first-class scoped objects, not just transient chat attachments.
+A document may be:
+- personal
+- workspace-scoped
+- warm
+- compressing
+- cold
+
+Chat should reference document identity or retrieved chunks, not repeatedly transport raw document bodies.
+
+### Retrieval boundary
+Retrieval requests should use the narrowest relevant scope available.
+Preferred scope anchors are:
+1. explicit document IDs
+2. workspace ID when present
+3. user ownership when workspace is absent
+
+Two failure modes matter here:
+- **over-scoping**: valid context is skipped because a scope field is absent
+- **under-scoping**: unrelated documents leak into results because scope is too broad
+
+### Preview boundary
+Preview is a direct document read/hydration path, not the same thing as retrieval.
+Preview should validate:
+- auth
+- document identity
+- user/workspace access rights
+
+A preview route should not require a workspace if the document is legitimately personal.
+
+### Runtime/provider boundary
+Infrastructure or provider differences must not silently change the meaning of user/workspace/document scope.
+Whether Lattice runs with different models, storage, or retrieval backends, scoping semantics should stay stable.
+
+---
+
+## 8. Local Development / Operator Zone
 
 ### Who this includes
 - developers with local repo access

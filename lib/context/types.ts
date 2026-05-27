@@ -20,7 +20,8 @@ export type ContextSectionKey =
   | 'factContext'
   | 'graphContext'
   | 'searchContext'
-  | 'memoryContext';
+  | 'memoryContext'
+  | 'attachedDocumentContext';
 
 export interface SectionAllocation {
   key: ContextSectionKey;
@@ -55,4 +56,5 @@ export type PreparedContextSections = {
   graphContext?: string;
   searchContext?: string;
   memoryContext?: string;
+  attachedDocumentContext?: string;
 };

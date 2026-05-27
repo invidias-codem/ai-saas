@@ -113,6 +113,10 @@ interface EngagementDecision {
   reason: string;
 }
 
+function formatError(err: unknown) {
+  return err instanceof Error ? { message: err.message, stack: err.stack } : err;
+}
+
 let _techGenieSystemPrompt: string | null = null;
 
 async function getTechGenieSystemPrompt(): Promise<string> {
@@ -288,7 +292,7 @@ export class BlueskyResponder {
     this.authenticated = true;
   }
 
-  private async isRateLimited(authorDid: string): Promise<boolean> {
+  private async isRateLimited(authorDid: string, runId?: string): Promise<boolean> {
     const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
 
     const { data, error } = await this.supabase
@@ -299,14 +303,14 @@ export class BlueskyResponder {
       .limit(1);
 
     if (error) {
-      console.error('[BlueskyResponder] Rate-limit check failed:', error);
+      console.error(JSON.stringify({ runId, event: 'responder_db_rate_limit_error', error: formatError(error) }));
       return false;
     }
 
     return !!data && data.length > 0;
   }
 
-  private async fetchPost(postUri: string): Promise<{ text: string | null; authorHandle: string | null }> {
+  private async fetchPost(postUri: string, runId?: string): Promise<{ text: string | null; authorHandle: string | null }> {
     try {
       await this.ensureAuth();
       const { data } = await this.agent.getPosts({ uris: [postUri] });
@@ -316,12 +320,12 @@ export class BlueskyResponder {
         authorHandle: extractAuthorHandle(post),
       };
     } catch (err) {
-      console.warn('[BlueskyResponder] Failed to fetch post:', err);
+      console.warn(JSON.stringify({ runId, event: 'responder_fetch_post_error', uri: postUri, error: formatError(err) }));
       return { text: null, authorHandle: null };
     }
   }
 
-  private async buildThreadContext(mention: BlueskyMention): Promise<ThreadContext> {
+  private async buildThreadContext(mention: BlueskyMention, runId?: string): Promise<ThreadContext> {
     if (!mention.replyRef) {
       return {
         parentText: null,
@@ -332,9 +336,9 @@ export class BlueskyResponder {
       };
     }
 
-    const parent = await this.fetchPost(mention.replyRef.parent.uri);
+    const parent = await this.fetchPost(mention.replyRef.parent.uri, runId);
     const sameRootAndParent = mention.replyRef.parent.uri === mention.replyRef.root.uri;
-    const root = sameRootAndParent ? parent : await this.fetchPost(mention.replyRef.root.uri);
+    const root = sameRootAndParent ? parent : await this.fetchPost(mention.replyRef.root.uri, runId);
 
     const replyToOwnPost = [parent.authorHandle, root.authorHandle].some(
       (handle) => !!handle && handle === SELF_HANDLE
@@ -349,7 +353,7 @@ export class BlueskyResponder {
     };
   }
 
-  private async getActorMemory(actorDid: string): Promise<ActorMemoryRecord | null> {
+  private async getActorMemory(actorDid: string, runId?: string): Promise<ActorMemoryRecord | null> {
     const { data, error } = await this.supabase
       .from('bluesky_actor_memory')
       .select('*')
@@ -357,14 +361,14 @@ export class BlueskyResponder {
       .maybeSingle();
 
     if (error) {
-      console.error('[BlueskyResponder] Failed to fetch bluesky_actor_memory:', error);
+      console.error(JSON.stringify({ runId, event: 'responder_db_actor_memory_error', error: formatError(error) }));
       return null;
     }
 
     return (data as ActorMemoryRecord | null) ?? null;
   }
 
-  private async getConversationMemory(threadRootUri: string): Promise<ConversationMemoryRecord | null> {
+  private async getConversationMemory(threadRootUri: string, runId?: string): Promise<ConversationMemoryRecord | null> {
     const { data, error } = await this.supabase
       .from('bluesky_conversation_memory')
       .select('*')
@@ -372,7 +376,7 @@ export class BlueskyResponder {
       .maybeSingle();
 
     if (error) {
-      console.error('[BlueskyResponder] Failed to fetch bluesky_conversation_memory:', error);
+      console.error(JSON.stringify({ runId, event: 'responder_db_conversation_memory_error', error: formatError(error) }));
       return null;
     }
 
@@ -442,7 +446,7 @@ export class BlueskyResponder {
         return { action: 'like_only', replyIntent, reason: 'lightweight_acknowledgement' };
       }
 
-      if ((actorMemory?.engagement_count ?? 0) > 3 && !text.includes('?')) {
+      if ((actorMemory?.engagement_count ?? 0) > 2 && !text.includes('?')) {
         return { action: 'like_only', replyIntent, reason: 'warm_repeat_engager' };
       }
     }
@@ -454,7 +458,7 @@ export class BlueskyResponder {
     return { action: 'reply_short', replyIntent, reason: 'default_reply_path' };
   }
 
-  private async generateResponse(context: string, userId?: string): Promise<string> {
+  private async generateResponse(context: string, userId?: string, runId?: string): Promise<string> {
     const systemPrompt = await getTechGenieSystemPrompt();
 
     let enrichedSystem = systemPrompt;
@@ -463,22 +467,25 @@ export class BlueskyResponder {
         const knowledgeCtx = await buildOllamaKnowledgeContext(userId, context);
         if (knowledgeCtx.systemFragment) {
           enrichedSystem = `${systemPrompt}\n\n${knowledgeCtx.systemFragment}`;
-          console.log(
-            `[BlueskyResponder] Knowledge context injected — facts=${knowledgeCtx.factsUsed} nodes=${knowledgeCtx.graphNodesUsed}`
-          );
+          console.log(JSON.stringify({
+            runId,
+            event: 'responder_knowledge_context_injected',
+            facts: knowledgeCtx.factsUsed,
+            nodes: knowledgeCtx.graphNodesUsed
+          }));
         }
       } catch (err) {
-        console.warn('[BlueskyResponder] Knowledge context injection failed (non-blocking):', err);
+        console.warn(JSON.stringify({ runId, event: 'responder_knowledge_injection_error', error: formatError(err) }));
       }
     }
 
     if (LAMBDA_OLLAMA_URL) {
       try {
         const raw = await this.generateWithOllamaEndpoint(LAMBDA_OLLAMA_URL, context, enrichedSystem);
-        console.log('[BlueskyResponder] Generated via Vast.ai Docker Model Runner (self-hosted)');
+        console.log(JSON.stringify({ runId, event: 'responder_generate_ollama_success', source: 'lambda' }));
         return this.enforceCharLimit(raw, context);
-      } catch (err) {
-        console.warn('[BlueskyResponder] Vast.ai Docker Model Runner failed, falling back to Nous API:', err);
+      } catch (err: any) {
+        console.warn(JSON.stringify({ runId, event: 'responder_generate_ollama_error', source: 'lambda', error: formatError(err) }));
       }
     }
 
@@ -489,8 +496,8 @@ export class BlueskyResponder {
           model: NOUS_MODEL,
         });
         return this.enforceCharLimit(raw, context);
-      } catch (err) {
-        console.warn('[BlueskyResponder] Nous API failed, falling back to Gemini:', err);
+      } catch (err: any) {
+        console.warn(JSON.stringify({ runId, event: 'responder_generate_nous_error', error: formatError(err) }));
       }
     }
 
@@ -539,7 +546,7 @@ export class BlueskyResponder {
   private async generateWithGemini(context: string, systemPrompt: string): Promise<string> {
     const effectiveApiKey = process.env.BLUESKY_GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
     const gemini = new GoogleGenerativeAI(effectiveApiKey);
-    const model = gemini.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
+    const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: context }] }],
@@ -676,7 +683,8 @@ export class BlueskyResponder {
     actorMemory: ActorMemoryRecord | null,
     conversationMemory: ConversationMemoryRecord | null,
     replyIntent: BlueskyReplyIntent,
-    threadContext?: ThreadContext
+    threadContext?: ThreadContext,
+    runId?: string
   ): Promise<string> {
     try {
       const memories = await searchMemories(BLUESKY_MEMORY_USER_ID, mention.text, 4);
@@ -735,7 +743,7 @@ export class BlueskyResponder {
         .filter(Boolean)
         .join('\n\n');
     } catch (err) {
-      console.warn('[BlueskyResponder] Failed to build memory context (non-blocking):', err);
+      console.warn(JSON.stringify({ runId, event: 'responder_build_memory_context_error', error: formatError(err) }));
       return `Reply intent: ${replyIntent}`;
     }
   }
@@ -746,6 +754,7 @@ export class BlueskyResponder {
     responseUri?: string;
     factsExtracted: number;
     routedTo: string;
+    runId?: string;
   }): Promise<void> {
     const { error } = await this.supabase.from('bluesky_interactions').insert({
       mention_uri: params.mention.uri,
@@ -759,7 +768,7 @@ export class BlueskyResponder {
     });
 
     if (error) {
-      console.error('[BlueskyResponder] Failed to log interaction to Supabase:', error);
+      console.error(JSON.stringify({ runId: params.runId, event: 'responder_db_log_interaction_error', error: formatError(error) }));
     }
   }
 
@@ -768,8 +777,9 @@ export class BlueskyResponder {
     topicLabels: string[];
     responseText?: string;
     replied: boolean;
+    runId?: string;
   }): Promise<void> {
-    const current = await this.getActorMemory(params.mention.authorDid);
+    const current = await this.getActorMemory(params.mention.authorDid, params.runId);
     const now = new Date().toISOString();
 
     const payload = {
@@ -793,7 +803,7 @@ export class BlueskyResponder {
     const { error } = await this.supabase.from('bluesky_actor_memory').upsert(payload, { onConflict: 'actor_did' });
 
     if (error) {
-      console.error('[BlueskyResponder] Failed to upsert bluesky_actor_memory:', error);
+      console.error(JSON.stringify({ runId: params.runId, event: 'responder_db_upsert_actor_error', error: formatError(error) }));
     }
   }
 
@@ -804,8 +814,9 @@ export class BlueskyResponder {
     topicLabels: string[];
     responseUri?: string;
     replyIntent: BlueskyReplyIntent;
+    runId?: string;
   }): Promise<void> {
-    const current = await this.getConversationMemory(params.threadRootUri);
+    const current = await this.getConversationMemory(params.threadRootUri, params.runId);
     const now = new Date().toISOString();
     const lower = params.mention.text.toLowerCase();
     const openQuestion = lower.includes('?') ? summarizeText(params.mention.text, 160) : null;
@@ -832,11 +843,11 @@ export class BlueskyResponder {
       .upsert(payload, { onConflict: 'thread_root_uri' });
 
     if (error) {
-      console.error('[BlueskyResponder] Failed to upsert bluesky_conversation_memory:', error);
+      console.error(JSON.stringify({ runId: params.runId, event: 'responder_db_upsert_conversation_error', error: formatError(error) }));
     }
   }
 
-  async respond(mention: BlueskyMention, source: 'mention' | 'discovery' = 'mention'): Promise<EngagementResult> {
+  async respond(mention: BlueskyMention, source: 'mention' | 'discovery' = 'mention', runId?: string): Promise<EngagementResult> {
     const base: EngagementResult = {
       mentionUri: mention.uri,
       responded: false,
@@ -850,20 +861,20 @@ export class BlueskyResponder {
 
       const policyCheck = this.safety.shouldAvoidText(mention.text);
       if (policyCheck.blocked) {
-        console.log(`[BlueskyResponder] Safety policy blocked engagement to ${mention.authorHandle}: ${policyCheck.reason}`);
+        console.log(JSON.stringify({ runId, event: 'responder_safety_blocked', author: mention.authorHandle, reason: policyCheck.reason }));
         return { ...base, error: policyCheck.reason };
       }
 
-      const limited = await this.isRateLimited(mention.authorDid);
+      const limited = await this.isRateLimited(mention.authorDid, runId);
       if (limited) {
-        console.log(`[BlueskyResponder] Rate-limited: skipping reply to ${mention.authorHandle}`);
+        console.log(JSON.stringify({ runId, event: 'responder_rate_limited', author: mention.authorHandle }));
         return { ...base, error: 'rate_limited' };
       }
 
       const threadRootUri = mention.replyRef?.root.uri ?? mention.uri;
-      const actorMemory = await this.getActorMemory(mention.authorDid);
-      const conversationMemory = await this.getConversationMemory(threadRootUri);
-      const threadContext = await this.buildThreadContext(mention);
+      const actorMemory = await this.getActorMemory(mention.authorDid, runId);
+      const conversationMemory = await this.getConversationMemory(threadRootUri, runId);
+      const threadContext = await this.buildThreadContext(mention, runId);
       const replyIntent = this.inferReplyIntent(mention, actorMemory, conversationMemory);
       const decision = this.decideEngagement({
         mention,
@@ -891,12 +902,14 @@ export class BlueskyResponder {
           mention,
           topicLabels,
           replied: false,
+          runId,
         });
         await this.upsertConversationMemory({
           threadRootUri,
           mention,
           topicLabels,
           replyIntent,
+          runId,
         });
         await this.safety.logAction({
           route: source === 'discovery' ? 'discovery-like' : 'mention-like',
@@ -916,7 +929,7 @@ export class BlueskyResponder {
 
       const replyBudget = await this.safety.canReply();
       if (!replyBudget.allowed) {
-        console.log(`[BlueskyResponder] Reply budget blocked reply to ${mention.authorHandle}: ${replyBudget.reason}`);
+        console.log(JSON.stringify({ runId, event: 'responder_budget_blocked', type: 'reply', reason: replyBudget.reason }));
         return { ...base, action: 'skip', error: replyBudget.reason };
       }
 
@@ -937,7 +950,8 @@ export class BlueskyResponder {
         actorMemory,
         conversationMemory,
         replyIntent,
-        threadContext
+        threadContext,
+        runId
       );
       if (memoryContext) {
         contextText = `${memoryContext}\n\n${contextText}`;
@@ -945,19 +959,24 @@ export class BlueskyResponder {
 
       const routing = await classifyQuery(mention.text, contextText, undefined, `bluesky:${mention.authorDid}`);
 
-      console.log(
-        `[BlueskyResponder] Routed "${mention.text.substring(0, 60)}" → ${routing.targetNode} (${routing.taskType}, clf=${routing.confidence.toFixed(2)})`
-      );
+      console.log(JSON.stringify({
+        runId,
+        event: 'responder_routed',
+        textPreview: mention.text.substring(0, 60),
+        targetNode: routing.targetNode,
+        taskType: routing.taskType,
+        confidence: routing.confidence
+      }));
 
       const contentType = detectContentType(mention.text);
       const facts = await extractFacts(contextText, contentType);
       const factsExtracted = facts.length;
 
       if (factsExtracted > 0) {
-        console.log(`[BlueskyResponder] Extracted ${factsExtracted} facts from mention (${mention.uri})`);
+        console.log(JSON.stringify({ runId, event: 'responder_facts_extracted', uri: mention.uri, count: factsExtracted }));
       }
 
-      const responseText = await this.generateResponse(contextText, BLUESKY_MEMORY_USER_ID);
+      const responseText = await this.generateResponse(contextText, BLUESKY_MEMORY_USER_ID, runId);
       const responseTopicLabels = inferTopicLabels(`${mention.text} ${responseText}`);
 
       await this.persistKnowledgeFromMention({
@@ -987,13 +1006,14 @@ export class BlueskyResponder {
       });
 
       const responseUri = postResult.uri;
-      console.log(`[BlueskyResponder] Posted reply: ${responseUri}`);
+      console.log(JSON.stringify({ runId, event: 'responder_replied', uri: responseUri }));
 
       await this.upsertActorMemory({
         mention,
         topicLabels: responseTopicLabels,
         responseText,
         replied: true,
+        runId,
       });
 
       await this.upsertConversationMemory({
@@ -1003,6 +1023,7 @@ export class BlueskyResponder {
         topicLabels: responseTopicLabels,
         responseUri,
         replyIntent,
+        runId,
       });
 
       await this.logInteraction({
@@ -1011,6 +1032,7 @@ export class BlueskyResponder {
         responseUri,
         factsExtracted,
         routedTo: routing.targetNode,
+        runId,
       });
 
       await this.safety.logAction({
@@ -1032,9 +1054,8 @@ export class BlueskyResponder {
         factsExtracted,
       };
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`[BlueskyResponder] Failed to respond to ${mention.uri}:`, message);
-      return { ...base, error: message };
+      console.error(JSON.stringify({ runId, event: 'responder_fatal_error', uri: mention.uri, error: formatError(err) }));
+      return { ...base, error: err instanceof Error ? err.message : String(err) };
     }
   }
 }

@@ -9,11 +9,9 @@ import { PaperPlaneIcon, ReloadIcon, PersonIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Turnstile } from "@marsidev/react-turnstile";
+import { useGuestChatStore, Message } from "@/lib/store/guest-chat-store";
 
-interface Message {
-    role: "user" | "bot";
-    text: string;
-}
 
 type FeedbackRating = 1 | -1;
 
@@ -49,26 +47,14 @@ async function submitFeedback(params: {
 const STORAGE_KEY = "genie_guest_count";
 
 export const LandingChat = () => {
-    const [messages, setMessages] = useState<Message[]>([]);
+    const { messages, addMessage, interactionCount, incrementInteraction, limitReached, setLimitReached, guestSessionId } = useGuestChatStore();
     const [input, setInput] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [interactionCount, setInteractionCount] = useState(0);
-    const [limitReached, setLimitReached] = useState(false);
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
-
-    // Load interaction count from localStorage on mount
-    useEffect(() => {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            const count = parseInt(stored, 10);
-            setInteractionCount(count);
-            if (count >= 10) {
-                setLimitReached(true);
-            }
-        }
-    }, []);
+    const turnstileRef = useRef<any>(null);
 
     // No auto-scroll - let users scroll manually to read from the beginning
 
@@ -76,8 +62,8 @@ export const LandingChat = () => {
         if (!input.trim() || isLoading || limitReached) return;
 
         const userMessage: Message = { role: "user", text: input.trim() };
-        const updatedMessages = [...messages, userMessage];
-        setMessages(updatedMessages);
+        addMessage(userMessage);
+        const currentMessages = [...messages, userMessage];
         setInput("");
         setIsLoading(true);
 
@@ -86,8 +72,10 @@ export const LandingChat = () => {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    messages: updatedMessages,
-                    interactionCount
+                    messages: currentMessages,
+                    interactionCount,
+                    guestSessionId,
+                    turnstileToken
                 }),
             });
 
@@ -96,7 +84,6 @@ export const LandingChat = () => {
             if (!response.ok) {
                 if (data.requiresSignup) {
                     setLimitReached(true);
-                    localStorage.setItem(STORAGE_KEY, "10");
                 } else {
                     throw new Error(data.error || "Something went wrong");
                 }
@@ -104,22 +91,14 @@ export const LandingChat = () => {
             }
 
             // Update messages with bot response
-            setMessages([...updatedMessages, { role: "bot", text: data.text }]);
+            addMessage({ role: "bot", text: data.text });
+            incrementInteraction();
 
-            // Update interaction count
-            const newCount = interactionCount + 1;
-            setInteractionCount(newCount);
-            localStorage.setItem(STORAGE_KEY, newCount.toString());
-
-            if (newCount >= 10) {
-                setLimitReached(true);
-            }
+            // Refresh turnstile token
+            turnstileRef.current?.reset();
         } catch (error) {
             console.error("Guest chat error:", error);
-            setMessages([
-                ...updatedMessages,
-                { role: "bot", text: "Oops! Something went wrong. Please try again." }
-            ]);
+            addMessage({ role: "bot", text: "Oops! Something went wrong. Please try again." });
         } finally {
             setIsLoading(false);
         }
@@ -201,10 +180,10 @@ export const LandingChat = () => {
                 {messages.length === 0 && (
                     <div className="grid grid-cols-2 gap-3 max-w-lg mx-auto mb-6">
                         {[
-                            { emoji: "💡", text: "Explain quantum computing", prompt: "Explain quantum computing" },
-                            { emoji: "🐍", text: "Write a Python script", prompt: "Write a Python script for web scraping" },
-                            { emoji: "✉️", text: "Draft an email to a client", prompt: "Draft an email to a client" },
-                            { emoji: "✨", text: "Creative story about AI", prompt: "Generate a creative story about AI" }
+                            { emoji: "📋", text: "Material Takeoff", prompt: "Generate a material takeoff for a 200sqft bathroom remodel" },
+                            { emoji: "🧾", text: "HVAC Invoice", prompt: "Draft an invoice for a 3-ton HVAC replacement" },
+                            { emoji: "🔧", text: "Plumbing Code", prompt: "Cross-reference this plumbing code requirement" },
+                            { emoji: "⚡", text: "Electrical Load", prompt: "Estimate the electrical load for a new kitchen addition" }
                         ].map((item) => (
                             <button
                                 key={item.prompt}
@@ -375,6 +354,15 @@ export const LandingChat = () => {
                                 {interactionCount === 9 ? "Last free message!" : "Almost out of free messages"}
                             </span>
                         )}
+                    </div>
+                    {/* Turnstile invisible widget */}
+                    <div className="hidden">
+                        <Turnstile
+                            siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "1x00000000000000000000AA"}
+                            ref={turnstileRef}
+                            onSuccess={(token) => setTurnstileToken(token)}
+                            options={{ size: "invisible" }}
+                        />
                     </div>
                 </div>
             </div>

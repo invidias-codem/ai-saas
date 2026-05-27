@@ -9,7 +9,7 @@
  *   import { tagLLMMessage, tagUserMessage, tagMessagesForStorage } from '@/lib/world-model/trustTag';
  *
  *   // Tag a single assistant turn before pushing to memory:
- *   const tagged = tagLLMMessage(responseText, 'gemini-3.1-flash-lite-preview');
+ *   const tagged = tagLLMMessage(responseText, 'gemini-2.5-flash');
  *
  *   // Tag a full conversation history before captureMemory():
  *   const safeMessages = tagMessagesForStorage(formattedMessages, modelId);

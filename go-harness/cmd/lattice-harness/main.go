@@ -20,6 +20,7 @@ type JSONRPCRequest struct {
 	Version       string          `json:"jsonrpc"`
 	WorkspaceRoot string          `json:"workspaceRoot"`
 	Action        string          `json:"action"`
+	AuthToken     string          `json:"authToken,omitempty"`
 	Inputs        json.RawMessage `json:"inputs"`
 }
 
@@ -60,6 +61,7 @@ var (
 	harnessMutex    sync.Mutex
 	activeHarnesses = make(map[string]*harness.LocalIOHarness)
 	stdoutMutex     sync.Mutex
+	expectedToken   string
 )
 
 func main() {
@@ -69,6 +71,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	defer cleanupHarnesses()
+
+	expectedToken = os.Getenv("LATTICE_AUTH_TOKEN")
+	if expectedToken == "" {
+		log.Println("WARNING: LATTICE_AUTH_TOKEN is not set. The daemon is running in insecure mode (not recommended).")
+	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -154,6 +161,13 @@ func processFrame(ctx context.Context, line []byte) {
 
 	if err := json.Unmarshal(line, &req); err != nil {
 		sendErrorResponse("", -32700, "Parse error: invalid JSON string payload")
+		return
+	}
+
+	// Inner Ring Security check: verify the injected auth token
+	if expectedToken != "" && req.AuthToken != expectedToken {
+		log.Printf("Unauthorized JSON-RPC payload received. Expected valid auth token.")
+		sendErrorResponse(req.ID, -32000, "Unauthorized: Invalid or missing authToken")
 		return
 	}
 

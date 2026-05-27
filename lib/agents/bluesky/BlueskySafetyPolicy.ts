@@ -1,9 +1,9 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const DEFAULT_WINDOW_HOURS = 24;
-const DEFAULT_MAX_LIKES = 15;
-const DEFAULT_MAX_REPLIES = 5;
-const DEFAULT_MAX_POSTS = 2;
+const DEFAULT_MAX_LIKES = 20;
+const DEFAULT_MAX_REPLIES = 8;
+const DEFAULT_MAX_POSTS = 3;
 const LIKE_ROUTES = ['discovery-like', 'mention-like'];
 
 function getSupabaseClient(): SupabaseClient {

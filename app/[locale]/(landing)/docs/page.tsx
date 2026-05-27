@@ -184,13 +184,13 @@ const audiences = [
 
 export default function DocsPage() {
     return (
-        <div className="bg-[#FAF9F7] dark:bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative text-slate-900 dark:text-white">
+        <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
             <div className="fixed inset-0 z-0 pointer-events-none">
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[100px]" />
                 <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px]" />
             </div>
 
-            <header className="relative z-10 py-6 px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full border-b border-slate-200 dark:border-white/5 bg-[#FAF9F7] dark:bg-[#111827]/80 backdrop-blur-md sticky top-0">
+            <header className="relative z-10 py-6 px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full border-b border-slate-200 dark:border-white/5 bg-background/80 backdrop-blur-md sticky top-0">
                 <Link href="/" className="flex items-center gap-2">
                     <div className="relative w-8 h-8">
                         <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" />
@@ -198,16 +198,16 @@ export default function DocsPage() {
                     <span className="text-2xl font-bold tracking-tight">Lattice OS</span>
                 </Link>
                 <div className="flex items-center gap-x-4">
-                    <Link href="/support" className="text-sm text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition hidden sm:block">
+                    <Link href="/support" className="text-sm text-muted-foreground hover:text-foreground transition hidden sm:block">
                         Support
                     </Link>
                     <Link href="/dashboard">
-                        <Button variant="ghost" className="text-slate-900 dark:text-white hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 rounded-full">
+                        <Button variant="ghost" className="text-foreground hover:text-foreground hover:bg-accent rounded-full">
                             Log in
                         </Button>
                     </Link>
                     <Link href="/dashboard">
-                        <Button className="bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-black dark:hover:bg-gray-200 rounded-full font-semibold">
+                        <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full font-semibold">
                             Get Started
                         </Button>
                     </Link>
@@ -218,13 +218,13 @@ export default function DocsPage() {
                 <aside className="w-full md:w-72 flex-shrink-0 hidden md:block">
                     <div className="sticky top-32 space-y-8">
                         <div>
-                            <h3 className="text-sm font-semibold text-slate-500 dark:text-gray-400 uppercase tracking-wider mb-4">Documentation</h3>
-                            <ul className="space-y-3 border-l border-slate-200 dark:border-white/10">
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Documentation</h3>
+                            <ul className="space-y-3 border-l border-border">
                                 {docSections.map((section, index) => (
                                     <li key={section.id}>
                                         <a
                                             href={`#${section.id}`}
-                                            className={`block pl-4 transition ${index === 0 ? "text-purple-500 dark:text-purple-400 border-l border-purple-500 -ml-px" : "text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"}`}
+                                            className={`block pl-4 transition ${index === 0 ? "text-purple-500 dark:text-purple-400 border-l border-purple-500 -ml-px" : "text-muted-foreground hover:text-foreground"}`}
                                         >
                                             {section.title}
                                         </a>
@@ -234,12 +234,12 @@ export default function DocsPage() {
                         </div>
 
                         <div>
-                            <h3 className="text-sm font-semibold text-slate-500 dark:text-gray-400 uppercase tracking-wider mb-4">Use This Docs Set For</h3>
-                            <ul className="space-y-3 border-l border-slate-200 dark:border-white/10">
-                                <li className="block pl-4 text-slate-500 dark:text-gray-400">Lattice OS platform orientation</li>
-                                <li className="block pl-4 text-slate-500 dark:text-gray-400">Runtime behavior clarity</li>
-                                <li className="block pl-4 text-slate-500 dark:text-gray-400">Operational debugging</li>
-                                <li className="block pl-4 text-slate-500 dark:text-gray-400">Security boundary review</li>
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Use This Docs Set For</h3>
+                            <ul className="space-y-3 border-l border-border">
+                                <li className="block pl-4 text-muted-foreground">Lattice OS platform orientation</li>
+                                <li className="block pl-4 text-muted-foreground">Runtime behavior clarity</li>
+                                <li className="block pl-4 text-muted-foreground">Operational debugging</li>
+                                <li className="block pl-4 text-muted-foreground">Security boundary review</li>
                             </ul>
                         </div>
                     </div>
@@ -254,36 +254,36 @@ export default function DocsPage() {
                         <h1 className="text-4xl md:text-5xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:to-gray-500">
                             Platform docs for how Genie AI actually works
                         </h1>
-                        <p className="text-xl text-slate-600 dark:text-gray-400 leading-relaxed mb-8 max-w-3xl">
+                        <p className="text-xl text-muted-foreground leading-relaxed mb-8 max-w-3xl">
                             This docs surface is designed to make Genie AI legible as a real platform — not just a landing page with vague AI copy. It maps the architecture, runtime behavior, security boundaries, deployment model, and operational reference surfaces that shape the product.
                         </p>
 
                         <div className="grid md:grid-cols-3 gap-4">
-                            <div className="p-6 rounded-2xl bg-white/70 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                            <div className="p-6 rounded-2xl bg-card border border-border">
                                 <BrainCircuit className="w-8 h-8 text-purple-500 dark:text-purple-400 mb-4" />
                                 <h3 className="text-lg font-semibold mb-2">Architecture-first</h3>
-                                <p className="text-sm text-slate-600 dark:text-gray-400">Explains workspace, context, retrieval, runtime routing, and system boundaries without hand-wavy abstractions.</p>
+                                <p className="text-sm text-muted-foreground">Explains workspace, context, retrieval, runtime routing, and system boundaries without hand-wavy abstractions.</p>
                             </div>
-                            <div className="p-6 rounded-2xl bg-white/70 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                            <div className="p-6 rounded-2xl bg-card border border-border">
                                 <Shield className="w-8 h-8 text-blue-500 dark:text-blue-400 mb-4" />
                                 <h3 className="text-lg font-semibold mb-2">Security-aware</h3>
-                                <p className="text-sm text-slate-600 dark:text-gray-400">Makes route visibility, trust boundaries, and operational assumptions explicit instead of implicit.</p>
+                                <p className="text-sm text-muted-foreground">Makes route visibility, trust boundaries, and operational assumptions explicit instead of implicit.</p>
                             </div>
-                            <div className="p-6 rounded-2xl bg-white/70 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                            <div className="p-6 rounded-2xl bg-card border border-border">
                                 <ServerCog className="w-8 h-8 text-emerald-500 dark:text-emerald-400 mb-4" />
                                 <h3 className="text-lg font-semibold mb-2">Operationally useful</h3>
-                                <p className="text-sm text-slate-600 dark:text-gray-400">Documents truth surfaces, deployment reality, debugging discipline, and concrete reference material for the live system.</p>
+                                <p className="text-sm text-muted-foreground">Documents truth surfaces, deployment reality, debugging discipline, and concrete reference material for the live system.</p>
                             </div>
                         </div>
                     </section>
 
-                    <section id="how-to-use" className="scroll-mt-32 border-t border-slate-200 dark:border-white/10 pt-16">
+                    <section id="how-to-use" className="scroll-mt-32 border-t border-border pt-16">
                         <h2 className="text-3xl font-bold mb-8">How to use this docs set</h2>
                         <div className="grid md:grid-cols-3 gap-6">
                             {audiences.map((audience) => (
-                                <div key={audience.title} className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-6">
+                                <div key={audience.title} className="rounded-2xl border border-border bg-card p-6">
                                     <h3 className="text-lg font-semibold mb-3">{audience.title}</h3>
-                                    <p className="text-sm text-slate-600 dark:text-gray-400 leading-relaxed">{audience.description}</p>
+                                    <p className="text-sm text-muted-foreground leading-relaxed">{audience.description}</p>
                                 </div>
                             ))}
                         </div>
@@ -292,25 +292,25 @@ export default function DocsPage() {
                     {docSections.map((section) => {
                         const Icon = section.icon;
                         return (
-                            <section key={section.id} id={section.id} className="scroll-mt-32 border-t border-slate-200 dark:border-white/10 pt-16">
+                            <section key={section.id} id={section.id} className="scroll-mt-32 border-t border-border pt-16">
                                 <div className="flex items-center gap-4 mb-6">
-                                    <div className="p-3 rounded-xl bg-slate-100 dark:bg-white/10">
-                                        <Icon className="w-7 h-7 text-slate-800 dark:text-white" />
+                                    <div className="p-3 rounded-xl bg-secondary">
+                                        <Icon className="w-7 h-7 text-foreground" />
                                     </div>
                                     <div>
                                         <h2 className="text-3xl font-bold">{section.title}</h2>
-                                        <p className="text-slate-600 dark:text-gray-400 mt-2">{section.description}</p>
+                                        <p className="text-muted-foreground mt-2">{section.description}</p>
                                     </div>
                                 </div>
 
                                 <div className="grid gap-4">
                                     {section.items.map((item) => (
-                                        <div key={`${section.id}-${item.title}`} className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-6">
+                                        <div key={`${section.id}-${item.title}`} className="rounded-2xl border border-border bg-card p-6">
                                             <div className="flex items-start justify-between gap-4">
                                                 <div>
                                                     <h3 className="text-xl font-semibold mb-2">{item.title}</h3>
-                                                    <p className="text-slate-600 dark:text-gray-400 leading-relaxed mb-4">{item.description}</p>
-                                                    <code className="text-xs px-2 py-1 rounded bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-gray-300 break-all">
+                                                    <p className="text-muted-foreground leading-relaxed mb-4">{item.description}</p>
+                                                    <code className="text-xs px-2 py-1 rounded bg-secondary text-card-foreground break-all">
                                                         {item.path}
                                                     </code>
                                                 </div>
@@ -323,10 +323,10 @@ export default function DocsPage() {
                         );
                     })}
 
-                    <section className="border-t border-slate-200 dark:border-white/10 pt-16 pb-16">
+                    <section className="border-t border-border pt-16 pb-16">
                         <div className="rounded-2xl bg-blue-600/10 border border-blue-500/20 p-8 text-center">
                             <h2 className="text-2xl font-bold mb-4">Need help with the platform or docs?</h2>
-                            <p className="text-slate-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto">
+                            <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
                                 If you&apos;re trying to understand a route, runtime behavior, deployment issue, or integration surface that isn&apos;t clear yet, use the support page and we can tighten the docs further.
                             </p>
                             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -336,7 +336,7 @@ export default function DocsPage() {
                                     </Button>
                                 </Link>
                                 <Link href="/dashboard">
-                                    <Button variant="outline" className="border-slate-300 dark:border-white/20 hover:bg-slate-100 dark:hover:bg-white/5">
+                                    <Button variant="outline" className="border-border hover:bg-accent">
                                         Open Product <ArrowRight className="w-4 h-4 ml-2" />
                                     </Button>
                                 </Link>
@@ -346,25 +346,25 @@ export default function DocsPage() {
                 </div>
             </main>
 
-            <footer className="py-10 border-t border-slate-200 dark:border-white/10 bg-[#FAF9F7] dark:bg-[#111827]">
+            <footer className="py-10 border-t border-border bg-background">
                 <div className="max-w-7xl mx-auto px-6">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                         <div className="flex items-center gap-2">
                             <div className="relative w-6 h-6">
                                 <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" />
                             </div>
-                            <span className="text-lg font-bold text-slate-900 dark:text-white">Lattice OS</span>
+                            <span className="text-lg font-bold text-foreground">Lattice OS</span>
                         </div>
 
-                        <div className="flex items-center gap-6 text-sm text-slate-500 dark:text-gray-400">
-                            <Link href="/privacy" className="hover:text-slate-900 dark:hover:text-white transition">Privacy Policy</Link>
-                            <Link href="/support" className="hover:text-slate-900 dark:hover:text-white transition">Support</Link>
-                            <Link href="/dashboard" className="hover:text-slate-900 dark:hover:text-white transition">Dashboard</Link>
+                        <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                            <Link href="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
+                            <Link href="/support" className="hover:text-foreground transition">Support</Link>
+                            <Link href="/dashboard" className="hover:text-foreground transition">Dashboard</Link>
                         </div>
                     </div>
 
-                    <div className="mt-8 pt-8 border-t border-slate-200 dark:border-white/10 text-center">
-                        <p className="text-slate-500 dark:text-gray-500 text-sm">
+                    <div className="mt-8 pt-8 border-t border-border text-center">
+                        <p className="text-muted-foreground text-sm">
                             © {new Date().getFullYear()} Genie AI. All rights reserved.
                         </p>
                     </div>
