@@ -18,7 +18,8 @@ export interface UploadedDoc {
 
 interface NeuralArchivalUploaderProps {
   workspaceId?: string | null;
-  onUploadComplete?: (doc: any) => void;
+  docs: UploadedDoc[];
+  setDocs: React.Dispatch<React.SetStateAction<UploadedDoc[]>>;
 }
 
 export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArchivalUploaderProps) {
