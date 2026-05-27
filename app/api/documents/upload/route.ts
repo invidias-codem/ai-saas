@@ -47,10 +47,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Normalise: frontend sends 'default' when no workspace is selected;
-    // null is what the DB column (now nullable) expects.
-    if (!workspaceId || workspaceId === 'default') {
-      workspaceId = null;
+    if (workspaceId === 'default') {
+      workspaceId = null as any;
     }
 
     if (!storageUri && !base64Data) {
@@ -118,7 +116,7 @@ export async function POST(req: Request) {
     }
 
     const doc = await createDocument({
-      workspace_id: workspaceId,
+      workspace_id: workspaceId ?? null,
       user_id: user.userId,
       filename,
       mime_type: mimeType,

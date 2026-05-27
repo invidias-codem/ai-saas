@@ -111,7 +111,6 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
         mimeType: finalMimeType,
       };
 
-      // 5. Replace the temp optimistic card with the real WARM card
       setDocs(prev => prev.map(d => d.id === tempId ? completedDoc : d));
 
     } catch (err: any) {
