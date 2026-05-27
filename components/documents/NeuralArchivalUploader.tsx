@@ -18,8 +18,7 @@ export interface UploadedDoc {
 
 interface NeuralArchivalUploaderProps {
   workspaceId?: string | null;
-  docs: UploadedDoc[];
-  setDocs: React.Dispatch<React.SetStateAction<UploadedDoc[]>>;
+  onUploadComplete?: (doc: any) => void;
 }
 
 export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArchivalUploaderProps) {
@@ -111,8 +110,8 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
         mimeType: finalMimeType,
       };
 
-      // 5. Replace the temp optimistic card with the real WARM card
-      setDocs(prev => prev.map(d => d.id === tempId ? completedDoc : d));
+      setOptimisticDocs(prev => prev.filter(d => d.id !== tempId));
+      onUploadComplete?.(finalDoc);
 
     } catch (err: any) {
       console.error('[Uploader] Upload failed:', err);

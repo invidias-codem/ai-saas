@@ -1,97 +1,130 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import * as path from 'path';
-import * as crypto from 'crypto';
-import { spawn, ChildProcess } from 'child_process';
-import { GatewayServer } from './websocket-server';
+import { SecureVault } from './store';
+import { GoIOHarness } from '../lib/harness/GoIOHarness';
+import { generateConversationReply } from '../lib/llm/conversationEngine';
 
-let mainWindow: BrowserWindow | null;
-let goDaemon: ChildProcess | null;
-let gatewayServer: GatewayServer | null;
-let localPairingToken: string = '';
+let mainWindow: BrowserWindow | null = null;
 
-const WSS_PORT = 8081;
+async function createWindow() {
+    mainWindow = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true
+        }
+    });
 
-function createDaemon() {
-  // Generate the cryptographic key on boot
-  localPairingToken = crypto.randomBytes(32).toString('hex');
-  console.log(`[Core] Generated Secure Pairing Token: ${localPairingToken}`);
-
-  // Resolve the path to the compiled Go daemon
-  const daemonPath = path.join(
-    __dirname, 
-    '..', 
-    'go-harness', 
-    'bin', 
-    `lattice-harness-${process.platform}-${process.arch}`
-  );
-
-  // Spawn the Go JSON-RPC Daemon with the injected env variable
-  goDaemon = spawn(daemonPath, [], {
-    env: {
-      ...process.env,
-      LATTICE_AUTH_TOKEN: localPairingToken,
-    },
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
-
-  goDaemon.on('error', (err) => {
-    console.error(`[Daemon] Failed to start Go daemon: ${err.message}`);
-  });
-
-  goDaemon.on('exit', (code) => {
-    console.log(`[Daemon] Exited with code ${code}`);
-  });
-
-  // Start the WebSocket Gateway once the daemon is up
-  gatewayServer = new GatewayServer(WSS_PORT, localPairingToken, goDaemon);
+    if (app.isPackaged) {
+        // In a packaged app, load the static HTML (we will build this later)
+        // mainWindow.loadFile(path.join(__dirname, '../out/index.html'));
+        mainWindow.loadURL('http://localhost:3000'); // placeholder
+    } else {
+        // In dev, load Next.js or Vite dev server
+        mainWindow.loadURL('http://localhost:3000');
+        mainWindow.webContents.openDevTools();
+    }
 }
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
+app.whenReady().then(async () => {
+    // 1. Initialize Secure Vault
+    await SecureVault.init();
 
-  // Setup the IPC Bridge for the React Frontend
-  ipcMain.handle('get-remote-config', async () => {
-    return {
-      ip: gatewayServer?.getLocalIP() || '127.0.0.1',
-      port: WSS_PORT,
-      token: localPairingToken,
-    };
-  });
+    // 2. Setup IPC Handlers
+    
+    // Store IPC
+    ipcMain.handle('store:setApiKey', async (_, provider: 'google' | 'anthropic', key: string) => {
+        await SecureVault.setApiKey(provider, key);
+        return true;
+    });
 
-  // Load the Next.js app in development or production
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:3000');
-  } else {
-    // In production, we'd load the static export or Next server route
-    mainWindow.loadURL('http://localhost:3000');
-  }
+    ipcMain.handle('store:getApiKey', async (_, provider: 'google' | 'anthropic') => {
+        return await SecureVault.getApiKey(provider);
+    });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
-}
+    // Native Workspace Picker
+    ipcMain.handle('dialog:openDirectory', async () => {
+        if (!mainWindow) return null;
+        const result = await dialog.showOpenDialog(mainWindow, {
+            properties: ['openDirectory']
+        });
+        
+        if (result.canceled || result.filePaths.length === 0) {
+            return null;
+        }
+        return result.filePaths[0];
+    });
 
-app.on('ready', () => {
-  createDaemon();
-  createWindow();
+    // Agent Invocation
+    ipcMain.handle('agent:invoke', async (event, workspacePath: string, query: string) => {
+        try {
+            // Setup dynamic binary path
+            const exeName = process.platform === 'win32' ? 'lattice-harness.exe' : 'lattice-harness';
+            let binaryPath: string;
+            
+            if (app.isPackaged) {
+                binaryPath = path.join(process.resourcesPath, 'bin', exeName);
+            } else {
+                binaryPath = path.join(__dirname, '..', 'go-harness', 'bin', exeName);
+            }
+
+            console.log(`[Main] Launching Go Daemon from: ${binaryPath}`);
+
+            process.env.LATTICE_HARNESS_BINARY_PATH = binaryPath;
+
+            // Initialize GoIOHarness with the target workspace
+            const ioHarness = new GoIOHarness(workspacePath);
+            await ioHarness.initialize();
+
+            const streamCallback = (step: any) => {
+                event.sender.send('agent:stream', step);
+            };
+
+            const agentRes = await generateConversationReply({
+                userId: 'local-desktop-user',
+                clerkUser: null as any,
+                request: {
+                    messages: [{ role: 'user', text: query }],
+                    mode: 'agentic'
+                }
+            }, {
+                ioHarness,
+                slackStreamCallback: streamCallback // Re-use the onStep property
+            });
+
+            // Read the final stream
+            const reader = agentRes.stream.getReader();
+            const decoder = new TextDecoder();
+            let finalAnswer = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                finalAnswer += decoder.decode(value, { stream: true });
+            }
+
+            ioHarness.shutdown();
+            return { ok: true, result: finalAnswer };
+
+        } catch (error: any) {
+            console.error('[Agent Error]', error);
+            return { ok: false, error: error.message };
+        }
+    });
+
+    // Create Window
+    createWindow();
+
+    app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+            createWindow();
+        }
+    });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});
-
-app.on('quit', () => {
-  if (goDaemon) {
-    goDaemon.kill();
-  }
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
 });
