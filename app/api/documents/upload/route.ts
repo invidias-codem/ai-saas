@@ -116,7 +116,7 @@ export async function POST(req: Request) {
     }
 
     const doc = await createDocument({
-      workspace_id: workspaceId,
+      workspace_id: workspaceId ?? null,
       user_id: user.userId,
       filename,
       mime_type: mimeType,
