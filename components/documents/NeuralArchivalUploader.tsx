@@ -111,8 +111,7 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
         mimeType: finalMimeType,
       };
 
-      setOptimisticDocs(prev => prev.filter(d => d.id !== tempId));
-      onUploadComplete?.(finalDoc);
+      setDocs(prev => prev.map(d => d.id === tempId ? completedDoc : d));
 
     } catch (err: any) {
       console.error('[Uploader] Upload failed:', err);
