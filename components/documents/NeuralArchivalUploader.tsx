@@ -10,8 +10,10 @@ import { scrubImageMetadata } from '@/lib/utils/imageScrubber';
 export interface UploadedDoc {
   id: string;
   filename: string;
-  storageState: StorageState | 'INGESTING' | 'ERROR';
+  storageState: StorageState | 'INGESTING' | 'ERROR' | 'PREMIUM_REQUIRED';
   mimeType?: string;
+  cta?: { label: string; href: string };
+  message?: string;
 }
 
 interface NeuralArchivalUploaderProps {
@@ -112,10 +114,20 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
       // 5. Replace the temp optimistic card with the real WARM card
       setDocs(prev => prev.map(d => d.id === tempId ? completedDoc : d));
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Uploader] Upload failed:', err);
-      // Show error state on the card instead of silently disappearing
-      setDocs(prev => prev.map(d => d.id === tempId ? { ...d, storageState: 'ERROR' } : d));
+      // Check for premium entitlement rejection
+      if (err.response?.status === 403 && err.response?.data?.cta) {
+        setDocs(prev => prev.map(d => d.id === tempId ? { 
+          ...d, 
+          storageState: 'PREMIUM_REQUIRED',
+          cta: err.response.data.cta,
+          message: err.response.data.message || 'Premium feature required.'
+        } : d));
+      } else {
+        // Show generic error state
+        setDocs(prev => prev.map(d => d.id === tempId ? { ...d, storageState: 'ERROR' } : d));
+      }
     }
   };
 
@@ -139,8 +151,10 @@ export function NeuralArchivalUploader({ workspaceId, docs, setDocs }: NeuralArc
               id={doc.id}
               filename={doc.filename}
               storageState={doc.storageState as any}
+              message={doc.message}
+              cta={doc.cta}
               onRemove={doc.storageState !== 'INGESTING' ? () => removeDoc(doc.id) : undefined}
-              onPreview={doc.storageState !== 'INGESTING' && doc.storageState !== 'ERROR' ? () => handlePreview(doc.id, doc.filename) : undefined}
+              onPreview={doc.storageState !== 'INGESTING' && doc.storageState !== 'ERROR' && doc.storageState !== 'PREMIUM_REQUIRED' ? () => handlePreview(doc.id, doc.filename) : undefined}
             />
           ))}
         </div>
