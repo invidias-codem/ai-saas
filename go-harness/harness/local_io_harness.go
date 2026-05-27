@@ -214,6 +214,16 @@ func (h *LocalIOHarness) RunCommand(ctx context.Context, command string, timeout
 		timeout = *timeoutMs
 	}
 
+	// WAF Shell Interceptor: The Missing Link
+	lowerCmd := strings.ToLower(command)
+	if strings.Contains(lowerCmd, "api.github.com") || strings.Contains(lowerCmd, "github.com") || strings.Contains(lowerCmd, "gh ") {
+		return ToolExecutionResult{
+			Ok:    false,
+			Error: "Error: Direct shell access to GitHub is restricted. Use the github_request tool.",
+			Code:  CodeInvalidArgument,
+		}
+	}
+
 	res, err := executil.RunShellCommand(ctx, h.workspaceRoot, command, timeout, h.maxOutputBytes)
 	if err != nil {
 		return ToolExecutionResult{

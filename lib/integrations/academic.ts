@@ -14,7 +14,7 @@ import os from "os";
 // Lazy initialize
 function getModel() {
     const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
-    return genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    return genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 }
 
 function getFileManager() {

@@ -20,6 +20,7 @@ type JSONRPCRequest struct {
 	Version       string          `json:"jsonrpc"`
 	WorkspaceRoot string          `json:"workspaceRoot"`
 	Action        string          `json:"action"`
+	AuthToken     string          `json:"authToken,omitempty"`
 	Inputs        json.RawMessage `json:"inputs"`
 }
 
@@ -56,10 +57,40 @@ type RunCommandArgs struct {
 	TimeoutMs *int   `json:"timeoutMs,omitempty"`
 }
 
+type GitHubRequestArgs struct {
+	Method       string   `json:"method"`
+	URL          string   `json:"url"`
+	Body         string   `json:"body,omitempty"`
+	AllowedRepos []string `json:"allowedRepos"` // Injected by Next.js per request
+}
+
+type IngestRepositoryArgs struct {
+	WorkspaceID  string `json:"workspaceId"`
+	RepoFullName string `json:"repoFullName"`
+	ClerkToken   string `json:"clerkToken"`
+	APIBaseURL   string `json:"apiBaseURL"`
+	GitHubToken  string `json:"githubToken"`
+}
+
+type SemanticSearchArgs struct {
+	WorkspaceID  string `json:"workspaceId"`
+	RepoFullName string `json:"repoFullName"`
+	Query        string `json:"query"`
+	ClerkToken   string `json:"clerkToken"`
+	APIBaseURL   string `json:"apiBaseURL"`
+}
+
+type GetFileContentsArgs struct {
+	RepoFullName string   `json:"repoFullName"`
+	FilePath     string   `json:"filePath"`
+	AllowedRepos []string `json:"allowedRepos"` // Injected by Next.js per request
+}
+
 var (
 	harnessMutex    sync.Mutex
 	activeHarnesses = make(map[string]*harness.LocalIOHarness)
 	stdoutMutex     sync.Mutex
+	expectedToken   string
 )
 
 func main() {
@@ -69,6 +100,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	defer cleanupHarnesses()
+
+	expectedToken = os.Getenv("LATTICE_AUTH_TOKEN")
+	if expectedToken == "" {
+		log.Println("WARNING: LATTICE_AUTH_TOKEN is not set. The daemon is running in insecure mode (not recommended).")
+	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -157,6 +193,13 @@ func processFrame(ctx context.Context, line []byte) {
 		return
 	}
 
+	// Inner Ring Security check: verify the injected auth token
+	if expectedToken != "" && req.AuthToken != expectedToken {
+		log.Printf("Unauthorized JSON-RPC payload received. Expected valid auth token.")
+		sendErrorResponse(req.ID, -32000, "Unauthorized: Invalid or missing authToken")
+		return
+	}
+
 	ioHarness, err := getOrInitHarness(req.WorkspaceRoot)
 	if err != nil {
 		sendErrorResponse(req.ID, -32602, fmt.Sprintf("Invalid workspace initialization: %v", err))
@@ -196,6 +239,73 @@ func processFrame(ctx context.Context, line []byte) {
 			res = ioHarness.RunCommand(ctx, args.Command, args.TimeoutMs)
 		} else {
 			sendErrorResponse(req.ID, -32602, "Invalid params for run_command")
+			return
+		}
+	case "github_request":
+		var args GitHubRequestArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			var err error
+			res, err = harness.ExecuteGitHubRequest(ctx, args.Method, args.URL, args.Body, expectedToken, args.AllowedRepos)
+			if err != nil {
+				sendErrorResponse(req.ID, -32603, fmt.Sprintf("Failed to execute GitHub request: %v", err))
+				return
+			}
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for github_request")
+			return
+		}
+	case "ingest_repository":
+		var args IngestRepositoryArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			err := harness.CrawlAndIngest(harness.CrawlerConfig{
+				WorkspaceID:  args.WorkspaceID,
+				RepoFullName: args.RepoFullName,
+				AuthToken:    args.ClerkToken,
+				APIBaseURL:   args.APIBaseURL,
+				GitHubToken:  args.GitHubToken,
+			})
+			if err != nil {
+				sendErrorResponse(req.ID, -32603, fmt.Sprintf("Crawler error: %v", err))
+				return
+			}
+			res = harness.ToolExecutionResult{
+				Success: true,
+				Stdout:  "Repository ingested successfully",
+			}
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for ingest_repository")
+			return
+		}
+	case "semantic_code_search":
+		var args SemanticSearchArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			var err error
+			res, err = harness.SemanticCodeSearch(ctx, harness.SemanticSearchConfig{
+				WorkspaceID:  args.WorkspaceID,
+				RepoFullName: args.RepoFullName,
+				Query:        args.Query,
+				ClerkToken:   args.ClerkToken,
+				APIBaseURL:   args.APIBaseURL,
+			})
+			if err != nil {
+				sendErrorResponse(req.ID, -32603, fmt.Sprintf("Search error: %v", err))
+				return
+			}
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for semantic_code_search")
+			return
+		}
+	case "get_file_contents":
+		var args GetFileContentsArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			var err error
+			res, err = harness.GetFileContents(ctx, args.RepoFullName, args.FilePath, expectedToken, args.AllowedRepos)
+			if err != nil {
+				sendErrorResponse(req.ID, -32603, fmt.Sprintf("File read error: %v", err))
+				return
+			}
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for get_file_contents")
 			return
 		}
 	default:

@@ -63,7 +63,7 @@ const SupportPage = () => {
   };
 
   return (
-    <div className="bg-[#FAF9F7] dark:bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative text-slate-900 dark:text-white">
+    <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/15 rounded-full blur-3xl" />
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/15 rounded-full blur-3xl" />
@@ -76,11 +76,11 @@ const SupportPage = () => {
             Support Center
           </div>
 
-          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.1] text-slate-900 dark:text-white">
+          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.1] text-foreground">
             Need help with Lattice OS?
           </h1>
 
-          <p className="text-lg text-slate-600 dark:text-gray-400 max-w-2xl mx-auto">
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Whether you&apos;re troubleshooting a route, trying to understand the platform architecture, or reporting a bug, this page is the fastest way to get support or find the right docs.
           </p>
         </section>
@@ -90,13 +90,13 @@ const SupportPage = () => {
             {contactOptions.map((option, index) => (
               <div
                 key={index}
-                className="p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition"
+                className="p-6 rounded-2xl border border-border bg-card hover:bg-accent/50 transition"
               >
                 <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4", option.bgColor)}>
                   <option.icon className={cn("w-6 h-6", option.color)} />
                 </div>
-                <h3 className="text-lg font-semibold mb-2 text-slate-900 dark:text-white">{option.title}</h3>
-                <p className="text-slate-600 dark:text-gray-400 text-sm mb-4 leading-relaxed">{option.description}</p>
+                <h3 className="text-lg font-semibold mb-2 text-foreground">{option.title}</h3>
+                <p className="text-muted-foreground text-sm mb-4 leading-relaxed">{option.description}</p>
                 {option.action && (
                   <a href={option.action.href} className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium inline-flex items-center gap-1">
                     {option.action.label} <ArrowRight className="w-3 h-3" />
@@ -108,10 +108,10 @@ const SupportPage = () => {
         </section>
 
         <section className="px-4 pb-16 max-w-6xl mx-auto">
-          <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-8">
+          <div className="rounded-2xl border border-border bg-card p-8">
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">Start with self-serve help</h2>
-              <p className="text-slate-600 dark:text-gray-400 max-w-3xl">
+              <h2 className="text-3xl font-bold text-foreground mb-3">Start with self-serve help</h2>
+              <p className="text-muted-foreground max-w-3xl">
                 The docs surface now covers the platform more explicitly — architecture, security, deployment reality, runtime behavior, API surfaces, and operational reference material.
               </p>
             </div>
@@ -121,15 +121,15 @@ const SupportPage = () => {
                 <Link
                   key={resource.title}
                   href={resource.href}
-                  className="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-5 hover:bg-white dark:hover:bg-white/10 transition"
+                  className="rounded-xl border border-border bg-secondary p-5 hover:bg-accent/50 transition"
                 >
                   <div className="flex items-start gap-4">
                     <div className={cn("p-3 rounded-lg", resource.bgColor)}>
                       <resource.icon className={cn("w-5 h-5", resource.color)} />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-slate-900 dark:text-white mb-1">{resource.title}</h3>
-                      <p className="text-sm text-slate-600 dark:text-gray-400 leading-relaxed">{resource.description}</p>
+                      <h3 className="font-semibold text-foreground mb-1">{resource.title}</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{resource.description}</p>
                     </div>
                   </div>
                 </Link>
@@ -141,13 +141,13 @@ const SupportPage = () => {
         <section className="px-4 pb-16 max-w-6xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {helpCategories.map((category) => (
-              <div key={category.title} className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-white/5 p-6">
+              <div key={category.title} className="rounded-2xl border border-border bg-card p-6">
                 <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4", category.bgColor)}>
                   <category.icon className={cn("w-6 h-6", category.color)} />
                 </div>
-                <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-3">{category.title}</h3>
-                <p className="text-sm text-slate-600 dark:text-gray-400 mb-4 leading-relaxed">{category.description}</p>
-                <ul className="space-y-2 text-sm text-slate-700 dark:text-gray-300">
+                <h3 className="text-xl font-semibold text-foreground mb-3">{category.title}</h3>
+                <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{category.description}</p>
+                <ul className="space-y-2 text-sm text-card-foreground">
                   {category.items.map((item) => (
                     <li key={item} className="flex items-start gap-2">
                       <span className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-400 dark:bg-gray-500" />
@@ -162,14 +162,14 @@ const SupportPage = () => {
 
         <section className="px-4 pb-16 max-w-5xl mx-auto">
           <div className="rounded-2xl border border-amber-300/40 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5 p-8">
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">How to report a bug well</h2>
-            <p className="text-slate-600 dark:text-gray-400 mb-6 max-w-3xl">
+            <h2 className="text-2xl font-bold text-foreground mb-4">How to report a bug well</h2>
+            <p className="text-muted-foreground mb-6 max-w-3xl">
               The fastest way to get a useful response is to include the details that make the issue reproducible. If you can, include both what happened and what you expected to happen.
             </p>
             <div className="grid md:grid-cols-2 gap-6">
               <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white mb-3">Helpful details</h3>
-                <ul className="space-y-2 text-sm text-slate-700 dark:text-gray-300">
+                <h3 className="font-semibold text-foreground mb-3">Helpful details</h3>
+                <ul className="space-y-2 text-sm text-card-foreground">
                   {bugReportChecklist.map((item) => (
                     <li key={item} className="flex items-start gap-2">
                       <span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-500" />
@@ -179,8 +179,8 @@ const SupportPage = () => {
                 </ul>
               </div>
               <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white mb-3">Especially useful for technical issues</h3>
-                <ul className="space-y-2 text-sm text-slate-700 dark:text-gray-300">
+                <h3 className="font-semibold text-foreground mb-3">Especially useful for technical issues</h3>
+                <ul className="space-y-2 text-sm text-card-foreground">
                   {technicalBugHints.map((item) => (
                     <li key={item} className="flex items-start gap-2">
                       <span className="mt-1 h-1.5 w-1.5 rounded-full bg-blue-500" />
@@ -193,24 +193,24 @@ const SupportPage = () => {
           </div>
         </section>
 
-        <section className="py-16 px-4 border-t border-slate-200 dark:border-white/10 bg-black/5 dark:bg-black/20">
+        <section className="py-16 px-4 border-t border-border bg-muted/50">
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-10">
-              <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Send us a message</h2>
-              <p className="text-slate-600 dark:text-gray-400">If the docs don&apos;t answer it, reach out here and we&apos;ll get back to you as soon as possible.</p>
+              <h2 className="text-3xl font-bold text-foreground mb-4">Send us a message</h2>
+              <p className="text-muted-foreground">If the docs don&apos;t answer it, reach out here and we&apos;ll get back to you as soon as possible.</p>
             </div>
 
             {submitStatus === "success" ? (
               <div className="p-8 rounded-2xl border border-green-500/30 bg-green-500/10 text-center">
                 <CheckCircledIcon className="w-12 h-12 text-green-500 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">Message sent</h3>
-                <p className="text-slate-600 dark:text-gray-400 mb-6">
+                <h3 className="text-xl font-semibold text-foreground mb-2">Message sent</h3>
+                <p className="text-muted-foreground mb-6">
                   Thanks for reaching out. We&apos;ll respond as soon as we can.
                 </p>
                 <Button
                   onClick={() => setSubmitStatus("idle")}
                   variant="outline"
-                  className="border-slate-300 dark:border-white/20 text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-white/10"
+                  className="border-border text-foreground hover:bg-accent"
                 >
                   Send another message
                 </Button>
@@ -219,7 +219,7 @@ const SupportPage = () => {
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-card-foreground mb-2">
                       Your name
                     </label>
                     <Input
@@ -227,12 +227,12 @@ const SupportPage = () => {
                       required
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="bg-white dark:bg-white/5 border-slate-300 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500 focus:border-purple-500"
+                      className="bg-card border-border text-foreground placeholder:text-muted-foreground focus:border-purple-500"
                       placeholder="Jane Doe"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-card-foreground mb-2">
                       Email address
                     </label>
                     <Input
@@ -240,14 +240,14 @@ const SupportPage = () => {
                       required
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="bg-white dark:bg-white/5 border-slate-300 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500 focus:border-purple-500"
+                      className="bg-card border-border text-foreground placeholder:text-muted-foreground focus:border-purple-500"
                       placeholder="jane@example.com"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
                     Subject
                   </label>
                   <Input
@@ -255,13 +255,13 @@ const SupportPage = () => {
                     required
                     value={formData.subject}
                     onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                    className="bg-white dark:bg-white/5 border-slate-300 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500 focus:border-purple-500"
+                    className="bg-card border-border text-foreground placeholder:text-muted-foreground focus:border-purple-500"
                     placeholder="What can we help with?"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-card-foreground mb-2">
                     Message
                   </label>
                   <Textarea
@@ -269,7 +269,7 @@ const SupportPage = () => {
                     rows={6}
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                    className="bg-white dark:bg-white/5 border-slate-300 dark:border-white/10 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-gray-500 focus:border-purple-500 resize-none"
+                    className="bg-card border-border text-foreground placeholder:text-muted-foreground focus:border-purple-500 resize-none"
                     placeholder="Describe the issue, question, or behavior you need help with..."
                   />
                 </div>
@@ -284,7 +284,7 @@ const SupportPage = () => {
                 <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-black dark:hover:bg-gray-200 text-white py-6 rounded-xl text-lg"
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 rounded-xl text-lg"
                 >
                   {isSubmitting ? (
                     <>
@@ -303,37 +303,37 @@ const SupportPage = () => {
           </div>
         </section>
 
-        <section className="py-16 px-4 border-t border-slate-200 dark:border-white/10">
+        <section className="py-16 px-4 border-t border-border">
           <div className="max-w-4xl mx-auto text-center">
             <Clock className="w-10 h-10 text-blue-500 dark:text-blue-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Response expectations</h2>
-            <p className="text-slate-600 dark:text-gray-400 max-w-2xl mx-auto">
+            <h2 className="text-2xl font-bold text-foreground mb-4">Response expectations</h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
               We aim to respond to support requests as quickly as possible. If the issue is urgent, make that clear in the subject line and include the route or feature affected.
             </p>
           </div>
         </section>
       </main>
 
-      <footer className="py-10 border-t border-slate-200 dark:border-white/10 bg-[#FAF9F7] dark:bg-[#111827]">
+      <footer className="py-10 border-t border-border bg-background">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="relative w-6 h-6">
                 <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
               </div>
-              <span className="text-lg font-bold text-slate-900 dark:text-white">Genie AI</span>
+              <span className="text-lg font-bold text-foreground">Genie AI</span>
             </div>
 
-            <div className="flex items-center gap-6 text-sm text-slate-500 dark:text-gray-400">
-              <Link href="/privacy" className="hover:text-slate-900 dark:hover:text-white transition">Privacy Policy</Link>
-              <Link href="/docs" className="hover:text-slate-900 dark:hover:text-white transition">Docs</Link>
-              <Link href="/blog" className="hover:text-slate-900 dark:hover:text-white transition">Blog</Link>
-              <Link href="/" className="hover:text-slate-900 dark:hover:text-white transition">Home</Link>
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+              <Link href="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
+              <Link href="/docs" className="hover:text-foreground transition">Docs</Link>
+              <Link href="/blog" className="hover:text-foreground transition">Blog</Link>
+              <Link href="/" className="hover:text-foreground transition">Home</Link>
             </div>
           </div>
 
-          <div className="mt-8 pt-8 border-t border-slate-200 dark:border-white/10 text-center">
-            <p className="text-slate-500 dark:text-gray-500 text-sm">
+          <div className="mt-8 pt-8 border-t border-border text-center">
+            <p className="text-muted-foreground text-sm">
               © {new Date().getFullYear()} Genie AI. All rights reserved.
             </p>
           </div>

@@ -8439,7 +8439,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
             "text",
             "image"
         ],
-        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-3.1-flash-lite-preview",
+        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-2.5-flash",
         "supports_tool_choice": true,
         "supports_web_search": true,
         "cache_read_input_token_cost": 0.0,
@@ -9069,7 +9069,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
         "supports_reasoning": true,
         "supports_tool_choice": true
     },
-    "gemini/gemini-3.1-flash-lite-preview": {
+    "gemini/gemini-2.5-flash": {
         "max_tokens": 8192,
         "max_input_tokens": 1048576,
         "max_output_tokens": 8192,
@@ -9188,7 +9188,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
             "text",
             "image"
         ],
-        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-3.1-flash-lite-preview",
+        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-2.5-flash",
         "supports_tool_choice": true,
         "supports_parallel_function_calling": true,
         "supports_web_search": true,
@@ -9236,7 +9236,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
             "text",
             "image"
         ],
-        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-3.1-flash-lite-preview",
+        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-2.5-flash",
         "supports_tool_choice": true,
         "supports_parallel_function_calling": true,
         "supports_web_search": true,
@@ -9313,7 +9313,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
         "supported_output_modalities": [
             "text"
         ],
-        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-3.1-flash-lite-preview",
+        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-2.5-flash",
         "supports_web_search": true,
         "cache_read_input_token_cost": 1.875e-08,
         "supports_prompt_caching": true
@@ -9361,7 +9361,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
             "text",
             "image"
         ],
-        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-3.1-flash-lite-preview",
+        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-2.5-flash",
         "supports_tool_choice": true,
         "supports_web_search": true,
         "cache_read_input_token_cost": 0.0,
@@ -10407,7 +10407,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
             "text",
             "image"
         ],
-        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-3.1-flash-lite-preview",
+        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-2.5-flash",
         "supports_tool_choice": true,
         "supports_web_search": true,
         "cache_read_input_token_cost": 0.0,
@@ -12364,7 +12364,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
         "cache_read_input_token_cost": 3.75e-08,
         "supports_prompt_caching": true
     },
-    "gemini-3.1-flash-lite-preview": {
+    "gemini-2.5-flash": {
         "max_tokens": 8192,
         "max_input_tokens": 1048576,
         "max_output_tokens": 8192,
@@ -12403,7 +12403,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
         "cache_read_input_token_cost": 2.5e-08,
         "supports_prompt_caching": true
     },
-    "gemini-3.1-flash-lite-preview": {
+    "gemini-2.5-flash": {
         "max_input_tokens": 1048576,
         "max_output_tokens": 8192,
         "max_images_per_prompt": 3000,
@@ -12431,7 +12431,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
         "supported_output_modalities": [
             "text"
         ],
-        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-3.1-flash-lite-preview",
+        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-2.5-flash",
         "supports_tool_choice": true,
         "supports_parallel_function_calling": true,
         "supports_web_search": true,
@@ -12466,7 +12466,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
         "supported_output_modalities": [
             "text"
         ],
-        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-3.1-flash-lite-preview",
+        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models#gemini-2.5-flash",
         "supports_tool_choice": true,
         "deprecation_date": "2026-02-25",
         "supports_parallel_function_calling": true,
@@ -12567,7 +12567,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
         "cache_read_input_token_cost": 3.125e-07,
         "supports_prompt_caching": true
     },
-    "gemini/gemini-3.1-flash-lite-preview": {
+    "gemini/gemini-2.5-flash": {
         "max_input_tokens": 1048576,
         "max_output_tokens": 8192,
         "max_images_per_prompt": 3000,
@@ -12598,7 +12598,7 @@ export const modelsConfig: Record<string, ModelConfig> = {
         "supported_output_modalities": [
             "text"
         ],
-        "source": "https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-flash-lite-preview",
+        "source": "https://ai.google.dev/gemini-api/docs/pricing#gemini-2.5-flash",
         "supports_web_search": true,
         "cache_read_input_token_cost": 1.875e-08,
         "supports_prompt_caching": true

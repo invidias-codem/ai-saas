@@ -500,9 +500,6 @@ function CodePageContent() {
             </div>
           )}
 
-          {/* Model Toggle */}
-          <CodeModelToggle disabled={loading} />
-
           {/* GitHub Connect Button */}
           <Button
             variant="ghost"
@@ -723,6 +720,10 @@ function CodePageContent() {
             >
               <Paperclip className="h-5 w-5" />
             </Button>
+
+            <div className="pb-1 shrink-0">
+              <CodeModelToggle disabled={loading} />
+            </div>
 
             <Textarea
               rows={1}

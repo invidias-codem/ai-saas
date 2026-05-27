@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/security/apiAuth';
+import { currentUser } from '@clerk/nextjs/server';
+import { checkDocumentEntitlement } from '@/lib/entitlements/documents';
 import { StorageState, EmbeddingTier, UploadDocumentRequest } from '@/lib/types/documents';
 import { createDocument, saveDocumentChunks } from '@/lib/documents/store';
 import { extractDocumentText } from '@/lib/documents/extractText';
@@ -10,6 +12,27 @@ import { getStorageClient, getStorageProjectId } from '@/lib/gcp/storage';
 export async function POST(req: Request) {
   try {
     const user = await requireAuth();
+    const clerkUser = await currentUser();
+
+    if (!clerkUser) {
+      return NextResponse.json({ error: 'User profile not found' }, { status: 401 });
+    }
+
+    const computeCredits = typeof clerkUser.privateMetadata?.computeCredits === 'number' 
+      ? clerkUser.privateMetadata.computeCredits 
+      : 200;
+
+    const entitlement = checkDocumentEntitlement(clerkUser, computeCredits);
+    if (!entitlement.allowed) {
+      return NextResponse.json({
+        error: entitlement.reason,
+        message: entitlement.message,
+        cta: {
+          label: entitlement.ctaLabel,
+          href: entitlement.ctaHref
+        }
+      }, { status: 403 });
+    }
 
     let body: UploadDocumentRequest;
     try {
@@ -55,12 +78,28 @@ export async function POST(req: Request) {
       }
     }
 
-    // 1. Extract Text
-    const extracted = await extractDocumentText(buffer, mimeType);
-    const rawText = extracted.text;
+    // 1. Check if media (image, video, audio)
+    const isMedia = mimeType.startsWith('image/') || mimeType.startsWith('video/') || mimeType.startsWith('audio/');
+    
+    // 2. Extract Text (if extractable)
+    const isTextExtractable = mimeType === 'application/pdf' || 
+                              mimeType === 'text/plain' || 
+                              mimeType === 'text/markdown' || 
+                              mimeType === 'text/csv' || 
+                              mimeType === 'application/json';
 
-    // 2. Determine Embedding Tier
-    // High res for PDFs or large documents, Standard for small text.
+    let rawText = '';
+    let textChunks: any[] = [];
+    if (isTextExtractable) {
+      const extracted = await extractDocumentText(buffer, mimeType);
+      rawText = extracted.text;
+      textChunks = chunkDocumentText(rawText, { maxTokens: 512, overlapPercentage: 0.1 });
+    } else if (!isMedia && !isTextExtractable) {
+      console.log(`[UploadRoute] Skipping text extraction for unsupported mime type: ${mimeType}`);
+    }
+
+    // 3. Determine Embedding Tier
+    // High res for PDFs or large documents, Standard for small text, none needed for images (but we store WARM)
     let tier = EmbeddingTier.STANDARD_768;
     if (mimeType === 'application/pdf' || rawText.length > 20000) {
       tier = EmbeddingTier.HIGH_RES_3076;
@@ -77,7 +116,7 @@ export async function POST(req: Request) {
     }
 
     const doc = await createDocument({
-      workspace_id: workspaceId,
+      workspace_id: workspaceId ?? null,
       user_id: user.userId,
       filename,
       mime_type: mimeType,
@@ -89,22 +128,30 @@ export async function POST(req: Request) {
       version: nextVersion
     });
 
-    // 4. Chunk Text
-    const textChunks = chunkDocumentText(rawText, { maxTokens: 512, overlapPercentage: 0.1 });
-
-    // 5. Generate Embeddings and Save Chunks
-    // We batch process embeddings to avoid hitting rate limits instantly, but for now map sequentially or in small parallel batches.
+    // 5. Generate Embeddings and Save Chunks (only if text exists)
     const chunksToSave = [];
-    for (const chunk of textChunks) {
-      const embedding = await embedDocumentChunk(chunk.content, tier);
+    let embeddingFailed = false;
+
+    if (!isMedia) {
+      for (const chunk of textChunks) {
+      let embedding;
+      try {
+        if (!embeddingFailed) {
+          embedding = await embedDocumentChunk(chunk.content, tier);
+        }
+      } catch (err) {
+        console.warn('[UploadRoute] Embedding failed for chunk, saving without embedding:', err);
+        embeddingFailed = true; // Stop trying if we hit a 429 or 404
+      }
       
       chunksToSave.push({
         document_id: doc.id,
         chunk_index: chunk.chunk_index,
         content: chunk.content,
-        embedding_768: tier === EmbeddingTier.STANDARD_768 ? embedding : undefined,
-        embedding_3076: tier === EmbeddingTier.HIGH_RES_3076 ? embedding : undefined,
+        embedding_768: tier === EmbeddingTier.STANDARD_768 && embedding ? embedding : undefined,
+        embedding_3076: tier === EmbeddingTier.HIGH_RES_3076 && embedding ? embedding : undefined,
       });
+    }
     }
 
     if (chunksToSave.length > 0) {

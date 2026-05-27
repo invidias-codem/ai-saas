@@ -64,6 +64,37 @@
 
 @layer base {
   :root {
+    --background: 210 40% 98%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
     --background: 224 71% 4%;
     --foreground: 213 31% 91%;
 
@@ -91,7 +122,6 @@
     --border: 216 34% 17%;
     --input: 216 34% 17%;
     --ring: 216 34% 17%;
-    --radius: 0.5rem;
   }
 }
 
@@ -105,7 +135,6 @@
   :root {
     height: 100dvh;
     touch-action: manipulation;
-    color-scheme: dark;
   }
 
   body {
@@ -170,10 +199,10 @@
 
 @layer utilities {
   .glass-card {
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: hsl(var(--card) / 0.6);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid hsl(var(--border) / 0.5);
     box-shadow: none;
   }
 
@@ -198,43 +227,43 @@
   }
 
   .landing-bg-main {
-    background-color: #080b14;
+    background-color: hsl(var(--background));
   }
 
   .landing-bg-alt {
-    background-color: #090d16;
+    background-color: hsl(var(--secondary));
   }
 
   .landing-bg-muted {
-    background-color: #070a12;
+    background-color: hsl(var(--muted));
   }
 
   .landing-text-primary {
-    color: white;
+    color: hsl(var(--foreground));
   }
 
   .landing-text-secondary {
-    color: rgb(148 163 184);
+    color: hsl(var(--muted-foreground));
   }
 
   .landing-text-muted {
-    color: rgb(100 116 139);
+    color: hsl(var(--muted-foreground));
   }
 
   .landing-badge-primary {
-    @apply border border-violet-500/30 bg-violet-500/10 text-violet-300;
+    @apply border border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300;
   }
 
   .landing-badge-secondary {
-    @apply border border-sky-500/30 bg-sky-500/10 text-sky-300;
+    @apply border border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-300;
   }
 
   .landing-card {
-    @apply border border-white/[0.08] bg-white/[0.04] backdrop-blur-md;
+    @apply border border-border bg-card/60 backdrop-blur-md;
   }
 
   .landing-card-strong {
-    @apply border border-violet-500/20 bg-white/[0.05] backdrop-blur-md;
+    @apply border border-border bg-card/80 backdrop-blur-md;
   }
 
   .landing-cta-primary {
@@ -242,19 +271,19 @@
   }
 
   .landing-cta-secondary {
-    @apply border border-white/15 bg-white/5 text-white hover:bg-white/10;
+    @apply border border-border bg-secondary text-secondary-foreground hover:bg-secondary/80;
   }
 
   .landing-orb-primary {
-    background-color: rgb(109 40 217 / 0.10);
+    @apply bg-violet-600/10 dark:bg-violet-600/20;
   }
 
   .landing-orb-secondary {
-    background-color: rgb(67 56 202 / 0.10);
+    @apply bg-indigo-600/10 dark:bg-indigo-600/20;
   }
 
   .landing-orb-tertiary {
-    background-color: rgb(3 105 161 / 0.08);
+    @apply bg-sky-600/10 dark:bg-sky-600/20;
   }
 
   .landing-grid-overlay {
@@ -262,14 +291,15 @@
       linear-gradient(rgba(139, 92, 246, 0.4) 1px, transparent 1px),
       linear-gradient(90deg, rgba(139, 92, 246, 0.4) 1px, transparent 1px);
     background-size: 60px 60px;
+    @apply opacity-30 dark:opacity-100;
   }
 
   .landing-headline-gradient {
-    @apply bg-gradient-to-r from-violet-400 via-purple-300 to-indigo-400 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-violet-600 via-purple-500 to-indigo-600 dark:from-violet-400 dark:via-purple-300 dark:to-indigo-400 bg-clip-text text-transparent;
   }
 
   .landing-nav-shell {
-    @apply border-b border-white/10 bg-[#0f1117]/90 shadow-none backdrop-blur-xl;
+    @apply border-b border-border bg-background/90 shadow-none backdrop-blur-xl;
   }
 
   .landing-nav-shell-top {
@@ -277,14 +307,14 @@
   }
 
   .landing-nav-link {
-    @apply text-gray-300 hover:text-white;
+    @apply text-muted-foreground hover:text-foreground;
   }
 
   .landing-nav-ghost {
-    @apply text-gray-300 hover:bg-white/10 hover:text-white;
+    @apply text-muted-foreground hover:bg-accent hover:text-accent-foreground;
   }
 
   .landing-nav-burger-mid {
-    @apply bg-white;
+    @apply bg-foreground;
   }
 }

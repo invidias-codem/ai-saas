@@ -46,8 +46,8 @@ export const ConversationRequestSchema = z.object({
   fileName: z.string().max(255).optional(),
   mimeType: z.string().max(100).optional(),
   fileUri: z.string().max(1024).optional(),
-  documentIds: z.array(z.string().uuid()).optional(),
-  workspaceId: z.string().uuid().optional(),
+  documentIds: z.array(z.string()).optional(),
+  workspaceId: z.string().nullable().optional(),
   mode: z.enum(['fast', 'quality', 'agentic', 'reasoning']).optional(),
 });
 
@@ -68,7 +68,7 @@ export type ConversationEngineOptions = {
    */
   disableExternalContext?: boolean;
 
-  /** Override model id (defaults to gemini-3.1-flash-lite-preview). */
+  /** Override model id (defaults to gemini-2.5-flash). */
   model?: string;
 
   /** Operating mode for the agent */
@@ -92,6 +92,7 @@ export type ConversationEngineOptions = {
 
 export type ConversationEngineResult = {
   stream: ReadableStream;
+  thoughtSignaturePromise?: Promise<string | null>;
   sources?: Source[];
   debug?: {
     promptVersion?: string | null;
@@ -154,10 +155,11 @@ export async function generateConversationReply(
     userId: string;
     clerkUser: any;
     request: ConversationRequest;
+    conversationId?: string | null;
   },
   options: ConversationEngineOptions = {}
 ): Promise<ConversationEngineResult> {
-  const { userId, clerkUser, request } = args;
+  const { userId, clerkUser, request, conversationId } = args;
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
 
@@ -268,7 +270,10 @@ export async function generateConversationReply(
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const { messages, fileData, mimeType, workspaceId, documentIds } = parsed;
+  const { messages, fileData, mimeType, workspaceId, documentIds: rawDocumentIds } = parsed;
+
+  // Filter out optimistic temp_ IDs that haven't been persisted to DB yet
+  const documentIds = rawDocumentIds?.filter((id: string) => id && !id.startsWith('temp_'));
 
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
@@ -406,15 +411,91 @@ export async function generateConversationReply(
     } as ChatMessage))
   ];
 
-  // Attach file to the last message if present
+  // ── Step 5: Tip-of-context thought signature injection ───────────────────────
+  // Load the most recent bot message's stored thought signature and append it
+  // ONLY to the last model turn. The Gemini API accepts exactly one active
+  // scratchpad at the tip of the context window — injecting into older turns
+  // causes a 400 Bad Request. This is a no-op for non-Gemini providers.
+  if (conversationId && supabase) {
+    try {
+      const { data: lastBotMsg } = await supabase
+        .from('messages')
+        .select('metadata')
+        .eq('conversation_id', conversationId)
+        .eq('role', 'bot')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const lastSignature = lastBotMsg?.metadata?.last_thought_signature as string | null | undefined;
+
+      if (lastSignature) {
+        // Find the last assistant turn in the constructed history array
+        let lastAssistantIdx = -1;
+        for (let i = history.length - 1; i >= 0; i--) {
+          if (history[i].role === 'assistant') { lastAssistantIdx = i; break; }
+        }
+
+        if (lastAssistantIdx >= 0) {
+          // Encode the signature back into the text field using the XML wrapper
+          // that gemini.ts's history serializer already knows how to parse.
+          // This is safe: the stream processor strips it before display.
+          const existingText = history[lastAssistantIdx].text || '';
+          history[lastAssistantIdx] = {
+            ...history[lastAssistantIdx],
+            text: existingText + `\n<thought_signature>${lastSignature}</thought_signature>`,
+          };
+          console.info('[ConversationEngine] Injected thought signature onto last model turn for reasoning continuity');
+        }
+      }
+    } catch (sigErr) {
+      // Non-fatal — a missing signature means Gemini starts a fresh scratchpad, which is fine.
+      console.warn('[ConversationEngine] Thought signature injection failed (non-blocking):', sigErr);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // Attach explicit files to the last message if present
   if (fileData && mimeType) {
     const lastMsg = history[history.length - 1];
     if (lastMsg && lastMsg.role === 'user') {
-      lastMsg.attachments = [{
+      lastMsg.attachments = lastMsg.attachments || [];
+      lastMsg.attachments.push({
         name: parsed.fileName || 'attached_file',
         mimeType: mimeType,
         base64Data: fileData
-      }];
+      });
+    }
+  }
+
+  // Attach explicitly selected document images
+  if (documentIds && documentIds.length > 0 && supabase) {
+    try {
+      const { data: docs } = await supabase
+        .from('workspace_documents')
+        .select('filename, mime_type, storage_uri')
+        .in('id', documentIds);
+
+      if (docs) {
+        const mediaDocs = docs.filter((d: any) => d.mime_type.startsWith('image/') || d.mime_type.startsWith('video/') || d.mime_type.startsWith('audio/'));
+        if (mediaDocs.length > 0) {
+          const lastMsg = history[history.length - 1];
+          if (lastMsg && lastMsg.role === 'user') {
+            lastMsg.attachments = lastMsg.attachments || [];
+            for (const mediaDoc of mediaDocs) {
+              if (mediaDoc.storage_uri) {
+                lastMsg.attachments.push({
+                  name: mediaDoc.filename || 'media',
+                  mimeType: mediaDoc.mime_type,
+                  fileUri: mediaDoc.storage_uri
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[ConversationEngine] Failed to fetch image attachments', e);
     }
   }
 
@@ -477,7 +558,7 @@ export async function generateConversationReply(
     }
   }
 
-  const { stream: originalStream } = streamResult;
+  const { stream: originalStream, thoughtSignaturePromise } = streamResult;
 
   // Wrap stream to capture full text for side effects
   const textEncoder = new TextEncoder();
@@ -494,11 +575,14 @@ export async function generateConversationReply(
       controller.enqueue(chunk);
     },
     flush() {
+      // Clean fullText once before any side effects
+      const cleanedFullText = fullText ? fullText.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim() : '';
+
       // Side effects after stream completes
       if (!options.disableSideEffects && fullText) {
         waitUntil((async () => {
           try {
-            const tokensUsed = estimateTokenCount(userQuery + fullText);
+            const tokensUsed = estimateTokenCount(userQuery + cleanedFullText);
 
             // ── Budget Kill Switch: record actual spend (fire-and-forget) ────
             // Uses estimated token counts since providers stream without usage metadata.
@@ -515,7 +599,7 @@ export async function generateConversationReply(
             const tags = extractTags(userQuery);
             const summary = generateSummary([
               { role: 'user', content: userQuery },
-              { role: 'assistant', content: fullText },
+              { role: 'assistant', content: cleanedFullText },
             ]);
 
             // ── RFC-001 WMRT: Tag all messages with trust tier before storage ──
@@ -529,7 +613,7 @@ export async function generateConversationReply(
             // Append the current turn — assistant response tagged as UNVERIFIED
             taggedHistory.push(
               { role: 'user', content: userQuery, trust_tier: 'UNVERIFIED', tagged_at: new Date().toISOString() },
-              tagLLMMessage(fullText, actualModelId),
+              tagLLMMessage(cleanedFullText, actualModelId),
             );
             const wmrtMeta = extractWMRTMetadata(taggedHistory, actualModelId);
             // ──────────────────────────────────────────────────────────────────
@@ -545,7 +629,7 @@ export async function generateConversationReply(
               {
                 userName: userContext.fullName,
                 userEmail: userContext.email,
-                responseLength: fullText.length,
+                responseLength: cleanedFullText.length,
                 interactionStyle: userContext.interactionStyle,
                 agentMode,
                 ...wmrtMeta,
@@ -556,7 +640,7 @@ export async function generateConversationReply(
             // These populate the knowledge graph that the DeltaEngine queries.
             if (process.env.ENABLE_HEAVY_CONTEXT !== 'false') {
               try {
-                const extractedFacts = await extractFactsFromConversation(userQuery, fullText);
+                const extractedFacts = await extractFactsFromConversation(userQuery, cleanedFullText);
                 console.log(`[ConversationEngine] Extracted ${extractedFacts.length} structured facts`);
               } catch (factErr) {
                 console.warn('[ConversationEngine] Fact extraction failed (non-blocking):', factErr);
@@ -673,7 +757,7 @@ export async function generateConversationReply(
             // ── OutputCritic: async quality gate (fire-and-forget) ───────────────
             // Never awaited — critic must never add latency to the hot path.
             // block verdicts → console.error; warn verdicts → console.warn.
-            critiqueLLMOutput(fullText, { userId, taskType: agentMode }).then(verdict => {
+            critiqueLLMOutput(cleanedFullText, { userId, taskType: agentMode }).then(verdict => {
               if (verdict.severity === 'block') {
                 console.error('[OutputCritic] BLOCK verdict:', verdict.overallReason);
                 // TODO: persist to ucol_critic_verdicts Supabase table (next PR)
@@ -699,7 +783,7 @@ export async function generateConversationReply(
             // Pass factsForRouting — enables the two-axis (task + confidence) routing
             const decision = await classifyQuery(
               userQuery,
-              fullText.substring(0, 400),
+              cleanedFullText.substring(0, 400),
               factsForRouting,
             );
 
@@ -726,7 +810,7 @@ export async function generateConversationReply(
               await router.dispatchToJKlaw(
                 {
                   query: userQuery,
-                  context: fullText.substring(0, 400),
+                  context: cleanedFullText.substring(0, 400),
                   userId, // tenant scope — required
                   goalContext: {
                     // Surface the "why" behind this task to JKlaw (T-007)
@@ -757,6 +841,7 @@ export async function generateConversationReply(
 
   return {
     stream,
+    thoughtSignaturePromise,
     sources: [
       ...intelligentFacts.map(f => ({ id: f.id || `fact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
       ...(memorySources || [])

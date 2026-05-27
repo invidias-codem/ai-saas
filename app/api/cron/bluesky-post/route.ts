@@ -22,7 +22,7 @@ function getBearerToken(req: NextRequest): string | null {
   return token || null;
 }
 
-async function buildPlan(req: NextRequest) {
+async function buildPlan(req: NextRequest, runId?: string) {
   const lane = parseLane(req.nextUrl.searchParams.get('lane'));
   const distributionUrl = req.nextUrl.searchParams.get('url');
   const distributionTitle = req.nextUrl.searchParams.get('title');
@@ -34,8 +34,8 @@ async function buildPlan(req: NextRequest) {
         title: distributionTitle,
         summary: distributionSummary,
         lane,
-      })
-    : planProactiveBlueskyPost(lane);
+      }, runId)
+    : planProactiveBlueskyPost(lane, runId);
 }
 
 function requireCronAuth(req: NextRequest): NextResponse | null {
@@ -86,6 +86,9 @@ export async function GET(req: NextRequest) {
   const authFailure = requireCronAuth(req);
   if (authFailure) return authFailure;
 
+  const runId = crypto.randomUUID();
+  console.log(JSON.stringify({ runId, event: 'post_run_start', method: 'GET', dryRun: true }));
+
   const dryRun = req.nextUrl.searchParams.get('dryRun') === 'true';
   if (!dryRun) {
     return NextResponse.json(
@@ -95,7 +98,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const plan = await buildPlan(req);
+    const plan = await buildPlan(req, runId);
+    console.log(JSON.stringify({ runId, event: 'post_dry_run_complete', plan: serializePlan(plan) }));
     return NextResponse.json({
       success: true,
       dryRun: true,
@@ -103,7 +107,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[BlueskyPostCron] Dry-run error:', message);
+    console.error(JSON.stringify({ runId, event: 'post_dry_run_error', error: message }));
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
@@ -112,8 +116,11 @@ export async function POST(req: NextRequest) {
   const authFailure = requireCronAuth(req);
   if (authFailure) return authFailure;
 
+  const runId = crypto.randomUUID();
   const dryRun = req.nextUrl.searchParams.get('dryRun') === 'true';
   const execute = req.nextUrl.searchParams.get('execute') === 'true';
+
+  console.log(JSON.stringify({ runId, event: 'post_run_start', method: 'POST', dryRun, execute }));
 
   if (!dryRun && !execute) {
     return NextResponse.json(
@@ -123,9 +130,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const plan = await buildPlan(req);
+    const plan = await buildPlan(req, runId);
 
     if (dryRun) {
+      console.log(JSON.stringify({ runId, event: 'post_dry_run_complete', plan: serializePlan(plan) }));
       return NextResponse.json({
         success: true,
         dryRun: true,
@@ -134,6 +142,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (plan.suppressed) {
+      console.log(JSON.stringify({ runId, event: 'post_suppressed', reason: plan.suppressionReason, plan: serializePlan(plan) }));
       await logProactiveBlueskyPost({
         lane: plan.lane,
         intent: plan.intent,
@@ -169,7 +178,7 @@ export async function POST(req: NextRequest) {
       text: plan.text,
       topics: plan.topics,
       ctaMode: plan.ctaMode,
-    });
+    }, runId);
 
     await logProactiveBlueskyPost({
       lane: plan.lane,
@@ -203,6 +212,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    console.log(JSON.stringify({ runId, event: 'post_execute_complete', uri: result.uri }));
     return NextResponse.json({
       success: true,
       dryRun: false,
@@ -211,7 +221,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[BlueskyPostCron] Error:', message);
+    console.error(JSON.stringify({ runId, event: 'post_error', error: message }));
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

@@ -2,17 +2,38 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/security/apiAuth';
 import { getDocument } from '@/lib/documents/store';
 import { StorageState } from '@/lib/types/documents';
+import { currentUser } from '@clerk/nextjs/server';
+import { checkDocumentEntitlement } from '@/lib/entitlements/documents';
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const user = await requireAuth();
+    const clerkUser = await currentUser();
     
-    // We expect workspaceId to be passed as a search param for scope validation
-    const { searchParams } = new URL(req.url);
-    const workspaceId = searchParams.get('workspaceId');
+    if (!clerkUser) {
+      return NextResponse.json({ error: 'User profile not found' }, { status: 401 });
+    }
 
-    if (!workspaceId) {
-      return NextResponse.json({ error: 'Missing workspaceId' }, { status: 400 });
+    const computeCredits = typeof clerkUser.privateMetadata?.computeCredits === 'number' 
+      ? clerkUser.privateMetadata.computeCredits 
+      : 200;
+
+    const entitlement = checkDocumentEntitlement(clerkUser, computeCredits);
+    if (!entitlement.allowed) {
+      return NextResponse.json({
+        error: entitlement.reason,
+        message: entitlement.message,
+        cta: {
+          label: entitlement.ctaLabel,
+          href: entitlement.ctaHref
+        }
+      }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    let workspaceId = searchParams.get('workspaceId');
+    if (!workspaceId || workspaceId === 'default' || workspaceId === 'null') {
+      workspaceId = null;
     }
 
     const doc = await getDocument(params.id, workspaceId);

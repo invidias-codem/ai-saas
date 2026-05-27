@@ -26,17 +26,21 @@ export async function createDocument(doc: Omit<WorkspaceDocument, 'id' | 'create
 /**
  * Retrieves a document by its ID and Workspace ID.
  */
-export async function getDocument(id: string, workspaceId: string): Promise<WorkspaceDocument | null> {
+export async function getDocument(id: string, workspaceId?: string | null): Promise<WorkspaceDocument | null> {
   if (!supabaseAdmin) {
     throw new Error('Supabase admin client not configured');
   }
 
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from('workspace_documents')
     .select('*')
-    .eq('id', id)
-    .eq('workspace_id', workspaceId)
-    .single();
+    .eq('id', id);
+
+  if (workspaceId) {
+    query = query.eq('workspace_id', workspaceId);
+  }
+
+  const { data, error } = await query.single();
 
   if (error) {
     if (error.code === 'PGRST116') return null; // Not found
