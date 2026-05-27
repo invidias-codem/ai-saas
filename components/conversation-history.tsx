@@ -146,111 +146,58 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
 
     return (
         <Card className="p-0 border-none bg-transparent shadow-none text-foreground">
-            <div className="flex items-center justify-between mb-3 pt-1 pb-1 border-b border-slate-200 dark:border-white/10">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                        <MessageSquare className="w-4 h-4 text-sky-500" />
-                        <h3 className="text-sm font-semibold text-foreground/80">
-                            {isWorkspaceScopedView ? 'Workspace History' : 'History'}
-                        </h3>
-                    </div>
-                    {isWorkspaceScopedView && (
-                        <div className="inline-flex items-center gap-1 text-[10px] text-sky-300/80">
-                            <Layers3 className="w-3 h-3" />
-                            Showing chats for this workspace
-                        </div>
-                    )}
-                </div>
-                <Button
-                    onClick={handleNewConversation}
-                    disabled={creatingNew}
-                    size="sm"
-                    className="bg-sky-600 hover:bg-sky-700 text-white"
-                >
-                    {creatingNew ? (
-                        <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Creating...
-                        </>
-                    ) : (
-                        <>
-                            <Plus className="w-4 h-4 mr-2" />
-                            New Chat
-                        </>
-                    )}
-                </Button>
-            </div>
+            {/* Minimal header removed to match mockup */}
 
             {loading ? (
                 <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    <Loader2 className="w-6 h-6 animate-spin text-[#a0a0a0]" />
                 </div>
             ) : visibleConversations.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                    <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                <div className="text-center py-8 text-[#a0a0a0]">
                     <p className="text-sm">
-                        {isWorkspaceScopedView ? 'No workspace conversations yet.' : 'No conversations yet.'}
+                        {isWorkspaceScopedView ? 'No workspace conversations.' : 'No conversations yet.'}
                     </p>
                 </div>
             ) : (
-                // No max-h here — the parent scroll container controls height
-                <div className="space-y-1 pb-2">
+                <div className="space-y-0.5">
                     {visibleConversations.map((conv) => (
                         <div
                             key={conv.id}
                             className={cn(
-                                "flex items-start gap-3 p-3 rounded-lg border transition cursor-pointer hover:bg-foreground/5 border-border/30",
-                                conv.id === activeId ? "bg-foreground/5 border-sky-500/30" : "bg-transparent"
+                                "group flex items-center justify-between px-3 py-2 rounded-full transition-colors cursor-pointer text-[13px]",
+                                conv.id === activeId 
+                                    ? "bg-[#2a2a2a] text-[#e3e3e3] font-medium" 
+                                    : "bg-transparent text-[#c0c0c0] hover:bg-white/5"
                             )}
                             onClick={() => handleSelectConversation(conv)}
                         >
-                            <div className="flex-shrink-0 mt-1">
-                                <MessageCircle
-                                    className={cn(
-                                        "w-4 h-4",
-                                        conv.id === activeId ? "text-sky-400" : "text-muted-foreground"
-                                    )}
-                                />
-                            </div>
-
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-2">
-                                    <p className={cn("text-sm font-medium truncate", conv.id === activeId ? "text-foreground" : "text-foreground/80")}>
-                                        {conv.title}
-                                    </p>
-                                    <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap">
-                                        {formatDate(conv.lastUpdated)}
-                                    </span>
-                                </div>
-
-                                {conv.preview && (
-                                    <p className="text-xs text-muted-foreground/60 truncate mt-1">{conv.preview}</p>
-                                )}
-                            </div>
+                            <p className="truncate mr-2 w-full">
+                                {conv.title}
+                            </p>
 
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                     <Button
                                         size="sm"
                                         variant="ghost"
-                                        className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 hover:bg-red-500/10 flex-shrink-0"
+                                        className="h-5 w-5 p-0 text-[#808080] hover:text-[#ff6b6b] hover:bg-transparent flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                         onClick={(e) => e.stopPropagation()}
                                     >
-                                        <Trash2 className={cn("w-3 h-3", deletingId === conv.id && "opacity-50")} />
+                                        <Trash2 className="w-3.5 h-3.5" />
                                     </Button>
                                 </AlertDialogTrigger>
-                                <AlertDialogContent className="bg-card border-border text-foreground">
+                                <AlertDialogContent className="bg-[#1e1e1e] border-[#333] text-[#e3e3e3]">
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Delete Conversation?</AlertDialogTitle>
-                                        <AlertDialogDescription className="text-muted-foreground">
+                                        <AlertDialogDescription className="text-[#a0a0a0]">
                                             This will permanently delete &quot;{conv.title}&quot;. This action cannot be undone.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                        <AlertDialogCancel className="bg-secondary hover:bg-secondary/80 text-foreground border-border">Cancel</AlertDialogCancel>
+                                        <AlertDialogCancel className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-white border-none">Cancel</AlertDialogCancel>
                                         <AlertDialogAction
                                             onClick={() => handleDelete(conv.id)}
-                                            className="bg-red-600 hover:bg-red-700"
+                                            className="bg-[#d32f2f] hover:bg-[#b71c1c] text-white"
                                         >
                                             Delete
                                         </AlertDialogAction>

@@ -11,7 +11,7 @@ export function KofiDonationModal() {
 
     return (
         <Dialog open={showKofiModal} onOpenChange={setShowKofiModal}>
-            <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800 text-slate-100">
+            <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800 text-slate-100 max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-50">
                         {computeCredits <= 0 ? <Lock className="w-5 h-5 text-indigo-400" /> : <Sparkles className="w-5 h-5 text-indigo-400" />}
