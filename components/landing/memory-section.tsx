@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { motion } from "framer-motion";
 import { useTranslations } from "next-intl";
+import Image from "next/image";
 
 const constellationNodes = [
   { id: "ts",       x: 300, y: 200, r: 22, label: "Prefers TypeScript",  color: "#d97706", delay: 0.0 },
@@ -224,12 +225,25 @@ export const MemorySection = () => {
         <motion.div
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
+          viewport={{ once: true, margin: "-40px" }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          className="landing-card-strong relative rounded-2xl p-6 md:p-10"
+          className="landing-card-strong relative rounded-2xl p-6 md:p-10 overflow-hidden"
         >
           <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-amber-300/20 to-transparent dark:from-violet-500/[0.08] pointer-events-none" />
-          <Constellation />
+          
+          <div className="hidden md:block">
+            <Constellation />
+          </div>
+          
+          <div className="block md:hidden relative w-full aspect-[600/420]">
+            <Image 
+              src="/memory_constellation.png" 
+              alt="Lattice OS Memory Layer" 
+              fill 
+              className="object-cover rounded-xl"
+              sizes="(max-width: 768px) 100vw, 50vw"
+            />
+          </div>
         </motion.div>
 
         <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
