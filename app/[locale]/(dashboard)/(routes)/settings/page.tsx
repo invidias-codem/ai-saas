@@ -12,6 +12,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useTranslations } from "next-intl";
 import SlackIntegration from "@/components/slack-integration";
 import { ConversationHistory } from "@/components/conversation-history";
+import { RepoSelectorModal } from "@/components/integrations/RepoSelectorModal";
 
 // Loading fallback for Slack integration
 function SlackIntegrationSkeleton() {
@@ -29,7 +30,6 @@ function SlackIntegrationSkeleton() {
   );
 }
 
-// Define the Integration interface
 interface Integration {
   id: string;
   label: string;
@@ -38,6 +38,8 @@ interface Integration {
   connected: boolean;
   color: string;
   bgColor: string;
+  username?: string;
+  email?: string;
 }
 
 const SettingsPage = () => {
@@ -46,6 +48,7 @@ const SettingsPage = () => {
   const { userId } = useAuth();
   const [dailyDigestEnabled, setDailyDigestEnabled] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
+  const [repoSelectorOpen, setRepoSelectorOpen] = useState(false);
 
   useEffect(() => {
     async function fetchSettings() {
@@ -125,7 +128,7 @@ const SettingsPage = () => {
           const githubData = await githubRes.json();
           setIntegrations((prev) =>
             prev.map((int) =>
-              int.id === "github" ? { ...int, connected: githubData.connected } : int
+              int.id === "github" ? { ...int, connected: githubData.connected, username: githubData.username, email: githubData.email } : int
             )
           );
         }
@@ -202,6 +205,23 @@ const SettingsPage = () => {
       window.location.href = "/api/integrations/github/auth";
     } else if (integrationId === "trello") {
       window.location.href = "/api/integrations/trello/auth";
+    }
+  };
+
+  const onDisconnect = async (integrationId: string) => {
+    if (integrationId === "github") {
+      try {
+        const response = await fetch("/api/integrations/github/disconnect", { method: "POST" });
+        if (response.ok) {
+          setIntegrations((prev) =>
+            prev.map((int) =>
+              int.id === "github" ? { ...int, connected: false, username: undefined, email: undefined } : int
+            )
+          );
+        }
+      } catch (error) {
+        console.error("Failed to disconnect GitHub:", error);
+      }
     }
   };
 
@@ -319,14 +339,32 @@ const SettingsPage = () => {
                     <p className="text-muted-foreground text-xs">
                       {integration.description}
                     </p>
+                    {integration.id === "github" && integration.connected && (
+                       <p className="text-xs text-muted-foreground mt-2 max-w-lg">
+                         Connected as <strong>{integration.username}</strong> {integration.email ? `(${integration.email})` : ''}.
+                         <br/><span className="italic">Your GitHub account may use a different email address than your Lattice login. The connection is explicitly authorized by you.</span>
+                       </p>
+                    )}
                   </div>
                 </div>
 
                 <div>
                   {integration.connected ? (
-                    <div className="flex items-center gap-x-2 bg-green-500/10 text-green-500 px-3 py-1 rounded-full text-xs font-bold">
-                      <span className="w-2 h-2 rounded-full bg-green-500" />
-                      Connected
+                    <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-x-2 bg-green-500/10 text-green-500 px-3 py-1 rounded-full text-xs font-bold">
+                          <span className="w-2 h-2 rounded-full bg-green-500" />
+                          Connected
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {integration.id === "github" && (
+                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setRepoSelectorOpen(true)}>
+                              Manage Repos
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="text-destructive h-7 text-xs" onClick={() => onDisconnect(integration.id)}>
+                              Disconnect
+                          </Button>
+                        </div>
                     </div>
                   ) : (
                     <Button
@@ -343,6 +381,7 @@ const SettingsPage = () => {
           </div>
         </Card>
       </div>
+      <RepoSelectorModal isOpen={repoSelectorOpen} onOpenChange={setRepoSelectorOpen} />
     </div>
   );
 };
