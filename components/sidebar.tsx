@@ -75,104 +75,85 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
   const maxCredits = 200;
   const creditsPercentage = Math.min(100, Math.max(0, (computeCredits / maxCredits) * 100));
 
-  const isConversationRoute =
-    pathname?.startsWith(localHref("/conversation")) ||
-    pathname?.includes("/workspaces/");
-
   return (
-    // Outer shell: full height, flex column, no overflow here
-    <div className="flex flex-col h-full bg-background text-foreground">
-
-      {/* ── Top: Logo + Nav routes ────────────────────────────────── */}
-      <div className="flex-shrink-0 px-3 py-4">
-        {/* Logo */}
+    // Outer shell: full height, flex column, matching Gemini's dark theme aesthetics
+    <div className="flex flex-col h-full bg-[#1e1e1e] text-[#e3e3e3] font-sans">
+      
+      {/* ── Top: Logo ────────────────────────────────── */}
+      <div className="flex-shrink-0 px-4 py-5">
         <div
-          className="flex items-center pl-3 mb-6 cursor-pointer"
+          className="flex items-center cursor-pointer mb-6"
           onClick={() => handleClick("/dashboard")}
         >
-          <div className="relative w-8 h-8 mr-4">
-            <Image fill alt="Logo" src="/Genie.png" sizes="32px" />
+          <div className="relative w-6 h-6 mr-3">
+            <Image fill alt="Logo" src="/Genie.png" sizes="24px" />
           </div>
-          <h1 className={cn("text-2xl font-bold", montserrat.className)}>
-            Genie
+          <h1 className={cn("text-lg font-medium tracking-wide text-white", montserrat.className)}>
+            Lattice
           </h1>
         </div>
 
-        {/* Nav routes */}
-        <div className="space-y-1">
-          {routes.map((route) => (
+        {/* ── Top Actions (New Chat) ────────────────────────────────── */}
+        <div className="space-y-0.5 mb-6">
+          <div
+            onClick={handleNewChat}
+            className={cn(
+              "text-sm flex items-center px-3 py-2 w-full justify-start font-medium cursor-pointer rounded-full transition-colors",
+              "hover:bg-white/10 text-[#e3e3e3]",
+              creatingNew ? "opacity-70 pointer-events-none" : ""
+            )}
+          >
+            <Plus className="h-4 w-4 mr-4 text-white" />
+            {creatingNew ? "Starting…" : "New chat"}
+          </div>
+          
+          {/* Main Routes mapped over */}
+          {routes.filter(r => r.label !== "Conversation").map((route) => (
             <div
               key={route.href}
               onClick={() => handleClick(route.href)}
               className={cn(
-                "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer rounded-lg transition",
-                "hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10",
+                "text-sm flex items-center px-3 py-2 w-full justify-start font-medium cursor-pointer rounded-full transition-colors",
                 pathname === localHref(route.href)
-                  ? "text-slate-900 dark:text-white bg-slate-100 dark:bg-white/10"
-                  : "text-slate-500 dark:text-zinc-400"
+                  ? "bg-white/10 text-white"
+                  : "hover:bg-white/10 text-[#e3e3e3]"
               )}
             >
-              <div className="flex items-center flex-1">
-                <route.icon className={cn("h-5 w-5 mr-3", route.color)} />
-                {t(labelMap[route.label] || route.label)}
-              </div>
+              <route.icon className={cn("h-4 w-4 mr-4 text-[#e3e3e3]")} />
+              {t(labelMap[route.label] || route.label)}
             </div>
           ))}
-        </div>
-
-        {/* Conversation section divider + New Chat CTA (always visible on mobile) */}
-        <div className="mt-5 border-t border-slate-200 dark:border-white/10 pt-4">
-          <button
-            type="button"
-            onClick={handleNewChat}
-            disabled={creatingNew}
-            className={cn(
-              "w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5",
-              "bg-sky-600 hover:bg-sky-700 active:bg-sky-800",
-              "text-sm font-semibold text-white transition-all duration-150",
-              "shadow-sm disabled:opacity-60"
-            )}
-          >
-            <Plus className="h-4 w-4 flex-shrink-0" />
-            {creatingNew ? "Starting…" : "New Chat"}
-          </button>
         </div>
       </div>
 
       {/* ── Middle: Scrollable conversation history ──────────────── */}
-      {/*
-        flex-1 + min-h-0 is the critical pair:
-        - flex-1 lets this div grow to fill remaining space
-        - min-h-0 overrides the default min-height:auto so overflow-y-auto works
-      */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-2">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-2">
+        <div className="text-[11px] font-semibold text-[#a0a0a0] px-2 mb-2 tracking-wider uppercase">
+          Recents
+        </div>
         <ConversationHistory onNavigate={onNavigate} />
       </div>
 
-      {/* ── Bottom: Credits widget ────────────────────────────────── */}
-      <div className="flex-shrink-0 px-3 py-3 border-t border-slate-200 dark:border-white/10">
+      {/* ── Bottom: Profile / Credits widget ────────────────────────────────── */}
+      <div className="flex-shrink-0 px-4 py-4 mt-2">
         <div
-          className="bg-slate-100 dark:bg-white/5 rounded-lg p-3 cursor-pointer hover:bg-slate-200 dark:hover:bg-white/10 transition"
+          className="bg-transparent rounded-2xl p-2 cursor-pointer hover:bg-white/5 transition flex items-center justify-between"
           onClick={triggerPaywall}
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400 flex items-center">
-              <Zap className="w-3 h-3 mr-1 text-amber-500" />
-              Premium Credits
-            </span>
-            <span className="text-xs font-bold text-slate-700 dark:text-zinc-200">
-              {computeCredits}/{maxCredits}
-            </span>
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-[#2a5a2a] flex items-center justify-center text-[#90ee90] font-bold text-sm">
+              G
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-[#e3e3e3]">
+                Joshua Mohammed
+              </span>
+              <span className="text-xs text-[#a0a0a0] flex items-center gap-1">
+                Pro <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-sm">{computeCredits}/{maxCredits}</span>
+              </span>
+            </div>
           </div>
-          <div className="w-full bg-slate-200 dark:bg-zinc-800 rounded-full h-1.5">
-            <div
-              className={cn(
-                "h-1.5 rounded-full transition-all duration-300",
-                computeCredits > 50 ? "bg-amber-500" : "bg-rose-500"
-              )}
-              style={{ width: `${creditsPercentage}%` }}
-            />
-          </div>
+          <Zap className="w-4 h-4 text-[#a0a0a0] hover:text-white transition-colors" />
         </div>
       </div>
     </div>

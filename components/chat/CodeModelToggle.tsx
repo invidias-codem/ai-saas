@@ -1,16 +1,16 @@
 "use client";
 
 import React from "react";
-import { Zap, Brain, Bot, Lightbulb } from "lucide-react";
+import { Zap, Brain, Bot, Lightbulb, ChevronDown } from "lucide-react";
 import { useCodeModel } from "@/contexts/CodeModelContext";
 import { CODE_MODELS } from "@/lib/llm/codeModels";
 import { cn } from "@/lib/utils";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip";
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const MODE_ICONS = {
     fast: Zap,
@@ -20,48 +20,55 @@ const MODE_ICONS = {
 };
 
 const MODE_COLORS = {
-    fast: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300',
-    quality: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300',
-    agentic: 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300',
-    reasoning: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300',
+    fast: 'text-green-600 dark:text-green-400',
+    quality: 'text-purple-600 dark:text-purple-400',
+    agentic: 'text-indigo-600 dark:text-indigo-400',
+    reasoning: 'text-amber-600 dark:text-amber-400',
 };
 
 export function CodeModelToggle({ disabled }: { disabled?: boolean }) {
     const { codeModel, setCodeModel } = useCodeModel();
+    const activeConfig = CODE_MODELS[codeModel] || CODE_MODELS.fast;
+    const ActiveIcon = MODE_ICONS[codeModel as keyof typeof MODE_ICONS] || Zap;
 
     return (
-        <TooltipProvider>
-            <div className="flex items-center p-1 bg-muted/50 rounded-lg border border-border gap-1">
+        <DropdownMenu>
+            <DropdownMenuTrigger disabled={disabled} className="outline-none" asChild>
+                <button className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-[20px] text-sm font-medium transition-colors border border-border bg-background hover:bg-muted focus:bg-muted",
+                    disabled && "opacity-50 cursor-not-allowed",
+                    MODE_COLORS[codeModel as keyof typeof MODE_COLORS]
+                )}>
+                    <ActiveIcon className="w-4 h-4" />
+                    <span>{activeConfig.name}</span>
+                    <ChevronDown className="w-3.5 h-3.5 ml-0.5 opacity-50" />
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top" className="w-[220px] mb-2 p-1 border-border/50 shadow-lg rounded-xl">
                 {Object.entries(CODE_MODELS).map(([key, config]) => {
                     const Icon = MODE_ICONS[key as keyof typeof MODE_ICONS];
                     const isActive = codeModel === key;
 
                     return (
-                        <Tooltip key={key}>
-                            <TooltipTrigger asChild>
-                                <button
-                                    onClick={() => setCodeModel(key as any)}
-                                    disabled={disabled}
-                                    className={cn(
-                                        "px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1.5",
-                                        isActive
-                                            ? `${MODE_COLORS[key as keyof typeof MODE_COLORS]} border shadow-sm`
-                                            : "text-muted-foreground hover:text-foreground",
-                                        disabled && "opacity-50 cursor-not-allowed"
-                                    )}
-                                >
-                                    <Icon className="w-3.5 h-3.5" />
-                                    {config.name}
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom">
-                                <p className="font-semibold">{config.name}</p>
-                                <p className="text-xs text-muted-foreground">{config.description}</p>
-                            </TooltipContent>
-                        </Tooltip>
+                        <DropdownMenuItem
+                            key={key}
+                            onClick={() => setCodeModel(key as any)}
+                            className={cn(
+                                "flex items-start gap-3 p-2.5 cursor-pointer rounded-lg mb-1 last:mb-0 transition-colors",
+                                isActive ? "bg-muted" : "hover:bg-muted/50"
+                            )}
+                        >
+                            <div className="flex-shrink-0 mt-0.5">
+                                <Icon className={cn("w-4 h-4", MODE_COLORS[key as keyof typeof MODE_COLORS])} />
+                            </div>
+                            <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold text-[13px]">{config.name}</span>
+                                <span className="text-[11px] leading-tight text-muted-foreground">{config.description}</span>
+                            </div>
+                        </DropdownMenuItem>
                     );
                 })}
-            </div>
-        </TooltipProvider>
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 }
