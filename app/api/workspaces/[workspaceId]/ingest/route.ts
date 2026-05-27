@@ -48,7 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: { workspaceId
             const currentBatch = chunks.slice(i, i + batchSize);
             const embeddings = await Promise.all(
                 currentBatch.map(async (c: any) => {
-                    const vector = await generateEmbedding(c.content_chunk);
+                    const vector = await generateEmbedding(c.content_chunk, userId);
                     return {
                         workspace_id: workspaceId,
                         repo_full_name: repo_full_name,
