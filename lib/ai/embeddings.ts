@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 // Ensure this utility only runs in environments where OPENAI_API_KEY is available
 const openai = new OpenAI({ 
-    apiKey: process.env.OPENAI_API_KEY 
+    apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-build'
 });
 
 /**
