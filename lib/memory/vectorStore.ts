@@ -1,7 +1,7 @@
-import { supabase } from '../supabaseClient';
-import { generateEmbeddingWithMetadata } from './embedding';
+import { supabase } from '@/lib/supabaseClient';
+import { generateEmbeddingWithMetadata } from '@/lib/memory/embedding';
 
-export type MemoryType = 'conversation_summary' | 'fact' | 'preference';
+export type MemoryType = 'conversation_summary' | 'fact' | 'preference' | 'code_chunk';
 export type MemoryScope = 'conversation' | 'user' | 'workspace';
 
 export interface MemoryWriteOptions {
@@ -138,13 +138,136 @@ export async function storeMemory(
 }
 
 /**
+ * Helper to generate embeddings concurrently with a concurrency limit.
+ */
+async function getEmbeddingsConcurrent(
+    contents: string[],
+    concurrencyLimit: number = 15
+): Promise<Array<Awaited<ReturnType<typeof generateEmbeddingWithMetadata>>>> {
+    const results: Array<Awaited<ReturnType<typeof generateEmbeddingWithMetadata>>> = new Array(contents.length);
+    let index = 0;
+
+    async function worker() {
+        while (index < contents.length) {
+            const currentIndex = index++;
+            try {
+                results[currentIndex] = await generateEmbeddingWithMetadata(contents[currentIndex]);
+            } catch (err) {
+                console.error(`[VectorStore] Failed to generate embedding for index ${currentIndex}:`, err);
+                throw err;
+            }
+        }
+    }
+
+    const workers = [];
+    for (let i = 0; i < Math.min(concurrencyLimit, contents.length); i++) {
+        workers.push(worker());
+    }
+    await Promise.all(workers);
+    return results;
+}
+
+/**
+ * Deletes stale code chunks for a specific file and workspace.
+ */
+export async function deleteCodeChunks(filePath: string, workspaceId: string): Promise<boolean> {
+    try {
+        const { error } = await supabase
+            .from('memory_bank')
+            .delete()
+            .eq('type', 'code_chunk')
+            .eq('metadata->>workspaceId', workspaceId)
+            .eq('metadata->>path', filePath);
+
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        console.error('[VectorStore] Error deleting stale code chunks:', error);
+        return false;
+    }
+}
+
+/**
+ * Stores multiple memories in bulk, batching them into blocks of 100.
+ * Generates embeddings concurrently with a limit of 15 concurrent calls.
+ */
+export async function storeMemoriesBulk(
+    userId: string,
+    memories: Array<{ content: string; type: MemoryType; metadata?: any }>,
+    options: MemoryWriteOptions = {}
+): Promise<string[]> {
+    const normalizedUserId = typeof userId === 'string' ? userId.trim() : '';
+    if (!normalizedUserId) {
+        console.warn('[MemoryStoreBulk] Skipping bulk insert without userId');
+        return [];
+    }
+
+    if (memories.length === 0) {
+        return [];
+    }
+
+    const { compress } = await import('@/lib/compression');
+    const insertedIds: string[] = [];
+
+    // Process in batches of 100 memories
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < memories.length; i += BATCH_SIZE) {
+        const batch = memories.slice(i, i + BATCH_SIZE);
+        
+        // 1. Generate embeddings concurrently (max 15 in parallel)
+        const contents = batch.map(m => m.content);
+        const embeddings = await getEmbeddingsConcurrent(contents, 15);
+
+        // 2. Prepare bulk insert payload
+        const scope: MemoryScope = options.scope || 'conversation';
+        const insertPayload = await Promise.all(batch.map(async (m, index) => {
+            const compressedContent = compress(m.content);
+            const embeddingResult = embeddings[index];
+            const normalizedMetadata = {
+                ...m.metadata,
+                ...(scope === 'workspace' && options.workspaceId
+                    ? { workspaceId: options.workspaceId, scopeHint: 'workspace', scopeLocked: true, allowUserPromotion: false }
+                    : {}),
+            };
+
+            return {
+                user_id: normalizedUserId,
+                content: compressedContent,
+                type: m.type,
+                scope,
+                metadata: normalizedMetadata,
+                ...buildEmbeddingColumnPatch(embeddingResult),
+            };
+        }));
+
+        // 3. Bulk insert to Supabase
+        const { data, error } = await supabase
+            .from('memory_bank')
+            .insert(insertPayload)
+            .select('id');
+
+        if (error) {
+            console.error('[MemoryStoreBulk] Supabase bulk insert error:', error);
+            throw error;
+        }
+
+        if (data) {
+            data.forEach((row: any) => insertedIds.push(row.id));
+        }
+    }
+
+    return insertedIds;
+}
+
+/**
  * Searches for relevant memories using dimension-aware vector similarity RPCs.
  */
 export async function searchMemories(
     userId: string,
     query: string,
     limit: number = 5,
-    featureType?: string
+    featureType?: string,
+    metadataFilter: Record<string, any> = {}
 ): Promise<Memory[]> {
     try {
         const embeddingResult = await generateEmbeddingWithMetadata(query);
@@ -163,7 +286,8 @@ export async function searchMemories(
             match_threshold: 0.5,
             match_count: limit,
             filter_user_id: userId,
-            filter_feature_type: featureType || null
+            filter_feature_type: featureType || null,
+            metadata_filter: metadataFilter
         });
 
         if (error) {

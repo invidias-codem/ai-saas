@@ -54,7 +54,7 @@ const Constellation = () => {
   return (
     <svg
       viewBox="0 0 600 420"
-      className="w-full h-auto max-w-2xl mx-auto"
+      className="w-full h-auto aspect-[600/420] max-w-2xl mx-auto"
       aria-hidden="true"
     >
       <defs>

@@ -69,7 +69,7 @@ export async function searchCodebase(query: string, limit = 5): Promise<string[]
       q: `${query} repo:${REPO_OWNER}/${REPO_NAME}`,
       per_page: limit,
     });
-    return data.items.map(item => item.path);
+    return data.items.map((item: any) => item.path);
   } catch (err: any) {
     console.warn('[CodebaseExplorer] Search failed:', err.message);
     return [];

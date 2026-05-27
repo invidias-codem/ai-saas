@@ -16,7 +16,7 @@ class EngagementBrain:
         self.local_model = os.environ.get("LOCAL_LLM_MODEL")
         
         self.client = genai.Client(api_key=api_key)
-        self.model_name = "gemini-3.1-flash-lite-preview"
+        self.model_name = "gemini-2.5-flash"
         
     def analyze_social_economy(self, posts_text: list) -> dict:
         """

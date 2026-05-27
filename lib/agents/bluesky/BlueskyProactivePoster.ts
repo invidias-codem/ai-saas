@@ -105,7 +105,7 @@ Return only the post text.`;
 
     const prompt = await this.buildPrompt();
     const gemini = new GoogleGenerativeAI(apiKey);
-    const model = gemini.getGenerativeModel({ model: 'gemini-3.1-flash-lite-preview' });
+    const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
 

@@ -9,7 +9,7 @@ const PrivacyPolicyPage = () => {
   const lastUpdated = "January 15, 2025";
 
   return (
-    <div className="bg-[#FAF9F7] dark:bg-[#111827] min-h-screen flex flex-col overflow-x-hidden relative">
+    <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative">
 
       {/* Background Gradients */}
       <div className="fixed inset-0 z-0 pointer-events-none">
@@ -47,7 +47,7 @@ const PrivacyPolicyPage = () => {
             {privacyHighlights.map((item, index) => (
               <div
                 key={index}
-                className="p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/5 text-center"
+                className="p-6 rounded-2xl border border-border bg-white/5 text-center"
               >
                 <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center mx-auto mb-4">
                   <item.icon className="w-6 h-6 text-green-400" />
@@ -60,7 +60,7 @@ const PrivacyPolicyPage = () => {
         </section>
 
         {/* Policy Content */}
-        <section className="py-16 px-4 border-t border-slate-200 dark:border-white/10 bg-black/20">
+        <section className="py-16 px-4 border-t border-border bg-black/20">
           <div className="max-w-3xl mx-auto prose prose-invert">
 
             {/* Section 1 */}
@@ -253,7 +253,7 @@ const PrivacyPolicyPage = () => {
                 <p>
                   If you have any questions about this Privacy Policy or our data practices, please contact us:
                 </p>
-                <div className="p-6 rounded-xl bg-white/5 border border-slate-200 dark:border-white/10 space-y-3">
+                <div className="p-6 rounded-xl bg-white/5 border border-border space-y-3">
                   <p className="flex items-center gap-3">
                     <Mail className="w-5 h-5 text-purple-400" />
                     <a href="mailto:privacy@genieai.app" className="text-purple-400 hover:text-purple-300">
@@ -309,7 +309,7 @@ const PrivacyPolicyPage = () => {
       </main>
 
       {/* Footer */}
-      <footer className="py-10 border-t border-slate-200 dark:border-white/10 bg-[#FAF9F7] dark:bg-[#111827]">
+      <footer className="py-10 border-t border-border bg-background">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
@@ -327,7 +327,7 @@ const PrivacyPolicyPage = () => {
             </div>
           </div>
 
-          <div className="mt-8 pt-8 border-t border-slate-200 dark:border-white/10 text-center">
+          <div className="mt-8 pt-8 border-t border-border text-center">
             <p className="text-gray-500 text-sm">
               © {new Date().getFullYear()} Genie AI. All rights reserved.
             </p>

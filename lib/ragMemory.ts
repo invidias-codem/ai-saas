@@ -79,7 +79,7 @@ export async function getRAGMemoryContext(
     if (isRateLimit) {
       console.warn(`[RAG] Rate limited for user ${userId}, query: "${query.substring(0, 50)}..."`);
     } else {
-      console.error(`[RAG] Error retrieving context for user ${userId}:`, {
+      console.error("[RAG] Error retrieving context for user %s:", userId, {
         query: query.substring(0, 100),
         featureType,
         error: errorMessage

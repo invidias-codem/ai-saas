@@ -5,6 +5,12 @@ import { generateEmbedding } from "../lib/memory/embedding";
 // Mock dependencies
 jest.mock("../lib/memory/embedding", () => ({
     generateEmbedding: jest.fn().mockResolvedValue(new Array(768).fill(0.1)),
+    generateEmbeddingWithMetadata: jest.fn().mockResolvedValue({
+        vector: new Array(768).fill(0.1),
+        dimension: 768,
+        provider: 'test-provider',
+        model: 'test-model',
+    }),
 }));
 
 jest.mock("../lib/supabaseClient", () => ({
@@ -14,10 +20,10 @@ jest.mock("../lib/supabaseClient", () => ({
         select: jest.fn().mockReturnThis(),
         single: jest.fn().mockResolvedValue({ data: { id: "mock-memory-id" }, error: null }),
         rpc: jest.fn().mockImplementation((fnName, args) => {
-            if (fnName === 'match_memories') {
+            if (fnName.startsWith('match_memories')) {
                 // Mock returning a compressed memory
                 const content = "This is a test memory for compression.";
-                const compressed = require("lz-string").compressToUTF16(content);
+                const compressed = compress(content);
                 return Promise.resolve({
                     data: [{
                         id: "mock-memory-id",

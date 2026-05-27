@@ -1,5 +1,6 @@
 
 import { z } from "zod";
+import type { IOHarness } from "@/lib/harness/IOHarness";
 
 /**
  * Capability-based security levels for tools.
@@ -63,6 +64,16 @@ export interface AgentContext {
      * Telemetry / Debugging
      */
     enableTelemetry: boolean;
+
+    /**
+     * Execution Harness for local workspace changes
+     */
+    ioHarness?: IOHarness;
+
+    /**
+     * Callback fired whenever the agent updates its thought or executes a tool.
+     */
+    onStep?: (step: TrajectoryStep) => void;
 }
 
 /**

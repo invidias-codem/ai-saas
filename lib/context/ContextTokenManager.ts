@@ -122,6 +122,7 @@ export class ContextTokenManager {
       { key: 'graphContext', label: 'Graph Context', text: sections.graphContext || '' },
       { key: 'searchContext', label: 'Search Context', text: sections.searchContext || '' },
       { key: 'memoryContext', label: 'Memory Context', text: sections.memoryContext || '' },
+      { key: 'attachedDocumentContext', label: 'Attached Documents', text: sections.attachedDocumentContext || '' },
     ];
 
     const allocations: SectionAllocation[] = [];
@@ -141,6 +142,9 @@ export class ContextTokenManager {
       } else if (sec.key === 'userProfileContext') {
         priority = 90;
         ratio = 0.15;
+      } else if (sec.key === 'attachedDocumentContext') {
+        priority = 98; // Always include documents if present
+        ratio = 0.4;
       }
 
       // Intent-specific weighting
@@ -247,8 +251,10 @@ export class ContextTokenManager {
           // Determine language heuristic for code outline mode
           const language = alloc.key === 'memoryContext' ? 'typescript' : undefined;
           
+          const mode = alloc.key === 'memoryContext' ? 'atomic' : 'auto';
+
           const compaction = ContextCompactor.compact(alloc.text, targetBudgetLimit, {
-            mode: 'auto',
+            mode,
             language,
           });
 
@@ -272,7 +278,7 @@ export class ContextTokenManager {
     const packedContext = allocatedSections
       // Maintain natural logical layout order of keys rather than priority order
       .sort((a, b) => {
-        const order = ['userContextPrompt', 'userProfileContext', 'factContext', 'graphContext', 'searchContext', 'memoryContext'];
+        const order = ['userContextPrompt', 'userProfileContext', 'factContext', 'graphContext', 'searchContext', 'memoryContext', 'attachedDocumentContext'];
         return order.indexOf(a.key) - order.indexOf(b.key);
       })
       .map(sec => `=== ${sec.label} ===\n${sec.text.trim()}`)

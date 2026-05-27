@@ -16,6 +16,56 @@ import { logger } from "@/lib/logger";
 import { ContextTokenManager } from '@/lib/context/ContextTokenManager';
 import { PreparedContextSections } from '@/lib/context/types';
 import type { FileAttachmentInput } from '@/lib/types/attachments';
+import { supabaseAdmin } from '@/lib/supabaseClient';
+import { embedDocumentChunk } from '@/lib/documents/indexDocument';
+import { EmbeddingTier } from '@/lib/types/documents';
+
+export async function getAttachedDocumentContext(
+  userQuery: string,
+  workspaceId: string | null | undefined,
+  documentIds: string[]
+): Promise<string> {
+  // Return early only if there are no document IDs
+  if (!documentIds || !documentIds.length) return '';
+
+  // Defensive: filter out any optimistic temp_ IDs that weren't stripped upstream.
+  // These are client-side placeholders that have no corresponding DB row.
+  const validDocumentIds = documentIds.filter(id => id && !id.startsWith('temp_'));
+  if (!validDocumentIds.length) return '';
+
+  if (!supabaseAdmin) {
+    console.error('[DocumentContext] supabaseAdmin is null');
+    return '';
+  }
+
+  try {
+    const { data: documents, error } = await supabaseAdmin
+      .from('workspace_documents')
+      .select('id, filename, content_raw')
+      .in('id', validDocumentIds);
+
+    if (error) {
+      console.error('[DocumentContext] Error fetching attached documents:', error);
+      return '';
+    }
+
+    if (!documents || documents.length === 0) {
+      return '';
+    }
+
+    const contextParts = documents.map(doc => {
+      if (doc.content_raw) {
+         return `Document: ${doc.filename}\n\n${doc.content_raw}`;
+      }
+      return `Document: ${doc.filename}\n[Content is missing or cold]`;
+    });
+
+    return `## Explicitly Attached Documents Context\n${contextParts.join('\n\n---\n\n')}`;
+  } catch (err) {
+     console.error('[DocumentContext] Failed to retrieve document context', err);
+     return '';
+  }
+}
 
 export interface ContextAggregatorParams {
   userId: string;

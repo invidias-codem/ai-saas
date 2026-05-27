@@ -4,7 +4,8 @@ import { z } from "zod";
 export interface Attachment {
     name?: string;
     mimeType: string;
-    base64Data: string;
+    base64Data?: string;
+    fileUri?: string;
 }
 
 export const ChatMessageSchema = z.object({
@@ -13,7 +14,8 @@ export const ChatMessageSchema = z.object({
     attachments: z.array(z.object({
         name: z.string().optional(),
         mimeType: z.string(),
-        base64Data: z.string()
+        base64Data: z.string().optional(),
+        fileUri: z.string().optional()
     })).optional()
 });
 
@@ -59,6 +61,7 @@ export interface CompletionOptions {
 export interface StreamResult {
     stream: ReadableStream;
     debug?: any;
+    thoughtSignaturePromise?: Promise<string | null>;
 }
 
 export interface LLMProvider {

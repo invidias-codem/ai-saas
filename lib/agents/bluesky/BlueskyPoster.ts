@@ -9,6 +9,7 @@
 
 import { BskyAgent, RichText } from '@atproto/api';
 import type { AppBskyEmbedImages } from '@atproto/api';
+import { validateExternalUrl } from '@/lib/security/urlValidator';
 
 const RESPONSE_MAX_CHARS = 290;
 const SITE_CTA = 'gen1e.xyz';
@@ -147,10 +148,30 @@ export class BlueskyPoster {
     this.authenticated = true;
   }
 
+  private async withRetry<T>(operation: () => Promise<T>, runId?: string): Promise<T> {
+    let attempt = 0;
+    while (true) {
+      try {
+        return await operation();
+      } catch (error: any) {
+        attempt++;
+        if (attempt > 2) throw error;
+        
+        if (error.message?.includes('RateLimitExceeded')) {
+          console.log(JSON.stringify({ runId, event: 'poster_rate_limit', message: error.message }));
+        }
+        
+        const delay = Math.min(1000 * Math.pow(2, attempt), 3000);
+        console.log(JSON.stringify({ runId, event: 'poster_retry', attempt, delay, message: error.message }));
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+
   /**
    * Upload an image from a URL or base64 data URI and return the blob ref.
    */
-  private async uploadImage(image: PostImage): Promise<AppBskyEmbedImages.Image> {
+  private async uploadImage(image: PostImage, runId?: string): Promise<AppBskyEmbedImages.Image> {
     let buffer: Buffer;
     let mimeType = image.mimeType ?? 'image/jpeg';
 
@@ -161,15 +182,21 @@ export class BlueskyPoster {
       mimeType = matches[1];
       buffer = Buffer.from(matches[2], 'base64');
     } else {
+      // Validate external URL to prevent SSRF
+      const ssrfCheck = await validateExternalUrl(image.url);
+      if (!ssrfCheck.valid) {
+        throw new Error(`[BlueskyPoster] Invalid image URL (SSRF blocked): ${ssrfCheck.reason}`);
+      }
+
       // Fetch from URL
-      const res = await fetch(image.url);
+      const res = await this.withRetry(() => fetch(image.url), runId);
       if (!res.ok) throw new Error(`[BlueskyPoster] Failed to fetch image: ${res.status} ${image.url}`);
       const contentType = res.headers.get('content-type');
       if (contentType) mimeType = contentType.split(';')[0].trim();
       buffer = Buffer.from(await res.arrayBuffer());
     }
 
-    const uploadResult = await this.agent.uploadBlob(buffer, { encoding: mimeType });
+    const uploadResult = await this.withRetry(() => this.agent.uploadBlob(buffer, { encoding: mimeType }), runId);
     return {
       image: uploadResult.data.blob,
       alt: image.alt,
@@ -180,7 +207,7 @@ export class BlueskyPoster {
   /**
    * Create a post with optional images and optional reply threading.
    */
-  async post(options: PostOptions): Promise<PostResult> {
+  async post(options: PostOptions, runId?: string): Promise<PostResult> {
     await this.ensureAuth();
 
     const finalText = finalizePostText(options);
@@ -191,7 +218,7 @@ export class BlueskyPoster {
     let embed: AppBskyEmbedImages.Main | undefined;
     if (options.images && options.images.length > 0) {
       const images = await Promise.all(
-        options.images.slice(0, 4).map((img) => this.uploadImage(img))
+        options.images.slice(0, 4).map((img) => this.uploadImage(img, runId))
       );
       embed = {
         $type: 'app.bsky.embed.images',
@@ -207,15 +234,21 @@ export class BlueskyPoster {
         }
       : undefined;
 
-    const result = await this.agent.post({
+    const result = await this.withRetry(() => this.agent.post({
       text: rt.text,
       facets: rt.facets,
       embed,
       reply: replyRef,
       createdAt: new Date().toISOString(),
-    });
+    }), runId);
 
-    console.log(`[BlueskyPoster] Posted: ${result.uri} topics=${(options.topics ?? inferTopicLabels(finalText)).join(',') || 'none'} ctaMode=${options.ctaMode ?? 'auto'}`);
+    console.log(JSON.stringify({
+      runId,
+      event: 'poster_success',
+      uri: result.uri,
+      topics: options.topics ?? inferTopicLabels(finalText),
+      ctaMode: options.ctaMode ?? 'auto'
+    }));
     return { uri: result.uri, cid: result.cid };
   }
 
@@ -223,7 +256,7 @@ export class BlueskyPoster {
    * Post a thread (sequential posts where each replies to the previous).
    * Returns array of post results in order.
    */
-  async postThread(posts: Omit<PostOptions, 'replyTo'>[]): Promise<PostResult[]> {
+  async postThread(posts: Omit<PostOptions, 'replyTo'>[], runId?: string): Promise<PostResult[]> {
     await this.ensureAuth();
     const results: PostResult[] = [];
 
@@ -241,7 +274,7 @@ export class BlueskyPoster {
         };
       }
 
-      const result = await this.post(options);
+      const result = await this.post(options, runId);
       results.push(result);
 
       // Small delay between thread posts to avoid AT Protocol rate limits

@@ -10,6 +10,8 @@ process.env.GOOGLE_PROJECT_ID ??= "test-project";
 process.env.NEXT_PUBLIC_SUPABASE_URL ??= "https://test.supabase.co";
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??= "test-anon-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+process.env.SLACK_TOKEN_ENCRYPTION_KEY ??= "test-encryption-key";
+
 
 jest.mock("@supabase/supabase-js", () => ({
   createClient: jest.fn(() => ({

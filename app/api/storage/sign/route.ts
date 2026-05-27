@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { getClientIP } from '@/lib/security/apiAuth';
 import { getStorageClient, getStorageProjectId, GCPConfigurationError } from '../../../../lib/gcp/storage';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -31,6 +33,20 @@ export async function POST(req: Request) {
         const { userId } = await auth();
         if (!userId) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const ip = getClientIP(req);
+        const rateLimit = await limitApiEndpoint(userId, ip, 'mutation');
+        if (!rateLimit.success) {
+            return NextResponse.json(
+                { error: 'Too many requests' },
+                {
+                    status: 429,
+                    headers: {
+                        'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
+                    }
+                }
+            );
         }
 
         // 2. Resolve & Instantiate GCP Storage Client
@@ -66,12 +82,16 @@ export async function POST(req: Request) {
 
         // 4. Validate Content Type (Security Boundary)
         const allowedTypes = [
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
             'application/pdf',
-            'text/plain', 'text/csv',
-            'application/json',
-            'video/mp4', 'video/webm',
-            'audio/mpeg', 'audio/wav'
+            'text/plain', 'text/csv', 'text/markdown', 'text/rtf', 'text/vcard',
+            'application/json', 'application/rtf',
+            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/vnd.apple.pages', 'application/vnd.apple.numbers', 'application/vnd.apple.keynote',
+            'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v', 'video/3gpp',
+            'audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/amr', 'audio/ogg', 'audio/flac'
         ];
         if (!allowedTypes.includes(contentType)) {
             return NextResponse.json({ error: 'File type not allowed' }, { status: 400 });

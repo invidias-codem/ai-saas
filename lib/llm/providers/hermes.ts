@@ -87,6 +87,20 @@ export class HermesProvider implements LLMProvider {
     systemInstruction?: string,
     options: CompletionOptions & { thinking?: boolean; tools?: HermesTool[]; agentic?: boolean } = {}
   ): Promise<HermesStreamResultWithTools> {
+    // If any message has media attachments, forward to Gemini which supports multimodal.
+    // Hermes/Nous/Ollama are text-only; silently discarding attachments would lose the user's media.
+    const hasMediaAttachments = messages.some(m =>
+      m.attachments && m.attachments.some(a =>
+        a.mimeType?.startsWith('image/') || a.mimeType?.startsWith('video/') || a.mimeType?.startsWith('audio/')
+      )
+    );
+    if (hasMediaAttachments) {
+      logger.info('[HermesProvider] Media attachments detected — forwarding to Gemini multimodal provider');
+      const gemini = new (await import('./gemini')).GeminiProvider();
+      const result = await gemini.generateStream(messages, systemInstruction, options);
+      return { ...result, toolCalls: [] };
+    }
+
     const formattedMessages: { role: string; content: string }[] = [];
     const useThinking = options.thinking === true;
     const hasTools = options.tools && options.tools.length > 0;

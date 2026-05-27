@@ -37,6 +37,30 @@ This document should track that schema, but the live deployment environment must
 
 ---
 
+## Deployment Mode Guidance
+
+Lattice should be configured in a mode-aware way rather than requiring every optional subsystem in every installation.
+
+Operationally, configuration falls into these broad classes:
+- **core required**: values needed for any serious deployment
+- **mode-specific required**: values required only for certain deployment modes
+- **optional feature config**: values that enable advanced or optional capabilities
+
+For the initial self-hosted story, the baseline should remain centered on:
+- **Mode A — Standard Internal Deployment**
+
+That means a standard business install should prioritize configuration for:
+- app/runtime
+- authentication
+- database
+- storage
+- at least one supported reasoning provider
+- at least one supported embedding provider
+
+It should not require every optional subsystem (social agents, GPU archival, advanced local retrieval, etc.) unless those capabilities are intentionally enabled.
+
+---
+
 ## Authentication / Clerk
 
 ## `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`

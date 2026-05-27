@@ -45,8 +45,8 @@ export const InfrastructureSection = () => {
         style={{ backgroundSize: "44px 44px" }}
       />
 
-      <div className="landing-orb-primary absolute top-0 left-1/2 h-[420px] w-[900px] -translate-x-1/2 rounded-full blur-[120px] pointer-events-none" />
-      <div className="landing-orb-secondary absolute bottom-0 right-0 h-[420px] w-[420px] rounded-full blur-[120px] pointer-events-none" />
+      <div className="landing-orb-primary absolute top-0 left-1/2 h-[420px] w-[900px] -translate-x-1/2 rounded-full blur-[60px] dark:blur-[120px] opacity-20 dark:opacity-100 pointer-events-none" />
+      <div className="landing-orb-secondary absolute bottom-0 right-0 h-[420px] w-[420px] rounded-full blur-[60px] dark:blur-[120px] opacity-20 dark:opacity-100 pointer-events-none" />
 
       <div className="relative z-10 mx-auto max-w-7xl">
         <motion.div

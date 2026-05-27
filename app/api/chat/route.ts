@@ -13,6 +13,8 @@ import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { promptSchema, validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
 import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
+import { calculateInteractionCost, deductUserCredits } from '@/lib/subscription/credits';
+import { checkDocumentEntitlement } from '@/lib/entitlements/documents';
 import type { AgentMode } from '@/lib/llm/types';
 import type { RuntimeProfileSignals } from '@/lib/workspaces/runtimeMode';
 import type { UcolRequestPacket, UcolResolvedContext } from '@/lib/ucol/routing/types';
@@ -48,12 +50,16 @@ export async function POST(req: Request) {
         const body = await req.json();
         validateRequestSize(body, 5 * 1024 * 1024);
 
-        const { prompt, conversationId, fileData, messages } = body as {
+        const { prompt, conversationId, documentIds: rawDocumentIds, messages } = body as {
             prompt: string;
             conversationId?: string;
-            fileData?: FileAttachmentInput;
+            documentIds?: string[];
             messages?: Array<{ role: string; text: string }>;
         };
+        let fileData = body.fileData as FileAttachmentInput | undefined;
+
+        // Filter out optimistic temp_ IDs that haven't been persisted to the DB yet
+        let documentIds = rawDocumentIds?.filter(id => id && !id.startsWith('temp_'));
 
         const promptValidation = promptSchema.safeParse(prompt);
         if (!promptValidation.success) {
@@ -91,7 +97,30 @@ export async function POST(req: Request) {
         }
 
         const resolved = await resolveRuntimeContext({ userId: user.userId, surface: 'web', conversationId, strictValidation: false });
-        const effectiveMode = resolved.mode;
+        let effectiveMode = resolved.mode;
+        
+        // --- CREDIT ENFORCEMENT & GRACEFUL DEGRADATION ---
+        let computeCredits = typeof clerkUser.privateMetadata.computeCredits === 'number' 
+            ? clerkUser.privateMetadata.computeCredits 
+            : 200; // Default grant
+            
+        let finalCost = calculateInteractionCost({ 
+            hasAttachments: Boolean(fileData), 
+            mode: effectiveMode 
+        });
+
+        const entitlement = checkDocumentEntitlement(clerkUser, computeCredits);
+
+        if (!entitlement.allowed || computeCredits <= 0) {
+            // Graceful Degradation
+            fileData = undefined; // Strip premium attachments
+            documentIds = undefined; // Strip document context
+            if (effectiveMode === 'agentic' || effectiveMode === 'reasoning') {
+                effectiveMode = 'fast'; // Fallback to cheaper model for basic chat
+            }
+            finalCost = 0; // Free degraded chat
+        }
+        // --------------------------------------------------
 
         const requestPacket: UcolRequestPacket = {
             requestId: randomUUID(),
@@ -142,17 +171,30 @@ export async function POST(req: Request) {
             rationale: routingDecision.debug.rationale,
         });
 
+        const normalizedFileData = fileData
+            ? fileData.fileUri
+                ? {
+                    name: fileData.name,
+                    type: fileData.type,
+                    mimeType: fileData.mimeType || fileData.type,
+                    sizeBytes: fileData.sizeBytes,
+                    fileUri: fileData.fileUri,
+                    storageProvider: fileData.storageProvider,
+                }
+                : {
+                    name: fileData.name,
+                    type: fileData.type,
+                    mimeType: fileData.mimeType || fileData.type,
+                    sizeBytes: fileData.sizeBytes,
+                    base64Data: fileData.base64Data,
+                }
+            : undefined;
+
         const requestPayload = {
             messages: [...(messages || []), { role: 'user', text: prompt }],
-            fileData: fileData ? {
-                name: fileData.name,
-                type: fileData.type,
-                mimeType: fileData.mimeType || fileData.type,
-                sizeBytes: fileData.sizeBytes,
-                base64Data: fileData.base64Data,
-                fileUri: fileData.fileUri,
-                storageProvider: fileData.storageProvider,
-            } : undefined,
+            fileData: normalizedFileData,
+            documentIds,
+            workspaceId: resolved.ucolContext.workspaceId,
             mode: effectiveMode
         };
 
@@ -165,7 +207,8 @@ export async function POST(req: Request) {
             {
                 userId: user.userId,
                 clerkUser,
-                request: validationResult.data
+                request: validationResult.data,
+                conversationId,
             },
             {
                 mode: effectiveMode,
@@ -186,6 +229,13 @@ export async function POST(req: Request) {
                     if (done) break;
                     fullText += decoder.decode(value, { stream: true });
                 }
+
+                // Await the signature only after the stream has fully drained.
+                // Promise.resolve wraps the optional promise safely; the catch
+                // ensures a network/parse error never prevents message persistence.
+                const thoughtSignature = await Promise.resolve(
+                    result.thoughtSignaturePromise ?? Promise.resolve(null)
+                ).catch(() => null);
 
                 if (fullText) {
                     await runPostGenerationPipeline({
@@ -210,12 +260,19 @@ export async function POST(req: Request) {
                         },
                         saveToMemory: false,
                         persistUserMessage: true,
+                        thoughtSignature,
                     });
                 }
             } catch (err) {
                 console.error('Background DB persistence failed:', err);
             }
         })());
+
+        // Deduct credits asynchronously
+        if (finalCost > 0) {
+            waitUntil(deductUserCredits(user.userId, computeCredits, finalCost));
+            computeCredits = Math.max(0, computeCredits - finalCost);
+        }
 
         return new NextResponse(clientStream, {
             headers: {
@@ -224,6 +281,7 @@ export async function POST(req: Request) {
                 'X-Debug-Agent-Mode': effectiveMode,
                 'X-Debug-Execution-Mode': routingDecision.executionPlan.mode,
                 'X-Debug-Intent': routingDecision.intent.category,
+                'X-Remaining-Credits': String(computeCredits),
             }
         });
 
