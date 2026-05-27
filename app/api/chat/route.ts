@@ -14,6 +14,7 @@ import { promptSchema, validateRequestSize, ValidationError, fileUploadSchema } 
 import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
 import { calculateInteractionCost, deductUserCredits } from '@/lib/subscription/credits';
+import { checkDocumentEntitlement } from '@/lib/entitlements/documents';
 import type { AgentMode } from '@/lib/llm/types';
 import type { RuntimeProfileSignals } from '@/lib/workspaces/runtimeMode';
 import type { UcolRequestPacket, UcolResolvedContext } from '@/lib/ucol/routing/types';
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
         let fileData = body.fileData as FileAttachmentInput | undefined;
 
         // Filter out optimistic temp_ IDs that haven't been persisted to the DB yet
-        const documentIds = rawDocumentIds?.filter(id => id && !id.startsWith('temp_'));
+        let documentIds = rawDocumentIds?.filter(id => id && !id.startsWith('temp_'));
 
         const promptValidation = promptSchema.safeParse(prompt);
         if (!promptValidation.success) {
@@ -108,9 +109,12 @@ export async function POST(req: Request) {
             mode: effectiveMode 
         });
 
-        if (computeCredits <= 0) {
+        const entitlement = checkDocumentEntitlement(clerkUser, computeCredits);
+
+        if (!entitlement.allowed || computeCredits <= 0) {
             // Graceful Degradation
             fileData = undefined; // Strip premium attachments
+            documentIds = undefined; // Strip document context
             if (effectiveMode === 'agentic' || effectiveMode === 'reasoning') {
                 effectiveMode = 'fast'; // Fallback to cheaper model for basic chat
             }

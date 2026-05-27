@@ -2,13 +2,39 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/security/apiAuth';
 import { getDocument } from '@/lib/documents/store';
 import { StorageState } from '@/lib/types/documents';
+import { currentUser } from '@clerk/nextjs/server';
+import { checkDocumentEntitlement } from '@/lib/entitlements/documents';
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const user = await requireAuth();
+    const clerkUser = await currentUser();
     
+    if (!clerkUser) {
+      return NextResponse.json({ error: 'User profile not found' }, { status: 401 });
+    }
+
+    const computeCredits = typeof clerkUser.privateMetadata?.computeCredits === 'number' 
+      ? clerkUser.privateMetadata.computeCredits 
+      : 200;
+
+    const entitlement = checkDocumentEntitlement(clerkUser, computeCredits);
+    if (!entitlement.allowed) {
+      return NextResponse.json({
+        error: entitlement.reason,
+        message: entitlement.message,
+        cta: {
+          label: entitlement.ctaLabel,
+          href: entitlement.ctaHref
+        }
+      }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
-    const workspaceId = searchParams.get('workspaceId') || null;
+    let workspaceId = searchParams.get('workspaceId');
+    if (!workspaceId || workspaceId === 'default' || workspaceId === 'null') {
+      workspaceId = null;
+    }
 
     const doc = await getDocument(params.id, workspaceId);
 
