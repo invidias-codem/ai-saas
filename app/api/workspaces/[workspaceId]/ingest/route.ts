@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 import { generateEmbedding } from "@/lib/ai/embeddings";
+import { PremiumRequiredError } from "@/lib/ai/auth";
 
 export const dynamic = 'force-dynamic';
 // Vercel max duration limit mapping if needed
@@ -75,6 +76,9 @@ export async function POST(req: NextRequest, { params }: { params: { workspaceId
 
         return NextResponse.json({ success: true, inserted: processedVectors.length });
     } catch (error) {
+        if (error instanceof PremiumRequiredError) {
+            return NextResponse.json({ error: "PREMIUM_REQUIRED" }, { status: 402 });
+        }
         console.error("[Ingest Route] Fatal Error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
