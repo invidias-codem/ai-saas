@@ -22,7 +22,7 @@ const SLACK_API_BASE = 'https://slack.com/api';
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
 const model = genAI.getGenerativeModel({
-  model: "gemini-3.1-flash-lite-preview",
+  model: "gemini-2.5-flash",
   safetySettings: [
     { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
     { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
@@ -224,7 +224,7 @@ async function storeFeedback(
         conversation_id: null,
         message_id: responseId,
         prompt_version: process.env.GIT_SHA || null,
-        model: 'gemini-3.1-flash-lite-preview',
+        model: 'gemini-2.5-flash',
         input: prompt ?? null,
         output: responseText ?? null,
         rating,

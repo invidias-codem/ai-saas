@@ -6,12 +6,14 @@ import { cn } from '@/lib/utils';
 interface FileItemProps {
   id: string;
   filename: string;
-  storageState: StorageState | 'INGESTING' | 'ERROR';
+  storageState: StorageState | 'INGESTING' | 'ERROR' | 'PREMIUM_REQUIRED';
+  message?: string;
+  cta?: { label: string; href: string };
   onPreview?: () => void;
   onRemove?: () => void;
 }
 
-export function FileItem({ id, filename, storageState, onPreview, onRemove }: FileItemProps) {
+export function FileItem({ id, filename, storageState, message, cta, onPreview, onRemove }: FileItemProps) {
   return (
     <div className="flex items-center justify-between p-3 mb-2 rounded-xl border bg-card/50 shadow-sm backdrop-blur-sm transition-all hover:bg-card">
       <div className="flex items-center gap-3 overflow-hidden cursor-pointer" onClick={onPreview}>
@@ -22,18 +24,28 @@ export function FileItem({ id, filename, storageState, onPreview, onRemove }: Fi
           storageState === 'COLD' && "bg-gradient-to-br from-slate-400 to-slate-600",
           storageState === 'INGESTING' && "bg-gradient-to-br from-indigo-400 to-indigo-600 animate-pulse",
           storageState === 'ERROR' && "bg-gradient-to-br from-red-400 to-red-600",
+          storageState === 'PREMIUM_REQUIRED' && "bg-gradient-to-br from-violet-400 to-violet-600",
         )}>
           {storageState === 'WARM' && <Zap className="h-5 w-5" />}
           {storageState === 'COMPRESSING' && <Loader2 className="h-5 w-5 animate-spin" />}
           {storageState === 'COLD' && <Database className="h-5 w-5" />}
           {storageState === 'INGESTING' && <Loader2 className="h-5 w-5 animate-spin" />}
           {storageState === 'ERROR' && <span className="text-lg font-bold">!</span>}
+          {storageState === 'PREMIUM_REQUIRED' && <span className="text-lg font-bold">★</span>}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-medium truncate">{filename}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
              <StatusBadge state={storageState} />
           </div>
+          {storageState === 'PREMIUM_REQUIRED' && message && cta && (
+             <div className="mt-2 p-2.5 bg-violet-500/10 rounded-md border border-violet-500/20 text-xs">
+                <p className="text-muted-foreground mb-1.5">{message}</p>
+                <a href={cta.href} className="text-violet-500 hover:text-violet-600 font-medium inline-flex items-center transition-colors">
+                   {cta.label} <span className="ml-1">→</span>
+                </a>
+             </div>
+          )}
         </div>
       </div>
       {onRemove && (
@@ -50,12 +62,15 @@ export function FileItem({ id, filename, storageState, onPreview, onRemove }: Fi
   );
 }
 
-function StatusBadge({ state }: { state: StorageState | 'INGESTING' | 'ERROR' }) {
+function StatusBadge({ state }: { state: StorageState | 'INGESTING' | 'ERROR' | 'PREMIUM_REQUIRED' }) {
   if (state === 'INGESTING') {
     return <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full">Uploading & Indexing...</span>;
   }
   if (state === 'ERROR') {
     return <span className="text-[10px] uppercase font-bold tracking-wider text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full">Upload Failed</span>;
+  }
+  if (state === 'PREMIUM_REQUIRED') {
+    return <span className="text-[10px] uppercase font-bold tracking-wider text-violet-500 bg-violet-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">Premium Required</span>;
   }
   if (state === 'WARM') {
     return <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">Warm Storage</span>;

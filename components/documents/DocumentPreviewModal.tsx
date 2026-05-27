@@ -31,12 +31,14 @@ export function DocumentPreviewModal({
 }: DocumentPreviewModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cta, setCta] = useState<{ label: string; href: string } | null>(null);
   const [data, setData] = useState<PreviewData | null>(null);
 
   useEffect(() => {
     if (isOpen && documentId && documentId !== 'undefined' && documentId !== 'null') {
       setLoading(true);
       setError(null);
+      setCta(null);
       setData(null);
 
       // Workspace ID is optional now, the route handles it. We can omit it.
@@ -49,6 +51,9 @@ export function DocumentPreviewModal({
         .catch((err) => {
           if (err.response?.status === 409) {
             setError('Document is currently being compressed and indexed. Please try again in a few moments.');
+          } else if (err.response?.status === 403 && err.response?.data?.cta) {
+            setError(err.response.data.message || 'Premium feature required.');
+            setCta(err.response.data.cta);
           } else {
             setError('Failed to load document preview.');
           }
@@ -72,8 +77,13 @@ export function DocumentPreviewModal({
               <p className="text-sm text-muted-foreground">Loading preview...</p>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center h-48">
-              <p className="text-sm text-amber-600 dark:text-amber-400 text-center px-4">{error}</p>
+            <div className="flex flex-col items-center justify-center h-48 space-y-4">
+              <p className="text-sm text-amber-600 dark:text-amber-400 text-center px-4 max-w-md">{error}</p>
+              {cta && (
+                 <a href={cta.href} className="inline-flex h-9 items-center justify-center rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-violet-600/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50">
+                    {cta.label}
+                 </a>
+              )}
             </div>
           ) : data?.contentRaw ? (
             <div className="text-sm whitespace-pre-wrap font-mono text-muted-foreground break-words">

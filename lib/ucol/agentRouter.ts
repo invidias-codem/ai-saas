@@ -331,7 +331,7 @@ export class AgentRouter {
             const result = await this.gemini.generateStream(
                 [{ role: 'user', text: `Query: ${task.query}${task.context ? `\n\nContext: ${task.context.substring(0, 500)}` : ''}` }],
                 CLASSIFIER_SYSTEM_PROMPT,
-                { model: 'gemini-3.1-flash-lite-preview', temperature: 0.1, maxTokens: 256 }
+                { model: 'gemini-2.5-flash', temperature: 0.1, maxTokens: 256 }
             );
 
             const reader = result.stream.getReader();
@@ -343,7 +343,8 @@ export class AgentRouter {
                 raw += decoder.decode(value, { stream: true });
             }
 
-            const match = raw.match(/\{[\s\S]*\}/);
+            const cleanedRaw = raw.replace(/<thought_signature>[\s\S]*/gi, '').trim();
+            const match = cleanedRaw.match(/\{[\s\S]*\}/);
             if (!match) throw new Error('No JSON in classifier response');
 
             const parsed = JSON.parse(match[0]);

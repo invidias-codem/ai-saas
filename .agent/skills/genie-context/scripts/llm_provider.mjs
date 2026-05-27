@@ -43,7 +43,7 @@ export async function generateContent(systemPrompt, userPrompt, options = {}) {
         console.log('✨ Using Provider: Google Gemini 2.0 Flash');
         const genAI = new GoogleGenerativeAI(geminiKey);
         const model = genAI.getGenerativeModel({
-            model: "gemini-3.1-flash-lite-preview",
+            model: "gemini-2.5-flash",
             generationConfig: {
                 responseMimeType: options.jsonMode ? "application/json" : "text/plain"
             }

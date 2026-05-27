@@ -4,13 +4,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from '@/components/ui/button';
 import { useSubscriptionStore } from '@/lib/store/subscription-store';
 import { Sparkles, Lock } from 'lucide-react';
+import { KoFiWidget } from '@/components/kofi-widget';
 
 export function KofiDonationModal() {
     const { showKofiModal, setShowKofiModal, computeCredits } = useSubscriptionStore();
 
     return (
         <Dialog open={showKofiModal} onOpenChange={setShowKofiModal}>
-            <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800 text-slate-100">
+            <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800 text-slate-100 max-h-[90vh] overflow-y-auto p-4 sm:p-6">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-50">
                         {computeCredits <= 0 ? <Lock className="w-5 h-5 text-indigo-400" /> : <Sparkles className="w-5 h-5 text-indigo-400" />}
@@ -34,15 +35,14 @@ export function KofiDonationModal() {
                         </div>
                     </div>
                 </div>
+                <div className="w-full mt-2">
+                    <KoFiWidget />
+                </div>
                 <DialogFooter className="flex-col sm:flex-row gap-2">
                     <Button variant="outline" className="w-full bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-slate-100" onClick={() => setShowKofiModal(false)}>
                         Continue with Standard Chat
                     </Button>
-                    <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-lg shadow-indigo-900/20" asChild>
-                        <a href="https://ko-fi.com/yourhandle" target="_blank" rel="noreferrer">
-                            Support on Ko-Fi & Unlock
-                        </a>
-                    </Button>
+
                 </DialogFooter>
             </DialogContent>
         </Dialog>

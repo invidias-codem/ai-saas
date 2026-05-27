@@ -36,7 +36,7 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
 
     const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
     const model = genAI.getGenerativeModel({
-        model: 'gemini-3.1-flash-lite-preview',
+        model: 'gemini-2.5-flash',
         systemInstruction: {
             role: 'user',
             parts: [{ text: PLANNER_SYSTEM_PROMPT }],

@@ -46,6 +46,7 @@
     "tools",
     "scripts",
     "relay-client",
+    "remote",
     "**/* 2.ts",
     "**/* 2.tsx"
   ]
