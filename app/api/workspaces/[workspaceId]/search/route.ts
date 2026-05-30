@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 import { generateEmbedding } from "@/lib/ai/embeddings";
+import { PremiumRequiredError } from "@/lib/ai/auth";
 
 export async function POST(req: NextRequest, { params }: { params: { workspaceId: string } }) {
     try {
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: { workspaceId
         }
 
         // Generate vector embedding for the search query
-        const queryEmbedding = await generateEmbedding(query);
+        const queryEmbedding = await generateEmbedding(query, userId);
 
         // Execute Supabase RPC vector match
         // We set match_threshold very low (0.0) initially to ensure we get results for code queries
@@ -56,6 +57,9 @@ export async function POST(req: NextRequest, { params }: { params: { workspaceId
 
         return NextResponse.json({ success: true, matches });
     } catch (error) {
+        if (error instanceof PremiumRequiredError) {
+            return NextResponse.json({ error: "PREMIUM_REQUIRED" }, { status: 402 });
+        }
         console.error("[Search Route] Fatal Error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }

@@ -53,7 +53,7 @@ export async function getGitHubUserProfile(accessToken: string) {
     if (!email) {
         try {
             const { data: emails } = await octokit.rest.users.listEmailsForAuthenticatedUser();
-            const primaryEmail = emails.find(e => e.primary);
+            const primaryEmail = emails.find((e: any) => e.primary);
             if (primaryEmail) {
                 email = primaryEmail.email;
             } else if (emails.length > 0) {

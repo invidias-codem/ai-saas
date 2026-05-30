@@ -25,7 +25,7 @@ export async function GET() {
         });
 
         // Map to lightweight structure
-        const repos = data.map(repo => ({
+        const repos = data.map((repo: any) => ({
             id: repo.id,
             name: repo.name,
             full_name: repo.full_name,
