@@ -19,6 +19,10 @@ export class PremiumRequiredError extends Error {
  */
 export async function getOpenAIClient(userId: string): Promise<OpenAI> {
   // Phase 1: Dynamic Fetch from Vault (to be swapped with Redis cache in Phase 2)
+  if (!supabaseAdmin) {
+    throw new Error('Supabase Admin not configured');
+  }
+
   const { data: decryptedKey, error } = await supabaseAdmin.rpc('get_user_openai_key', {
     p_user_id: userId
   });

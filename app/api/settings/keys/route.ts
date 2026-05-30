@@ -5,7 +5,7 @@ import OpenAI from 'openai';
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) return new NextResponse('Unauthorized', { status: 401 });
 
     const { apiKey } = await req.json();
@@ -26,6 +26,7 @@ export async function POST(req: Request) {
     const secretDescription = `OpenAI API Key for user ${userId}`;
     
     // Check if user already has a secret mapped
+    if (!supabaseAdmin) return new NextResponse('Supabase Admin not configured', { status: 500 });
     const { data: existingMapping } = await supabaseAdmin
       .from('user_api_keys')
       .select('secret_id')
@@ -67,8 +68,9 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) return new NextResponse('Unauthorized', { status: 401 });
+    if (!supabaseAdmin) return new NextResponse('Supabase Admin not configured', { status: 500 });
 
     const { data: existingMapping } = await supabaseAdmin
       .from('user_api_keys')
