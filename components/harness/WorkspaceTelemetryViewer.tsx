@@ -55,7 +55,7 @@ export function WorkspaceTelemetryViewer({ workspaceId }: { workspaceId: string 
           table: "harness_telemetry_events",
           filter: `workspace_id=eq.${workspaceId}`,
         },
-        (payload) => {
+        (payload: any) => {
           const newEvent = payload.new as TelemetryEvent;
           if (newEvent.event_type.startsWith("ingestion_")) {
             setLogs((prev) => [...prev.slice(-100), newEvent]); // Keep last 100
