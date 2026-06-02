@@ -33,10 +33,45 @@ export interface IOHarness {
   patchFile(filePath: string, searchBlock: string, replaceBlock: string): Promise<ToolExecutionResult>;
 
   /**
-   * Executes a shell command within the harness environment.
-   * Implementation must enforce timeouts, output capping, and policy limits.
+   * Executes a shell command securely within the harness environment.
+   * Implementation enforces strict context timeouts, non-interactive execution, and output truncation.
    */
-  runCommand(command: string, timeoutMs?: number): Promise<ToolExecutionResult>;
+  executeCommandSecure(command: string, timeoutSeconds: number, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
+
+  /**
+   * Discovers documents within the workspace, honoring exclusion lists.
+   */
+  discoverDocuments(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
+
+  /**
+   * Safely reads text/code files, enforcing size constraints and extensions.
+   */
+  extractText(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
+
+  /**
+   * Summarizes the repository structure and configuration.
+   */
+  summarizeRepo(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
+
+  /**
+   * Executes an in-memory cosine similarity search against local SQLite chunks.
+   */
+  semanticSearch(query: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
+
+  /**
+   * Initiates an asynchronous background ingestion of the workspace into the local Vector DB.
+   */
+  ingestWorkspace(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
+
+  /**
+   * Inserts a new episodic event into the local SQLite ledger.
+   */
+  insertEpisodicEvent(workspaceId: string, eventType: string, content: string, metadata: string, embedding: number[]): Promise<ToolExecutionResult>;
+
+  /**
+   * Searches the episodic ledger using an embedded query.
+   */
+  searchEpisodicEvents(workspaceId: string, queryEmbedding: number[], topK: number): Promise<ToolExecutionResult>;
 
   /**
    * Optional shutdown to gracefully terminate the persistent harness process if it's stateful.

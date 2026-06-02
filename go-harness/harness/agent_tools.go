@@ -87,8 +87,8 @@ func SemanticCodeSearch(ctx context.Context, config SemanticSearchConfig) (ToolE
 	}
 
 	return ToolExecutionResult{
-		Success: true,
-		Stdout:  formattedResult.String(),
+		Ok:     true,
+		Output: formattedResult.String(),
 	}, nil
 }
 
@@ -106,19 +106,19 @@ func GetFileContents(ctx context.Context, repoFullName string, filePath string, 
 		return ToolExecutionResult{}, fmt.Errorf("GitHub API request failed via WAF: %v", err)
 	}
 
-	if !wafRes.Success {
+	if !wafRes.Ok {
 		return wafRes, nil
 	}
 
 	var fileResp GithubFileContentResponse
-	if err := json.Unmarshal([]byte(wafRes.Stdout), &fileResp); err != nil {
+	if err := json.Unmarshal([]byte(wafRes.Output), &fileResp); err != nil {
 		return ToolExecutionResult{}, fmt.Errorf("failed to parse GitHub file content response: %v", err)
 	}
 
 	if fileResp.Encoding != "base64" {
 		return ToolExecutionResult{
-			Success: true,
-			Stdout:  wafRes.Stdout, // Fallback if it's not base64 for some reason
+			Ok:     true,
+			Output: wafRes.Output, // Fallback if it's not base64 for some reason
 		}, nil
 	}
 
@@ -129,7 +129,7 @@ func GetFileContents(ctx context.Context, repoFullName string, filePath string, 
 	}
 
 	return ToolExecutionResult{
-		Success: true,
-		Stdout:  string(decodedBytes),
+		Ok:     true,
+		Output: string(decodedBytes),
 	}, nil
 }

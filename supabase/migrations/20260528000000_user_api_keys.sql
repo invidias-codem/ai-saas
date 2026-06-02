@@ -23,8 +23,7 @@ CREATE POLICY "Users can only insert/update their own key mappings"
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
 
--- Optional: Add an updated_at trigger
 CREATE TRIGGER handle_updated_at_user_api_keys
     BEFORE UPDATE ON public.user_api_keys
     FOR EACH ROW
-    EXECUTE FUNCTION moddatetime (updated_at);
+    EXECUTE FUNCTION public.touch_updated_at();

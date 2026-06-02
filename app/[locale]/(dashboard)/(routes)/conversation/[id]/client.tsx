@@ -26,6 +26,7 @@ import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
 import { submitFeedback } from "@/lib/feedback/submitFeedback";
 import { NeuralArchivalUploader, UploadedDoc } from "@/components/documents/NeuralArchivalUploader";
 import { FileItem } from "@/components/documents/FileItem";
+import { ContextualNudge } from "@/components/workspaces/ContextualNudge";
 import {
   getSessionMemoryFromStorage,
   saveSessionMemoryToStorage,
@@ -279,6 +280,29 @@ function ConversationPage({
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [memoryCount, setMemoryCount] = useState<number>(0);
   const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
+  const [swarmSuggestion, setSwarmSuggestion] = useState<string>("");
+
+  useEffect(() => {
+    const fetchSuggestion = async () => {
+      try {
+        // Asynchronously fetch episodic memory suggestion to avoid blocking render
+        const res = await fetch(`/api/memory/episodic?workspaceId=${conversationContext.workspaceId || ''}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.suggestion) {
+            setSwarmSuggestion(data.suggestion);
+          }
+        }
+      } catch (e) {
+        // Fail silently to avoid interrupting the UX
+      }
+    };
+    
+    // Only fetch if we are in a fresh conversation (no messages yet)
+    if (initialMessages.length === 0) {
+      fetchSuggestion();
+    }
+  }, [conversationContext.workspaceId, initialMessages.length]);
 
   // GitHub Consent State
   const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
@@ -771,6 +795,11 @@ function ConversationPage({
             </div>
           )}
 
+          <ContextualNudge 
+            className="mb-6 animate-in fade-in slide-in-from-top-2 duration-500" 
+            actionIntended={agentMode === 'agentic' ? 'agentic execution' : undefined} 
+          />
+
           {/* Greeting */}
           {showGreeting && (
             <div className="flex flex-col items-center justify-center min-h-[40vh] text-center space-y-4 animate-in fade-in zoom-in duration-500">
@@ -1003,8 +1032,8 @@ function ConversationPage({
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder={agentMode === 'agentic' ? t("placeholderAgentic") : agentMode === 'quality' ? t("placeholderQuality") : t("placeholderFast")}
-              className="flex-1 min-h-[44px] max-h-[200px] border-0 focus-visible:ring-0 resize-none py-3 px-2 bg-transparent text-[15px] placeholder:text-muted-foreground/70"
+              placeholder={swarmSuggestion || (agentMode === 'agentic' ? t("placeholderAgentic") : agentMode === 'quality' ? t("placeholderQuality") : t("placeholderFast"))}
+              className="flex-1 min-h-[44px] max-h-[200px] border-0 focus-visible:ring-0 resize-none py-3 px-2 bg-transparent text-[15px] placeholder:text-muted-foreground/70 transition-all duration-700"
               rows={1}
             />
 

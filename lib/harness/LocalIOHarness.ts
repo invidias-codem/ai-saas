@@ -119,8 +119,8 @@ export class LocalIOHarness implements IOHarness {
     }
   }
 
-  public async runCommand(command: string, timeoutMs?: number): Promise<ToolExecutionResult> {
-    const timeout = timeoutMs ?? this.defaultCommandTimeoutMs;
+  public async executeCommandSecure(command: string, timeoutSeconds: number, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    const timeout = timeoutSeconds * 1000 || this.defaultCommandTimeoutMs;
     
     return new Promise((resolve) => {
       let outputBuffer = '';

@@ -3,13 +3,16 @@ import createMDX from '@next/mdx';
 import createNextIntlPlugin from 'next-intl/plugin';
 
 const projectRoot = path.resolve('./');
+const isTauri = process.env.TAURI_BUILD === 'true';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: isTauri ? 'export' : 'standalone',
   // Enable MDX pages
   pageExtensions: ['js', 'jsx', 'mdx', 'ts', 'tsx'],
 
   images: {
+    unoptimized: isTauri,
     remotePatterns: [
       {
         protocol: 'https',
