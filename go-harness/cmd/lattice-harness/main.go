@@ -13,6 +13,8 @@ import (
 	"syscall"
 
 	"github.com/invidias-codem/ai-saas/go-harness/harness"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/telemetry"
 )
 
 type JSONRPCRequest struct {
@@ -34,6 +36,77 @@ type JSONRPCResponse struct {
 type JSONRPCError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+// SessionContext holds the long-lived memory structures initialized on boot.
+type SessionContext struct {
+	Registry  *fsutil.RootRegistry
+	Telemetry *telemetry.Manager
+	VectorDB  *harness.VectorIndex
+}
+
+type SyncGrantsArgs struct {
+	ApiBaseUrl  string             `json:"api_base_url"`
+	AuthToken   string             `json:"auth_token"`
+	WorkspaceID string             `json:"workspace_id"`
+	UserID      string             `json:"user_id"`
+	Grants      []fsutil.RootGrant `json:"grants"`
+}
+
+type LocalCapabilityArgs struct {
+	Path        string `json:"path"`
+	WorkspaceID string `json:"workspace_id"`
+	UserID      string `json:"user_id"`
+}
+
+type SemanticSearchSecureArgs struct {
+	Query       string `json:"query"`
+	WorkspaceID string `json:"workspace_id"`
+	UserID      string `json:"user_id"`
+}
+
+type InsertEpisodicEventArgs struct {
+	WorkspaceID string    `json:"workspace_id"`
+	EventType   string    `json:"event_type"`
+	Content     string    `json:"content"`
+	Metadata    string    `json:"metadata"`
+	Embedding   []float32 `json:"embedding"`
+}
+
+type SearchEpisodicEventsArgs struct {
+	WorkspaceID    string    `json:"workspace_id"`
+	QueryEmbedding []float32 `json:"query_embedding"`
+	TopK           int       `json:"top_k"`
+}
+
+type ExecuteCommandSecureArgs struct {
+	Command        string `json:"command"`
+	TimeoutSeconds int    `json:"timeout_seconds"`
+	Path           string `json:"path"`
+	WorkspaceID    string `json:"workspace_id"`
+	UserID         string `json:"user_id"`
+}
+
+type StartWorkspaceIngestionArgs struct {
+	Path        string `json:"path"`
+	WorkspaceID string `json:"workspace_id"`
+	UserID      string `json:"user_id"`
+	ApiBaseUrl  string `json:"api_base_url"`
+	AuthToken   string `json:"auth_token"`
+}
+
+type WriteFileSecureArgs struct {
+	Path        string `json:"path"`
+	Content     string `json:"content"`
+	WorkspaceID string `json:"workspace_id"`
+	UserID      string `json:"user_id"`
+}
+
+type MovePathSecureArgs struct {
+	SrcPath     string `json:"src_path"`
+	DestPath    string `json:"dest_path"`
+	WorkspaceID string `json:"workspace_id"`
+	UserID      string `json:"user_id"`
 }
 
 // Structs mapping to harness arguments
@@ -119,6 +192,20 @@ func main() {
 	// Use bufio.Reader instead of bufio.Scanner to bypass strict 64KB/1MB line limits
 	reader := bufio.NewReader(os.Stdin)
 
+	// 1. Initialize the decoupled memory structures
+	telemetryManager := telemetry.NewManager() // Buffer is ready, flusher is OFF
+	rootRegistry := fsutil.NewRootRegistry()
+	vectorDB, err := harness.NewVectorIndex("lattice_vectors.db")
+	if err != nil {
+		log.Printf("Failed to initialize vector index: %v", err)
+	}
+
+	session := &SessionContext{
+		Registry:  rootRegistry,
+		Telemetry: telemetryManager,
+		VectorDB:  vectorDB,
+	}
+
 	for {
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
@@ -134,7 +221,7 @@ func main() {
 			continue
 		}
 
-		go processFrame(ctx, line)
+		go processFrame(ctx, session, line)
 	}
 }
 
@@ -178,7 +265,7 @@ func sendErrorResponse(id string, code int, message string) {
 	})
 }
 
-func processFrame(ctx context.Context, line []byte) {
+func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 	var req JSONRPCRequest
 	
 	defer func() {
@@ -209,6 +296,191 @@ func processFrame(ctx context.Context, line []byte) {
 	var res harness.ToolExecutionResult
 
 	switch req.Action {
+	case "sync_root_grants":
+		var args SyncGrantsArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			// 1. Hydrate the registry
+			session.Registry.UpdateGrants(args.Grants)
+
+			// 2. Activate the background flusher securely
+			session.Telemetry.StartFlusher(args.ApiBaseUrl, args.AuthToken)
+
+			// Log the successful hydration
+			session.Telemetry.RecordEvent(telemetry.NewEvent(
+				args.UserID, args.WorkspaceID,
+				"daemon_synchronized", "", "sync_root_grants",
+				0, nil,
+			))
+
+			res = harness.ToolExecutionResult{
+				Ok:     true,
+				Output: fmt.Sprintf("Synchronized %d roots", len(args.Grants)),
+			}
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for sync_root_grants")
+			return
+		}
+
+	case "read_file_secure":
+		var args LocalCapabilityArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.ReadFileSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for read_file_secure")
+			return
+		}
+
+	case "list_directory_secure":
+		var args LocalCapabilityArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.ListDirectorySecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for list_directory_secure")
+			return
+		}
+
+	case "stat_path_secure":
+		var args LocalCapabilityArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.StatPathSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for stat_path_secure")
+			return
+		}
+
+	case "start_workspace_ingestion":
+		var args StartWorkspaceIngestionArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.StartWorkspaceIngestion(session.Registry, session.Telemetry, session.VectorDB, args.Path, args.WorkspaceID, args.UserID, args.AuthToken, args.ApiBaseUrl)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for start_workspace_ingestion")
+			return
+		}
+
+	case "execute_command_secure":
+		var args ExecuteCommandSecureArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			outputStr, execErr := harness.ExecuteCommandSecure(session.Registry, session.Telemetry, args.Command, args.Path, args.WorkspaceID, args.UserID, args.TimeoutSeconds)
+			if execErr != nil {
+				res = harness.ToolExecutionResult{Ok: false, Error: execErr.Error(), Code: "COMMAND_FAILED"}
+			} else {
+				res = harness.ToolExecutionResult{Ok: true, Output: outputStr}
+			}
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for execute_command_secure")
+			return
+		}
+
+	case "discover_documents_secure":
+		var args LocalCapabilityArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.DiscoverDocumentsSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for discover_documents_secure")
+			return
+		}
+
+	case "extract_text_secure":
+		var args LocalCapabilityArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.ExtractTextSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for extract_text_secure")
+			return
+		}
+
+	case "summarize_repo_secure":
+		var args LocalCapabilityArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.SummarizeRepoSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for summarize_repo_secure")
+			return
+		}
+
+	case "semantic_search_secure":
+		var args SemanticSearchSecureArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.SemanticSearchSecure(session.Registry, session.Telemetry, session.VectorDB, args.Query, args.WorkspaceID, args.UserID, expectedToken)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for semantic_search_secure")
+			return
+		}
+
+	case "insert_episodic_event":
+		var args InsertEpisodicEventArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			err := session.VectorDB.InsertEpisodicEvent(args.WorkspaceID, args.EventType, args.Content, args.Metadata, args.Embedding)
+			if err != nil {
+				res = harness.ToolExecutionResult{Ok: false, Error: err.Error()}
+			} else {
+				res = harness.ToolExecutionResult{Ok: true, Output: "Episodic event inserted successfully"}
+			}
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for insert_episodic_event")
+			return
+		}
+
+	case "search_episodic_events":
+		var args SearchEpisodicEventsArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			events, err := session.VectorDB.SearchEpisodicEvents(args.WorkspaceID, args.QueryEmbedding, args.TopK)
+			if err != nil {
+				res = harness.ToolExecutionResult{Ok: false, Error: err.Error()}
+			} else {
+				b, _ := json.Marshal(events)
+				res = harness.ToolExecutionResult{Ok: true, Output: string(b)}
+			}
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for search_episodic_events")
+			return
+		}
+
+	case "create_file_secure":
+		var args LocalCapabilityArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.CreateFileSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for create_file_secure")
+			return
+		}
+
+	case "write_file_secure":
+		var args WriteFileSecureArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.WriteFileSecure(session.Registry, session.Telemetry, args.Path, args.Content, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for write_file_secure")
+			return
+		}
+
+	case "create_directory_secure":
+		var args LocalCapabilityArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.CreateDirectorySecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for create_directory_secure")
+			return
+		}
+
+	case "delete_path_secure":
+		var args LocalCapabilityArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.DeletePathSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for delete_path_secure")
+			return
+		}
+
+	case "move_path_secure":
+		var args MovePathSecureArgs
+		if json.Unmarshal(req.Inputs, &args) == nil {
+			res = harness.MovePathSecure(session.Registry, session.Telemetry, args.SrcPath, args.DestPath, args.WorkspaceID, args.UserID)
+		} else {
+			sendErrorResponse(req.ID, -32602, "Invalid params for move_path_secure")
+			return
+		}
+
 	case "read_file":
 		var args ReadFileArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
@@ -269,8 +541,8 @@ func processFrame(ctx context.Context, line []byte) {
 				return
 			}
 			res = harness.ToolExecutionResult{
-				Success: true,
-				Stdout:  "Repository ingested successfully",
+				Ok:     true,
+				Output: "Repository ingested successfully",
 			}
 		} else {
 			sendErrorResponse(req.ID, -32602, "Invalid params for ingest_repository")

@@ -49,6 +49,7 @@ export interface Tool<TInput = any, TOutput = any> {
 export interface AgentContext {
     userId: string;
     sessionId: string;
+    workspaceId?: string | null;
 
     /**
      * User's verified identity/permissions.

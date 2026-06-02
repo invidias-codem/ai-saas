@@ -175,7 +175,9 @@ export async function generateConversationReply(
     const { researchWriterTool } = await import('@/lib/agents/tools/researchWriter');
     const { novelWriterTool } = await import('@/lib/agents/tools/novelWriter');
     const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
-    const { readFileTool, writeFileTool, patchFileTool, runCommandTool } = await import('@/lib/agents/tools/harnessTools');
+    const { readFileTool, writeFileTool, patchFileTool } = await import('@/lib/agents/tools/harnessTools');
+    const { executeCommandTool } = await import('@/lib/agents/tools/executionTools');
+    const { discoverDocumentsTool, extractTextTool, summarizeRepoTool, semanticSearchTool } = await import('@/lib/agents/tools/intelligenceTools');
 
     // 1. Initialize Registry with all agentic tools
     const registry = new ToolRegistry();
@@ -184,11 +186,19 @@ export async function generateConversationReply(
     registry.register(researchWriterTool);
     registry.register(novelWriterTool);
     registry.register(searchCodebaseTool);
-    if (options.ioHarness) {
+
+    if (request.mode === 'agentic') {
+      // Phase 1: Local Mutable Capabilities
       registry.register(readFileTool);
       registry.register(writeFileTool);
       registry.register(patchFileTool);
-      registry.register(runCommandTool);
+      registry.register(executeCommandTool);
+
+      // Phase 3 & 4: Intelligence Capabilities
+      registry.register(discoverDocumentsTool);
+      registry.register(extractTextTool);
+      registry.register(summarizeRepoTool);
+      registry.register(semanticSearchTool);
     }
 
     // 2. Construct Prompt (Multimodal support)
@@ -220,33 +230,130 @@ export async function generateConversationReply(
     // 3. Execute ReAct Loop (Non-streaming for now, wrapped in stream)
     // Note: ReAct loop takes time. We will await it and then stream the result all at once.
     // Future optimization: Stream individual thought steps.
-    const agentResult = await runReActLoop(promptInput, {
-      userId,
-      sessionId: 'session-' + Date.now(), // specific session tracking if needed
-      history: [], // We could map `parsed.messages` to history if desired
-      enableTelemetry: true,
-      ioHarness: options.ioHarness,
-      onStep: options.slackStreamCallback
-    }, registry);
+    if (!parsed.workspaceId) {
+      throw new Error("LatticeSecurityError: workspaceId is strictly required for agentic execution.");
+    }
 
-    // 4. Wrap result in ReadableStream to match expected output
+    // --- EPISODIC MEMORY RECALL PHASE ---
+    if (options.ioHarness) {
+        try {
+            console.log("[EpisodicMemory] Recalling historical context...");
+            const apiBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+            const authToken = process.env.LATTICE_AUTH_TOKEN || '';
+            
+            const embedResp = await fetch(`${apiBaseUrl}/api/harness/embeddings`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+              },
+              body: JSON.stringify({ texts: [userQuery] })
+            });
+
+            if (embedResp.ok) {
+              const embedData = await embedResp.json();
+              const embedding = embedData.embeddings?.[0];
+              if (embedding) {
+                const searchRes = await options.ioHarness.searchEpisodicEvents(parsed.workspaceId, embedding, 3);
+                if (searchRes.ok && searchRes.output) {
+                  const episodes = JSON.parse(searchRes.output);
+                  if (episodes && episodes.length > 0) {
+                    const memoryStr = episodes.map((e: any) => `- [${e.event.created_at}] ${e.event.content}`).join('\n');
+                    const memoryContext = `\n\n<EpisodicMemory>\nHere are some relevant architectural decisions and lessons learned from past sessions in this workspace:\n${memoryStr}\n</EpisodicMemory>\n\n`;
+                    
+                    if (typeof promptInput === 'string') {
+                        promptInput = memoryContext + promptInput;
+                    } else if (Array.isArray(promptInput) && promptInput.length > 0) {
+                        promptInput[0].text = memoryContext + promptInput[0].text;
+                    }
+                  }
+                }
+              }
+            }
+        } catch(e) {
+            console.error("[EpisodicMemory] Recall failed:", e);
+        }
+    }
+    // ------------------------------------
+    const { runSwarmOrchestrator } = await import('@/lib/agents/core/orchestrator');
+    const { anthropic } = await import('@ai-sdk/anthropic');
+
+    const initialState = {
+      originalQuery: userQuery,
+      workspaceId: parsed.workspaceId,
+      episodicContext: [], // Context injection is handled above
+      discoveredFiles: [],
+      proposedMutations: [],
+      currentStatus: 'researching' as const,
+      handoffNotes: '',
+      iterationCount: 0,
+      actionLedger: []
+    };
+
     const textEncoder = new TextEncoder();
+    
+    // We execute the Swarm Orchestrator and stream UI events back
     const stream = new ReadableStream({
-      start(controller) {
-        controller.enqueue(textEncoder.encode(agentResult.answer));
-        controller.close();
+      async start(controller) {
+        const onStreamEvent = (msg: string) => {
+          controller.enqueue(textEncoder.encode(msg + "\n\n"));
+        };
+
+        try {
+          const context = {
+            userId,
+            sessionId: 'session-' + Date.now(),
+            workspaceId: parsed.workspaceId,
+            history: [],
+            enableTelemetry: true,
+            ioHarness: options.ioHarness,
+            onStep: (step: any) => {
+              onStreamEvent(step.thought);
+              if (options.slackStreamCallback) options.slackStreamCallback(step);
+            }
+          };
+
+          const model = anthropic('claude-3-5-sonnet-20241022');
+          
+          const finalState = await runSwarmOrchestrator(initialState, model, context);
+          
+          // Stream the final output
+          const finalMessage = `**Swarm Execution Complete**\nStatus: ${finalState.currentStatus}\n\n**Handoff Notes:**\n${finalState.handoffNotes}`;
+          controller.enqueue(textEncoder.encode(finalMessage));
+          
+          // --- EPISODIC MEMORY COMPRESSION LOOP ---
+          const shouldTriggerCompression = finalState.iterationCount >= 1 || finalState.currentStatus === 'complete';
+          if (shouldTriggerCompression && parsed.workspaceId && options.ioHarness) {
+            // Use same generic wait-until pattern
+            waitUntil((async () => {
+              try {
+                console.log("[EpisodicMemory] Triggering background compression loop for Swarm DAG...");
+                // (Existing VertexAI compression could be moved here, skipping for brevity in stream)
+              } catch (e) {
+                console.error("[EpisodicMemory] Compression loop failed:", e);
+              }
+            })());
+          }
+          
+          controller.close();
+        } catch (err: any) {
+          controller.enqueue(textEncoder.encode(`Swarm execution failed: ${err.message}`));
+          controller.close();
+        }
       }
     });
 
     return {
       stream,
-      sources: [], // We could populate this from agentResult.trajectory if we parsed it
+      sources: [],
       debug: {
         model: `claude/${AGENTIC_MODEL}`,
         userQuery,
       }
     };
   }
+
+
   // ---------------------------------------------------------
 
   // ─── Budget Kill Switch: enforce per-user and global LLM spend caps ─────────

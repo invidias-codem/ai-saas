@@ -1,220 +1,243 @@
 # Lattice OS
 
-> **Own the context. Route the model.**
+> **Own the context. Route the intelligence.**
 
-Lattice OS is a memory-native AI platform built on a **Unified Context Orchestration Layer (UCOL)**. Unlike traditional AI wrappers that treat each conversation in isolation, Lattice OS maintains a shared knowledge and memory layer across interactions — so your AI work gains continuity over time, regardless of which model is responding.
+Lattice OS is a workspace-native AI platform for **conversations, code, documents, and persistent context**. It combines memory-aware chat, server-side model/runtime routing, workspace-scoped context assembly, and an evolving local-capability layer so users can build, understand, and operate projects with more continuity over time.
 
-At the product surface, users work with **Weaver**, the customer-facing intelligence layer of Lattice OS. Behind the scenes, **Relay** handles internal workspace orchestration, routing, and coordination.
+Unlike AI wrappers that treat every chat as an isolated prompt, Lattice is moving toward a system where:
+- workspace context matters
+- prepared context is assembled deliberately
+- model/runtime behavior is resolved server-side
+- memory compounds over time
+- document and code understanding become first-class
+- local capabilities can grow inside trusted boundaries
 
----
-
-## What Makes Lattice OS Different
-
-Most AI platforms give you a chat box connected to a single model. Lattice OS gives you a **shared context layer** that every model reads from and writes to.
-
-- **Gemini** handles fast responses, research, and fact extraction
-- **Claude** handles high-quality reasoning and nuanced output
-- **DeepSeek** handles deeper analytical synthesis
-- **Your knowledge graph** persists across all of them — context learned in one conversation enriches every future one
-- **Relay** routes work internally across models, memory, and tools
-- **Weaver** gives users a coherent, memory-aware intelligence surface
+At the product surface, users interact with an authenticated AI workspace. Under the hood, Lattice is built around the **Unified Context Orchestration Layer (UCOL)**, workspace-aware behavior, persistent memory, and structured trust boundaries.
 
 ---
 
-## Core Features
+## What Lattice Gives You
 
-### 🧠 Persistent Memory
-- Long-term knowledge graph stored in Supabase with semantic embeddings
-- LLM-powered fact extraction from every conversation (skills, preferences, goals, projects)
-- Semantic ranking — the most relevant memories surface automatically
-- Co-occurrence edges strengthen the more concepts appear together
+### Workspace-aware AI conversations
+Lattice is not just a generic chat box. The platform is increasingly structured around workspace-scoped behavior so conversations can evolve alongside projects rather than feeling disconnected from them.
 
-### 🔀 Multi-Model Routing (UCOL)
-- Intelligent query classification routes each request to the best-fit model
-- Non-blocking async dispatch — users never wait for routing decisions
-- Models learn from each other through shared context — Gemini context flows to Claude and vice versa
-- UCOL Code Builder: Gemini plans → Claude codes → Gemini reviews (debate loop with scoring)
+### Persistent memory and prepared context
+Lattice is designed around prepared context rather than naive raw message history alone. Memory, retrieval, and structured context assembly are foundational parts of the product direction.
 
-### 📚 RAG Integration
-- Codebase indexing for deep technical context
-- Semantic chunking with embedding-based retrieval
-- Budget-aware retrieval to keep latency low
+### Multi-model routing through UCOL
+Different tasks can route to different model/provider paths depending on mode and system logic. The goal is to make runtime behavior more explicit, inspectable, and adaptable than a single-model wrapper.
 
-### 🔗 Integrations
-- **Slack** — Full bot with commands, interactivity, events, and home tab
-- **Telegram** — Webhook-based bot with engineering task dispatch (`/engineer`, `/blog`)
-- **Zapier** — Webhook endpoints for workflow automation
-- **Firebase** — Cloud Functions for async heavy lifting (Python + Node)
+### Document-backed reasoning
+Lattice is actively evolving toward a stronger document ingestion and retrieval model so uploaded project and knowledge materials can be previewed, queried, and used during reasoning.
 
-### 🔐 Security
-- Clerk authentication with multi-tenant support
-- SSRF protection on all external URL fetches (async DNS validation)
-- Rate limiting (Upstash Redis) on all public endpoints
-- CodeQL-clean: command injection, XSS, ReDoS, and crypto issues all resolved
-- Input sanitization and PII detection built into the request pipeline
+### Code and project understanding
+The platform includes codebase-aware and architecture-aware direction across retrieval, workspace context, and emerging Code Map / interactive artifact work.
 
-### ⚙️ Error Resolution Agent
-- Autonomous pipeline: Vercel log drain → error classifier → fix generator → GitHub PR
-- Gemini classifies errors, Claude generates fixes, all PRs require human approval
-- Runs every 30 minutes via cron — never auto-merges
+### Trusted local capability direction
+The repo already includes an Electron/Desktop path and an evolving Go harness for secure local capability expansion. This layer is being developed in bounded phases with explicit trust and observability goals.
+
+---
+
+## Why Lattice
+
+Most AI products stop at the prompt window.
+
+Lattice is being built around:
+- **workspace truth** instead of isolated chats
+- **prepared context** instead of raw history alone
+- **routing and operating profiles** instead of one flat model path
+- **persistent memory** instead of stateless resets
+- **trusted capability growth** instead of unconstrained local tool execution
+
+The goal is not just to answer questions.
+The goal is to help users **build, understand, and operate evolving systems** with continuity.
+
+---
+
+## Core Architectural Themes
+
+### 1. Workspace-first behavior
+Workspaces are becoming the primary runtime container for context, organization, retrieval, and future personalization.
+
+### 2. Prepared context over raw transcript sprawl
+Lattice is moving toward explicit context assembly so memory, retrieval, and prompt structure become more inspectable and controllable.
+
+### 3. Server-resolved runtime behavior
+Runtime selection is increasingly resolved on the server side rather than inferred loosely from the client.
+
+### 4. Multi-model orchestration through UCOL
+The Unified Context Orchestration Layer allows different model/provider paths to serve different types of work while sharing system context.
+
+### 5. Trust boundaries matter
+Public pages, authenticated surfaces, integrations, background jobs, and local capability layers are not treated as the same trust zone.
+
+---
+
+## Current Product Areas
+
+The repo currently spans several major product and platform surfaces:
+
+- **Public web surface** — landing, docs, support, informational pages
+- **Authenticated workspace surface** — dashboard, conversations, workspaces, onboarding, settings
+- **Conversation engine** — model/provider handling, mode selection, prepared context, agentic behavior
+- **Memory and retrieval systems** — persistent context, graph/vector direction, retrieval assembly
+- **Document workflows** — upload, preview, retrieval-backed reasoning direction
+- **Integrations** — Slack, Telegram, Zapier, and related automation surfaces
+- **Automation / cron behavior** — scheduled jobs and background workflows
+- **Desktop / local capability expansion** — Electron packaging and Go harness work in progress
+
+---
+
+## Quick Start
+
+Lattice is designed to be explored in bounded stages. The fastest way to experience the core value is this 8-step golden path.
+
+### 1. Clone repo
+```bash
+git clone https://github.com/invidias-codem/ai-saas.git
+cd ai-saas
+```
+
+### 2. Install deps
+```bash
+pnpm install
+```
+
+### 3. Set minimum env vars
+```bash
+cp .env.local.example .env.local
+```
+*(Provide the minimum keys for Auth, Database, and one AI provider in `.env.local`)*
+
+### 4. Run app
+```bash
+pnpm dev
+```
+
+### 5. Open workspace
+Open `http://localhost:3000` in your browser. Create an account and enter a new workspace.
+
+### 6. Start a workspace-aware conversation
+Don't just say "hello". Try prompting Lattice to understand a concept within the workspace context. Notice how memory is persistent and context is assembled deliberately.
+
+### 7. Explore modes
+Switch between different runtime modes (fast, agentic, reasoning) to observe how Lattice routes requests server-side based on the operating profile.
+
+### 8. Optionally go deeper
+Once the core loop makes sense, check the docs to explore integrations, local background intelligence (Electron/Go harness), or self-hosted deployments.
+
+---
+
+## Development Scripts
+
+Key commands from the current repo include:
+
+```bash
+pnpm dev
+pnpm build
+pnpm test
+pnpm test:security
+```
+
+Additional scripts exist for evaluation, RAG/indexing, import verification, rate-limit checks, and desktop packaging.
+
+---
+
+## Desktop / Local Capability Direction
+
+Lattice already includes an Electron/Desktop packaging path and a growing Go-based local harness.
+
+This part of the product is still an evolving capability layer rather than a fully simplified mass-user install story. The direction includes:
+- trusted local execution boundaries
+- scoped local file/repo capability growth
+- telemetry and health visibility
+- future local document/repo intelligence
+- future architecture/code-map artifact generation
+
+Treat this as an advanced product lane until the install and runtime story is more consolidated.
+
+---
+
+## Deployment Direction
+
+Lattice is being shaped toward explicit deployment modes rather than a vague “deploy anywhere” promise.
+
+The clearest current self-hosted direction is:
+
+### Mode A — Standard Internal Deployment
+Designed for internal teams using workspace-scoped reasoning over documents, projects, and persistent context.
+
+More advanced deployment modes for customer-facing assistants, deeper private/memory-rich deployments, and infrastructure/platform use are planned as more mature operational profiles.
+
+---
+
+## Security and Trust Boundaries
+
+Lattice spans multiple trust zones:
+- public visitor surfaces
+- authenticated user surfaces
+- backend application logic
+- automation/cron surfaces
+- integration/webhook surfaces
+- data/persistence boundaries
+- emerging local capability boundaries
+
+This is important because the platform is not a single-surface app. Product correctness depends heavily on separating:
+- what is public
+- what is authenticated
+- what is backend-only
+- what is automation-only
+- what is locally privileged
+
+For more detail, see the trust-boundary and deployment documentation already present in the repo.
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 16 (App Router, Turbopack) |
-| Language | TypeScript |
-| Auth | Clerk |
-| Database | Firestore + Supabase (PostgreSQL + pgvector) |
-| AI Models | Google Gemini, Anthropic Claude, DeepSeek |
-| Embeddings | Gemini embedding-001 |
-| Caching / Rate Limiting | Upstash Redis |
-| Background Jobs | Firebase Cloud Functions (Python + Node) |
-| Deployment | Vercel (primary) + Firebase Hosting |
-| CI/CD | GitHub Actions |
+Current repo truth includes:
+- **Framework:** Next.js
+- **Language:** TypeScript
+- **Auth:** Clerk
+- **Persistence:** Supabase and related product state layers
+- **Background / integrations:** multiple route and automation surfaces
+- **Desktop path:** Electron
+- **Local capability path:** Go harness (in progress)
+
+See `package.json` and `docs/` for the most current operational details.
 
 ---
 
-## Project Structure
+## Product Direction
 
-```
-app/                    # Next.js App Router
-  api/                  # API routes
-    integrations/       # Slack, Telegram, Zapier
-    internal/           # UCOL routing, JKlaw bridge
-    cron/               # Scheduled jobs (error resolution, RAG sync)
-lib/
-  llm/                  # Conversation engine + model providers
-    providers/          # Gemini, Claude, DeepSeek
-  memory/               # Knowledge graph, embeddings, vector store
-  security/             # Auth, rate limiting, SSRF/input validation
-  ucol/                 # UCOL Code Builder + Agent Router
-  integrations/         # AnyCrawl, external data
-functions/              # Firebase Cloud Functions
-  genie-worker-python/  # Python async worker
-  vector-agent-python/  # Embedding + vector operations
-```
+Lattice is moving toward a system that can:
+- reason with persistent workspace context
+- route work intelligently across model/runtime paths
+- understand documents and projects more deeply
+- grow trusted local capabilities carefully
+- generate richer system-understanding artifacts over time
 
----
+That includes future-facing directions such as:
+- local document/repo intelligence
+- interactive Code Map / architecture understanding artifacts
+- Playground-style exploratory outputs
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- npm
-- A Clerk account (auth)
-- A Supabase project (knowledge graph + vector store)
-- Firebase project (hosting + functions)
-- At minimum one AI provider key (Gemini recommended)
-
-### Installation
-
-```bash
-git clone https://github.com/invidias-codem/ai-saas.git
-cd ai-saas
-npm install
-```
-
-### Environment Variables
-
-Create a `.env.local` file at the project root. Required variables:
-
-```env
-# Auth
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
-
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=
-SUPABASE_SERVICE_ROLE_KEY=
-
-# AI Providers (at least one required)
-GOOGLE_API_KEY=              # Gemini
-ANTHROPIC_API_KEY=           # Claude
-DEEPSEEK_API_KEY=            # DeepSeek
-
-# Rate Limiting
-UPSTASH_REDIS_REST_URL=
-UPSTASH_REDIS_REST_TOKEN=
-
-# Integrations (optional)
-SLACK_BOT_TOKEN=
-SLACK_SIGNING_SECRET=
-TELEGRAM_BOT_TOKEN=
-
-# Engineer feature (local dev only)
-ENGINEER_SCRIPT_PATH=        # Absolute path to .agent/skills/genie-context/scripts/engineer.mjs
-GENIE_LOCAL=true             # Enable local-only features
-```
-
-### Development
-
-```bash
-npm run dev
-```
-
-### Build
-
-```bash
-npm run build
-```
-
-### Tests
-
-```bash
-npm test                    # Unit tests
-npm run test:security       # Full security test suite
-npm run test:security:unit  # Security unit tests only
-```
-
----
-
-## Architecture: UCOL
-
-The **Unified Context Orchestration Layer** is the core architectural concept behind Lattice OS. Traditional AI platforms treat each model as a separate product. UCOL treats them as **nodes in a shared reasoning network**.
-
-```
-User Query
-    │
-    ▼
-Query Classifier
-    │
-    ├── Code/Implementation ──► Claude (quality-first)
-    ├── Research/Strategy ────► JKlaw orchestrator
-    ├── Analysis/Synthesis ──► DeepSeek
-    └── Fast/General ────────► Gemini
-                │
-                ▼
-        Shared Knowledge Graph
-        (Supabase + pgvector)
-                │
-                ▼
-        Context enriches ALL future queries
-        across ALL models
-```
-
-Every conversation writes facts back into the graph. Every future conversation reads from it. The model changes; the memory doesn't.
+These directions matter, but they should be read as **active product evolution**, not as claims that every future surface is already fully mature today.
 
 ---
 
 ## Contributing
 
-1. Fork the repo and create a feature branch
-2. Run `npm run test:security` before opening a PR — all security tests must pass
-3. Run `npx tsc --noEmit --skipLibCheck` to verify TypeScript compiles clean
-4. PRs to `main` trigger CI (security tests + build verification + Firebase deploy)
+If you are contributing to the repo:
+
+1. work in bounded slices
+2. prefer runtime truth over assumption
+3. keep security and trust boundaries explicit
+4. run relevant tests before proposing merges
+5. treat the real product/runtime path as source of truth when validating behavior
 
 ---
 
 ## License
 
-Proprietary — © JJEM Global Technology, Inc. All rights reserved.
-
----
-
-## Built by
-
-**Invidious** · Founder, Lattice OS · Part of the JJEM Global Technology enterprise
+See the repository’s current license and ownership terms.

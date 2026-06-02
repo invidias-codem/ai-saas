@@ -1,0 +1,5 @@
+Already up to date
+Done in 22.9s using pnpm v11.5.0
+$ TAURI_BUILD=true tauri init --app-name 'Lattice OS' --window-title 'Lattice OS' --dist-dir ../out --dev-path http://localhost:3000 --before-dev-command 'pnpm dev' --before-build-command 'pnpm build'
+sh: tauri: command not found
+[ELIFECYCLE] Command failed.

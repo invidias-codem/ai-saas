@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useLocale } from "next-intl";
-import { Brain, MessageSquare, FileText, Workflow, Layers3, Cpu, Search, Zap } from "lucide-react";
+import { Brain, MessageSquare, FileText, Workflow, Layers3, Cpu, Search, Zap, Settings } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { WorkspaceSyncManager } from "@/components/harness/WorkspaceSyncManager";
 
 interface OperatingProfile {
   id: string;
@@ -86,7 +87,15 @@ export default function WorkspaceHomePage() {
           <Layers3 className="w-4 h-4" />
           Workspace overview
         </div>
-        <h1 className="text-3xl md:text-4xl font-bold tracking-tight">{workspace?.name || 'Workspace'}</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">{workspace?.name || 'Workspace'}</h1>
+          <Link href={`/${locale}/workspaces/${workspaceId}/settings`}>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Settings className="w-4 h-4" />
+              Settings
+            </Button>
+          </Link>
+        </div>
         <p className="text-muted-foreground max-w-2xl">
           {workspace?.description || 'This workspace will become the home for shared memory, prepared context, conversations, and durable outputs.'}
         </p>
@@ -106,6 +115,8 @@ export default function WorkspaceHomePage() {
           </div>
         </div>
       </Card>
+
+      <WorkspaceSyncManager workspaceId={workspaceId} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <Link href={`/${locale}/workspaces/${workspaceId}/conversation`}>

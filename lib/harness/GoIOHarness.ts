@@ -157,8 +157,61 @@ export class GoIOHarness implements IOHarness {
     return this.sendRequest('patch_file', { filePath, search_block: searchBlock, replace_block: replaceBlock });
   }
 
-  public async runCommand(command: string, timeoutMs?: number): Promise<ToolExecutionResult> {
-    return this.sendRequest('run_command', { command, timeoutMs });
+  public async executeCommandSecure(command: string, timeoutSeconds: number, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    return this.sendRequest('execute_command_secure', { 
+      command, 
+      timeout_seconds: timeoutSeconds, 
+      path: this.workspaceRoot,
+      workspace_id: workspaceId, 
+      user_id: userId 
+    });
+  }
+
+  public async discoverDocuments(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    return this.sendRequest('discover_documents_secure', { path: targetPath, workspace_id: workspaceId, user_id: userId });
+  }
+
+  public async extractText(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    return this.sendRequest('extract_text_secure', { path: targetPath, workspace_id: workspaceId, user_id: userId });
+  }
+
+  public async summarizeRepo(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    return this.sendRequest('summarize_repo_secure', { path: targetPath, workspace_id: workspaceId, user_id: userId });
+  }
+
+  public async semanticSearch(query: string, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    return this.sendRequest('semantic_search_secure', { query: query, workspace_id: workspaceId, user_id: userId });
+  }
+
+  public async ingestWorkspace(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    const apiBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const authToken = process.env.LATTICE_AUTH_TOKEN || '';
+    
+    return this.sendRequest('start_workspace_ingestion', { 
+      path: targetPath, 
+      workspace_id: workspaceId, 
+      user_id: userId,
+      api_base_url: apiBaseUrl,
+      auth_token: authToken
+    });
+  }
+
+  public async insertEpisodicEvent(workspaceId: string, eventType: string, content: string, metadata: string, embedding: number[]): Promise<ToolExecutionResult> {
+    return this.sendRequest('insert_episodic_event', {
+      workspace_id: workspaceId,
+      event_type: eventType,
+      content,
+      metadata,
+      embedding
+    });
+  }
+
+  public async searchEpisodicEvents(workspaceId: string, queryEmbedding: number[], topK: number): Promise<ToolExecutionResult> {
+    return this.sendRequest('search_episodic_events', {
+      workspace_id: workspaceId,
+      query_embedding: queryEmbedding,
+      top_k: topK
+    });
   }
 
   public shutdown() {

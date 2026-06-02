@@ -68,3 +68,30 @@ func TestGetRelativePath(t *testing.T) {
 		})
 	}
 }
+
+func TestIsPathContained(t *testing.T) {
+	root := "/var/log/app"
+
+	tests := []struct {
+		name     string
+		target   string
+		expected bool
+	}{
+		{"Inside root", "/var/log/app/info.log", true},
+		{"Same as root", "/var/log/app", true},
+		{"Trailing slash root match", "/var/log/app/", true},
+		{"Outside root", "/var/log/other.log", false},
+		{"Path traversal outside", "/var/log/app/../../etc/passwd", false},
+		{"Lexical trick (different folder starting with same name)", "/var/log/app-data/info.log", false},
+		{"Relative path traversal outside", "../../../../etc/passwd", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			contained, _ := IsPathContained(root, tt.target)
+			if contained != tt.expected {
+				t.Errorf("IsPathContained() = %v, want %v for target %s", contained, tt.expected, tt.target)
+			}
+		})
+	}
+}
