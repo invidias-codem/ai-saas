@@ -237,7 +237,7 @@ export default async function HarnessDashboardPage() {
                 {sortedDeniedTools.map(([tool, count]) => (
                   <div key={tool} className="flex justify-between items-center">
                     <span className="text-sm font-mono text-muted-foreground">{tool}</span>
-                    <span className="text-sm font-bold">{count}</span>
+                    <span className="text-sm font-bold">{String(count)}</span>
                   </div>
                 ))}
                 {sortedDeniedTools.length === 0 && <p className="text-sm text-muted-foreground">No denials recorded.</p>}
@@ -250,7 +250,7 @@ export default async function HarnessDashboardPage() {
                 {sortedTopErrors.map(([errClass, count]) => (
                   <div key={errClass} className="flex justify-between items-center">
                     <span className="text-xs text-muted-foreground truncate max-w-[200px]">{errClass}</span>
-                    <span className="text-sm font-bold text-red-500">{count}</span>
+                    <span className="text-sm font-bold text-red-500">{String(count)}</span>
                   </div>
                 ))}
                 {sortedTopErrors.length === 0 && <p className="text-sm text-muted-foreground">No errors recorded.</p>}
