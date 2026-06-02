@@ -133,6 +133,7 @@
     "replicate": "^1.4.0",
     "resend": "^6.9.2",
     "svix": "^1.87.0",
+    "swr": "^2.4.1",
     "tailwind-merge": "^2.3.0",
     "tailwindcss-animate": "^1.0.7",
     "unpdf": "^1.4.0",

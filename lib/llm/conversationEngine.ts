@@ -177,7 +177,7 @@ export async function generateConversationReply(
     const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
     const { readFileTool, writeFileTool, patchFileTool } = await import('@/lib/agents/tools/harnessTools');
     const { executeCommandTool } = await import('@/lib/agents/tools/executionTools');
-    const { discoverDocumentsTool, extractTextTool, summarizeRepoTool } = await import('@/lib/agents/tools/intelligenceTools');
+    const { discoverDocumentsTool, extractTextTool, summarizeRepoTool, semanticSearchTool } = await import('@/lib/agents/tools/intelligenceTools');
 
     // 1. Initialize Registry with all agentic tools
     const registry = new ToolRegistry();
@@ -351,6 +351,7 @@ export async function generateConversationReply(
         userQuery,
       }
     };
+  }
 
 
   // ---------------------------------------------------------
