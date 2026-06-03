@@ -146,7 +146,7 @@ export async function runSwarmOrchestrator(initialState: SwarmState, model: Lang
                 if (context.ioHarness) {
                     for (const df of state.discoveredFiles) {
                         const res = await context.ioHarness.readFile(df.path);
-                        if (res.ok && res.output) {
+                        if (res.ok) {
                             df.content = res.output;
                         } else {
                             df.content = `// Error reading file: ${res.error}`;
