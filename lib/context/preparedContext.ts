@@ -1,4 +1,4 @@
-import type { UserResource } from '@clerk/types';
+type UserResource = any;
 import type { AgentMode } from '@/lib/llm/types';
 import type { UcolMemoryPlan, UcolMemoryScope, UcolRetrievalMode } from '@/lib/ucol/routing/types';
 import type { ExtractedFact } from '@/lib/intelligentMemory';
