@@ -40,7 +40,7 @@ export async function executeResearcher(state: SwarmState, model: LanguageModel,
       submit_handoff: aiTool({
         description: "Submit your final findings and handoff notes to the Coder. Call this exactly once when you are done.",
         parameters: ResearcherHandoffSchema,
-        execute: async () => {
+        execute: async (_args) => {
           return "Handoff submitted successfully. You must end your turn now.";
         }
       })
@@ -100,7 +100,7 @@ export async function executeReviewer(state: SwarmState, model: LanguageModel, c
       submit_handoff: aiTool({
         description: "Submit your final review verdict. Call this exactly once when you are done testing.",
         parameters: ReviewerHandoffSchema,
-        execute: async () => {
+        execute: async (_args) => {
           return "Review submitted successfully. You must end your turn now.";
         }
       })
