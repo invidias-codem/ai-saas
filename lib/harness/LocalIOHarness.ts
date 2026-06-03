@@ -205,4 +205,31 @@ export class LocalIOHarness implements IOHarness {
       });
     });
   }
+  public async discoverDocuments(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    return { ok: false, error: 'Not implemented in LocalIOHarness', code: 'NOT_IMPLEMENTED' };
+  }
+
+  public async extractText(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    return { ok: false, error: 'Not implemented in LocalIOHarness', code: 'NOT_IMPLEMENTED' };
+  }
+
+  public async summarizeRepo(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    return { ok: false, error: 'Not implemented in LocalIOHarness', code: 'NOT_IMPLEMENTED' };
+  }
+
+  public async semanticSearch(query: string, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    return { ok: false, error: 'Not implemented in LocalIOHarness', code: 'NOT_IMPLEMENTED' };
+  }
+
+  public async ingestWorkspace(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+    return { ok: false, error: 'Not implemented in LocalIOHarness', code: 'NOT_IMPLEMENTED' };
+  }
+
+  public async insertEpisodicEvent(workspaceId: string, eventType: string, content: string, metadata: string, embedding: number[]): Promise<ToolExecutionResult> {
+    return { ok: false, error: 'Not implemented in LocalIOHarness', code: 'NOT_IMPLEMENTED' };
+  }
+
+  public async searchEpisodicEvents(workspaceId: string, queryEmbedding: number[], topK: number): Promise<ToolExecutionResult> {
+    return { ok: false, error: 'Not implemented in LocalIOHarness', code: 'NOT_IMPLEMENTED' };
+  }
 }
