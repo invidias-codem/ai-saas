@@ -5,9 +5,11 @@ import createNextIntlPlugin from 'next-intl/plugin';
 const projectRoot = path.resolve('./');
 const isTauri = process.env.TAURI_BUILD === 'true';
 
+const isVercel = Boolean(process.env.VERCEL);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: isTauri ? 'export' : 'standalone',
+  output: isTauri ? 'export' : isVercel ? undefined : 'standalone',
   // Enable MDX pages
   pageExtensions: ['js', 'jsx', 'mdx', 'ts', 'tsx'],
 
