@@ -12,12 +12,12 @@ import { readFileTool } from '../tools/harnessTools';
 import { executeCommandTool } from '../tools/executionTools';
 import { z } from 'zod';
 
-// Helper to adapt our internal Tool interface to Vercel AI SDK tools
 function adaptTool(internalTool: any, context: AgentContext) {
   return aiTool({
     description: internalTool.description,
     parameters: internalTool.schema,
-    execute: async (args) => {
+    // @ts-expect-error - AI SDK dynamic zod inference fails here since internalTool is any
+    execute: async (args: any) => {
       const res = await internalTool.execute(args, context);
       if (!res.success) return `Error: ${res.error || 'Tool execution failed'}`;
       return res.data ? JSON.stringify(res.data) : 'Success';
