@@ -56,7 +56,13 @@ const nextConfig = {
       '.agent/skills/**',
       'functions/**/venv/**',
       'functions/**/__pycache__/**',
+      'functions/**',
       'anycrawl/**',
+      'remote/**',
+      'packages/**',
+      'go-harness/**',
+      '**/node_modules/.bin/**',
+      '**/.bin/**',
     ],
   },
   outputFileTracingIncludes: {

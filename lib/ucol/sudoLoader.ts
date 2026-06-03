@@ -78,7 +78,10 @@ const DEFAULT_CACHE_MS = 5 * 60 * 1000; // 5 minutes
  * Project root resolved relative to this file.
  * __dirname = lib/ucol  →  two levels up = project root
  */
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+// Use process.cwd() instead of __dirname to avoid Turbopack tracing the entire
+// project tree. The /*turbopackIgnore: true*/ comment prevents NFT from walking
+// up from this file.
+const PROJECT_ROOT = path.join(/*turbopackIgnore: true*/ process.cwd());
 
 // ─── Registry API ─────────────────────────────────────────────────────────────
 
@@ -162,7 +165,7 @@ export async function loadSudoPrompt(
   }
 
   // ── 3. Convention path: lib/ucol/agents/prompts/<name>.sudo.md ─────────
-  const ucolConventionPath = path.resolve(
+  const ucolConventionPath = path.join(
     PROJECT_ROOT,
     'lib',
     'ucol',
@@ -177,7 +180,7 @@ export async function loadSudoPrompt(
   }
 
   // ── 4. Agent-local path: lib/agents/<name>/prompts/<name>.sudo.md ──────
-  const agentLocalPath = path.resolve(
+  const agentLocalPath = path.join(
     PROJECT_ROOT,
     'lib',
     'agents',
