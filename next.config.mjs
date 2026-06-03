@@ -67,12 +67,7 @@ const nextConfig = {
       '**/.bin/**',
     ],
   },
-  outputFileTracingIncludes: {
-    '/api/**/*': [
-      'node_modules/@google-cloud/tasks/build/esm/src/**/*.json',
-      'node_modules/google-gax/build/src/**/*.json'
-    ]
-  },
+  // outputFileTracingIncludes removed to prevent pnpm symlink packaging errors
   experimental: {},
   webpack: (config, { isServer }) => {
     if (isServer) {
