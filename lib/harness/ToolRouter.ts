@@ -96,6 +96,6 @@ export class ToolRouter {
       };
     }
 
-    return this.harness.runCommand(args.command, args.timeoutMs);
+    return this.harness.executeCommandSecure(args.command, Math.ceil(args.timeoutMs / 1000), '', '');
   }
 }
