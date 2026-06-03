@@ -1,4 +1,4 @@
-import { generateText, generateObject, tool as aiTool, LanguageModel } from 'ai';
+import { generateText, generateObject, tool as aiTool, LanguageModel, stepCountIs } from 'ai';
 import { 
   SwarmState, 
   ResearcherHandoffSchema, 
@@ -44,7 +44,7 @@ export async function executeResearcher(state: SwarmState, model: LanguageModel,
         }
       })
     },
-    maxSteps: 5,
+    stopWhen: stepCountIs(5),
     onStepFinish: (step) => {
         if (context.onStep && step.toolCalls.length > 0) {
             context.onStep({
@@ -62,7 +62,7 @@ export async function executeResearcher(state: SwarmState, model: LanguageModel,
     throw new Error("Researcher failed to call submit_handoff within max steps.");
   }
   
-  return handoffCall.args as z.infer<typeof ResearcherHandoffSchema>;
+  return handoffCall.input as z.infer<typeof ResearcherHandoffSchema>;
 }
 
 export async function executeCoder(state: SwarmState, model: LanguageModel, context: AgentContext) {
@@ -104,7 +104,7 @@ export async function executeReviewer(state: SwarmState, model: LanguageModel, c
         }
       })
     },
-    maxSteps: 5,
+    stopWhen: stepCountIs(5),
     onStepFinish: (step) => {
         if (context.onStep && step.toolCalls.length > 0) {
             context.onStep({
@@ -122,7 +122,7 @@ export async function executeReviewer(state: SwarmState, model: LanguageModel, c
     throw new Error("Reviewer failed to call submit_handoff within max steps.");
   }
   
-  return handoffCall.args as z.infer<typeof ReviewerHandoffSchema>;
+  return handoffCall.input as z.infer<typeof ReviewerHandoffSchema>;
 }
 
 export async function runSwarmOrchestrator(initialState: SwarmState, model: LanguageModel, context: AgentContext): Promise<SwarmState> {
