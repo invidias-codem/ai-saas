@@ -5,10 +5,6 @@ import OpenAI from 'openai';
 // We use the edge runtime if possible, but openai SDK sometimes prefers node.
 // We'll stick to the default node runtime for maximum compatibility.
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // Note: You must ensure this is set in your .env
-});
-
 export async function POST(req: Request) {
   try {
     // 1. Verify Authentication
@@ -28,6 +24,12 @@ export async function POST(req: Request) {
     if (!process.env.OPENAI_API_KEY) {
       return new NextResponse('OpenAI API key not configured on server', { status: 500 });
     }
+
+    // Lazy-initialize the OpenAI client inside the handler so the module
+    // can be loaded during Next.js build without requiring env vars.
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
 
     // 2. Parse Payload
     const body = await req.json();
