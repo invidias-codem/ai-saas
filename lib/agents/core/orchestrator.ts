@@ -15,8 +15,7 @@ import { z } from 'zod';
 function adaptTool(internalTool: any, context: AgentContext) {
   return aiTool({
     description: internalTool.description,
-    parameters: internalTool.schema,
-    // @ts-expect-error - AI SDK dynamic zod inference fails here since internalTool is any
+    inputSchema: internalTool.schema,
     execute: async (args: any) => {
       const res = await internalTool.execute(args, context);
       if (!res.success) return `Error: ${res.error || 'Tool execution failed'}`;
@@ -39,7 +38,7 @@ export async function executeResearcher(state: SwarmState, model: LanguageModel,
       readFile: adaptTool(readFileTool, context),
       submit_handoff: aiTool({
         description: "Submit your final findings and handoff notes to the Coder. Call this exactly once when you are done.",
-        parameters: ResearcherHandoffSchema,
+        inputSchema: ResearcherHandoffSchema,
         execute: async (_args) => {
           return "Handoff submitted successfully. You must end your turn now.";
         }
@@ -99,7 +98,7 @@ export async function executeReviewer(state: SwarmState, model: LanguageModel, c
       executeCommand: adaptTool(executeCommandTool, context),
       submit_handoff: aiTool({
         description: "Submit your final review verdict. Call this exactly once when you are done testing.",
-        parameters: ReviewerHandoffSchema,
+        inputSchema: ReviewerHandoffSchema,
         execute: async (_args) => {
           return "Review submitted successfully. You must end your turn now.";
         }
