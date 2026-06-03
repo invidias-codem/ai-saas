@@ -67,7 +67,8 @@ export const runCommandTool: Tool<{ command: string; timeoutMs?: number }, any> 
         if (!context.ioHarness) {
             return { success: false, error: "Execution harness is not available in the current context." };
         }
-        const res = await context.ioHarness.runCommand(input.command, input.timeoutMs);
+        const timeoutSeconds = input.timeoutMs ? Math.ceil(input.timeoutMs / 1000) : 30;
+        const res = await context.ioHarness.executeCommandSecure(input.command, timeoutSeconds, context.workspaceId || "default", context.userId);
         return { success: res.ok, data: res.ok ? res : undefined, error: res.ok ? undefined : res.error };
     }
 };
