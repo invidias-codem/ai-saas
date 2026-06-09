@@ -51,6 +51,12 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
+    // ─── DESKTOP STATIC EXPORT BYPASS ──────────
+    if (process.env.NEXT_PUBLIC_IS_DESKTOP === 'true') {
+        return NextResponse.next();
+    }
+    // ───────────────────────────────────────────
+
     const isApi = req.nextUrl.pathname.startsWith('/api') || req.nextUrl.pathname.startsWith('/trpc');
 
     // ─── REFERRAL TRACKING (runs on ALL page requests, no auth needed) ──────────
