@@ -85,6 +85,8 @@
     "@supabase/supabase-js": "^2.90.1",
     "@swc/helpers": "^0.5.18",
     "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-shell": "^2.3.5",
+    "@tauri-apps/plugin-stronghold": "^2.3.1",
     "@upstash/qstash": "^2.11.0",
     "@upstash/ratelimit": "^2.0.6",
     "@upstash/redis": "^1.35.3",
