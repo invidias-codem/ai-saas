@@ -14,8 +14,7 @@ export class GoIOHarness implements IOHarness {
   private binaryPath: string = '';
   
   private child: ChildProcess | null = null;
-  private pendingRequests: Map<string, (res: ToolExecutionResult) => void> = new Map();
-  private stdoutBuffer: string = '';
+  private daemonPort: number | null = null;
   private requestIdCounter: number = 0;
 
   constructor(workspaceRoot: string) {
@@ -23,11 +22,9 @@ export class GoIOHarness implements IOHarness {
   }
 
   public async initialize(): Promise<void> {
-    // Cross-Platform Suffix Resolution: Check if on Windows
     const suffix = os.platform() === 'win32' ? '.exe' : '';
     const binaryName = `lattice-harness${suffix}`;
 
-    // Dynamic Binary Lookup checking multiple paths
     const pathsToTry = [
       process.env.LATTICE_HARNESS_BINARY_PATH,
       path.resolve(process.cwd(), `go-harness/bin/${binaryName}`),
@@ -43,107 +40,103 @@ export class GoIOHarness implements IOHarness {
         found = true;
         break;
       } catch {
-        // Path inaccessible or not executable; try next option
       }
     }
 
     if (!found) {
-      throw new Error(
-        `Go harness execution binary not found or not executable. Checked paths: ${pathsToTry.join(
-          ', '
-        )}. Please make sure it is compiled inside go-harness first.`
-      );
+      throw new Error(`Go harness execution binary not found or not executable. Checked paths: ${pathsToTry.join(', ')}`);
     }
 
-    // Spawn the persistent daemon
-    this.child = spawn(this.binaryPath, [], {
-      cwd: this.workspaceRoot,
-      env: process.env,
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-
-    this.child.stderr?.on('data', (chunk: Buffer) => {
-      // Diagnostic traces routed to stderr
-      process.stderr.write(`[Go Daemon Debug] ${chunk.toString('utf-8')}`);
-    });
-
-    this.child.stdout?.on('data', (chunk: Buffer) => {
-      this.stdoutBuffer += chunk.toString('utf-8');
-      
-      let newlineIdx: number;
-      while ((newlineIdx = this.stdoutBuffer.indexOf('\n')) !== -1) {
-        // Extract line and remove \r to prevent Windows CRLF issues
-        const line = this.stdoutBuffer.substring(0, newlineIdx).trim();
-        this.stdoutBuffer = this.stdoutBuffer.substring(newlineIdx + 1);
-        
-        if (line) {
-          this.handleDaemonResponse(line);
-        }
-      }
-    });
-
-    this.child.on('error', (err) => {
-      console.error(`[Lattice OS] Failed to spawn Go harness execution bridge: ${err.message}`);
-      this.cleanupPending(null);
-    });
-
-    this.child.on('close', (code) => {
-      if (code !== 0 && code !== null) {
-        console.warn(`[Lattice OS] Go Harness Daemon closed unexpectedly with exit code: ${code}`);
-      }
-      this.cleanupPending(code);
-    });
-  }
-
-  private handleDaemonResponse(line: string) {
-    try {
-      const response = JSON.parse(line);
-      const callback = this.pendingRequests.get(response.id);
-      
-      if (callback) {
-        this.pendingRequests.delete(response.id);
-        if (response.error) {
-          callback({ ok: false, error: response.error.message, code: 'DAEMON_RPC_ERROR' });
-        } else {
-          callback(response.result);
-        }
-      }
-    } catch (err: any) {
-      console.error(`[Lattice OS] Failed to decode JSON-RPC frame line: ${err.message}. Line: ${line}`);
-    }
-  }
-
-  private sendRequest(action: string, inputs: any): Promise<ToolExecutionResult> {
-    return new Promise((resolve) => {
-      if (!this.child || this.child.killed || !this.child.stdin?.writable) {
-        return resolve({ ok: false, error: 'Harness daemon process is dead or uninitialized', code: 'DAEMON_DOWN' });
-      }
-
-      const id = `req_${++this.requestIdCounter}_${Date.now()}`;
-      this.pendingRequests.set(id, resolve);
-
-      const payload = {
-        id,
-        jsonrpc: "2.0",
-        workspaceRoot: this.workspaceRoot,
-        action,
-        inputs
-      };
-
-      this.child.stdin.write(JSON.stringify(payload) + '\n');
-    });
-  }
-
-  private cleanupPending(exitCode: number | null) {
-    for (const [id, resolve] of this.pendingRequests.entries()) {
-      resolve({
-        ok: false,
-        error: `Harness daemon terminated with exit status: ${exitCode}. Call aborted.`,
-        code: 'DAEMON_CRASH'
+    return new Promise((resolve, reject) => {
+      this.child = spawn(this.binaryPath, ['--port=0'], {
+        cwd: this.workspaceRoot,
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe']
       });
-    }
-    this.pendingRequests.clear();
+
+      this.child.stderr?.on('data', (chunk: Buffer) => {
+        process.stderr.write(`[Go Daemon Debug] ${chunk.toString('utf-8')}`);
+      });
+
+      let stdoutBuffer = '';
+      let portFound = false;
+
+      this.child.stdout?.on('data', (chunk: Buffer) => {
+        if (portFound) return;
+        stdoutBuffer += chunk.toString('utf-8');
+        let newlineIdx = stdoutBuffer.indexOf('\n');
+        if (newlineIdx !== -1) {
+          const line = stdoutBuffer.substring(0, newlineIdx).trim();
+          try {
+            const data = JSON.parse(line);
+            if (data.status === 'ready' && data.port) {
+              this.daemonPort = data.port;
+              portFound = true;
+              resolve();
+            }
+          } catch (e) {
+            console.error('[Lattice OS] Failed to parse daemon boot line:', line);
+          }
+        }
+      });
+
+      this.child.on('error', (err) => {
+        console.error(`[Lattice OS] Failed to spawn Go harness execution bridge: ${err.message}`);
+        reject(err);
+      });
+
+      this.child.on('close', (code) => {
+        if (code !== 0 && code !== null) {
+          console.warn(`[Lattice OS] Go Harness Daemon closed unexpectedly with exit code: ${code}`);
+        }
+        this.daemonPort = null;
+      });
+      
+      // Safety timeout
+      setTimeout(() => {
+        if (!portFound) {
+          reject(new Error('Timed out waiting for Go daemon to bind port.'));
+        }
+      }, 5000);
+    });
   }
+
+
+  private async sendRequest(action: string, inputs: any): Promise<ToolExecutionResult> {
+    if (!this.daemonPort) {
+      return { ok: false, error: 'Harness daemon process is dead or uninitialized', code: 'DAEMON_DOWN' };
+    }
+
+    const id = `req_${++this.requestIdCounter}_${Date.now()}`;
+    const payload = {
+      id,
+      jsonrpc: "2.0",
+      workspaceRoot: this.workspaceRoot,
+      action,
+      inputs
+    };
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.daemonPort}/rpc`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) {
+        return { ok: false, error: `HTTP ${res.status} from daemon`, code: 'DAEMON_HTTP_ERROR' };
+      }
+      
+      const jsonRes = await res.json();
+      if (jsonRes.error) {
+        return { ok: false, error: jsonRes.error.message, code: 'DAEMON_RPC_ERROR' };
+      }
+      return jsonRes.result;
+    } catch (err: any) {
+      return { ok: false, error: err.message, code: 'DAEMON_NETWORK_ERROR' };
+    }
+  }
+
 
   public async readFile(filePath: string): Promise<ToolExecutionResult> {
     return this.sendRequest('read_file', { filePath });

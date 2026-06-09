@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeDevCommand": "NEXT_PUBLIC_IS_DESKTOP=true pnpm dev",
+    "beforeBuildCommand": "NEXT_PUBLIC_IS_DESKTOP=true pnpm build"
   },
   "app": {
     "windows": [
@@ -38,6 +38,15 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "latticeos"
+        ]
+      }
     }
   }
 }

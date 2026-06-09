@@ -24,3 +24,8 @@ log = "0.4"
 tauri = { version = "2.11.2" }
 tauri-plugin-log = "2"
 tauri-plugin-shell = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-store = "2"
+tauri-plugin-stronghold = "2"
+sha2 = "0.10.8"

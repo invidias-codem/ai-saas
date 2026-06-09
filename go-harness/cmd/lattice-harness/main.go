@@ -1,14 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -170,6 +173,10 @@ func main() {
 	// Violent Descriptor Separation
 	log.SetOutput(os.Stderr)
 
+	portFlag := flag.Int("port", 0, "Port to bind the HTTP server to (0 for dynamic)")
+	corsOriginsFlag := flag.String("cors-origins", "http://localhost:3000,tauri://localhost,https://tauri.localhost", "Comma-separated list of allowed CORS origins")
+	flag.Parse()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	defer cleanupHarnesses()
@@ -189,9 +196,6 @@ func main() {
 		os.Exit(1)
 	}()
 
-	// Use bufio.Reader instead of bufio.Scanner to bypass strict 64KB/1MB line limits
-	reader := bufio.NewReader(os.Stdin)
-
 	// 1. Initialize the decoupled memory structures
 	telemetryManager := telemetry.NewManager() // Buffer is ready, flusher is OFF
 	rootRegistry := fsutil.NewRootRegistry()
@@ -206,22 +210,72 @@ func main() {
 		VectorDB:  vectorDB,
 	}
 
-	for {
-		line, err := reader.ReadBytes('\n')
-		if err != nil {
-			if err == io.EOF {
-				log.Printf("Received EOF on stdin. Shutting down daemon.")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rpc", func(w http.ResponseWriter, r *http.Request) {
+		// CORS Headers
+		origin := r.Header.Get("Origin")
+		allowedOrigins := strings.Split(*corsOriginsFlag, ",")
+		allowed := false
+		for _, o := range allowedOrigins {
+			if origin == strings.TrimSpace(o) {
+				allowed = true
 				break
 			}
-			log.Printf("Daemon read error: %v", err)
-			break
+		}
+		if allowed {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			// Fallback for development if no origin is provided
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
 		}
 
-		if len(line) == 0 {
-			continue
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
 		}
 
-		go processFrame(ctx, session, line)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		processFrame(w, ctx, session, body)
+	})
+
+	addr := fmt.Sprintf("127.0.0.1:%d", *portFlag)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("Failed to bind to port: %v", err)
+	}
+
+	actualPort := listener.Addr().(*net.TCPAddr).Port
+
+	// Print ready status to stdout (MUST be stdout so parent process can parse it)
+	readyMsg := map[string]interface{}{
+		"status": "ready",
+		"port":   actualPort,
+	}
+	json.NewEncoder(os.Stdout).Encode(readyMsg)
+
+	srv := &http.Server{Handler: mux}
+
+	go func() {
+		<-ctx.Done()
+		srv.Shutdown(context.Background())
+	}()
+
+	log.Printf("Listening on http://127.0.0.1:%d", actualPort)
+	if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("HTTP server error: %v", err)
 	}
 }
 
@@ -250,46 +304,44 @@ func getOrInitHarness(workspaceRoot string) (*harness.LocalIOHarness, error) {
 	return h, nil
 }
 
-func writeResponse(resp JSONRPCResponse) {
-	// Thread-Safe Output (Mutex) to prevent stream interleaving
-	stdoutMutex.Lock()
-	defer stdoutMutex.Unlock()
-	json.NewEncoder(os.Stdout).Encode(resp)
+func writeResponse(w http.ResponseWriter, resp JSONRPCResponse) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
 
-func sendErrorResponse(id string, code int, message string) {
-	writeResponse(JSONRPCResponse{
+func sendErrorResponse(w http.ResponseWriter, id string, code int, message string) {
+	writeResponse(w, JSONRPCResponse{
 		ID:      id,
 		Version: "2.0",
 		Error:   &JSONRPCError{Code: code, Message: message},
 	})
 }
 
-func processFrame(ctx context.Context, session *SessionContext, line []byte) {
+func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionContext, line []byte) {
 	var req JSONRPCRequest
-	
+
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("Panic recovered in processFrame: %v", r)
-			sendErrorResponse(req.ID, -32603, fmt.Sprintf("Internal Server Error (Panic): %v", r))
+			sendErrorResponse(w, req.ID, -32603, fmt.Sprintf("Internal Server Error (Panic): %v", r))
 		}
 	}()
 
 	if err := json.Unmarshal(line, &req); err != nil {
-		sendErrorResponse("", -32700, "Parse error: invalid JSON string payload")
+		sendErrorResponse(w, "", -32700, "Parse error: invalid JSON string payload")
 		return
 	}
 
 	// Inner Ring Security check: verify the injected auth token
 	if expectedToken != "" && req.AuthToken != expectedToken {
 		log.Printf("Unauthorized JSON-RPC payload received. Expected valid auth token.")
-		sendErrorResponse(req.ID, -32000, "Unauthorized: Invalid or missing authToken")
+		sendErrorResponse(w, req.ID, -32000, "Unauthorized: Invalid or missing authToken")
 		return
 	}
 
 	ioHarness, err := getOrInitHarness(req.WorkspaceRoot)
 	if err != nil {
-		sendErrorResponse(req.ID, -32602, fmt.Sprintf("Invalid workspace initialization: %v", err))
+		sendErrorResponse(w, req.ID, -32602, fmt.Sprintf("Invalid workspace initialization: %v", err))
 		return
 	}
 
@@ -317,7 +369,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 				Output: fmt.Sprintf("Synchronized %d roots", len(args.Grants)),
 			}
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for sync_root_grants")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for sync_root_grants")
 			return
 		}
 
@@ -326,7 +378,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.ReadFileSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for read_file_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for read_file_secure")
 			return
 		}
 
@@ -335,7 +387,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.ListDirectorySecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for list_directory_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for list_directory_secure")
 			return
 		}
 
@@ -344,7 +396,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.StatPathSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for stat_path_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for stat_path_secure")
 			return
 		}
 
@@ -353,7 +405,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.StartWorkspaceIngestion(session.Registry, session.Telemetry, session.VectorDB, args.Path, args.WorkspaceID, args.UserID, args.AuthToken, args.ApiBaseUrl)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for start_workspace_ingestion")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for start_workspace_ingestion")
 			return
 		}
 
@@ -367,7 +419,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 				res = harness.ToolExecutionResult{Ok: true, Output: outputStr}
 			}
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for execute_command_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for execute_command_secure")
 			return
 		}
 
@@ -376,7 +428,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.DiscoverDocumentsSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for discover_documents_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for discover_documents_secure")
 			return
 		}
 
@@ -385,7 +437,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.ExtractTextSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for extract_text_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for extract_text_secure")
 			return
 		}
 
@@ -394,7 +446,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.SummarizeRepoSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for summarize_repo_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for summarize_repo_secure")
 			return
 		}
 
@@ -403,7 +455,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.SemanticSearchSecure(session.Registry, session.Telemetry, session.VectorDB, args.Query, args.WorkspaceID, args.UserID, expectedToken)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for semantic_search_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for semantic_search_secure")
 			return
 		}
 
@@ -417,7 +469,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 				res = harness.ToolExecutionResult{Ok: true, Output: "Episodic event inserted successfully"}
 			}
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for insert_episodic_event")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for insert_episodic_event")
 			return
 		}
 
@@ -432,7 +484,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 				res = harness.ToolExecutionResult{Ok: true, Output: string(b)}
 			}
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for search_episodic_events")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for search_episodic_events")
 			return
 		}
 
@@ -441,7 +493,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.CreateFileSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for create_file_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for create_file_secure")
 			return
 		}
 
@@ -450,7 +502,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.WriteFileSecure(session.Registry, session.Telemetry, args.Path, args.Content, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for write_file_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for write_file_secure")
 			return
 		}
 
@@ -459,7 +511,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.CreateDirectorySecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for create_directory_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for create_directory_secure")
 			return
 		}
 
@@ -468,7 +520,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.DeletePathSecure(session.Registry, session.Telemetry, args.Path, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for delete_path_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for delete_path_secure")
 			return
 		}
 
@@ -477,7 +529,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = harness.MovePathSecure(session.Registry, session.Telemetry, args.SrcPath, args.DestPath, args.WorkspaceID, args.UserID)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for move_path_secure")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for move_path_secure")
 			return
 		}
 
@@ -486,7 +538,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = ioHarness.ReadFile(ctx, args.FilePath)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for read_file")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for read_file")
 			return
 		}
 	case "write_file":
@@ -494,7 +546,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = ioHarness.WriteFile(ctx, args.FilePath, args.Content)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for write_file")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for write_file")
 			return
 		}
 	case "patch_file":
@@ -502,7 +554,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = ioHarness.PatchFile(ctx, args.FilePath, args.SearchBlock, args.ReplaceBlock)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for patch_file")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for patch_file")
 			return
 		}
 	case "run_command":
@@ -510,7 +562,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 		if json.Unmarshal(req.Inputs, &args) == nil {
 			res = ioHarness.RunCommand(ctx, args.Command, args.TimeoutMs)
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for run_command")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for run_command")
 			return
 		}
 	case "github_request":
@@ -519,11 +571,11 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 			var err error
 			res, err = harness.ExecuteGitHubRequest(ctx, args.Method, args.URL, args.Body, expectedToken, args.AllowedRepos)
 			if err != nil {
-				sendErrorResponse(req.ID, -32603, fmt.Sprintf("Failed to execute GitHub request: %v", err))
+				sendErrorResponse(w, req.ID, -32603, fmt.Sprintf("Failed to execute GitHub request: %v", err))
 				return
 			}
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for github_request")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for github_request")
 			return
 		}
 	case "ingest_repository":
@@ -537,7 +589,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 				GitHubToken:  args.GitHubToken,
 			})
 			if err != nil {
-				sendErrorResponse(req.ID, -32603, fmt.Sprintf("Crawler error: %v", err))
+				sendErrorResponse(w, req.ID, -32603, fmt.Sprintf("Crawler error: %v", err))
 				return
 			}
 			res = harness.ToolExecutionResult{
@@ -545,7 +597,7 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 				Output: "Repository ingested successfully",
 			}
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for ingest_repository")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for ingest_repository")
 			return
 		}
 	case "semantic_code_search":
@@ -560,11 +612,11 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 				APIBaseURL:   args.APIBaseURL,
 			})
 			if err != nil {
-				sendErrorResponse(req.ID, -32603, fmt.Sprintf("Search error: %v", err))
+				sendErrorResponse(w, req.ID, -32603, fmt.Sprintf("Search error: %v", err))
 				return
 			}
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for semantic_code_search")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for semantic_code_search")
 			return
 		}
 	case "get_file_contents":
@@ -573,19 +625,19 @@ func processFrame(ctx context.Context, session *SessionContext, line []byte) {
 			var err error
 			res, err = harness.GetFileContents(ctx, args.RepoFullName, args.FilePath, expectedToken, args.AllowedRepos)
 			if err != nil {
-				sendErrorResponse(req.ID, -32603, fmt.Sprintf("File read error: %v", err))
+				sendErrorResponse(w, req.ID, -32603, fmt.Sprintf("File read error: %v", err))
 				return
 			}
 		} else {
-			sendErrorResponse(req.ID, -32602, "Invalid params for get_file_contents")
+			sendErrorResponse(w, req.ID, -32602, "Invalid params for get_file_contents")
 			return
 		}
 	default:
-		sendErrorResponse(req.ID, -32601, fmt.Sprintf("Method '%s' not found", req.Action))
+		sendErrorResponse(w, req.ID, -32601, fmt.Sprintf("Method '%s' not found", req.Action))
 		return
 	}
 
-	writeResponse(JSONRPCResponse{
+	writeResponse(w, JSONRPCResponse{
 		ID:      req.ID,
 		Version: "2.0",
 		Result:  &res,

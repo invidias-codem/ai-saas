@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { ModalProvider } from "@/components/modal-provider";
+import { DesktopAuthProvider } from "@/components/providers/DesktopAuthProvider";
 import { NextIntlClientProvider } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { locales } from '@/i18n';
@@ -88,7 +89,9 @@ export default async function LocaleLayout({
               disableTransitionOnChange={true}
             >
               <ModalProvider>
-                {children}
+                <DesktopAuthProvider>
+                  {children}
+                </DesktopAuthProvider>
               </ModalProvider>
               <Analytics />
             </ThemeProvider>

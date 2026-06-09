@@ -69,3 +69,4 @@ supabase/.temp/
 
 # research scratch (machine-generated)
 research/lambda-labs-deployment/
+scripts/grant-unlimited-credits.ts
