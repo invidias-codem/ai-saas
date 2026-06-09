@@ -1,6 +1,5 @@
 "use client";
 
-import { open } from "@tauri-apps/plugin-shell";
 import { Button } from "@/components/ui/button";
 import { Shield, ExternalLink } from "lucide-react";
 
@@ -19,8 +18,10 @@ export default function DesktopLogin() {
     
     // Open the system browser to the Clerk hosted sign-in page, 
     // which will redirect back to our custom deep link upon success.
+    const { open } = await import("@tauri-apps/plugin-shell");
     await open(`${fapiUrl}/sign-in?redirect_url=${redirectUri}`);
   };
+
 
   return (
     <div className="flex h-screen w-full flex-col items-center justify-center bg-background text-foreground">

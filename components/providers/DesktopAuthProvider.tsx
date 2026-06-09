@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { listen, Event } from "@tauri-apps/api/event";
-import { Stronghold, Store } from "@tauri-apps/plugin-stronghold";
+
 import { Clerk } from "@clerk/clerk-js";
 import { Loader2 } from "lucide-react";
 
@@ -17,12 +16,14 @@ export function DesktopAuthProvider({ children }: { children: React.ReactNode })
     if (!isDesktop) return;
 
     let unlisten: (() => void) | null = null;
-    let strongholdStore: Store | null = null;
+    let strongholdStore: any = null;
     let clerkInstance: Clerk | null = null;
 
     const initDesktopAuth = async () => {
       try {
-        const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!;
+        const { listen } = await import("@tauri-apps/api/event");
+        const { Stronghold } = await import("@tauri-apps/plugin-stronghold");
+        const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!
         clerkInstance = new Clerk(publishableKey);
         await clerkInstance.load();
 
@@ -62,7 +63,7 @@ export function DesktopAuthProvider({ children }: { children: React.ReactNode })
         }
 
         // 4. Listen for OS Deep Links (oauth_callback)
-        unlisten = await listen<string>("oauth_callback", async (event: Event<string>) => {
+        unlisten = await listen<string>("oauth_callback", async (event: { payload: string }) => {
           const url = event.payload;
           console.log("Intercepted OAuth Callback Deep Link:", url);
           
