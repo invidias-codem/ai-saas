@@ -56,7 +56,7 @@ export async function listMemories(
             .from('memory_bank')
             .select('*')
             .eq('user_id', userId)
-            .order('created_at', { ascending: false })
+            .order('extracted_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
         if (error) throw error;
@@ -67,7 +67,7 @@ export async function listMemories(
             content: safeDecompress(item.content),
             type: item.type,
             metadata: item.metadata,
-            createdAt: item.created_at
+            createdAt: item.extracted_at
         }));
     } catch (error) {
         console.error('Error listing memories:', error);
