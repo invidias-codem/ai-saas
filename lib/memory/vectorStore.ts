@@ -409,3 +409,99 @@ export async function updateMemory(
         return false;
     }
 }
+
+// ─── Hybrid RRF Retrieval ─────────────────────────────────────────────────────
+
+export interface HybridSearchOptions {
+    /** Limit results to a specific "owner/repo". null = search all repos. */
+    repoFilter?: string | null;
+    /** Number of results to return (default 10). */
+    limit?: number;
+    /** RRF k constant — higher values smooth out rank differences (default 60). */
+    k?: number;
+}
+
+/**
+ * Hybrid code retrieval using Reciprocal Rank Fusion (RRF).
+ *
+ * Combines two retrieval lanes and fuses their ranks:
+ *   - Vector lane:   cosine similarity search via 768-dim embeddings
+ *   - Keyword lane:  Postgres full-text search (websearch_to_tsquery)
+ *
+ * RRF formula: score(d) = 1/(k + rank_vector) + 1/(k + rank_keyword)
+ *
+ * This ensures that exact identifier matches (e.g. "user_integrations") score
+ * highly via keywords, while semantic matches (e.g. "save user data") score
+ * highly via the vector lane, and documents strong in both rank best overall.
+ *
+ * Migration guard: if search_code_rrf is not yet deployed (the SQL migration
+ * hasn't run), falls back transparently to the existing vector-only search.
+ *
+ * @param userId   Clerk user_id to scope results
+ * @param query    Natural language or identifier query string
+ * @param options  Optional repo filter, result limit, k constant
+ */
+export async function searchCodeHybrid(
+    userId: string,
+    query: string,
+    options: HybridSearchOptions = {}
+): Promise<Memory[]> {
+    const { repoFilter = null, limit = 10, k = 60 } = options;
+
+    try {
+        // Generate the query embedding (same provider/dimension as stored vectors)
+        const embeddingResult = await generateEmbeddingWithMetadata(query);
+        const { safeDecompress } = await import('@/lib/compression');
+
+        // Only the 768-dim lane is supported by search_code_rrf (Gemini embeddings).
+        // Fall back to vector-only if a 3072-dim provider is active.
+        if (embeddingResult.dimension !== 768) {
+            console.warn('[HybridSearch] 3072-dim provider active — falling back to vector-only search');
+            return searchMemories(userId, query, limit, 'github');
+        }
+
+        const { data, error } = await supabase.rpc('search_code_rrf', {
+            p_user_id: userId,
+            p_query_text: query,
+            p_query_embedding: embeddingResult.vector,
+            p_match_count: limit,
+            p_k: k,
+            p_repo_filter: repoFilter,
+        });
+
+        if (error) {
+            // Migration not yet applied or RPC unavailable — degrade gracefully
+            if (error.code === 'PGRST202' || error.message?.includes('search_code_rrf')) {
+                console.warn('[HybridSearch] search_code_rrf RPC not found — falling back to vector-only');
+                return searchMemories(userId, query, limit, 'github');
+            }
+            throw error;
+        }
+
+        console.info('[HybridSearch] RRF results', {
+            count: data?.length ?? 0,
+            repoFilter,
+            provider: embeddingResult.provider,
+        });
+
+        return (data ?? []).map((item: any) => ({
+            id: item.id,
+            userId,
+            content: safeDecompress(item.content),
+            type: 'code_chunk' as MemoryType,
+            metadata: {
+                ...item.metadata,
+                rrfScore: item.rrf_score,
+                vecRank: item.vec_rank,
+                kwRank: item.kw_rank,
+            },
+            similarity: item.rrf_score,
+            createdAt: item.metadata?.indexedAt ?? new Date().toISOString(),
+        }));
+
+    } catch (error) {
+        console.error('[HybridSearch] Error, falling back to vector-only:', error);
+        return searchMemories(userId, query, limit, 'github');
+    }
+}
+

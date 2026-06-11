@@ -70,6 +70,23 @@ const envSchema = z.object({
   VERCEL_LOG_WEBHOOK_SECRET: z.string().optional(),
   CLERK_WEBHOOK_SECRET: z.string().optional(),
   CRON_SECRET: z.string().optional(),
+
+  // GitHub App — Context Engine (per-user installation flow)
+  // Register at: https://github.com/settings/apps
+  // Private key must be base64-encoded (no raw newlines) for Vercel + Turbopack compatibility.
+  // e.g.: base64 -i private-key.pem | tr -d '\n' > private-key.b64
+  GITHUB_APP_ID: z.string().optional(),
+  GITHUB_APP_PRIVATE_KEY_B64: z.string().optional(),
+  GITHUB_APP_WEBHOOK_SECRET: z.string().optional(),
+  GITHUB_APP_CLIENT_ID: z.string().optional(),
+  GITHUB_APP_CLIENT_SECRET: z.string().optional(),
+
+  // Inngest Cloud — Durable background execution
+  // INNGEST_EVENT_KEY:   Used by the server to push events into the Inngest Cloud queue.
+  // INNGEST_SIGNING_KEY: Used by /api/inngest to verify requests come from Inngest Cloud.
+  // Generate both at: https://app.inngest.com → your environment → "Manage" → "Event keys" / "Signing key"
+  INNGEST_EVENT_KEY: z.string().optional(),
+  INNGEST_SIGNING_KEY: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.DEPLOYMENT_MODE === "A") {
     const requiredModeAVars = [
