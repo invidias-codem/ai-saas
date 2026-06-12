@@ -1,4 +1,5 @@
 import { App } from "@octokit/app";
+import { Octokit } from "octokit";
 import { requireEnv } from "@/lib/env";
 
 let _app: App | null = null;
@@ -26,6 +27,7 @@ function getApp(): App {
     appId,
     privateKey,
     webhooks: { secret: webhookSecret },
+    Octokit,
   });
 
   return _app;

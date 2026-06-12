@@ -1,15 +1,17 @@
+packages:
+  - '.'
 allowBuilds:
   '@clerk/shared': true
   '@firebase/util': true
   '@google/genai': true
   '@parcel/watcher': true
   '@swc/core': true
-  browser-tabs-lock: set this to true or false
-  bufferutil: set this to true or false
-  core-js: set this to true or false
+  browser-tabs-lock: true
+  bufferutil: true
+  core-js: true
   electron-winstaller: true
   esbuild: true
   protobufjs: true
   sharp: true
   unrs-resolver: true
-  utf-8-validate: set this to true or false
+  utf-8-validate: true

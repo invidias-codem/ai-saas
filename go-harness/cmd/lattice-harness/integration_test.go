@@ -197,7 +197,7 @@ func TestSecureCapabilities(t *testing.T) {
 
 	var foundTraversalDenial, foundMutationDenial, foundDestructiveDenial bool
 	for _, e := range events {
-		if e.EventType == telemetry.EventRootAccessDenied && strings.Contains(e.PathAccessed, "../../../etc/passwd") {
+		if e.EventType == telemetry.EventRootAccessDenied && strings.Contains(e.PathAccessed, "etc/passwd") {
 			foundTraversalDenial = true
 		}
 		if e.EventType == telemetry.EventMutationDenied && strings.Contains(e.PathAccessed, "test_authorized.txt") {

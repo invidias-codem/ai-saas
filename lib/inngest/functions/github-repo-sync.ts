@@ -58,8 +58,8 @@ export const githubRepoSync = inngest.createFunction(
       key: "event.data.userId + '-' + event.data.owner + '-' + event.data.repo",
       limit: 1,
     },
+    triggers: [{ event: "github/repo.sync" as GitHubRepoSyncEvent["name"] }],
   },
-  { event: "github/repo.sync" as GitHubRepoSyncEvent["name"] },
 
   async ({ event, step, logger }) => {
     const { installationId, owner, repo, userId, triggeredBy, commitSha } =
@@ -71,8 +71,8 @@ export const githubRepoSync = inngest.createFunction(
     // Step 1: Fetch the full file tree
     const treeFiles = await step.run("fetch-tree", async () => {
       const octokit = await getInstallationOctokit(installationId);
-      const { data: repoData } = await octokit.rest.repos.get({ owner, repo });
-      const { data: treeData } = await octokit.rest.git.getTree({
+      const { data: repoData } = await octokit.request("GET /repos/{owner}/{repo}", { owner, repo });
+      const { data: treeData } = await octokit.request("GET /repos/{owner}/{repo}/git/trees/{tree_sha}", {
         owner,
         repo,
         tree_sha: repoData.default_branch,
@@ -90,10 +90,9 @@ export const githubRepoSync = inngest.createFunction(
         )
         .map((item) => ({
           path: item.path!,
-          sha: item.sha ?? "",
           size: item.size,
         })) as TreeFile[];
-    });
+    }) as TreeFile[];
 
     // Step 2: Filter to indexable files (pure CPU, no network)
     const filesToIndex = await step.run("filter-files", async () => {
@@ -108,7 +107,7 @@ export const githubRepoSync = inngest.createFunction(
           return CODE_EXTENSIONS.has(ext);
         })
         .slice(0, MAX_FILES_PER_RUN);
-    });
+    }) as TreeFile[];
 
     logger.info(`[RepoSync] ${filesToIndex.length} files to index`);
 
@@ -130,7 +129,7 @@ export const githubRepoSync = inngest.createFunction(
         await Promise.all(
           batch.map(async (file) => {
             try {
-              const { data: fileData } = await octokit.rest.repos.getContent({
+              const { data: fileData } = await octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
                 owner,
                 repo,
                 path: file.path,
