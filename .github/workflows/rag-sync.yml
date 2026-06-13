@@ -24,14 +24,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps --no-audit
+        run: pnpm install --frozen-lockfile
 
       - name: Check RAG Budget
         id: budget
@@ -39,12 +44,14 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         run: |
-          result=$(npx tsx scripts/check-rag-budget.ts 2>&1)
+          result=$(npx tsx scripts/check-rag-budget.ts 2>&1) || true
           echo "$result"
           if echo "$result" | grep -q "Budget OK"; then
             echo "budget_ok=true" >> $GITHUB_OUTPUT
           else
+            echo "::error::RAG budget check failed: $result"
             echo "budget_ok=false" >> $GITHUB_OUTPUT
+            exit 1
           fi
 
       - name: Fetch Recent PRs
