@@ -8,7 +8,7 @@ on:
       - 'lib/security/**'
       - '__tests__/security/**'
       - 'package.json'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
   pull_request:
     branches: [main, develop]
     paths:
@@ -16,7 +16,7 @@ on:
       - 'lib/security/**'
       - '__tests__/security/**'
       - 'package.json'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
 
 permissions:
   contents: read        # read-only — security tests never push
@@ -36,14 +36,14 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       
       - name: Install pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
           version: 9
 
       - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '22.x'
           cache: 'pnpm'
       
       - name: Install dependencies
