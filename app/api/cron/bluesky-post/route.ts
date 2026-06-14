@@ -49,9 +49,19 @@ function requireCronAuth(req: NextRequest): NextResponse | null {
     );
   }
 
-  const provided = getBearerToken(req);
-  if (!provided || provided !== cronSecret) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  const bearer = getBearerToken(req);
+  const querySecret = req.nextUrl.searchParams.get('secret');
+  const provided = bearer ?? querySecret ?? '';
+
+  if (!provided || provided.trim() !== cronSecret) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Unauthorized',
+        hint: 'Pass Authorization: Bearer <CRON_SECRET> header or ?secret=<CRON_SECRET>',
+      },
+      { status: 401 }
+    );
   }
 
   return null;
