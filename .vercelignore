@@ -1,24 +1,24 @@
 # Exclude Firebase/Cloud Functions (has its own node_modules with symlinks)
-functions/
+/functions/
 
 # Exclude anycrawl subproject (has its own node_modules with symlinks)
-anycrawl/
+/anycrawl/
 
 # Exclude remote/mobile subproject (has its own node_modules with symlinks)
-remote/
+/remote/
 
 # Exclude local packages directory
-packages/
+/packages/
 
 # Exclude Go harness binary artifacts
-go-harness/
+/go-harness/
 
 # Exclude Python venvs
 **/venv/
 **/__pycache__/
 
 # Exclude Tauri build artifacts
-src-tauri/target/
+/src-tauri/target/
 
-# Exclude AI agent skill directories
-.agent/
+# Exclude AI agent skill directories (root .agent only)
+/.agent/
