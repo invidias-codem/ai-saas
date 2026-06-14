@@ -13,16 +13,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
+          cache: 'pnpm'
       - name: Build Next.js app
         id: build_app
         env:
           GOOGLE_API_KEY: "dummy-key-for-build"
-        run: npm install --legacy-peer-deps && npm run build > build_logs.txt 2>&1 || { cat build_logs.txt; exit 1; }
+        run: pnpm install --no-frozen-lockfile && pnpm run build > build_logs.txt 2>&1 || { cat build_logs.txt; exit 1; }
 
       - name: Ingest CI Failure to UCOL Agent
         if: failure() && steps.build_app.outcome == 'failure'
@@ -30,7 +34,7 @@ jobs:
           ERROR_LOG=$(tail -n 100 build_logs.txt | jq -Rsa .)
           curl -s -X POST "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}/rest/v1/logs" \
             -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Authorization: Bearer *** secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json" \
             -d "{\"level\":\"error\",\"source\":\"github_actions_ci\",\"resolution_status\":\"pending\",\"message\":$ERROR_LOG,\"metadata\":{\"run_id\":\"${{ github.run_id }}\",\"repo\":\"${{ github.repository }}\",\"branch\":\"${{ github.head_ref }}\"}}"
       - uses: FirebaseExtended/action-hosting-deploy@e2eda2e106cfa35cdbcf4ac9ddaf6c4756df2c8c # v0

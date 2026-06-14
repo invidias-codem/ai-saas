@@ -31,14 +31,19 @@ jobs:
           # untrusted code that may be checked out from a PR branch.
           persist-credentials: false
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps --no-audit
+        run: pnpm install --no-frozen-lockfile
 
       - name: Check RAG Budget
         id: budget

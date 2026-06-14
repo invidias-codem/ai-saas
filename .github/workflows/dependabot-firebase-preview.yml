@@ -43,16 +43,21 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Build Next.js app
         env:
           GOOGLE_API_KEY: "dummy-key-for-build"
-        run: npm install --legacy-peer-deps && npm run build
+        run: pnpm install --no-frozen-lockfile && pnpm run build
 
       # Step 4: Deploy Firebase preview — now works because pull_request_target has secrets
       - name: Deploy Firebase Preview

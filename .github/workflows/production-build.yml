@@ -23,7 +23,7 @@ jobs:
       NEXT_DISABLE_ESLINT: '1'
       NODE_OPTIONS: --max-old-space-size=8192
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_Y2xlcmsuZXhhbXBsZS5jb20k' }}
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY || 'sk_test_dummy' }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY || '***' }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co' }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'dummy_key' }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy_anon_key' }}
@@ -36,11 +36,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Print runner resources
         run: |
@@ -54,13 +59,13 @@ jobs:
           df -h || true
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps --no-audit
+        run: pnpm install --no-frozen-lockfile
 
       - name: Remove broken symlinks
         run: find . -path ./node_modules -prune -o -type l -print | xargs -I{} sh -c 'test -e "{}" || rm -f "{}"' 2>/dev/null || true
 
       - name: Production build (webpack)
-        run: npm run build -- --webpack 2>&1 | tee build.log
+        run: pnpm run build -- --webpack 2>&1 | tee build.log
 
       - name: Upload build log
         if: always()

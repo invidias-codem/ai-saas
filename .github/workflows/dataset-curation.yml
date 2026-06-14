@@ -26,18 +26,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: pnpm install --no-frozen-lockfile
 
       - name: Curate dataset (last 30 days, negative ratings)
         run: |
-          npm run curate:dataset -- \
+          pnpm run curate:dataset -- \
             --since-days 30 \
             --min-rating -1 \
             --max-rating -1 \

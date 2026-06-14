@@ -38,16 +38,22 @@ jobs:
         run: |
           echo "No prompt/memory/llm changes detected; skipping eval."
 
+      - name: Setup pnpm
+        if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node
         if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: npm
+          node-version: '22'
+          cache: pnpm
 
       - name: Install dependencies
         if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
-        run: npm install --legacy-peer-deps
+        run: pnpm install --no-frozen-lockfile
 
       # Option 1: download curated dataset artifact from nightly workflow.
       # For now we re-run curation in the PR job for determinism.
@@ -57,7 +63,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          npm run curate:dataset -- \
+          pnpm run curate:dataset -- \
             --since-days 30 \
             --min-rating -1 \
             --max-rating -1 \
@@ -82,7 +88,7 @@ jobs:
 
           if [ -f "datasets/golden/dataset.jsonl" ]; then
             echo "Running eval on Golden Dataset..."
-            npm run eval:run -- \
+            pnpm run eval:run -- \
               --dataset "datasets/golden/dataset.jsonl" \
               --out eval_golden \
               --disable-side-effects true \
@@ -91,7 +97,7 @@ jobs:
             
             # Compare to baseline if it exists
             if [ -f "datasets/golden/baseline.json" ]; then
-              npm run eval:compare -- --report eval_golden/report.json --baseline datasets/golden/baseline.json
+              pnpm run eval:compare -- --report eval_golden/report.json --baseline datasets/golden/baseline.json
             else
               echo "No baseline found at datasets/golden/baseline.json, skipping comparison."
             fi
@@ -120,7 +126,7 @@ jobs:
              echo "No dynamic dataset generated, skipping dynamic replay."
           else
              echo "Running eval on Dynamic Dataset: $DATASET_DIR"
-             npm run eval:run -- \
+             pnpm run eval:run -- \
                --dataset "datasets/${DATASET_DIR}/dataset.jsonl" \
                --out eval \
                --disable-side-effects true \

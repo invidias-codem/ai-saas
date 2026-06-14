@@ -43,11 +43,16 @@ jobs:
         with:
           fetch-depth: 0  # Full history for diff analysis
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
+          cache: 'pnpm'
 
       - name: Get PR Diff
         id: diff
@@ -75,7 +80,7 @@ jobs:
           if [ -n "${{ secrets.OPENCLAW_WEBHOOK_URL }}" ]; then
             curl -X POST "${{ secrets.OPENCLAW_WEBHOOK_URL }}" \
               -H "Content-Type: application/json" \
-              -H "Authorization: Bearer ${{ secrets.OPENCLAW_WEBHOOK_SECRET }}" \
+              -H "Authorization: Bearer *** secrets.OPENCLAW_WEBHOOK_SECRET }}" \
               -d '{
                 "action": "review_pr",
                 "repo": "${{ env.REPO_NAME }}",
@@ -99,7 +104,7 @@ jobs:
           echo "🧠 Enriching PR context with Genie RAG..."
           
           # Install dependencies if needed
-          npm install --legacy-peer-deps --no-audit 2>/dev/null || true
+          pnpm install --no-frozen-lockfile 2>/dev/null || true
           
           # Run RAG enrichment
           npx tsx scripts/pr-rag-enrichment.ts \
