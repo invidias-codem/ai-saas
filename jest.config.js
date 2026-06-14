@@ -10,6 +10,7 @@ const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^uuid$': '<rootDir>/__mocks__/uuid.js',
   },
   testEnvironment: 'jest-environment-node',
   testMatch: [
@@ -34,7 +35,10 @@ const customJestConfig = {
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   testTimeout: 10000,
-  transformIgnorePatterns: ['<rootDir>/anycrawl/'],
+  transformIgnorePatterns: [
+    '<rootDir>/anycrawl/',
+    '/node_modules/(?!.*uuid.*)',
+  ],
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
