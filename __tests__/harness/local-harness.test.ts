@@ -134,7 +134,7 @@ describe('LocalIOHarness', () => {
 
   describe('Command Execution Limits (Timeout and Truncation)', () => {
     it('should run a benign command successfully', async () => {
-      const result = await harness.runCommand('echo "harness test success"') as any;
+      const result = await harness.executeCommandSecure('echo "harness test success"', 30, 'test-ws', 'test-user') as any;
       expect(result.ok).toBe(true);
       expect(result.output).toBe('harness test success');
       expect(result.meta).toEqual(
@@ -146,9 +146,9 @@ describe('LocalIOHarness', () => {
       );
     });
 
-    it('should aggressively terminate command execution if it times out via custom timeoutMs', async () => {
+    it('should aggressively terminate command execution if it times out via custom timeoutSeconds', async () => {
       const start = Date.now();
-      const result = await harness.runCommand('sleep 5', 150) as any;
+      const result = await harness.executeCommandSecure('sleep 5', 0.15, 'test-ws', 'test-user') as any;
       const duration = Date.now() - start;
 
       expect(result.ok).toBe(false);
@@ -162,7 +162,7 @@ describe('LocalIOHarness', () => {
 
     it('should aggressively terminate and truncate output if it exceeds size limits', async () => {
       // Limit is 512KB. Let's write a node snippet that outputs 600KB.
-      const result = await harness.runCommand('node -e "console.log(\'a\'.repeat(600 * 1024))"') as any;
+      const result = await harness.executeCommandSecure('node -e "console.log(\'a\'.repeat(600 * 1024))"', 30, 'test-ws', 'test-user') as any;
       expect(result.ok).toBe(false);
       expect(result.code).toBe('COMMAND_FAILED');
       expect(result.error).toContain('Command terminated due to output size limit');
@@ -174,14 +174,14 @@ describe('LocalIOHarness', () => {
 
     it('should allow outputs that are strictly below the size limit without truncation', async () => {
       // 100KB output
-      const result = await harness.runCommand('node -e "console.log(\'a\'.repeat(100 * 1024))"') as any;
+      const result = await harness.executeCommandSecure('node -e "console.log(\'a\'.repeat(100 * 1024))"', 30, 'test-ws', 'test-user') as any;
       expect(result.ok).toBe(true);
       expect(result.meta?.isTruncated).toBe(false);
       expect(result.output.length).toBe(100 * 1024);
     });
 
     it('should return ok: false and COMMAND_FAILED for invalid commands (exit 127)', async () => {
-      const result = await harness.runCommand('non_existent_command_xyz_123') as any;
+      const result = await harness.executeCommandSecure('non_existent_command_xyz_123', 30, 'test-ws', 'test-user') as any;
       expect(result.ok).toBe(false);
       expect(result.code).toBe('COMMAND_FAILED');
       expect(result.meta?.code).toBe(127);

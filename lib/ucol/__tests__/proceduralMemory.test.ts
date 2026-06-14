@@ -126,7 +126,7 @@ const FAKE_RECORD_ROW = {
   failure_count: 1,
   avg_latency_ms: 200,
   confidence: 5 / 6,
-  promoted_at: '2026-01-01T00:00:00Z',
+  promoted_at: '2026-01-01T00:00:00Z' as string | null,
   last_used_at: new Date().toISOString(),
   similarity: 0.95,
 };

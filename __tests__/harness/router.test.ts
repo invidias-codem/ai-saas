@@ -12,6 +12,13 @@ describe('ToolRouter', () => {
       writeFile: jest.fn(),
       patchFile: jest.fn(),
       executeCommandSecure: jest.fn(),
+      discoverDocuments: jest.fn(),
+      extractText: jest.fn(),
+      summarizeRepo: jest.fn(),
+      semanticSearch: jest.fn(),
+      ingestWorkspace: jest.fn(),
+      insertEpisodicEvent: jest.fn(),
+      searchEpisodicEvents: jest.fn(),
     };
     router = new ToolRouter(mockHarness);
   });

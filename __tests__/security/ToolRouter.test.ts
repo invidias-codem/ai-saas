@@ -7,16 +7,25 @@ describe('ToolRouter Security Policy', () => {
 
   beforeEach(() => {
     mockHarness = {
+      initialize: jest.fn(),
       readFile: jest.fn(),
       writeFile: jest.fn(),
-      runCommand: jest.fn(),
-    } as unknown as jest.Mocked<IOHarness>;
+      patchFile: jest.fn(),
+      executeCommandSecure: jest.fn(),
+      discoverDocuments: jest.fn(),
+      extractText: jest.fn(),
+      summarizeRepo: jest.fn(),
+      semanticSearch: jest.fn(),
+      ingestWorkspace: jest.fn(),
+      insertEpisodicEvent: jest.fn(),
+      searchEpisodicEvents: jest.fn(),
+    };
     toolRouter = new ToolRouter(mockHarness);
   });
 
   describe('run_command policy', () => {
     it('should allow safe commands', async () => {
-      mockHarness.runCommand.mockResolvedValue({ ok: true, output: 'Success' });
+      mockHarness.executeCommandSecure.mockResolvedValue({ ok: true, output: 'Success' });
       
       const result = await toolRouter.dispatch('run_command', {
         command: 'npm test',
@@ -24,7 +33,7 @@ describe('ToolRouter Security Policy', () => {
       });
 
       expect(result.ok).toBe(true);
-      expect(mockHarness.runCommand).toHaveBeenCalledWith('npm test', 5000);
+      expect(mockHarness.executeCommandSecure).toHaveBeenCalledWith('npm test', 5, '', '');
     });
 
     it('should block destructive commands (rm -rf)', async () => {
@@ -35,9 +44,9 @@ describe('ToolRouter Security Policy', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.code).toBe('POLICY_VIOLATION');
-        expect(result.error).toMatch(/destructive command/i);
+        expect(result.error).toContain('Command blocked by security policy');
       }
-      expect(mockHarness.runCommand).not.toHaveBeenCalled();
+      expect(mockHarness.executeCommandSecure).not.toHaveBeenCalled();
     });
 
     it('should block destructive commands (chmod -R 777)', async () => {
@@ -48,9 +57,9 @@ describe('ToolRouter Security Policy', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.code).toBe('POLICY_VIOLATION');
-        expect(result.error).toMatch(/destructive command/i);
+        expect(result.error).toContain('Command blocked by security policy');
       }
-      expect(mockHarness.runCommand).not.toHaveBeenCalled();
+      expect(mockHarness.executeCommandSecure).not.toHaveBeenCalled();
     });
 
     it('should block interactive commands (vim)', async () => {
@@ -61,9 +70,9 @@ describe('ToolRouter Security Policy', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.code).toBe('POLICY_VIOLATION');
-        expect(result.error).toMatch(/interactive command/i);
+        expect(result.error).toContain('Command blocked by security policy');
       }
-      expect(mockHarness.runCommand).not.toHaveBeenCalled();
+      expect(mockHarness.executeCommandSecure).not.toHaveBeenCalled();
     });
 
     it('should return schema validation errors for invalid arguments', async () => {
@@ -76,7 +85,7 @@ describe('ToolRouter Security Policy', () => {
       if (!result.ok) {
         expect(result.code).toBe('VALIDATION_ERROR');
       }
-      expect(mockHarness.runCommand).not.toHaveBeenCalled();
+      expect(mockHarness.executeCommandSecure).not.toHaveBeenCalled();
     });
   });
 });
