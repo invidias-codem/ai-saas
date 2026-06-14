@@ -11,7 +11,7 @@ describe('ToolRouter', () => {
       readFile: jest.fn(),
       writeFile: jest.fn(),
       patchFile: jest.fn(),
-      runCommand: jest.fn(),
+      executeCommandSecure: jest.fn(),
     };
     router = new ToolRouter(mockHarness);
   });
@@ -43,17 +43,17 @@ describe('ToolRouter', () => {
     });
 
     it('should route run_command successfully with valid args', async () => {
-      mockHarness.runCommand.mockResolvedValue({ ok: true, output: 'success output' });
+      mockHarness.executeCommandSecure.mockResolvedValue({ ok: true, output: 'success output' });
       const result = await router.dispatch('run_command', { command: 'npm run test', timeoutMs: 15000 });
       expect(result).toEqual({ ok: true, output: 'success output' });
-      expect(mockHarness.runCommand).toHaveBeenCalledWith('npm run test', 15000);
+      expect(mockHarness.executeCommandSecure).toHaveBeenCalledWith('npm run test', 15, '', '');
     });
 
     it('should route run_command using default timeout if not provided', async () => {
-      mockHarness.runCommand.mockResolvedValue({ ok: true, output: 'success output' });
+      mockHarness.executeCommandSecure.mockResolvedValue({ ok: true, output: 'success output' });
       const result = await router.dispatch('run_command', { command: 'npm run test' });
       expect(result).toEqual({ ok: true, output: 'success output' });
-      expect(mockHarness.runCommand).toHaveBeenCalledWith('npm run test', 30000);
+      expect(mockHarness.executeCommandSecure).toHaveBeenCalledWith('npm run test', 30, '', '');
     });
   });
 
@@ -120,13 +120,13 @@ describe('ToolRouter', () => {
       const result1 = await router.dispatch('run_command', { command: '' }) as any;
       expect(result1.ok).toBe(false);
       expect(result1.code).toBe('VALIDATION_ERROR');
-      expect(mockHarness.runCommand).not.toHaveBeenCalled();
+      expect(mockHarness.executeCommandSecure).not.toHaveBeenCalled();
 
       // Invalid type for timeoutMs
       const result2 = await router.dispatch('run_command', { command: 'ls', timeoutMs: 'invalid-timeout' }) as any;
       expect(result2.ok).toBe(false);
       expect(result2.code).toBe('VALIDATION_ERROR');
-      expect(mockHarness.runCommand).not.toHaveBeenCalled();
+      expect(mockHarness.executeCommandSecure).not.toHaveBeenCalled();
     });
   });
 
@@ -136,7 +136,7 @@ describe('ToolRouter', () => {
       expect(result.ok).toBe(false);
       expect(result.code).toBe('POLICY_VIOLATION');
       expect(result.error).toContain('Command blocked by security policy');
-      expect(mockHarness.runCommand).not.toHaveBeenCalled();
+      expect(mockHarness.executeCommandSecure).not.toHaveBeenCalled();
     });
 
     it('should reject unknown tool names with UNKNOWN_TOOL code', async () => {

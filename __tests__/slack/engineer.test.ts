@@ -5,10 +5,10 @@
 
 // Mock executes of external scripts
 // IMPORTANT: Mock creation needs to be before imports, but checking how Jest handles modules.
-// We mock 'child_process' to intercept execSync.
+// We mock 'child_process' to intercept execFileSync.
 jest.mock('child_process', () => ({
-    execSync: jest.fn().mockImplementation((command) => {
-        if (command && command.includes('--plan-only')) {
+    execFileSync: jest.fn().mockImplementation((file: string, args: string[]) => {
+        if (args && args.some((a: string) => a === '--plan-only')) {
             return `
 ---JSON_START---
 {
@@ -22,6 +22,7 @@ jest.mock('child_process', () => ({
         }
         return 'Execution output';
     }),
+    execSync: jest.fn(),
 }));
 
 // Mock NextResponse before importing the route
@@ -95,6 +96,8 @@ describe('Slack Engineering Integration', () => {
         // Env vars
         process.env.SLACK_SIGNING_SECRET = 'test-secret';
         process.env.GOOGLE_API_KEY = 'test-key';
+        process.env.GENIE_LOCAL = '1';
+        process.env.ENGINEER_SCRIPT_PATH = '/tmp/engineer.mjs';
     });
 
     const createCommandRequest = (text: string) => {
@@ -138,10 +141,11 @@ describe('Slack Engineering Integration', () => {
             // Wait for async processing (waitUntil)
             await new Promise(r => setTimeout(r, 100));
 
-            // Verify execSync called
-            const { execSync } = require('child_process');
-            expect(execSync).toHaveBeenCalledWith(
-                expect.stringContaining('--plan-only'),
+            // Verify execFileSync called
+            const { execFileSync } = require('child_process');
+            expect(execFileSync).toHaveBeenCalledWith(
+                'node',
+                expect.arrayContaining(['--plan-only']),
                 expect.anything()
             );
 
@@ -229,9 +233,10 @@ describe('Slack Engineering Integration', () => {
                 })
             );
 
-            const { execSync } = require('child_process');
-            expect(execSync).toHaveBeenCalledWith(
-                expect.stringContaining('--execute-plan'),
+            const { execFileSync } = require('child_process');
+            expect(execFileSync).toHaveBeenCalledWith(
+                'node',
+                expect.arrayContaining(['--execute-plan']),
                 expect.anything()
             );
         });

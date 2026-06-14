@@ -116,7 +116,8 @@ describe('Slack Command Handler', () => {
 
       expect(response.status).toBe(200);
       expect(data.response_type).toBe('ephemeral');
-      expect(data.text).toContain('Genie AI Slack Commands');
+      expect(data.blocks).toBeDefined();
+      expect(JSON.stringify(data.blocks)).toContain('Genie AI Commands');
     });
 
     it('should return help message for empty command', async () => {
@@ -137,7 +138,7 @@ describe('Slack Command Handler', () => {
 
       expect(response.status).toBe(200);
       expect(data.response_type).toBe('ephemeral');
-      expect(data.text).toContain('Processing your request...');
+      expect(data.text).toMatch(/\*(Thinking\.\.\.|Processing your request\.\.\.|Analyzing\.\.\.|Working on it\.\.\.)\*/);
 
       // Wait for async processing
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -176,7 +177,7 @@ describe('Slack Command Handler', () => {
 
       expect(response.status).toBe(200);
       expect(data.response_type).toBe('ephemeral');
-      expect(data.text).toContain('Processing your request...');
+      expect(data.text).toMatch(/\*(💻 Writing code\.\.\.|⌨️ Coding\.\.\.)\*/);
     });
 
     it('should return error for /genie code without request', async () => {
@@ -203,7 +204,7 @@ describe('Slack Command Handler', () => {
 
       expect(response.status).toBe(200);
       expect(data.response_type).toBe('ephemeral');
-      expect(data.text).toContain('Processing your request...');
+      expect(data.text).toMatch(/\*(Thinking\.\.\.|Processing your request\.\.\.|Analyzing\.\.\.|Working on it\.\.\.)\*/);
     });
   });
 
@@ -217,7 +218,7 @@ describe('Slack Command Handler', () => {
 
       expect(response.status).toBe(200);
       expect(data.response_type).toBe('ephemeral');
-      expect(data.text).toContain('Processing your request...');
+      expect(data.text).toMatch(/\*(Thinking\.\.\.|Processing your request\.\.\.|Analyzing\.\.\.|Working on it\.\.\.)\*/);
     });
   });
 
@@ -229,7 +230,7 @@ describe('Slack Command Handler', () => {
 
       expect(response.status).toBe(200);
       expect(data.response_type).toBe('ephemeral');
-      expect(data.text).toContain('Processing your request...');
+      expect(data.text).toMatch(/\*(Thinking\.\.\.|Processing your request\.\.\.|Analyzing\.\.\.|Working on it\.\.\.)\*/);
     });
   });
 
