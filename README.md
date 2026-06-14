@@ -1,18 +1,18 @@
 # Lattice OS
 
-> **Own the context. Route the intelligence.**
+> **Own your memory. Route the intelligence.**
 
-Lattice OS is a workspace-native AI platform for **conversations, code, documents, and persistent context**. It combines memory-aware chat, server-side model/runtime routing, workspace-scoped context assembly, and an evolving local-capability layer so users can build, understand, and operate projects with more continuity over time.
+Lattice OS is a **memory-native AI platform** for conversations, code, documents, and persistent context. Unlike ChatGPT and Claude that forget every session, Lattice combines persistent memory, server-side model/runtime routing, memory-aware context assembly, and an evolving local-capability layer so users can build, understand, and operate projects with real continuity over time.
 
-Unlike AI wrappers that treat every chat as an isolated prompt, Lattice is moving toward a system where:
-- workspace context matters
+Unlike AI wrappers that treat every chat as an isolated prompt, Lattice is built around the idea that:
+- memory persists across sessions
 - prepared context is assembled deliberately
 - model/runtime behavior is resolved server-side
-- memory compounds over time
+- knowledge compounds over time
 - document and code understanding become first-class
 - local capabilities can grow inside trusted boundaries
 
-At the product surface, users interact with an authenticated AI workspace. Under the hood, Lattice is built around the **Unified Context Orchestration Layer (UCOL)**, workspace-aware behavior, persistent memory, and structured trust boundaries.
+At the product surface, users interact with an authenticated AI workspace. Under the hood, Lattice is built around the **Unified Context Orchestration Layer (UCOL)**, memory-native architecture, persistent memory, and structured trust boundaries.
 
 ---
 

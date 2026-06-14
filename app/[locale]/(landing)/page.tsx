@@ -71,7 +71,7 @@ const LandingPage = () => {
   return (
     <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative selection:bg-purple-500/30 selection:text-slate-900 dark:selection:text-white">
       <main className="relative z-10 flex-grow pt-16">
-        {/* 1 — Hero: Own your AI stack. */}
+        {/* 1 — Hero: Own your memory. */}
         <HeroSection />
 
         {/* 2 — UCOL: Hybrid orchestration across open and frontier models. */}
