@@ -253,7 +253,7 @@ describe('Slack Integration - End to End', () => {
 
       expect(response.status).toBe(200);
       // Copy is intentionally flexible (e.g. "*Thinking...*", "*Analyzing...*", "*Processing your request...*")
-      expect(data.text).toMatch(/thinking|analyzing|processing/i);
+      expect(data.text).toMatch(/thinking|analyzing|processing|working on it/i);
 
       // Wait for async processing
       await new Promise((resolve) => setTimeout(resolve, 200));
