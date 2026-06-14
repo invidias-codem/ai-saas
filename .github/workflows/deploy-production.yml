@@ -69,7 +69,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       
       - name: Deploy to Vercel
-        uses: amondnet/vercel-action@c71810f8732de6b8656e41155e63b6303ca3e4bf # v42.1.0
+        uses: amondnet/vercel-action@de09aeac2ace6599ec9b11ef87558759a496bac4 # v42.3.0
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
