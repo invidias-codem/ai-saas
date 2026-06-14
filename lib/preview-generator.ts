@@ -4,9 +4,6 @@ import path from 'path';
 import fs from 'fs/promises';
 import { createHash } from 'crypto';
 
-// Type declaration for pdf-parse (CommonJS, no built-in types)
-declare module 'pdf-parse';
-
 const execFileAsync = promisify(execFile);
 
 export interface PreviewResult {
