@@ -54,6 +54,13 @@ const envSchema = z.object({
   SLACK_CLIENT_SECRET: z.string().optional(),
   NEXT_PUBLIC_SLACK_CLIENT_ID: z.string().optional(), // For client-side Add to Slack button
 
+  // Cloudflare Turnstile (guest-chat anti-abuse).
+  // Public site key is exposed to the browser; secret key (TURNSTILE_SECRET_KEY) stays server-side.
+  // Defaults to Cloudflare's documented "always passes" test key so the guest funnel works
+  // out-of-the-box in dev/preview. Override with a real key in production.
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().optional().default("1x00000000000000000000AA"),
+  TURNSTILE_SECRET_KEY: z.string().optional(),
+
   // Supabase
   // NOTE: optional for offline eval runs; required for dataset curation and runtime features.
   NEXT_PUBLIC_SUPABASE_URL: z.string().min(1, { message: "NEXT_PUBLIC_SUPABASE_URL is required" }).optional(),

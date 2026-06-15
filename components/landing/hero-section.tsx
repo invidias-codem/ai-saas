@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { ArrowRightIcon } from "@radix-ui/react-icons";
 
 import { Button } from "@/components/ui/button";
+import { GuestChat } from "@/components/landing/guest-chat";
 
 const STAR_COUNT = 55;
 
@@ -260,14 +261,7 @@ export const HeroSection = () => {
           transition={{ duration: 0.9, delay: 1.7 }}
           className="relative mx-auto w-full max-w-lg"
         >
-          <div className="landing-card-strong relative rounded-2xl p-6">
-            <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
-            <p className="text-xs tracking-widest uppercase mb-4 font-medium text-primary">
-              {t("graphLabel")}
-            </p>
-            <MiniGraph />
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 h-16 rounded-b-2xl bg-gradient-to-t from-background to-transparent pointer-events-none" />
+          <GuestChat />
         </motion.div>
       </div>
 
