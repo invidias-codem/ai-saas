@@ -243,7 +243,19 @@ async function generateWithGemini(prompt: string): Promise<string> {
   const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 120, temperature: 0.85 },
+    generationConfig: {
+      // gemini-2.5-flash is a thinking model: with a tight maxOutputTokens it
+      // spends nearly the whole budget on internal reasoning and emits only a
+      // truncated fragment (e.g. "AI agents", "Too many"), which the quality
+      // gates then (correctly) suppress as too_vague/stale_mix. Disabling the
+      // thinking budget frees the tokens for the actual post, and 220 tokens is
+      // ample headroom for a <300-char Bluesky post.
+      // NOTE: thinkingConfig is honored at runtime by the API but not yet in the
+      // @google/generative-ai v0.24 TS types, hence the cast.
+      maxOutputTokens: 220,
+      temperature: 0.85,
+      thinkingConfig: { thinkingBudget: 0 },
+    } as any,
   });
 
   return result.response.text().trim();
@@ -458,8 +470,13 @@ async function getTopicState(topic: string, lane: BlueskyTopicLane, runId?: stri
 
 async function getRecencyPenalty(topic: string, lane: BlueskyTopicLane, runId?: string): Promise<number> {
   const state = await getTopicState(topic, lane, runId);
-  // Adjusted coefficient: 0.15 per post in 7d to heavily penalize over-indexed topics.
-  return state.postCount7d * 0.15;
+  // Soft nudge toward topic variety, capped so it can never sink an otherwise
+  // strong post into the borderline dead zone. With only a few topic clusters
+  // the agent always matches its own recent cluster, so the previous 0.15/post
+  // (uncapped) penalty was effectively a permanent -0.30 that suppressed good
+  // posts as draft_borderline. 0.07/post capped at 0.15 keeps the variety
+  // signal without starving the feed.
+  return Math.min(0.15, state.postCount7d * 0.07);
 }
 
 function scoreFreshness(
@@ -1083,9 +1100,15 @@ export async function planProactiveBlueskyPost(
     if (qualityScore >= 0.45 && qualityScore < 0.55 && !suppressionReason) {
       suppressed = true;
       finalSuppressionReason = 'draft_borderline';
-    } else if ((suppressionReason && qualityScore < 0.55) || staleMix) {
+    } else if (suppressionReason && qualityScore < 0.55) {
       suppressed = true;
-      finalSuppressionReason = staleMix ? 'stale_mix' : suppressionReason;
+      finalSuppressionReason = suppressionReason;
+    } else if (staleMix && qualityScore < 0.6) {
+      // Freshness is a soft signal — only let it block when the post isn't
+      // strong on its own. A genuinely good, complete post should still ship
+      // even if the intent/topic mix looks similar to recent activity.
+      suppressed = true;
+      finalSuppressionReason = 'stale_mix';
     }
 
     if (!suppressed) {
