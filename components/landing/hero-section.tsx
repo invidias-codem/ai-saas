@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
@@ -9,7 +9,7 @@ import { ArrowRightIcon } from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
 import { GuestChat } from "@/components/landing/guest-chat";
 
-const STAR_COUNT = 55;
+const STAR_COUNT = 32;
 
 interface Star {
   id: number;
@@ -33,8 +33,27 @@ function generateStars(count: number): Star[] {
   }));
 }
 
+// Respects the user's reduced-motion preference: skips the animation loop
+// entirely for accessibility and to avoid needless main-thread work / battery
+// drain on the most bounce-prone (mobile) surface.
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return reduced;
+}
+
 const ParticleField = () => {
+  const reducedMotion = usePrefersReducedMotion();
   const [stars] = useState<Star[]>(() => generateStars(STAR_COUNT));
+
+  // No animated particles for users who asked for reduced motion.
+  if (reducedMotion) return null;
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -62,109 +81,6 @@ const ParticleField = () => {
         />
       ))}
     </div>
-  );
-};
-
-const MiniGraph = () => {
-  const nodes = [
-    { id: "ucol", x: 200, y: 140, label: "UCOL", color: "#d97706", r: 28 },
-    { id: "open", x: 80, y: 60, label: "Open", color: "#f59e0b", r: 20 },
-    { id: "frontier", x: 320, y: 60, label: "Frontier", color: "#8b5cf6", r: 20 },
-    { id: "router", x: 200, y: 240, label: "Router", color: "#f59e0b", r: 20 },
-    { id: "memory", x: 60, y: 210, label: "Memory", color: "#eab308", r: 14 },
-    { id: "context", x: 340, y: 200, label: "Context", color: "#6366f1", r: 14 },
-  ];
-
-  const edges = [
-    ["ucol", "open"],
-    ["ucol", "frontier"],
-    ["ucol", "router"],
-    ["ucol", "memory"],
-    ["ucol", "context"],
-    ["open", "memory"],
-    ["frontier", "context"],
-  ];
-
-  const getNode = (id: string) => nodes.find((n) => n.id === id)!;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 1, delay: 0.8 }}
-      className="relative mx-auto w-full max-w-[420px]"
-    >
-      <svg viewBox="0 0 400 290" className="w-full h-auto drop-shadow-2xl">
-        {edges.map(([a, b], i) => {
-          const na = getNode(a);
-          const nb = getNode(b);
-          return (
-            <motion.line
-              key={`${a}-${b}`}
-              x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
-              stroke="rgba(217,119,6,0.24)"
-              strokeWidth="1"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.2 + i * 0.12, duration: 0.4 }}
-            />
-          );
-        })}
-
-        <motion.circle
-          r="3"
-          fill="#d97706"
-          animate={{
-            cx: [80, 200, 320, 200, 80],
-            cy: [60, 140, 60, 140, 60],
-          }}
-          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-          opacity={0.9}
-        />
-
-        {nodes.map((node, i) => (
-          <motion.g
-            key={node.id}
-            style={{ originX: `${node.x}px`, originY: `${node.y}px` }}
-            initial={{ opacity: 0, scale: 0 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 1.0 + i * 0.15, duration: 0.4, type: "spring", stiffness: 200 }}
-          >
-            <motion.circle
-              cx={node.x}
-              cy={node.y}
-              r={node.r + 6}
-              fill="none"
-              stroke={node.color}
-              strokeWidth="1"
-              opacity={0.2}
-              animate={{ r: [node.r + 6, node.r + 10, node.r + 6] }}
-              transition={{ duration: 2.5, repeat: Infinity, delay: i * 0.3 }}
-            />
-            <circle
-              cx={node.x}
-              cy={node.y}
-              r={node.r}
-              fill={node.color}
-              fillOpacity={0.15}
-              stroke={node.color}
-              strokeWidth="1.5"
-            />
-            <text
-              x={node.x}
-              y={node.y + 4}
-              textAnchor="middle"
-              fontSize={node.r > 20 ? "9" : "7"}
-              className="fill-current text-foreground"
-              fontWeight="600"
-              fontFamily="system-ui"
-            >
-              {node.label}
-            </text>
-          </motion.g>
-        ))}
-      </svg>
-    </motion.div>
   );
 };
 
