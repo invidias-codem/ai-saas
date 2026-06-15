@@ -46,11 +46,7 @@ const nextConfig = {
   transpilePackages: [
     'recharts',
     'react-is',
-    'mammoth',
-    'pdf-parse',
-    'pdfjs-dist',
-    'xlsx',
-    'file-type'
+    'pdfjs-dist'
   ],
   serverExternalPackages: [
     '@google-cloud/tasks',
@@ -58,7 +54,12 @@ const nextConfig = {
     '@google-cloud/vertexai',
     '@google-cloud/aiplatform',
     'google-gax',
-    'grpc'
+    'grpc',
+    // Server-only packages that Turbopack can't resolve properly (CommonJS/ESM hybrid)
+    'mammoth',
+    'pdf-parse',
+    'xlsx',
+    'file-type',
   ],
   outputFileTracingExcludes: {
     '**': [
