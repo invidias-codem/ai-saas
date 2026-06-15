@@ -43,7 +43,15 @@ const nextConfig = {
   },
 
   // Required for Turbopack to properly resolve recharts dependencies
-  transpilePackages: ['recharts', 'react-is'],
+  transpilePackages: [
+    'recharts',
+    'react-is',
+    'mammoth',
+    'pdf-parse',
+    'pdfjs-dist',
+    'xlsx',
+    'file-type'
+  ],
   serverExternalPackages: [
     '@google-cloud/tasks',
     '@google-cloud/storage',
