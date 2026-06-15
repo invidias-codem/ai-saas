@@ -42,11 +42,16 @@ const nextConfig = {
     root: projectRoot,
   },
 
-  // Required for Turbopack to properly resolve recharts dependencies
+  // Required for Turbopack to properly resolve dependencies
+  // These packages are ESM/CommonJS hybrids that Turbopack can't resolve without explicit transpilation
   transpilePackages: [
     'recharts',
     'react-is',
-    'pdfjs-dist'
+    'pdfjs-dist',
+    'mammoth',
+    'pdf-parse',
+    'xlsx',
+    'file-type'
   ],
   serverExternalPackages: [
     '@google-cloud/tasks',
@@ -54,12 +59,7 @@ const nextConfig = {
     '@google-cloud/vertexai',
     '@google-cloud/aiplatform',
     'google-gax',
-    'grpc',
-    // Server-only packages that Turbopack can't resolve properly (CommonJS/ESM hybrid)
-    'mammoth',
-    'pdf-parse',
-    'xlsx',
-    'file-type',
+    'grpc'
   ],
   outputFileTracingExcludes: {
     '**': [
