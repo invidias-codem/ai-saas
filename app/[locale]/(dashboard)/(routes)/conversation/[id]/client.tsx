@@ -26,6 +26,7 @@ import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
 import { submitFeedback } from "@/lib/feedback/submitFeedback";
 import { NeuralArchivalUploader, UploadedDoc } from "@/components/documents/NeuralArchivalUploader";
 import { FileItem } from "@/components/documents/FileItem";
+import { FilePreview } from "@/components/FilePreview";
 import { ContextualNudge } from "@/components/workspaces/ContextualNudge";
 import {
   getSessionMemoryFromStorage,
@@ -271,6 +272,7 @@ function ConversationPage({
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
+  const [showFilePreview, setShowFilePreview] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const [sessionId, setSessionId] = useState("");
   const [sessionRestored, setSessionRestored] = useState(false);
@@ -525,6 +527,7 @@ function ConversationPage({
       : undefined;
 
     setSelectedFile(null);
+    setShowFilePreview(false);
 
     try {
       // Dispatcher Call (Fetch with Streaming)
@@ -617,6 +620,7 @@ function ConversationPage({
       };
 
       setSelectedFile(newFileState);
+      setShowFilePreview(false);
 
       if (isLargeFile) {
         // Smart Upload: GCS Direct
@@ -998,20 +1002,47 @@ function ConversationPage({
       {/* Input Area - Floating & Glassmorphism */}
       <div className="flex-none w-full p-4 bg-gradient-to-t from-background via-background to-transparent pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="max-w-3xl mx-auto relative">
-          {/* File Preview Pill */}
+          {/* File Preview Pill + expandable rich preview */}
           {selectedFile && (
-            <div className="absolute -top-10 left-0 animate-in slide-in-from-bottom-2 fade-in">
-              <div className="flex items-center gap-2 bg-background border border-border shadow-sm px-3 py-1.5 rounded-full text-xs font-medium text-foreground">
+            <div className="absolute bottom-full left-0 mb-3 w-full animate-in slide-in-from-bottom-2 fade-in">
+              {/* Rich preview panel (image / PDF / text / docx / xlsx) */}
+              {showFilePreview && (
+                <div className="mb-2 max-w-md">
+                  <FilePreview
+                    file={selectedFile.file}
+                    maxHeight="40vh"
+                    showHeader={false}
+                    allowFullscreen
+                    allowDownload={false}
+                  />
+                </div>
+              )}
+
+              <div className="inline-flex items-center gap-2 bg-background border border-border shadow-sm px-3 py-1.5 rounded-full text-xs font-medium text-foreground">
                 <Paperclip className="h-3 w-3 text-indigo-500" />
                 <span className="max-w-[150px] truncate">{selectedFile.name}</span>
+                {selectedFile.isUploading && (
+                  <span className="text-[10px] text-muted-foreground">uploading…</span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowFilePreview((v) => !v)}
+                  className="text-muted-foreground hover:text-indigo-500 transition-colors"
+                  title={showFilePreview ? "Hide preview" : "Show preview"}
+                  aria-label={showFilePreview ? "Hide file preview" : "Show file preview"}
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                </button>
                 <button
                   onClick={() => {
-                    setSelectedFile(null);
                     if (selectedFile.preview) {
                       URL.revokeObjectURL(selectedFile.preview); // Clean up object URL
                     }
+                    setSelectedFile(null);
+                    setShowFilePreview(false);
                   }}
                   className="text-muted-foreground hover:text-destructive transition-colors ml-1"
+                  aria-label="Remove attached file"
                 >
                   <X className="h-3 w-3" />
                 </button>
