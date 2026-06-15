@@ -10,6 +10,7 @@ import { DesktopAuthProvider } from "@/components/providers/DesktopAuthProvider"
 import { NextIntlClientProvider } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { locales } from '@/i18n';
+import { getSiteUrl } from '@/lib/site-url';
 import { Analytics } from "@vercel/analytics/react";
 
 const inter = Inter({
@@ -45,6 +46,7 @@ export async function generateMetadata({
   const t = metadataMessages[locale] ?? metadataMessages.en;
 
   return {
+    metadataBase: new URL(getSiteUrl()),
     title: t.title,
     description: t.description,
     keywords: t.keywords,
@@ -56,6 +58,13 @@ export async function generateMetadata({
       title: t.title,
       description: t.description,
       type: 'website',
+      siteName: 'Lattice OS',
+      url: `/${locale}`,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: t.title,
+      description: t.description,
     },
   };
 }
