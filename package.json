@@ -82,7 +82,7 @@
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-switch": "^1.2.6",
-    "@radix-ui/react-tooltip": "^1.2.8",
+    "@radix-ui/react-tooltip": "^1.2.10",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.90.1",
     "@swc/helpers": "^0.5.18",
