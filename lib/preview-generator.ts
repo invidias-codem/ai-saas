@@ -3,6 +3,29 @@ import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs/promises';
 import { createHash } from 'crypto';
+import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
+
+// Type for pdf-parse CJS dynamic require
+interface PdfParseModule {
+  default?: { new (options: any): { getText: () => Promise<{ total: number; text: string }>; destroy: () => Promise<void> } };
+  PDFParse?: { new (options: any): { getText: () => Promise<{ total: number; text: string }>; destroy: () => Promise<void> } };
+  // Allow it to be a constructor function directly
+  [key: string]: any;
+}
+
+// Dynamic require for pdf-parse (CommonJS module without proper ESM exports)
+function getPdfParse() {
+  // Use require for the CJS module - this works in Node.js API routes
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const pdfParseModule = require('pdf-parse') as PdfParseModule;
+  // pdf-parse CJS exports PDFParse as named export
+  const PDFParse = pdfParseModule.PDFParse || pdfParseModule.default;
+  if (!PDFParse) {
+    throw new Error('pdf-parse module does not export PDFParse class');
+  }
+  return PDFParse;
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -126,14 +149,13 @@ async function previewPdf(inputPath: string, tempDir: string, originalBuffer: Bu
     let pageCount = 1;
     let textPreview = '';
     try {
-      // Use pdf-parse if available (CommonJS via dynamic require)
-      const pdfParseModule = await import('pdf-parse');
-      const pdfParse = (pdfParseModule as any).default || (pdfParseModule as any).PDFParse;
-      if (typeof pdfParse === 'function') {
-        const parsed = await pdfParse(originalBuffer);
-        pageCount = parsed.numpages || 1;
-        textPreview = parsed.text?.slice(0, 500) || '';
-      }
+      // Use pdf-parse if available
+      const PDFParse = getPdfParse() as new (options: any) => { getText: () => Promise<{ total: number; text: string }>; destroy: () => Promise<void> };
+      const parser = new PDFParse({ data: originalBuffer });
+      const parsed = await parser.getText();
+      pageCount = parsed.total || 1;
+      textPreview = parsed.text?.slice(0, 500) || '';
+      await parser.destroy();
     } catch {
       // pdf-parse optional, use default
     }
@@ -150,14 +172,12 @@ async function previewPdf(inputPath: string, tempDir: string, originalBuffer: Bu
     let pageCount = 1;
     let textPreview = '';
     try {
-      // Use pdf-parse if available (CommonJS via dynamic require)
-      const pdfParseModule = await import('pdf-parse');
-      const pdfParse = (pdfParseModule as any).default || (pdfParseModule as any).PDFParse;
-      if (typeof pdfParse === 'function') {
-        const parsed = await pdfParse(originalBuffer);
-        pageCount = parsed.numpages || 1;
-        textPreview = parsed.text?.slice(0, 500) || '';
-      }
+      const PDFParse = getPdfParse() as new (options: any) => { getText: () => Promise<{ total: number; text: string }>; destroy: () => Promise<void> };
+      const parser = new PDFParse({ data: originalBuffer });
+      const parsed = await parser.getText();
+      pageCount = parsed.total || 1;
+      textPreview = parsed.text?.slice(0, 500) || '';
+      await parser.destroy();
     } catch {}
 
     return {
@@ -222,7 +242,6 @@ async function previewText(buffer: Buffer, mimeType: string): Promise<PreviewRes
 
 async function previewDocx(inputPath: string, tempDir: string): Promise<PreviewResult> {
   try {
-    const { default: mammoth } = await import('mammoth');
     const result = await mammoth.extractRawText({ path: inputPath });
     
     return {
@@ -267,7 +286,6 @@ async function previewDoc(inputPath: string, tempDir: string): Promise<PreviewRe
 async function previewXlsx(inputPath: string, tempDir: string): Promise<PreviewResult> {
   try {
     // Use xlsx library to parse
-    const XLSX = await import('xlsx');
     const workbook = XLSX.readFile(inputPath);
     const sheetNames = workbook.SheetNames;
 
