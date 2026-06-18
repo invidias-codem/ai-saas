@@ -1,0 +1,45 @@
+# Lattice-1 Merge Configuration - DARE-TIES
+# Merge strategy: DARE-TIES for sparse merging of multiple LoRA adapters
+# Base: Qwen2.5-Coder-14B (Apache 2.0, strong coding, manageable size)
+
+merge_method: dare_ties
+base_model: Qwen/Qwen2.5-Coder-14B
+dtype: bfloat16
+out_path: ./lattice-1-merged
+
+models:
+  # Base model is implicit
+
+  # --- CODING EXPERT (Claude-style: careful, thorough, explains tradeoffs) ---
+  - model: Qwen/Qwen2.5-Coder-14B-Instruct  # Official instruct version
+    parameters:
+      weight: 0.35
+      density: 0.7   # DARE sparsity - keep 70% of params
+      tie_threshold: 0.1  # TIES threshold
+
+  # --- REASONING EXPERT (Gemini-style: structured, multi-perspective) ---
+  - model: Qwen/Qwen2.5-14B-Instruct  # Strong reasoning via official instruct
+    parameters:
+      weight: 0.30
+      density: 0.7
+      tie_threshold: 0.1
+
+  # --- PERSONALITY EXPERT (GPT-5-style: witty, conversational, self-aware) ---
+  # Using the same model with different weight to emphasize chat personality
+  - model: Qwen/Qwen2.5-14B-Instruct
+    parameters:
+      weight: 0.20
+      density: 0.75
+      tie_threshold: 0.1
+
+  # --- GENERAL BREADTH (Nemotron-style) ---
+  - model: Qwen/Qwen2.5-14B  # Base model for breadth
+    parameters:
+      weight: 0.15
+      density: 0.5
+      tie_threshold: 0.15
+
+# DARE-TIES specific parameters
+parameters:
+  normalize: true
+  int8_mask: false  # Set true for quantization-aware merge

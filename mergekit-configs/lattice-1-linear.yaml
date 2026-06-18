@@ -1,0 +1,27 @@
+# Lattice-1 Merge Configuration - Linear (Fallback)
+# Simpler merge, faster, good for quick iteration
+
+merge_method: linear
+base_model: Qwen/Qwen2.5-Coder-14B
+dtype: bfloat16
+out_path: ./lattice-1-merged-linear
+
+models:
+  - model: Qwen/Qwen2.5-Coder-14B
+    parameters:
+      weight: 0.40
+
+  # Coding specialist
+  - model: mlabonne/Qwen2.5-Coder-14B-Chat-DPO
+    parameters:
+      weight: 0.30
+
+  # General chat + reasoning
+  - model: Qwen/Qwen2.5-14B-Instruct
+    parameters:
+      weight: 0.20
+
+  # Personality
+  - model: cognitivecomputations/dolphin-2.9-qwen2-14b
+    parameters:
+      weight: 0.10
