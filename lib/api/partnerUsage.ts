@@ -5,6 +5,7 @@
  * logged but swallowed — metering must never break the API.
  */
 
+import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
 export interface UsageRecord {
@@ -47,15 +48,15 @@ export async function recordUsage(record: UsageRecord): Promise<void> {
  * Convenience wrapper that times a handler and records usage automatically.
  * Returns the handler's result; metering runs as a side-effect.
  */
-export async function withMetering<T>(
+export async function withMetering(
   params: {
     keyId: string;
     workspaceId: string;
     endpoint: string;
     method?: string;
   },
-  handler: () => Promise<{ result: T; statusCode: number; tokensIn?: number; tokensOut?: number; modelUsed?: string }>
-): Promise<T> {
+  handler: () => Promise<{ result: NextResponse | Response; statusCode: number; tokensIn?: number; tokensOut?: number; modelUsed?: string }>
+): Promise<NextResponse | Response> {
   const start = Date.now();
   let statusCode = 500;
   let tokensIn = 0;
