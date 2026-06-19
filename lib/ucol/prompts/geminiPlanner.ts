@@ -1,9 +1,10 @@
 // lib/ucol/prompts/geminiPlanner.ts
 // Planning integration — generates a structured ProjectPlan from a user prompt.
-// Uses OpenAI GPT-4 (primary) with Gemini fallback.
+// Uses OpenAI GPT-4 (primary), Anthropic fallback, then Gemini fallback.
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { requireEnv } from '@/lib/env';
 import type { ContextPackage, ProjectPlan } from '../types';
 
@@ -65,10 +66,38 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
             }
         }
     } catch (openaiError: any) {
-        console.warn('[UCOL:OpenAI] Planning failed, falling back to Gemini:', openaiError.message);
+        console.warn('[UCOL:OpenAI] Planning failed, falling back to Anthropic:', openaiError.message);
     }
 
-    // Fallback to Gemini with increased token limit
+    // Try Anthropic before Gemini. This keeps Code Builder usable when Google
+    // temporarily blocks unrestricted Gemini API keys, and reuses the Claude key
+    // already required by the code-generation phase.
+    try {
+        const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+        if (anthropicApiKey) {
+            const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+            const response = await anthropic.messages.create({
+                model: 'claude-sonnet-4-20250514',
+                max_tokens: 8192,
+                temperature: 0.7,
+                system: PLANNER_SYSTEM_PROMPT,
+                messages: [{ role: 'user', content: userPrompt }],
+            });
+
+            const text = response.content
+                .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+                .map((block) => block.text)
+                .join('');
+
+            if (text) {
+                return parseAndValidatePlan(text, 'Anthropic');
+            }
+        }
+    } catch (anthropicError: any) {
+        console.warn('[UCOL:Anthropic] Planning failed, falling back to Gemini:', anthropicError.message);
+    }
+
+    // Final fallback to Gemini with increased token limit
     const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
     const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
@@ -78,26 +107,41 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
         },
     });
 
-    const result = await model.generateContent({
-        contents: [
-            {
-                role: 'user',
-                parts: [{ text: userPrompt }],
+    try {
+        const result = await model.generateContent({
+            contents: [
+                {
+                    role: 'user',
+                    parts: [{ text: userPrompt }],
+                },
+            ],
+            generationConfig: {
+                responseMimeType: 'application/json',
+                temperature: 0.7,
+                maxOutputTokens: 16384, // Increased from 8192 to handle complex apps
             },
-        ],
-        generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.7,
-            maxOutputTokens: 16384, // Increased from 8192 to handle complex apps
-        },
-    });
+        });
 
-    if (!result.response) {
-        throw new Error('[UCOL:Gemini] No response received from planning model');
+        if (!result.response) {
+            throw new Error('[UCOL:Gemini] No response received from planning model');
+        }
+
+        const text = result.response.text();
+        return parseAndValidatePlan(text, 'Gemini');
+    } catch (geminiError: any) {
+        if (isUnrestrictedGoogleKeyError(geminiError)) {
+            throw new Error(
+                '[UCOL:Gemini] Google blocked this unrestricted Gemini API key. Restrict GOOGLE_API_KEY in Google Cloud Console to the Generative Language API, or replace it with a newly restricted key. Code Builder can avoid this path when OPENAI_API_KEY or ANTHROPIC_API_KEY is configured.'
+            );
+        }
+        throw geminiError;
     }
+}
 
-    const text = result.response.text();
-    return parseAndValidatePlan(text, 'Gemini');
+export function isUnrestrictedGoogleKeyError(error: unknown): boolean {
+    const candidate = error as { status?: number; message?: string; statusText?: string };
+    const message = `${candidate?.message ?? ''} ${candidate?.statusText ?? ''}`.toLowerCase();
+    return candidate?.status === 403 && message.includes('unrestricted') && message.includes('gemini');
 }
 
 function parseAndValidatePlan(text: string, provider: string): ProjectPlan {
