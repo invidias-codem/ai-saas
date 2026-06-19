@@ -1,7 +1,9 @@
 // lib/ucol/prompts/geminiPlanner.ts
-// Gemini planning integration — generates a structured ProjectPlan from a user prompt.
+// Planning integration — generates a structured ProjectPlan from a user prompt.
+// Uses OpenAI GPT-4 (primary) with Gemini fallback.
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import { requireEnv } from '@/lib/env';
 import type { ContextPackage, ProjectPlan } from '../types';
 
@@ -34,6 +36,39 @@ Output a single JSON object (NOT an array). No markdown fences, no explanation t
 export async function generatePlan(contextPackage: ContextPackage): Promise<ProjectPlan> {
     const { prompt, userId, availableDependencies } = contextPackage.payload.content;
 
+    let userPrompt = `Build this app: ${prompt}`;
+
+    // Inject available dependencies so techStack is constrained
+    if (availableDependencies && availableDependencies.length > 0) {
+        userPrompt += `\n\n## AVAILABLE DEPENDENCIES (from package.json)\nYou MUST constrain your techStack to ONLY these installed packages:\n${availableDependencies.join(', ')}\n\nDo NOT add any packages that are not in this list.`;
+    }
+
+    // Try OpenAI first (higher token limits, better JSON adherence)
+    try {
+        const openaiApiKey = process.env.OPENAI_API_KEY;
+        if (openaiApiKey) {
+            const openai = new OpenAI({ apiKey: openaiApiKey });
+            const completion = await openai.chat.completions.create({
+                model: 'gpt-4o',
+                messages: [
+                    { role: 'system', content: PLANNER_SYSTEM_PROMPT },
+                    { role: 'user', content: userPrompt }
+                ],
+                response_format: { type: 'json_object' },
+                max_tokens: 16384, // Higher limit for complex apps
+                temperature: 0.7,
+            });
+
+            const text = completion.choices[0]?.message?.content;
+            if (text) {
+                return parseAndValidatePlan(text, 'OpenAI');
+            }
+        }
+    } catch (openaiError: any) {
+        console.warn('[UCOL:OpenAI] Planning failed, falling back to Gemini:', openaiError.message);
+    }
+
+    // Fallback to Gemini with increased token limit
     const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
     const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
@@ -42,13 +77,6 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
             parts: [{ text: PLANNER_SYSTEM_PROMPT }],
         },
     });
-
-    let userPrompt = `Build this app: ${prompt}`;
-
-    // Inject available dependencies so technStack is constrained
-    if (availableDependencies && availableDependencies.length > 0) {
-        userPrompt += `\n\n## AVAILABLE DEPENDENCIES (from package.json)\nYou MUST constrain your techStack to ONLY these installed packages:\n${availableDependencies.join(', ')}\n\nDo NOT add any packages that are not in this list.`;
-    }
 
     const result = await model.generateContent({
         contents: [
@@ -60,7 +88,7 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
         generationConfig: {
             responseMimeType: 'application/json',
             temperature: 0.7,
-            maxOutputTokens: 8192,
+            maxOutputTokens: 16384, // Increased from 8192 to handle complex apps
         },
     });
 
@@ -69,14 +97,17 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
     }
 
     const text = result.response.text();
+    return parseAndValidatePlan(text, 'Gemini');
+}
 
+function parseAndValidatePlan(text: string, provider: string): ProjectPlan {
     try {
         let parsed = JSON.parse(text);
 
-        // Gemini sometimes wraps the plan in an array — unwrap it
+        // Sometimes wraps the plan in an array — unwrap it
         if (Array.isArray(parsed)) {
             if (parsed.length === 0) {
-                throw new Error('Gemini returned an empty array');
+                throw new Error(`${provider} returned an empty array`);
             }
             parsed = parsed[0];
         }
@@ -100,7 +131,7 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
 
         return plan;
     } catch (parseError: any) {
-        console.error('[UCOL:Gemini] Failed to parse plan JSON:', text.substring(0, 500));
-        throw new Error(`[UCOL:Gemini] Plan parsing failed: ${parseError.message}`);
+        console.error(`[UCOL:${provider}] Failed to parse plan JSON:`, text.substring(0, 500));
+        throw new Error(`[UCOL:${provider}] Plan parsing failed: ${parseError.message}`);
     }
 }

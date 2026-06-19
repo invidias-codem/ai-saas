@@ -335,7 +335,10 @@ async function buildResponse(
   command: string,
   args: string,
   fullText: string,
-  userId: string
+  userId: string,
+  channelId: string,
+  teamId: string,
+  channelName: string
 ): Promise<Record<string, any>> {
   // Handle help command
   if (command === 'help' || fullText === '') {
@@ -485,6 +488,14 @@ async function buildResponse(
       emoji = '📝';
       break;
 
+    case 'index':
+      // Enable auto-indexing for this channel
+      return handleIndexCommand(channelId, teamId, userId, channelName, args);
+
+    case 'stop-indexing':
+      // Disable auto-indexing for this channel
+      return handleStopIndexCommand(channelId, teamId, userId);
+
     default:
       // Treat the entire text as a question - auto-detect if code-related
       if (isCodeRelated(fullText)) {
@@ -564,6 +575,8 @@ export async function POST(req: Request) {
     const responseUrl = params.get('response_url') || '';
     const userId = params.get('user_id') || '';
     const teamId = params.get('team_id') || '';
+    const channelId = params.get('channel_id') || '';
+    const channelName = params.get('channel_name') || channelId;
 
     // Validate team_id
     if (!teamId) {
@@ -629,7 +642,7 @@ export async function POST(req: Request) {
     waitUntil((async () => {
       try {
         console.log('[SLACK_COMMAND] Async processing started for:', command);
-        const response = await buildResponse(command, args, text, userId);
+        const response = await buildResponse(command, args, text, userId, channelId, teamId, channelName);
 
         // Send to response_url
         await sendToResponseUrl(responseUrl, response);
@@ -655,6 +668,94 @@ export async function POST(req: Request) {
       response_type: 'ephemeral',
       text: '❌ An error occurred. Please try again.',
     });
+  }
+}
+
+/**
+ * Handle /genie index command - enable auto-indexing for a channel
+ */
+async function handleIndexCommand(
+  channelId: string,
+  teamId: string,
+  userId: string,
+  channelName: string,
+  args: string
+): Promise<Record<string, any>> {
+  try {
+    const { enableIndexingChannel } = await import('@/lib/slack/channelIndexer');
+    await enableIndexingChannel(teamId, channelId, channelName, userId);
+    
+    return {
+      response_type: 'in_channel',
+      text: `✅ Auto-indexing enabled for this channel. Genie will now learn from conversations to provide better context-aware responses.`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `✅ *Auto-indexing enabled*\n\nGenie will now continuously learn from conversations in this channel to provide better context-aware responses.`,
+          },
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: `Enabled by <@${userId}> • Use \`/genie stop-indexing\` to disable`,
+            },
+          ],
+        },
+      ],
+    };
+  } catch (error: any) {
+    console.error('[SLACK_COMMAND] Index error:', error.message);
+    return {
+      response_type: 'ephemeral',
+      text: `❌ Failed to enable auto-indexing: ${error.message}`,
+    };
+  }
+}
+
+/**
+ * Handle /genie stop-indexing command - disable auto-indexing for a channel
+ */
+async function handleStopIndexCommand(
+  channelId: string,
+  teamId: string,
+  userId: string
+): Promise<Record<string, any>> {
+  try {
+    const { stopIndexingChannel } = await import('@/lib/slack/channelIndexer');
+    await stopIndexingChannel(teamId, channelId);
+    
+    return {
+      response_type: 'in_channel',
+      text: `🛑 Auto-indexing disabled for this channel. Previously indexed content will be retained but no new conversations will be indexed.`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `🛑 *Auto-indexing disabled*\n\nGenie will no longer learn from new conversations in this channel. Previously indexed content is still available.`,
+          },
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: `Disabled by <@${userId}> • Use \`/genie index\` to re-enable`,
+            },
+          ],
+        },
+      ],
+    };
+  } catch (error: any) {
+    console.error('[SLACK_COMMAND] Stop-index error:', error.message);
+    return {
+      response_type: 'ephemeral',
+      text: `❌ Failed to disable auto-indexing: ${error.message}`,
+    };
   }
 }
 

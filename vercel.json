@@ -1,1 +1,13 @@
-{}
+{
+  "crons": [
+    {
+      "path": "/api/cron/slack-indexer",
+      "schedule": "*/5 * * * *"
+    }
+  ],
+  "functions": {
+    "app/api/cron/slack-indexer/route.ts": {
+      "maxDuration": 300
+    }
+  }
+}

@@ -8,12 +8,78 @@ const DEFAULT_TOPICS = [
   'developer tools',
   'software infrastructure',
   'Next.js Supabase architecture',
+  'small business Slack AI',
+  'Slack workflow automation',
+  'Slack knowledge management',
+];
+
+const SMALL_BUSINESS_SLACK_TARGET_PATTERNS = [
+  /\bsmall business(?:es)?\b/i,
+  /\bagency\b/i,
+  /\bstudio\b/i,
+  /\bshop\b/i,
+  /\bclinic\b/i,
+  /\bfirm\b/i,
+  /\bteam of \d+\b/i,
+  /\b\d+[- ]?(?:person|people|member) team\b/i,
+  /\b\d+[- ]?person\b/i,
+  /\bclient handoff/i,
+  /\bclients?\b/i,
+];
+
+const SLACK_PATTERNS = [
+  /\bslack\b/i,
+  /\bchannels?\b/i,
+  /\bworkspace\b/i,
+];
+
+const AI_SOLUTION_PATTERNS = [
+  /\bai\b/i,
+  /\bagents?\b/i,
+  /\bautomation\b/i,
+  /\bsummar(?:y|ize|ise|ization)\b/i,
+  /\bknowledge\b/i,
+  /\bmemory\b/i,
+  /\bcontext\b/i,
+];
+
+const PAIN_SIGNAL_PATTERNS = [
+  /\bstruggl(?:e|ing)\b/i,
+  /\bpain\b/i,
+  /\bchaos\b/i,
+  /\blost\b/i,
+  /\bcan't find\b/i,
+  /\bhard to find\b/i,
+  /\bcontext(?: gets?| is)? lost\b/i,
+  /\bhandoffs?\b/i,
+  /\btoo many channels\b/i,
+  /\bmanual\b/i,
+  /\brepetitive\b/i,
+  /\banyone (?:found|using|tried)\b/i,
+  /\bwhat (?:are|do) you (?:using|recommend)\b/i,
+  /\bhow (?:do|are) you\b/i,
+  /\?$/,
 ];
 
 const LANE_KEYWORDS = {
   ai: ['ai', 'llm', 'llms', 'model', 'models', 'agent', 'agents', 'inference', 'reasoning'],
   memory: ['memory', 'memory-native', 'context', 'retrieval', 'rag', 'graph', 'knowledge graph'],
-  tech: ['developer tools', 'devtools', 'infra', 'infrastructure', 'next.js', 'supabase', 'tooling', 'architecture', 'software'],
+  tech: [
+    'developer tools',
+    'devtools',
+    'infra',
+    'infrastructure',
+    'next.js',
+    'supabase',
+    'tooling',
+    'architecture',
+    'software',
+    'slack',
+    'workflow',
+    'automation',
+    'saas',
+    'small business',
+  ],
 } as const;
 
 const LOW_SIGNAL_PATTERNS = [
@@ -121,6 +187,38 @@ export function evaluateQuality(text: string, metrics?: { likeCount?: number; re
   return { qualityScore, reasons };
 }
 
+export function evaluateSmallBusinessSlackFit(text: string): {
+  isTarget: boolean;
+  hasPainSignal: boolean;
+  scoreBoost: number;
+  reasons: string[];
+} {
+  const reasons: string[] = [];
+  const mentionsSlack = SLACK_PATTERNS.some((pattern) => pattern.test(text));
+  const mentionsSmallBusiness = SMALL_BUSINESS_SLACK_TARGET_PATTERNS.some((pattern) => pattern.test(text));
+  const mentionsAiSolution = AI_SOLUTION_PATTERNS.some((pattern) => pattern.test(text));
+  const hasPainSignal = PAIN_SIGNAL_PATTERNS.some((pattern) => pattern.test(text));
+
+  if (!mentionsSlack || !mentionsSmallBusiness || !mentionsAiSolution) {
+    return { isTarget: false, hasPainSignal: false, scoreBoost: 0, reasons };
+  }
+
+  reasons.push('target:small_business_slack');
+  let scoreBoost = 3;
+
+  if (hasPainSignal) {
+    reasons.push('pain_signal');
+    scoreBoost += 2;
+  }
+
+  return {
+    isTarget: true,
+    hasPainSignal,
+    scoreBoost,
+    reasons,
+  };
+}
+
 export function findRejectReason(text: string, laneScore: number): string | null {
   if (text.length < MIN_TEXT_LENGTH) return 'too_short';
   if (LOW_SIGNAL_PATTERNS.some((pattern) => pattern.test(text))) return 'low_signal_pattern';
@@ -198,12 +296,14 @@ export class BlueskyDiscoveryEngine {
             repostCount: item.repostCount,
           });
 
-          const score = laneScore * 3 + qualityScore;
+          const smbSlackFit = evaluateSmallBusinessSlackFit(normalized);
+          const score = laneScore * 3 + qualityScore + smbSlackFit.scoreBoost;
           const reasonParts = [
             lane ? `lane:${lane}` : 'lane:none',
             `lane_score:${laneScore}`,
             `quality_score:${qualityScore}`,
             ...reasons,
+            ...smbSlackFit.reasons,
             rejectReason ? `reject:${rejectReason}` : '',
           ].filter(Boolean);
 
@@ -239,6 +339,17 @@ export class BlueskyDiscoveryEngine {
   }
 
   decide(candidate: BlueskyDiscoveryCandidate): BlueskyDiscoveryDecision {
+    const isSmallBusinessSlackTarget = candidate.reason.includes('target:small_business_slack');
+    const hasExplicitPainSignal = candidate.reason.includes('pain_signal');
+
+    // Outreach guardrail: the agent may notice relevant small-business Slack accounts,
+    // but it should not jump into their mentions unless they are explicitly asking
+    // for help or describing a workflow/context pain point. Without that signal,
+    // keep engagement lightweight.
+    if (isSmallBusinessSlackTarget && !hasExplicitPainSignal && candidate.score >= MIN_LIKE_SCORE) {
+      return { uri: candidate.uri, action: 'like', score: candidate.score, reason: candidate.reason };
+    }
+
     if (candidate.score >= 12) {
       return { uri: candidate.uri, action: 'reply', score: candidate.score, reason: candidate.reason };
     } else if (candidate.score >= MIN_LIKE_SCORE) {
