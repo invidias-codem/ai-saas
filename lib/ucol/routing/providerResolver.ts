@@ -4,6 +4,7 @@ import { ClaudeProvider } from '@/lib/llm/providers/claude';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { HermesProvider } from '@/lib/llm/providers/hermes';
 import type { UcolProviderPlan } from './types';
+import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
 const FAST_MODEL = process.env.HERMES_MODEL_ID || 'hermes3';
 const QUALITY_MODEL = 'gemini-3.1-pro-preview';
@@ -13,6 +14,7 @@ const REASONING_MODEL = 'deepseek-r1';
 export type ProviderResolutionInput = {
   mode: AgentMode;
   hasAttachments?: boolean;
+  providerKeys?: ProviderApiKeys;
 };
 
 export type ProviderResolution = {
@@ -26,13 +28,13 @@ export type ProviderResolution = {
 };
 
 export function resolveProviderForMode(input: ProviderResolutionInput): ProviderResolution {
-  const { mode, hasAttachments = false } = input;
+  const { mode, hasAttachments = false, providerKeys = {} } = input;
 
   if (mode === 'agentic') {
     return {
       providerId: 'claude',
       execution: {
-        provider: new ClaudeProvider(),
+        provider: new ClaudeProvider(providerKeys.anthropic),
         modelId: AGENTIC_MODEL,
       },
       routing: {
@@ -66,7 +68,7 @@ export function resolveProviderForMode(input: ProviderResolutionInput): Provider
     return {
       providerId: 'hermes',
       execution: {
-        provider: new HermesProvider(),
+        provider: new HermesProvider(providerKeys),
         modelId: FAST_MODEL,
       },
       routing: {
@@ -84,7 +86,7 @@ export function resolveProviderForMode(input: ProviderResolutionInput): Provider
   return {
     providerId: 'gemini',
     execution: {
-      provider: new GeminiProvider(),
+      provider: new GeminiProvider(providerKeys.google),
       modelId: QUALITY_MODEL,
     },
     routing: {

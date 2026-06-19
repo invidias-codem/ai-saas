@@ -23,11 +23,13 @@ import type {
     RefinementContext,
     DiscoveredPattern,
 } from './types';
+import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
 type ContextFlowCallback = (entry: ContextFlowEntry) => void;
 
 interface ContextRouterOptions {
     onContextFlow: ContextFlowCallback;
+    providerKeys?: ProviderApiKeys;
 }
 
 const MAX_REVIEW_ATTEMPTS = 3;
@@ -59,10 +61,12 @@ const SIMPLICITY_CONSTRAINTS = [
 export class ContextRouter {
     private onContextFlow: ContextFlowCallback;
     private installedDependencies: string[];
+    private providerKeys: ProviderApiKeys;
 
     constructor(options: ContextRouterOptions) {
         this.onContextFlow = options.onContextFlow;
         this.installedDependencies = this.getInstalledDependencies();
+        this.providerKeys = options.providerKeys ?? {};
     }
 
     // ─── Read installed dependencies from package.json ───
@@ -112,7 +116,7 @@ export class ContextRouter {
             sessionId: session.id,
         };
 
-        const plan = await generatePlan(contextPackage);
+        const plan = await generatePlan(contextPackage, this.providerKeys);
 
         this.emitContextFlow({
             id: crypto.randomUUID(),
@@ -260,7 +264,7 @@ export class ContextRouter {
             // Try Claude first (with timeout), fall back to Gemini
             try {
                 latestFiles = await this.withTimeout(
-                    generateComponent(contextPackage, refinement, session.discoveredPatterns),
+                    generateComponent(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
                     COMPONENT_TIMEOUT_MS,
                     component.name
                 );
@@ -277,7 +281,7 @@ export class ContextRouter {
                     status: 'active',
                 });
                 latestFiles = await generateComponentGemini(
-                    contextPackage, refinement, session.discoveredPatterns
+                    contextPackage, refinement, session.discoveredPatterns, this.providerKeys
                 );
             }
 
@@ -328,7 +332,7 @@ export class ContextRouter {
             });
 
             session.reviewRounds++;
-            const review = await reviewCode(latestFiles, component, plan);
+            const review = await reviewCode(latestFiles, component, plan, this.providerKeys);
 
             // ── Step 3: Extract novel patterns (if high originality) ──
             if (review.originalityScore >= 7 && review.novelPatterns.length > 0) {

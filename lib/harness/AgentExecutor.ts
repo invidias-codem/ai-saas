@@ -7,6 +7,7 @@ import { HarnessFactory } from '@/lib/harness/IOHarness';
 import { ToolRouter } from '@/lib/harness/ToolRouter';
 import { CODE_MODELS } from '@/lib/llm/codeModels';
 import { pruneHistory } from '@/lib/context/HistoryPruner';
+import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
 export interface AgentExecutorParams {
     enhancedPromptText: string;
@@ -14,10 +15,11 @@ export interface AgentExecutorParams {
     modelConfig: typeof CODE_MODELS[keyof typeof CODE_MODELS];
     fileData?: { name?: string; type?: string; base64Data: string; mimeType?: string };
     systemInstruction: string;
+    providerKeys?: ProviderApiKeys;
 }
 
 export async function executeAgentLoop(params: AgentExecutorParams) {
-    const { enhancedPromptText, dynamicHistory, modelConfig, fileData, systemInstruction } = params;
+    const { enhancedPromptText, dynamicHistory, modelConfig, fileData, systemInstruction, providerKeys = {} } = params;
 
     let responseText = "";
 
@@ -49,7 +51,11 @@ export async function executeAgentLoop(params: AgentExecutorParams) {
       else if (modelConfig.provider === 'deepseek') ProviderClass = DeepSeekProvider;
       else ProviderClass = GeminiProvider;
 
-      const provider = new ProviderClass();
+      const provider = modelConfig.provider === 'claude'
+        ? new ClaudeProvider(providerKeys.anthropic)
+        : modelConfig.provider === 'gemini'
+          ? new GeminiProvider(providerKeys.google)
+          : new ProviderClass();
       
       const chatHistory: ChatMessage[] = dynamicHistory.map((msg: any) => {
         let attachments;

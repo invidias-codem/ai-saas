@@ -5,6 +5,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { requireEnv } from '@/lib/env';
 import type { ContextPackage, GeneratedFile, RefinementContext, DiscoveredPattern } from '../types';
+import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
 const CODER_SYSTEM_PROMPT = `You are an expert React/Next.js developer. You receive a component specification from a planning agent and generate production-quality code.
 
@@ -44,11 +45,12 @@ A Lead QA Engineer reviewed your previous code and found issues. Fix every flagg
 export async function generateComponentGemini(
     contextPackage: ContextPackage,
     refinement?: RefinementContext,
-    discoveredPatterns?: DiscoveredPattern[]
+    discoveredPatterns?: DiscoveredPattern[],
+    providerKeys: ProviderApiKeys = {}
 ): Promise<GeneratedFile[]> {
     const { component, fullPlan, existingFiles, techStack } = contextPackage.payload.content;
 
-    const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
+    const genAI = new GoogleGenerativeAI(providerKeys.google || requireEnv('GOOGLE_API_KEY'));
 
     const systemPrompt = refinement && refinement.feedbackHistory.length > 0
         ? CODER_SYSTEM_PROMPT + REFINEMENT_ADDENDUM

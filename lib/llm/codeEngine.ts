@@ -7,6 +7,7 @@ import { gatherCodeContext } from '@/lib/llm/contextAggregator';
 import { executeAgentLoop } from '@/lib/harness/AgentExecutor';
 import type { FileAttachmentInput, ResolvedAttachment } from '@/lib/types/attachments';
 import { resolveAttachmentForAnalysis } from '@/lib/gcp/fileResolver';
+import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
 
 const CODE_SYSTEM_INSTRUCTION_TEXT = "You are 'Genie Code', an expert coding assistant. Analyze provided code snippets or file content, explain concepts, generate code, and answer questions related to programming. **If file content data is provided along with a text prompt, focus your analysis on the file data based on the instructions in the text prompt.** Use markdown code blocks with language identifiers. For non-coding questions, politely decline.";
 
@@ -124,6 +125,7 @@ export async function runCodeEngine({
 
   const enhancedPromptText = gatheredPromptText + buildAttachmentPromptBlock(resolvedAttachment);
   const systemInstruction = CODE_SYSTEM_INSTRUCTION_TEXT + "\n\n" + HARNESS_INSTRUCTIONS;
+  const providerKeys = await getUserProviderApiKeys(userId);
 
   const responseText = await executeAgentLoop({
     enhancedPromptText,
@@ -136,6 +138,7 @@ export async function runCodeEngine({
       base64Data: resolvedAttachment.base64Data,
     } : undefined,
     systemInstruction,
+    providerKeys,
   });
 
   return {

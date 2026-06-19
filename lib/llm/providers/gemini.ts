@@ -8,7 +8,10 @@ import { getStorageClient, getStorageProjectId } from '@/lib/gcp/storage';
 // Module-level throws break integration tests that import routes without setting env vars.
 // The key is validated inside getGenAI() before any network call is made.
 let _genAI: GoogleGenerativeAI | null = null;
-function getGenAI(): GoogleGenerativeAI {
+function getGenAI(apiKeyOverride?: string): GoogleGenerativeAI {
+  if (apiKeyOverride) {
+    return new GoogleGenerativeAI(apiKeyOverride);
+  }
   if (!_genAI) {
     if (!process.env.GOOGLE_API_KEY) {
       throw new Error('[GeminiProvider] GOOGLE_API_KEY is not set. Set it in your environment before starting.');
@@ -24,6 +27,8 @@ const AGENTIC_MODEL = "gemini-3-flash-preview";
 export class GeminiProvider implements LLMProvider {
     id = "gemini";
     name = "Google Gemini";
+
+    constructor(private readonly apiKey?: string) {}
 
     async generateStream(
         messages: ChatMessage[],
@@ -114,7 +119,7 @@ export class GeminiProvider implements LLMProvider {
             throw new Error("Gemini requires the last message to be from the user.");
         }
 
-        const model = getGenAI().getGenerativeModel({
+        const model = getGenAI(this.apiKey).getGenerativeModel({
             model: modelId,
             systemInstruction: systemInstruction ? {
                 role: 'user',

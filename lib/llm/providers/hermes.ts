@@ -1,5 +1,6 @@
 import { LLMProvider, ChatMessage, CompletionOptions, StreamResult } from "../types";
 import { logger } from "@/lib/logger";
+import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
 /**
  * Fast Provider — Self-hosted vLLM (Vast.ai) + Nous Research Inference API
@@ -82,6 +83,8 @@ export class HermesProvider implements LLMProvider {
   id = "hermes";
   name = "Hermes4 (Fast)";
 
+  constructor(private readonly providerKeys: ProviderApiKeys = {}) {}
+
   async generateStream(
     messages: ChatMessage[],
     systemInstruction?: string,
@@ -96,7 +99,7 @@ export class HermesProvider implements LLMProvider {
     );
     if (hasMediaAttachments) {
       logger.info('[HermesProvider] Media attachments detected — forwarding to Gemini multimodal provider');
-      const gemini = new (await import('./gemini')).GeminiProvider();
+      const gemini = new (await import('./gemini')).GeminiProvider(this.providerKeys.google);
       const result = await gemini.generateStream(messages, systemInstruction, options);
       return { ...result, toolCalls: [] };
     }
@@ -368,7 +371,7 @@ export class HermesProvider implements LLMProvider {
     systemInstruction?: string,
     options: CompletionOptions = {}
   ): Promise<HermesStreamResultWithTools> {
-    const gemini = new (await import('./gemini')).GeminiProvider();
+    const gemini = new (await import('./gemini')).GeminiProvider(this.providerKeys.google);
     return gemini.generateStream(
       messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : m.role, text: m.content } as ChatMessage)),
       systemInstruction,

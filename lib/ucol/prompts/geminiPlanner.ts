@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { requireEnv } from '@/lib/env';
 import type { ContextPackage, ProjectPlan } from '../types';
+import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
 const PLANNER_SYSTEM_PROMPT = `You are an expert software architect. Given a user's app description, produce a detailed project plan as structured JSON.
 
@@ -34,7 +35,7 @@ CRITICAL RULES:
 
 Output a single JSON object (NOT an array). No markdown fences, no explanation text.`;
 
-export async function generatePlan(contextPackage: ContextPackage): Promise<ProjectPlan> {
+export async function generatePlan(contextPackage: ContextPackage, providerKeys: ProviderApiKeys = {}): Promise<ProjectPlan> {
     const { prompt, userId, availableDependencies } = contextPackage.payload.content;
 
     let userPrompt = `Build this app: ${prompt}`;
@@ -46,7 +47,7 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
 
     // Try OpenAI first (higher token limits, better JSON adherence)
     try {
-        const openaiApiKey = process.env.OPENAI_API_KEY;
+        const openaiApiKey = providerKeys.openai || process.env.OPENAI_API_KEY;
         if (openaiApiKey) {
             const openai = new OpenAI({ apiKey: openaiApiKey });
             const completion = await openai.chat.completions.create({
@@ -73,7 +74,7 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
     // temporarily blocks unrestricted Gemini API keys, and reuses the Claude key
     // already required by the code-generation phase.
     try {
-        const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+        const anthropicApiKey = providerKeys.anthropic || process.env.ANTHROPIC_API_KEY;
         if (anthropicApiKey) {
             const anthropic = new Anthropic({ apiKey: anthropicApiKey });
             const response = await anthropic.messages.create({
@@ -98,7 +99,7 @@ export async function generatePlan(contextPackage: ContextPackage): Promise<Proj
     }
 
     // Final fallback to Gemini with increased token limit
-    const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
+    const genAI = new GoogleGenerativeAI(providerKeys.google || requireEnv('GOOGLE_API_KEY'));
     const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
         systemInstruction: {

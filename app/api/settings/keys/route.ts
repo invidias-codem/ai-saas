@@ -1,86 +1,120 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { supabaseAdmin } from '@/lib/supabaseClient';
 import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import {
+  deleteUserProviderApiKey,
+  getConfiguredProviderKeys,
+  isProviderName,
+  ProviderName,
+  upsertUserProviderApiKey,
+} from '@/lib/userProviderKeys';
+
+type ProviderPayload = {
+  provider?: string;
+  apiKey?: string;
+};
+
+function validateKeyShape(provider: ProviderName, apiKey: string): string | null {
+  if (provider === 'openai' && !(apiKey.startsWith('sk-') || apiKey.startsWith('proj-'))) {
+    return 'Invalid OpenAI API key format.';
+  }
+  if (provider === 'anthropic' && !apiKey.startsWith('sk-ant-')) {
+    return 'Invalid Anthropic API key format.';
+  }
+  if (provider === 'google' && !apiKey.startsWith('AIza')) {
+    return 'Invalid Google API key format.';
+  }
+  return null;
+}
+
+async function validateProviderKey(provider: ProviderName, apiKey: string): Promise<void> {
+  if (provider === 'openai') {
+    const client = new OpenAI({ apiKey });
+    await client.models.list();
+    return;
+  }
+
+  if (provider === 'anthropic') {
+    const client = new Anthropic({ apiKey });
+    await client.messages.create({
+      model: 'claude-3-5-haiku-latest',
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ping' }],
+    });
+    return;
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  await model.generateContent({
+    contents: [{ role: 'user', parts: [{ text: 'Return the word pong.' }] }],
+    generationConfig: { maxOutputTokens: 4, temperature: 0 },
+  });
+}
+
+export async function GET() {
+  try {
+    const { userId } = await auth();
+    if (!userId) return new NextResponse('Unauthorized', { status: 401 });
+
+    const providers = await getConfiguredProviderKeys(userId);
+    return NextResponse.json({ providers, configured: providers.openai.configured });
+  } catch (error) {
+    console.error('[PROVIDER_KEYS_GET]', error);
+    return new NextResponse('Internal Server Error', { status: 500 });
+  }
+}
 
 export async function POST(req: Request) {
   try {
     const { userId } = await auth();
     if (!userId) return new NextResponse('Unauthorized', { status: 401 });
 
-    const { apiKey } = await req.json();
+    const { provider: rawProvider = 'openai', apiKey }: ProviderPayload = await req.json();
+    if (!isProviderName(rawProvider)) {
+      return new NextResponse('Unsupported provider', { status: 400 });
+    }
+
     if (!apiKey || typeof apiKey !== 'string') {
-      return new NextResponse('Invalid API Key provided', { status: 400 });
+      return new NextResponse('Invalid API key provided', { status: 400 });
     }
 
-    // 1. Instant Validation (Fail Fast)
-    const testClient = new OpenAI({ apiKey });
+    const shapeError = validateKeyShape(rawProvider, apiKey);
+    if (shapeError) return new NextResponse(shapeError, { status: 400 });
+
     try {
-      await testClient.models.list();
+      await validateProviderKey(rawProvider, apiKey);
     } catch (error) {
-      return new NextResponse('Invalid OpenAI API Key', { status: 400 });
+      console.warn(`[PROVIDER_KEY_VALIDATE:${rawProvider}]`, error);
+      return new NextResponse(`Invalid ${rawProvider} API key`, { status: 400 });
     }
 
-    // 2. Insert into Supabase Vault securely
-    const secretName = `openai_key_${userId}`;
-    const secretDescription = `OpenAI API Key for user ${userId}`;
-    
-    // Check if user already has a secret mapped
-    if (!supabaseAdmin) return new NextResponse('Supabase Admin not configured', { status: 500 });
-    const { data: existingMapping } = await supabaseAdmin
-      .from('user_api_keys')
-      .select('secret_id')
-      .eq('user_id', userId)
-      .single();
+    await upsertUserProviderApiKey({ userId, provider: rawProvider, apiKey });
 
-    let secretId;
-
-    if (existingMapping) {
-      // Update existing secret in vault
-      const { data: updatedSecret, error: vaultError } = await supabaseAdmin.rpc(
-        'update_secret', 
-        { secret_id: existingMapping.secret_id, new_secret: apiKey }
-      );
-      if (vaultError) throw vaultError;
-      secretId = existingMapping.secret_id;
-    } else {
-      // Insert new secret into vault
-      const { data: newSecret, error: vaultError } = await supabaseAdmin.rpc(
-        'insert_secret',
-        { secret: apiKey, name: secretName, description: secretDescription }
-      );
-      if (vaultError) throw vaultError;
-      secretId = newSecret;
-
-      // Create the mapping
-      await supabaseAdmin
-        .from('user_api_keys')
-        .insert({ user_id: userId, secret_id: secretId });
-    }
-
-    return NextResponse.json({ success: true, message: 'API Key securely stored.' });
-
+    return NextResponse.json({ success: true, providers: await getConfiguredProviderKeys(userId) });
   } catch (error) {
-    console.error('[API_KEY_UPSERT]', error);
+    console.error('[PROVIDER_KEYS_UPSERT]', error);
     return new NextResponse('Internal Server Error', { status: 500 });
   }
 }
 
-export async function GET(req: Request) {
+export async function DELETE(req: Request) {
   try {
     const { userId } = await auth();
     if (!userId) return new NextResponse('Unauthorized', { status: 401 });
-    if (!supabaseAdmin) return new NextResponse('Supabase Admin not configured', { status: 500 });
 
-    const { data: existingMapping } = await supabaseAdmin
-      .from('user_api_keys')
-      .select('secret_id')
-      .eq('user_id', userId)
-      .single();
+    const { searchParams } = new URL(req.url);
+    const rawProvider = searchParams.get('provider') || 'openai';
+    if (!isProviderName(rawProvider)) {
+      return new NextResponse('Unsupported provider', { status: 400 });
+    }
 
-    return NextResponse.json({ configured: !!existingMapping });
+    await deleteUserProviderApiKey(userId, rawProvider);
+    return NextResponse.json({ success: true, providers: await getConfiguredProviderKeys(userId) });
   } catch (error) {
-    console.error('[API_KEY_CHECK]', error);
+    console.error('[PROVIDER_KEYS_DELETE]', error);
     return new NextResponse('Internal Server Error', { status: 500 });
   }
 }

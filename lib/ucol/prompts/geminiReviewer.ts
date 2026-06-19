@@ -7,6 +7,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { requireEnv } from '@/lib/env';
 import type { ComponentSpec, ProjectPlan, ReviewFeedback, GeneratedFile } from '../types';
+import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
 const REVIEWER_SYSTEM_PROMPT = `You are the Lead QA Engineer AND Chief Architect rolled into one. You evaluate generated code on THREE independent axes.
 
@@ -107,9 +108,10 @@ RULES:
 export async function reviewCode(
     files: GeneratedFile[],
     component: ComponentSpec,
-    plan: ProjectPlan
+    plan: ProjectPlan,
+    providerKeys: ProviderApiKeys = {}
 ): Promise<ReviewFeedback> {
-    const genAI = new GoogleGenerativeAI(requireEnv('GOOGLE_API_KEY'));
+    const genAI = new GoogleGenerativeAI(providerKeys.google || requireEnv('GOOGLE_API_KEY'));
     const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
         systemInstruction: {

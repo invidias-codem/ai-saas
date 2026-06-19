@@ -5,6 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { ContextPackage, GeneratedFile, RefinementContext, DiscoveredPattern } from '../types';
+import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
 const CODER_SYSTEM_PROMPT = `You are an expert React/Next.js developer who writes code that goes BEYOND the spec.
 
@@ -59,8 +60,8 @@ const CONSTRAINT_ADDENDUM = `
 
 Your previous implementation was scored low on originality. You MUST now rewrite the component while satisfying the constraint below. This is non-negotiable — standard tutorial-level code will be rejected again.`;
 
-function getAnthropicClient(): Anthropic {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+function getAnthropicClient(apiKeyOverride?: string): Anthropic {
+    const apiKey = apiKeyOverride || process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
         throw new Error('ANTHROPIC_API_KEY environment variable is not set');
     }
@@ -89,11 +90,12 @@ function trimDependencyContent(files: GeneratedFile[]): string {
 export async function generateComponent(
     contextPackage: ContextPackage,
     refinement?: RefinementContext,
-    discoveredPatterns?: DiscoveredPattern[]
+    discoveredPatterns?: DiscoveredPattern[],
+    providerKeys: ProviderApiKeys = {}
 ): Promise<GeneratedFile[]> {
     const { component, fullPlan, existingFiles, techStack } = contextPackage.payload.content;
 
-    const anthropic = getAnthropicClient();
+    const anthropic = getAnthropicClient(providerKeys.anthropic);
 
     let userPrompt = `## Project Context
 ${condensePlan(fullPlan)}

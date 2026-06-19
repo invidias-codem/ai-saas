@@ -19,6 +19,7 @@ import {
     generateRootLayout,
 } from '@/lib/ucol/projectTemplates';
 import type { BuildSession, ContextFlowEntry, GeneratedFile } from '@/lib/ucol/types';
+import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300; // Vercel Pro: 5 min ceiling for streaming SSE
@@ -120,8 +121,11 @@ export async function GET(req: Request) {
                     discoveredPatterns: [],
                 };
 
+                const providerKeys = await getUserProviderApiKeys(user.userId);
+
                 // Per-request router (no singleton — prevents cross-contamination)
                 const router = new ContextRouter({
+                    providerKeys,
                     onContextFlow: (entry: ContextFlowEntry) => {
                         session.contextFlow.push(entry);
                         send('context-flow', entry);

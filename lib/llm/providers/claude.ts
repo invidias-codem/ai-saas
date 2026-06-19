@@ -2,8 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { LLMProvider, ChatMessage, CompletionOptions, StreamResult } from "../types";
 import { logger } from "@/lib/logger";
 
-function getAnthropicClient() {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+function getAnthropicClient(apiKeyOverride?: string) {
+    const apiKey = apiKeyOverride || process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
         throw new Error('ANTHROPIC_API_KEY environment variable is not set');
     }
@@ -15,6 +15,8 @@ const DEFAULT_MODEL = "claude-sonnet-4-6";
 export class ClaudeProvider implements LLMProvider {
     id = "claude";
     name = "Anthropic Claude";
+
+    constructor(private readonly apiKey?: string) {}
 
     async generateStream(
         messages: ChatMessage[],
@@ -94,7 +96,7 @@ export class ClaudeProvider implements LLMProvider {
             };
         })) as Anthropic.MessageParam[];
 
-        const anthropic = getAnthropicClient();
+        const anthropic = getAnthropicClient(this.apiKey);
         const result = await anthropic.messages.create({
             model: modelId,
             max_tokens: options.maxTokens || 4096,

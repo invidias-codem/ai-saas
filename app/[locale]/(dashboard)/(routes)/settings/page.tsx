@@ -42,6 +42,26 @@ interface Integration {
   email?: string;
 }
 
+type ProviderName = 'openai' | 'anthropic' | 'google';
+
+const providerLabels: Record<ProviderName, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google Gemini',
+};
+
+const providerPlaceholders: Record<ProviderName, string> = {
+  openai: 'sk-... or proj-...',
+  anthropic: 'sk-ant-...',
+  google: 'AIza...',
+};
+
+const providerDescriptions: Record<ProviderName, string> = {
+  openai: 'Used first by Code Builder planning when configured.',
+  anthropic: 'Used by Code Builder code generation and agentic conversation/code modes.',
+  google: 'Used by Gemini planning, review, multimodal fallback, and quality conversation modes.',
+};
+
 const SettingsPage = () => {
   const router = useRouter();
   const t = useTranslations("Settings");
@@ -49,8 +69,12 @@ const SettingsPage = () => {
   const [dailyDigestEnabled, setDailyDigestEnabled] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [repoSelectorOpen, setRepoSelectorOpen] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [isKeyConfigured, setIsKeyConfigured] = useState(false);
+  const [apiKeyInputs, setApiKeyInputs] = useState<Record<ProviderName, string>>({ openai: '', anthropic: '', google: '' });
+  const [configuredKeys, setConfiguredKeys] = useState<Record<ProviderName, { configured: boolean; preview: string | null }>>({
+    openai: { configured: false, preview: null },
+    anthropic: { configured: false, preview: null },
+    google: { configured: false, preview: null },
+  });
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keyError, setKeyError] = useState("");
   const [keySuccess, setKeySuccess] = useState("");
@@ -68,7 +92,9 @@ const SettingsPage = () => {
         const keyResponse = await fetch('/api/settings/keys');
         if (keyResponse.ok) {
           const keyData = await keyResponse.json();
-          setIsKeyConfigured(keyData.configured ?? false);
+          if (keyData.providers) {
+            setConfiguredKeys(keyData.providers);
+          }
         }
       } catch (err) {
         console.error("Error fetching user settings:", err);
@@ -100,11 +126,18 @@ const SettingsPage = () => {
     }
   };
 
-  const handleSaveApiKey = async () => {
+  const handleSaveApiKey = async (provider: ProviderName) => {
     setKeyError("");
     setKeySuccess("");
-    if (!apiKeyInput.startsWith("sk-") && !apiKeyInput.startsWith("proj-")) {
-      setKeyError("Invalid API Key format.");
+    const apiKey = apiKeyInputs[provider];
+    const validFormat = provider === 'openai'
+      ? (apiKey.startsWith('sk-') || apiKey.startsWith('proj-'))
+      : provider === 'anthropic'
+        ? apiKey.startsWith('sk-ant-')
+        : apiKey.startsWith('AIza');
+
+    if (!validFormat) {
+      setKeyError(`Invalid ${providerLabels[provider]} API key format.`);
       return;
     }
     
@@ -113,7 +146,7 @@ const SettingsPage = () => {
       const res = await fetch('/api/settings/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: apiKeyInput })
+        body: JSON.stringify({ provider, apiKey })
       });
       
       if (!res.ok) {
@@ -121,9 +154,10 @@ const SettingsPage = () => {
         throw new Error(errText);
       }
       
-      setIsKeyConfigured(true);
-      setApiKeyInput("");
-      setKeySuccess("API Key securely stored!");
+      const data = await res.json();
+      if (data.providers) setConfiguredKeys(data.providers);
+      setApiKeyInputs(prev => ({ ...prev, [provider]: '' }));
+      setKeySuccess(`${providerLabels[provider]} API key securely stored!`);
     } catch (err: any) {
       setKeyError(err.message || "Failed to save API Key");
     } finally {
@@ -366,41 +400,56 @@ const SettingsPage = () => {
                 <Key className="w-6 h-6 text-emerald-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  OpenAI API Key
-                  {isKeyConfigured && (
-                    <span className="bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full text-xs font-bold">
-                      Configured
-                    </span>
-                  )}
-                </h3>
+                <h3 className="text-lg font-semibold">AI Provider Keys</h3>
                 <p className="text-sm text-muted-foreground">
-                  Provide your own OpenAI API key to use the platform indefinitely. Your key is encrypted at rest using Supabase Vault.
+                  Bring your own OpenAI, Anthropic, and Google keys. Keys are validated server-side, encrypted in Supabase Vault, and never displayed back to the browser.
                 </p>
               </div>
             </div>
-            
-            <div className="flex items-start gap-2 max-w-xl">
-              <div className="flex-1 space-y-1">
-                <input 
-                  type="password" 
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder={isKeyConfigured ? "Enter new key to replace existing..." : "sk-..."}
-                  className="w-full flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={isSavingKey}
-                />
-                {keyError && <p className="text-xs text-destructive">{keyError}</p>}
-                {keySuccess && <p className="text-xs text-emerald-600">{keySuccess}</p>}
-              </div>
-              <Button 
-                onClick={handleSaveApiKey} 
-                disabled={!apiKeyInput || isSavingKey}
-                className="bg-emerald-600 hover:bg-emerald-700 w-24"
-              >
-                {isSavingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
-              </Button>
+
+            <div className="grid gap-4">
+              {(['openai', 'anthropic', 'google'] as ProviderName[]).map((provider) => {
+                const status = configuredKeys[provider];
+                const inputValue = apiKeyInputs[provider];
+                return (
+                  <div key={provider} className="rounded-lg border p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-semibold flex items-center gap-2">
+                          {providerLabels[provider]}
+                          {status.configured && (
+                            <span className="bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full text-xs font-bold">
+                              Configured{status.preview ? ` · ${status.preview}` : ''}
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-xs text-muted-foreground">{providerDescriptions[provider]}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 max-w-2xl">
+                      <input
+                        type="password"
+                        value={inputValue}
+                        onChange={(e) => setApiKeyInputs(prev => ({ ...prev, [provider]: e.target.value }))}
+                        placeholder={status.configured ? `Enter new ${providerLabels[provider]} key to replace existing...` : providerPlaceholders[provider]}
+                        className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={isSavingKey}
+                      />
+                      <Button
+                        onClick={() => handleSaveApiKey(provider)}
+                        disabled={!inputValue || isSavingKey}
+                        className="bg-emerald-600 hover:bg-emerald-700 w-24"
+                      >
+                        {isSavingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+
+            {keyError && <p className="text-xs text-destructive">{keyError}</p>}
+            {keySuccess && <p className="text-xs text-emerald-600">{keySuccess}</p>}
           </div>
         </Card>
         {/* Other Integrations Card Section */}

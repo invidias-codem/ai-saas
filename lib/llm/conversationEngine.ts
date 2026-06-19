@@ -37,6 +37,7 @@ import type { AIOutputAudit } from '@/lib/world-model/types';
 import { deltaEngine } from '@/lib/world-model/delta';
 import { critiqueLLMOutput } from '@/lib/ucol/critics/OutputCritic';
 import type { UcolMemoryPlan, UcolMemoryScope } from '@/lib/ucol/routing/types';
+import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
 
 // ChatMessageSchema imported from types
 
@@ -162,6 +163,7 @@ export async function generateConversationReply(
   const { userId, clerkUser, request, conversationId } = args;
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
+  const providerKeys = await getUserProviderApiKeys(userId);
 
   // ---------------------------------------------------------
   // UCOL AGENTIC MODE — Claude + ReAct Loop
@@ -276,7 +278,10 @@ export async function generateConversationReply(
     }
     // ------------------------------------
     const { runSwarmOrchestrator } = await import('@/lib/agents/core/orchestrator');
-    const { anthropic } = await import('@ai-sdk/anthropic');
+    const { anthropic, createAnthropic } = await import('@ai-sdk/anthropic');
+    const anthropicProvider = providerKeys.anthropic
+      ? createAnthropic({ apiKey: providerKeys.anthropic })
+      : anthropic;
 
     const initialState = {
       originalQuery: userQuery,
@@ -313,7 +318,7 @@ export async function generateConversationReply(
             }
           };
 
-          const model = anthropic('claude-3-5-sonnet-20241022');
+          const model = anthropicProvider('claude-3-5-sonnet-20241022');
           
           const finalState = await runSwarmOrchestrator(initialState, model, context);
           
@@ -384,7 +389,7 @@ export async function generateConversationReply(
 
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
-  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType) });
+  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType), providerKeys });
   let { provider, modelId: actualModelId } = providerResolution.execution;
 
   const userQuery = messages[messages.length - 1]?.text || "";
@@ -469,7 +474,7 @@ export async function generateConversationReply(
         const upgradeMode = confidenceSignal.recommendedTier === 'claude-sonnet'
           ? 'quality'
           : 'reasoning';
-        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments: Boolean(fileData && mimeType) });
+        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments: Boolean(fileData && mimeType), providerKeys });
         provider = providerResolution.execution.provider;
         actualModelId = providerResolution.execution.modelId;
         confidenceOverrideApplied = true;
@@ -653,7 +658,7 @@ export async function generateConversationReply(
   } catch (err: any) {
     if (err?.status === 429 || String(err).includes('429')) {
       console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to fast mode`);
-      const fallback = resolveProviderForMode({ mode: 'fast', hasAttachments: Boolean(fileData && mimeType) });
+      const fallback = resolveProviderForMode({ mode: 'fast', hasAttachments: Boolean(fileData && mimeType), providerKeys });
       actualModelId = fallback.execution.modelId;
       streamResult = await fallback.execution.provider.generateStream(history, enhancedSystemInstruction, {
         model: actualModelId,
