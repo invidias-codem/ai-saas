@@ -1,7 +1,9 @@
 /**
  * Slack Channel Indexer - Cron Endpoint
  * 
- * Called every 5 minutes by cron job to auto-index opted-in Slack channels.
+ * Called by a scheduler to auto-index opted-in Slack channels.
+ * Vercel Hobby only allows daily cron schedules; use an external scheduler for
+ * higher-frequency indexing if needed.
  * Secured with CRON_SECRET environment variable.
  */
 

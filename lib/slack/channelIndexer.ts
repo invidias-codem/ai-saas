@@ -347,7 +347,7 @@ export async function stopIndexingChannel(
 
 /**
  * Index all workspaces (master indexer)
- * Called by cron job - processes one workspace at a time to avoid overload
+ * Called by scheduled job - processes one workspace at a time to avoid overload
  */
 export async function indexAllWorkspaces(): Promise<void> {
   try {
