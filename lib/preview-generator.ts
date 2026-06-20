@@ -4,7 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { createHash } from 'crypto';
 import mammoth from 'mammoth';
-import * as XLSX from 'xlsx';
+import readExcelFile from 'read-excel-file/node';
 
 // Type for pdf-parse CJS dynamic require
 interface PdfParseModule {
@@ -285,21 +285,21 @@ async function previewDoc(inputPath: string, tempDir: string): Promise<PreviewRe
 
 async function previewXlsx(inputPath: string, tempDir: string): Promise<PreviewResult> {
   try {
-    // Use xlsx library to parse
-    const workbook = XLSX.readFile(inputPath);
-    const sheetNames = workbook.SheetNames;
+    const sheets = await readExcelFile(inputPath);
 
     let output = '';
-    for (const sheetName of sheetNames.slice(0, 5)) { // Max 5 sheets
-      const sheet = workbook.Sheets[sheetName];
-      const csv = XLSX.utils.sheet_to_csv(sheet);
-      output += `=== ${sheetName} ===\n${csv}\n\n`;
+    for (const sheet of sheets.slice(0, 5)) { // Max 5 sheets
+      const rows = sheet.data.slice(0, 200); // Bound preview work and output size
+      const csv = rows
+        .map((row) => row.map(formatCsvCell).join(','))
+        .join('\n');
+      output += `=== ${sheet.sheet} ===\n${csv}\n\n`;
     }
 
     return {
       type: 'text',
       data: output.slice(0, 50000),
-      metadata: { sheets: sheetNames.length, generator: 'xlsx' },
+      metadata: { sheets: sheets.length, generator: 'read-excel-file' },
     };
   } catch (err) {
     console.error('[PreviewGenerator] XLSX preview failed:', err);
@@ -309,6 +309,15 @@ async function previewXlsx(inputPath: string, tempDir: string): Promise<PreviewR
       error: 'Failed to parse XLSX file',
     };
   }
+}
+
+function formatCsvCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const text = value instanceof Date ? value.toISOString() : String(value);
+  if (/[",\n\r]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
 }
 
 function getImageDimensions(buffer: Buffer, mimeType: string): { width: number; height: number } | null {
