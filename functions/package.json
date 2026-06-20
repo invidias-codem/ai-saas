@@ -38,8 +38,8 @@
     "typescript": "^5.0.0"
   },
   "overrides": {
-    "qs": "^6.14.2",
-    "fast-xml-parser": ">=5.3.4",
+    "qs": "^6.15.2",
+    "fast-xml-parser": ">=5.7.0",
     "jws": "^4.0.1",
     "tar": ">=7.5.7",
     "glob": ">=9.0.0",
@@ -48,9 +48,12 @@
     "mdast-util-to-hast": ">=13.2.1",
     "undici": ">=7.18.2",
     "body-parser": ">=2.1.0",
-    "js-yaml": ">=4.1.1",
+    "js-yaml": ">=4.2.0",
     "esbuild": ">=0.25.0",
     "minimatch": ">=10.2.1",
-    "follow-redirects": ">=1.15.6"
+    "follow-redirects": ">=1.15.6",
+    "form-data": "^4.0.6",
+    "protobufjs": "^7.6.3",
+    "@babel/core": "^7.29.6"
   }
 }
