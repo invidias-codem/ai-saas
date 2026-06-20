@@ -10,11 +10,15 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireCronAuth } from '@/lib/security/cronAuth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 export async function GET(req: Request) {
+  const authFailure = requireCronAuth(req, { routeName: 'RefreshTruthScoresCron' });
+  if (authFailure) return authFailure;
+
   // Verify this is a legitimate cron call
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

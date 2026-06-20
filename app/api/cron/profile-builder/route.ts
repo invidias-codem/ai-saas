@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 import { buildUserProfile } from '@/lib/agents/profileBuilder';
+import { requireCronAuth } from '@/lib/security/cronAuth';
 
 /**
  * Background User Profile Builder Cron Job
@@ -10,6 +11,9 @@ import { buildUserProfile } from '@/lib/agents/profileBuilder';
  */
 export async function POST(request: NextRequest) {
   try {
+    const authFailure = requireCronAuth(request, { routeName: 'ProfileBuilderCron' });
+    if (authFailure) return authFailure;
+
     console.log('[ProfileBuilder Cron] Starting profile building job');
 
     // Optional: Add auth check for cron services
@@ -148,6 +152,9 @@ export async function POST(request: NextRequest) {
  * Manual trigger endpoint (GET request for testing)
  */
 export async function GET(request: NextRequest) {
+  const authFailure = requireCronAuth(request, { routeName: 'ProfileBuilderManualCron' });
+  if (authFailure) return authFailure;
+
   const url = new URL(request.url);
   const userId = url.searchParams.get('userId');
   const force = url.searchParams.get('force') === 'true';

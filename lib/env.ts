@@ -77,6 +77,7 @@ const envSchema = z.object({
   VERCEL_LOG_WEBHOOK_SECRET: z.string().optional(),
   CLERK_WEBHOOK_SECRET: z.string().optional(),
   CRON_SECRET: z.string().optional(),
+  BLUESKY_POST_SECRET: z.string().optional(),
 
   // GitHub App — Context Engine (per-user installation flow)
   // Register at: https://github.com/settings/apps

@@ -2,12 +2,16 @@
 import { NextResponse } from 'next/server';
 import { generateDailyDigest } from '@/lib/retention/digestService';
 import { createClerkClient } from '@clerk/nextjs/server';
+import { requireCronAuth } from '@/lib/security/cronAuth';
 // We'll trust this runs in a secure environment or verify CRON_SECRET if exposed publically
 // Vercel Cron calls this endpoint with an authorization header
 
 const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
 export async function GET(req: Request) {
+    const authFailure = requireCronAuth(req, { routeName: 'DailyDigestCron' });
+    if (authFailure) return authFailure;
+
     if (process.env.CRON_SECRET && req.headers.get('Authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
         return new NextResponse('Unauthorized', { status: 401 });
     }

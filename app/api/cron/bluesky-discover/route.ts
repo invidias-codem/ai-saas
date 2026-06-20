@@ -3,6 +3,7 @@ import { BlueskyDiscoveryEngine } from '@/lib/agents/bluesky/BlueskyDiscoveryEng
 import { BlueskySafetyPolicy } from '@/lib/agents/bluesky/BlueskySafetyPolicy';
 import { BlueskyResponder } from '@/lib/agents/bluesky/BlueskyResponder';
 import type { BlueskyMention } from '@/lib/agents/bluesky/types';
+import { requireCronAuth } from '@/lib/security/cronAuth';
 
 export const maxDuration = 300;
 const MAX_EXTERNAL_LIKES_PER_RUN = 3;
@@ -14,6 +15,12 @@ function incrementReason(bucket: Record<string, number>, key: string | undefined
 }
 
 export async function GET(req: NextRequest) {
+  const authFailure = requireCronAuth(req, {
+    routeName: 'BlueskyDiscoverCron',
+    secretEnvVars: ['BLUESKY_POST_SECRET', 'CRON_SECRET'],
+  });
+  if (authFailure) return authFailure;
+
   const secret = process.env.BLUESKY_POST_SECRET ?? process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
   const querySecret = req.nextUrl.searchParams.get('secret');

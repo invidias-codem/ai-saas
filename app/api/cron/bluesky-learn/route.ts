@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BlueskyLearningLoop } from '@/lib/agents/bluesky/BlueskyLearningLoop';
+import { requireCronAuth } from '@/lib/security/cronAuth';
 
 export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
+  const authFailure = requireCronAuth(req, {
+    routeName: 'BlueskyLearnCron',
+    secretEnvVars: ['BLUESKY_POST_SECRET', 'CRON_SECRET'],
+  });
+  if (authFailure) return authFailure;
+
   const secret = process.env.BLUESKY_POST_SECRET ?? process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
   const querySecret = req.nextUrl.searchParams.get('secret');

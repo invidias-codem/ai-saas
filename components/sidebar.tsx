@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useLocale, useTranslations } from "next-intl";
 import { Plus, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import { useSubscriptionStore } from "@/lib/store/subscription-store";
 
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
   const router = useRouter();
   const locale = useLocale();
   const t = useTranslations("Sidebar");
+  const { user } = useUser();
   const [creatingNew, setCreatingNew] = useState(false);
 
   const labelMap: Record<string, string> = {
@@ -74,6 +76,8 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
 
   const maxCredits = 200;
   const creditsPercentage = Math.min(100, Math.max(0, (computeCredits / maxCredits) * 100));
+  const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account";
+  const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "L";
 
   return (
     // Outer shell: full height, flex column, matching Gemini's dark theme aesthetics
@@ -142,11 +146,11 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
         >
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-full bg-[#2a5a2a] flex items-center justify-center text-[#90ee90] font-bold text-sm">
-              G
+            {avatarInitial}
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-medium text-[#e3e3e3]">
-                Joshua Mohammed
+              {displayName}
               </span>
               <span className="text-xs text-[#a0a0a0] flex items-center gap-1">
                 Pro <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-sm">{computeCredits}/{maxCredits}</span>

@@ -12,10 +12,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { runBatchResolution } from '@/lib/ucol/agents/errorResolutionAgent';
+import { requireCronAuth } from '@/lib/security/cronAuth';
 
 export const maxDuration = 300; // 5 min (Vercel Pro max for cron)
 
 export async function GET(req: NextRequest) {
+  const authFailure = requireCronAuth(req, { routeName: 'ErrorResolutionCron' });
+  if (authFailure) return authFailure;
+
   const cronSecret = process.env.CRON_SECRET;
 
   // Accept secret via Authorization header (Vercel cron) OR ?secret= query param (manual testing)

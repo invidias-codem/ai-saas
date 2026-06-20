@@ -9,31 +9,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { indexAllWorkspaces } from '@/lib/slack/channelIndexer';
+import { requireCronAuth } from '@/lib/security/cronAuth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max
 
-export async function POST(request: NextRequest) {
+export async function runSlackIndexerCron(request: NextRequest) {
   try {
-    // Verify this is a legitimate cron call
-    const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-
-    if (!cronSecret) {
-      console.error('[Cron] CRON_SECRET not configured');
-      return NextResponse.json(
-        { error: 'Cron not configured' },
-        { status: 500 }
-      );
-    }
-
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      console.error('[Cron] Unauthorized cron call');
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const authFailure = requireCronAuth(request, { routeName: 'SlackIndexerCron' });
+    if (authFailure) return authFailure;
 
     console.log('[Cron] Starting Slack channel indexer run');
     const startTime = Date.now();
@@ -61,4 +45,12 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+export async function GET(request: NextRequest) {
+  return runSlackIndexerCron(request);
+}
+
+export async function POST(request: NextRequest) {
+  return runSlackIndexerCron(request);
 }

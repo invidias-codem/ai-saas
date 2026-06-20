@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { execFile as _execFile } from 'child_process';
 import { promisify } from 'util';
 import { createClient } from '@supabase/supabase-js';
+import { requireCronAuth } from '@/lib/security/cronAuth';
 
 const execFile = promisify(_execFile);
 
@@ -63,6 +64,9 @@ async function checkHarness(binary: string): Promise<{ available: boolean; versi
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const authFailure = requireCronAuth(req, { routeName: 'ToolRegistrySyncCron' });
+  if (authFailure) return authFailure;
+
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
   const querySecret = req.nextUrl.searchParams.get('secret');

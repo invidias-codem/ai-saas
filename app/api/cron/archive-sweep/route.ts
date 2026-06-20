@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 import { enqueueArchivalTask } from '@/lib/queue/archivalQueue';
+import { requireCronAuth } from '@/lib/security/cronAuth';
 
 export async function GET(req: Request) {
+  const authFailure = requireCronAuth(req, { routeName: 'ArchiveSweepCron' });
+  if (authFailure) return authFailure;
+
   try {
     if (!supabaseAdmin) {
       return NextResponse.json({ error: 'Supabase admin client not initialized' }, { status: 500 });

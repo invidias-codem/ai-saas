@@ -12,6 +12,7 @@ import { MentionPoller } from '@/lib/agents/bluesky/MentionPoller';
 import { BlueskyResponder } from '@/lib/agents/bluesky/BlueskyResponder';
 import { TimelineDiscoveryEngine } from '@/lib/agents/bluesky/TimelineDiscoveryEngine';
 import type { EngagementResult } from '@/lib/agents/bluesky/types';
+import { requireCronAuth } from '@/lib/security/cronAuth';
 
 export const maxDuration = 300;
 const MAX_MENTIONS_PER_RUN = 10;
@@ -22,6 +23,9 @@ function incrementReason(bucket: Record<string, number>, key: string | undefined
 }
 
 export async function GET(req: NextRequest) {
+  const authFailure = requireCronAuth(req, { routeName: 'BlueskyEngageCron' });
+  if (authFailure) return authFailure;
+
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
   const querySecret = req.nextUrl.searchParams.get('secret');

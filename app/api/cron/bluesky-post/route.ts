@@ -7,19 +7,13 @@ import {
   updateBlueskyTopicState,
   type BlueskyTopicLane,
 } from '@/lib/agents/bluesky/ProactivePostPlanner';
+import { requireCronAuth as requireSharedCronAuth } from '@/lib/security/cronAuth';
 
 export const maxDuration = 120;
 
 function parseLane(value: string | null): BlueskyTopicLane | undefined {
   if (value === 'ai' || value === 'memory' || value === 'tech') return value;
   return undefined;
-}
-
-function getBearerToken(req: NextRequest): string | null {
-  const authHeader = req.headers.get('authorization')?.trim();
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.slice('Bearer '.length).trim();
-  return token || null;
 }
 
 async function buildPlan(req: NextRequest, runId?: string) {
@@ -39,32 +33,7 @@ async function buildPlan(req: NextRequest, runId?: string) {
 }
 
 function requireCronAuth(req: NextRequest): NextResponse | null {
-  const cronSecret = process.env.CRON_SECRET?.trim();
-
-  if (!cronSecret) {
-    console.error('[BlueskyPostCron] Missing CRON_SECRET');
-    return NextResponse.json(
-      { success: false, error: 'Server misconfigured' },
-      { status: 500 }
-    );
-  }
-
-  const bearer = getBearerToken(req);
-  const querySecret = req.nextUrl.searchParams.get('secret');
-  const provided = bearer ?? querySecret ?? '';
-
-  if (!provided || provided.trim() !== cronSecret) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Unauthorized',
-        hint: 'Pass Authorization: Bearer <CRON_SECRET> header or ?secret=<CRON_SECRET>',
-      },
-      { status: 401 }
-    );
-  }
-
-  return null;
+  return requireSharedCronAuth(req, { routeName: 'BlueskyPostCron' });
 }
 
 function serializePlan(plan: Awaited<ReturnType<typeof buildPlan>>) {
