@@ -7,6 +7,8 @@ on:
       - 'app/api/**'
       - 'lib/security/**'
       - '__tests__/security/**'
+      - '__tests__/readiness/**'
+      - '.github/workflows/security-tests.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
   pull_request:
@@ -15,6 +17,8 @@ on:
       - 'app/api/**'
       - 'lib/security/**'
       - '__tests__/security/**'
+      - '__tests__/readiness/**'
+      - '.github/workflows/security-tests.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
 

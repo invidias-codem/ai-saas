@@ -54,6 +54,13 @@ describe('Sprint 1 production readiness hardening', () => {
     expect(securityWorkflow).toMatch(/node-version:\s*['"](2[4-9]|[3-9]\d)\.x['"]/);
   });
 
+  it('runs the security workflow when sprint readiness guards or the workflow itself change', () => {
+    const securityWorkflow = read('.github/workflows/security-tests.yml');
+
+    expect(securityWorkflow).toContain("'__tests__/readiness/**'");
+    expect(securityWorkflow).toContain("'.github/workflows/security-tests.yml'");
+  });
+
   it('sets baseline browser security headers including Permissions-Policy', () => {
     const config = read('next.config.mjs');
 
