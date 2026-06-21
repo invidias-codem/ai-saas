@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""
+lattice — CLI tool for managing Lattice OS Docker appliance deployments.
+
+Designed for enterprise customers deploying Lattice OS as a self-hosted
+container on their own infrastructure. Supports:
+
+  - Docker Hub PAT authentication for private registry pulls
+  - One-command deployment via docker-compose
+  - Feature-gated licensing (Community / Enterprise)
+  - Health checks and preflight verification
+  - Zero-downtime upgrades with config migration
+  - Supabase volume backup and restore
+  - Network-isolated / air-gapped deployment mode
+
+Usage:
+  lattice auth login
+  lattice deploy
+  lattice license activate <key>
+  lattice health check
+  lattice upgrade
+  lattice backup create [--output ./backups]
+  lattice backup restore <backup-file>
+
+Built by JJEM Global Technology, Inc.
+"""
+
+import sys
+import os
+
+# Ensure the package is importable when run directly
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from lattice_cli.main import main
+
+if __name__ == "__main__":
+    main()
