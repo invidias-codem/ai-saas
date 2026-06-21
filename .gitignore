@@ -70,3 +70,8 @@ supabase/.temp/
 research/lambda-labs-deployment/
 scripts/grant-unlimited-credits.ts
 debug_*.log
+
+# Lattice OS signing keys
+lattice_private.pem
+lattice-license-private.pem
+*lattice*private*.pem
