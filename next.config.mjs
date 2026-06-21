@@ -72,6 +72,7 @@ const nextConfig = {
       'remote/**',
       'packages/**',
       'go-harness/**',
+      'scripts/lattice-cli/venv/**',
       '**/node_modules/.bin/**',
       '**/.bin/**',
     ],

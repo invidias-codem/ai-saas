@@ -75,3 +75,6 @@ debug_*.log
 lattice_private.pem
 lattice-license-private.pem
 *lattice*private*.pem
+
+# Lattice CLI venv (dev only, never ship)
+scripts/lattice-cli/venv/
