@@ -159,18 +159,36 @@ def cmd_start(args):
     config = load_config()
     instance_name = args.name or "default"
     compose_file = args.compose or config.get("compose_file", "docker-compose.yml")
+    skip_preflight = args.skip_preflight
 
     print(f"  ╔══════════════════════════════════════════╗")
     print(f"  ║  Lattice OS — Deploying {instance_name:<17}║")
     print(f"  ╚══════════════════════════════════════════╝\n")
 
-    # Step 1: Prerequisites
-    print(f"  [1/6] Checking prerequisites ...")
-    if not docker_ops.check_prerequisites():
-        return 1
+    # Step 1: Full preflight (V2 — replaces basic prerequisite check)
+    print(f"  [1/7] Running preflight checks ...")
+    if not skip_preflight:
+        from . import preflight
+        is_airgap = config.get("deployment_mode") == "air-gapped"
+        custom_ports = None
+        if args.port:
+            custom_ports = [int(p) for p in str(args.port).split(",")]
+
+        results = preflight.run_preflight(
+            skip_auth=is_airgap,
+            skip_ports=bool(args.skip_ports),
+            custom_ports=custom_ports,
+        )
+        if not preflight.print_preflight_report(results):
+            print(f"  ✗ Preflight failed. Use --skip-preflight to bypass.")
+            return 1
+    else:
+        print(f"  ⚠ Preflight skipped (--skip-preflight)")
+        if not docker_ops.check_prerequisites():
+            return 1
 
     # Step 2: Auth check
-    print(f"  [2/6] Verifying Docker Hub authentication ...")
+    print(f"  [2/7] Verifying Docker Hub authentication ...")
     auth = load_state("auth")
     if not auth.get("username"):
         print(f"  ✗ Not authenticated. Run: lattice auth login")
@@ -178,7 +196,7 @@ def cmd_start(args):
     print(f"  ✓ Authenticated as {auth['username']}")
 
     # Step 3: Environment check
-    print(f"  [3/6] Checking environment configuration ...")
+    print(f"  [3/7] Checking environment configuration ...")
     env_path = LATTICE_HOME / "deployments" / f"{instance_name}.env"
     if not env_path.exists():
         print(f"  ✗ No environment file for '{instance_name}'.")
@@ -194,15 +212,24 @@ def cmd_start(args):
         return 1
     print(f"  ✓ All required variables set")
 
-    # Step 4: Pull image
+    # Step 4: License check
+    print(f"  [4/7] Checking license ...")
+    from . import license as lic
+    license_data = lic.get_active_license()
+    if license_data and license_data.get("status") == "active":
+        print(f"  ✓ License active ({license_data.get('tier')})")
+    else:
+        print(f"  ⚠ No active license — running in community mode")
+
+    # Step 5: Pull image
     image = config.get("image", "lattice-os")
     tag = config.get("tag", "latest")
-    print(f"  [4/6] Pulling container image ...")
+    print(f"  [5/7] Pulling container image ...")
     if not docker_ops.pull_image(image, tag):
         return 1
 
-    # Step 5: Compose up
-    print(f"  [5/6] Starting services ...")
+    # Step 6: Compose up
+    print(f"  [6/7] Starting services ...")
 
     # Check compose file exists
     if not os.path.exists(compose_file):
@@ -214,8 +241,8 @@ def cmd_start(args):
         print(f"  ✗ Failed to start services.")
         return 1
 
-    # Step 6: Health verification
-    print(f"  [6/6] Running post-deploy health check ...")
+    # Step 7: Health verification
+    print(f"  [7/7] Running post-deploy health check ...")
     # Brief wait for startup
     import time
     time.sleep(5)
@@ -309,6 +336,15 @@ def get_subcommands():
             "args": [
                 (("--name", "-n"), {"default": "default", "help": "Instance name"}),
                 (("--compose", "-c"), {"help": "Path to docker-compose.yml"}),
+                (("--skip-preflight",), {
+                    "action": "store_true",
+                    "help": "Skip V2 preflight checks (not recommended)",
+                }),
+                (("--skip-ports",), {
+                    "action": "store_true",
+                    "help": "Skip port availability check",
+                }),
+                (("--port",), {"help": "Override default ports (comma-separated)"}),
             ],
         },
         "stop": {

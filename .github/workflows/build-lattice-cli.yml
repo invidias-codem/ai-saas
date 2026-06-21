@@ -1,0 +1,135 @@
+# ── Cross-platform lattice-cli binary build + release ─────────────────────────
+# Triggered manually via workflow_dispatch, or on tag push (v*-cli-*).
+# Produces native binaries for linux/macos (amd64 + arm64) via Nuitka,
+# then uploads as GitHub Release assets.
+
+name: Build lattice-cli
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semantic version (e.g. 0.2.0)"
+        required: true
+      prerelease:
+        description: "Mark as prerelease?"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v*-cli-*"
+
+concurrency:
+  group: build-lattice-cli
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            runner: ubuntu-22.04
+          - os: linux
+            arch: arm64
+            runner: ubuntu-22.04-arm
+          - os: macos
+            arch: amd64
+            runner: macos-13
+          - os: macos
+            arch: arm64
+            runner: macos-14-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Nuitka
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka ordered-set
+
+      - name: Build binary
+        run: python scripts/lattice-cli/build.py --nuitka
+        env:
+          TARGET_PLATFORM: ${{ matrix.os }}-${{ matrix.arch }}
+
+      - name: Verify binary
+        run: |
+          BINARY=$(ls dist/cli/lattice-* | head -1)
+          chmod +x "$BINARY"
+          "$BINARY" --version
+          "$BINARY" --help | head -5
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lattice-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/cli/lattice-*
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-22.04
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/cli/
+          merge-multiple: true
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="v${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: "lattice-cli ${{ steps.version.outputs.version }}"
+          files: dist/cli/lattice-*
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          body: |
+            ## lattice-cli ${{ steps.version.outputs.version }}
+
+            ### Install
+
+            ```bash
+            curl -sL https://lattice.sh/install.sh | bash
+            ```
+
+            ### Binaries
+
+            | Platform | Arch | Asset |
+            |---|---|---|
+            | Linux | amd64 | `lattice-linux-amd64` |
+            | Linux | arm64 | `lattice-linux-arm64` |
+            | macOS | amd64 | `lattice-macos-amd64` |
+            | macOS | arm64 | `lattice-macos-arm64` |
+
+            ### Verify
+
+            ```bash
+            chmod +x lattice-*
+            ./lattice-<platform>-<arch> --version
+            ```
+
+            Built with Nuitka (native compilation — source not extractable).

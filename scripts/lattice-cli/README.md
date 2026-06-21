@@ -1,6 +1,6 @@
 # lattice-cli
 
-**Sovereign AI Infrastructure Management CLI**
+**Sovereign AI Infrastructure Management CLI (v0.2.0)**
 
 The official command-line tool for deploying, managing, and upgrading
 [Lattice OS](https://gen1e.xyz) Docker appliance instances.
@@ -16,15 +16,21 @@ with `read` scope for pulling private images.
 
 ## Installation
 
+### Option 1: Pre-built binary (recommended)
 ```bash
-# From the ai-saas repository root
+curl -sL https://lattice.sh/install.sh | bash
+```
+
+### Option 2: From source
+```bash
 cd scripts/lattice-cli
 pip install -e .
 ```
 
-Or run directly:
+### Option 3: Build standalone binary
 ```bash
-python scripts/lattice-cli/lattice auth login
+pip install nuitka ordered-set
+python scripts/lattice-cli/build.py --nuitka
 ```
 
 ## Quick Start
@@ -61,7 +67,8 @@ lattice health logs --follow
 
 | Command | Description |
 |---|---|
-| `lattice deploy start` | Pull image, bootstrap env, start services |
+| `lattice deploy init` | Bootstrap .env with secrets |
+| `lattice deploy start` | Full deploy with 7-step preflight validation |
 | `lattice deploy stop` | Stop all services gracefully |
 | `lattice deploy restart` | Restart all services |
 | `lattice deploy status` | Show running container status |
@@ -96,6 +103,18 @@ lattice health logs --follow
 | `lattice backup create` | Snapshot config + Supabase volumes |
 | `lattice backup restore <path>` | Restore from a backup |
 | `lattice backup list` | List available backups |
+
+### V2 Preflight (runs automatically on deploy start)
+
+| Check | Validates |
+|---|---|
+| Docker daemon | Running, accessible without sudo |
+| Compose v2 | Plugin installed (not deprecated v1) |
+| Host resources | ≥4GB RAM, ≥2 CPUs |
+| Ports | 3000, 5432, 6379 available |
+| Disk space | ≥8GB free |
+| Docker auth | PAT configured |
+| License | Valid and unexpired |
 
 ## Configuration
 
