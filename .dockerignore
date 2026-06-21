@@ -1,0 +1,35 @@
+# Git / deps
+.git
+.github
+node_modules
+**/node_modules
+.pnpm-store
+
+# Build outputs
+.next
+out
+dist
+dist-electron
+coverage
+.turbo
+.cache
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Large or non-runtime workspaces excluded from appliance image context
+anycrawl
+functions/**/venv
+functions/**/__pycache__
+remote
+research
+.agent
+.hermes
+
+# OS/editor noise
+.DS_Store
+*.log

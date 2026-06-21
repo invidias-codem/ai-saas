@@ -16,6 +16,7 @@ import { HeroSection } from "@/components/landing/hero-section";
 import { UCOLSection } from "@/components/landing/ucol-section";
 import { MemorySection } from "@/components/landing/memory-section";
 import { InfrastructureSection } from "@/components/landing/infrastructure-section";
+import { ComplianceSection } from "@/components/landing/compliance-section";
 import { FeatureCard } from "@/components/landing/feature-card";
 import { Testimonials } from "@/components/landing/testimonials";
 import { useTranslations } from "next-intl";
@@ -83,7 +84,10 @@ const LandingPage = () => {
         {/* 4 — Infrastructure control: self-hosted OSS + premium fallback. */}
         <InfrastructureSection />
 
-        {/* 5 — Features Grid: Platform capabilities built on memory-native AI. */}
+        {/* 5 — Compliance: Regulatory frameworks for regulated industries */}
+        <ComplianceSection />
+
+        {/* 6 — Features Grid: Platform capabilities built on memory-native AI. */}
         <section className="px-4 py-16 md:py-32 max-w-7xl mx-auto relative cursor-default">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-violet-500/5 dark:bg-indigo-500/10 rounded-full blur-[100px] -z-10" />
 
