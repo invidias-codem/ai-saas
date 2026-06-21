@@ -5,6 +5,7 @@ import { z } from "zod";
 const envSchema = z.object({
   DEPLOYMENT_MODE: z.string().optional(),
   PREFLIGHT_SECRET: z.string().optional(),
+  LATTICE_INSTANCE_ID: z.string().uuid().optional(),
 
   // Clerk keys (publicly exposed to browser)
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1, { message: "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is required" }).optional(),

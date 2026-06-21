@@ -42,6 +42,24 @@ export type AuditAction =
   | 'memory.delete'
   | 'memory.bulk_delete'
   | 'memory.export'
+  // Workspace / enterprise administration
+  | 'workspace.create'
+  | 'workspace.update'
+  | 'workspace.delete'
+  | 'workspace.member.invite'
+  | 'workspace.member.role_change'
+  | 'workspace.member.remove'
+  | 'workspace.repository.link'
+  | 'workspace.repository.unlink'
+  | 'partner_key.create'
+  | 'partner_key.revoke'
+  | 'provider_key.create'
+  | 'provider_key.update'
+  | 'provider_key.delete'
+  | 'license.activation_attempt'
+  | 'license.activation_success'
+  | 'license.activation_failed'
+  | 'preflight.check'
   // Agent / UCOL
   | 'agent.dispatch'
   | 'agent.pr_opened'
@@ -70,6 +88,17 @@ const ACTION_SEVERITY: Partial<Record<AuditAction, AuditSeverity>> = {
   'chat.budget_exceeded':     'warn',
   'memory.bulk_delete':       'warn',
   'memory.delete':            'info',
+  'workspace.delete':         'warn',
+  'workspace.member.invite':  'warn',
+  'workspace.member.role_change': 'warn',
+  'workspace.member.remove':  'warn',
+  'partner_key.create':       'warn',
+  'partner_key.revoke':       'warn',
+  'provider_key.create':      'warn',
+  'provider_key.update':      'warn',
+  'provider_key.delete':      'warn',
+  'license.activation_attempt': 'warn',
+  'license.activation_failed': 'warn',
   'agent.pr_blocked':         'warn',
   'security.rate_limit':      'warn',
   'security.pii_detected':    'critical',
@@ -86,8 +115,8 @@ function getSeverity(action: AuditAction): AuditSeverity {
 // ─── Payload Sanitization ────────────────────────────────────────────────────
 
 const SENSITIVE_KEYS = new Set([
-  'password', 'token', 'secret', 'api_key', 'apiKey',
-  'authorization', 'credit_card', 'ssn', 'dob',
+  'password', 'token', 'secret', 'api_key', 'apikey', 'apiKey',
+  'authorization', 'credit_card', 'ssn', 'dob', 'licenseKey', 'license_key',
 ]);
 
 /**

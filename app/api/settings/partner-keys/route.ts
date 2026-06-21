@@ -13,6 +13,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 import { generatePartnerKey, PARTNER_SCOPES, type KeyEnvironment } from '@/lib/api/partnerKeys';
+import { audit } from '@/lib/security/auditLog';
+import { requireWorkspacePermission } from '@/lib/security/workspaceAccess';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,17 +47,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify the user owns the workspace
-    const { data: ws, error: wsErr } = await supabaseAdmin
-      .from('workspaces')
-      .select('id')
-      .eq('id', workspaceId)
-      .eq('user_id', userId)
-      .single();
-
-    if (wsErr || !ws) {
-      return NextResponse.json({ error: 'Forbidden: workspace not found or not owned' }, { status: 403 });
-    }
+    await requireWorkspacePermission(userId, workspaceId, 'partner_key:create');
 
     // Generate the key
     const generated = generatePartnerKey(env);
@@ -81,6 +73,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Return plaintext ONCE — never retrievable again
+    void audit('partner_key.create', userId, {
+      workspaceId,
+      keyId: inserted.id,
+      keyPrefix: generated.prefix,
+      environment: env,
+      scopes: inserted.scopes,
+      rateLimitPerMin: inserted.rate_limit_per_min,
+    }, req);
+
     return NextResponse.json({
       key: generated.plaintext,
       keyInfo: inserted,
@@ -128,17 +129,35 @@ export async function DELETE(req: NextRequest) {
     const keyId = searchParams.get('id');
     if (!keyId) return NextResponse.json({ error: 'id query param is required' }, { status: 400 });
 
-    // Only revoke keys owned by this user
+    // Only revoke keys in workspaces where this user can manage partner keys.
+    const { data: key, error: keyErr } = await supabaseAdmin
+      .from('partner_keys')
+      .select('id, workspace_id, key_prefix, environment')
+      .eq('id', keyId)
+      .single();
+
+    if (keyErr || !key) {
+      return NextResponse.json({ error: 'Key not found' }, { status: 404 });
+    }
+
+    await requireWorkspacePermission(userId, key.workspace_id, 'partner_key:revoke');
+
     const { error } = await supabaseAdmin
       .from('partner_keys')
       .update({ revoked: true })
-      .eq('id', keyId)
-      .eq('user_id', userId);
+      .eq('id', keyId);
 
     if (error) {
       console.error('[partner-keys] revoke error:', error);
       return NextResponse.json({ error: 'Failed to revoke key' }, { status: 500 });
     }
+
+    void audit('partner_key.revoke', userId, {
+      workspaceId: key.workspace_id,
+      keyId,
+      keyPrefix: key.key_prefix,
+      environment: key.environment,
+    }, req);
 
     return NextResponse.json({ success: true, revoked: keyId });
   } catch (err) {

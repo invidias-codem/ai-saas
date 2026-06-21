@@ -12,6 +12,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { activateLicense, checkLicense } from '@/lib/api/license';
+import { audit } from '@/lib/security/auditLog';
+import { env } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +28,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const instanceId = process.env.LATTICE_INSTANCE_ID;
+    const instanceId = env.LATTICE_INSTANCE_ID;
     if (!instanceId) {
       return NextResponse.json(
         { error: 'LATTICE_INSTANCE_ID not configured' },
@@ -34,12 +36,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    void audit('license.activation_attempt', 'system', {
+      instanceId,
+      licenseKey,
+    }, req);
+
     const result = await activateLicense(licenseKey, instanceId);
     if (!result.ok) {
+      void audit('license.activation_failed', 'system', {
+        instanceId,
+        licenseKey,
+        reason: result.error,
+      }, req);
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
     const license = await checkLicense(instanceId);
+    void audit('license.activation_success', 'system', {
+      instanceId,
+      licenseId: license?.id,
+      tier: license?.tier,
+      maxSeats: license?.maxSeats,
+      maxNodes: license?.maxNodes,
+    }, req);
+
     return NextResponse.json({
       success: true,
       license: license
