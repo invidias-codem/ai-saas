@@ -1,0 +1,145 @@
+/* Lattice Auth Pages Custom Styling */
+/* Inspired by PS1/PS2 boot screen aesthetic */
+
+/* Main card with glassmorphism effect */
+.lattice-auth .cl-card {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset !important;
+  border-radius: 16px !important;
+  animation: cardFadeIn 0.5s ease-out !important;
+}
+
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Header styling */
+.lattice-auth .cl-headerTitle {
+  color: #1f2937 !important;
+  font-weight: 700 !important;
+  font-size: 1.75rem !important;
+  letter-spacing: -0.025em !important;
+}
+
+.lattice-auth .cl-headerSubtitle {
+  color: #6b7280 !important;
+  font-size: 0.875rem !important;
+  margin-top: 0.25rem !important;
+}
+
+/* Social buttons with hover effects */
+.lattice-auth .cl-socialButtonsBlockButton {
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-radius: 8px !important;
+}
+
+.lattice-auth .cl-socialButtonsBlockButton:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.15),
+    0 0 0 2px rgba(6, 182, 212, 0.2) !important;
+  border-color: #06b6d4 !important;
+}
+
+.lattice-auth .cl-socialButtonsBlockButton:active {
+  transform: translateY(0) !important;
+}
+
+/* Primary button with gradient */
+.lattice-auth .cl-formButtonPrimary {
+  background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.lattice-auth .cl-formButtonPrimary::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: -100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  ) !important;
+  transition: left 0.5s !important;
+}
+
+.lattice-auth .cl-formButtonPrimary:hover::before {
+  left: 100% !important;
+}
+
+.lattice-auth .cl-formButtonPrimary:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.4) !important;
+}
+
+/* Form inputs with smooth focus */
+.lattice-auth .cl-formFieldInput {
+  border: 1px solid #e5e7eb !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border-radius: 8px !important;
+}
+
+.lattice-auth .cl-formFieldInput:focus {
+  border-color: #06b6d4 !important;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1) !important;
+  outline: none !important;
+}
+
+/* Divider styling */
+.lattice-auth .cl-dividerLine {
+  background: #e5e7eb !important;
+}
+
+.lattice-auth .cl-dividerText {
+  color: #9ca3af !important;
+  font-size: 0.75rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+}
+
+/* Footer links */
+.lattice-auth .cl-footerActionLink {
+  color: #06b6d4 !important;
+  font-weight: 500 !important;
+  transition: color 0.2s ease !important;
+}
+
+.lattice-auth .cl-footerActionLink:hover {
+  color: #0891b2 !important;
+}
+
+/* Badge (secured by Clerk) */
+.lattice-auth .cl-badge {
+  color: #9ca3af !important;
+  font-size: 0.75rem !important;
+}
+
+/* Logo container */
+.lattice-auth .cl-logoBox {
+  margin-bottom: 1.5rem !important;
+}
+
+.lattice-auth .cl-logoImage {
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15)) !important;
+}
