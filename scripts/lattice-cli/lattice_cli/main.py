@@ -9,7 +9,7 @@ import argparse
 import sys
 
 from . import __version__
-from . import auth, deploy, license, health, upgrade, backup
+from . import auth, deploy, license, health, upgrade, backup, crypto_license
 
 
 BANNER = f"""
@@ -103,6 +103,15 @@ Built by JJEM Global Technology, Inc.
             p.add_argument(*flags, **kwargs)
         p.set_defaults(handler=spec["handler"])
 
+    # ── Dev (internal crypto tools) ───────────────────────────────────
+    crypto_parser = sub.add_parser("dev", help="Internal dev tools (JJEM use only)")
+    crypto_sub = crypto_parser.add_subparsers(dest="subcommand")
+    for name, spec in crypto_license.get_subcommands().items():
+        p = crypto_sub.add_parser(name, help=spec["help"])
+        for flags, kwargs in spec["args"]:
+            p.add_argument(*flags, **kwargs)
+        p.set_defaults(handler=spec["handler"])
+
     args = parser.parse_args()
 
     # No command given — show banner + help
@@ -123,6 +132,7 @@ Built by JJEM Global Technology, Inc.
             "health": health_parser,
             "upgrade": upgrade_parser,
             "backup": backup_parser,
+            "dev": crypto_parser,
         }
         if args.command in sub_parsers:
             sub_parsers[args.command].print_help()

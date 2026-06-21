@@ -9,6 +9,7 @@ License keys follow the format: LATTICE-<TIER>-<32-hex-chars>
 Activation is recorded locally — no phone-home telemetry (data sovereignty).
 """
 
+import json
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -53,13 +54,31 @@ def get_active_license() -> dict | None:
 def cmd_activate(args):
     """Activate a Lattice OS license key."""
     key = args.key
-    valid, tier = validate_key(key)
-
-    if not valid or tier is None:
-        print(f"  ✗ Invalid license key format.")
-        print(f"    Expected: LATTICE-<TIER>-<32 hex chars>")
-        print(f"    Got:      {key}")
-        return 1
+    
+    # Check if this is a V3 crypto license
+    if key.startswith("lattice-v3-"):
+        from . import crypto_license
+        payload = crypto_license.verify_license_key(key)
+        
+        if payload is None:
+            print(f"  ✗ Invalid V3 license (signature verification failed)")
+            return 1
+        
+        # Extract tier from payload
+        tier = payload.get("tier", "community")
+        expires = payload.get("expires_at") or (datetime.now(timezone.utc) + timedelta(days=365)).isoformat()
+        
+        print(f"  ✓ V3 license signature verified")
+        print(f"    Payload: {json.dumps(payload, indent=2)}")
+    else:
+        # V1/V2 format validation
+        valid, tier = validate_key(key)
+        if not valid or tier is None:
+            print(f"  ✗ Invalid license key format.")
+            print(f"    Expected: LATTICE-<TIER>-<32 hex chars> or lattice-v3-<payload>.<signature>")
+            print(f"    Got:      {key}")
+            return 1
+        expires = (datetime.now(timezone.utc) + timedelta(days=365)).isoformat()
 
     # Check for existing activation
     existing = get_active_license()
@@ -71,9 +90,6 @@ def cmd_activate(args):
             print(f"\n    Use --force to replace the current license.")
             return 1
         print(f"    Replacing with new license ...")
-
-    # Determine expiry (1 year from now for both tiers in pilot phase)
-    expires = (datetime.now(timezone.utc) + timedelta(days=365)).isoformat()
 
     license_data = {
         "key": key,

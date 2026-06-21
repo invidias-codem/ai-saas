@@ -1,6 +1,2 @@
-# lattice-cli: zero external runtime dependencies
-# Uses only Python 3.10+ stdlib (argparse, subprocess, json, pathlib, etc.)
-# Docker CLI must be installed separately on the host.
-#
-# Dev-only dependencies (for type-checking and testing):
-# pyright>=1.1
+# lattice-cli runtime dependencies
+cryptography>=41.0      # ed25519 license signing/verification (V3)
