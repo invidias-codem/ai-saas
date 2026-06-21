@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { createClient } from "@supabase/supabase-js";
+import { audit } from "@/lib/security/auditLog";
+import { checkLicense } from "@/lib/api/license";
+
+export const dynamic = 'force-dynamic';
+
+// Helper to safely represent env presence without leaking values
+function configured(value: unknown): boolean {
+  return Boolean(value);
+}
 
 export async function GET(request: Request) {
   // Extract secret from either Authorization header or query parameter
@@ -16,37 +25,64 @@ export async function GET(request: Request) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
-  const status = {
-    mode_a_active: env.DEPLOYMENT_MODE === "A",
-    db_configured: !!env.NEXT_PUBLIC_SUPABASE_URL && !!env.SUPABASE_SERVICE_ROLE_KEY,
-    auth_configured: !!env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && !!env.CLERK_SECRET_KEY,
-    ai_configured: !!env.GOOGLE_API_KEY,
-    db_reachable: false,
-    timestamp: new Date().toISOString(),
+  const required_env = {
+    NEXT_PUBLIC_SUPABASE_URL: configured(env.NEXT_PUBLIC_SUPABASE_URL),
+    SUPABASE_SERVICE_ROLE_KEY: configured(env.SUPABASE_SERVICE_ROLE_KEY),
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: configured(env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY),
+    CLERK_SECRET_KEY: configured(env.CLERK_SECRET_KEY),
+    GOOGLE_API_KEY: configured(env.GOOGLE_API_KEY),
+    LATTICE_INSTANCE_ID: configured(env.LATTICE_INSTANCE_ID),
   };
 
-  // Check DB Reachability if configured
-  if (status.db_configured) {
+  const db_configured = !!env.NEXT_PUBLIC_SUPABASE_URL && !!env.SUPABASE_SERVICE_ROLE_KEY;
+  const auth_configured = !!env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && !!env.CLERK_SECRET_KEY;
+  const ai_configured = !!env.GOOGLE_API_KEY;
+
+  let db_reachable = false;
+  if (db_configured && env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
-      // Using service role for a backend check
-      const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!);
-      
-      // Perform a minimal query to verify connection
-      // Attempting to select 1 row from a table likely to exist or just hitting the API.
-      // We'll query a lightweight public schema or a known table. 
-      // If the query fails due to missing table but connection succeeds, it's still reachable.
+      const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
       const { error } = await supabase.from('users').select('id').limit(1);
-      
-      // Even if 'users' table doesn't exist, a PostgREST error means the API is reachable.
-      // A fetch failed error means it's unreachable.
-      status.db_reachable = true;
+      db_reachable = true;
     } catch (e) {
-      status.db_reachable = false;
+      db_reachable = false;
+    }
+  }
+  let license_configured = false;
+  let license_status: { tier: string; features: string[]; maxSeats: number; maxNodes: number } | null = null;
+  if (env.LATTICE_INSTANCE_ID) {
+    const license = await checkLicense(env.LATTICE_INSTANCE_ID);
+    if (license) {
+      license_configured = true;
+      license_status = {
+        tier: license.tier,
+        features: license.featureGates,
+        maxSeats: license.maxSeats,
+        maxNodes: license.maxNodes,
+      };
     }
   }
 
-  // Determine overall readiness
-  const isHealthy = status.db_configured && status.auth_configured && status.ai_configured && status.db_reachable;
+  const isHealthy = db_configured && auth_configured && ai_configured && db_reachable;
+
+  const status = {
+    mode_a_active: env.DEPLOYMENT_MODE === "A",
+    db_configured,
+    auth_configured,
+    ai_configured,
+    db_reachable,
+    license_configured,
+    license_status,
+    required_env,
+    timestamp: new Date().toISOString(),
+  };
+
+  void audit('preflight.check', 'system', {
+    healthy: isHealthy,
+    db_configured,
+    auth_configured,
+    license_configured,
+  });
 
   return NextResponse.json(status, {
     status: isHealthy ? 200 : 503,

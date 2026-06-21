@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
+import { audit } from "@/lib/security/auditLog";
+import { requireWorkspacePermission } from "@/lib/security/workspaceAccess";
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +14,7 @@ export async function GET(req: NextRequest, { params }: { params: { workspaceId:
         }
 
         const workspaceId = params.workspaceId;
+        await requireWorkspacePermission(userId, workspaceId, 'workspace:read');
 
         if (!supabaseAdmin) {
             throw new Error("Supabase Admin client not initialized");
@@ -42,6 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: { workspaceId
         }
 
         const workspaceId = params.workspaceId;
+        await requireWorkspacePermission(userId, workspaceId, 'repository:link');
         const body = await req.json();
         const { repo_full_name } = body;
 
@@ -69,6 +73,12 @@ export async function POST(req: NextRequest, { params }: { params: { workspaceId
             throw new Error("Failed to link repository");
         }
 
+        void audit('workspace.repository.link', userId, {
+            workspaceId,
+            repoFullName: repo_full_name,
+            provider: 'github',
+        }, req);
+
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error("[Workspace Repos] Error:", error);
@@ -84,6 +94,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { workspace
         }
 
         const workspaceId = params.workspaceId;
+        await requireWorkspacePermission(userId, workspaceId, 'repository:unlink');
         const searchParams = req.nextUrl.searchParams;
         const repo_full_name = searchParams.get('repo_full_name');
 
@@ -106,6 +117,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { workspace
             console.error("[Workspace Repos] Supabase delete error:", error);
             throw new Error("Failed to unlink repository");
         }
+
+        void audit('workspace.repository.unlink', userId, {
+            workspaceId,
+            repoFullName: repo_full_name,
+            provider: 'github',
+        }, req);
 
         return NextResponse.json({ success: true });
     } catch (error) {

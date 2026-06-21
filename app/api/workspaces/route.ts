@@ -4,6 +4,7 @@ import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAut
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { ensureDefaultOperatingProfile } from '@/lib/workspaces/operatingProfiles';
 import { attachOperatingProfiles } from '@/lib/workspaces/query';
+import { audit } from '@/lib/security/auditLog';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +65,13 @@ async function ensureDefaultWorkspace(userId: string) {
     workspace_id: created.id,
     last_open_tab: 'overview',
   });
+
+  await supabaseAdmin.from('workspace_members').upsert({
+    workspace_id: created.id,
+    user_id: userId,
+    role: 'owner',
+    accepted_at: new Date().toISOString(),
+  }, { onConflict: 'workspace_id,user_id' });
 
   return created;
 }
@@ -163,6 +171,20 @@ export async function POST(req: Request) {
       workspace_id: data.id,
       last_open_tab: 'overview',
     });
+
+    await supabaseAdmin.from('workspace_members').upsert({
+      workspace_id: data.id,
+      user_id: user.userId,
+      role: 'owner',
+      accepted_at: new Date().toISOString(),
+    }, { onConflict: 'workspace_id,user_id' });
+
+    void audit('workspace.create', user.userId, {
+      workspaceId: data.id,
+      role: 'owner',
+      kind,
+      defaultOperatingProfileId: defaultOperatingProfileId || fallbackProfile.id,
+    }, req);
 
     const [workspace] = await attachOperatingProfiles([data]);
 
