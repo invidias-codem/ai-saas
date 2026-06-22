@@ -2,11 +2,12 @@
 # install.sh — One-command installer for lattice-cli
 # Usage: curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash
 #
-# Detects OS/arch, downloads the matching binary from GitHub Releases,
-# and installs to /usr/local/bin/lattice (or ~/.local/bin if no sudo).
+# Tries to download a prebuilt binary from GitHub Releases. If no matching
+# release asset exists (or it fails to execute), falls back to source install
+# by downloading the Python wrapper + package files directly.
 #
-# For air-gapped environments: download the binary manually, then:
-#   chmod +x lattice && sudo mv lattice /usr/local/bin/
+# Air-gapped alternative: copy the whole `lattice_cli/` package and `lattice`
+# wrapper to a shared dir, then symlink it into PATH.
 
 set -euo pipefail
 
@@ -15,6 +16,7 @@ RELEASE_TAG="latest"
 BINARY_NAME="lattice"
 INSTALL_DIR="/usr/local/bin"
 FALLBACK_DIR="$HOME/.local/bin"
+SOURCE_INSTALL_DIR="$HOME/.local/share/lattice-cli"
 
 # Colors
 RED='\033[0;31m'
@@ -70,18 +72,63 @@ get_download_url() {
     | python3 -c "import sys,json; data=json.load(sys.stdin); assets=[a for a in data.get('assets',[]) if '${ASSET_NAME}' in a['name']]; print(assets[0]['browser_download_url'] if assets else '')" 2>/dev/null)
 
   if [ -z "$DOWNLOAD_URL" ]; then
-    # Fallback: try tag-based direct URL
     TAG=$(echo "$RESPONSE" \
       | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name',''))" 2>/dev/null)
     if [ -z "$TAG" ]; then
-      fail "No releases found. Run \`pip install -e scripts/lattice-cli/\` as fallback."
+      warn "No releases found — will use Python wrapper fallback"
+      DOWNLOAD_URL=""
+    else
+      DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
+      warn "Using direct URL fallback (no matching asset found)"
     fi
-    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
-    warn "Using direct URL fallback (no matching asset found)"
   fi
 }
 
+install_source_fallback() {
+  warn "Installing Python wrapper fallback -> ${SOURCE_INSTALL_DIR}"
+  mkdir -p "${SOURCE_INSTALL_DIR}"
+  mkdir -p "${SOURCE_INSTALL_DIR}/lattice_cli"
+
+  WRAPPER_URL="https://raw.githubusercontent.com/${REPO}/main/scripts/lattice-cli/lattice"
+  if ! curl -sL "$WRAPPER_URL" -o "${SOURCE_INSTALL_DIR}/lattice"; then
+    fail "Failed to download wrapper: $WRAPPER_URL"
+  fi
+  chmod +x "${SOURCE_INSTALL_DIR}/lattice"
+
+  for name in __init__ main auth backup config crypto_license deploy docker_ops health license preflight upgrade; do
+    curl -sL "https://raw.githubusercontent.com/${REPO}/main/scripts/lattice-cli/lattice_cli/${name}.py" \
+      -o "${SOURCE_INSTALL_DIR}/lattice_cli/${name}.py" \
+      || fail "Failed to download package file: ${name}.py"
+  done
+
+  # Verify the wrapper works before symlinking
+  if ! "${SOURCE_INSTALL_DIR}/lattice" --version >/dev/null 2>&1; then
+    fail "Wrapper install failed — check Python version and dependencies"
+  fi
+
+  mkdir -p "${FALLBACK_DIR}"
+  ln -sf "${SOURCE_INSTALL_DIR}/lattice" "${FALLBACK_DIR}/${BINARY_NAME}"
+  INSTALL_PATH="${FALLBACK_DIR}/${BINARY_NAME}"
+  if ! echo "$PATH" | tr ':' '\n' | grep -q "^${FALLBACK_DIR}$"; then
+    echo ""
+    warn "${FALLBACK_DIR} is not in your PATH."
+    echo "    Add this to your shell profile:"
+    echo ""
+    echo "    export PATH=\"${FALLBACK_DIR}:\$PATH\""
+    echo ""
+  fi
+
+  ok "Installed to ${INSTALL_PATH}"
+  ok "Source files at ${SOURCE_INSTALL_DIR}"
+}
+
 download_and_install() {
+  if [ -z "$DOWNLOAD_URL" ]; then
+    info "Skipping binary download — source-only mode"
+    install_source_fallback
+    return
+  fi
+
   TMPDIR=$(mktemp -d)
   trap "rm -rf $TMPDIR" EXIT
 
@@ -92,9 +139,11 @@ download_and_install() {
 
   chmod +x "$TARGET"
 
-  # Verify it actually runs
+  # Verify it actually runs; if not, fall back to the Python wrapper
   if ! "$TARGET" --version >/dev/null 2>&1; then
-    fail "Downloaded binary failed to execute — wrong platform?"
+    warn "Binary release not available — falling back to Python wrapper"
+    install_source_fallback
+    return
   fi
 
   # Choose install directory
@@ -131,7 +180,7 @@ verify_install() {
     VERSION=$($BINARY_NAME --version 2>&1 | head -1)
     ok "lattice $VERSION"
   else
-    warn "Binary installed but not on PATH. Run: $INSTALL_PATH --version"
+    warn "lattice installed but not on PATH. Run: $INSTALL_PATH --version"
   fi
 
   echo ""

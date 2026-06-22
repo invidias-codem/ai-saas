@@ -29,7 +29,7 @@ import sys
 import os
 
 # Ensure the package is importable when run directly
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from lattice_cli.main import main
 
