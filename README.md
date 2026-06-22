@@ -149,7 +149,7 @@ pip install -e .
 
 **Option 3: Install standalone binary**
 ```bash
-curl -sL https://lattice.sh/install.sh | bash
+curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash
 ```
 
 ### Core Commands
@@ -282,7 +282,7 @@ Deploy Lattice OS as a self-contained Docker appliance with zero cloud dependenc
 
 ```bash
 # Install lattice-cli
-curl -sL https://lattice.sh/install.sh | bash
+curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash
 
 # Authenticate with Docker Hub
 lattice auth login

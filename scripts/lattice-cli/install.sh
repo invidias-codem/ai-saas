@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install.sh — One-command installer for lattice-cli
-# Usage: curl -sL https://lattice.sh/install.sh | bash
+# Usage: curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash
 #
 # Detects OS/arch, downloads the matching binary from GitHub Releases,
 # and installs to /usr/local/bin/lattice (or ~/.local/bin if no sudo).

@@ -18,7 +18,7 @@ with `read` scope for pulling private images.
 
 ### Option 1: Pre-built binary (recommended)
 ```bash
-curl -sL https://lattice.sh/install.sh | bash
+curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash
 ```
 
 ### Option 2: From source

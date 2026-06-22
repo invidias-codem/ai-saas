@@ -55,7 +55,7 @@ const START: BetaGuide = {
       body:
         "The lattice CLI is a single compiled binary. Pick whichever method works for you — curl is fastest, pip is universal.",
       command:
-        "curl -sL https://lattice.sh/install.sh | bash\n# or: pip install git+https://github.com/invidias-codem/ai-saas.git#subdirectory=scripts/lattice-cli",
+        "curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash\n# or: pip install git+https://github.com/invidias-codem/ai-saas.git#subdirectory=scripts/lattice-cli",
     },
     {
       title: "2. Verify the install",
@@ -197,7 +197,7 @@ const ENTERPRISE: BetaGuide = {
     {
       title: "1. Install + authenticate",
       body: "Same as Quick Start — this gets you a binary and Docker Hub access.",
-      command: "curl -sL https://lattice.sh/install.sh | bash\nlattice auth login",
+      command: "curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash\nlattice auth login",
     },
     {
       title: "2. Understand the license tiers",
