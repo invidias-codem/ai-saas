@@ -92,39 +92,153 @@ The repo currently spans several major product and platform surfaces:
 
 Lattice is designed to be explored in bounded stages. The fastest way to experience the core value is this 8-step golden path.
 
-### 1. Clone repo
+### Development Setup
+
+**1. Clone repo**
 ```bash
 git clone https://github.com/invidias-codem/ai-saas.git
 cd ai-saas
 ```
 
-### 2. Install deps
+**2. Install deps**
 ```bash
 pnpm install
 ```
 
-### 3. Set minimum env vars
+**3. Set minimum env vars**
 ```bash
 cp .env.local.example .env.local
 ```
 *(Provide the minimum keys for Auth, Database, and one AI provider in `.env.local`)*
 
-### 4. Run app
+**4. Run app**
 ```bash
 pnpm dev
 ```
 
-### 5. Open workspace
+**5. Open workspace**
 Open `http://localhost:3000` in your browser. Create an account and enter a new workspace.
 
-### 6. Start a workspace-aware conversation
+**6. Start a workspace-aware conversation**
 Don't just say "hello". Try prompting Lattice to understand a concept within the workspace context. Notice how memory is persistent and context is assembled deliberately.
 
-### 7. Explore modes
+**7. Explore modes**
 Switch between different runtime modes (fast, agentic, reasoning) to observe how Lattice routes requests server-side based on the operating profile.
 
-### 8. Optionally go deeper
+**8. Optionally go deeper**
 Once the core loop makes sense, check the docs to explore integrations, local background intelligence (Electron/Go harness), or self-hosted deployments.
+
+---
+
+## lattice-cli: Docker Appliance Management
+
+Lattice OS includes a production-ready CLI tool for managing Docker appliance deployments with cryptographic licensing and preflight validation.
+
+### Installation
+
+**Option 1: Install from GitHub (recommended)**
+```bash
+pip install git+https://github.com/invidias-codem/ai-saas.git#subdirectory=scripts/lattice-cli
+```
+
+**Option 2: Build from source**
+```bash
+cd scripts/lattice-cli
+pip install -e .
+```
+
+**Option 3: Install standalone binary**
+```bash
+curl -sL https://lattice.sh/install.sh | bash
+```
+
+### Core Commands
+
+```bash
+# Check version and help
+lattice --version
+lattice --help
+
+# Authentication
+lattice auth login --username <dockerhub-username> --token <dockerhub-pat>
+lattice auth status
+
+# Deploy Lattice OS
+lattice deploy init --name prod --tier enterprise
+lattice deploy start --name prod
+
+# License management
+lattice license activate <v3-license-key>
+lattice license show
+
+# Health checks and logs
+lattice health check --instance prod
+lattice health logs --tail 100
+
+# Upgrades and rollbacks
+lattice upgrade upgrade --tag latest
+lattice upgrade rollback
+
+# Backups
+lattice backup create --instance prod
+lattice backup list
+lattice backup restore <backup-id>
+```
+
+### V3 Cryptographic Licensing (v0.3.0)
+
+Lattice OS v0.3.0 introduces ed25519 cryptographic license verification:
+
+- **Secure by design**: Private signing key stored offline (HSM-backed), public key embedded in binary
+- **Tamper-proof**: Licenses are digitally signed and verified before activation
+- **Offline-capable**: License verification works in air-gapped environments
+- **Feature-based**: Licenses encode tier (community/enterprise) and feature gates
+
+**License types:**
+- **Community**: Free forever, up to 3 workspaces, core features
+- **Enterprise**: Unlimited workspaces, RBAC, SSO, audit logs, support
+
+**Activation flow:**
+```bash
+# Generate license (admin only, requires private key)
+lattice dev sign --tier enterprise --expires 2027-06-21T00:00:00Z --instance prod
+
+# Activate license (user)
+lattice license activate lattice-v3-<signed-payload>
+```
+
+### Air-Gapped Deployment
+
+Lattice OS supports fully offline operation:
+
+```bash
+# Mark deployment as air-gapped
+# Set deployment_mode = "air-gapped" in ~/.lattice/config.toml first
+lattice deploy init --name secure --tier enterprise
+
+# Verify no network calls
+lattice health check --instance secure
+```
+
+**Preflight checks include:**
+- Docker daemon accessibility
+- Compose v2 availability
+- RAM/CPU requirements (4GB/2 cores minimum)
+- Port availability (3000, 5432, 6379)
+- Disk space (8GB minimum)
+- Authentication status
+- Licensing status
+
+### Beta Onboarding Guides
+
+We provide guided onboarding tracks for beta testers:
+
+- **Quick Start** (`/en/beta/start`): 15-minute path from install to first conversation
+- **Developer** (`/en/beta/dev`): 45-minute deep dive into source builds and CI integration
+- **Enterprise** (`/en/beta/enterprise`): 1-hour team setup with licensing, RBAC, and SSO
+- **Privacy** (`/en/beta/privacy`): 1-hour compliance-focused setup for regulated environments
+
+Each guide includes prerequisites, step-by-step walkthroughs, and CLI commands.
 
 ---
 
@@ -160,14 +274,84 @@ Treat this as an advanced product lane until the install and runtime story is mo
 
 ## Deployment Direction
 
-Lattice is being shaped toward explicit deployment modes rather than a vague “deploy anywhere” promise.
+Lattice OS supports multiple deployment modes, from cloud-hosted SaaS to fully air-gapped Docker appliances.
 
-The clearest current self-hosted direction is:
+### Docker Appliance Deployment (Recommended for Enterprise)
 
-### Mode A — Standard Internal Deployment
-Designed for internal teams using workspace-scoped reasoning over documents, projects, and persistent context.
+Deploy Lattice OS as a self-contained Docker appliance with zero cloud dependencies:
 
-More advanced deployment modes for customer-facing assistants, deeper private/memory-rich deployments, and infrastructure/platform use are planned as more mature operational profiles.
+```bash
+# Install lattice-cli
+curl -sL https://lattice.sh/install.sh | bash
+
+# Authenticate with Docker Hub
+lattice auth login
+
+# Initialize and deploy
+lattice deploy init --name prod --tier enterprise
+lattice deploy start --name prod
+```
+
+**What you get:**
+- Complete Lattice OS stack in Docker containers
+- Automatic preflight validation (Docker, Compose v2, RAM/CPU, ports, disk, Docker auth)
+- Cryptographic license verification (tamper-proof)
+- Air-gap support for disconnected environments
+- Built-in backup and restore capabilities
+
+**Requirements:**
+- Docker Engine 20.10+ with Compose v2
+- 4GB RAM (8GB recommended for Enterprise)
+- 8GB disk space minimum (20GB recommended for Enterprise)
+- Docker Hub PAT for private image authentication
+
+### Deployment Modes
+
+**1. Cloud-Hosted (gen1e.xyz)**
+- Managed SaaS deployment
+- No infrastructure to maintain
+- Automatic updates and scaling
+- Best for: Teams, individual users
+
+**2. Docker Appliance (Self-Hosted)**
+- Single-server deployment
+- Full control over data residency
+- Air-gap capable
+- Best for: Enterprise, regulated environments
+
+**3. Air-Gapped (Fully Offline)**
+- Zero network dependencies
+- All models and data stay on-premises
+- Compliance-ready (HIPAA, GDPR, SOC2)
+- Best for: Government, healthcare, finance
+
+**4. Hybrid (Mixed Infrastructure)**
+- Core services self-hosted
+- Optional cloud integrations (OpenAI, Slack, etc.)
+- Flexible data residency
+- Best for: Organizations with mixed compliance needs
+
+### Infrastructure Requirements
+
+| Mode | RAM | CPU | Disk | Network | Docker |
+|------|-----|-----|------|---------|--------|
+| Community | 4GB | 2 cores | 10GB | Optional | Required |
+| Enterprise | 8GB | 4 cores | 20GB | Optional | Required |
+| Air-Gapped | 8GB | 4 cores | 20GB | **None** | Required |
+
+### Preflight Validation
+
+The `lattice deploy start` flow runs 6 preflight checks before deployment, then verifies licensing during the deploy sequence:
+
+1. **Docker daemon** - Ensures Docker is running and accessible
+2. **Compose v2** - Verifies Docker Compose plugin (not legacy docker-compose)
+3. **System resources** - Validates RAM/CPU meet minimum requirements
+4. **Port availability** - Checks 3000, 5432, 6379 are free
+5. **Disk space** - Ensures 8GB+ free for images and volumes
+6. **Authentication** - Confirms Docker Hub PAT is configured
+7. **Licensing** - Validates the active ed25519 license during deployment
+
+All checks are non-destructive and provide detailed remediation steps on failure.
 
 ---
 

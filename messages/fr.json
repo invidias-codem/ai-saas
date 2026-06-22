@@ -1,31 +1,31 @@
 {
     "Navbar": {
-        "supportGenie": "Soutenir Genie",
+        "supportGenie": "Soutenir Lattice",
         "credits": "Crédits"
     },
     "KoFiNudge": {
-        "enjoyingGenie": "Vous appréciez Genie ?",
+        "enjoyingGenie": "Vous appréciez Lattice OS ?",
         "supportProject": "Soutenez le projet et maintenez les serveurs en ligne !",
         "supportOnKoFi": "Soutenir sur Ko-fi"
     },
     "SupportGenie": {
-        "title": "Soutenir Genie",
+        "title": "Soutenir Lattice",
         "description": "Débloquez des crédits automatisés en soutenant le projet sur Ko-fi.",
-        "important": "Important : Utilisez la même adresse e-mail sur Ko-fi que sur votre compte Genie pour que nous puissions vous créditer automatiquement !",
+        "important": "Important : Utilisez la même adresse e-mail sur Ko-fi que sur votre compte Lattice pour que nous puissions vous créditer automatiquement !",
         "donatedWithDifferentEmail": "Vous avez fait un don avec une autre adresse e-mail ?",
         "contactSupport": "Contacter le support"
     },
     "DashboardSupport": {
         "title": "Un appel personnel",
-        "p1": "Nous ne demandons généralement pas, mais aujourd'hui, nous avons besoin de votre aide. Genie AI est un projet indépendant, conçu pour vous fournir les outils d'IA les plus avancés sans le prix élevé des grandes entreprises.",
-        "p2": "Il faut beaucoup de ressources pour faire fonctionner nos serveurs et développer de nouvelles fonctionnalités innovantes. Si tous ceux qui lisaient ceci donnaient un petit montant, nous pourrions faire prospérer Genie AI pendant des années.",
+        "p1": "Nous ne demandons généralement pas, mais aujourd'hui, nous avons besoin de votre aide. Lattice OS est un projet indépendant, conçu pour vous fournir les outils d'IA les plus avancés sans le prix élevé des grandes entreprises.",
+        "p2": "Il faut beaucoup de ressources pour faire fonctionner nos serveurs et développer de nouvelles fonctionnalités innovantes. Si tous ceux qui lisaient ceci donnaient un petit montant, nous pourrions faire prospérer Lattice OS pendant des années.",
         "p3": "Si vous trouvez de la valeur dans ce que nous faisons, pensez à nous soutenir. Cela ne prend qu'une minute et fait une énorme différence.",
-        "button": "Soutenir Genie AI ❤️"
+        "button": "Soutenir Lattice OS ❤️"
     },
     "Metadata": {
-        "title": "Genie AI : Plateforme Tout-en-Un OpenAI, Gemini & Claude",
-        "description": "Libérez votre créativité avec Genie AI. La plateforme SaaS d'IA ultime intégrant OpenAI, Google Gemini et Anthropic Claude pour la génération de texte, de code, d'images, de vidéo et de musique.",
-        "keywords": "Genie AI, Plateforme d'IA, Gemini AI, Claude AI, SaaS IA, Système de Mémoire, Intégration Slack, Création de Contenu, L'assistant IA le plus intelligent"
+        "title": "Lattice OS : Votre Plateforme IA Souveraine",
+        "description": "Découvrez l'avenir de l'IA avec Lattice OS. Une plateforme IA souveraine et mémoire-native intégrant OpenAI, Google Gemini et Anthropic Claude pour la génération de texte, de code, d'images, de vidéo et de musique - tout localement et sous votre contrôle.",
+        "keywords": "Lattice OS, Plateforme d'IA, Gemini AI, Claude AI, SaaS IA, Système de Mémoire, IA souveraine, IA locale, Création de Contenu, L'assistant IA le plus intelligent"
     },
     "Landing": {
         "hero": {
@@ -33,7 +33,7 @@
             "headline1": "Chaque conversation que vous avez eue avec l'IA —",
             "headline2": "oubliée.",
             "headline3": "Plus maintenant.",
-            "subhead": "Tech Genie se souvient de vous. Apprend de vous. Connecte trois esprits d'IA — pour que vous ne repartiez jamais de zéro.",
+            "subhead": "Lattice OS se souvient de vous. Apprend de vous. Connecte trois esprits d'IA — pour que vous ne repartiez jamais de zéro.",
             "cta": "Commencer gratuitement",
             "ctaSecondary": "Voir comment ça marche",
             "graphLabel": "Votre Graphe de Connaissances — aperçu en direct",
@@ -56,7 +56,7 @@
         },
         "memory": {
             "eyebrow": "Mémoire Persistante",
-            "title": "Genie apprend de vous.",
+            "title": "Lattice apprend de vous.",
             "subtitle": "Chaque conversation s'ajoute à votre graphe de connaissances. Faits, préférences, objectifs — connectés et mémorisés.",
             "stat1Value": "∞",
             "stat1Label": "La mémoire n'expire jamais",
@@ -96,82 +96,7 @@
             "disclaimer": "Les prix sont estimés sur la base d'une utilisation standard."
         },
         "footer": {
-            "rights": "© {year} Genie AI. Tous droits réservés."
+            "rights": "© {year} Lattice OS. Tous droits réservés."
         }
-    },
-    "Sidebar": {
-        "dashboard": "Tableau de Bord",
-        "conversation": "Conversation",
-        "imageGeneration": "Génération d'Images",
-        "videoGeneration": "Génération de Vidéos",
-        "musicGeneration": "Génération de Musique",
-        "codeGeneration": "Génération de Code",
-        "codeBuilder": "Constructeur de Code ⚡",
-        "settings": "Paramètres"
-    },
-    "Dashboard": {
-        "exploreTitle": "Explorez la puissance de l'IA",
-        "exploreSubtitle": "Discutez avec l'IA la plus intelligente - Découvrez la puissance de l'IA",
-        "tools": {
-            "conversation": {
-                "label": "Conversation",
-                "description": "Discutez avec l'IA"
-            },
-            "image": {
-                "label": "Génération d'Images",
-                "description": "Générer des images à partir de texte"
-            },
-            "video": {
-                "label": "Génération de Vidéos",
-                "description": "Créer une vidéo à partir de texte"
-            },
-            "music": {
-                "label": "Génération de Musique",
-                "description": "Composer de la musique à partir de texte"
-            },
-            "code": {
-                "label": "Génération de Code",
-                "description": "Écrire du code avec l'IA"
-            },
-            "codeBuilder": {
-                "label": "Constructeur de Code ⚡",
-                "description": "Planifiez, codez et révisez avec l'IA"
-            }
-        }
-    },
-    "Image": {
-        "title": "Capsule d'Images",
-        "description": "Transformez votre texte en image avec Seedream 4 !",
-        "empty": "Aucune image générée pour le moment. Commencez à créer ! 🎨",
-        "placeholder": "Un chien mignon marchant dans une rue colorée",
-        "generateBtn": "Générer",
-        "downloadBtn": "Télécharger"
-    },
-    "Video": {
-        "title": "Clip Rapide",
-        "description": "Générez des vidéos avec Replicate !",
-        "empty": "Prêt à créer votre vidéo ! 🎬",
-        "placeholder": "Une ville futuriste dans les nuages",
-        "generateBtn": "Générer"
-    },
-    "Music": {
-        "title": "Boîte à Musique",
-        "description": "Transformez votre texte en chanson avec Lyria !",
-        "empty": "Aucune musique générée pour le moment. Commencez à créer ! 🎵",
-        "placeholder": "Un solo de piano dans le style de Mozart",
-        "generateBtn": "Générer"
-    },
-    "Conversation": {
-        "title": "Conversation",
-        "description": "Discutez avec l'IA la plus intelligente - Découvrez la puissance de l'IA",
-        "placeholder": "Comment calculer le rayon d'un cercle ?",
-        "generateBtn": "Générer",
-        "placeholderAgentic": "Mode Agentique actif — essayez : chercher sur le web, écrire un article...",
-        "placeholderQuality": "Mode Qualité — posez n'importe quelle question complexe...",
-        "placeholderFast": "Demandez n'importe quoi à Genie..."
-    },
-    "Settings": {
-        "title": "Paramètres",
-        "description": "Gérez les paramètres et préférences de votre compte."
     }
 }
