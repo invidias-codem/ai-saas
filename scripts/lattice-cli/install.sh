@@ -2,12 +2,9 @@
 # install.sh — One-command installer for lattice-cli
 # Usage: curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash
 #
-# Tries to download a prebuilt binary from GitHub Releases. If no matching
-# release asset exists (or it fails to execute), falls back to source install
-# by downloading the Python wrapper + package files directly.
-#
-# Air-gapped alternative: copy the whole `lattice_cli/` package and `lattice`
-# wrapper to a shared dir, then symlink it into PATH.
+# Tries a prebuilt binary from GitHub Releases first. If no matching asset exists,
+# falls back to a source install: downloads the Python package, creates a small
+# venv, installs the dependency (cryptography), and symlinks the wrapper into PATH.
 
 set -euo pipefail
 
@@ -17,6 +14,7 @@ BINARY_NAME="lattice"
 INSTALL_DIR="/usr/local/bin"
 FALLBACK_DIR="$HOME/.local/bin"
 SOURCE_INSTALL_DIR="$HOME/.local/share/lattice-cli"
+SOURCE_VENV_DIR="$SOURCE_INSTALL_DIR/venv"
 
 # Colors
 RED='\033[0;31m'
@@ -74,25 +72,24 @@ get_download_url() {
   if [ -z "$DOWNLOAD_URL" ]; then
     TAG=$(echo "$RESPONSE" \
       | python3 -c "import sys,json; print(json.load(sys.stdin).get('tag_name',''))" 2>/dev/null)
-    if [ -z "$TAG" ]; then
-      warn "No releases found — will use Python wrapper fallback"
-      DOWNLOAD_URL=""
-    else
+    if [ -n "$TAG" ]; then
       DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
       warn "Using direct URL fallback (no matching asset found)"
+    else
+      warn "No releases found — will use Python wrapper fallback"
+      DOWNLOAD_URL=""
     fi
   fi
 }
 
 install_source_fallback() {
-  warn "Installing Python wrapper fallback -> ${SOURCE_INSTALL_DIR}"
-  mkdir -p "${SOURCE_INSTALL_DIR}"
+  warn "Installing Python wrapper -> ${SOURCE_INSTALL_DIR}"
   mkdir -p "${SOURCE_INSTALL_DIR}/lattice_cli"
 
-  WRAPPER_URL="https://raw.githubusercontent.com/${REPO}/main/scripts/lattice-cli/lattice"
-  if ! curl -sL "$WRAPPER_URL" -o "${SOURCE_INSTALL_DIR}/lattice"; then
-    fail "Failed to download wrapper: $WRAPPER_URL"
-  fi
+  # Download wrapper + package files
+  curl -sL "https://raw.githubusercontent.com/${REPO}/main/scripts/lattice-cli/lattice" \
+    -o "${SOURCE_INSTALL_DIR}/lattice" \
+    || fail "Failed to download wrapper"
   chmod +x "${SOURCE_INSTALL_DIR}/lattice"
 
   for name in __init__ main auth backup config crypto_license deploy docker_ops health license preflight upgrade; do
@@ -101,9 +98,48 @@ install_source_fallback() {
       || fail "Failed to download package file: ${name}.py"
   done
 
-  # Verify the wrapper works before symlinking
-  if ! "${SOURCE_INSTALL_DIR}/lattice" --version >/dev/null 2>&1; then
-    fail "Wrapper install failed — check Python version and dependencies"
+  # Create a dedicated venv and install dep
+  info "Creating venv at ${SOURCE_VENV_DIR} ..."
+  python3 -m venv "${SOURCE_VENV_DIR}" || fail "Failed to create venv"
+  "${SOURCE_VENV_DIR}/bin/pip" install --quiet cryptography \
+    || fail "Failed to install cryptography in venv"
+
+  # Point wrapper at the venv Python by rewriting shebang + venv path
+  python3 - "${SOURCE_INSTALL_DIR}" <<'PY'
+import pathlib, sys
+
+install_dir = pathlib.Path(sys.argv[1])
+venv_dir = install_dir / 'venv'
+wrapper = install_dir / 'lattice'
+text = wrapper.read_text()
+# Update shebang to venv python
+lines = text.splitlines()
+for i, line in enumerate(lines):
+    if line.startswith('#!'):
+        lines[i] = f'#!{venv_dir}/bin/python3'
+        break
+else:
+    lines.insert(0, f'#!{venv_dir}/bin/python3')
+
+# Ensure lattice_cli is discoverable from the source tree
+for i, line in enumerate(lines):
+    if line.strip().startswith('sys.path.insert'):
+        lines[i] = 'sys.path.insert(0, "' + str(install_dir) + '")'
+        break
+else:
+    # Insert before `from lattice_cli.main import main`
+    for i, line in enumerate(lines):
+        if 'from lattice_cli.main import main' in line:
+            lines.insert(i, 'import sys, os')
+            lines.insert(i+1, 'sys.path.insert(0, "' + str(install_dir) + '")')
+            break
+
+wrapper.write_text('\n'.join(lines) + '\n')
+PY
+
+  # Quick smoke test before symlinking
+  if ! "${SOURCE_VENV_DIR}/bin/python3" "${SOURCE_INSTALL_DIR}/lattice" --version >/dev/null 2>&1; then
+    fail "Wrapper install failed — verify Python 3.10+ and network access"
   fi
 
   mkdir -p "${FALLBACK_DIR}"
@@ -120,11 +156,12 @@ install_source_fallback() {
 
   ok "Installed to ${INSTALL_PATH}"
   ok "Source files at ${SOURCE_INSTALL_DIR}"
+  ok "Runtime venv at ${SOURCE_VENV_DIR}"
 }
 
 download_and_install() {
   if [ -z "$DOWNLOAD_URL" ]; then
-    info "Skipping binary download — source-only mode"
+    info "Skipping binary download — using Python wrapper fallback"
     install_source_fallback
     return
   fi
@@ -139,7 +176,7 @@ download_and_install() {
 
   chmod +x "$TARGET"
 
-  # Verify it actually runs; if not, fall back to the Python wrapper
+  # Verify binary executes; if not, fall back to source installer
   if ! "$TARGET" --version >/dev/null 2>&1; then
     warn "Binary release not available — falling back to Python wrapper"
     install_source_fallback

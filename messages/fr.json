@@ -1,102 +1,220 @@
 {
-    "Navbar": {
-        "supportGenie": "Soutenir Lattice",
-        "credits": "Crédits"
+  "Navbar": {
+    "supportGenie": "Soutenir Lattice",
+    "credits": "Crédits"
+  },
+  "KoFiNudge": {
+    "enjoyingGenie": "Vous appréciez Lattice OS ?",
+    "supportProject": "Soutenez le projet et maintenez les serveurs en ligne !",
+    "supportOnKoFi": "Soutenir sur Ko-fi"
+  },
+  "SupportGenie": {
+    "title": "Soutenir Lattice",
+    "description": "Débloquez des crédits automatisés en soutenant le projet sur Ko-fi.",
+    "important": "Important : Utilisez la même adresse e-mail sur Ko-fi que sur votre compte Lattice pour que nous puissions vous créditer automatiquement !",
+    "donatedWithDifferentEmail": "Vous avez fait un don avec une autre adresse e-mail ?",
+    "contactSupport": "Contacter le support"
+  },
+  "DashboardSupport": {
+    "title": "Un appel personnel",
+    "p1": "Nous ne demandons généralement pas, mais aujourd'hui, nous avons besoin de votre aide. Lattice OS est un projet indépendant, conçu pour vous fournir les outils d'IA les plus avancés sans le prix élevé des grandes entreprises.",
+    "p2": "Il faut beaucoup de ressources pour faire fonctionner nos serveurs et développer de nouvelles fonctionnalités innovantes. Si tous ceux qui lisaient ceci donnaient un petit montant, nous pourrions faire prospérer Lattice OS pendant des années.",
+    "p3": "Si vous trouvez de la valeur dans ce que nous faisons, pensez à nous soutenir. Cela ne prend qu'une minute et fait une énorme différence.",
+    "button": "Soutenir Lattice OS ❤️"
+  },
+  "Metadata": {
+    "title": "Lattice OS : Votre Plateforme IA Souveraine",
+    "description": "Découvrez l'avenir de l'IA avec Lattice OS. Une plateforme IA souveraine et mémoire-native intégrant OpenAI, Google Gemini et Anthropic Claude pour la génération de texte, de code, d'images, de vidéo et de musique - tout localement et sous votre contrôle.",
+    "keywords": "Lattice OS, Plateforme d'IA, Gemini AI, Claude AI, SaaS IA, Système de Mémoire, IA souveraine, IA locale, Création de Contenu, L'assistant IA le plus intelligent"
+  },
+  "Landing": {
+    "hero": {
+      "badge": "Propulsé par UCOL — Couche Unifiée d'Orchestration de Contexte",
+      "headline1": "Chaque conversation que vous avez eue avec l'IA —",
+      "headline2": "oubliée.",
+      "headline3": "Plus maintenant.",
+      "subhead": "Lattice OS se souvient de vous. Apprend de vous. Connecte trois esprits d'IA — pour que vous ne repartiez jamais de zéro.",
+      "cta": "Commencer gratuitement",
+      "ctaSecondary": "Voir comment ça marche",
+      "graphLabel": "Votre Graphe de Connaissances — aperçu en direct",
+      "title": "L'Assistant IA le Plus Intelligent Jamais Créé",
+      "description": "Rationalisez votre flux de travail avec notre Système de Mémoire avancé, notre intégration Slack et nos outils de Création de Contenu. Propulsé par les modèles Gemini et Anthropic pour les meilleurs résultats.",
+      "login": "Se connecter"
     },
-    "KoFiNudge": {
-        "enjoyingGenie": "Vous appréciez Lattice OS ?",
-        "supportProject": "Soutenez le projet et maintenez les serveurs en ligne !",
-        "supportOnKoFi": "Soutenir sur Ko-fi"
+    "ucol": {
+      "eyebrow": "UCOL — Couche Unifiée d'Orchestration de Contexte",
+      "title": "Trois esprits. Une réponse.",
+      "subtitle": "UCOL achemine chaque question vers le bon modèle, transmet la mémoire entre eux et fournit une réponse fluide.",
+      "hermeTagline": "Raisonnement rapide. Réponses instantanées.",
+      "hermes": "Hermes",
+      "hermesTagline": "Raisonnement rapide. Réponses instantanées.",
+      "gemini": "Gemini",
+      "geminiTagline": "Analyse approfondie. Réflexion stratégique.",
+      "claude": "Claude",
+      "claudeTagline": "Langage précis. Conception soignée.",
+      "flowLabel": "Comment UCOL achemine votre requête",
+      "card1Title": "Local-First Inference",
+      "card1Body": "Simple tasks resolve on-device with sub-10ms latency. No cloud calls, no token costs, no round-trip delays. Only escalate when the task demands it.",
+      "card2Title": "Memory-Bound Escalation",
+      "card2Body": "When context matters, route to stronger models equipped with your knowledge graph. The model doesn't start from zero — it starts from everything you've built.",
+      "card3Title": "Cost-Controlled Routing",
+      "card3Body": "Frontier models only activate for tasks that justify the compute. A $0.03 query never burns $0.30 of inference. Spend money where intelligence quality actually matters.",
+      "card4Title": "Event-Gated Execution",
+      "card4Body": "Models don't poll. They respond to events. User queries, memory triggers, system signals — compute activates on demand, not on a timer."
     },
-    "SupportGenie": {
-        "title": "Soutenir Lattice",
-        "description": "Débloquez des crédits automatisés en soutenant le projet sur Ko-fi.",
-        "important": "Important : Utilisez la même adresse e-mail sur Ko-fi que sur votre compte Lattice pour que nous puissions vous créditer automatiquement !",
-        "donatedWithDifferentEmail": "Vous avez fait un don avec une autre adresse e-mail ?",
-        "contactSupport": "Contacter le support"
+    "memory": {
+      "eyebrow": "Mémoire Persistante",
+      "title": "Lattice apprend de vous.",
+      "subtitle": "Chaque conversation s'ajoute à votre graphe de connaissances. Faits, préférences, objectifs — connectés et mémorisés.",
+      "stat1Value": "∞",
+      "stat1Label": "La mémoire n'expire jamais",
+      "stat2Value": "3",
+      "stat2Label": "Modèles d'IA, un contexte",
+      "stat3Value": "0",
+      "stat3Label": "Fois où vous repartez de zéro"
     },
-    "DashboardSupport": {
-        "title": "Un appel personnel",
-        "p1": "Nous ne demandons généralement pas, mais aujourd'hui, nous avons besoin de votre aide. Lattice OS est un projet indépendant, conçu pour vous fournir les outils d'IA les plus avancés sans le prix élevé des grandes entreprises.",
-        "p2": "Il faut beaucoup de ressources pour faire fonctionner nos serveurs et développer de nouvelles fonctionnalités innovantes. Si tous ceux qui lisaient ceci donnaient un petit montant, nous pourrions faire prospérer Lattice OS pendant des années.",
-        "p3": "Si vous trouvez de la valeur dans ce que nous faisons, pensez à nous soutenir. Cela ne prend qu'une minute et fait une énorme différence.",
-        "button": "Soutenir Lattice OS ❤️"
+    "features": {
+      "title": "Une plateforme. Toutes les capacités.",
+      "subtitle": "Tout ce dont vous avez besoin pour construire, créer et penser — avec une IA qui vous connaît vraiment.",
+      "conversation": "Chat avec mémoire",
+      "conversationDesc": "Trois esprits d'IA avec un contexte partagé. Vos préférences, objectifs et historique — conservés dans chaque conversation.",
+      "image": "Génération visuelle",
+      "imageDesc": "Transformez vos idées en visuels époustouflants. Décrivez-le, affinez-le, appropriez-le vous.",
+      "video": "Création de vidéo",
+      "videoDesc": "Donnez vie à vos histoires avec des clips vidéo générés par l'IA à partir de simples descriptions.",
+      "music": "Composition musicale",
+      "musicDesc": "Générez des pistes audio originales et des effets sonores pour vos projets.",
+      "code": "Constructeur de Code",
+      "codeDesc": "Planifiez, construisez et révisez du code avec une IA qui comprend votre stack et se souvient de vos modèles.",
+      "fast": "Rapide et toujours actif",
+      "fastDesc": "Infrastructure de niveau entreprise. Votre IA ne dort jamais, n'oublie jamais, ne ralentit jamais.",
+      "research": "Regulated Research Workflows",
+      "researchDesc": "Persistent context and structured memory for research, analysis, and synthesis in regulated industries where data residency and audit trails are non-negotiable.",
+      "hybrid": "Proportional Inference",
+      "hybridDesc": "Event-gated routing through reflex, memory, and heavy compute layers. Models only activate when the task justifies it — no wasted compute, no unnecessary cloud calls.",
+      "memoryLayer": "Cryptographic Memory Provenance",
+      "memoryLayerDesc": "Signed knowledge graph writes, causal edges, and temporal validity tracking. Every memory mutation is traceable for compliance reviews and forensic analysis.",
+      "infrastructure": "On-Premises Appliance",
+      "infrastructureDesc": "Ship as a Docker container on your hardware. Air-gapped operation, network isolation, and self-signed certificates supported. No vendor dependency on your infrastructure."
     },
-    "Metadata": {
-        "title": "Lattice OS : Votre Plateforme IA Souveraine",
-        "description": "Découvrez l'avenir de l'IA avec Lattice OS. Une plateforme IA souveraine et mémoire-native intégrant OpenAI, Google Gemini et Anthropic Claude pour la génération de texte, de code, d'images, de vidéo et de musique - tout localement et sous votre contrôle.",
-        "keywords": "Lattice OS, Plateforme d'IA, Gemini AI, Claude AI, SaaS IA, Système de Mémoire, IA souveraine, IA locale, Création de Contenu, L'assistant IA le plus intelligent"
+    "cta": {
+      "title": "Découvrez l'IA qui se souvient.",
+      "subtitle": "Rejoignez des milliers de créateurs qui ont arrêté de repartir de zéro.",
+      "button": "Commencer gratuitement →"
     },
-    "Landing": {
-        "hero": {
-            "badge": "Propulsé par UCOL — Couche Unifiée d'Orchestration de Contexte",
-            "headline1": "Chaque conversation que vous avez eue avec l'IA —",
-            "headline2": "oubliée.",
-            "headline3": "Plus maintenant.",
-            "subhead": "Lattice OS se souvient de vous. Apprend de vous. Connecte trois esprits d'IA — pour que vous ne repartiez jamais de zéro.",
-            "cta": "Commencer gratuitement",
-            "ctaSecondary": "Voir comment ça marche",
-            "graphLabel": "Votre Graphe de Connaissances — aperçu en direct",
-            "title": "L'Assistant IA le Plus Intelligent Jamais Créé",
-            "description": "Rationalisez votre flux de travail avec notre Système de Mémoire avancé, notre intégration Slack et nos outils de Création de Contenu. Propulsé par les modèles Gemini et Anthropic pour les meilleurs résultats.",
-            "login": "Se connecter"
-        },
-        "ucol": {
-            "eyebrow": "UCOL — Couche Unifiée d'Orchestration de Contexte",
-            "title": "Trois esprits. Une réponse.",
-            "subtitle": "UCOL achemine chaque question vers le bon modèle, transmet la mémoire entre eux et fournit une réponse fluide.",
-            "hermeTagline": "Raisonnement rapide. Réponses instantanées.",
-            "hermes": "Hermes",
-            "hermesTagline": "Raisonnement rapide. Réponses instantanées.",
-            "gemini": "Gemini",
-            "geminiTagline": "Analyse approfondie. Réflexion stratégique.",
-            "claude": "Claude",
-            "claudeTagline": "Langage précis. Conception soignée.",
-            "flowLabel": "Comment UCOL achemine votre requête"
-        },
-        "memory": {
-            "eyebrow": "Mémoire Persistante",
-            "title": "Lattice apprend de vous.",
-            "subtitle": "Chaque conversation s'ajoute à votre graphe de connaissances. Faits, préférences, objectifs — connectés et mémorisés.",
-            "stat1Value": "∞",
-            "stat1Label": "La mémoire n'expire jamais",
-            "stat2Value": "3",
-            "stat2Label": "Modèles d'IA, un contexte",
-            "stat3Value": "0",
-            "stat3Label": "Fois où vous repartez de zéro"
-        },
-        "features": {
-            "title": "Une plateforme. Toutes les capacités.",
-            "subtitle": "Tout ce dont vous avez besoin pour construire, créer et penser — avec une IA qui vous connaît vraiment.",
-            "conversation": "Chat avec mémoire",
-            "conversationDesc": "Trois esprits d'IA avec un contexte partagé. Vos préférences, objectifs et historique — conservés dans chaque conversation.",
-            "image": "Génération visuelle",
-            "imageDesc": "Transformez vos idées en visuels époustouflants. Décrivez-le, affinez-le, appropriez-le vous.",
-            "video": "Création de vidéo",
-            "videoDesc": "Donnez vie à vos histoires avec des clips vidéo générés par l'IA à partir de simples descriptions.",
-            "music": "Composition musicale",
-            "musicDesc": "Générez des pistes audio originales et des effets sonores pour vos projets.",
-            "code": "Constructeur de Code",
-            "codeDesc": "Planifiez, construisez et révisez du code avec une IA qui comprend votre stack et se souvient de vos modèles.",
-            "fast": "Rapide et toujours actif",
-            "fastDesc": "Infrastructure de niveau entreprise. Votre IA ne dort jamais, n'oublie jamais, ne ralentit jamais."
-        },
-        "cta": {
-            "title": "Découvrez l'IA qui se souvient.",
-            "subtitle": "Rejoignez des milliers de créateurs qui ont arrêté de repartir de zéro.",
-            "button": "Commencer gratuitement →"
-        },
-        "pricing": {
-            "title": "Tarification Flexible",
-            "subtitle": "Ne payez que ce que vous générez.",
-            "payAsYouGo": "Paiement à l'utilisation",
-            "creatorBundle": "Pack Créateur",
-            "proStudio": "Pro Studio",
-            "startCreating": "Commencer à créer",
-            "disclaimer": "Les prix sont estimés sur la base d'une utilisation standard."
-        },
-        "footer": {
-            "rights": "© {year} Lattice OS. Tous droits réservés."
-        }
+    "pricing": {
+      "title": "Tarification Flexible",
+      "subtitle": "Ne payez que ce que vous générez.",
+      "payAsYouGo": "Paiement à l'utilisation",
+      "creatorBundle": "Pack Créateur",
+      "proStudio": "Pro Studio",
+      "startCreating": "Commencer à créer",
+      "disclaimer": "Les prix sont estimés sur la base d'une utilisation standard."
+    },
+    "footer": {
+      "rights": "© {year} Lattice OS. Tous droits réservés."
+    },
+    "compliance": {
+      "eyebrow": "Built for Regulated Industries",
+      "title": "GDPR-ready. HIPAA-aligned. Your audit, your rules.",
+      "subtitle": "Every intelligence operation is logged, signed, and traceable. Lattice OS ships with the security primitives that regulated organizations need to deploy AI without compliance risk.",
+      "gdprTitle": "GDPR / European Data Residency",
+      "gdprBody": "Data stays in your jurisdiction. No cross-border transfers. Right-to-deletion built into the memory layer. No third-party telemetry.",
+      "hipaaTitle": "HIPAA / Healthcare Safeguards",
+      "hipaaBody": "Encryption at rest and in transit. Append-only audit logs. Role-based access control. Memory writes are cryptographically signed for tamper evidence.",
+      "doraTitle": "DORA / Financial Resilience",
+      "doraBody": "Operational resilience through on-premises operation. No dependency on third-party cloud availability. Self-contained disaster recovery for intelligence workloads.",
+      "soc2Title": "SOC 2 Type II Readiness",
+      "soc2Body": "Immutable audit trail. Access controls on every memory operation. Workspace-level isolation prevents cross-tenant data contamination."
+    },
+    "infrastructure": {
+      "eyebrow": "Sovereign by Design",
+      "title": "Runs on your hardware. Stays in your network. Scales with your rules.",
+      "subtitle": "Deploy Lattice OS as a self-hosted Docker appliance on Raspberry Pi, NVIDIA Jetson, Intel NUC, or any on-premises server. No cloud dependency, no vendor lock-in, no data exfiltration. Your intelligence work never leaves your infrastructure.",
+      "card1Title": "One-Command Deployment",
+      "card1Body": "docker run lattice-os installs the orchestration layer, memory graph, model routing, and audit logging. No cloud signup, no required third-party AI key path, and enterprise capabilities unlock through your deployment license.",
+      "card2Title": "Network-Isolated Mode",
+      "card2Body": "Run in air-gapped environments with zero outbound internet. All model inference, memory operations, and routing decisions happen on your hardware. Compliant with strict data residency requirements.",
+      "card3Title": "Edge-Native Architecture",
+      "card3Body": "Optimized for ~5µW inference on ARM devices. Event-gated execution means models only run when needed — not always-on polling. Built for low-power, high-reliability environments.",
+      "card4Title": "Cryptographic Provenance",
+      "card4Body": "Every memory write is signed. Every knowledge graph mutation is traceable. Audit logs prove your AI's reasoning chain for compliance reviews, HIPAA safeguards, and forensic analysis."
     }
+  },
+  "Sidebar": {
+    "dashboard": "Dashboard",
+    "workspaces": "Workspaces",
+    "conversation": "Conversation",
+    "imageGeneration": "Image Generation",
+    "videoGeneration": "Video Generation",
+    "musicGeneration": "Music Generation",
+    "codeGeneration": "Code Generation",
+    "codeBuilder": "Code Builder ⚡",
+    "settings": "Settings"
+  },
+  "Dashboard": {
+    "exploreTitle": "Explore the power of AI",
+    "exploreSubtitle": "Work with memory-native AI across your workspace",
+    "tools": {
+      "conversation": {
+        "label": "Conversation",
+        "description": "Chat with AI"
+      },
+      "image": {
+        "label": "Image Generation",
+        "description": "Generate images from text"
+      },
+      "video": {
+        "label": "Video Generation",
+        "description": "Create video from text"
+      },
+      "music": {
+        "label": "Music Generation",
+        "description": "Compose music from text"
+      },
+      "code": {
+        "label": "Code Generation",
+        "description": "Write code with AI"
+      },
+      "codeBuilder": {
+        "label": "Code Builder ⚡",
+        "description": "Plan, Code, and Review with AI"
+      }
+    }
+  },
+  "Image": {
+    "title": "Image Capsule",
+    "description": "Turn your prompt into an image with Seedream 4!",
+    "empty": "No images generated yet. Start creating! 🎨",
+    "placeholder": "A cute dog walking on a colorful street",
+    "generateBtn": "Generate",
+    "downloadBtn": "Download"
+  },
+  "Video": {
+    "title": "Quick Clip",
+    "description": "Generate videos with Replicate!",
+    "empty": "Ready to create your video! 🎬",
+    "placeholder": "A futuristic city in the clouds",
+    "generateBtn": "Generate"
+  },
+  "Music": {
+    "title": "Juke Box",
+    "description": "Turn your prompt into a song with Lyria!",
+    "empty": "No music generated yet. Start creating! 🎵",
+    "placeholder": "A piano solo in the style of Mozart",
+    "generateBtn": "Generate"
+  },
+  "Conversation": {
+    "title": "Conversation",
+    "description": "Work with Weaver across your memory-native workspace",
+    "placeholder": "How do I calculate the radius of a circle?",
+    "generateBtn": "Generate",
+    "placeholderAgentic": "Agentic Mode active — try: search the web, write a research paper...",
+    "placeholderQuality": "Quality Mode — ask anything complex...",
+    "placeholderFast": "Ask Weaver anything..."
+  },
+  "Settings": {
+    "title": "Settings",
+    "description": "Manage your account settings and preferences."
+  }
 }
