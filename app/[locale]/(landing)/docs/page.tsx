@@ -18,6 +18,8 @@ import {
     KeyRound,
     LockKeyhole,
     LifeBuoy,
+    Github,
+    ExternalLink,
     type LucideIcon,
 } from "lucide-react";
 
@@ -35,6 +37,15 @@ type DocSection = {
     description: string;
     items: DocItem[];
 };
+
+const GITHUB_REPO_URL = "https://github.com/invidias-codem/ai-saas";
+const GITHUB_DOCS_URL = `${GITHUB_REPO_URL}/tree/main/docs`;
+
+function githubUrlForPath(path: string) {
+    if (path.startsWith("/")) return null;
+    const target = path.endsWith("/") ? `tree/main/${path.slice(0, -1)}` : `blob/main/${path}`;
+    return `${GITHUB_REPO_URL}/${target}`;
+}
 
 const onboardingPath = [
     {
@@ -345,34 +356,7 @@ export default function DocsPage() {
                 <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px]" />
             </div>
 
-            <header className="relative z-10 py-6 px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full border-b border-slate-200 dark:border-white/5 bg-background/80 backdrop-blur-md sticky top-0">
-                <Link href="/" className="flex items-center gap-2">
-                    <div className="relative w-8 h-8">
-                        <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" />
-                    </div>
-                    <span className="text-2xl font-bold tracking-tight">Lattice OS</span>
-                </Link>
-                <div className="flex items-center gap-x-4">
-                    <Link href="/beta" className="text-sm text-muted-foreground hover:text-foreground transition hidden sm:block">
-                        Beta Tracks
-                    </Link>
-                    <Link href="/support" className="text-sm text-muted-foreground hover:text-foreground transition hidden sm:block">
-                        Support
-                    </Link>
-                    <Link href="/dashboard">
-                        <Button variant="ghost" className="text-foreground hover:text-foreground hover:bg-accent rounded-full">
-                            Log in
-                        </Button>
-                    </Link>
-                    <Link href="/beta/start">
-                        <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full font-semibold">
-                            Start Onboarding
-                        </Button>
-                    </Link>
-                </div>
-            </header>
-
-            <main className="relative z-10 max-w-7xl mx-auto w-full px-6 py-12 flex flex-col md:flex-row gap-12">
+            <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-10 pt-24 sm:px-6 sm:pt-28 md:flex-row md:gap-12 md:px-10 md:py-12">
                 <aside className="w-full md:w-72 flex-shrink-0 hidden md:block">
                     <div className="sticky top-32 space-y-8">
                         <div>
@@ -404,44 +388,54 @@ export default function DocsPage() {
                     </div>
                 </aside>
 
-                <div className="flex-grow max-w-4xl space-y-16">
+                <div className="w-full flex-grow space-y-10 md:max-w-4xl md:space-y-16">
                     <section id="hero" className="scroll-mt-32">
-                        <div className="inline-flex items-center rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs text-purple-700 dark:text-purple-200 mb-6">
-                            <BookOpen className="w-3 h-3 mr-2" />
-                            Documentation Hub · Updated for beta onboarding, CLI, and appliance deployment
+                        <div className="mb-5 inline-flex max-w-full items-start gap-2 rounded-2xl border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[11px] font-medium leading-snug text-purple-700 dark:text-purple-200 sm:items-center sm:rounded-full sm:text-xs">
+                            <BookOpen className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 sm:mt-0" />
+                            <span>Documentation Hub · Beta onboarding, CLI, appliance deployment</span>
                         </div>
-                        <h1 className="text-4xl md:text-5xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 dark:from-white dark:to-gray-500">
-                            Platform docs for onboarding, operating, and extending Lattice OS
+                        <h1 className="mb-5 max-w-3xl bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 bg-clip-text text-[2.35rem] font-bold leading-[1.04] tracking-tight text-transparent dark:from-white dark:via-slate-300 dark:to-slate-500 min-[390px]:text-[2.75rem] sm:text-5xl md:text-6xl">
+                            Docs for onboarding, operating, and extending Lattice OS
                         </h1>
-                        <p className="text-xl text-muted-foreground leading-relaxed mb-8 max-w-3xl">
-                            This hub gives new users a clear path from install to first memory-aware workspace, while giving power users direct entry points for Docker appliance deployment, V3 licensing, air-gapped operation, Enterprise rollout, route verification, and incident debugging.
+                        <p className="mb-6 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg md:text-xl md:leading-relaxed">
+                            New users get a clear path from install to first memory-aware workspace. Power users get direct entry points for Docker appliance deployment, V3 licensing, air-gapped operation, Enterprise rollout, route verification, and incident debugging.
                         </p>
 
-                        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                            <Link href="/beta/start">
-                                <Button className="rounded-full font-semibold">
-                                    Start Quick Onboarding <ArrowRight className="w-4 h-4 ml-2" />
+                        <div className="mb-6 grid gap-3 sm:mb-8 sm:flex sm:flex-wrap">
+                            <Link href="/beta/start" className="w-full sm:w-auto">
+                                <Button className="h-11 w-full rounded-full px-5 text-sm font-semibold sm:w-auto">
+                                    Start Quick Onboarding <ArrowRight className="ml-2 h-4 w-4" />
                                 </Button>
                             </Link>
-                            <a href="#power-user-recipes">
-                                <Button variant="outline" className="rounded-full border-border hover:bg-accent">
-                                    Browse Power-User Recipes
+                            <a href="#power-user-recipes" className="w-full sm:w-auto">
+                                <Button variant="outline" className="h-11 w-full rounded-full border-border px-5 text-sm hover:bg-accent sm:w-auto">
+                                    Power-User Recipes
+                                </Button>
+                            </a>
+                            <a href={GITHUB_DOCS_URL} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
+                                <Button variant="outline" className="h-11 w-full rounded-full border-border px-5 text-sm hover:bg-accent sm:w-auto">
+                                    <Github className="mr-2 h-4 w-4" /> Docs on GitHub
+                                </Button>
+                            </a>
+                            <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
+                                <Button variant="ghost" className="h-11 w-full rounded-full px-5 text-sm hover:bg-accent sm:w-auto">
+                                    Source Code <ExternalLink className="ml-2 h-4 w-4" />
                                 </Button>
                             </a>
                         </div>
 
-                        <div className="grid md:grid-cols-3 gap-4">
-                            <div className="p-6 rounded-2xl bg-card border border-border">
+                        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4">
+                            <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                 <Rocket className="w-8 h-8 text-purple-500 dark:text-purple-400 mb-4" />
                                 <h3 className="text-lg font-semibold mb-2">Onboarding-first</h3>
                                 <p className="text-sm text-muted-foreground">Maps the fastest route through beta tracks, CLI install, license activation, deployment, and first useful workspace.</p>
                             </div>
-                            <div className="p-6 rounded-2xl bg-card border border-border">
+                            <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                 <ServerCog className="w-8 h-8 text-blue-500 dark:text-blue-400 mb-4" />
                                 <h3 className="text-lg font-semibold mb-2">Appliance-ready</h3>
                                 <p className="text-sm text-muted-foreground">Explains the Docker appliance path, preflight validation, health checks, backups, upgrades, and rollback workflows.</p>
                             </div>
-                            <div className="p-6 rounded-2xl bg-card border border-border">
+                            <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                 <Shield className="w-8 h-8 text-emerald-500 dark:text-emerald-400 mb-4" />
                                 <h3 className="text-lg font-semibold mb-2">Security-aware</h3>
                                 <p className="text-sm text-muted-foreground">Makes trust boundaries, public routes, workspace isolation, and cryptographic license verification explicit.</p>
@@ -449,23 +443,23 @@ export default function DocsPage() {
                         </div>
                     </section>
 
-                    <section id="start-here" className="scroll-mt-32 border-t border-border pt-16">
-                        <h2 className="text-3xl font-bold mb-3">New user path</h2>
+                    <section id="start-here" className="scroll-mt-24 border-t border-border pt-10 md:scroll-mt-32 md:pt-16">
+                        <h2 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">New user path</h2>
                         <p className="text-muted-foreground mb-8 max-w-3xl">
                             If someone just received access, this is the shortest path from zero context to a working local Lattice OS instance.
                         </p>
                         <div className="grid gap-4">
                             {onboardingPath.map((item) => (
-                                <div key={item.step} className="rounded-2xl border border-border bg-card p-6">
-                                    <div className="flex items-start gap-4">
-                                        <div className="rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
+                                <div key={item.step} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+                                        <div className="w-fit rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
                                             {item.step}
                                         </div>
-                                        <div className="flex-1">
-                                            <h3 className="text-xl font-semibold mb-2">{item.title}</h3>
-                                            <p className="text-muted-foreground leading-relaxed">{item.description}</p>
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="mb-2 text-lg font-semibold sm:text-xl">{item.title}</h3>
+                                            <p className="text-sm leading-6 text-muted-foreground sm:text-base sm:leading-relaxed">{item.description}</p>
                                             {item.command && (
-                                                <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-black/5 p-4 text-sm dark:bg-white/5">
+                                                <pre className="mt-4 max-w-full overflow-x-auto rounded-lg border border-border bg-black/5 p-3 text-xs dark:bg-white/5 sm:p-4 sm:text-sm">
                                                     <code>{item.command}</code>
                                                 </pre>
                                             )}
@@ -481,11 +475,11 @@ export default function DocsPage() {
                         </div>
                     </section>
 
-                    <section id="how-to-use" className="scroll-mt-32 border-t border-border pt-16">
-                        <h2 className="text-3xl font-bold mb-8">How to use this docs set</h2>
+                    <section id="how-to-use" className="scroll-mt-24 border-t border-border pt-10 md:scroll-mt-32 md:pt-16">
+                        <h2 className="mb-6 text-2xl font-bold tracking-tight sm:mb-8 sm:text-3xl">How to use this docs set</h2>
                         <div className="grid md:grid-cols-2 gap-6">
                             {audiences.map((audience) => (
-                                <div key={audience.title} className="rounded-2xl border border-border bg-card p-6">
+                                <div key={audience.title} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                     <h3 className="text-lg font-semibold mb-3">{audience.title}</h3>
                                     <p className="text-sm text-muted-foreground leading-relaxed">{audience.description}</p>
                                 </div>
@@ -493,8 +487,8 @@ export default function DocsPage() {
                         </div>
                     </section>
 
-                    <section id="power-user-recipes" className="scroll-mt-32 border-t border-border pt-16">
-                        <h2 className="text-3xl font-bold mb-3">Power-user recipes</h2>
+                    <section id="power-user-recipes" className="scroll-mt-24 border-t border-border pt-10 md:scroll-mt-32 md:pt-16">
+                        <h2 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">Power-user recipes</h2>
                         <p className="text-muted-foreground mb-8 max-w-3xl">
                             For niche questions, start from the recipe that matches the job instead of reading the docs linearly.
                         </p>
@@ -502,16 +496,28 @@ export default function DocsPage() {
                             {powerUserRecipes.map((recipe) => {
                                 const Icon = recipe.icon;
                                 return (
-                                    <div key={recipe.title} className="rounded-2xl border border-border bg-card p-6">
+                                    <div key={recipe.title} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                         <Icon className="mb-4 h-7 w-7 text-primary" />
                                         <h3 className="text-lg font-semibold mb-3">{recipe.title}</h3>
                                         <p className="text-sm text-muted-foreground leading-relaxed mb-4">{recipe.description}</p>
                                         <ul className="space-y-2">
-                                            {recipe.links.map((link) => (
-                                                <li key={link}>
-                                                    <code className="text-xs px-2 py-1 rounded bg-secondary text-card-foreground break-all">{link}</code>
-                                                </li>
-                                            ))}
+                                            {recipe.links.map((link) => {
+                                                const href = githubUrlForPath(link) ?? link;
+                                                const isExternal = href.startsWith("http");
+                                                return (
+                                                    <li key={link}>
+                                                        <a
+                                                            href={href}
+                                                            target={isExternal ? "_blank" : undefined}
+                                                            rel={isExternal ? "noreferrer" : undefined}
+                                                            className="inline-flex max-w-full items-center gap-1 rounded bg-secondary px-2 py-1 text-xs text-card-foreground transition hover:bg-accent"
+                                                        >
+                                                            <code className="break-all">{link}</code>
+                                                            {isExternal && <ExternalLink className="h-3 w-3 flex-shrink-0" />}
+                                                        </a>
+                                                    </li>
+                                                );
+                                            })}
                                         </ul>
                                     </div>
                                 );
@@ -522,57 +528,72 @@ export default function DocsPage() {
                     {docSections.map((section) => {
                         const Icon = section.icon;
                         return (
-                            <section key={section.id} id={section.id} className="scroll-mt-32 border-t border-border pt-16">
+                            <section key={section.id} id={section.id} className="scroll-mt-24 border-t border-border pt-10 md:scroll-mt-32 md:pt-16">
                                 <div className="flex items-center gap-4 mb-6">
                                     <div className="p-3 rounded-xl bg-secondary">
                                         <Icon className="w-7 h-7 text-foreground" />
                                     </div>
                                     <div>
-                                        <h2 className="text-3xl font-bold">{section.title}</h2>
+                                        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{section.title}</h2>
                                         <p className="text-muted-foreground mt-2">{section.description}</p>
                                     </div>
                                 </div>
 
                                 <div className="grid gap-4">
-                                    {section.items.map((item) => (
-                                        <div key={`${section.id}-${item.title}`} className="rounded-2xl border border-border bg-card p-6">
-                                            <div className="flex items-start justify-between gap-4">
-                                                <div>
-                                                    <h3 className="text-xl font-semibold mb-2">{item.title}</h3>
-                                                    <p className="text-muted-foreground leading-relaxed mb-4">{item.description}</p>
-                                                    {item.href ? (
-                                                        <Link href={item.href} className="inline-flex items-center text-sm font-semibold text-primary hover:underline">
-                                                            {item.path} <ArrowRight className="ml-1 h-4 w-4" />
-                                                        </Link>
-                                                    ) : (
-                                                        <code className="text-xs px-2 py-1 rounded bg-secondary text-card-foreground break-all">
-                                                            {item.path}
-                                                        </code>
-                                                    )}
+                                    {section.items.map((item) => {
+                                        const sourceUrl = githubUrlForPath(item.path);
+                                        return (
+                                            <div key={`${section.id}-${item.title}`} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+                                                <div className="flex items-start justify-between gap-3 sm:gap-4">
+                                                    <div className="min-w-0">
+                                                        <h3 className="mb-2 text-lg font-semibold sm:text-xl">{item.title}</h3>
+                                                        <p className="mb-4 text-sm leading-6 text-muted-foreground sm:text-base sm:leading-relaxed">{item.description}</p>
+                                                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                                            {item.href ? (
+                                                                <Link href={item.href} className="inline-flex items-center text-sm font-semibold text-primary hover:underline">
+                                                                    {item.path} <ArrowRight className="ml-1 h-4 w-4" />
+                                                                </Link>
+                                                            ) : (
+                                                                <code className="rounded bg-secondary px-2 py-1 text-xs text-card-foreground break-all">
+                                                                    {item.path}
+                                                                </code>
+                                                            )}
+                                                            {sourceUrl && (
+                                                                <a
+                                                                    href={sourceUrl}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="inline-flex items-center text-xs font-semibold text-muted-foreground transition hover:text-foreground"
+                                                                >
+                                                                    View source <ExternalLink className="ml-1 h-3 w-3" />
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <CheckCircle2 className="mt-1 h-5 w-5 flex-shrink-0 text-emerald-500" />
                                                 </div>
-                                                <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-1" />
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </section>
                         );
                     })}
 
-                    <section className="border-t border-border pt-16 pb-16">
-                        <div className="rounded-2xl bg-blue-600/10 border border-blue-500/20 p-8 text-center">
+                    <section className="border-t border-border pb-10 pt-10 md:pb-16 md:pt-16">
+                        <div className="rounded-2xl border border-blue-500/20 bg-blue-600/10 p-5 text-center sm:p-8">
                             <h2 className="text-2xl font-bold mb-4">Need a path that is not documented yet?</h2>
                             <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
                                 If you&apos;re trying to understand a route, runtime behavior, deployment issue, integration surface, or compliance requirement that isn&apos;t clear yet, use support and we can turn the answer into a reusable doc path.
                             </p>
-                            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                            <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:gap-4">
                                 <Link href="/support">
-                                    <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                                    <Button className="w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto">
                                         Contact Support
                                     </Button>
                                 </Link>
                                 <Link href="/dashboard">
-                                    <Button variant="outline" className="border-border hover:bg-accent">
+                                    <Button variant="outline" className="w-full border-border hover:bg-accent sm:w-auto">
                                         Open Product <ArrowRight className="w-4 h-4 ml-2" />
                                     </Button>
                                 </Link>
@@ -592,11 +613,12 @@ export default function DocsPage() {
                             <span className="text-lg font-bold text-foreground">Lattice OS</span>
                         </div>
 
-                        <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm text-muted-foreground md:justify-end">
                             <Link href="/beta" className="hover:text-foreground transition">Beta Tracks</Link>
                             <Link href="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
                             <Link href="/support" className="hover:text-foreground transition">Support</Link>
                             <Link href="/dashboard" className="hover:text-foreground transition">Dashboard</Link>
+                            <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" className="hover:text-foreground transition">GitHub</a>
                         </div>
                     </div>
 
