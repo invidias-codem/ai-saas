@@ -1,7 +1,7 @@
 {
   "name": "@ucol/node",
   "version": "0.1.0",
-  "description": "UCOL Protocol Reference Implementation — v0.1",
+  "description": "UCOL Protocol Reference Implementation \u2014 v0.1",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -29,7 +29,8 @@
   },
   "overrides": {
     "@babel/core": "^7.29.6",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "js-yaml": ">=4.2.0"
   },
   "jest": {
     "preset": "ts-jest",

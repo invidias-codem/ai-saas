@@ -23,5 +23,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "js-yaml": ">=4.2.0",
+    "uuid": "^14.0.0"
+  }
 }
