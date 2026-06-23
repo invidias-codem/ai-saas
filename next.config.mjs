@@ -70,7 +70,7 @@ const nextConfig = {
       'functions/**',
       'anycrawl/**',
       'remote/**',
-      'packages/**',
+      'packages/ucol-node/**',
       'go-harness/**',
       'scripts/lattice-cli/venv/**',
       '**/node_modules/.bin/**',
