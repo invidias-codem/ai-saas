@@ -1,9 +1,10 @@
-import { SignIn } from "@clerk/nextjs";
+import WebviewAwareAuth from '../../../webview-auth';
 
 export default async function Page({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   return (
-    <SignIn 
+    <WebviewAwareAuth
+      locale={locale}
       path={`/${locale}/sign-in`}
       appearance={{
         elements: {
@@ -14,5 +15,3 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
     />
   );
 }
-
-
