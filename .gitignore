@@ -86,3 +86,7 @@ packages/lattice-core/node_modules/
 # Lattice OS local MCP adapter build artifacts
 packages/lattice-mcp-local/dist/
 packages/lattice-mcp-local/node_modules/
+
+# Lattice OS remote MCP adapter build artifacts
+packages/lattice-mcp-remote/dist/
+packages/lattice-mcp-remote/node_modules/

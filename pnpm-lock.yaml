@@ -50,6 +50,9 @@ importers:
       '@lattice-os/core':
         specifier: workspace:*
         version: link:packages/lattice-core
+      '@lattice-os/mcp-remote':
+        specifier: workspace:*
+        version: link:packages/lattice-mcp-remote
       '@marsidev/react-turnstile':
         specifier: ^1.5.2
         version: 1.5.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -417,6 +420,22 @@ importers:
         version: 5.9.3
 
   packages/lattice-mcp-local:
+    dependencies:
+      '@lattice-os/core':
+        specifier: workspace:*
+        version: link:../lattice-core
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@3.25.76)
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
+  packages/lattice-mcp-remote:
     dependencies:
       '@lattice-os/core':
         specifier: workspace:*
