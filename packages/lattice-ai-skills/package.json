@@ -1,0 +1,32 @@
+{
+  "name": "@lattice-os/ai-skills",
+  "version": "0.1.0",
+  "description": "Lattice OS AI Skills adapter — SKILL.md definitions, slash commands, wrappers, and Custom GPT manifest",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./manifest": {
+      "types": "./dist/manifest.d.ts",
+      "import": "./dist/manifest.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepare": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lattice-os/core": "workspace:*",
+    "zod": "^3.22.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  },
+  "license": "ISC"
+}

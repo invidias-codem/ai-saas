@@ -29,12 +29,13 @@
     "rag:index": "tsx scripts/index-codebase.ts",
     "rag:index:dry": "tsx scripts/index-codebase.ts --dry-run",
     "rag:test": "tsx scripts/test-rag-integration.ts",
-    "prebuild": "rm -rf functions/vector-agent-python/venv && echo prebuild: cleaned venv symlinks && pnpm --dir packages/lattice-core run build && pnpm --dir packages/lattice-mcp-local run build && pnpm --dir packages/lattice-mcp-remote run build",
+    "prebuild": "rm -rf functions/vector-agent-python/venv && echo prebuild: cleaned venv symlinks && pnpm --dir packages/lattice-core run build && pnpm --dir packages/lattice-mcp-local run build && pnpm --dir packages/lattice-mcp-remote run build && pnpm --dir packages/lattice-ai-skills run build",
     "dev:electron": "tsc -p electron/tsconfig.json && concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "build:electron:main": "tsc -p electron/tsconfig.json",
     "build:electron": "npm run build:electron:main && electron-builder",
     "mcp:local": "pnpm --filter @lattice-os/mcp-local start",
-    "mcp:remote": "pnpm --filter @lattice-os/mcp-remote start"
+    "mcp:remote": "pnpm --filter @lattice-os/mcp-remote start",
+    "ai-skills": "pnpm --filter @lattice-os/ai-skills start"
   },
   "build": {
     "appId": "xyz.gen1e.latticeos",
@@ -57,6 +58,7 @@
     ]
   },
   "dependencies": {
+    "@lattice-os/ai-skills": "workspace:*",
     "@lattice-os/core": "workspace:*",
     "@lattice-os/mcp-remote": "workspace:*",
     "@ai-sdk/anthropic": "^3.0.81",
