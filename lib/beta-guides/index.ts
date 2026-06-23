@@ -133,7 +133,7 @@ const DEV: BetaGuide = {
     {
       title: "2. Read the architecture",
       body:
-        "Before you change anything: `vision.md` is the source of truth. Lattice has three logical layers — Reflex (sub-10ms local), Memory (context recall), Heavy Compute (frontier models) — event-gated, not poll-based. The UCOL routing layer sits underneath everything. Don't touch it without reading `lib/ucol/`.",
+        "Before you change anything: `vision.md` is the source of truth. Lattice has three logical layers — Reflex (sub-10ms local), Memory (context recall), Heavy Compute (frontier models) — event-gated, not poll-based. The UCOL routing layer sits underneath everything. Don't touch it without reading `lib/ucol/`.\n\nThe repo is now a pnpm monorepo. Platform logic lives in `packages/lattice-core`; adapters live in `packages/lattice-{mcp-local,mcp-remote,ai-skills}`. The Next.js app wires them together through the `prebuild` step.",
     },
     {
       title: "3. Build your own Docker image",

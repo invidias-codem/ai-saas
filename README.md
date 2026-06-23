@@ -86,6 +86,20 @@ The repo currently spans several major product and platform surfaces:
 - **Automation / cron behavior** — scheduled jobs and background workflows
 - **Desktop / local capability expansion** — Electron packaging and Go harness work in progress
 
+### Repository layout
+
+Lattice OS is a **pnpm monorepo** rather than a single bag of scripts. This keeps platform logic, infrastructure adapters, and product surfaces decoupled.
+
+| Path | Purpose |
+|------|---------|
+| `apps/web` | Next.js 14 + app router frontend |
+| `packages/lattice-core` | Zod contracts, constants, license/preflight schemas |
+| `packages/lattice-mcp-local` | Local MCP stdio adapter |
+| `packages/lattice-mcp-remote` | Remote MCP HTTP adapter (Clerk-authed) |
+| `packages/lattice-ai-skills` | AI Skills adapter (SKILL.md schema, slash commands, wrappers) |
+
+The root app depends on these via `workspace:*` and builds them in `prebuild` so Vercel can resolve `@lattice-os/*` paths.
+
 ---
 
 ## Quick Start

@@ -47,6 +47,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^3.3.4
         version: 3.10.0(react-hook-form@7.79.0(react@18.3.1))
+      '@lattice-os/ai-skills':
+        specifier: workspace:*
+        version: link:packages/lattice-ai-skills
       '@lattice-os/core':
         specifier: workspace:*
         version: link:packages/lattice-core
@@ -405,6 +408,22 @@ importers:
       wait-on:
         specifier: ^9.0.10
         version: 9.0.10
+
+  packages/lattice-ai-skills:
+    dependencies:
+      '@lattice-os/core':
+        specifier: workspace:*
+        version: link:../lattice-core
+      zod:
+        specifier: ^3.22.5
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      typescript:
+        specifier: ^5
+        version: 5.9.3
 
   packages/lattice-core:
     dependencies:

@@ -1,7 +1,36 @@
 # System Architecture
 
-## Purpose
+Lattice OS is a workspace-centric, operating-profile-aware, memory-native AI platform. The implementation is organized as a pnpm-managed monorepo that separates platform-agnostic logic from delivery-specific adapters.
 
+## Monorepo Layout
+
+| Package | Role |
+|---------|------|
+| `apps/web` | Next.js 14+ frontend (app router, Clerk auth, UI) |
+| `packages/lattice-core` | Zod-validated contracts, constants, license/preflight schemas |
+| `packages/lattice-mcp-local` | Local MCP stdio adapter |
+| `packages/lattice-mcp-remote` | Remote MCP HTTP adapter (Clerk-authed) |
+| `packages/lattice-ai-skills` | AI Skills adapter: SKILL.md schema, slash commands, wrappers, Custom GPT manifest |
+
+The root Next.js app depends on the workspace packages at `workspace:*` versions and builds them during the `prebuild` step.
+
+## Layer Mapping
+
+| Architectural Layer | Implementation |
+|---------------------|----------------|
+| Public web surface | `app/(landing)/*` and `app/(public)/beta/*` |
+| Authenticated surface | `app/(dashboard)/*` with Clerk middleware |
+| API/server behavior | `app/api/**/*` route handlers |
+| Persistence | Supabase + PostgreSQL (server-side only) |
+| Automation/integration | Cron jobs, webhook routes, MCP adapters |
+
+## Build & Deploy
+
+- Build order: `prebuild` runs `pnpm --dir packages/lattice-{core,mcp-local,mcp-remote,ai-skills} run build` first so `dist/` exists before Next.js bundling.
+- Vercel: `.vercelignore` allows `packages/lattice-*` (only `packages/ucol-node/` is excluded). The prebuild fix and NFT-scoped dynamic require are in `package.json` and `next.config.mjs`.
+
+---
+...
 This document provides a high-level explanation of Lattice OS’s current system architecture.
 
 It is intended to answer:
