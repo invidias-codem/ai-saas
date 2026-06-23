@@ -29,7 +29,7 @@
     "rag:index": "tsx scripts/index-codebase.ts",
     "rag:index:dry": "tsx scripts/index-codebase.ts --dry-run",
     "rag:test": "tsx scripts/test-rag-integration.ts",
-    "prebuild": "rm -rf functions/vector-agent-python/venv && echo prebuild: cleaned venv symlinks",
+    "prebuild": "rm -rf functions/vector-agent-python/venv && echo prebuild: cleaned venv symlinks && pnpm --filter @lattice-os/core --filter @lattice-os/mcp-local --filter @lattice-os/mcp-remote run build",
     "dev:electron": "tsc -p electron/tsconfig.json && concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "build:electron:main": "tsc -p electron/tsconfig.json",
     "build:electron": "npm run build:electron:main && electron-builder",
