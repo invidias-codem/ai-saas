@@ -78,3 +78,7 @@ lattice-license-private.pem
 
 # Lattice CLI venv (dev only, never ship)
 scripts/lattice-cli/venv/
+
+# Lattice OS core package build artifacts
+packages/lattice-core/dist/
+packages/lattice-core/node_modules/

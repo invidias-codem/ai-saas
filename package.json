@@ -55,6 +55,7 @@
     ]
   },
   "dependencies": {
+    "@lattice-os/core": "workspace:*",
     "@ai-sdk/anthropic": "^3.0.81",
     "@anthropic-ai/sdk": "^0.74.0",
     "@atproto/api": "^0.13.15",
