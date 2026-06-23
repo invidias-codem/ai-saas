@@ -82,3 +82,7 @@ scripts/lattice-cli/venv/
 # Lattice OS core package build artifacts
 packages/lattice-core/dist/
 packages/lattice-core/node_modules/
+
+# Lattice OS local MCP adapter build artifacts
+packages/lattice-mcp-local/dist/
+packages/lattice-mcp-local/node_modules/

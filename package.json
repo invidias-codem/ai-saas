@@ -32,7 +32,8 @@
     "prebuild": "rm -rf functions/vector-agent-python/venv && echo prebuild: cleaned venv symlinks",
     "dev:electron": "tsc -p electron/tsconfig.json && concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "build:electron:main": "tsc -p electron/tsconfig.json",
-    "build:electron": "npm run build:electron:main && electron-builder"
+    "build:electron": "npm run build:electron:main && electron-builder",
+    "mcp:local": "pnpm --filter @lattice-os/mcp-local start"
   },
   "build": {
     "appId": "xyz.gen1e.latticeos",
