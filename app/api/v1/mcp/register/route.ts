@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
+import { getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
 
 // Simple in-memory client registry.
 // In production this would be Supabase / Redis / Postgres.
@@ -24,6 +26,22 @@ export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized — sign in with Clerk first' }, { status: 401 });
+  }
+
+  const rateLimit = await limitApiEndpoint(userId, getClientIP(req), 'mutation');
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: 'Too many requests', message: 'MCP registration rate limit exceeded. Please wait before trying again.' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
+          'X-RateLimit-Limit': String(rateLimit.limit),
+          'X-RateLimit-Remaining': String(rateLimit.remaining),
+          'X-RateLimit-Reset': String(rateLimit.reset),
+        },
+      }
+    );
   }
 
   let body: unknown;
@@ -69,6 +87,22 @@ export async function GET(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const rateLimit = await limitApiEndpoint(userId, getClientIP(req), 'query');
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: 'Too many requests', message: 'MCP client list rate limit exceeded. Please wait before trying again.' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
+          'X-RateLimit-Limit': String(rateLimit.limit),
+          'X-RateLimit-Remaining': String(rateLimit.remaining),
+          'X-RateLimit-Reset': String(rateLimit.reset),
+        },
+      }
+    );
   }
 
   const clients = Array.from(registeredClients.values()).map((c) => ({
