@@ -37,47 +37,6 @@ const nextConfig = {
     ],
   },
 
-  outputFileTracingRoot: projectRoot,
-  turbopack: {
-    root: projectRoot,
-  },
-
-  // Required for Turbopack to properly resolve dependencies
-  // These packages are ESM/CommonJS hybrids that Turbopack can't resolve without explicit transpilation
-  transpilePackages: [
-    'recharts',
-    'react-is',
-    'pdfjs-dist',
-    'mammoth',
-    'pdf-parse',
-    'xlsx',
-    'file-type'
-  ],
-  serverExternalPackages: [
-    '@google-cloud/tasks',
-    '@google-cloud/storage',
-    '@google-cloud/vertexai',
-    '@google-cloud/aiplatform',
-    'google-gax',
-    'grpc'
-  ],
-  outputFileTracingExcludes: {
-    '**': [
-      '.agent/**',
-      '.agent/skills/**',
-      'functions/**/venv/**',
-      'functions/**/__pycache__/**',
-      'functions/**',
-      'anycrawl/**',
-      'remote/**',
-      'packages/ucol-node/**',
-      'go-harness/**',
-      'scripts/lattice-cli/venv/**',
-      '**/node_modules/.bin/**',
-      '**/.bin/**',
-    ],
-  },
-  // outputFileTracingIncludes removed to prevent pnpm symlink packaging errors
   experimental: {},
   webpack: (config, { isServer }) => {
     if (isServer) {

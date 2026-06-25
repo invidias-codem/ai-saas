@@ -94,3 +94,4 @@ packages/lattice-mcp-remote/node_modules/
 # Lattice OS AI Skills adapter build artifacts
 packages/lattice-ai-skills/dist/
 packages/lattice-ai-skills/node_modules/
+packages/ucol-node/node_modules/
