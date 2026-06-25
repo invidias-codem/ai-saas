@@ -21,7 +21,6 @@ import { Paperclip, AlertCircle, SendHorizontal, X, Plus, ArrowDown, Github, Cod
 import { GitHubConsentModal } from "@/components/github-consent-modal";
 import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
-import EmptyState from "@/components/empty";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
 import { submitFeedback } from "@/lib/feedback/submitFeedback";
 import { NeuralArchivalUploader, UploadedDoc } from "@/components/documents/NeuralArchivalUploader";
@@ -804,17 +803,36 @@ function ConversationPage({
             actionIntended={agentMode === 'agentic' ? 'agentic execution' : undefined} 
           />
 
-          {/* Greeting */}
+          {/* Greeting / Empty State */}
           {showGreeting && (
-            <div className="flex flex-col items-center justify-center min-h-[40vh] text-center space-y-4 animate-in fade-in zoom-in duration-500">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-sky-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                <ChatBubbleIcon className="h-8 w-8 text-white" />
+            <div className="flex flex-col items-center justify-center min-h-[40vh] text-center animate-in fade-in zoom-in duration-500">
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-sky-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 mb-6">
+                <Sparkles className="h-8 w-8 text-white" />
               </div>
-              <div className="space-y-2 max-w-sm">
-                <h2 className="text-xl font-semibold tracking-tight">Welcome back</h2>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  {GREETING_MESSAGE}
+              <div className="space-y-2 max-w-xl mb-6">
+                <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-foreground">
+                  What would you like to explore?
+                </h2>
+                <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
+                  Start a conversation, attach a file, or choose a prompt below to see Lattice in action.
                 </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl">
+                {[
+                  'Help me think through an architecture decision',
+                  'Review this code and suggest improvements',
+                  'Research a topic and summarize what you find',
+                  'Generate an image from a short description',
+                ].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    onClick={() => setUserInput(suggestion)}
+                    className="text-left rounded-2xl border border-border bg-card hover:bg-accent/60 hover:border-primary/40 px-4 py-3 text-sm md:text-base text-foreground transition-colors duration-200"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
               </div>
             </div>
           )}

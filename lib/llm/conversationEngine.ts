@@ -38,6 +38,7 @@ import { deltaEngine } from '@/lib/world-model/delta';
 import { critiqueLLMOutput } from '@/lib/ucol/critics/OutputCritic';
 import type { UcolMemoryPlan, UcolMemoryScope } from '@/lib/ucol/routing/types';
 import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
+import { createTrace } from '@/lib/observability/langfuse';
 
 // ChatMessageSchema imported from types
 
@@ -648,6 +649,13 @@ export async function generateConversationReply(
   // for this mode so Hermes can make function calls when appropriate.
   const isHermesMode = agentMode === 'fast';
   let streamResult;
+  const trace = createTrace({
+    traceName: 'conversation',
+    userId,
+    sessionId: conversationId || undefined,
+    tags: [agentMode, actualModelId, wmDomain],
+    metadata: { hasAttachments: Boolean(fileData && mimeType), contextFactsCount: intelligentFacts.length },
+  });
   try {
     streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
       model: actualModelId,
@@ -655,7 +663,18 @@ export async function generateConversationReply(
       maxTokens: 2048,
       ...(isHermesMode ? { agentic: true } : {}),
     });
+    try {
+      trace.update({
+        metadata: {
+          completionStatus: 'streaming',
+          model: actualModelId,
+        },
+      });
+    } catch {}
   } catch (err: any) {
+    try {
+      trace.update({ metadata: { error: err?.message || String(err) } });
+    } catch {}
     if (err?.status === 429 || String(err).includes('429')) {
       console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to fast mode`);
       const fallback = resolveProviderForMode({ mode: 'fast', hasAttachments: Boolean(fileData && mimeType), providerKeys });
@@ -689,6 +708,8 @@ export async function generateConversationReply(
     flush() {
       // Clean fullText once before any side effects
       const cleanedFullText = fullText ? fullText.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim() : '';
+
+      try { trace.update({ metadata: { completionStatus: 'completed', responseLength: cleanedFullText.length } }); } catch {}
 
       // Side effects after stream completes
       if (!options.disableSideEffects && fullText) {
@@ -950,6 +971,8 @@ export async function generateConversationReply(
   });
 
   const stream = originalStream.pipeThrough(transformedStream);
+
+  try { trace.update({ metadata: { completionStatus: 'streaming', model: actualModelId } }); } catch {}
 
   return {
     stream,

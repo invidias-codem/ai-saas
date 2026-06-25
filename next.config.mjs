@@ -1,6 +1,7 @@
 import path from 'path';
 import createMDX from '@next/mdx';
 import createNextIntlPlugin from 'next-intl/plugin';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const projectRoot = path.resolve('./');
 const isTauri = process.env.TAURI_BUILD === 'true';
@@ -109,9 +110,10 @@ const withMDX = createMDX({
 
 const withNextIntl = createNextIntlPlugin('./i18n.ts');
 
-export default withMDX(withNextIntl({
-  ...nextConfig,
-  async redirects() {
+export default withSentryConfig(
+  withMDX(withNextIntl({
+    ...nextConfig,
+    async redirects() {
     return [
       { source: '/dashboard', destination: '/en/dashboard', permanent: false },
       { source: '/dashboard/:path*', destination: '/en/dashboard/:path*', permanent: false },
@@ -157,4 +159,4 @@ export default withMDX(withNextIntl({
       }
     ];
   },
-}));
+})));

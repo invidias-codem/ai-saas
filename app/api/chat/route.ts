@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { waitUntil } from '@vercel/functions';
 import { runPostGenerationPipeline } from '@/lib/ucol/postGenerationPipeline';
+import { logger } from '@/lib/logger';
 import {
     generateConversationReply,
     ConversationRequestSchema
@@ -160,7 +161,7 @@ export async function POST(req: Request) {
             },
         });
 
-        console.info('[UCOL] Initial routing decision', {
+        logger.info('[UCOL] Initial routing decision', {
             requestId: routingDecision.requestId,
             workspaceId: routingDecision.resolvedWorkspaceId,
             operatingProfileId: routingDecision.operatingProfileId,
@@ -264,7 +265,7 @@ export async function POST(req: Request) {
                     });
                 }
             } catch (err) {
-                console.error('Background DB persistence failed:', err);
+                logger.error('Background DB persistence failed', { error: String(err) });
             }
         })());
 
@@ -286,7 +287,10 @@ export async function POST(req: Request) {
         });
 
     } catch (error: any) {
-        console.error('Genie API Error:', error);
+        logger.error('Genie API Error', {
+            message: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        });
 
         const authResponse = handleAuthError(error);
         if (authResponse) return authResponse;

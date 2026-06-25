@@ -11,6 +11,7 @@ allowBuilds:
   '@firebase/util': true
   '@google/genai': true
   '@parcel/watcher': true
+  '@sentry/cli': set this to true or false
   '@swc/core': true
   browser-tabs-lock: true
   bufferutil: true

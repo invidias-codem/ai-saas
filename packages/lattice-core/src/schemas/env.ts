@@ -113,6 +113,21 @@ export const envSchema = z.object({
   // Inngest Cloud — Durable background execution
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
+
+  // Observability
+  LANGFUSE_PUBLIC_KEY: z.string().optional(),
+  LANGFUSE_SECRET_KEY: z.string().optional(),
+  LANGFUSE_HOST: z.string().optional().default('https://cloud.langfuse.com'),
+  SENTRY_DSN: z.string().optional(),
+  NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
+
+  // Billing / Payment
+  PAYPAL_CLIENT_ID: z.string().optional(),
+  PAYPAL_CLIENT_SECRET: z.string().optional(),
+  PAYPAL_WEBHOOK_ID: z.string().optional(),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  NEXT_PUBLIC_APP_URL: z.string().url().optional(),
 }).superRefine((data, ctx) => {
   if (data.DEPLOYMENT_MODE === 'A') {
     const requiredModeAVars = [

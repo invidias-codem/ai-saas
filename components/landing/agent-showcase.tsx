@@ -141,7 +141,7 @@ export const AgentShowcase = () => {
             </div>
 
             {/* Main Showcase Card */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-card/80 backdrop-blur-xl border border-border rounded-3xl overflow-hidden shadow-2xl ring-1 ring-slate-200 dark:ring-white/5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 bg-card/80 backdrop-blur-xl border border-border rounded-3xl overflow-hidden shadow-lg ring-1 ring-slate-200 dark:ring-white/5">
 
                 {/* LEFT: Input / Setup */}
                 <div className="relative p-8 flex flex-col justify-between min-h-[400px] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-white/5 bg-gradient-to-br from-slate-50 dark:from-white/5 to-transparent">
@@ -192,7 +192,7 @@ export const AgentShowcase = () => {
                             >
                                 <Button
                                     onClick={startSimulation}
-                                    className="w-full h-14 text-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-500/20 dark:shadow-indigo-900/20 rounded-xl"
+                                    className="w-full h-14 text-lg bg-indigo-700 dark:bg-white text-white dark:text-indigo-900 rounded-xl"
                                 >
                                     <Sparkles className="w-5 h-5 mr-2 animate-pulse" />
                                     Run Agent Analysis

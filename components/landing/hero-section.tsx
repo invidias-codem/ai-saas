@@ -88,14 +88,15 @@ export const HeroSection = () => {
   const t = useTranslations("Landing.hero");
 
   return (
-    <section className="landing-bg-main relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
-      <ParticleField />
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
+      <div className="absolute top-[-20%] left-[-10%] h-[520px] w-[520px] rounded-full bg-violet-500/10 blur-[80px] dark:bg-violet-500/15 opacity-40 dark:opacity-80 pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-5%] h-[380px] w-[380px] rounded-full bg-indigo-500/10 blur-[80px] dark:bg-indigo-500/15 opacity-40 dark:opacity-80 pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 h-[320px] w-[720px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-500/10 blur-[100px] dark:bg-sky-500/12 opacity-30 dark:opacity-70 pointer-events-none" />
 
-      <div className="landing-orb-primary absolute top-[-20%] left-[-10%] h-[700px] w-[700px] rounded-full blur-[60px] dark:blur-[120px] opacity-20 dark:opacity-100 pointer-events-none" />
-      <div className="landing-orb-secondary absolute bottom-[-10%] right-[-5%] h-[500px] w-[500px] rounded-full blur-[60px] dark:blur-[120px] opacity-20 dark:opacity-100 pointer-events-none" />
-      <div className="landing-orb-tertiary absolute top-1/2 left-1/2 h-[400px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[60px] dark:blur-[100px] opacity-20 dark:opacity-100 pointer-events-none" />
-
-      <div className="landing-grid-overlay absolute inset-0 pointer-events-none opacity-[0.02] dark:opacity-[0.03]" />
+      <div className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.04]" style={{
+        backgroundImage: 'linear-gradient(rgba(139,92,246,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(139,92,246,0.5) 1px, transparent 1px)',
+        backgroundSize: '64px 64px',
+      }} />
 
       <div className="container relative z-10 mx-auto flex flex-col items-center px-4 pt-24 pb-16 text-center">
         <motion.div
@@ -154,7 +155,7 @@ export const HeroSection = () => {
           <Link href="/dashboard">
             <Button
               size="lg"
-              className="landing-cta-primary rounded-full px-8 py-6 text-base transition-all duration-300 hover:shadow-[0_0_48px_-8px_rgba(245,158,11,0.55)] dark:hover:shadow-[0_0_48px_-8px_rgba(139,92,246,0.85)]"
+              className="landing-cta-primary rounded-full px-8 py-6 text-base md:text-lg transition-all duration-200 hover:opacity-95"
             >
               {t("cta")}
               <ArrowRightIcon className="ml-2 h-5 w-5" />
@@ -182,6 +183,6 @@ export const HeroSection = () => {
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background/80 to-transparent pointer-events-none" />
-    </section>
+    </div>
   );
 };

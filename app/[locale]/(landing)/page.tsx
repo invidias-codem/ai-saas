@@ -88,8 +88,8 @@ const LandingPage = () => {
         <ComplianceSection />
 
         {/* 6 — Features Grid: Platform capabilities built on memory-native AI. */}
-        <section className="px-4 py-16 md:py-32 max-w-7xl mx-auto relative cursor-default">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-violet-500/5 dark:bg-indigo-500/10 rounded-full blur-[100px] -z-10" />
+        <section className="px-4 py-16 md:py-24 max-w-7xl mx-auto relative cursor-default">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[640px] h-[400px] bg-violet-500/5 dark:bg-indigo-500/10 rounded-full blur-[80px] -z-10" />
 
           <motion.div
             initial={{ opacity: 0, y: 24 }}
@@ -120,9 +120,9 @@ const LandingPage = () => {
         <Testimonials />
 
         {/* 6 — CTA: Build on a context layer you can actually own. */}
-        <section className="py-16 md:py-32 text-center px-4 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-100 via-indigo-50 to-violet-100 dark:from-indigo-950 dark:via-violet-950 dark:to-indigo-950 pointer-events-none" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-violet-400/15 dark:bg-violet-500/20 rounded-full blur-[100px] pointer-events-none" />
+        <section className="py-16 md:py-24 text-center px-4 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-50 via-background to-violet-50 dark:from-indigo-950/60 dark:via-background dark:to-indigo-950/60 pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[320px] bg-violet-400/10 dark:bg-violet-500/12 rounded-full blur-[80px] pointer-events-none" />
 
           <motion.div
             initial={{ opacity: 0, y: 24 }}
@@ -143,7 +143,7 @@ const LandingPage = () => {
             <Link href="/dashboard">
               <Button
                 size="lg"
-                className="rounded-full px-12 py-8 text-lg mt-4 bg-violet-700 dark:bg-white text-white dark:text-violet-900 font-bold hover:opacity-90 dark:hover:bg-white/90 shadow-[0_0_40px_-10px_rgba(124,58,237,0.5)] dark:shadow-[0_0_60px_-10px_rgba(255,255,255,0.3)] transition-all duration-300"
+                className="rounded-full px-10 py-7 text-base md:text-lg font-semibold bg-violet-700 dark:bg-white text-white dark:text-violet-900 hover:opacity-90 transition-all duration-200"
               >
                 {t("cta.button")}
               </Button>

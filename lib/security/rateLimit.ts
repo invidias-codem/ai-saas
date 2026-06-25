@@ -1,6 +1,7 @@
 import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
 import { shouldQuietBuildLogs } from '@/lib/runtime/buildPhase';
+import { logger } from '@/lib/logger';
 
 // In-memory fallback for development (when Upstash not configured)
 class InMemoryRateLimiter {
@@ -148,6 +149,9 @@ export async function limitFeedback(
   if (isUpstashConfigured && anonymousLimiter && authedLimiter) {
     const rl = isAuthed ? authedLimiter : anonymousLimiter;
     const res = await rl.limit(`feedback:${key}`);
+    if (!res.success) {
+      logger.warn('[RATE_LIMIT] Feedback blocked', { key, isAuthed });
+    }
     return {
       success: res.success,
       limit: res.limit,
@@ -205,6 +209,14 @@ export async function limitApiEndpoint(
 
   if (isUpstashConfigured && limiter) {
     const res = await limiter.limit(key);
+    if (!res.success) {
+      logger.warn('[RATE_LIMIT] Blocked', {
+        endpointType,
+        key,
+        limit: res.limit,
+        reset: new Date(res.reset).toISOString(),
+      });
+    }
     return {
       success: res.success,
       limit: res.limit,

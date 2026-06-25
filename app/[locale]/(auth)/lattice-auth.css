@@ -1,22 +1,22 @@
 /* Lattice Auth Pages Custom Styling */
-/* Inspired by PS1/PS2 boot screen aesthetic */
 
 /* Main card with glassmorphism effect */
 .lattice-auth .cl-card {
-  background: rgba(255, 255, 255, 0.95) !important;
-  backdrop-filter: blur(10px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  box-shadow: 
-    0 20px 60px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.1) inset !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow:
+    0 18px 45px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset !important;
   border-radius: 16px !important;
-  animation: cardFadeIn 0.5s ease-out !important;
+  animation: cardFadeIn 0.4s ease-out !important;
 }
 
 @keyframes cardFadeIn {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(14px);
   }
   to {
     opacity: 1;
@@ -26,31 +26,31 @@
 
 /* Header styling */
 .lattice-auth .cl-headerTitle {
-  color: #1f2937 !important;
+  color: #0f172a !important;
   font-weight: 700 !important;
-  font-size: 1.75rem !important;
-  letter-spacing: -0.025em !important;
+  font-size: 1.65rem !important;
+  letter-spacing: -0.03em !important;
 }
 
 .lattice-auth .cl-headerSubtitle {
-  color: #6b7280 !important;
+  color: #475569 !important;
   font-size: 0.875rem !important;
-  margin-top: 0.25rem !important;
+  letter-spacing: -0.012em !important;
+  margin-top: 0.375rem !important;
+  line-height: 1.5 !important;
 }
 
-/* Social buttons with hover effects */
+/* Social buttons */
 .lattice-auth .cl-socialButtonsBlockButton {
-  border: 1px solid #e5e7eb !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border: 1px solid rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
   border-radius: 8px !important;
 }
 
 .lattice-auth .cl-socialButtonsBlockButton:hover {
-  transform: translateY(-2px) !important;
-  box-shadow: 
-    0 4px 12px rgba(0, 0, 0, 0.15),
-    0 0 0 2px rgba(6, 182, 212, 0.2) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14) !important;
   border-color: #06b6d4 !important;
 }
 
@@ -58,10 +58,10 @@
   transform: translateY(0) !important;
 }
 
-/* Primary button with gradient */
+/* Primary CTA */
 .lattice-auth .cl-formButtonPrimary {
-  background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%) !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  background: linear-gradient(180deg, #0ea5e9 0%, #2563eb 100%) !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
   font-weight: 600 !important;
   border-radius: 8px !important;
   position: relative !important;
@@ -78,10 +78,10 @@
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(255, 255, 255, 0.3),
+    rgba(255, 255, 255, 0.18),
     transparent
   ) !important;
-  transition: left 0.5s !important;
+  transition: left 0.35s !important;
 }
 
 .lattice-auth .cl-formButtonPrimary:hover::before {
@@ -90,56 +90,60 @@
 
 .lattice-auth .cl-formButtonPrimary:hover {
   transform: translateY(-1px) !important;
-  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.4) !important;
+  box-shadow: 0 6px 18px rgba(14, 165, 233, 0.25) !important;
 }
 
-/* Form inputs with smooth focus */
+/* Fields */
 .lattice-auth .cl-formFieldInput {
-  border: 1px solid #e5e7eb !important;
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   border-radius: 8px !important;
 }
 
 .lattice-auth .cl-formFieldInput:focus {
-  border-color: #06b6d4 !important;
-  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1) !important;
+  border-color: #0ea5e9 !important;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.12) !important;
   outline: none !important;
 }
 
-/* Divider styling */
+.lattice-auth .cl-formFieldErrorText {
+  font-size: 0.8rem !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* Divider */
 .lattice-auth .cl-dividerLine {
-  background: #e5e7eb !important;
+  background: rgba(15, 23, 42, 0.08) !important;
 }
 
 .lattice-auth .cl-dividerText {
-  color: #9ca3af !important;
+  color: #64748b !important;
   font-size: 0.75rem !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
+  text-transform: none !important;
+  letter-spacing: 0.01em !important;
 }
 
-/* Footer links */
+/* Footer actions */
 .lattice-auth .cl-footerActionLink {
-  color: #06b6d4 !important;
+  color: #0284c7 !important;
   font-weight: 500 !important;
   transition: color 0.2s ease !important;
 }
 
 .lattice-auth .cl-footerActionLink:hover {
-  color: #0891b2 !important;
+  color: #0369a1 !important;
 }
 
-/* Badge (secured by Clerk) */
 .lattice-auth .cl-badge {
-  color: #9ca3af !important;
+  color: #94a3b8 !important;
   font-size: 0.75rem !important;
 }
 
-/* Logo container */
+/* Logo */
 .lattice-auth .cl-logoBox {
-  margin-bottom: 1.5rem !important;
+  margin-bottom: 1.25rem !important;
 }
 
 .lattice-auth .cl-logoImage {
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15)) !important;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.25)) !important;
 }
