@@ -10,7 +10,7 @@
     "dev": "ts-node src/api/server.ts"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.12.0",
+    "@google/generative-ai": "^0.24.1",
     "@noble/ed25519": "^1.7.3",
     "@supabase/supabase-js": "^2.39.0",
     "ajv": "^8.12.0",
