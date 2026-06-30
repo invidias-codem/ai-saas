@@ -64,7 +64,7 @@
     "@ai-sdk/anthropic": "^3.0.81",
     "@anthropic-ai/sdk": "^0.74.0",
     "@atproto/api": "^0.13.15",
-    "@clerk/clerk-js": "^5.62.0",
+    "@clerk/clerk-js": "^6.22.1",
     "@clerk/nextjs": "^6.39.3",
     "@google-cloud/aiplatform": "^6.4.0",
     "@google-cloud/storage": "^7.17.2",
