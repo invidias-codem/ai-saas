@@ -90,13 +90,13 @@ The repo currently spans several major product and platform surfaces:
 
 Lattice OS is a **pnpm monorepo** rather than a single bag of scripts. This keeps platform logic, infrastructure adapters, and product surfaces decoupled.
 
-| Path | Purpose |
-|------|---------|
-| `apps/web` | Next.js 14 + app router frontend |
-| `packages/lattice-core` | Zod contracts, constants, license/preflight schemas |
+| Path | Package / Purpose |
+|------|-------------------|
+| `app/` | Next.js 16 + App Router web app |
+| `packages/lattice-core` | Core contracts: env, constants, types |
 | `packages/lattice-mcp-local` | Local MCP stdio adapter |
-| `packages/lattice-mcp-remote` | Remote MCP HTTP adapter (Clerk-authed) |
-| `packages/lattice-ai-skills` | AI Skills adapter (SKILL.md schema, slash commands, wrappers) |
+| `packages/lattice-mcp-remote` | Remote MCP HTTP adapter (CLerk-authed) |
+| `packages/lattice-ai-skills` | AI Skills adapter |
 
 The root app depends on these via `workspace:*` and builds them in `prebuild` so Vercel can resolve `@lattice-os/*` paths.
 

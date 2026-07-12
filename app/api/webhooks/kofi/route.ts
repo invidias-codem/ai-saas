@@ -72,17 +72,25 @@ export async function POST(req: NextRequest) {
 
     const user = users.data[0];
 
-    // 5. Calculate and Update Credits
-    const currentCredits = (user.privateMetadata.computeCredits as number) || 0;
+    // 5. Credit the unified ledger (supporter_credits) — the same ledger all
+    // spend paths (chat, image, video, music, code) deduct from.
     const creditsToAdd = Math.floor(amount * CREDITS_PER_DOLLAR);
-    const newCreditBalance = currentCredits + creditsToAdd;
 
-    await client.users.updateUserMetadata(user.id, {
-      privateMetadata: {
-        ...user.privateMetadata,
-        computeCredits: newCreditBalance,
-      },
+    const { error: creditError } = await supabaseAdmin.rpc('increment_credits', {
+      p_user_id: user.id,
+      p_amount: creditsToAdd,
+      p_type: 'TOP_UP',
+      p_description: `Ko-Fi top-up: $${amount} (TX ${transactionId})`,
+      p_metadata: { source: 'kofi', transaction_id: transactionId, amount_usd: amount },
     });
+
+    if (creditError) {
+      console.error(`Ko-Fi Webhook: failed to credit ledger for ${buyerEmail}:`, creditError);
+      // Return 500 so Ko-Fi retries; payment_events row insert will hit the
+      // idempotency path next attempt only if we also roll it back — safer to
+      // let the unique constraint short-circuit and surface for manual review.
+      return NextResponse.json({ error: "Credit update failed" }, { status: 500 });
+    }
 
     console.log(`Successfully added ${creditsToAdd} credits to ${buyerEmail}`);
 

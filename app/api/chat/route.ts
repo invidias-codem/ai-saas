@@ -1,26 +1,24 @@
 // app/api/chat/route.ts
+//
+// Phase 2 refactor: thin transport into RuntimeBridge.
+// Route now owns: auth, rate-limit, validation, context resolution,
+// credit/entitlement checks, and graceful degradation.
+// Everything else (execution, post-gen pipeline, response) is delegated.
 import { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
-import { waitUntil } from '@vercel/functions';
-import { runPostGenerationPipeline } from '@/lib/ucol/postGenerationPipeline';
-import { logger } from '@/lib/logger';
-import {
-    generateConversationReply,
-    ConversationRequestSchema
-} from '@/lib/llm/conversationEngine';
+import { generateConversationReply, ConversationRequestSchema } from '@/lib/llm/conversationEngine';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { promptSchema, validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
 import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
-import { calculateInteractionCost, deductUserCredits } from '@/lib/subscription/credits';
+import { calculateInteractionCost, deductUserCredits, getUserCredits } from '@/lib/subscription/credits';
 import { checkDocumentEntitlement } from '@/lib/entitlements/documents';
-import type { AgentMode } from '@/lib/llm/types';
-import type { RuntimeProfileSignals } from '@/lib/workspaces/runtimeMode';
-import type { UcolRequestPacket, UcolResolvedContext } from '@/lib/ucol/routing/types';
+import { runRuntimeBridge } from '@/lib/ucol/runtimeBridge';
+import { logger } from '@/lib/logger';
+import type { UcolRequestPacket } from '@/lib/ucol/routing/types';
 import type { FileAttachmentInput } from '@/lib/types/attachments';
-
 
 export async function POST(req: Request) {
     try {
@@ -99,27 +97,27 @@ export async function POST(req: Request) {
 
         const resolved = await resolveRuntimeContext({ userId: user.userId, surface: 'web', conversationId, strictValidation: false });
         let effectiveMode = resolved.mode;
-        
+
         // --- CREDIT ENFORCEMENT & GRACEFUL DEGRADATION ---
-        let computeCredits = typeof clerkUser.privateMetadata.computeCredits === 'number' 
-            ? clerkUser.privateMetadata.computeCredits 
-            : 200; // Default grant
-            
-        let finalCost = calculateInteractionCost({ 
-            hasAttachments: Boolean(fileData), 
-            mode: effectiveMode 
+        // Unified ledger: balance comes from supporter_credits (Supabase),
+        // not Clerk metadata — same ledger the payment webhooks credit.
+        let computeCredits = await getUserCredits(user.userId);
+
+        let finalCost = calculateInteractionCost({
+            hasAttachments: Boolean(fileData),
+            mode: effectiveMode
         });
 
         const entitlement = checkDocumentEntitlement(clerkUser, computeCredits);
 
         if (!entitlement.allowed || computeCredits <= 0) {
             // Graceful Degradation
-            fileData = undefined; // Strip premium attachments
-            documentIds = undefined; // Strip document context
+            fileData = undefined;
+            documentIds = undefined;
             if (effectiveMode === 'agentic' || effectiveMode === 'reasoning') {
-                effectiveMode = 'fast'; // Fallback to cheaper model for basic chat
+                effectiveMode = 'fast';
             }
-            finalCost = 0; // Free degraded chat
+            finalCost = 0;
         }
         // --------------------------------------------------
 
@@ -161,17 +159,6 @@ export async function POST(req: Request) {
             },
         });
 
-        logger.info('[UCOL] Initial routing decision', {
-            requestId: routingDecision.requestId,
-            workspaceId: routingDecision.resolvedWorkspaceId,
-            operatingProfileId: routingDecision.operatingProfileId,
-            intent: routingDecision.intent,
-            executionMode: routingDecision.executionPlan.mode,
-            providerPlan: routingDecision.providerPlan,
-            memoryPlan: routingDecision.memoryPlan,
-            rationale: routingDecision.debug.rationale,
-        });
-
         const normalizedFileData = fileData
             ? fileData.fileUri
                 ? {
@@ -204,96 +191,66 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Validation Error', details: validationResult.error.flatten() }, { status: 400 });
         }
 
-        const result = await generateConversationReply(
-            {
-                userId: user.userId,
+        const result = await runRuntimeBridge({
+            surface: 'chat',
+            session: {
+                user,
                 clerkUser,
-                request: validationResult.data,
+                body: {
+                    ...body,
+                    prompt,
+                    messages,
+                    fileData,
+                    documentIds,
+                    conversationId,
+                },
+                resolvedContext: resolved,
+                requestPacket,
+                routingDecision,
+            },
+            requestId: requestPacket.requestId,
+            featureType: 'chat',
+            body: {
+                ...body,
+                prompt,
+                messages,
+                fileData,
+                documentIds,
                 conversationId,
             },
-            {
-                mode: effectiveMode,
-                memoryPlan: routingDecision.memoryPlan,
-            }
-        );
-
-        const [clientStream, dbStream] = result.stream.tee();
-
-        waitUntil((async () => {
-            try {
-                const reader = dbStream.getReader();
-                const decoder = new TextDecoder();
-                let fullText = '';
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    fullText += decoder.decode(value, { stream: true });
-                }
-
-                // Await the signature only after the stream has fully drained.
-                // Promise.resolve wraps the optional promise safely; the catch
-                // ensures a network/parse error never prevents message persistence.
-                const thoughtSignature = await Promise.resolve(
-                    result.thoughtSignaturePromise ?? Promise.resolve(null)
-                ).catch(() => null);
-
-                if (fullText) {
-                    await runPostGenerationPipeline({
+            billing: async () => ({
+                cost: finalCost,
+                bypass: finalCost === 0,
+                remaining: Math.max(0, computeCredits),
+            }),
+            execute: async ({ resolved: ctx, rawInput, messages: msgs, fileData: fData }) => {
+                const reply = await generateConversationReply(
+                    {
                         userId: user.userId,
+                        clerkUser,
+                        request: validationResult.data,
                         conversationId,
-                        workspaceId: resolved.ucolContext.workspaceId,
-                        operatingProfileId: resolved.ucolContext.operatingProfileId,
-                        operatingProfileMode: effectiveMode,
-                        requestId: requestPacket.requestId,
-                        userQuery: prompt,
-                        responseText: fullText,
-                        history: messages || [],
-                        fileData: fileData || null,
-                        modelId: result.debug?.model || 'unknown',
-                        cost: 0,
-                        bypassCredits: false,
-                        featureType: 'chat',
-                        routingDecision,
-                        userContext: {
-                            fullName: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || clerkUser.username || 'User',
-                            email: clerkUser.emailAddresses?.[0]?.emailAddress || '',
-                        },
-                        saveToMemory: false,
-                        persistUserMessage: true,
-                        thoughtSignature,
-                    });
-                }
-            } catch (err) {
-                logger.error('Background DB persistence failed', { error: String(err) });
-            }
-        })());
+                    },
+                    {
+                        mode: effectiveMode,
+                        memoryPlan: routingDecision.memoryPlan,
+                    }
+                );
 
-        // Deduct credits asynchronously
-        if (finalCost > 0) {
-            waitUntil(deductUserCredits(user.userId, computeCredits, finalCost));
-            computeCredits = Math.max(0, computeCredits - finalCost);
-        }
-
-        return new NextResponse(clientStream, {
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-                'X-Debug-Model': result.debug?.model || 'unknown',
-                'X-Debug-Agent-Mode': effectiveMode,
-                'X-Debug-Execution-Mode': routingDecision.executionPlan.mode,
-                'X-Debug-Intent': routingDecision.intent.category,
-                'X-Remaining-Credits': String(computeCredits),
-            }
+                return {
+                    stream: reply.stream,
+                    thoughtSignaturePromise: reply.thoughtSignaturePromise,
+                    modelId: reply.debug?.model || 'unknown',
+                    routingDecision,
+                };
+            },
         });
+
+        return result;
 
     } catch (error: any) {
-        logger.error('Genie API Error', {
-            message: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-        });
-
-        const authResponse = handleAuthError(error);
-        if (authResponse) return authResponse;
+        const handled = handleAuthError(error);
+        if (handled) return handled;
 
         if (error instanceof ValidationError) {
             return NextResponse.json({
@@ -301,6 +258,11 @@ export async function POST(req: Request) {
                 details: error.message
             }, { status: 400 });
         }
+
+        logger.error('Genie API Error', {
+            message: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        });
 
         if (error?.status === 429 || error?.toString().includes('429')) {
             return NextResponse.json({

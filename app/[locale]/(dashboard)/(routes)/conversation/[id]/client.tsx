@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 // but keeping the import if you use it elsewhere.
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Paperclip, AlertCircle, SendHorizontal, X, Plus, ArrowDown, Github, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Plus, ArrowDown, Github, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
 import { GitHubConsentModal } from "@/components/github-consent-modal";
 import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,7 @@ import {
   setActiveConversation,
 } from "@/lib/conversationManager";
 import { useSupabaseChat, Message as SupabaseMessage } from "@/app/hooks/useSupabaseChat";
+import { useRuntimeStore } from "@/lib/store/runtimeStore";
 
 // New Agentic Integration
 import { ModelProvider, useModel } from "@/contexts/ModelContext";
@@ -197,6 +198,98 @@ function modeIcon(mode?: string | null) {
   }
 }
 
+// ─── Runtime Status Helpers ──────────────────────────────────────
+
+type RuntimeState = 'idle' | 'thinking' | 'executing_tools' | 'streaming' | 'error';
+
+function getRuntimeState({
+  loading,
+  streaming,
+  streamingContent,
+  error,
+  agentMode,
+}: {
+  loading: boolean;
+  streaming: boolean;
+  streamingContent: string;
+  error: string | null;
+  agentMode: string | undefined;
+}): RuntimeState {
+  if (error) return 'error';
+  if (streaming && streamingContent) return 'streaming';
+  if (loading && agentMode === 'agentic') return 'executing_tools';
+  if (loading) return 'thinking';
+  return 'idle';
+}
+
+function runtimeLabel(state: RuntimeState, agentMode?: string) {
+  switch (state) {
+    case 'thinking': return 'Thinking';
+    case 'executing_tools': return 'Executing tools';
+    case 'streaming': return 'Streaming response';
+    case 'error': return 'Error';
+    default: return agentMode ? modeLabel(agentMode) : 'Ready';
+  }
+}
+
+function runtimeColor(state: RuntimeState) {
+  switch (state) {
+    case 'thinking': return 'text-amber-600 dark:text-amber-400';
+    case 'executing_tools': return 'text-violet-600 dark:text-violet-400';
+    case 'streaming': return 'text-sky-600 dark:text-sky-400';
+    case 'error': return 'text-red-600 dark:text-red-400';
+    default: return 'text-emerald-600 dark:text-emerald-400';
+  }
+}
+
+const RuntimeStatusBar = ({
+  agentMode,
+  loading,
+  streaming,
+  streamingContent,
+  error,
+  executionMode,
+  intent,
+  pendingApproval,
+}: {
+  agentMode: string | undefined;
+  loading: boolean;
+  streaming: boolean;
+  streamingContent: string;
+  error: string | null;
+  executionMode?: string;
+  intent?: string;
+  pendingApproval?: boolean;
+}) => {
+  const state = getRuntimeState({ loading, streaming, streamingContent, error, agentMode });
+  const Icon = state === 'executing_tools' ? Wrench : Activity;
+  const label = runtimeLabel(state, agentMode);
+  const color = runtimeColor(state);
+
+  return (
+    <div className={cn(
+      "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all duration-300",
+      color,
+      state !== 'idle' && "border-current/20 bg-current/5"
+    )}>
+      <Icon className="h-3 w-3" />
+      <span>{label}</span>
+      {executionMode && state !== 'idle' && (
+        <span className="text-muted-foreground">· {executionMode}</span>
+      )}
+      {intent && state !== 'idle' && (
+        <span className="text-muted-foreground">· {intent}</span>
+      )}
+      {pendingApproval && (
+        <span className="text-amber-600 dark:text-amber-400 animate-pulse">· Awaiting approval</span>
+      )}
+      {agentMode && state === 'idle' && !pendingApproval && (
+        <span className="text-muted-foreground">· {modeLabel(agentMode)}</span>
+      )}
+    </div>
+  );
+};
+
 function ConversationPageGlobalWrapper({
   conversationId,
   initialMessages = [],
@@ -282,6 +375,8 @@ function ConversationPage({
   const [memoryCount, setMemoryCount] = useState<number>(0);
   const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
   const [swarmSuggestion, setSwarmSuggestion] = useState<string>("");
+  const [debugExecutionMode, setDebugExecutionMode] = useState<string | undefined>(undefined);
+  const [debugIntent, setDebugIntent] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const fetchSuggestion = async () => {
@@ -314,13 +409,35 @@ function ConversationPage({
   };
 
   const handleGitHubActionConfirm = async () => {
-    // Execute logic here calling /api/integrations/github/execute
-    console.log("Executing GitHub action:", gitHubAction);
     setIsGitHubModalOpen(false);
 
-    // Mock execution for UI demo
-    const botMessage: Message = { text: `✅ Successfully executed GitHub Action: ${gitHubAction?.type} on ${gitHubAction?.repo}`, role: "bot", timestamp: new Date() };
+    const action = gitHubAction;
+    const botMessage: Message = {
+      text: `⏳ Executing GitHub Action: ${action?.type} \`${action?.repo}\`${action?.target ? ` → ${action.target}` : ""}…`,
+      role: "bot",
+      timestamp: new Date(),
+    };
     setMessages((prev) => [...prev, botMessage]);
+
+    try {
+      const { data } = await fetch("/api/integrations/github/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: action?.type, repo: action?.repo, target: action?.target }),
+      }).then((res) => res.json());
+
+      const successText =
+        typeof data?.html_url === "string"
+          ? `✅ Done — ${action?.type} on \`${action?.repo}\`: ${data.html_url}`
+          : `✅ Successfully executed GitHub Action: ${action?.type} on \`${action?.repo}\``;
+
+      setMessages((prev) => [...prev, { text: successText, role: "bot", timestamp: new Date() }]);
+    } catch (err: any) {
+      setMessages((prev) => [...prev, { text: `❌ Failed to execute GitHub action: ${err?.message || "unknown error"}`, role: "bot", timestamp: new Date() }]);
+      setError(err?.message || "GitHub action failed.");
+    } finally {
+      setGitHubAction(null);
+    }
   };
 
   // Refs
@@ -482,6 +599,33 @@ function ConversationPage({
     }
   }, [messages.length]);
 
+  // ─── Sync local runtime state to global store for dashboard shell ──────────
+  useEffect(() => {
+    const store = useRuntimeStore.getState();
+    store.setRuntime({
+      agentMode,
+      loading,
+      streaming,
+      error,
+      executionMode: debugExecutionMode,
+      intent: debugIntent,
+    });
+  }, [agentMode, loading, streaming, error, debugExecutionMode, debugIntent]);
+
+  // ─── Sync approval state to global store ──────────────────────────────────
+  useEffect(() => {
+    const store = useRuntimeStore.getState();
+    if (gitHubAction) {
+      store.setPendingApproval({
+        type: gitHubAction.type,
+        repo: gitHubAction.repo,
+        target: gitHubAction.target,
+      });
+    } else {
+      store.clearPendingApproval();
+    }
+  }, [gitHubAction]);
+
   // ---------------------------------------------------------------
 
   const handleSendMessage = async () => {
@@ -580,6 +724,11 @@ function ConversationPage({
           console.error("Failed to parse sources header", e);
         }
       }
+
+      const debugExecutionMode = response.headers.get("X-Debug-Execution-Mode") || undefined;
+      const debugIntent = response.headers.get("X-Debug-Intent") || undefined;
+      setDebugExecutionMode(debugExecutionMode);
+      setDebugIntent(debugIntent);
 
       const cleanedAccum = accum.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim();
       setMessages(prev => [...prev, { text: cleanedAccum, role: "bot", timestamp: new Date(), sources }]);
@@ -726,6 +875,18 @@ function ConversationPage({
             {/* Added Model Toggle here */}
             <div className="mt-1">
               <ModelToggle disabled={loading || streaming} />
+            </div>
+            <div className="mt-1">
+              <RuntimeStatusBar
+                agentMode={agentMode}
+                loading={loading}
+                streaming={streaming}
+                streamingContent={streamingContent}
+                error={error}
+                executionMode={debugExecutionMode}
+                intent={debugIntent}
+                pendingApproval={!!gitHubAction}
+              />
             </div>
           </div>
         </div>

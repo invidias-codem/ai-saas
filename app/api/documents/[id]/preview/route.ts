@@ -4,6 +4,7 @@ import { getDocument } from '@/lib/documents/store';
 import { StorageState } from '@/lib/types/documents';
 import { currentUser } from '@clerk/nextjs/server';
 import { checkDocumentEntitlement } from '@/lib/entitlements/documents';
+import { getUserCredits } from '@/lib/subscription/credits';
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -14,9 +15,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return NextResponse.json({ error: 'User profile not found' }, { status: 401 });
     }
 
-    const computeCredits = typeof clerkUser.privateMetadata?.computeCredits === 'number' 
-      ? clerkUser.privateMetadata.computeCredits 
-      : 200;
+    const computeCredits = await getUserCredits(user.userId);
 
     const entitlement = checkDocumentEntitlement(clerkUser, computeCredits);
     if (!entitlement.allowed) {

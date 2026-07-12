@@ -112,16 +112,23 @@ export async function POST(req: NextRequest) {
     }
 
     const user = users.data[0];
-    const currentCredits = (user.privateMetadata.computeCredits as number) || 0;
-    const creditsToAdd = Math.floor(amount * CREDITS_PER_DOLLAR);
-    const newCreditBalance = currentCredits + creditsToAdd;
 
-    await client.users.updateUserMetadata(user.id, {
-      privateMetadata: {
-        ...user.privateMetadata,
-        computeCredits: newCreditBalance,
-      },
+    // Credit the unified ledger (supporter_credits) — same ledger all spend
+    // paths deduct from.
+    const creditsToAdd = Math.floor(amount * CREDITS_PER_DOLLAR);
+
+    const { error: creditError } = await supabaseAdmin.rpc('increment_credits', {
+      p_user_id: user.id,
+      p_amount: creditsToAdd,
+      p_type: 'TOP_UP',
+      p_description: `PayPal top-up: ${amount} ${currency} (TX ${transactionId})`,
+      p_metadata: { source: 'paypal', transaction_id: transactionId, amount, currency },
     });
+
+    if (creditError) {
+      console.error(`PayPal Webhook: failed to credit ledger for ${payerEmail}:`, creditError);
+      return NextResponse.json({ error: "Credit update failed" }, { status: 500 });
+    }
 
     return NextResponse.json({ status: "Success", creditsAdded: creditsToAdd }, { status: 200 });
   } catch (error) {

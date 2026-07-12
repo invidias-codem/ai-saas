@@ -24,27 +24,51 @@ export const LandingNavbar = () => {
 
     const pricingTiers = [
         {
-            name: t('pricing.payAsYouGo'),
-            price: "$0.10",
-            unit: "per video",
-            description: t('pricing.subtitle'),
-            features: ["No monthly subscription", "Access to all models", "Standard generation speed"],
+            name: t('pricing.freeTierName'),
+            price: 'Free',
+            unit: t('pricing.freeTierUnit'),
+            description: t('pricing.freeTierSubtitle'),
+            features: [
+                t('pricing.freeTierFeature1'),
+                t('pricing.freeTierFeature2'),
+                t('pricing.freeTierFeature3'),
+            ],
             popular: false,
         },
         {
             name: t('pricing.creatorBundle'),
-            price: "$1.00",
-            unit: "per 10 videos",
+            price: '$5.00',
+            unit: t('pricing.creatorBundleUnit'),
             description: t('pricing.subtitle'),
-            features: ["10 Credits included", "Priority support", "High-res downloads"],
+            features: [
+                t('pricing.creatorBundleFeature1'),
+                t('pricing.creatorBundleFeature2'),
+                t('pricing.creatorBundleFeature3'),
+            ],
             popular: true,
         },
         {
             name: t('pricing.proStudio'),
-            price: "$9.00",
-            unit: "per 100 videos",
+            price: '$20.00',
+            unit: t('pricing.proStudioUnit'),
             description: t('pricing.subtitle'),
-            features: ["100 Credits included", "Fastest generation speed", "Commercial usage rights"],
+            features: [
+                t('pricing.proStudioFeature1'),
+                t('pricing.proStudioFeature2'),
+                t('pricing.proStudioFeature3'),
+            ],
+            popular: false,
+        },
+        {
+            name: t('pricing.enterprise'),
+            price: t('pricing.enterprisePriceLabel'),
+            unit: t('pricing.enterpriseUnit'),
+            description: t('pricing.enterpriseSubtitle'),
+            features: [
+                t('pricing.enterpriseFeature1'),
+                t('pricing.enterpriseFeature2'),
+                t('pricing.enterpriseFeature3'),
+            ],
             popular: false,
         },
     ];

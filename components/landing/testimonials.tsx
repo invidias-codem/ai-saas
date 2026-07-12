@@ -4,24 +4,24 @@ import { motion } from "framer-motion";
 
 const testimonials = [
     {
-        quote: "Lattice OS has completely transformed how I create content for my social media channels.",
-        name: "Alex R.",
-        role: "Content Creator",
-        initials: "AR",
+        quote: "I stopped explaining tools to peers and just showed them a conversation with memory. That’s the first AI product I’ve demoed and actually believed in.",
+        name: "Mia R.",
+        role: "Developer",
+        initials: "MR",
         gradient: "from-purple-500 to-blue-500"
     },
     {
-        quote: "The code generation tool saves me hours of debugging every single week. Highly recommend.",
-        name: "Sarah J.",
-        role: "Software Engineer",
-        initials: "SJ",
+        quote: "The workspace isolation made onboarding a non-event. I could hand someone a project context without handoff horror.",
+        name: "Daniel K.",
+        role: "Product Lead",
+        initials: "DK",
         gradient: "from-pink-500 to-orange-500"
     },
     {
-        quote: "I use the image generator for all my presentation decks. The quality is unmatched.",
-        name: "David K.",
-        role: "Product Manager",
-        initials: "DK",
+        quote: "What sold me was reproducibility. The same task, same context, same reasoning quality—on a Raspberry Pi and in the notebook I already use.",
+        name: "Samir P.",
+        role: "Operations",
+        initials: "SP",
         gradient: "from-green-400 to-emerald-600"
     }
 ];

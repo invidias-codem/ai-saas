@@ -1,79 +1,43 @@
 // app/api/code/route.ts
-import { auth, currentUser } from '@clerk/nextjs/server';
+//
+// Phase 2 refactor: atomic thin transport.
+// Route now owns ONLY: custom file validation.
+// Everything else (auth, rate-limit, context, billing, execution, post-gen, response) is delegated.
 import { NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Part } from "@google/generative-ai";
-import { requireEnv } from '@/lib/env';
-import { waitUntil } from '@vercel/functions';
-import { runPostGenerationPipeline } from '@/lib/ucol/postGenerationPipeline';
-import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
-import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { runCodeEngine } from '@/lib/llm/codeEngine';
 import { validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
 import { CODE_MODELS } from '@/lib/llm/codeModels';
-import { runCodeEngine } from '@/lib/llm/codeEngine';
-import { checkCredits, deductCredits, spendCreditsAtomic, CREDIT_COSTS, hasUnlimitedUsageAccess } from "@/lib/credits";
-import { trackAIError } from "@/lib/analytics/track";
-import { logger } from "@/lib/logger";
-import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
-import type { RuntimeProfileSignals, OperatingProfileMode } from '@/lib/workspaces/runtimeMode';
+import { setupUcolSession } from '@/lib/ucol/sessionHandler';
+import { runRuntimeBridge } from '@/lib/ucol/runtimeBridge';
 import type { FileAttachmentInput } from '@/lib/types/attachments';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   try {
-    const user = await requireAuth();
-    const clerkUser = await currentUser();
-    const ip = getClientIP(req);
+    // --- Phase 2: session bootstrap ----------------------------------
+    const session = await setupUcolSession({
+      req,
+      maxRequestSizeBytes: 10 * 1024 * 1024,
+      surface: 'api',
+      strictValidation: true,
+    });
+    if (session.errorResponse) return session.errorResponse;
 
-    if (!clerkUser) {
-      return new NextResponse("User profile not found", { status: 401 });
-    }
+    const { user, clerkUser, body, resolvedContext } = session;
+    const {
+      messages,
+      currentUserPrompt,
+      fileData,
+      model = 'fast',
+      activeRepo,
+    } = body;
 
-    const rateLimit = await limitApiEndpoint(user.userId, ip, 'ai');
-    if (!rateLimit.success) {
-      return NextResponse.json(
-        { error: 'Too many requests', message: 'Code generation rate limit exceeded' },
-        {
-          status: 429,
-          headers: {
-            'Retry-After': String(Math.ceil((rateLimit.reset - Date.now()) / 1000)),
-            'X-RateLimit-Remaining': String(rateLimit.remaining)
-          }
-        }
-      );
-    }
-
-    const body = await req.json();
-    validateRequestSize(body, 10 * 1024 * 1024);
-
-    const { messages, currentUserPrompt, fileData, model = 'fast', activeRepo, workspaceId, operatingProfileId, operatingProfileMode, conversationId } = body;
     let modelConfig = CODE_MODELS[model] || CODE_MODELS.fast;
 
-    const resolved = await resolveRuntimeContext({ 
-      userId: user.userId, 
-      surface: 'api', 
-      conversationId, 
-      workspaceId, 
-      operatingProfileId, 
-      fallbackMode: operatingProfileMode,
-      strictValidation: true 
-    });
-
-    if (resolved.error) {
-      return NextResponse.json({ error: resolved.error.message }, { status: resolved.error.status });
-    }
-
-    const validatedConversationId = resolved.conversationId;
-    const effectiveProfile = resolved.profile;
-    const operatingProfileResolvedMode = resolved.mode;
-    const operatingProfileName = resolved.operatingProfileName ?? resolved.operatingProfileId ?? 'resolved';
-    const effectiveWorkspaceId = resolved.workspaceId;
-    const effectiveOperatingProfileId = resolved.operatingProfileId;
-
-    if (!messages && (!currentUserPrompt && !fileData)) {
-      return new NextResponse("Messages or prompt/file are required", { status: 400 });
-    }
-
+    // --- Custom file validation (code-specific) -----------------------
     if (fileData) {
       const fileValidation = fileUploadSchema.safeParse(fileData);
       if (!fileValidation.success) {
@@ -93,123 +57,89 @@ export async function POST(req: Request) {
       }
     }
 
-    const history = (messages || []).slice(0, -1).map((msg: {
-      role: string;
-      text: string;
-      fileData?: FileAttachmentInput
-    }) => {
-      const parts: Part[] = [{ text: msg.text || '' }];
-
-      if (msg.fileData && msg.fileData.base64Data) {
-        parts.push({
-          inlineData: {
-            mimeType: msg.fileData.mimeType || msg.fileData.type || 'text/plain',
-            data: msg.fileData.base64Data
-          }
-        });
-      }
-
-      return {
-        role: msg.role === 'bot' ? 'model' : 'user',
-        parts: parts,
-      };
-    });
-
-    const cost = CREDIT_COSTS.CODE_GENERATION;
-    const idempotencyKey = req.headers.get('idempotency-key') || `code-${user.userId}-${Date.now()}`;
-    const bypassCredits = await hasUnlimitedUsageAccess(user.userId);
-
-    if (!bypassCredits) {
-      const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Code generation", { model: modelConfig.modelId, activeRepo });
-
-      if (!spendResult.success && !spendResult.duplicate) {
-        return NextResponse.json(
-          {
-            error: 'Insufficient credits',
-            message: `Weaver Code requires ${cost} credits before generation starts.`,
-            remaining: spendResult.remaining,
-          },
-          { status: 402 }
-        );
-      }
+    if (!messages && (!currentUserPrompt && !fileData)) {
+      return new NextResponse("Messages or prompt/file are required", { status: 400 });
     }
 
-    const userQuery = currentUserPrompt || 'code assistance';
+    if (messages && Array.isArray(messages) && messages.length > 100) {
+      return NextResponse.json(
+        { error: 'Validation Error', details: 'Maximum 100 messages allowed in history' },
+        { status: 400 }
+      );
+    }
 
-    const {
-      responseText,
-      modelConfig: finalModelConfig,
-      routingDecision,
-      intelligentFacts,
-      userContext
-    } = await runCodeEngine({
-      userId: user.userId,
-      clerkUser,
-      userQuery,
-      history,
-      fileData,
-      activeRepo,
-      initialModelConfig: modelConfig,
-      resolvedContext: resolved,
-      requestId: req.headers.get('x-request-id') || `req-${Date.now()}`,
-      messagesLength: messages?.length || 0
+    const requestId = req.headers.get('x-request-id') || randomUUID();
+
+    // --- Phase 2: delegate to bridge ---------------------------------
+    return runRuntimeBridge({
+      surface: 'code',
+      session,
+      requestId,
+      featureType: 'code',
+      body,
+      execute: async ({ resolved: ctx, rawInput, messages: msgs, fileData: attachedFileData }) => {
+        const history = (msgs || []).slice(0, -1).map((msg: {
+          role: string;
+          text: string;
+          fileData?: FileAttachmentInput;
+        }) => {
+          const parts: Part[] = [{ text: msg.text || '' }];
+          if (msg.fileData && msg.fileData.base64Data) {
+            parts.push({
+              inlineData: {
+                mimeType: msg.fileData.mimeType || msg.fileData.type || 'text/plain',
+                data: msg.fileData.base64Data
+              }
+            });
+          }
+          return {
+            role: msg.role === 'bot' ? 'model' : 'user',
+            parts,
+          };
+        });
+
+        const {
+          responseText,
+          modelConfig: finalModelConfig,
+          routingDecision,
+          intelligentFacts,
+          userContext
+        } = await runCodeEngine({
+          userId: user.userId,
+          clerkUser,
+          userQuery: rawInput,
+          history,
+          fileData: attachedFileData ?? undefined,
+          activeRepo,
+          initialModelConfig: modelConfig,
+          resolvedContext: ctx,
+          requestId,
+          messagesLength: msgs?.length || 0,
+        });
+
+        return {
+          text: responseText,
+          modelId: finalModelConfig.modelId,
+          routingDecision,
+          intelligentFacts,
+          userContext,
+        };
+      },
     });
-    
-    modelConfig = finalModelConfig;
-
-    waitUntil(
-      runPostGenerationPipeline({
-        userId: user.userId,
-        conversationId: validatedConversationId,
-        workspaceId: effectiveWorkspaceId,
-        operatingProfileId: effectiveOperatingProfileId,
-        operatingProfileMode: operatingProfileResolvedMode,
-        requestId: req.headers.get('x-request-id') || `req-${Date.now()}`,
-        userQuery,
-        responseText,
-        history: messages || [],
-        fileData: fileData || null,
-        modelId: modelConfig.modelId,
-        cost,
-        bypassCredits,
-        featureType: 'code',
-        intelligentFacts,
-        routingDecision,
-        userContext: {
-          fullName: userContext?.fullName || clerkUser?.fullName || 'Unknown User',
-          email: userContext?.email || clerkUser?.emailAddresses?.[0]?.emailAddress || 'unknown@example.com',
-          interactionStyle: userContext?.interactionStyle
-        },
-        saveToMemory: body.saveToMemory,
-        persistUserMessage: true,
-      })
-    );
-
-    return NextResponse.json({ text: responseText });
 
   } catch (error: any) {
-    console.error("[CODE_API_ERROR]", error);
-
-    const authResponse = handleAuthError(error);
-    if (authResponse) return authResponse;
-
     if (error instanceof ValidationError) {
       return NextResponse.json({
         error: 'Validation Error',
         details: error.message
       }, { status: 400 });
     }
-
-    if (error.response?.data?.error) {
-      logger.error("Gemini API Error:", error.response.data.error);
-    }
-    const errorMessage = error.response?.data?.error?.message || error.message || "An unknown error occurred";
-    return new NextResponse(JSON.stringify({
-      error: "Internal Server Error",
-      details: errorMessage
-    }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" }
-    });
+    return NextResponse.json(
+      {
+        error: "Internal Server Error",
+        details: error?.response?.data?.error?.message || error.message || "An unknown error occurred"
+      },
+      { status: 500 }
+    );
   }
 }

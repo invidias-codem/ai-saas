@@ -78,7 +78,7 @@ const SlackLandingPage = () => {
         <section className="py-20 px-4 border-y border-white/10 bg-gradient-to-b from-transparent via-purple-950/10 to-transparent">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-4xl font-bold text-white mb-4">Why Teams Choose Genie</h2>
+              <h2 className="text-4xl font-bold text-white mb-4">Why Teams Choose Lattice OS</h2>
               <p className="text-gray-400 text-lg">More features, better performance, unbeatable value</p>
             </div>
 
@@ -86,9 +86,9 @@ const SlackLandingPage = () => {
               <div className="relative group">
                 <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all" />
                 <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
-                  <div className="text-5xl font-bold text-white mb-2">Free</div>
-                  <div className="text-gray-400 mb-4">vs. Manus $20/mo</div>
-                  <div className="text-sm text-gray-500">Full access to all features at no cost</div>
+                  <div className="text-5xl font-bold text-white mb-2">Free to start</div>
+                  <div className="text-gray-400 mb-4">Welcome credits, then pay-as-you-go</div>
+                  <div className="text-sm text-gray-500">Start free — buy credits only when you need more</div>
                 </div>
               </div>
 
@@ -104,9 +104,9 @@ const SlackLandingPage = () => {
               <div className="relative group">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all" />
                 <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
-                  <div className="text-5xl font-bold text-white mb-2">∞</div>
-                  <div className="text-gray-400 mb-4">Unlimited Usage</div>
-                  <div className="text-sm text-gray-500">No caps on generations or requests</div>
+                  <div className="text-5xl font-bold text-white mb-2">Pay-as-you-go</div>
+                  <div className="text-gray-400 mb-4">No subscriptions</div>
+                  <div className="text-sm text-gray-500">Credits, not monthly caps — use what you need</div>
                 </div>
               </div>
             </div>
@@ -116,7 +116,7 @@ const SlackLandingPage = () => {
         {/* Ways to Use - Manus-inspired with time savings */}
         <section id="features" className="py-24 px-4 max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-white mb-4">Ways to Use Genie in Slack</h2>
+            <h2 className="text-4xl font-bold text-white mb-4">Ways to Use Lattice OS in Slack</h2>
             <p className="text-gray-400 text-lg">Transform hours of work into minutes</p>
           </div>
 
@@ -256,7 +256,7 @@ const SlackLandingPage = () => {
               Ready to Transform Your Workflow?
             </h2>
             <p className="text-gray-300 mb-10 text-xl max-w-2xl mx-auto">
-              Join thousands of teams using Genie AI to work smarter, not harder.
+              Join thousands of teams using Lattice OS to work smarter, not harder.
             </p>
             <Link href={addToSlackUrl}>
               <Button
@@ -280,9 +280,9 @@ const SlackLandingPage = () => {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="relative w-6 h-6">
-                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
+                <Image src="/Genie.png" alt="Lattice OS" fill className="object-cover" />
               </div>
-              <span className="text-lg font-bold text-white">Genie AI</span>
+              <span className="text-lg font-bold text-white">Lattice OS</span>
             </div>
 
             <div className="flex items-center gap-6 text-sm text-gray-400">
@@ -295,7 +295,7 @@ const SlackLandingPage = () => {
 
           <div className="mt-8 pt-8 border-t border-white/10 text-center">
             <p className="text-gray-500 text-sm">
-              © {new Date().getFullYear()} Genie AI. All rights reserved.
+              © {new Date().getFullYear()} Lattice OS. All rights reserved.
             </p>
           </div>
         </div>
@@ -311,7 +311,7 @@ export default SlackLandingPage;
 const steps = [
   {
     title: "Connect to Slack",
-    description: "Click the button to authorize Genie AI in your workspace—takes 30 seconds.",
+    description: "Click the button to authorize Lattice OS in your workspace—takes 30 seconds.",
   },
   {
     title: "Invite to Channels",
@@ -401,7 +401,7 @@ const allFeatures = [
   {
     label: "Direct Messages",
     icon: MessageSquare,
-    description: "Private conversations with Genie for sensitive questions and personal assistance.",
+    description: "Private conversations with Lattice OS for sensitive questions and personal assistance.",
     color: "text-cyan-500",
     bgColor: "bg-cyan-500/10",
   },
@@ -422,7 +422,7 @@ const allFeatures = [
   {
     label: "Smart Context",
     icon: Zap,
-    description: "Genie understands thread context, attached files, and links for more accurate responses.",
+    description: "Lattice OS understands thread context, attached files, and links for more accurate responses.",
     color: "text-red-500",
     bgColor: "bg-red-500/10",
   },

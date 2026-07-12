@@ -6,7 +6,7 @@ import Image from "next/image";
 import { Shield, Lock, Eye, Trash2, Mail, FileText } from "lucide-react";
 
 const PrivacyPolicyPage = () => {
-  const lastUpdated = "January 15, 2025";
+  const lastUpdated = "July 11, 2026";
 
   return (
     <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative">
@@ -160,10 +160,10 @@ const PrivacyPolicyPage = () => {
                   <li><strong className="text-white">Opt-out:</strong> Opt out of marketing communications at any time.</li>
                 </ul>
                 <p className="mt-4">
-                  To exercise these rights, contact us at{" "}
-                  <a href="mailto:privacy@genieai.app" className="text-purple-400 hover:text-purple-300">
-                    privacy@genieai.app
-                  </a>
+                  To exercise these rights, contact us via our{" "}
+                  <Link href="/support" className="text-purple-400 hover:text-purple-300">
+                    Support Center
+                  </Link>
                 </p>
               </div>
             </div>
@@ -256,9 +256,9 @@ const PrivacyPolicyPage = () => {
                 <div className="p-6 rounded-xl bg-white/5 border border-border space-y-3">
                   <p className="flex items-center gap-3">
                     <Mail className="w-5 h-5 text-purple-400" />
-                    <a href="mailto:privacy@genieai.app" className="text-purple-400 hover:text-purple-300">
-                      privacy@genieai.app
-                    </a>
+                    <Link href="/support" className="text-purple-400 hover:text-purple-300">
+                      Support Center
+                    </Link>
                   </p>
                   <p className="flex items-center gap-3">
                     <FileText className="w-5 h-5 text-purple-400" />
@@ -298,10 +298,10 @@ const PrivacyPolicyPage = () => {
                 <li>Right to non-discrimination for exercising your rights</li>
               </ul>
               <p className="text-gray-300 mt-4">
-                To exercise these rights, email us at{" "}
-                <a href="mailto:privacy@genieai.app" className="text-blue-400 hover:text-blue-300">
-                  privacy@genieai.app
-                </a>
+                To exercise these rights, contact us via our{" "}
+                <Link href="/support" className="text-blue-400 hover:text-blue-300">
+                  Support Center
+                </Link>
               </p>
             </div>
           </div>
@@ -314,9 +314,9 @@ const PrivacyPolicyPage = () => {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="relative w-6 h-6">
-                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
+                <Image src="/Genie.png" alt="Lattice OS" fill className="object-cover" />
               </div>
-              <span className="text-lg font-bold text-white">Genie AI</span>
+              <span className="text-lg font-bold text-white">Lattice OS</span>
             </div>
 
             <div className="flex items-center gap-6 text-sm text-gray-400">
@@ -329,7 +329,7 @@ const PrivacyPolicyPage = () => {
 
           <div className="mt-8 pt-8 border-t border-border text-center">
             <p className="text-gray-500 text-sm">
-              © {new Date().getFullYear()} Genie AI. All rights reserved.
+              © {new Date().getFullYear()} Lattice OS. All rights reserved.
             </p>
           </div>
         </div>

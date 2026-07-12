@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/security/apiAuth';
 import { currentUser } from '@clerk/nextjs/server';
 import { checkDocumentEntitlement } from '@/lib/entitlements/documents';
+import { getUserCredits } from '@/lib/subscription/credits';
 import { StorageState, EmbeddingTier, UploadDocumentRequest } from '@/lib/types/documents';
 import { createDocument, saveDocumentChunks } from '@/lib/documents/store';
 import { extractDocumentText } from '@/lib/documents/extractText';
@@ -18,9 +19,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'User profile not found' }, { status: 401 });
     }
 
-    const computeCredits = typeof clerkUser.privateMetadata?.computeCredits === 'number' 
-      ? clerkUser.privateMetadata.computeCredits 
-      : 200;
+    const computeCredits = await getUserCredits(user.userId);
 
     const entitlement = checkDocumentEntitlement(clerkUser, computeCredits);
     if (!entitlement.allowed) {
