@@ -221,6 +221,9 @@
   },
   "Settings": {
     "title": "Settings",
-    "description": "Manage your account settings and preferences."
+    "description": "Manage your account settings and preferences.",
+    "creditsTitle": "Compute Credits",
+    "creditsHint": "1 USD = 50 credits. Top up to keep using premium tools like image, video, and code generation.",
+    "topUp": "Top up"
   }
 }

@@ -3,13 +3,15 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { Heading } from "@/components/heading";
-import { Github, Slack, Trello, Archive, Settings, Loader2, Database, Mail, Key } from "lucide-react";
+import { Github, Slack, Trello, Archive, Settings, Loader2, Database, Mail, Key, Zap } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@clerk/nextjs";
 import { useTranslations } from "next-intl";
+import { useProModal } from "@/hooks/use-pro-modal";
+import { useCredits } from "@/hooks/use-credits";
 import SlackIntegration from "@/components/slack-integration";
 import { ConversationHistory } from "@/components/conversation-history";
 import { RepoSelectorModal } from "@/components/integrations/RepoSelectorModal";
@@ -61,6 +63,40 @@ const providerDescriptions: Record<ProviderName, string> = {
   anthropic: 'Used by Code Builder code generation and agentic conversation/code modes.',
   google: 'Used by Gemini planning, review, multimodal fallback, and quality conversation modes.',
 };
+
+// Credits overview + top-up entry point
+function CreditsCard() {
+  const { credits, isLoading } = useCredits();
+  const proModal = useProModal();
+  const t = useTranslations("Settings");
+
+  return (
+    <Card className="p-6 border-black/5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-yellow-500/10">
+            <Zap className="w-6 h-6 text-yellow-500" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold">{t("creditsTitle")}</h3>
+            <p className="text-sm text-muted-foreground">
+              {isLoading ? "…" : `${credits.toLocaleString()} compute credits available`}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t("creditsHint")}
+            </p>
+          </div>
+        </div>
+        <Button
+          onClick={proModal.onOpen}
+          className="bg-yellow-500 hover:bg-yellow-600 text-black"
+        >
+          {t("topUp")}
+        </Button>
+      </div>
+    </Card>
+  );
+}
 
 const SettingsPage = () => {
   const router = useRouter();
@@ -312,6 +348,9 @@ const SettingsPage = () => {
       />
 
       <div className="px-4 lg:px-8 space-y-6">
+        {/* Credits Section */}
+        <CreditsCard />
+
         {/* Slack Integration Section */}
         {userId && (
           <Suspense fallback={<SlackIntegrationSkeleton />}>

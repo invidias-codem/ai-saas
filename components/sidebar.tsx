@@ -8,6 +8,7 @@ import { Plus, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useSubscriptionStore } from "@/lib/store/subscription-store";
+import { WELCOME_CREDITS } from "@/lib/subscription/packs";
 
 import { cn } from "@/lib/utils";
 import { routes } from "@/app/constants";
@@ -74,7 +75,7 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
       .catch(console.error);
   }, [setCredits]);
 
-  const maxCredits = 200;
+  const maxCredits = WELCOME_CREDITS;
   const creditsPercentage = Math.min(100, Math.max(0, (computeCredits / maxCredits) * 100));
   const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account";
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "L";
@@ -153,7 +154,7 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
               {displayName}
               </span>
               <span className="text-xs text-[#a0a0a0] flex items-center gap-1">
-                Pro <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-sm">{computeCredits}/{maxCredits}</span>
+                <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-sm">{computeCredits} credits</span>
               </span>
             </div>
           </div>
