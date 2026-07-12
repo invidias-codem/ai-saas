@@ -37,6 +37,9 @@ const VideoPage = () => {
   // ✅ Added state to hold the prediction ID
   const [predictionId, setPredictionId] = useState<string | null>(null);
 
+  // Stable filename computed once on mount (Date.now() must not run during render).
+  const [downloadName] = useState(() => `genie-video-${Date.now()}.mp4`);
+
   // Nudge Integration
   const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
 
@@ -312,7 +315,7 @@ const VideoPage = () => {
               <div className="flex gap-2 w-full">
                 <a
                   href={videoUrl}
-                  download={`genie-video-${Date.now()}.mp4`}
+                  download={downloadName}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-1 inline-flex items-center justify-center px-4 py-3 bg-gradient-to-r from-pink-700 to-rose-600 hover:from-pink-600 hover:to-rose-500 text-white shadow-lg shadow-pink-700/30 hover:shadow-pink-700/50 transition-all duration-300 rounded-xl font-semibold"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -79,11 +79,14 @@ export const LandingNavbar = () => {
         { href: "/support", label: "Support", icon: QuestionMarkCircledIcon },
     ];
 
-    const [mounted, setMounted] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
+    const pathname = usePathname();
 
-    useEffect(() => {
-        setMounted(true);
-    }, []);
+    const mounted = useSyncExternalStore(
+        () => () => {},
+        () => true,
+        () => false
+    );
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 10);
@@ -92,6 +95,9 @@ export const LandingNavbar = () => {
     }, []);
 
     useEffect(() => {
+        // Close the mobile menu when the route changes. This is a genuine
+        // navigation side-effect, not derived state.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsOpen(false);
     }, [pathname]);
 

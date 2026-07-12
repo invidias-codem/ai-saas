@@ -19,6 +19,9 @@ export function useHarnessHeartbeat() {
 
   useEffect(() => {
     if (!isTauri) {
+      // When not running in the Tauri shell, the daemon cannot be present —
+      // this is a genuine environment guard, not derived state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsDaemonRunning(false);
       return;
     }

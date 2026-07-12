@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Play } from "lucide-react";
@@ -16,6 +16,8 @@ export function WorkspaceSyncManager({ workspaceId }: { workspaceId: string }) {
   const { getToken, userId } = useAuth();
   const [grants, setGrants] = useState<RootGrant[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  // Monotonic id for JSON-RPC calls (avoids Date.now() during render).
+  const rpcSeq = useRef(0);
 
   useEffect(() => {
     async function fetchGrants() {
@@ -43,7 +45,7 @@ export function WorkspaceSyncManager({ workspaceId }: { workspaceId: string }) {
           auth_token: token,
           api_base_url: window.location.origin,
         },
-        id: Date.now(),
+        id: ++rpcSeq.current,
       };
 
       const daemonRes = await fetch("http://127.0.0.1:4000/rpc", {

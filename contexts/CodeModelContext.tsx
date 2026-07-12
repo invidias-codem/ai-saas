@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useSyncExternalStore } from "react";
 import { CodeAgentMode } from "@/lib/llm/types";
 
 interface CodeModelContextType {
@@ -11,18 +11,35 @@ interface CodeModelContextType {
 const CodeModelContext = createContext<CodeModelContextType | undefined>(undefined);
 
 export function CodeModelProvider({ children }: { children: React.ReactNode }) {
-    const [codeModel, setCodeModelState] = useState<CodeAgentMode>("fast");
+    const listeners = React.useRef<Set<() => void>>(new Set());
 
-    useEffect(() => {
-        const saved = localStorage.getItem("codeModel") as CodeAgentMode;
-        if (saved && ["fast", "quality", "agentic"].includes(saved)) {
-            setCodeModelState(saved);
-        }
+    const subscribe = React.useCallback((onChange: () => void) => {
+        listeners.current.add(onChange);
+        return () => {
+            listeners.current.delete(onChange);
+        };
     }, []);
 
+    const emit = () => {
+        listeners.current.forEach((l) => l());
+    };
+
+    // codeModel is a client-only snapshot of localStorage; reading it during
+    // render (via useSyncExternalStore) avoids a mount-time setState.
+    const codeModel = useSyncExternalStore(
+        subscribe,
+        () => {
+            const saved = localStorage.getItem("codeModel") as CodeAgentMode;
+            return saved && ["fast", "quality", "agentic"].includes(saved)
+                ? saved
+                : "fast";
+        },
+        () => "fast" as CodeAgentMode
+    );
+
     const setCodeModel = (mode: CodeAgentMode) => {
-        setCodeModelState(mode);
         localStorage.setItem("codeModel", mode);
+        emit();
     };
 
     return (

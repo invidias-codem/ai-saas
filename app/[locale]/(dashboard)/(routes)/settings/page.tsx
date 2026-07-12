@@ -314,9 +314,9 @@ const SettingsPage = () => {
   const onConnect = (integrationId: string) => {
     // Redirect to OAuth flow
     if (integrationId === "github") {
-      window.location.href = "/api/integrations/github/auth";
+      window.location.assign("/api/integrations/github/auth");
     } else if (integrationId === "trello") {
-      window.location.href = "/api/integrations/trello/auth";
+      window.location.assign("/api/integrations/trello/auth");
     }
   };
 

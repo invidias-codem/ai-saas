@@ -15,6 +15,8 @@ export const KoFiNudge = ({ isOpen, onClose }: KoFiNudgeProps) => {
 
     useEffect(() => {
         if (isOpen) {
+            // Begin enter transition when the modal opens.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setIsVisible(true);
         } else {
             const timer = setTimeout(() => setIsVisible(false), 300); // Wait for transition

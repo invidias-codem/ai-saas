@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { SignIn } from "@clerk/nextjs";
 import { ExternalLink, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,13 +34,14 @@ export default function WebviewAwareAuth({
   appearance?: any;
   fallbackComponent?: React.ReactNode;
 }) {
-  const [webview, setWebview] = useState<boolean | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    const detected = isWebview();
-    setWebview(detected);
-  }, []);
+  // Detect webview client-side (window is unavailable during SSR).
+  const webview = useSyncExternalStore(
+    () => () => {},
+    () => isWebview(),
+    () => null as boolean | null
+  );
 
   if (webview === null) {
     return (

@@ -34,9 +34,14 @@ export function DocumentPreviewModal({
   // Fetch preview when modal opens
   useEffect(() => {
     if (isOpen && documentId && documentId !== 'undefined' && documentId !== 'null') {
+      // Initialize loading/error/cta state before fetching the preview.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError(null);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCta(null);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreviewData(null);
 
       const params = new URLSearchParams();

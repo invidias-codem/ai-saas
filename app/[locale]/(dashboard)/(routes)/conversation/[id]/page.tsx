@@ -21,6 +21,19 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     console.error('Auth error on conversation load', err);
   }
 
+  // Guard: no admin client available — render the client with empty context
+  // outside the try/catch (JSX must not be constructed inside try).
+  if (!supabaseAdmin) {
+    console.warn('supabaseAdmin is null, skipping conversation context fetch');
+    return (
+      <ChatClient
+        conversationId={conversationId}
+        initialMessages={initialMessages}
+        conversationContext={conversationContext}
+      />
+    );
+  }
+
   let initialMessages: any[] = [];
   let conversationContext: ConversationContext = {
     workspaceId: null,
@@ -33,14 +46,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   try {
     if (!supabaseAdmin) {
       console.warn('supabaseAdmin is null, skipping conversation context fetch');
-      return (
-        <ChatClient
-          conversationId={conversationId}
-          initialMessages={initialMessages}
-          conversationContext={conversationContext}
-        />
-      );
-    }
+    } else {
 
     const { data: conversation, error: conversationError } = await supabaseAdmin
       .from('conversations')
@@ -94,6 +100,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
         timestamp: new Date(msg.created_at).toISOString(),
         sources: [],
       }));
+    }
     }
   } catch (err) {
     console.error('Exception loading conversation page data:', err);

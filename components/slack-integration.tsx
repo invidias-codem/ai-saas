@@ -54,6 +54,10 @@ export function SlackIntegration({ userId }: SlackIntegrationProps) {
     const slackTeam = searchParams.get('slack_team');
 
     if (slackSuccess === 'true') {
+      // Message state is intentionally derived from OAuth URL params and
+      // auto-dismissed via a timer below — a genuine stateful effect, not
+      // render-derived state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSuccessMessage(`🎉 Successfully connected to ${slackTeam || 'your Slack workspace'}! You can now use Genie in Slack.`);
       // Clear URL params after showing message
       const timeout = setTimeout(() => {
@@ -71,6 +75,7 @@ export function SlackIntegration({ userId }: SlackIntegrationProps) {
         'token_exchange_failed': 'Failed to complete the connection. Please try again.',
         'callback_failed': 'Connection failed. Please try again.',
       };
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setErrorMessage(errorMessages[slackError] || `Connection error: ${slackError}`);
       // Clear URL params
       const timeout = setTimeout(() => {
@@ -97,6 +102,8 @@ export function SlackIntegration({ userId }: SlackIntegrationProps) {
   }, []);
 
   useEffect(() => {
+    // Initial config load on mount — a data-fetch effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchConfig();
   }, [fetchConfig]);
 

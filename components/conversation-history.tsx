@@ -48,18 +48,12 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
     const [loading, setLoading] = useState(true);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [creatingNew, setCreatingNew] = useState(false);
-    const [activeId, setActiveId] = useState<string | null>(null);
 
     const activeWorkspaceId = useMemo(() => extractWorkspaceId(pathname), [pathname]);
     const isWorkspaceScopedView = Boolean(activeWorkspaceId);
+    const activeId = pathname?.match(/\/conversation\/([^/]+)/)?.[1] ?? null;
 
-    useEffect(() => {
-        loadConversations();
-        const match = pathname?.match(/\/conversation\/([^/]+)/);
-        setActiveId(match ? match[1] : null);
-    }, [pathname]);
-
-    const loadConversations = async () => {
+    async function loadConversations() {
         setLoading(true);
         try {
             const result = await fetchConversations();
@@ -71,7 +65,13 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
         } finally {
             setLoading(false);
         }
-    };
+    }
+
+    useEffect(() => {
+        // Initial data load on mount/route change — async fetch + setState.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        loadConversations();
+    }, [pathname]);
 
     const visibleConversations = useMemo(() => {
         if (!activeWorkspaceId) return conversations;

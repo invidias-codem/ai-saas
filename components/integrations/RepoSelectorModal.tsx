@@ -33,22 +33,7 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchRepos();
-      fetchWorkspaces();
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (selectedWorkspaceId && isOpen) {
-      fetchAllowedRepos(selectedWorkspaceId);
-    } else {
-      setAllowedRepos(new Set());
-    }
-  }, [selectedWorkspaceId, isOpen]);
-
-  const fetchWorkspaces = async () => {
+  async function fetchWorkspaces() {
     try {
       const res = await fetch("/api/workspaces");
       if (res.ok) {
@@ -62,9 +47,9 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
     } catch (err) {
       console.error("Failed to fetch workspaces", err);
     }
-  };
+  }
 
-  const fetchRepos = async () => {
+  async function fetchRepos() {
     setLoading(true);
     try {
       const res = await fetch("/api/integrations/github/repos");
@@ -77,9 +62,9 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const fetchAllowedRepos = async (workspaceId: string) => {
+  async function fetchAllowedRepos(workspaceId: string) {
     try {
       const res = await fetch(`/api/workspaces/${workspaceId}/repos`);
       if (res.ok) {
@@ -89,7 +74,29 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
     } catch (err) {
       console.error("Failed to fetch allowed repos", err);
     }
-  };
+  }
+
+  useEffect(() => {
+    if (isOpen) {
+      // Async data loads on open.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchRepos();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchWorkspaces();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (selectedWorkspaceId && isOpen) {
+      // Async data load for the selected workspace.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchAllowedRepos(selectedWorkspaceId);
+    } else {
+      // Reset repos when the modal closes or workspace changes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAllowedRepos(new Set());
+    }
+  }, [selectedWorkspaceId, isOpen]);
 
   const toggleRepo = async (repoFullName: string, checked: boolean) => {
     if (!selectedWorkspaceId) return;

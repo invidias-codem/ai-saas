@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
+import React, { useState, useRef, ChangeEvent, KeyboardEvent, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import axios from "axios";
@@ -114,13 +114,13 @@ interface ChartDataPoint {
 }
 
 const SafeChart = ({ data }: { data: ChartDataPoint[] }) => {
-  const [mounted, setMounted] = useState(false);
+    const isMounted = useSyncExternalStore(
+        () => () => {},
+        () => true,
+        () => false
+    );
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
+    if (!isMounted) return null;
 
   return (
     <div className="my-6 w-full overflow-hidden rounded-lg border bg-card p-4 shadow-sm">
@@ -152,6 +152,7 @@ const SafeChart = ({ data }: { data: ChartDataPoint[] }) => {
 
 // Chart rendering component
 const RenderTableAsChart = ({ node, ...props }: any) => {
+  let chartData: { name: string; value: number }[] | null = null;
   try {
     const table = node;
     const headers = table.children?.[0]?.children?.map((th: any) => th.children?.[0]?.value) || [];
@@ -160,11 +161,14 @@ const RenderTableAsChart = ({ node, ...props }: any) => {
     ) || [];
 
     if (headers.length === 2 && rows.length > 0 && !isNaN(parseFloat(rows[0][1]))) {
-      const data = rows.map((row: any) => ({ name: row[0], value: parseFloat(row[1]) }));
-      return <SafeChart data={data} />;
+      chartData = rows.map((row: any) => ({ name: row[0], value: parseFloat(row[1]) }));
     }
   } catch (e) {
     console.error("Error parsing/rendering chart:", e);
+  }
+
+  if (chartData) {
+    return <SafeChart data={chartData} />;
   }
 
   return (

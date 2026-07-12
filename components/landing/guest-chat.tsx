@@ -51,10 +51,11 @@ export const GuestChat = () => {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const guestSessionId = useRef<string>(
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `guest-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const [guestSessionId] = useState<string>(
+    () =>
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `guest-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
 
   const remaining = Math.max(0, FREE_LIMIT - interactionCount);

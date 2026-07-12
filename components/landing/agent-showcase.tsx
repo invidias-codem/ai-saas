@@ -88,7 +88,11 @@ export const AgentShowcase = () => {
 
     // Reset when scenario changes
     useEffect(() => {
+        // Resetting the step machine when the scenario changes is a genuine
+        // state transition, not derived state.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setStatus("idle");
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setCurrentStep(0);
     }, [activeScenario]);
 
@@ -106,7 +110,8 @@ export const AgentShowcase = () => {
                 }, 1200); // 1.2s per step
                 return () => clearTimeout(timer);
             } else {
-                // Done thinking
+                // Done thinking — terminal state of the step machine.
+                // eslint-disable-next-line react-hooks/set-state-in-effect
                 setStatus("complete");
             }
         }

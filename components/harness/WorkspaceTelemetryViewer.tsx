@@ -75,19 +75,19 @@ export function WorkspaceTelemetryViewer({ workspaceId }: { workspaceId: string 
     };
   }, [workspaceId]);
 
+  const [logs, setLogs] = useState<TelemetryEvent[]>([]);
+
+  // isActive is derived from the latest log entry (computed during render,
+  // not set inside an effect).
+  const lastEvent = logs.length > 0 ? logs[logs.length - 1] : undefined;
+  const isActive =
+    lastEvent?.event_type === "ingestion_started" ||
+    lastEvent?.event_type === "ingestion_progress";
+
   useEffect(() => {
     // Auto-scroll to bottom
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-    
-    // Check if ingestion is active
-    if (logs.length > 0) {
-      const lastEvent = logs[logs.length - 1];
-      setIsActive(
-        lastEvent.event_type === "ingestion_started" || 
-        lastEvent.event_type === "ingestion_progress"
-      );
     }
   }, [logs]);
 
