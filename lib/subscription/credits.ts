@@ -13,8 +13,10 @@
 
 import { supabaseAdmin } from '@/lib/supabaseClient';
 import { spendCreditsAtomic, getCredits } from '@/lib/credits';
+import { WELCOME_CREDITS } from '@/lib/subscription/packs';
 
-export const INITIAL_CREDITS = 200;
+/** Credits granted to a new/legacy account without an explicit purchase. */
+export const INITIAL_CREDITS = WELCOME_CREDITS;
 
 export async function getUserCredits(userId: string): Promise<number> {
     try {

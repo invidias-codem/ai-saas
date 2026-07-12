@@ -8,7 +8,7 @@ import { z } from "zod";
 // matches the actual webhook payload boundary, not just JSON.
 
 const PAYPAL_WEBHOOK_ID = process.env.PAYPAL_WEBHOOK_ID;
-const CREDITS_PER_DOLLAR = 50;
+import { CREDITS_PER_DOLLAR, matchPack } from '@/lib/subscription/packs';
 
 const getSupabaseAdmin = () => {
   return createClient(
@@ -116,13 +116,14 @@ export async function POST(req: NextRequest) {
     // Credit the unified ledger (supporter_credits) — same ledger all spend
     // paths deduct from.
     const creditsToAdd = Math.floor(amount * CREDITS_PER_DOLLAR);
+    const pack = matchPack(amount);
 
     const { error: creditError } = await supabaseAdmin.rpc('increment_credits', {
       p_user_id: user.id,
       p_amount: creditsToAdd,
       p_type: 'TOP_UP',
-      p_description: `PayPal top-up: ${amount} ${currency} (TX ${transactionId})`,
-      p_metadata: { source: 'paypal', transaction_id: transactionId, amount, currency },
+      p_description: `PayPal top-up: ${amount} ${currency}${pack ? ` (${pack.name})` : ''} (TX ${transactionId})`,
+      p_metadata: { source: 'paypal', transaction_id: transactionId, amount, currency, pack: pack?.id ?? null },
     });
 
     if (creditError) {

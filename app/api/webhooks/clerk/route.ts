@@ -14,10 +14,11 @@ import { NextResponse } from 'next/server';
 import { Webhook } from 'svix';
 import { headers } from 'next/headers';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { WELCOME_CREDITS } from '@/lib/subscription/packs';
 
 // Credits granted to every new user — enough for a meaningful free trial:
-//   25 chats  OR  12 code generations  OR  2 image generations
-const FREE_WELCOME_CREDITS = 25;
+//   200 chats  OR  100 code generations  OR  20 image generations  OR  4 videos
+const FREE_WELCOME_CREDITS = WELCOME_CREDITS;
 const WELCOME_TIER = 'free';
 
 type ClerkUserEvent = {

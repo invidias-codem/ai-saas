@@ -10,8 +10,8 @@ const getSupabaseAdmin = () => {
   );
 };
 
+import { CREDITS_PER_DOLLAR, matchPack } from '@/lib/subscription/packs';
 const KOFI_WEBHOOK_SECRET = process.env.KOFI_WEBHOOK_SECRET!;
-const CREDITS_PER_DOLLAR = 50; // Configure your exchange rate
 
 export async function POST(req: NextRequest) {
   try {
@@ -75,13 +75,14 @@ export async function POST(req: NextRequest) {
     // 5. Credit the unified ledger (supporter_credits) — the same ledger all
     // spend paths (chat, image, video, music, code) deduct from.
     const creditsToAdd = Math.floor(amount * CREDITS_PER_DOLLAR);
+    const pack = matchPack(amount);
 
     const { error: creditError } = await supabaseAdmin.rpc('increment_credits', {
       p_user_id: user.id,
       p_amount: creditsToAdd,
       p_type: 'TOP_UP',
-      p_description: `Ko-Fi top-up: $${amount} (TX ${transactionId})`,
-      p_metadata: { source: 'kofi', transaction_id: transactionId, amount_usd: amount },
+      p_description: `Ko-Fi top-up: $${amount}${pack ? ` (${pack.name})` : ''} (TX ${transactionId})`,
+      p_metadata: { source: 'kofi', transaction_id: transactionId, amount_usd: amount, pack: pack?.id ?? null },
     });
 
     if (creditError) {

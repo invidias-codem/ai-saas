@@ -1,5 +1,6 @@
 "use client";
 import { create } from 'zustand';
+import { WELCOME_CREDITS } from '@/lib/subscription/packs';
 
 interface SubscriptionState {
     computeCredits: number;
@@ -10,7 +11,7 @@ interface SubscriptionState {
 }
 
 export const useSubscriptionStore = create<SubscriptionState>((set) => ({
-    computeCredits: 200,
+    computeCredits: WELCOME_CREDITS,
     showKofiModal: false,
     setCredits: (credits: number) => set({ computeCredits: credits }),
     setShowKofiModal: (show: boolean) => set({ showKofiModal: show }),
