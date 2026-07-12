@@ -28,6 +28,7 @@ import {
 import { addNode, addEdge, strengthenEdge } from "@/lib/memory/graphStore";
 import { extractFactsFromConversation } from "@/lib/agents/factExtractor";
 import { SecurityAgent } from "@/lib/security/securityAgent";
+import { emitInteractionAudit } from "@/lib/telemetry/emit";
 // ── World Model: Distribution Shift + Self-Benchmarking ──────────────────────
 import { createDistributionShiftDetector } from '@/lib/world-model/distribution-shift';
 import { createBenchmarkingPipeline } from '@/lib/world-model/benchmarking';
@@ -392,6 +393,10 @@ export async function generateConversationReply(
   // for standard mode when context confidence is low.
   let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType), providerKeys });
   let { provider, modelId: actualModelId } = providerResolution.execution;
+  // Sovereign telemetry: the initially-requested model (before any confidence
+  // override or 429 fallback) and the serving provider id.
+  const requestedModelId = actualModelId;
+  const systemProvider = providerResolution.providerId;
 
   const userQuery = messages[messages.length - 1]?.text || "";
 
@@ -689,7 +694,32 @@ export async function generateConversationReply(
     }
   }
 
-  const { stream: originalStream, thoughtSignaturePromise } = streamResult;
+  // ── Sovereign telemetry: emit UDIF 2.0 interaction-audit (non-blocking) ──
+    // Captures requested vs actual model routing + serving provider. The client
+    // IndexedDB persistence + enterprise Supabase flush are wired in later phases.
+    try {
+      const { calculateInteractionCost } = await import("@/lib/subscription/credits");
+      const creditCost = calculateInteractionCost({
+        hasAttachments: Boolean(fileData && mimeType),
+        mode: agentMode as any,
+      });
+      emitInteractionAudit({
+        requestedModelId,
+        actualModelId,
+        systemProvider,
+        agentName: agentMode,
+        agentRole: "chat",
+        creditCost,
+        macroWorkflowId: conversationId ?? undefined,
+      });
+    } catch (telemetryErr) {
+      // Telemetry must never break the main flow.
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("[telemetry] conversationEngine emit failed (non-blocking):", telemetryErr);
+      }
+    }
+
+    const { stream: originalStream, thoughtSignaturePromise } = streamResult;
 
   // Wrap stream to capture full text for side effects
   const textEncoder = new TextEncoder();
@@ -977,6 +1007,10 @@ export async function generateConversationReply(
   return {
     stream,
     thoughtSignaturePromise,
+    modelId: actualModelId,
+    requestedModelId,
+    actualModelId,
+    systemProvider,
     sources: [
       ...intelligentFacts.map(f => ({ id: f.id || `fact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, title: (f.content || "").substring(0, 50) + "...", type: 'fact', similarity: 1 })),
       ...(memorySources || [])

@@ -7,7 +7,8 @@ import { gatherCodeContext } from '@/lib/llm/contextAggregator';
 import { executeAgentLoop } from '@/lib/harness/AgentExecutor';
 import type { FileAttachmentInput, ResolvedAttachment } from '@/lib/types/attachments';
 import { resolveAttachmentForAnalysis } from '@/lib/gcp/fileResolver';
-import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
+import { getUserProviderApiKeys } from '@/lib/userProviderApiKeys';
+import { emitInteractionAudit } from '@/lib/telemetry/emit';
 
 const CODE_SYSTEM_INSTRUCTION_TEXT = "You are 'Genie Code', an expert coding assistant. Analyze provided code snippets or file content, explain concepts, generate code, and answer questions related to programming. **If file content data is provided along with a text prompt, focus your analysis on the file data based on the instructions in the text prompt.** Use markdown code blocks with language identifiers. For non-coding questions, politely decline.";
 
@@ -141,9 +142,37 @@ export async function runCodeEngine({
     providerKeys,
   });
 
+  // ── Sovereign telemetry: emit UDIF 2.0 interaction-audit (non-blocking) ──
+  // Code path has a single resolved model (no confidence override / 429 fallback
+  // today), so requested === actual. Client IndexedDB + Supabase flush later.
+  try {
+    const { calculateInteractionCost } = await import("@/lib/subscription/credits");
+    const creditCost = calculateInteractionCost({
+      hasAttachments: Boolean(resolvedAttachment?.base64Data),
+      mode: resolvedContext.mode as any,
+    });
+    emitInteractionAudit({
+      requestedModelId: modelConfig.modelId,
+      actualModelId: modelConfig.modelId,
+      systemProvider: modelConfig.provider,
+      agentName: resolvedContext.mode,
+      agentRole: "code",
+      creditCost,
+      macroWorkflowId: resolvedContext.conversationId ?? undefined,
+    });
+  } catch (telemetryErr) {
+    if (process.env.NODE_ENV !== "production") {
+      console.debug("[telemetry] codeEngine emit failed (non-blocking):", telemetryErr);
+    }
+  }
+
   return {
     responseText,
     modelConfig,
+    modelId: modelConfig.modelId,
+    requestedModelId: modelConfig.modelId,
+    actualModelId: modelConfig.modelId,
+    systemProvider: modelConfig.provider,
     routingDecision,
     intelligentFacts,
     userContext,

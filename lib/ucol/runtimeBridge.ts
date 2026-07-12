@@ -49,6 +49,12 @@ export interface ExecuteRuntimeFnResult {
   stream?: ReadableStream<Uint8Array>;
   thoughtSignaturePromise?: Promise<any>;
   modelId?: string;
+  /** Sovereign telemetry: model id initially requested (pre override/fallback). */
+  requestedModelId?: string;
+  /** Sovereign telemetry: model id actually executed (post override/fallback). */
+  actualModelId?: string;
+  /** Sovereign telemetry: serving provider id (anthropic|openai|google|local). */
+  systemProvider?: string;
   routingDecision?: UcolRoutingDecision;
   userContext?: any;
   intelligentFacts?: any;

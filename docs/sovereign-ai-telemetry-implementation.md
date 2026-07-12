@@ -108,26 +108,28 @@ export interface UdifInteractionAudit {
 
 ---
 
-## 2. Phase 1 — Instrumentation (emit real spans)
+## 2. Phase 1 — Instrumentation (emit real spans)  ✅ DONE
 
-Wire the sink into the Runtime Bridge. **Highest-value, lowest-risk** because the routing seam already exists.
+Wire the sink into the Runtime Bridge. The routing seam already exists; emit is non-blocking (telemetry never breaks the main response path).
 
-### Task 1.1: Trace lifecycle in conversation engine
-**Files:** Modify `lib/llm/conversationEngine.ts` (around L322/L394/L480/L681).
-**Step:** At request entry, `const trace = generateTraceContext();` store on the session/context object. At model resolution, capture `gen_ai.request.model` (the *requested* id from config) and `gen_ai.response.model` (the *actual* `actualModelId` at L480/L681) + `system_provider`. On completion, build `UdifInteractionAudit` and `getSink().emit(rec)`.
-**Note:** requested vs actual will currently be equal (single-model path) — that's correct; schema future-proofs real routing.
+### Task 1.1: Trace lifecycle + model routing in conversation engine  ✅
+**Files:** `lib/llm/conversationEngine.ts` (L393 capture `requestedModelId`/`systemProvider`; L480 override + L681 429-fallback update `actualModelId`; emit after L695).
+**Impl:** new `lib/telemetry/emit.ts` → `emitInteractionAudit()` builds `UdifInteractionAudit` and calls `getSink().emit()` (swallowed on failure). `requestedModelId` = initial resolution; `actualModelId` = final after confidence override / 429 fallback; `systemProvider` = `providerResolution.providerId`. Credit cost via `calculateInteractionCost` (same fn the bridge uses).
 
-### Task 1.2: Mirror in code engine
-**Files:** Modify `lib/llm/codeEngine.ts` analogously.
+### Task 1.2: Code engine mirror  ✅
+**Files:** `lib/llm/codeEngine.ts` — emit after `executeAgentLoop`; `requested===actual===modelConfig.modelId`, `systemProvider=modelConfig.provider`.
 
-### Task 1.3: Tool-action spans
-**Files:** Modify swarm orchestrator tool-call sites (`lib/llm/conversationEngine.ts` ~L324 region) to push `ToolAction` entries (tool.name, duration_ms, status) into the in-progress record's `actions[]`.
+### Task 1.3: Tool-action spans  ⏸️ DEFERRED
+Swarm orchestrator tool-call sites would push `ToolAction` into `actions[]`. Deferred: swarm tool execution is not yet instrumented; `actions[]` supported in schema + emit helper (pass via `actions` arg). Add when tool-call sites are identified.
 
-### Task 1.4: Credit-cost attribution join
-**Files:** Reference `lib/subscription/packs.ts` (CREDITS_PER_DOLLAR, per-type costs).
-**Step:** Map `usage.prompt_tokens + completion_tokens` → credit cost and store in `context_baggage` (`credit_cost`). No change to billing logic — read-only join.
-**Test:** unit test token→credit math matches `packs.ts` constants.
-**Commit:** `feat(telemetry): Phase 1 instrumentation in Runtime Bridge`
+### Task 1.4: Credit-cost attribution join  ✅
+`emitInteractionAudit` joins `credit_cost` from `calculateInteractionCost` into `context_baggage` (read-only, no billing change). `CREDITS_PER_DOLLAR`=50 from `packs.ts` is the cost basis.
+
+** persistence note:** Server-side, `getSink()` resolves to a volatile `MemoryLedger` (no IndexedDB in SSR). Records are buffered server-side and are the feed for Phase 3's Supabase flush. The **sovereign client IndexedDB write** is wired in Phase 2 (browser emitter / Service Worker reads the emitted record and writes to `udif_ledger`).
+
+**Test:** `__tests__/telemetry/emit.test.ts` (5 cases: record shape, content_mode, usage/actions, sink-failure safety, trace reuse). Engine modules typecheck + return the new fields.
+
+**Commit:** `feat(telemetry): Phase 1 instrumentation in Runtime Bridge` (a9b624f4 + this)
 
 ---
 
