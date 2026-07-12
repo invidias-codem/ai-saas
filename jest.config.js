@@ -11,6 +11,8 @@ const customJestConfig = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
     '^uuid$': '<rootDir>/__mocks__/uuid.js',
+    '^@lattice-os/core$': '<rootDir>/packages/lattice-core/dist/index.js',
+    '^@lattice-os/core/(.*)$': '<rootDir>/packages/lattice-core/dist/$1',
   },
   testEnvironment: 'jest-environment-node',
   testMatch: [

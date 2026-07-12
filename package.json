@@ -164,7 +164,7 @@
     "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@jest/globals": "^30.4.1",
+    "@jest/globals": "30.4.1",
     "@tailwindcss/postcss": "^4.2.4",
     "@tauri-apps/cli": "^2.11.2",
     "@types/aws-lambda": "^8.10.161",
@@ -183,7 +183,8 @@
     "esbuild": "0.28.1",
     "eslint": "^9.24.0",
     "eslint-config-next": "^16.2.1",
-    "jest": "^30.3.0",
+    "jest": "30.4.1",
+    "jest-environment-node": "30.4.1",
     "postcss": "^8",
     "shell-quote": "1.8.4",
     "tailwindcss": "^4.1.18",
