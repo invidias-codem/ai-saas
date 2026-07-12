@@ -208,9 +208,21 @@ Tauri desktop client lift (PRD §4). **Out of scope until Phase 0-3 ship.** `isT
 | PRD example uses fictional `claude-fable-5` | Use real `actualModelId` from `providerResolution` |
 
 **Open questions for user:**
-1. ~~What is the source of truth for "active/disabled modules" (Task 2.1)?~~ ✅ **DECIDED:** Runtime Resolver + ephemeral cache + Supabase `agent_governance_policies` (see Task 2.1).
-2. Should audit records include any message content, or tokens/tool only? **(Pending)**
-3. Supabase `ai_interaction_audit` — same project DB or separate? **(Pending)**
+1. ~~What is the source of truth for "active/disabled modules" (Task 2.1)?~~ ✅ **DECIDED:** Runtime Resolver + ephemeral cache + Supabase `agent_governance_policies`.
+2. ~~Should audit records include message content, or tokens/tool only?~~ ✅ **DECIDED:** Hybrid, user-controlled (see below).
+3. ~~Supabase `ai_interaction_audit` — same project DB or separate?~~ ✅ **DECIDED:** Separate Supabase project / strictly isolated DB instance (see below).
+
+**Q2 — Audit content (DECIDED, 2026-07-12): Hybrid, user-controlled.**
+- *Baseline default:* metadata only — tokens, model identifiers, tool execution params, performance metrics. Auto-tracked; zero privacy leakage; fulfills billing.
+- *Sovereign overlap (opt-in, two user-controlled flags):*
+  1. **Hashed context:** store SHA-256 hash of prompt/completion (not plaintext) → cryptographic verification without storing content.
+  2. **Local-only storage:** if full message content tracked for debugging, enforce strict local-only policy in IndexedDB / local desktop; **strip entirely** on sync/export to external analytics.
+- Implement as `context_baggage.content_mode: "metadata" | "hashed" | "local_only"`; never send `local_only` payloads off-device.
+
+**Q3 — DB topology (DECIDED, 2026-07-12): Separate Supabase project / isolated instance.**
+- High-fidelity multi-agent telemetry = intense write volume (every tool step, reasoning loop, token calc). Keeping on main transactional DB risks resource starvation for auth/payments/core logic.
+- Logical boundary: enterprise clients route telemetry DB to their own/local/compliance instances while primary app interaction stays on centralized SaaS tier.
+- Implication: `lib/telemetry/` uses a **dedicated Supabase admin client** (separate `SUPABASE_TELEMETRY_URL` / `SUPABASE_TELEMETRY_SERVICE_ROLE`) — NOT the main app client. Flush endpoint (Phase 3) writes there.
 
 ## 8. Verification Gates (per phase)
 
