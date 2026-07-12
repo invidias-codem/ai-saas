@@ -75,7 +75,7 @@ export default function CreatorApplicationPage() {
             </div>
             <CardTitle className="text-2xl">Application Received</CardTitle>
             <CardDescription>
-              We'll review your application and get back to you within 24-48 hours.
+              We&apos;ll review your application and get back to you within 24-48 hours.
             </CardDescription>
           </CardHeader>
           <CardFooter className="flex justify-center">

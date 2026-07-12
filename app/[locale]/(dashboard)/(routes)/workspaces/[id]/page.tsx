@@ -78,8 +78,6 @@ export default function WorkspaceHomePage() {
     if (workspaceId) load();
   }, [workspaceId]);
 
-  const ModeIcon = modeIcon(workspace?.default_operating_profile?.mode);
-
   return (
     <div className="min-h-screen px-4 md:px-10 lg:px-16 py-8 space-y-8">
       <div className="space-y-3">
@@ -104,7 +102,7 @@ export default function WorkspaceHomePage() {
       <Card className="p-6 border-sky-500/20 bg-sky-500/5">
         <div className="flex items-start gap-4">
           <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20">
-            <ModeIcon className="w-6 h-6 text-sky-600 dark:text-sky-300" />
+            {modeIcon(workspace?.default_operating_profile?.mode)}
           </div>
           <div className="space-y-2">
             <div className="text-sm uppercase tracking-wide text-sky-700 dark:text-sky-300 font-medium">Operating mode</div>

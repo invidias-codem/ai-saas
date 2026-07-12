@@ -113,39 +113,6 @@ export const LandingNavbar = () => {
         open: { opacity: 1, y: 0, transition: { duration: 0.3 } },
     };
 
-    const Sparkles = () => {
-        const sparkles = Array.from({ length: 25 });
-        return (
-            <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-                {sparkles.map((_, i) => (
-                    <motion.div
-                        key={i}
-                        className="absolute w-1 h-1 bg-white rounded-full"
-                        initial={{
-                            opacity: 0,
-                            scale: 0,
-                            x: Math.random() * 100 + "%",
-                            y: Math.random() * 100 + "%",
-                        }}
-                        animate={{
-                            opacity: [0, 1, 0],
-                            scale: [0, 1, 0],
-                        }}
-                        transition={{
-                            duration: 2 + Math.random() * 3,
-                            repeat: Infinity,
-                            delay: Math.random() * 5,
-                            ease: "easeInOut",
-                        }}
-                        style={{
-                            boxShadow: "0 0 8px 1px rgba(255, 255, 255, 0.4)",
-                        }}
-                    />
-                ))}
-            </div>
-        );
-    };
-
     return (
         <>
             <header
@@ -451,5 +418,39 @@ export const LandingNavbar = () => {
                 )}
             </AnimatePresence>
         </>
+    );
+}
+
+// Module-scoped so its identity is stable across renders (react-hooks/static-components)
+function Sparkles() {
+    const sparkles = Array.from({ length: 25 });
+    return (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+            {sparkles.map((_, i) => (
+                <motion.div
+                    key={i}
+                    className="absolute w-1 h-1 bg-white rounded-full"
+                    initial={{
+                        opacity: 0,
+                        scale: 0,
+                        x: Math.random() * 100 + "%",
+                        y: Math.random() * 100 + "%",
+                    }}
+                    animate={{
+                        opacity: [0, 1, 0],
+                        scale: [0, 1, 0],
+                    }}
+                    transition={{
+                        duration: 2 + Math.random() * 3,
+                        repeat: Infinity,
+                        delay: Math.random() * 5,
+                        ease: "easeInOut",
+                    }}
+                    style={{
+                        boxShadow: "0 0 8px 1px rgba(255, 255, 255, 0.4)",
+                    }}
+                />
+            ))}
+        </div>
     );
 };

@@ -49,7 +49,7 @@ export default async function BetaGuidePage({ params }: PageProps) {
           <dd className="mt-1">{guide.duration}</dd>
         </div>
         <div>
-          <dt className="font-semibold text-muted-foreground">You'll walk away with</dt>
+          <dt className="font-semibold text-muted-foreground">You&apos;ll walk away with</dt>
           <dd className="mt-1">{guide.outcome}</dd>
         </div>
       </dl>

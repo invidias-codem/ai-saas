@@ -440,22 +440,6 @@ function CodePageContent() {
   };
 
   // Modern Typing Indicator (matching conversation page)
-  const TypingIndicator = () => {
-    return (
-      <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
-        <Avatar className="h-8 w-8 ring-1 ring-border/50">
-          <AvatarImage src="/Genie.png" />
-          <AvatarFallback className="bg-gradient-to-br from-green-500 to-emerald-500 text-white text-xs">AI</AvatarFallback>
-        </Avatar>
-        <div className="flex items-center space-x-1.5 h-8">
-          <div className="h-2 w-2 bg-green-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-          <div className="h-2 w-2 bg-emerald-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-          <div className="h-2 w-2 bg-teal-400 rounded-full animate-bounce"></div>
-        </div>
-      </div>
-    );
-  };
-
   // Nudge Integration
   const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
 
@@ -782,5 +766,22 @@ export default function CodePage() {
     <CodeModelProvider>
       <CodePageContent />
     </CodeModelProvider>
+  );
+}
+
+// Module-scoped so its identity is stable across renders (react-hooks/static-components)
+function TypingIndicator() {
+  return (
+    <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
+      <Avatar className="h-8 w-8 ring-1 ring-border/50">
+        <AvatarImage src="/Genie.png" />
+        <AvatarFallback className="bg-gradient-to-br from-green-500 to-emerald-500 text-white text-xs">AI</AvatarFallback>
+      </Avatar>
+      <div className="flex items-center space-x-1.5 h-8">
+        <div className="h-2 w-2 bg-green-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+        <div className="h-2 w-2 bg-emerald-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+        <div className="h-2 w-2 bg-teal-400 rounded-full animate-bounce"></div>
+      </div>
+    </div>
   );
 }

@@ -74,7 +74,7 @@ export function WorkspaceSyncManager({ workspaceId }: { workspaceId: string }) {
         <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Index Synchronization</h3>
           <p className="text-xs text-slate-500 max-w-md mt-1">
-            Re-scan your authorized directories to update the AI's semantic memory. The ingestion process runs silently in the background daemon.
+            Re-scan your authorized directories to update the AI&apos;s semantic memory. The ingestion process runs silently in the background daemon.
           </p>
         </div>
         

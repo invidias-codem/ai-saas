@@ -79,7 +79,7 @@ export default async function CreatorDashboardPage({ params }: { params: Promise
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Creator Dashboard</h1>
           <p className="text-muted-foreground mt-1">
-            Welcome back, {creatorCode.creator_name || creatorCode.creator_handle}. Here's your performance.
+            Welcome back, {creatorCode.creator_name || creatorCode.creator_handle}. Here&apos;s your performance.
           </p>
         </div>
         <div className="flex items-center gap-2">

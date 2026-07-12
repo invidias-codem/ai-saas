@@ -112,28 +112,6 @@ export const LandingChat = () => {
     };
 
     // Typing indicator - matching conversation page style
-    const TypingIndicator = () => (
-        <div className="flex gap-3 mb-6">
-            <div className="flex-shrink-0 mt-1">
-                <Avatar className="h-8 w-8 ring-1 ring-white/20 bg-[#1a1a2e]">
-                    <AvatarImage src="/Genie.png" />
-                    <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
-                </Avatar>
-            </div>
-            <div className="flex items-center gap-1 px-2 py-2">
-                <div className="flex gap-1">
-                    {[0, 1, 2].map((i) => (
-                        <div
-                            key={i}
-                            className="w-2 h-2 rounded-full bg-purple-400 animate-bounce"
-                            style={{ animationDelay: `${i * 0.15}s` }}
-                        />
-                    ))}
-                </div>
-                <span className="text-sm text-gray-400 ml-2">Genie is thinking...</span>
-            </div>
-        </div>
-    );
 
     // Limit reached CTA
     if (limitReached) {
@@ -369,3 +347,29 @@ export const LandingChat = () => {
         </div>
     );
 };
+
+// Module-scoped so its identity is stable across renders (react-hooks/static-components)
+function TypingIndicator() {
+    return (
+        <div className="flex gap-3 mb-6">
+            <div className="flex-shrink-0 mt-1">
+                <Avatar className="h-8 w-8 ring-1 ring-white/20 bg-[#1a1a2e]">
+                    <AvatarImage src="/Genie.png" />
+                    <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
+                </Avatar>
+            </div>
+            <div className="flex items-center gap-1 px-2 py-2">
+                <div className="flex gap-1">
+                    {[0, 1, 2].map((i) => (
+                        <div
+                            key={i}
+                            className="w-2 h-2 rounded-full bg-purple-400 animate-bounce"
+                            style={{ animationDelay: `${i * 0.15}s` }}
+                        />
+                    ))}
+                </div>
+                <span className="text-sm text-gray-400 ml-2">Genie is thinking...</span>
+            </div>
+        </div>
+    );
+}

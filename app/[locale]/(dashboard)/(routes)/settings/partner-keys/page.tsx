@@ -219,7 +219,7 @@ export default function PartnerKeysPage() {
                 Key Created Successfully
               </h2>
               <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                Copy this key now. <strong>It won't be shown again.</strong>
+                Copy this key now. <strong>It won&apos;t be shown again.</strong>
               </p>
 
               <div className="mt-3 flex items-center gap-2">
@@ -240,7 +240,7 @@ export default function PartnerKeysPage() {
                 variant="outline"
                 onClick={() => setNewKey(null)}
               >
-                I've copied it, close this
+                I&apos;ve copied it, close this
               </Button>
             </div>
           </div>
