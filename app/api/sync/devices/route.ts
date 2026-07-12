@@ -13,6 +13,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { mergeUserPreferences } from '@/lib/memorySyncUtils';
 import { db } from '@/lib/firebaseAdmin';
+import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,7 @@ export async function GET() {
     const snapshot = await devicesRef.orderBy('lastSeen', 'desc').get();
 
     const now = Date.now();
-    const devices: DeviceInfo[] = snapshot.docs.map(doc => {
+    const devices: DeviceInfo[] = snapshot.docs.map((doc: QueryDocumentSnapshot) => {
       const data = doc.data();
       const lastSeenTime = (data.lastSeen?.toDate?.()?.getTime?.() || data.lastSeen || 0);
 
@@ -123,7 +124,7 @@ export async function DELETE(req: Request) {
     const remainingPrefs = await devicePrefsRef.get();
     const prefMap = new Map();
 
-    remainingPrefs.docs.forEach(doc => {
+    remainingPrefs.docs.forEach((doc: QueryDocumentSnapshot) => {
       prefMap.set(doc.id, doc.data());
     });
 
