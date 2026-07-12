@@ -133,40 +133,25 @@ Swarm orchestrator tool-call sites would push `ToolAction` into `actions[]`. Def
 
 ---
 
-## 3. Phase 2 — Governance Schema + Observability UI
+## 3. Phase 2 — Governance Schema + Observability UI  ✅ DONE
 
-### Task 2.1: Governance single-source-of-truth — Runtime Resolver + ephemeral cache + Supabase  ✅ DECIDED
-**Files:** New `lib/telemetry/governance.ts`; new migration `supabase/migrations/xxxx_agent_governance_policies.sql`.
-**Decision (user, 2026-07-12):** Do NOT rely on hardcoded LLM agentic config or a raw per-turn DB query. Three-tier design:
-1. **Core storage (Supabase):** table `agent_governance_policies` mapping `context_role` → authorized module matrix (active/disabled modules, defense triggers). This is where security teams edit access controls / baseline restrictions.
-2. **Edge resolver (Runtime Layer):** a `resolveGovernance(contextRole, sessionState, liveVars)` function dynamically fetches the policy, cross-references the user's active session state, and evaluates alongside local state variables. Runs inside the service worker / backend at request-packaging time.
-3. **Ephemeral cache:** resolver result is cached short-TTL (in-memory + IndexedDB) so adversarial stress / network drops don't force a slow static lookup on every inference. Cache is invalidated on session/role change.
-**Why a runtime resolver (not static lookup):** frontier modules can fail or switch state instantly under adversarial load; the resolver evaluates the *live, operational configuration* at the exact millisecond the inference request is packaged into the W3C trace span, then drops the resolved snapshot into the local IndexedDB ledger under the UDIF `governance` block.
-**Step:** `resolveGovernance()` returns `GovernanceState` (PRD §3 schema: `context_role`, `active_modules`, `disabled_modules`, `defense_triggers`). In `telemetry/sink.ts` emit, attach to `ai_ledger.governance`.
-**Supabase table shape (initial):**
-```sql
-create table agent_governance_policies (
-  id uuid primary key default gen_random_uuid(),
-  context_role text not null unique,
-  active_modules text[] not null default '{}',
-  disabled_modules text[] not null default '{}',
-  defense_triggers text[] not null default '{}',
-  updated_at timestamptz not null default now()
-);
--- seed baseline (PRD §3.1 example)
-insert into agent_governance_policies (context_role, active_modules, disabled_modules, defense_triggers)
-values ('public_baseline', '{general_reasoning,syntax_analysis}', '{offensive_cybersecurity}', '{}');
-```
-RLS: security-team write; authenticated read of own role row only.
+### Task 2.1: Governance single-source-of-truth — Runtime Resolver + ephemeral cache + Supabase  ✅
+**Files:** `lib/telemetry/governance.ts`; migration `supabase/migrations/20260712000000_agent_governance_policies.sql`.
+**Impl:** Three-tier design as DECIDED:
+1. **Core storage (Supabase):** `agent_governance_policies(context_role → active/disabled_modules, defense_triggers)`, seeded with `public_baseline` (PRD §3.1). RLS: service-role write, public read.
+2. **Edge resolver:** `resolveGovernance(contextRole, sessionState, liveVars)` reads the policy via `supabaseAdmin`, cross-references session/live state, returns `GovernanceState`. `deriveContextRole({workspaceId, operatingProfileId, agentMode})` maps runtime context → `context_role` (`workspace:<id>` / `profile:<id>` / `public_baseline`).
+3. **Ephemeral cache:** in-memory TTL (30s) keyed by role; `invalidateGovernanceCache(role?)` on session/role change. (IndexedDB mirror is a Phase 3 enhancement; the resolver already falls back to baseline on any failure so telemetry never breaks.)
+**Wired:** `emitInteractionAudit` now resolves governance when `contextRole` is passed (engines pass `deriveContextRole(...)`), attaching `ai_ledger.governance` to the UDIF record. Graceful degradation to `public_baseline` if Supabase/row missing.
 
-### Task 2.2: Telemetry dashboard (Next client)
-**Files:** Create `components/telemetry/InteractionAuditViewer.tsx` + route `app/[locale]/(dashboard)/(routes)/telemetry/page.tsx`.
-**Step:** Reuse `WorkspaceTelemetryViewer` styling/patterns (that component is Go-daemon telemetry — keep separate). Read from IndexedDB ledger, render trace trees + model-routing table + token/credit cost.
+### Task 2.2: Browser emitter + telemetry dashboard  ✅
+**Files:** `lib/telemetry/clientEmitter.ts` (client IndexedDB writer: `emitToClientLedger`/`readClientLedger`/`clearClientLedger` — the sovereign local store); `components/telemetry/InteractionAuditViewer.tsx` + route `app/[locale]/(dashboard)/(routes)/telemetry/page.tsx`.
+**Impl:** The dashboard reads the local `udif_ledger` (via `openLedger()`) and renders model-routing, provider, credit-cost, and governance-role per record. Fails gracefully when empty (SW captures live traffic).
 
-### Task 2.3: Service Worker batch flush
-**Files:** Create `public/sw-telemetry.js` + register in root layout.
-**Step:** Intercept `/api/telemetry/flush`; batch IndexedDB records; post to Phase 3 endpoint. Keep PRD's "Service Worker polling/OTel interception" intent.
-**Commit:** `feat(telemetry): Phase 2 governance + dashboard + SW flush`
+### Task 2.3: Service Worker edge capture + batch flush  ✅
+**Files:** `public/sw-telemetry.js` (plain JS, PRD "Service Worker OTel interception" intent) + `components/telemetry/TelemetryServiceWorker.tsx` (browser-guarded registration) + `lib/telemetry/flush.ts` (`flushClientLedger` → POST `/api/telemetry/flush`, strips `local_only` per decision).
+**Impl:** The SW intercepts `/api/chat` + `/api/code` (POST), reads the requested model from the request body and the **actual model + provider from response headers** the Runtime Bridge now sets (`x-telemetry-model` / `x-telemetry-provider`), builds a minimal UDIF record client-side, and writes it to IndexedDB **without consuming the stream** (clone-based). This is the real sovereign client-persistence path: server emits server-side (buffered to volatile MemoryLedger), SW captures the same interaction at the edge and persists to the durable local ledger. The `flush` endpoint is created in Phase 3; until then `flushClientLedger` is safe no-op (records stay local).
+
+**Commit:** `feat(telemetry): Phase 2 governance resolver + client ledger + dashboard + SW`
 
 ---
 

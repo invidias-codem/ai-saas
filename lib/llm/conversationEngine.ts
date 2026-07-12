@@ -29,6 +29,7 @@ import { addNode, addEdge, strengthenEdge } from "@/lib/memory/graphStore";
 import { extractFactsFromConversation } from "@/lib/agents/factExtractor";
 import { SecurityAgent } from "@/lib/security/securityAgent";
 import { emitInteractionAudit } from "@/lib/telemetry/emit";
+import { deriveContextRole } from "@/lib/telemetry/governance";
 // ── World Model: Distribution Shift + Self-Benchmarking ──────────────────────
 import { createDistributionShiftDetector } from '@/lib/world-model/distribution-shift';
 import { createBenchmarkingPipeline } from '@/lib/world-model/benchmarking';
@@ -710,6 +711,7 @@ export async function generateConversationReply(
         agentName: agentMode,
         agentRole: "chat",
         creditCost,
+        contextRole: deriveContextRole({ workspaceId, agentMode }),
         macroWorkflowId: conversationId ?? undefined,
       });
     } catch (telemetryErr) {

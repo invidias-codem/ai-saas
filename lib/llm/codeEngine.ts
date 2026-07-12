@@ -9,6 +9,7 @@ import type { FileAttachmentInput, ResolvedAttachment } from '@/lib/types/attach
 import { resolveAttachmentForAnalysis } from '@/lib/gcp/fileResolver';
 import { getUserProviderApiKeys } from '@/lib/userProviderApiKeys';
 import { emitInteractionAudit } from '@/lib/telemetry/emit';
+import { deriveContextRole } from '@/lib/telemetry/governance';
 
 const CODE_SYSTEM_INSTRUCTION_TEXT = "You are 'Genie Code', an expert coding assistant. Analyze provided code snippets or file content, explain concepts, generate code, and answer questions related to programming. **If file content data is provided along with a text prompt, focus your analysis on the file data based on the instructions in the text prompt.** Use markdown code blocks with language identifiers. For non-coding questions, politely decline.";
 
@@ -158,6 +159,7 @@ export async function runCodeEngine({
       agentName: resolvedContext.mode,
       agentRole: "code",
       creditCost,
+      contextRole: deriveContextRole({ workspaceId: resolvedContext.workspaceId, agentMode: resolvedContext.mode }),
       macroWorkflowId: resolvedContext.conversationId ?? undefined,
     });
   } catch (telemetryErr) {

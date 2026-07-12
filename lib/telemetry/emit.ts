@@ -17,12 +17,12 @@
 
 import { getSink } from "./sink";
 import { newTrace } from "./trace";
-import {
-  buildAuditRecord,
-} from "./sink";
+import { buildAuditRecord } from "./sink";
+import { resolveGovernance } from "./governance";
 import type {
   UdifInteractionAudit,
   ContentMode,
+  GovernanceState,
 } from "./udif";
 
 export interface EmitInteractionAuditInput {
@@ -38,6 +38,10 @@ export interface EmitInteractionAuditInput {
   agentRole: string;
   /** Credit cost of this interaction (joined from lib/subscription). */
   creditCost: number;
+  /** Optional governance context role; when set, the resolver snapshot is attached. */
+  contextRole?: string;
+  /** Optional pre-built governance state (skips resolution). */
+  governance?: GovernanceState;
   /** Optional pre-built trace context (a new one is generated if omitted). */
   traceContext?: UdifInteractionAudit["trace_context"];
   /** Workflow correlation id (fleet-wide). */
@@ -48,17 +52,24 @@ export interface EmitInteractionAuditInput {
   usage?: { prompt_tokens: number; completion_tokens: number };
   /** Optional tool-action spans. */
   actions?: UdifInteractionAudit["ai_ledger"]["actions"];
-  /** Optional resolved governance snapshot (Phase 2.1). */
-  governance?: UdifInteractionAudit["ai_ledger"]["governance"];
 }
 
 /**
  * Construct and emit a UDIF 2.0 interaction-audit record.
- * Returns the record (for callers that want to forward it to the client),
- * or null if emission failed. Never throws.
+ * Resolves governance when a contextRole is supplied, then forwards the record
+ * to the active sink. Returns the record (for callers that forward it to the
+ * client), or null on failure. Never throws. Async because governance
+ * resolution may hit Supabase.
  */
-export function emitInteractionAudit(input: EmitInteractionAuditInput): UdifInteractionAudit | null {
+export async function emitInteractionAudit(
+  input: EmitInteractionAuditInput
+): Promise<UdifInteractionAudit | null> {
   try {
+    let governance = input.governance;
+    if (!governance && input.contextRole) {
+      governance = await resolveGovernance({ contextRole: input.contextRole });
+    }
+
     const record = buildAuditRecord({
       trace_context: input.traceContext ?? newTrace(),
       context_baggage: {
@@ -76,7 +87,7 @@ export function emitInteractionAudit(input: EmitInteractionAuditInput): UdifInte
         },
         ...(input.usage ? { usage: input.usage } : {}),
         ...(input.actions && input.actions.length ? { actions: input.actions } : {}),
-        ...(input.governance ? { governance: input.governance } : {}),
+        ...(governance ? { governance } : {}),
       },
     });
 

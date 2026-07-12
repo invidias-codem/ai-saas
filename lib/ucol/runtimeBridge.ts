@@ -262,6 +262,9 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
         'X-Debug-Execution-Mode': execResult.routingDecision?.executionPlan?.mode || 'direct',
         'X-Debug-Intent': execResult.routingDecision?.intent?.category || 'general',
         'X-Remaining-Credits': String(Math.max(0, billing.remaining)),
+        // Sovereign telemetry: edge SW reads these to capture the audit record.
+        'x-telemetry-model': execResult.actualModelId || execResult.modelId || 'unknown',
+        'x-telemetry-provider': execResult.systemProvider || 'unknown',
       } as Record<string, string>,
     });
   }
@@ -273,7 +276,13 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
     );
   }
   return NextResponse.json(
-    surface === 'code' ? { text: execResult.text || '' } : { text: execResult.text || '' }
+    surface === 'code' ? { text: execResult.text || '' } : { text: execResult.text || '' },
+    {
+      headers: {
+        'x-telemetry-model': execResult.actualModelId || execResult.modelId || 'unknown',
+        'x-telemetry-provider': execResult.systemProvider || 'unknown',
+      } as Record<string, string>,
+    }
   );
 }
 

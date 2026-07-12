@@ -241,6 +241,9 @@ export async function POST(req: Request) {
                     stream: reply.stream,
                     thoughtSignaturePromise: reply.thoughtSignaturePromise,
                     modelId: reply.debug?.model || 'unknown',
+                    requestedModelId: reply.requestedModelId,
+                    actualModelId: reply.actualModelId,
+                    systemProvider: reply.systemProvider,
                     routingDecision,
                 };
             },
