@@ -81,7 +81,7 @@ async function inspectUserMemory(userId: string) {
     console.log('\n📚 Memory Details:');
     console.log('─'.repeat(60));
 
-    memoriesSnapshot.docs.forEach((doc, index) => {
+    memoriesSnapshot.docs.forEach((doc: admin.firestore.QueryDocumentSnapshot, index: number) => {
       const memory = doc.data() as UserMemory;
       const createdDate = memory.createdAt?.toDate?.() || new Date(memory.createdAt);
       const timeSince = getTimeSince(createdDate);
@@ -108,7 +108,7 @@ async function inspectUserMemory(userId: string) {
     let totalTokens = 0;
     let totalMessages = 0;
 
-    memoriesSnapshot.forEach((doc) => {
+    memoriesSnapshot.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
       const memory = doc.data() as UserMemory;
       featureTypes.set(memory.featureType, (featureTypes.get(memory.featureType) || 0) + 1);
       totalTokens += memory.tokensUsed || 0;
@@ -149,7 +149,7 @@ async function inspectUserMemory(userId: string) {
       const lowerQuery = query.toLowerCase();
       let matches = 0;
 
-      memoriesSnapshot.forEach((doc) => {
+      memoriesSnapshot.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
         const memory = doc.data() as UserMemory;
         if (
           memory.title.toLowerCase().includes(lowerQuery) ||
@@ -168,7 +168,7 @@ async function inspectUserMemory(userId: string) {
     console.log('─'.repeat(60));
 
     let totalBytes = 0;
-    memoriesSnapshot.forEach((doc) => {
+    memoriesSnapshot.forEach((doc: admin.firestore.QueryDocumentSnapshot) => {
       const memory = doc.data() as UserMemory;
       // Rough estimation
       const docSize = JSON.stringify(memory).length;

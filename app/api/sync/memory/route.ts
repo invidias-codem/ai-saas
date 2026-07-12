@@ -8,6 +8,7 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import {
   mergeMemoryFacts,
   mergeUserPreferences,
@@ -98,7 +99,7 @@ export async function POST(req: Request): Promise<NextResponse<SyncResponse | { 
     const allDevicePrefs = await devicePrefsRef.get();
 
     const devicePrefsMap = new Map<string, UserPreferences>();
-    allDevicePrefs.docs.forEach(doc => {
+    allDevicePrefs.docs.forEach((doc: QueryDocumentSnapshot) => {
       devicePrefsMap.set(doc.id, doc.data() as UserPreferences);
     });
 
@@ -269,7 +270,7 @@ export async function GET(req: Request) {
       .limit(10);
 
     const snapshot = await syncEventsRef.get();
-    const syncHistory = snapshot.docs.map(doc => ({
+    const syncHistory = snapshot.docs.map((doc: QueryDocumentSnapshot) => ({
       id: doc.id,
       ...doc.data(),
     }));

@@ -8,6 +8,7 @@ import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
 import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/graphStore';
 import { Message } from './schemas';
 import { searchMemories, storeMemory, getMemoryStats } from '@/lib/memory/vectorStore';
+import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { supabase } from '@/lib/supabaseClient';
 
 export interface Source {
@@ -648,7 +649,7 @@ export async function getHighConfidenceFactsDirectly(
 
     const facts: any[] = [];
 
-    snapshot.docs.forEach((doc) => {
+    snapshot.docs.forEach((doc: QueryDocumentSnapshot) => {
       const data = doc.data();
 
       // Skip soft-deleted facts

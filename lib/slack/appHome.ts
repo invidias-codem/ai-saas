@@ -6,6 +6,7 @@ import { sanitizeForLog } from '@/lib/security/urlValidator';
  */
 import { getSlackConfig } from './tokenManager';
 import { db } from '@/lib/firebaseAdmin';
+import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 
@@ -191,7 +192,7 @@ async function getRecentMemories(userId: string, teamId: string): Promise<any[]>
       ];
     }
 
-    return memoriesSnapshot.docs.map(doc => {
+    return memoriesSnapshot.docs.map((doc: QueryDocumentSnapshot) => {
       const data = doc.data();
       return {
         type: 'section',
