@@ -83,4 +83,24 @@ describe('Sprint 1 production readiness hardening', () => {
     expect(sidebar).not.toContain('>G<');
     expect(sidebar).toContain('useUser');
   });
+
+  it('sets restrictive CORS headers without wildcards', () => {
+    const config = read('next.config.mjs');
+
+    // Must NOT have wildcard CORS
+    expect(config).not.toMatch(/Access-Control-Allow-Origin.*\*/);
+
+    // Must have explicit CORS restrictions
+    expect(config).toContain('Access-Control-Allow-Origin');
+    expect(config).toContain('Access-Control-Allow-Methods');
+    expect(config).toContain('Access-Control-Allow-Headers');
+    expect(config).toContain('Access-Control-Max-Age');
+
+    // Should include Cross-Origin isolation headers
+    expect(config).toContain('Cross-Origin-Opener-Policy');
+    expect(config).toContain('Cross-Origin-Resource-Policy');
+
+    // API routes must have separate CORS config
+    expect(config).toContain("'/api/:path*'");
+  });
 });

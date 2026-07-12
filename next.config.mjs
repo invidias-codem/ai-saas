@@ -98,8 +98,15 @@ export default withMDX(
       ];
     },
     async headers() {
+      const allowedOrigins = [
+        'https://gen1e.xyz',
+        'https://www.gen1e.xyz',
+        'https://clerk.gen1e.xyz',
+      ].join(',');
+
       return [
         {
+          // Restrictive CORS for page routes
           source: '/:path*',
           headers: [
             { key: 'X-DNS-Prefetch-Control', value: 'on' },
@@ -112,7 +119,27 @@ export default withMDX(
             { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
             { key: 'X-Content-Type-Options', value: 'nosniff' },
             { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-            { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' }
+            { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()' },
+            // Restrictive CORS — no wildcard
+            { key: 'Access-Control-Allow-Origin', value: allowedOrigins },
+            { key: 'Access-Control-Allow-Methods', value: 'GET, POST, OPTIONS' },
+            { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization, X-Requested-With' },
+            { key: 'Access-Control-Max-Age', value: '86400' },
+            { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+            { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
+            { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' }
+          ]
+        },
+        {
+          // API routes: CORS restricted, credentials-aware
+          source: '/api/:path*',
+          headers: [
+            { key: 'Access-Control-Allow-Origin', value: 'https://gen1e.xyz' },
+            { key: 'Access-Control-Allow-Methods', value: 'GET, POST, OPTIONS' },
+            { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization, X-Requested-With' },
+            { key: 'Access-Control-Max-Age', value: '86400' },
+            { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+            { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' }
           ]
         }
       ];
