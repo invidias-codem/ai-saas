@@ -12,6 +12,7 @@
     "title": "Support Lattice OS",
     "description": "Support the project and help fund future development.",
     "important": "Important: Use the same email address on Ko-fi as your Lattice OS account so we can match your support correctly.",
+    "creditRate": "Every $1 you contribute adds 50 compute credits to your account (e.g. $5 = 250, $20 = 1,000).",
     "donatedWithDifferentEmail": "Supported with a different email?",
     "contactSupport": "Contact Support"
   },

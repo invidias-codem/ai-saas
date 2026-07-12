@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Zap } from "lucide-react";
+import Link from "next/link";
 import { KoFiWidget } from "@/components/kofi-widget";
 import { useTranslations } from "next-intl";
 
@@ -11,8 +12,6 @@ interface SupportGenieProps {
 
 export const SupportGenie = ({ onSuccess }: SupportGenieProps) => {
     const t = useTranslations("SupportGenie");
-    // Replace with your actual Ko-fi Page ID
-    const KOFI_PAGE = "YourKofiName"; // User needs to update this
 
     return (
         <div className="space-y-6 h-full flex flex-col">
@@ -26,6 +25,9 @@ export const SupportGenie = ({ onSuccess }: SupportGenieProps) => {
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-600 dark:text-amber-400 font-medium">
                     ⚠️ {t('important')}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                    {t('creditRate')}
+                </p>
             </div>
 
             {/* Donation Widget */}
@@ -35,7 +37,7 @@ export const SupportGenie = ({ onSuccess }: SupportGenieProps) => {
 
             {/* Manual Fallback */}
             <div className="text-center pt-2 border-t text-xs text-muted-foreground flex-none">
-                <p>{t('donatedWithDifferentEmail')} <a href="mailto:support@genie.com?subject=Claim Credits" className="underline hover:text-primary">{t('contactSupport')}</a></p>
+                <p>{t('donatedWithDifferentEmail')} <Link href="/support" className="underline hover:text-primary">{t('contactSupport')}</Link></p>
             </div>
         </div>
     );
