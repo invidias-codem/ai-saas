@@ -1,0 +1,82 @@
+# ── Build the Tauri (Rust) desktop app ─────────────────────────────────────
+# Validates the Rust side (src-tauri) compiles and the full desktop app builds
+# in CI. The Lattice OS native client was scaffolded separately; this job keeps
+# the Rust command surface (e.g. flush_telemetry, ping_daemon) compile-checked
+# on every relevant change.
+#
+# We build with `--no-bundle` so we validate Rust + frontend compilation without
+# requiring the Go harness binary (binaries/lattice-harness), platform icons, or
+# code-signing, which are only needed at packaging time.
+
+name: Build Tauri (Rust)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "src-tauri/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tauri.conf.json"
+      - ".github/workflows/build-tauri.yml"
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "src-tauri/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tauri.conf.json"
+      - ".github/workflows/build-tauri.yml"
+
+concurrency:
+  group: build-tauri-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-tauri:
+    name: Build Tauri app (Rust + frontend)
+    runs-on: ubuntu-22.04
+    env:
+      NEXT_PUBLIC_IS_DESKTOP: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Tauri Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.6.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Rust lint (clippy) — src-tauri
+        # Non-fatal: main gate is a successful build. Reports warnings for visibility.
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
+        continue-on-error: true
+
+      - name: Build Tauri app (no bundle)
+        run: pnpm tauri build --no-bundle
