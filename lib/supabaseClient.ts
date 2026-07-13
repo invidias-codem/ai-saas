@@ -38,7 +38,18 @@ export const supabase = (supabaseUrl && supabaseKey)
 
 // Explicit Admin Client (for clear usage in backend routes)
 export const supabaseAdmin = (supabaseUrl && supabaseServiceKey)
-    ? createClient(supabaseUrl, supabaseServiceKey)
-    : null; // Do not fallback to anon client, as this hides configuration errors and causes RLS issues
+  ? createClient(supabaseUrl, supabaseServiceKey)
+  : null; // Do not fallback to anon client, as this hides configuration errors and causes RLS issues
+
+// ── Sovereign AI Telemetry dedicated instance (Q3 DECIDED 2026-07-12) ──
+// Telemetry is written to a STRICTLY ISOLATED Supabase instance so high-volume
+// multi-agent audit writes cannot starve the main transactional DB (auth,
+// payments, core logic). Separate env vars; null when not configured.
+const telemetryUrl = process.env.SUPABASE_TELEMETRY_URL;
+const telemetryServiceKey = process.env.SUPABASE_TELEMETRY_SERVICE_ROLE;
+
+export const supabaseTelemetryAdmin = (telemetryUrl && telemetryServiceKey)
+  ? createClient(telemetryUrl, telemetryServiceKey)
+  : null;
 
 

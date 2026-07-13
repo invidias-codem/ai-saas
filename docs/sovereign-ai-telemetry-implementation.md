@@ -155,19 +155,21 @@ Swarm orchestrator tool-call sites would push `ToolAction` into `actions[]`. Def
 
 ---
 
-## 4. Phase 3 — Enterprise Audit Tier (Supabase + signing)
+## 4. Phase 3 — Enterprise Audit Tier (Supabase + signing)  ✅ DONE
 
-### Task 3.1: Supabase schema + RLS
-**Files:** New migration `supabase/migrations/xxxx_ai_interaction_audit.sql`.
-**Step:** Table `ai_interaction_audit` (jsonb `record`, `user_id` FK to Clerk, `created_at`). RLS: owner-read; service-role write only.
+### Task 3.1: Dedicated telemetry Supabase client + schema  ✅
+**Files:** `lib/supabaseClient.ts` (new `supabaseTelemetryAdmin` using `SUPABASE_TELEMETRY_URL` / `SUPABASE_TELEMETRY_SERVICE_ROLE` — dedicated instance per Q3 decision); migration `supabase/migrations/20260712000000_ai_interaction_audit.sql`.
+**Impl:** `ai_interaction_audit(id, user_id, conversation_id, workspace_id, record jsonb, prev_record_hash, governance_signature, created_at)`. RLS: service-role write, owner read by `user_id`. Strictly isolated from main transactional DB.
 
-### Task 3.2: Hash-chain signing
-**Files:** `lib/telemetry/sign.ts` using Web Crypto (`crypto.subtle.digest` SHA-256 over canonical record + prev hash).
-**Step:** Append `governance_signature` + `prev_record_hash` to each enterprise record → tamper-evident chain (PRD §4 "cryptographic hashing and signing").
+### Task 3.2: Hash-chain signing  ✅
+**Files:** `lib/telemetry/sign.ts` (Web Crypto SHA-256).
+**Impl:** `signRecord(record, prevHash)` → `{ prev_record_hash, governance_signature }`; `verifyRecordSignature(record, chain, expectedPrevHash)` for tamper detection. `canonicalize()` sorts keys for stable hashing. Each flush continues the user's chain from their last `governance_signature` (or `"root"`). Keyless hash chain = tamper-evident; real asymmetric signing is a later hardening step (noted).
 
-### Task 3.3: Flush endpoint
-**Files:** `app/api/telemetry/flush/route.ts` — verifies signature, inserts with service role, scoped to authenticated `user_id`.
-**Commit:** `feat(telemetry): Phase 3 enterprise audit + signing`
+### Task 3.3: Flush endpoint  ✅
+**Files:** `app/api/telemetry/flush/route.ts`.
+**Impl:** Authenticates via `currentUser()` (Clerk); 503 if telemetry instance unconfigured; 422 if any `local_only` record slips through (defensive, per Q2); signs each record into the per-user chain, self-verifies, then bulk-inserts into the telemetry instance scoped by `user_id`. This is the server-side authority that makes `flushClientLedger()` (Phase 2) actually land records.
+
+**Commit:** `feat(telemetry): Phase 3 enterprise audit tier (Supabase + hash-chain + flush)`
 
 ---
 
