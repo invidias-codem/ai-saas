@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { SignIn } from "@clerk/nextjs";
 import { ExternalLink, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,10 @@ export default function WebviewAwareAuth({
 }) {
   const router = useRouter();
 
+  // Allow the user to dismiss the "open in browser" warning and try the
+  // in-webview sign-in anyway.
+  const [dismissed, setDismissed] = useState(false);
+
   // Detect webview client-side (window is unavailable during SSR).
   const webview = useSyncExternalStore(
     () => () => {},
@@ -51,7 +55,7 @@ export default function WebviewAwareAuth({
     );
   }
 
-  if (webview) {
+  if (webview && !dismissed) {
     const target = path ? `/${locale}${path}` : `/${locale}/sign-in`;
 
     return (
@@ -79,7 +83,7 @@ export default function WebviewAwareAuth({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setWebview(false)}
+            onClick={() => setDismissed(true)}
             className="text-xs text-muted-foreground"
           >
             Stay here (may fail)

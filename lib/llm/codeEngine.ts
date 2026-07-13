@@ -7,7 +7,7 @@ import { gatherCodeContext } from '@/lib/llm/contextAggregator';
 import { executeAgentLoop } from '@/lib/harness/AgentExecutor';
 import type { FileAttachmentInput, ResolvedAttachment } from '@/lib/types/attachments';
 import { resolveAttachmentForAnalysis } from '@/lib/gcp/fileResolver';
-import { getUserProviderApiKeys } from '@/lib/userProviderApiKeys';
+import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
 import { emitInteractionAudit } from '@/lib/telemetry/emit';
 import { deriveContextRole } from '@/lib/telemetry/governance';
 

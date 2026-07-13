@@ -79,9 +79,6 @@ export const LandingNavbar = () => {
         { href: "/support", label: "Support", icon: QuestionMarkCircledIcon },
     ];
 
-    const [scrolled, setScrolled] = useState(false);
-    const pathname = usePathname();
-
     const mounted = useSyncExternalStore(
         () => () => {},
         () => true,

@@ -19,7 +19,6 @@ export interface TelemetryEvent {
 
 export function WorkspaceTelemetryViewer({ workspaceId }: { workspaceId: string }) {
   const [logs, setLogs] = useState<TelemetryEvent[]>([]);
-  const [isActive, setIsActive] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,8 +73,6 @@ export function WorkspaceTelemetryViewer({ workspaceId }: { workspaceId: string 
       clearInterval(pollInterval);
     };
   }, [workspaceId]);
-
-  const [logs, setLogs] = useState<TelemetryEvent[]>([]);
 
   // isActive is derived from the latest log entry (computed during render,
   // not set inside an effect).
