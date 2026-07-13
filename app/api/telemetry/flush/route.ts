@@ -1,11 +1,50 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { supabaseTelemetryAdmin } from "@/lib/supabaseClient";
-import { signRecord, verifyRecordSignature } from "@/lib/telemetry/sign";
+import {
+  signRecord,
+  verifyRecordSignature,
+  signRecordEd25519,
+  verifyRecordEd25519,
+} from "@/lib/telemetry/sign";
 import type { UdifInteractionAudit } from "@/lib/telemetry/udif";
 
 interface FlushBody {
   records: UdifInteractionAudit[];
+}
+
+// Server-held Ed25519 private key (hex). When set, the flush endpoint signs
+// each link with real asymmetric Ed25519 (mode 2); otherwise it falls back to
+// the keyless hash chain (mode 1). Both are tamper-evident.
+const TELEMETRY_SIGNING_KEY = process.env.TELEMETRY_SIGNING_KEY ?? "";
+
+interface SignedLink {
+  prev_record_hash: string;
+  governance_signature: string;
+  signing_public_key?: string;
+  sig_mode?: "ed25519" | "hash-chain";
+}
+
+async function signLink(
+  record: UdifInteractionAudit,
+  prevHash: string
+): Promise<SignedLink> {
+  if (TELEMETRY_SIGNING_KEY) {
+    return signRecordEd25519(record, prevHash, TELEMETRY_SIGNING_KEY);
+  }
+  return signRecord(record, prevHash);
+}
+
+async function verifyLink(
+  record: UdifInteractionAudit,
+  link: SignedLink,
+  expectedPrevHash: string
+): Promise<boolean> {
+  if (link.sig_mode === "ed25519") {
+    // Verify against the server-held key (the authority that signed it).
+    return verifyRecordEd25519(record, link, expectedPrevHash, TELEMETRY_SIGNING_KEY);
+  }
+  return verifyRecordSignature(record, link, expectedPrevHash);
 }
 
 /**
@@ -65,9 +104,9 @@ export async function POST(req: Request) {
 
   const rows = [];
   for (const record of records) {
-    const chain = await signRecord(record, prevHash);
+    const chain = await signLink(record, prevHash);
     // Self-verify the link before persisting (cheap integrity gate).
-    const ok = await verifyRecordSignature(record, chain, prevHash);
+    const ok = await verifyLink(record, chain, prevHash);
     if (!ok) {
       return NextResponse.json(
         { error: "Chain verification failed before insert" },
@@ -83,6 +122,7 @@ export async function POST(req: Request) {
       record,
       prev_record_hash: chain.prev_record_hash,
       governance_signature: chain.governance_signature,
+      signing_public_key: chain.signing_public_key ?? null,
     });
     prevHash = chain.governance_signature;
   }

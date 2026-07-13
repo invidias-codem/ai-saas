@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { readClientLedger, clearClientLedger } from "@/lib/telemetry/clientEmitter";
-import { flushClientLedger } from "@/lib/telemetry/flush";
+import { flushNativeTelemetry, clientPublicKeyHex, isTauri } from "@/lib/telemetry/native";
 import type { UdifInteractionAudit } from "@/lib/telemetry/udif";
 
 /**
@@ -33,8 +33,8 @@ export function InteractionAuditViewer() {
   const flush = useCallback(async () => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFlushMsg("Flushing...");
-    const res = await flushClientLedger({ clearOnSuccess: true });
-    setFlushMsg(`Sent ${res.sent}/${res.attempted} (failed ${res.failed}).`);
+    const res = await flushNativeTelemetry({ clearOnSuccess: true });
+    setFlushMsg(`Sent ${res.sent}/${res.attempted} (failed ${res.failed}) — mode: ${res.mode}.`);
     await refresh();
   }, [refresh]);
 

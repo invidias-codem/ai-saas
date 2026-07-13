@@ -37,11 +37,23 @@ const customJestConfig = {
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   testTimeout: 10000,
-  transformIgnorePatterns: [
-    '<rootDir>/anycrawl/',
-    '/node_modules/(?!.*uuid.*)',
-  ],
 }
 
-// createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
-module.exports = createJestConfig(customJestConfig)
+// createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async.
+// We wrap it to inject a transformIgnorePatterns entry that allows @noble (pure-ESM deps) to be
+// transformed by babel — next/jest's default .pnpm allowlist only permits geist/next.
+module.exports = async () => {
+  const config = await createJestConfig(customJestConfig)()
+  // next/jest hard-codes a .pnpm allowlist (only geist|next). Drop it and
+  // add our own that also permits pure-ESM deps (@noble) and uuid to be
+  // transformed by babel. A path is transformed UNLESS it matches any
+  // transformIgnorePatterns entry, so we must ensure @noble matches NONE.
+  const base = (config.transformIgnorePatterns || []).filter(
+    (p) => !String(p).includes('.pnpm')
+  )
+  config.transformIgnorePatterns = [
+    ...base,
+    '/node_modules/(?!(.*@noble|.*uuid|geist|next)/)',
+  ]
+  return config
+}

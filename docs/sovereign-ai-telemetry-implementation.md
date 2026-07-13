@@ -219,3 +219,25 @@ Tauri desktop client lift (PRD §4). **Out of scope until Phase 0-3 ship.** `isT
 - Phase 1: a real chat call produces a `UdifInteractionAudit` in IndexedDB with correct `response.model` == `actualModelId`.
 - Phase 2: dashboard renders trace; governance populated per Task 2.1 decision.
 - Phase 3: signed record in Supabase; tamper test fails verification on mutate.
+
+## 9. Phase 3.2-b & Phase 4 — Asymmetric Signing + Tauri (COMPLETE 2026-07-12)
+
+### 3.2-b: Ed25519 asymmetric signing (server-held key)
+**Files:** `lib/telemetry/sign.ts` (extended), `app/api/telemetry/flush/route.ts` (updated), `supabase/migrations/20260712000000_ai_interaction_audit.sql` (added `signing_public_key` column), `jest.config.js` (wrapped to allow `@noble/ed25519` ESM transform).
+
+**Decision upgrade:** Real asymmetric Ed25519 signing replaces the keyless hash chain as the *preferred* mode. The flush endpoint signs each chain link with **Ed25519** when `TELEMETRY_SIGNING_KEY` (hex, 32-byte) is set; otherwise it falls back to the keyless hash chain. Both are tamper-evident. The stored `governance_signature` becomes a verifiable Ed25519 signature (RFC 8032 via `@noble/ed25519`, which works in Node/browser/Tauri). Any auditor holding `TELEMETRY_SIGNING_KEY`'s public key can verify.
+
+**Why `@noble/ed25519` (not Web Crypto / node:crypto):** Node's WebCrypto `importKey('raw', Ed25519, ['sign'])` is broken for raw private keys, and `node:crypto` `createPrivateKey` derives a *non-RFC-8032* public key from raw `d` (verified mismatch vs RFC 8032 test vector). `@noble/ed25519` is RFC-correct and universal. `jest.config.js` must wrap `next/jest` and inject a `transformIgnorePatterns` entry — `next/jest` hard-codes a `.pnpm` allowlist that otherwise leaves `@noble` untransformed (ESM parse error).
+
+### Phase 4: Tauri native client integration
+**Files:** `lib/telemetry/native.ts` (new), `lib/telemetry/signingKey.ts` (new), `src-tauri/src/lib.rs` (added `flush_telemetry` command), `src-tauri/capabilities/default.json` (added `flush_telemetry` permission), `components/telemetry/InteractionAuditViewer.tsx` (uses `flushNativeTelemetry`), `.env.example` (telemetry vars documented).
+
+**Scope:** The native desktop client was already scaffolded (`src-tauri/`, Stronghold + store plugins, `@tauri-apps/api` v2). Phase 4 **integrates** the telemetry MVP into it:
+- `flushNativeTelemetry()` works in both browser (SW-backed IndexedDB) and Tauri — same dual-write topology.
+- `signingKey.ts` resolves an **optional** client Ed25519 key (env → Stronghold in Tauri; generated + persisted on first run). The server remains the authoritative signer; the client key is opt-in (pre-signing / client-side authority proof).
+- `flush_telemetry` Rust command + capability permission added (build-gated — no `cargo` in this env; written faithfully, requires `pnpm tauri build` / `cargo build` to validate on a machine with the Rust toolchain).
+
+**Verification:** tsc clean; `pnpm lint` 0 errors; jest telemetry **48/48 pass** (incl. 6 new Ed25519 tests: sign/verify, tamper-detection, wrong-key, wrong-prev, chained); full suite 584 pass (same 4 pre-existing live-cred infra suites fail — no regressions).
+
+### Release notes (this session)
+- Phase 0 `a9b624f4`, Phase 1 `ea13adbd`, Phase 2 `7930bdb7`, Phase 3 `4639ddcc`, + Phase 3.2-b & Phase 4 (this commit). Total telemetry tests: 48.

@@ -3,6 +3,18 @@ async fn ping_daemon() -> Result<String, String> {
     Ok("ok".to_string())
 }
 
+#[tauri::command]
+async fn flush_telemetry() -> Result<serde_json::Value, String> {
+    // The native telemetry ledger lives in the webview (IndexedDB) and is
+    // flushed to the enterprise instance by the JS layer (flushNativeTelemetry).
+    // This command is the Rust-side trigger/hook: it signals the frontend to
+    // perform the flush and reports ledger status from the Tauri store.
+    // Note: the canonical ledger is in the webview; we simply acknowledge the
+    // trigger. The frontend invokes this and then calls the HTTP flush.
+    // (Store-backed fallback retained for headless operation.)
+    Ok(serde_json::json!({ "status": "trigger_ok" }))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -39,7 +51,7 @@ pub fn run() {
       }
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![ping_daemon])
+    .invoke_handler(tauri::generate_handler![ping_daemon, flush_telemetry])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

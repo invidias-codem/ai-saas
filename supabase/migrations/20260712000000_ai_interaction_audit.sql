@@ -10,6 +10,7 @@ create table if not exists public.ai_interaction_audit (
   record jsonb not null,                 -- full UDIF 2.0 interaction-audit
   prev_record_hash text,                 -- hash-chain linkage (Phase 3.2)
   governance_signature text,             -- tamper-evident signature (Phase 3.2)
+  signing_public_key text,               -- Ed25519 pubkey when mode 2 is used
   created_at timestamptz not null default now()
 );
 
