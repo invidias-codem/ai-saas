@@ -16,7 +16,7 @@
     "test:security:integration": "jest __tests__/security/api-security.integration.test.ts",
     "test:security:e2e": "jest __tests__/security/security-e2e.test.ts",
     "test:rate-limits": "./scripts/test-rate-limits.sh",
-    "typecheck": "NODE_OPTIONS='--max-old-space-size=4096' tsc --noEmit --skipLibCheck && NODE_OPTIONS='--max-old-space-size=4096' tsc --noEmit --skipLibCheck --project tsconfig.build.json",
+    "typecheck": "NODE_OPTIONS='--max-old-space-size=8192' tsc --noEmit --skipLibCheck --project tsconfig.build.json",
     "test:slack-stress": "./scripts/run-slack-stress-tests.sh",
     "setup:hooks": "./scripts/setup-git-hooks.sh",
     "deploy:check": "./scripts/pre-deployment-check.sh",

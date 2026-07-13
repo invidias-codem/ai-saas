@@ -7,10 +7,12 @@
   "include": [
     "next-env.d.ts",
     "types/**/*.d.ts",
-    "app/[locale]/(auth)/**/*.ts",
-    "app/[locale]/(auth)/**/*.tsx",
-    "app/[locale]/(dashboard)/**/*.ts",
-    "app/[locale]/(dashboard)/**/*.tsx"
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx"
   ],
   "exclude": [
     ".next",

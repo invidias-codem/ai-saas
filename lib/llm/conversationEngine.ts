@@ -98,6 +98,10 @@ export type ConversationEngineResult = {
   stream: ReadableStream;
   thoughtSignaturePromise?: Promise<string | null>;
   sources?: Source[];
+  modelId?: string;
+  requestedModelId?: string;
+  actualModelId?: string;
+  systemProvider?: string;
   debug?: {
     promptVersion?: string | null;
     model?: string;

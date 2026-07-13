@@ -91,7 +91,7 @@ export const GuestChat = () => {
               .map((m) => ({ role: m.role, text: m.text })),
             interactionCount,
             turnstileToken: turnstileToken ?? undefined,
-            guestSessionId: guestSessionId.current,
+            guestSessionId: guestSessionId,
           }),
         });
 
