@@ -1,9 +1,14 @@
 /**
  * Slack OAuth Callback Tests
- * Tests for the multi-tenant OAuth flow
+ * Multi-tenant OAuth flow. The callback route is a stateless, signature-
+ * verified edge function: the `state` param is `userId:timestamp:signature`,
+ * where `signature` is an HMAC-SHA256 (base64url) of `userId:timestamp` keyed
+ * by SLACK_CLIENT_SECRET. On success it upserts via
+ * `supabaseAdmin.rpc('upsert_slack_integration', ...)`.
  */
 
 import type { NextRequest } from 'next/server';
+import crypto from 'node:crypto';
 
 // Mock NextResponse before importing the route
 jest.mock('next/server', () => {
@@ -23,43 +28,30 @@ jest.mock('next/server', () => {
   };
 });
 
-// Mock the token manager
-jest.mock('@/lib/slack/tokenManager', () => ({
-  saveSlackInstallation: jest.fn(),
-  logInstallationEvent: jest.fn(),
-  hasInstallation: jest.fn(),
+// Mock Supabase admin client (the route dynamically imports this)
+jest.mock('@/lib/supabaseClient', () => ({
+  supabaseAdmin: {
+    rpc: jest.fn().mockResolvedValue({ error: null }),
+  },
 }));
 
-// Mock Firebase Admin
-jest.mock('firebase-admin', () => {
-  const mockDocRef = {
-    get: jest.fn().mockResolvedValue({ exists: false }),
-    set: jest.fn().mockResolvedValue(undefined),
-  };
-
-  const mockSubCollection = {
-    doc: jest.fn().mockReturnValue(mockDocRef),
-  };
-
-  const mockUserDocRef = {
-    collection: jest.fn().mockReturnValue(mockSubCollection),
-  };
-
-  const mockCollection = {
-    doc: jest.fn().mockReturnValue(mockUserDocRef),
-  };
-
-  return {
-    apps: [],
-    initializeApp: jest.fn(),
-    firestore: jest.fn().mockReturnValue({
-      collection: jest.fn().mockReturnValue(mockCollection),
-    }),
-  };
-});
-
-// Mock fetch for Slack API calls
+// Mock fetch for Slack API calls (token exchange)
 global.fetch = jest.fn();
+
+const CLIENT_SECRET = 'test-client-secret';
+
+/** Build a valid signed state param matching the route's HMAC check. */
+function signedState(userId: string, timestamp: number): string {
+  const data = `${userId}:${timestamp}`;
+  const sig = crypto
+    .createHmac('sha256', CLIENT_SECRET)
+    .update(data)
+    .digest('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+  return `${data}:${sig}`;
+}
 
 import { GET } from '@/app/api/integrations/slack/callback/route';
 import { NextResponse } from 'next/server';
@@ -67,7 +59,7 @@ import { NextResponse } from 'next/server';
 describe('Slack OAuth Callback', () => {
   const mockTokenResponse = {
     ok: true,
-    access_token: 'xoxb-test-token-123',
+    access_token: 'xoxb-test-token',
     authed_user: { id: 'U_INSTALLER_123' },
     team: { id: 'T123ABC456', name: 'Test Workspace' },
     bot_user_id: 'U_BOT_123',
@@ -76,276 +68,165 @@ describe('Slack OAuth Callback', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-
-    // Setup default mock for fetch (Slack token exchange)
     (global.fetch as jest.Mock).mockResolvedValue({
       json: () => Promise.resolve(mockTokenResponse),
     });
-
-    // Setup default mocks for token manager
-    const { saveSlackInstallation, logInstallationEvent, hasInstallation } =
-      require('@/lib/slack/tokenManager');
-    saveSlackInstallation.mockResolvedValue(undefined);
-    logInstallationEvent.mockResolvedValue(undefined);
-    hasInstallation.mockResolvedValue(false);
-
-    // Set environment variables
     process.env.SLACK_CLIENT_ID = 'test-client-id';
-    process.env.SLACK_CLIENT_SECRET = 'test-client-secret';
+    process.env.SLACK_CLIENT_SECRET = CLIENT_SECRET;
     process.env.NEXT_PUBLIC_APP_URL = 'https://app.example.com';
   });
 
-  describe('Successful OAuth Flow', () => {
-    it('should exchange code for token and save installation', async () => {
-      const { saveSlackInstallation } = require('@/lib/slack/tokenManager');
+  it('redirects to the slack error page on an OAuth error param', async () => {
+    const request = new Request(
+      'https://app.example.com/api/integrations/slack/callback?error=access_denied',
+      { method: 'GET' }
+    ) as unknown as NextRequest;
 
-      // Create state with user ID
-      const state = Buffer.from(`user_123:${Date.now()}`).toString('base64');
+    await GET(request);
 
-      const request = new Request(
-        `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
-        { method: 'GET' }
-      ) as unknown as NextRequest;
+    expect(NextResponse.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('slack_error=access_denied')
+    );
+  });
 
-      await GET(request);
+  it('returns missing_params when code or state is absent', async () => {
+    const request = new Request(
+      'https://app.example.com/api/integrations/slack/callback',
+      { method: 'GET' }
+    ) as unknown as NextRequest;
 
-      // Should redirect to settings with success
-      expect(NextResponse.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('slack_success=true')
-      );
+    await GET(request);
 
-      // Should save installation
-      expect(saveSlackInstallation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          teamId: 'T123ABC456',
-          teamName: 'Test Workspace',
-          botToken: 'xoxb-test-token-123',
-          botUserId: 'U_BOT_123',
-          installedBy: expect.objectContaining({
-            slackUserId: 'U_INSTALLER_123',
-            clerkUserId: 'user_123',
-          }),
-        })
-      );
-    });
+    expect(NextResponse.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('slack_error=missing_params')
+    );
+  });
 
-    it('should handle public installation (no state)', async () => {
-      const { saveSlackInstallation } = require('@/lib/slack/tokenManager');
+  it('rejects an expired state (timestamp older than 15 min)', async () => {
+    const oldTimestamp = Date.now() - 20 * 60 * 1000;
+    const state = signedState('user_123', oldTimestamp);
 
-      const request = new Request(
-        'https://app.example.com/api/integrations/slack/callback?code=test-code',
-        { method: 'GET' }
-      ) as unknown as NextRequest;
+    const request = new Request(
+      `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
+      { method: 'GET' }
+    ) as unknown as NextRequest;
 
-      await GET(request);
+    await GET(request);
 
-      expect(NextResponse.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('slack_success=true')
-      );
+    expect(NextResponse.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('slack_error=state_expired')
+    );
+  });
 
-      // Should save installation without clerkUserId
-      expect(saveSlackInstallation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          installedBy: expect.objectContaining({
-            slackUserId: 'U_INSTALLER_123',
-            clerkUserId: undefined,
-          }),
-        })
-      );
-    });
+  it('rejects a malformed state (invalid signature)', async () => {
+    // Recent timestamp (passes the expiry check) but a signature that will not
+    // match the HMAC computed from SLACK_CLIENT_SECRET -> invalid_state.
+    const badState = `user_123:${Date.now()}:not-a-valid-signature`;
 
-    it('should detect reinstallation', async () => {
-      const { hasInstallation, logInstallationEvent } = require('@/lib/slack/tokenManager');
-      hasInstallation.mockResolvedValue(true);
+    const request = new Request(
+      `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${badState}`,
+      { method: 'GET' }
+    ) as unknown as NextRequest;
 
-      const request = new Request(
-        'https://app.example.com/api/integrations/slack/callback?code=test-code',
-        { method: 'GET' }
-      ) as unknown as NextRequest;
+    await GET(request);
 
-      await GET(request);
+    expect(NextResponse.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('slack_error=invalid_state')
+    );
+  });
 
-      expect(logInstallationEvent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'reinstall',
-        })
-      );
-    });
+  it('exchanges the code, verifies state, and upserts the installation', async () => {
+    const { supabaseAdmin } = require('@/lib/supabaseClient');
+    const state = signedState('user_123', Date.now());
 
-    it('should log new installation', async () => {
-      const { hasInstallation, logInstallationEvent } = require('@/lib/slack/tokenManager');
-      hasInstallation.mockResolvedValue(false);
+    const request = new Request(
+      `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
+      { method: 'GET' }
+    ) as unknown as NextRequest;
 
-      const request = new Request(
-        'https://app.example.com/api/integrations/slack/callback?code=test-code',
-        { method: 'GET' }
-      ) as unknown as NextRequest;
+    await GET(request);
 
-      await GET(request);
-
-      expect(logInstallationEvent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'install',
-        })
-      );
+    expect(NextResponse.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('slack_success=true')
+    );
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('upsert_slack_integration', {
+      p_slack_team_id: 'T123ABC456',
+      p_slack_team_name: 'Test Workspace',
+      p_access_token: 'xoxb-test-token',
+      p_bot_user_id: 'U_BOT_123',
+      p_user_id: 'user_123',
+      p_encryption_key: expect.any(String),
     });
   });
 
-  describe('Error Handling', () => {
-    it('should handle Slack authorization error', async () => {
-      const request = new Request(
-        'https://app.example.com/api/integrations/slack/callback?error=access_denied',
-        { method: 'GET' }
-      ) as unknown as NextRequest;
+  it('links a public install (no valid userId) as a system install', async () => {
+    const { supabaseAdmin } = require('@/lib/supabaseClient');
+    const state = signedState('system', Date.now());
 
-      await GET(request);
+    const request = new Request(
+      `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
+      { method: 'GET' }
+    ) as unknown as NextRequest;
 
-      expect(NextResponse.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('slack_error=access_denied')
-      );
-    });
+    await GET(request);
 
-    it('should handle missing code', async () => {
-      const request = new Request(
-        'https://app.example.com/api/integrations/slack/callback',
-        { method: 'GET' }
-      ) as unknown as NextRequest;
-
-      await GET(request);
-
-      expect(NextResponse.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('slack_error=missing_code')
-      );
-    });
-
-    it('should handle expired state', async () => {
-      // Create state with old timestamp (11 minutes ago)
-      const oldTimestamp = Date.now() - 11 * 60 * 1000;
-      const state = Buffer.from(`user_123:${oldTimestamp}`).toString('base64');
-
-      const request = new Request(
-        `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
-        { method: 'GET' }
-      ) as unknown as NextRequest;
-
-      await GET(request);
-
-      expect(NextResponse.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('slack_error=state_expired')
-      );
-    });
-
-    it('should handle malformed state gracefully', async () => {
-      // Use a state that will fail timestamp parsing (no colon separator)
-      // The route will proceed but without a valid user ID
-      const invalidState = Buffer.from('no_colon_here').toString('base64');
-
-      const request = new Request(
-        `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${invalidState}`,
-        { method: 'GET' }
-      ) as unknown as NextRequest;
-
-      await GET(request);
-
-      // The route proceeds with OAuth flow even with malformed state
-      // It just won't have a valid clerkUserId
-      expect(NextResponse.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('slack_success=true')
-      );
-    });
-
-    it('should handle token exchange failure', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
-        json: () => Promise.resolve({ ok: false, error: 'invalid_code' }),
-      });
-
-      const request = new Request(
-        'https://app.example.com/api/integrations/slack/callback?code=invalid-code',
-        { method: 'GET' }
-      ) as unknown as NextRequest;
-
-      await GET(request);
-
-      expect(NextResponse.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('slack_error=invalid_code')
-      );
-    });
-
-    it('should handle incomplete token response', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
-        json: () =>
-          Promise.resolve({
-            ok: true,
-            // Missing required fields
-            team: { id: 'T123' },
-          }),
-      });
-
-      const request = new Request(
-        'https://app.example.com/api/integrations/slack/callback?code=test-code',
-        { method: 'GET' }
-      ) as unknown as NextRequest;
-
-      await GET(request);
-
-      expect(NextResponse.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('slack_error=incomplete_token_response')
-      );
-    });
-
-    it('should handle missing environment variables', async () => {
-      delete process.env.SLACK_CLIENT_ID;
-
-      const request = new Request(
-        'https://app.example.com/api/integrations/slack/callback?code=test-code',
-        { method: 'GET' }
-      ) as unknown as NextRequest;
-
-      await GET(request);
-
-      expect(NextResponse.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('slack_error=server_configuration_error')
-      );
-    });
-
-    it('should handle network errors', async () => {
-      (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
-
-      const request = new Request(
-        'https://app.example.com/api/integrations/slack/callback?code=test-code',
-        { method: 'GET' }
-      ) as unknown as NextRequest;
-
-      await GET(request);
-
-      expect(NextResponse.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('slack_error=callback_failed')
-      );
-    });
+    expect(NextResponse.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('slack_success=true')
+    );
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith(
+      'upsert_slack_integration',
+      expect.objectContaining({ p_user_id: null })
+    );
   });
 
-  describe('User Context Update', () => {
-    it('should update user context when logged in', async () => {
-      const admin = require('firebase-admin');
-      const mockSet = admin.firestore().collection().doc().collection().doc().set;
-
-      const state = Buffer.from(`user_123:${Date.now()}`).toString('base64');
-
-      const request = new Request(
-        `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
-        { method: 'GET' }
-      ) as unknown as NextRequest;
-
-      await GET(request);
-
-      // Verify user context was updated
-      expect(mockSet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          'integrations.slackEnabled': true,
-          'integrations.slackTeamId': 'T123ABC456',
-        }),
-        { merge: true }
-      );
+  it('returns the Slack error when token exchange fails', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      json: () => Promise.resolve({ ok: false, error: 'invalid_code' }),
     });
+    const state = signedState('user_123', Date.now());
+
+    const request = new Request(
+      `https://app.example.com/api/integrations/slack/callback?code=invalid-code&state=${state}`,
+      { method: 'GET' }
+    ) as unknown as NextRequest;
+
+    await GET(request);
+
+    expect(NextResponse.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('slack_error=invalid_code')
+    );
+  });
+
+  it('returns a db error when the upsert RPC fails', async () => {
+    const { supabaseAdmin } = require('@/lib/supabaseClient');
+    supabaseAdmin.rpc.mockResolvedValueOnce({ error: { message: 'boom' } });
+    const state = signedState('user_123', Date.now());
+
+    const request = new Request(
+      `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
+      { method: 'GET' }
+    ) as unknown as NextRequest;
+
+    await GET(request);
+
+    expect(NextResponse.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('slack_error=db_error')
+    );
+  });
+
+  it('surfaces a server error when the client secret is missing', async () => {
+    delete process.env.SLACK_CLIENT_SECRET;
+    const state = signedState('user_123', Date.now());
+
+    const request = new Request(
+      `https://app.example.com/api/integrations/slack/callback?code=test-code&state=${state}`,
+      { method: 'GET' }
+    ) as unknown as NextRequest;
+
+    await GET(request);
+
+    expect(NextResponse.redirect).toHaveBeenCalledWith(
+      expect.stringContaining('slack_error=server_error')
+    );
   });
 });

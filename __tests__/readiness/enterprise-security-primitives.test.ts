@@ -68,7 +68,9 @@ describe('Enterprise admin/security primitives', () => {
   });
 
   it('keeps license activation and preflight appliance checks env-validated and redacted', () => {
-    const env = read('lib/env.ts');
+    // lib/env.ts re-exports the canonical schema from @lattice-os/core; the
+    // authoritative env var definition lives in the core package schema.
+    const env = read('packages/lattice-core/src/schemas/env.ts');
     const activateLicenseRoute = read('app/api/onboarding/activate-license/route.ts');
     const preflightRoute = read('app/api/preflight/route.ts');
 

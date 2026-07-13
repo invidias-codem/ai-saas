@@ -6,8 +6,69 @@
 import { handleSlideCreation } from '@/lib/slack/handlers/slideHandler';
 import { SlackConfig } from '@/lib/slack';
 
+// Mock the Gemini client so the handler runs deterministically without a
+// live GOOGLE_API_KEY. Returns a valid PresentationStructure JSON.
+jest.mock('@google/generative-ai', () => ({
+  GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
+    getGenerativeModel: jest.fn().mockReturnValue({
+      generateContent: jest.fn().mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({
+              title: 'Test Deck',
+              subtitle: 'Generated for testing',
+              slides: [
+                { title: 'Slide 1', bullets: ['Point A', 'Point B'], layout: 'content' },
+                { title: 'Slide 2', bullets: ['Point C'], layout: 'content' },
+              ],
+            }),
+        },
+      }),
+    }),
+  })),
+}));
+
+// Mock PptxGenJS: the real lib uses a dynamic import internally (jszip) which
+// jest's CJS module environment rejects. Mirror pptxgenjs's CJS export shape
+// (the default export IS the constructor) with a chainable no-op builder that
+// resolves to a Buffer on write.
+jest.mock('pptxgenjs', () => {
+  function MockPptx(this: any) {
+    this.author = '';
+    this.title = '';
+    this.subject = '';
+    this.layout = '';
+  }
+  (MockPptx as any).prototype.addSlide = function () {
+    return { background: {}, addText: () => {}, addShape: () => {}, addImage: () => {} };
+  };
+  (MockPptx as any).prototype.write = function () {
+    return Promise.resolve(Buffer.from('fake-pptx-bytes'));
+  };
+  (MockPptx as any).prototype.ShapeType = { rect: 'rect' };
+  const exp: any = MockPptx;
+  exp.default = MockPptx;
+  exp.__esModule = true;
+  return exp;
+});
+
 // Mock APIs
 global.fetch = jest.fn();
+
+// Realistic uploadV2 sequence so the handler's Slack upload completes
+// deterministically without a live workspace.
+function mockFetch(url: string, _init?: any) {
+  if (typeof url === 'string' && url.includes('files.getUploadURLExternal')) {
+    return Promise.resolve({
+      json: async () => ({ ok: true, upload_url: 'https://slack-upload.test/x', file_id: 'F123' }),
+    });
+  }
+  if (typeof url === 'string' && url.includes('files.completeUploadExternal')) {
+    return Promise.resolve({ json: async () => ({ ok: true, files: [{ id: 'F123' }] }) });
+  }
+  return Promise.resolve({ json: async () => ({ ok: true }) });
+}
+(global.fetch as jest.Mock).mockImplementation(mockFetch);
 
 const mockConfig: SlackConfig = {
     teamId: 'T123ABC',
@@ -28,9 +89,7 @@ const mockEvent = {
 describe('Slide Handler Stress Tests', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        (global.fetch as jest.Mock).mockResolvedValue({
-            json: async () => ({ ok: true }),
-        });
+        (global.fetch as jest.Mock).mockImplementation((url: string, init?: any) => mockFetch(url, init));
     });
 
     describe('Topic Extraction', () => {
@@ -275,10 +334,10 @@ describe('Slide Handler Stress Tests', () => {
         test('should generate valid PPTX files', async () => {
             await handleSlideCreation(mockConfig, mockEvent, 'create slides about AI');
 
-            // Verify files.upload was called
+            // The handler uploads via Slack's files.uploadV2 flow.
             const fetchCalls = (global.fetch as jest.Mock).mock.calls;
             const uploadCalls = fetchCalls.filter(call =>
-                call[0]?.includes('files.upload')
+                call[0]?.includes('files.getUploadURLExternal')
             );
 
             expect(uploadCalls.length).toBeGreaterThan(0);

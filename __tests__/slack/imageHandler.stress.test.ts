@@ -6,13 +6,24 @@
 import { handleImageGeneration } from '@/lib/slack/handlers/imageHandler';
 import { SlackConfig } from '@/lib/slack';
 
+// Mock the image generation service so the handler runs deterministically
+// without a live REPLICATE_API_TOKEN (the real impl calls Replicate/Flux).
+jest.mock('@/lib/imageGeneration', () => ({
+  generateImage: jest.fn().mockResolvedValue({
+    urls: ['https://img.test/generated.png'],
+    model: 'flux-schnell',
+    success: true,
+  }),
+  ImageModel: undefined,
+}));
+
 // Mock Slack API
 global.fetch = jest.fn();
 
 const mockConfig: SlackConfig = {
     teamId: 'T123ABC',
     teamName: 'Test Team',
-    botToken: 'xoxb-test-token',
+    botToken: '«redacted:xox…»',
     botUserId: 'U123BOT',
     scopes: ['chat:write'],
 };
