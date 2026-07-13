@@ -102,7 +102,10 @@ export default function WorkspaceHomePage() {
       <Card className="p-6 border-sky-500/20 bg-sky-500/5">
         <div className="flex items-start gap-4">
           <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20">
-            {modeIcon(workspace?.default_operating_profile?.mode)}
+            {(() => {
+              const ModeIcon = modeIcon(workspace?.default_operating_profile?.mode);
+              return <ModeIcon className="w-6 h-6 text-sky-600" />;
+            })()}
           </div>
           <div className="space-y-2">
             <div className="text-sm uppercase tracking-wide text-sky-700 dark:text-sky-300 font-medium">Operating mode</div>

@@ -123,7 +123,6 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
             title: conv.title,
             createdAt: conv.createdAt,
         });
-        setActiveId(conv.id);
         onNavigate?.();
         router.push(`/conversation/${conv.id}`);
     };

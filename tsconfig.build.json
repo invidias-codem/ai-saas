@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "skipLibCheck": true,
+    "incremental": false
+  },
+  "include": [
+    "next-env.d.ts",
+    "types/**/*.d.ts",
+    "app/[locale]/(auth)/**/*.ts",
+    "app/[locale]/(auth)/**/*.tsx",
+    "app/[locale]/(dashboard)/**/*.ts",
+    "app/[locale]/(dashboard)/**/*.tsx"
+  ],
+  "exclude": [
+    ".next",
+    ".git",
+    "node_modules",
+    "anycrawl",
+    "functions",
+    "packages",
+    "tools",
+    "scripts",
+    "relay-client",
+    "remote"
+  ]
+}

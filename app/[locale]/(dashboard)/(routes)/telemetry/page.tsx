@@ -1,10 +1,11 @@
 "use client";
 
+import { Activity } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Heading } from "@/components/heading";
 import { Card } from "@/components/ui/card";
-import { InteractionAuditViewer } from "@/components/telemetry/InteractionAuditViewer";
 import { TelemetryServiceWorker } from "@/components/telemetry/TelemetryServiceWorker";
-import { useTranslations } from "next-intl";
+import { InteractionAuditViewer } from "@/components/telemetry/InteractionAuditViewer";
 
 export default function TelemetryPage() {
   const t = useTranslations("Settings");
@@ -14,6 +15,7 @@ export default function TelemetryPage() {
       <TelemetryServiceWorker />
 
       <Heading
+        icon={Activity}
         title={t("telemetryTitle") || "Sovereign AI Telemetry"}
         description={
           t("telemetryDesc") ||
