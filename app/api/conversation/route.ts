@@ -164,7 +164,7 @@ export async function POST(req: Request) {
   );
 }
 
-function extractStreamingText(stream: ReadableStream): Promise<string> {
+async function extractStreamingText(stream: ReadableStream): Promise<string> {
   const chunks: string[] = [];
   const reader = stream.getReader();
   const decoder = new TextDecoder();
