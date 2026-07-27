@@ -13,6 +13,7 @@ import { checkTokenBudget, recordTokenUsage } from "@/lib/security/budgetGuard";
 import { estimateTokenCount } from "@/lib/ragMemory";
 import { audit } from "@/lib/security/auditLog";
 import { logger } from "@/lib/logger";
+import { emitConversationMemoryEvent, buildConversationEventContext, conversationModelDecision, memoriesToToolInvocations } from "@/lib/memory/memoryEvents";
 
 export async function POST(req: Request) {
   return withProtectedRoute(
@@ -79,6 +80,7 @@ export async function POST(req: Request) {
           );
         }
 
+        const conversationStart = Date.now();
         let result;
         try {
           result = await generateConversationReply(
@@ -97,6 +99,17 @@ export async function POST(req: Request) {
             logger.info(`[Conversation API] Generation failed, refunding ${cost} credits to ${userId}`);
             await refundCredits(userId, cost, "Refund for failed chat generation");
           }
+          emitConversationMemoryEvent({
+            userId,
+            workspaceId: validationResult.data.workspaceId ?? null,
+            source: "genie",
+            promptText: userQuery,
+            resultSummary: error instanceof Error ? error.message : "Generation failed",
+            tokensIn: estimatedTokens,
+            tokensOut: 0,
+            model: { modelId: result?.debug?.model ?? "unknown", provider: "unknown", fallbackUsed: false },
+            startTime: conversationStart,
+          });
           throw error;
         }
 
@@ -105,7 +118,28 @@ export async function POST(req: Request) {
         void trackAIGeneration({ tool: "chat", model: modelUsed, userId, tokenCount: estimatedTokens, success: true });
         void trackCreditsDeducted({ tool: "chat", credits: cost, userId });
 
-        return new NextResponse(result.stream, {
+        const [clientStream, captureStream] = result.stream.tee();
+
+        void (async () => {
+          try {
+            const text = await extractStreamingText(captureStream);
+            emitConversationMemoryEvent({
+              userId,
+              workspaceId: validationResult.data.workspaceId ?? null,
+              source: "genie",
+              promptText: userQuery,
+              resultSummary: text.slice(-200),
+              tokensIn: estimatedTokens,
+              tokensOut: Math.max(0, text.length - estimatedTokens),
+              model: { modelId: modelUsed, provider: "unknown", fallbackUsed: false },
+              startTime: conversationStart,
+            });
+          } catch (err: any) {
+            logger.error("[Conversation API] Memory capture failed", { error: err?.message || String(err) });
+          }
+        })();
+
+        return new NextResponse(clientStream, {
           headers: {
             "Content-Type": "text/plain; charset=utf-8",
             "X-Debug-Model": result.debug?.model || "unknown",
@@ -128,4 +162,29 @@ export async function POST(req: Request) {
     },
     { idempotencyPrefix: "chat" }
   );
+}
+
+function extractStreamingText(stream: ReadableStream): Promise<string> {
+  const chunks: string[] = [];
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      if (typeof value === 'string') {
+        chunks.push(value);
+      } else if (value) {
+        chunks.push(decoder.decode(value, { stream: true }));
+      }
+    }
+  } catch {
+    // Best-effort text extraction only; never block response delivery on metadata capture.
+  }
+
+  return chunks.join("").replace(/<thought>[\s\S]*?<\/thought>/g, "").trim();
 }
