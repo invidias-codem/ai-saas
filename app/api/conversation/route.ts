@@ -13,7 +13,6 @@ import { checkTokenBudget, recordTokenUsage } from "@/lib/security/budgetGuard";
 import { estimateTokenCount } from "@/lib/ragMemory";
 import { audit } from "@/lib/security/auditLog";
 import { logger } from "@/lib/logger";
-import { emitConversationMemoryEvent, buildConversationEventContext, conversationModelDecision, memoriesToToolInvocations } from "@/lib/memory/memoryEvents";
 
 export async function POST(req: Request) {
   return withProtectedRoute(
