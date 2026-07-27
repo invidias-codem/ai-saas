@@ -25,7 +25,7 @@ type ToolInvocation = {
 type MemoryEvent = {
   id?: string;
   workspaceId?: string | null;
-  sessionId?: string | null;
+  sessionId?: string;
   source: 'siri' | 'genie' | 'system';
   entityRefs?: string[];
   toolInvocations?: ToolInvocation[];
