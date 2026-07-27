@@ -98,17 +98,6 @@ export async function POST(req: Request) {
             logger.info(`[Conversation API] Generation failed, refunding ${cost} credits to ${userId}`);
             await refundCredits(userId, cost, "Refund for failed chat generation");
           }
-          emitConversationMemoryEvent({
-            userId,
-            workspaceId: validationResult.data.workspaceId ?? null,
-            source: "genie",
-            promptText: userQuery,
-            resultSummary: error instanceof Error ? error.message : "Generation failed",
-            tokensIn: estimatedTokens,
-            tokensOut: 0,
-            model: { modelId: result?.debug?.model ?? "unknown", provider: "unknown", fallbackUsed: false },
-            startTime: conversationStart,
-          });
           throw error;
         }
 
@@ -117,28 +106,7 @@ export async function POST(req: Request) {
         void trackAIGeneration({ tool: "chat", model: modelUsed, userId, tokenCount: estimatedTokens, success: true });
         void trackCreditsDeducted({ tool: "chat", credits: cost, userId });
 
-        const [clientStream, captureStream] = result.stream.tee();
-
-        void (async () => {
-          try {
-            const text = await extractStreamingText(captureStream);
-            emitConversationMemoryEvent({
-              userId,
-              workspaceId: validationResult.data.workspaceId ?? null,
-              source: "genie",
-              promptText: userQuery,
-              resultSummary: text.slice(-200),
-              tokensIn: estimatedTokens,
-              tokensOut: Math.max(0, text.length - estimatedTokens),
-              model: { modelId: modelUsed, provider: "unknown", fallbackUsed: false },
-              startTime: conversationStart,
-            });
-          } catch (err: any) {
-            logger.error("[Conversation API] Memory capture failed", { error: err?.message || String(err) });
-          }
-        })();
-
-        return new NextResponse(clientStream, {
+        return new NextResponse(result.stream, {
           headers: {
             "Content-Type": "text/plain; charset=utf-8",
             "X-Debug-Model": result.debug?.model || "unknown",
