@@ -42,6 +42,7 @@ export type AuditAction =
   | 'memory.delete'
   | 'memory.bulk_delete'
   | 'memory.export'
+  | 'memory.event.ingested'
   // Workspace / enterprise administration
   | 'workspace.create'
   | 'workspace.update'

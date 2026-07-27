@@ -58,19 +58,6 @@ function hashPrompt(prompt: string): string {
   }
 
   const normalized = trimmed.replace(/\s+/g, ' ').slice(0, 2000);
-  const data = new TextEncoder().encode(normalized);
-
-  try {
-    if (typeof crypto !== 'undefined' && crypto.subtle) {
-      return crypto.subtle
-        .digest('SHA-256', data)
-        .then((buffer: ArrayBuffer) => Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, '0')).join(''))
-        .catch(() => simpleHash(normalized));
-    }
-  } catch {
-    // noop: fall through to simple hash
-  }
-
   return simpleHash(normalized);
 }
 

@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 
-export const ToolInvocationSchema: z.ZodType<ToolInvocation> = z.object({
+export const ToolInvocationSchema = z.object({
   toolId: z.string().min(1).max(120),
   toolName: z.string().min(1).max(240),
   status: z.enum(['success', 'failure', 'skipped']),
@@ -11,7 +11,7 @@ export const ToolInvocationSchema: z.ZodType<ToolInvocation> = z.object({
   outputSummary: z.string().max(500).optional(),
 });
 
-export const ModelDecisionSchema: z.ZodType<ModelDecision> = z.object({
+export const ModelDecisionSchema = z.object({
   requestedModel: z.string().min(1).max(240),
   routedModel: z.string().min(1).max(240),
   routeReason: z.string().max(500).optional(),
@@ -19,7 +19,7 @@ export const ModelDecisionSchema: z.ZodType<ModelDecision> = z.object({
   provider: z.string().min(1).max(240),
 });
 
-export const MemoryEventSchema: z.ZodType<MemoryEvent> = z.object({
+export const MemoryEventSchema = z.object({
   id: z.string().uuid().optional(),
   workspaceId: z.string().uuid().nullable().optional(),
   userId: z.string().uuid().optional(),
