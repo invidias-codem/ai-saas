@@ -1,0 +1,20 @@
+{
+  "name": "Lattice OS Preview",
+  "short_name": "Preview",
+  "start_url": "/en/dashboard/workspaces/default/memory-center",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0c10",
+  "theme_color": "#6d5dfc",
+  "icons": [
+    {
+      "src": "/Genie.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "lang": "en",
+  "dir": "ltr"
+}

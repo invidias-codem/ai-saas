@@ -82,3 +82,19 @@ This file resolves open architectural questions so contributors stop re-litigati
 **Rationale:**
 - OXC is fast enough for pre-commit hooks.
 - Full migration is churn; benefit is marginal until the team hits a real perf wall.
+
+---
+
+## 8. iOS 27 Siri Observability: PWA-first, Apple account blocked
+
+**Decision:** Ship a web-native PWA Memory Center first. Defer Foundation Models / App Intents / Core AI / Evaluations native iOS integration until an Apple developer account and Xcode 27 are available on this machine.
+
+**Rationale:**
+- No active Apple developer account on the current build host; Xcode-born phases are currently blocked.
+- A PWA delivers the observability layer immediately with the same data model that will later map to SwiftData.
+- Offline-first IndexedDB via `idb` plus service worker + Background Sync gives native-equivalent local persistence.
+- `display: standalone` PWA chrome is close enough for install-to-home-screen testing while waiting for native.
+
+**Tradeoff accepted:** Users do not get on-device Foundation Models or App Intents until Phase 2 unblocks. The backend ingest contract is identical for both PWA and native paths.
+
+**Revisit trigger:** Active Apple developer account + Xcode 27 installed on a build host.
