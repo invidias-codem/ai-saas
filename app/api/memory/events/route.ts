@@ -173,9 +173,6 @@ export async function POST(req: Request) {
 
       if (error) {
         console.error('[memory/events] Supabase insert failed', error);
-        if (!event.id && data?.id) {
-          event.id = data.id;
-        }
       }
     }
 
