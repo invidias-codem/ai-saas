@@ -1,0 +1,110 @@
+#!/usr/bin/env node
+
+const readline = require('readline');
+
+const API_URL = process.env.LATTICE_API_URL || 'http://localhost:3000';
+const USER_ID = process.env.LATTICE_USER_ID || '';
+const TOKEN = process.env.LATTICE_TOKEN || '';
+
+if (!USER_ID) {
+  console.error('LATTICE_USER_ID is required');
+  process.exit(1);
+}
+
+async function main() {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: true,
+  });
+
+  const question = () =>
+    new Promise<string>((resolve) => {
+      rl.question('❯ ', resolve);
+    });
+
+  while (true) {
+    const prompt = await question();
+    const trimmed = prompt.trim();
+    if (!trimmed) continue;
+    if (trimmed === 'exit' || trimmed === 'quit') break;
+
+    process.stdout.write('\n');
+    await streamPrompt(trimmed);
+    process.stdout.write('\n\n');
+  }
+
+  rl.close();
+}
+
+async function streamPrompt(prompt) {
+  const body = JSON.stringify({
+    messages: [
+      { role: 'user', text: prompt },
+    ],
+    options: {},
+  });
+
+  const res = await fetch(`${API_URL}/api/cli/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-lattice-user-id': USER_ID,
+      ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}),
+    },
+    body,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    process.stdout.write(`Error: ${res.status} ${text}\n`);
+    return;
+  }
+
+  if (!res.body) {
+    process.stdout.write('No response stream\n');
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('event:')) continue;
+      if (trimmed.startsWith('data:')) {
+        const raw = trimmed.slice(5).trim();
+        if (!raw.startsWith('{')) {
+          process.stdout.write(raw);
+          continue;
+        }
+
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed.done) continue;
+          if (parsed.error) {
+            process.stdout.write(`\n[error] ${parsed.error}\n`);
+            continue;
+          }
+          process.stdout.write(raw);
+        } catch {
+          process.stdout.write(raw);
+        }
+      }
+    }
+  }
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
