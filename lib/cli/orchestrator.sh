@@ -39,6 +39,14 @@ ensure_lattice_home() {
   mkdir -p "$LATTICE_HOME"
 }
 
+# ─── Token Auth ────────────────────────────────────────────────────────────────
+LATTICE_TOKEN=""
+if [[ -f "$LATTICE_HOME/token" ]]; then
+  LATTICE_TOKEN=$(<"$LATTICE_HOME/token")
+  LATTICE_TOKEN="${LATTICE_TOKEN#"${LATTICE_TOKEN%%[![:space:]]*}"}"
+  LATTICE_TOKEN="${LATTICE_TOKEN%"${LATTICE_TOKEN##*[![:space:]]}"}"
+fi
+
 # ─── Prompt primitive ─────────────────────────────────────────────────────────
 # Usage: lattice_prompt <user_input>
 # Streams SSE from /api/cli/stream and writes text payloads to /dev/tty.
@@ -57,6 +65,11 @@ lattice_prompt() {
   payload=$(jq -cn --arg text "$user_input" '{messages: [{role: "user", text: $text}], options: {}}')
 
   # Stream SSE and parse event/data lines
+  local tty_target="/dev/tty"
+  if [[ ! -t 1 ]]; then
+    tty_target="/dev/stdout"
+  fi
+
   curl -sS -N \
     -X POST \
     -H "Content-Type: application/json" \
@@ -77,7 +90,7 @@ lattice_prompt() {
             if [[ "$raw" == \{* ]]; then
               continue
             fi
-            printf '%s' "$raw" > /dev/tty
+            printf '%s' "$raw" > "$tty_target"
             ;;
         esac
       done
@@ -171,7 +184,7 @@ lattice_memory() {
   # Network fallback
   local api_payload
   api_payload=$(curl -sS -m 5 \
-    "${LATTICE_API}/api/v1/memory?q=$(printf '%s' "$query" | jq -sRr @uri)" \
+    "${LATTICE_API}/api/memory/cli?q=$(printf '%s' "$query" | jq -sRr @uri)" \
     -H "x-lattice-user-id: ${LATTICE_USER_ID:-local}" \
     ${LATTICE_TOKEN:+-H "Authorization: Bearer $LATTICE_TOKEN"} 2>/dev/null || true)
 

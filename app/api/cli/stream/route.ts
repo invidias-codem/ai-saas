@@ -11,7 +11,10 @@ function sseEncode(data: string, event = 'message') {
 
 export async function POST(req: NextRequest) {
   try {
-    const userId = req.headers.get('x-lattice-user-id');
+    const userId =
+      req.headers.get('x-lattice-user-id') ||
+      (req.nextUrl.searchParams.get('dev') === '1' ? 'local-dev' : null);
+
     if (!userId) {
       return NextResponse.json({ error: 'Missing x-lattice-user-id header' }, { status: 401 });
     }

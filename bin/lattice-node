@@ -1,14 +1,32 @@
 #!/usr/bin/env node
 
 const readline = require('readline');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 const API_URL = process.env.LATTICE_API_URL || 'http://localhost:3000';
 const USER_ID = process.env.LATTICE_USER_ID || '';
-const TOKEN = process.env.LATTICE_TOKEN || '';
+let TOKEN = process.env.LATTICE_TOKEN || '';
+const tokenPath = path.join(os.homedir(), '.lattice', 'token');
+try {
+  TOKEN = fs.readFileSync(tokenPath, 'utf8').trim() || TOKEN;
+} catch {}
 
 if (!USER_ID) {
   console.error('LATTICE_USER_ID is required');
   process.exit(1);
+}
+
+function buildHeaders() {
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-lattice-user-id': USER_ID,
+  };
+  if (TOKEN) {
+    headers['Authorization'] = `Bearer ${TOKEN}`;
+  }
+  return headers;
 }
 
 async function main() {
@@ -47,11 +65,7 @@ async function streamPrompt(prompt) {
 
   const res = await fetch(`${API_URL}/api/cli/stream`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-lattice-user-id': USER_ID,
-      ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}),
-    },
+    headers: buildHeaders(),
     body,
   });
 
@@ -104,7 +118,7 @@ async function streamPrompt(prompt) {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((error) => {
+  console.error(error);
   process.exit(1);
 });
