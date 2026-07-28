@@ -13,6 +13,66 @@ import { supabaseAdmin } from '@/lib/supabaseClient';
 import type { FileAttachmentInput } from '@/lib/types/attachments';
 import { resolveAttachmentForAnalysis } from '@/lib/gcp/fileResolver';
 
+async function recordTaskTokenMetrics(params: {
+  userId: string;
+  conversationId?: string | null;
+  requestId: string;
+  featureType: 'chat' | 'code';
+  modelId: string;
+  provider?: string | null;
+  intentCategory?: string | null;
+  executionMode?: string | null;
+  userQuery: string;
+  responseText: string;
+  latencyMs?: number | null;
+  costEstimate?: number | null;
+  bypassCredits?: boolean;
+}) {
+  if (!supabaseAdmin) return;
+
+  const {
+    userId,
+    conversationId,
+    requestId,
+    featureType,
+    modelId,
+    provider,
+    intentCategory,
+    executionMode,
+    userQuery,
+    responseText,
+    latencyMs,
+    costEstimate,
+    bypassCredits,
+  } = params;
+
+  try {
+    const tokensIn = Math.max(0, estimateTokenCount(userQuery));
+    const tokensOut = Math.max(0, estimateTokenCount(responseText));
+    const totalTokens = tokensIn + tokensOut;
+
+    await supabaseAdmin.from('task_token_metrics').insert({
+      user_id: userId,
+      conversation_id: conversationId ?? null,
+      request_id: requestId,
+      feature_type: featureType,
+      model_id: modelId,
+      provider: provider ?? null,
+      intent_category: intentCategory ?? null,
+      execution_mode: executionMode ?? null,
+      tokens_in: tokensIn,
+      tokens_out: tokensOut,
+      total_tokens: totalTokens,
+      cost_estimate: costEstimate ?? null,
+      bypass_credits: bypassCredits ?? false,
+      latency_ms: latencyMs ?? null,
+    });
+  } catch (err) {
+    console.error('[OTel] task_token_metrics insert failed:', err);
+  }
+}
+
+
 export interface PostGenerationPipelineParams {
   userId: string;
   conversationId?: string | null;
@@ -256,10 +316,26 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
 
     console.log(`[${featureType.toUpperCase()}] User: ${userContext.fullName} (${userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
 
-    void trackAIGeneration({ tool: featureType, userId, success: true });
+    void trackAIGeneration({ tool: featureType, model: modelId, userId, tokenCount: tokensUsed, success: true });
     if (!bypassCredits && cost > 0) {
       void trackCreditsDeducted({ tool: featureType, credits: cost, userId });
     }
+
+    void recordTaskTokenMetrics({
+      userId,
+      conversationId,
+      requestId,
+      featureType: featureType as 'chat' | 'code',
+      modelId,
+      provider: routingDecision?.systemProvider ?? null,
+      intentCategory: routingDecision?.intent?.category ?? null,
+      executionMode: routingDecision?.executionPlan?.mode ?? null,
+      userQuery,
+      responseText,
+      latencyMs: null,
+      costEstimate: cost,
+      bypassCredits,
+    });
 
   } catch (err) {
     console.error(`[PostGenerationPipeline] Error in background pipeline for ${featureType}:`, err);
