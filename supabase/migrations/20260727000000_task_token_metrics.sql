@@ -50,3 +50,40 @@ CREATE POLICY "Service role manages task token metrics"
   ON public.task_token_metrics
   FOR ALL
   USING (auth.role() = 'service_role');
+
+-- ─── Async alerting hook ───────────────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION public.notify_otel_task_alert()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  threshold bigint := 20000;
+  payload jsonb := jsonb_build_object('record', row_to_json(NEW));
+  url text := current_setting('app.otel_alert_url', true);
+BEGIN
+  IF url IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  threshold := COALESCE(
+    (current_setting('app.otel_alert_threshold', true) NULLIF '')::bigint,
+    threshold
+  );
+
+  IF NEW.total_tokens > threshold THEN
+    PERFORM net.http_post(
+      url := url,
+      headers := '{"Content-Type":"application/json"}'::jsonb,
+      body := payload
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER task_token_metrics_alert_trigger
+  AFTER INSERT ON public.task_token_metrics
+  FOR EACH ROW
+  EXECUTE FUNCTION public.notify_otel_task_alert();
