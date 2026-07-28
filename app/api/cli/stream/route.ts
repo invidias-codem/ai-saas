@@ -51,6 +51,8 @@ export async function POST(req: NextRequest) {
       {
         disableSideEffects: process.env.DISABLE_SIDE_EFFECTS === 'true',
         disableExternalContext: process.env.DISABLE_EXTERNAL_CONTEXT === 'true',
+        mode: 'fast',
+        sudoPromptNames: ['BashSafety', 'CLIStreamer', 'ToolRouter'],
       }
     );
 

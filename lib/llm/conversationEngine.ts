@@ -41,6 +41,7 @@ import { critiqueLLMOutput } from '@/lib/ucol/critics/OutputCritic';
 import type { UcolMemoryPlan, UcolMemoryScope } from '@/lib/ucol/routing/types';
 import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
 import { createTrace } from '@/lib/observability/langfuse';
+import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 
 // ChatMessageSchema imported from types
 
@@ -92,6 +93,9 @@ export type ConversationEngineOptions = {
 
   /** Slack UI update callback for agent loops */
   slackStreamCallback?: (step: import('@/lib/agents/core/types').TrajectoryStep) => void;
+
+  /** Optional SudoLang prompt names to inject into the system instruction for this request. */
+  sudoPromptNames?: string[];
 };
 
 export type ConversationEngineResult = {
@@ -519,6 +523,19 @@ export async function generateConversationReply(
 
   let enhancedSystemInstruction = getSystemInstruction() +
     "\n\n" + allocation.packedContext;
+
+  if (options.sudoPromptNames?.length) {
+    const loaded: string[] = [];
+    for (const name of options.sudoPromptNames) {
+      try {
+        const content = await loadSudoPrompt(name);
+        if (content) loaded.push(content);
+      } catch {}
+    }
+    if (loaded.length) {
+      enhancedSystemInstruction += "\n\n" + loaded.join("\n\n");
+    }
+  }
 
   if (allocation.omittedSections && allocation.omittedSections.length > 0) {
     const droppedCount = allocation.omittedSections.length;
