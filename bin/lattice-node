@@ -22,10 +22,14 @@ if (!USER_ID) {
 const LATTICE_HOME = path.join(os.homedir(), '.lattice');
 const SETTINGS_PATH = path.join(LATTICE_HOME, 'settings');
 
-let settings = {};
-try {
-  if (fs.existsSync(SETTINGS_PATH)) {
+let settings = { approval_mode: 'prompt', approved_commands: 'ls,cat,pwd,whoami,date,echo,git status,git diff' };
+let approvedCommands = settings.approved_commands.split(',').map(s => s.trim()).filter(Boolean);
+
+function readSettings() {
+  try {
+    if (!fs.existsSync(SETTINGS_PATH)) return settings;
     const raw = fs.readFileSync(SETTINGS_PATH, 'utf8');
+    const next = { ...settings };
     for (const line of raw.split(/\n+/)) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
@@ -33,12 +37,15 @@ try {
       if (eq <= 0) continue;
       const k = trimmed.slice(0, eq).trim();
       const v = trimmed.slice(eq + 1).trim();
-      if (k) settings[k] = v;
+      if (k) next[k] = v;
     }
+    settings = next;
+    approvedCommands = String(settings.approved_commands || '').split(',').map(s => s.trim()).filter(Boolean);
+    return settings;
+  } catch {
+    return settings;
   }
-} catch {}
-
-const APPROVED_COMMANDS = String(settings.approved_commands || 'ls,cat,pwd,whoami,date,echo,git status,git diff').split(',').map(s => s.trim()).filter(Boolean);
+}
 
 function buildHeaders() {
   const headers = {
@@ -57,33 +64,21 @@ function isRemoteURL(str) {
   return /^(https?:)?\/\//i.test(trimmed) || /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed);
 }
 
-function readSettings() {
-  try {
-    if (!fs.existsSync(SETTINGS_PATH)) return settings;
-    const raw = fs.readFileSync(SETTINGS_PATH, 'utf8');
-    const next = { ...settings };
-    for (const line of raw.split(/\n+/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eq = trimmed.indexOf('=');
-      if (eq <= 0) continue;
-      const k = trimmed.slice(0, eq).trim();
-      const v = trimmed.slice(eq + 1).trim();
-      if (k) next[k] = v;
-    }
-    settings = next;
-    APPROVED_COMMANDS.length = 0;
-    (String(settings.approved_commands || 'ls,cat,pwd,whoami,date,echo,git status,git diff').split(',').map(s => s.trim()).filter(Boolean)).forEach(v => APPROVED_COMMANDS.push(v));
-    return settings;
-  } catch {
-    return settings;
-  }
-}
-
 function isApprovedCommand(cmd) {
   if (!cmd || typeof cmd !== 'string') return false;
-  const first = cmd.trim().split(/\s+/)[0];
-  return APPROVED_COMMANDS.some(approved => cmd.trim() === approved || first === approved);
+  const trimmed = cmd.trim();
+  const first = trimmed.split(/\s+/)[0];
+  return approvedCommands.some(approved => trimmed === approved || first === approved);
+}
+
+function approvalDecision(cmd) {
+  if (!cmd || typeof cmd !== 'string') return 'deny';
+  if (isRemoteURL(cmd)) return 'deny';
+  if (isApprovedCommand(cmd)) return 'auto';
+  const mode = String(settings.approval_mode || 'prompt').trim().toLowerCase();
+  if (mode === 'auto') return 'auto';
+  if (mode === 'deny') return 'deny';
+  return 'prompt';
 }
 
 function runLocalBash(cmd, cwd = process.cwd()) {
@@ -108,14 +103,28 @@ function buildLocalResponse(command, result) {
   };
 }
 
-async function parseLocalIntent(promptText) {
-  const normalized = String(promptText || '').trim();
-  if (!normalized) return { kind: 'chat' };
-  if (/^(ls|list|find)\s/i.test(normalized) && !isRemoteURL(normalized)) return { kind: 'local_shell', suggestion: `ls -la ${normalized}` };
-  if (/^(cat)\s/i.test(normalized) && !isRemoteURL(normalized)) return { kind: 'local_shell', suggestion: `${normalized}` };
-  if (/^(pwd|whoami|date|echo)\s/i.test(normalized)) return { kind: 'local_shell', suggestion: normalized };
-  if (/^git\s+(status|diff|log|branch)\s/i.test(normalized)) return { kind: 'local_shell', suggestion: normalized };
-  return { kind: 'chat' };
+function buildLocalRejected(command, reason) {
+  return {
+    command,
+    mode: 'local',
+    status: 'rejected',
+    stdout: '',
+    stderr: reason,
+  };
+}
+
+async function promptUserForAuth(cmd) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+  try {
+    return await new Promise((resolve) => {
+      rl.question(`[lattice-guard] Approve command? [y/N] ${cmd}\n> `, (answer) => {
+        resolve(/^[Yy]$/.test(String(answer || '').trim()));
+      });
+    });
+  } finally {
+    rl.close();
+  }
 }
 
 async function main() {
@@ -199,8 +208,15 @@ async function streamPrompt(prompt, opts = {}) {
           try {
             const parsed = JSON.parse(raw);
             if (parsed.execution?.local) {
-              const result = await runLocalBash(parsed.execution.command, parsed.execution.cwd);
-              const localResponse = buildLocalResponse(parsed.execution.command, result);
+              const cmd = parsed.execution.command;
+              const decision = approvalDecision(cmd);
+              if (decision === 'deny' || (decision === 'prompt' && !(await promptUserForAuth(cmd)))) {
+                const rejected = buildLocalRejected(cmd, 'Command blocked by local approval matrix');
+                console.log(JSON.stringify({ event: 'local_result', data: JSON.stringify(rejected) }));
+                continue;
+              }
+              const result = await runLocalBash(cmd, parsed.execution.cwd);
+              const localResponse = buildLocalResponse(cmd, result);
               console.log(JSON.stringify({ event: 'local_result', data: JSON.stringify(localResponse) }));
               continue;
             }
