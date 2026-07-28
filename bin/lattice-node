@@ -19,7 +19,7 @@ async function main() {
   });
 
   const question = () =>
-    new Promise<string>((resolve) => {
+    new Promise((resolve) => {
       rl.question('❯ ', resolve);
     });
 
