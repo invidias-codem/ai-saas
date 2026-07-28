@@ -4,6 +4,7 @@ const readline = require('readline');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawn } = require('child_process');
 
 const API_URL = process.env.LATTICE_API_URL || 'http://localhost:3000';
 const USER_ID = process.env.LATTICE_USER_ID || '';
@@ -18,6 +19,27 @@ if (!USER_ID) {
   process.exit(1);
 }
 
+const LATTICE_HOME = path.join(os.homedir(), '.lattice');
+const SETTINGS_PATH = path.join(LATTICE_HOME, 'settings');
+
+let settings = {};
+try {
+  if (fs.existsSync(SETTINGS_PATH)) {
+    const raw = fs.readFileSync(SETTINGS_PATH, 'utf8');
+    for (const line of raw.split(/\n+/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq <= 0) continue;
+      const k = trimmed.slice(0, eq).trim();
+      const v = trimmed.slice(eq + 1).trim();
+      if (k) settings[k] = v;
+    }
+  }
+} catch {}
+
+const APPROVED_COMMANDS = String(settings.approved_commands || 'ls,cat,pwd,whoami,date,echo,git status,git diff').split(',').map(s => s.trim()).filter(Boolean);
+
 function buildHeaders() {
   const headers = {
     'Content-Type': 'application/json',
@@ -29,12 +51,86 @@ function buildHeaders() {
   return headers;
 }
 
+function isRemoteURL(str) {
+  if (!str || typeof str !== 'string') return false;
+  const trimmed = str.trim();
+  return /^(https?:)?\/\//i.test(trimmed) || /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed);
+}
+
+function readSettings() {
+  try {
+    if (!fs.existsSync(SETTINGS_PATH)) return settings;
+    const raw = fs.readFileSync(SETTINGS_PATH, 'utf8');
+    const next = { ...settings };
+    for (const line of raw.split(/\n+/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq <= 0) continue;
+      const k = trimmed.slice(0, eq).trim();
+      const v = trimmed.slice(eq + 1).trim();
+      if (k) next[k] = v;
+    }
+    settings = next;
+    APPROVED_COMMANDS.length = 0;
+    (String(settings.approved_commands || 'ls,cat,pwd,whoami,date,echo,git status,git diff').split(',').map(s => s.trim()).filter(Boolean)).forEach(v => APPROVED_COMMANDS.push(v));
+    return settings;
+  } catch {
+    return settings;
+  }
+}
+
+function isApprovedCommand(cmd) {
+  if (!cmd || typeof cmd !== 'string') return false;
+  const first = cmd.trim().split(/\s+/)[0];
+  return APPROVED_COMMANDS.some(approved => cmd.trim() === approved || first === approved);
+}
+
+function runLocalBash(cmd, cwd = process.cwd()) {
+  return new Promise((resolve) => {
+    const child = spawn('bash', ['-lc', cmd], { cwd, env: process.env });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', d => { stdout += d.toString(); });
+    child.stderr.on('data', d => { stderr += d.toString(); });
+    child.on('error', err => resolve({ command: cmd, status: 'error', stdout: '', stderr: String(err?.message || err) }));
+    child.on('close', code => resolve({ command: cmd, status: `exit:${String(code)}`, stdout, stderr }));
+  });
+}
+
+function buildLocalResponse(command, result) {
+  return {
+    command,
+    mode: 'local',
+    status: result.status,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
+async function parseLocalIntent(promptText) {
+  const normalized = String(promptText || '').trim();
+  if (!normalized) return { kind: 'chat' };
+  if (/^(ls|list|find)\s/i.test(normalized) && !isRemoteURL(normalized)) return { kind: 'local_shell', suggestion: `ls -la ${normalized}` };
+  if (/^(cat)\s/i.test(normalized) && !isRemoteURL(normalized)) return { kind: 'local_shell', suggestion: `${normalized}` };
+  if (/^(pwd|whoami|date|echo)\s/i.test(normalized)) return { kind: 'local_shell', suggestion: normalized };
+  if (/^git\s+(status|diff|log|branch)\s/i.test(normalized)) return { kind: 'local_shell', suggestion: normalized };
+  return { kind: 'chat' };
+}
+
 async function main() {
+  readSettings();
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     terminal: true,
   });
+
+  const args = process.argv.slice(2);
+  const localFlagIndex = args.indexOf('--local');
+  const localMode = localFlagIndex !== -1;
+  const promptIndex = args.indexOf('prompt');
+  const explicitPrompt = promptIndex !== -1 ? args.slice(promptIndex + 1).join(' ') : '';
 
   const question = () =>
     new Promise((resolve) => {
@@ -42,25 +138,27 @@ async function main() {
     });
 
   while (true) {
-    const prompt = await question();
+    const prompt = explicitPrompt || await question();
     const trimmed = prompt.trim();
     if (!trimmed) continue;
     if (trimmed === 'exit' || trimmed === 'quit') break;
 
     process.stdout.write('\n');
-    await streamPrompt(trimmed);
+    await streamPrompt(trimmed, { localMode });
     process.stdout.write('\n\n');
   }
 
   rl.close();
 }
 
-async function streamPrompt(prompt) {
+async function streamPrompt(prompt, opts = {}) {
   const body = JSON.stringify({
     messages: [
       { role: 'user', text: prompt },
     ],
-    options: {},
+    options: {
+      localMode: !!opts.localMode,
+    },
   });
 
   const res = await fetch(`${API_URL}/api/cli/stream`, {
@@ -97,22 +195,25 @@ async function streamPrompt(prompt) {
       if (!trimmed || trimmed.startsWith('event:')) continue;
       if (trimmed.startsWith('data:')) {
         const raw = trimmed.slice(5).trim();
-        if (!raw.startsWith('{')) {
-          process.stdout.write(raw);
-          continue;
-        }
-
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed.done) continue;
-          if (parsed.error) {
-            process.stdout.write(`\n[error] ${parsed.error}\n`);
-            continue;
+        if (raw.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed.execution?.local) {
+              const result = await runLocalBash(parsed.execution.command, parsed.execution.cwd);
+              const localResponse = buildLocalResponse(parsed.execution.command, result);
+              console.log(JSON.stringify({ event: 'local_result', data: JSON.stringify(localResponse) }));
+              continue;
+            }
+            if (parsed.done) continue;
+            if (parsed.error) {
+              process.stdout.write(`\n[error] ${parsed.error}\n`);
+              continue;
+            }
+          } catch {
+            // fall through and write raw
           }
-          process.stdout.write(raw);
-        } catch {
-          process.stdout.write(raw);
         }
+        process.stdout.write(raw);
       }
     }
   }
