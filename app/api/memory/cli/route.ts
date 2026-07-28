@@ -3,7 +3,18 @@ import { listMemories, storeMemory } from '@/lib/memory/vectorStore';
 
 export const dynamic = 'force-dynamic';
 
+const LATTICE_CLI_TOKEN = process.env.LATTICE_CLI_TOKEN || '';
+
 export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get('authorization') || '';
+  const provided = authHeader.startsWith('Bearer ')
+    ? authHeader.slice('Bearer '.length).trim()
+    : null;
+
+  if (!LATTICE_CLI_TOKEN || !provided || provided !== LATTICE_CLI_TOKEN) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const userId =
     req.headers.get('x-lattice-user-id') ||
     req.nextUrl.searchParams.get('userId');
@@ -24,6 +35,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authHeader = req.headers.get('authorization') || '';
+  const provided = authHeader.startsWith('Bearer ')
+    ? authHeader.slice('Bearer '.length).trim()
+    : null;
+
+  if (!LATTICE_CLI_TOKEN || !provided || provided !== LATTICE_CLI_TOKEN) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const userId =
     req.headers.get('x-lattice-user-id') ||
     (await req.json().catch(() => ({}))).userId;
@@ -40,7 +60,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const id = await storeMemory(userId, content, type || 'fact', metadata ?? {}, { scope: 'cli' });
+    const id = await storeMemory(userId, content, type || 'fact', metadata ?? {}, { scope: 'user' });
     return NextResponse.json({ success: true, id });
   } catch {
     return NextResponse.json({ error: 'Failed to store memory' }, { status: 500 });

@@ -9,12 +9,20 @@ function sseEncode(data: string, event = 'message') {
   return new TextEncoder().encode(payload);
 }
 
+const LATTICE_CLI_TOKEN = process.env.LATTICE_CLI_TOKEN || '';
+
 export async function POST(req: NextRequest) {
   try {
-    const userId =
-      req.headers.get('x-lattice-user-id') ||
-      (req.nextUrl.searchParams.get('dev') === '1' ? 'local-dev' : null);
+    const authHeader = req.headers.get('authorization') || '';
+    const provided = authHeader.startsWith('Bearer ')
+      ? authHeader.slice('Bearer '.length).trim()
+      : null;
 
+    if (!LATTICE_CLI_TOKEN || !provided || provided !== LATTICE_CLI_TOKEN) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const userId = req.headers.get('x-lattice-user-id') || 'cli-token-auth';
     if (!userId) {
       return NextResponse.json({ error: 'Missing x-lattice-user-id header' }, { status: 401 });
     }
@@ -100,3 +108,6 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export const runtime = 'nodejs';
+
