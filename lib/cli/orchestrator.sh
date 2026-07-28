@@ -39,6 +39,60 @@ ensure_lattice_home() {
   mkdir -p "$LATTICE_HOME"
 }
 
+# ─── Context window limits ────────────────────────────────────────────────────
+LATTICE_CONTEXT_HIGH_WATER=${LATTICE_CONTEXT_HIGH_WATER:-92}
+LATTICE_CONTEXT_LOW_WATER=${LATTICE_CONTEXT_LOW_WATER:-75}
+LATTICE_CONTEXT_FILE="${LATTICE_CONTEXT_FILE:-$LATTICE_HOME/context.json}"
+
+context_bytes() {
+  local ctx_file="${1:-$LATTICE_CONTEXT_FILE}"
+  if [[ -f "$ctx_file" ]]; then
+    wc -c < "$ctx_file" | tr -d ' '
+  else
+    echo 0
+  fi
+}
+
+context_threshold_exceeded() {
+  local ctx_bytes
+  ctx_bytes=$(context_bytes "$1")
+  local budget=${LATTICE_CONTEXT_BUDGET_BYTES:-120000}
+  if [[ "$budget" -le 0 ]]; then
+    return 1
+  fi
+  local pct
+  pct=$(( (ctx_bytes * 100) / budget ))
+  [[ "$pct" -ge "$LATTICE_CONTEXT_HIGH_WATER" ]]
+}
+
+append_context() {
+  local text="$1"
+  local ctx_file="${2:-$LATTICE_CONTEXT_FILE}"
+  ensure_lattice_home
+  if [[ -f "$ctx_file" ]]; then
+    tmp=$(mktemp)
+    cat "$ctx_file" > "$tmp"
+    printf '%s
+%s
+' "$(cat "$tmp")" "$text" > "$ctx_file"
+    rm -f "$tmp"
+  else
+    printf '%s
+' "$text" > "$ctx_file"
+  fi
+}
+
+flush_context() {
+  local ctx_file="${1:-$LATTICE_CONTEXT_FILE}"
+  local summary_file="${2:-$LATTICE_HOME/context.summary.json}"
+  ensure_lattice_home
+  if [[ -f "$ctx_file" ]]; then
+    mv -f "$ctx_file" "$ctx_file.bak"
+  fi
+  printf '{"compacted_at":"%s","note":"context flushed after high-water mark %s%%"}
+' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$LATTICE_CONTEXT_HIGH_WATER" > "$summary_file"
+}
+
 # ─── Token Auth ────────────────────────────────────────────────────────────────
 LATTICE_TOKEN=""
 if [[ -f "$LATTICE_HOME/token" ]]; then
@@ -91,9 +145,24 @@ lattice_prompt() {
               continue
             fi
             printf '%s' "$raw" > "$tty_target"
+            # Accumulate unbracketed text fragments for compaction bookkeeping
+            if [[ -n "$raw" ]]; then
+              tmp_ctx="${tmpdir}/context.append"
+              printf '%s
+' "$raw" >> "$tmp_ctx"
+            fi
             ;;
         esac
       done
+
+  if [[ -f "${tmpdir}/context.append" ]]; then
+    append_context "$(cat "${tmpdir}/context.append")" "$LATTICE_CONTEXT_FILE"
+  fi
+  if context_threshold_exceeded "$LATTICE_CONTEXT_FILE"; then
+    warn "Context high-water mark reached; running compaction"
+    lattice_compact "$LATTICE_CONTEXT_FILE" "$LATTICE_HOME/context.summary.json" >/dev/null 2>&1 || true
+    flush_context "$LATTICE_CONTEXT_FILE" "$LATTICE_HOME/context.summary.json"
+  fi
 }
 
 # ─── Tool primitive ───────────────────────────────────────────────────────────
