@@ -125,6 +125,13 @@ Some API routes must remain public because they are integration or webhook entry
 - `/api/test-mcts`
 - `/api/webhooks/vercel-logs`
 
+### Explicit exclusions
+The following are **not** public despite having client-side entry points or non-browser consumers:
+- `/api/cli/stream`
+- `/api/memory/cli`
+
+These routes require bearer-token auth when `LATTICE_CLI_TOKEN` is configured. They must not be treated as public in proxy allowlists or route ops.
+
 ### Important note
 Public API surface does **not** mean low-risk surface.
 Many of these routes are public because they must accept external traffic, but they still require:

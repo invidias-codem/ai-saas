@@ -252,6 +252,29 @@ This is a trust zone because operator actions often exceed normal application pe
 
 ---
 
+## 9. Terminal / Raw SSE + Local Sandbox Zone
+
+### Who this includes
+- CLI clients and local shell loops
+- machine-local automation calling `/api/cli/stream` and `/api/memory/cli`
+- local approval-matrix behavior in `~/.lattice/settings`
+
+### Why this matters
+This zone is technically remote-backed but authority is split between:
+- the server stream API
+- local client trust decisions
+- user-gated execution in the shell loop
+
+It is not public, and it is not equivalent to normal authenticated product usage.
+
+### Rules in this zone
+- `/api/cli/stream` and `/api/memory/cli` require bearer-token auth when `LATTICE_CLI_TOKEN` is configured
+- local approval modes affect execution authority, not server trust
+- bearer tokens must not be treated like anonymous or public credentials
+- proxy or transport layers must not expose these routes as public by omission
+
+---
+
 ## Boundary Types
 
 Trust boundaries in this system appear in multiple forms.
