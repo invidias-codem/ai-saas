@@ -313,16 +313,13 @@ function CodePageContent() {
 
   useEffect(() => {
     // Initial memory-count load on mount — a data-fetch effect.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMemoryCount();
   }, []);
 
   // Trigger fetch on new message (bot response)
   useEffect(() => {
     if (messages.length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchMemoryCount();
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsMemoryPulsing(true);
       const timer = setTimeout(() => setIsMemoryPulsing(false), 2000);
       return () => clearTimeout(timer);

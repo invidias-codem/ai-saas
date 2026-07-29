@@ -767,9 +767,7 @@ async function dispatchEngineerPlanning(task: string, userId: string): Promise<R
     return { response_type: 'ephemeral', text: '⚙️ Engineering tasks are only available in local development mode.' };
   }
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { execFileSync } = require('child_process') as typeof import('child_process');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require('path') as typeof import('path');
     // Sourced from env so Turbopack cannot statically trace it as a module
     const scriptPath = process.env.ENGINEER_SCRIPT_PATH as string;

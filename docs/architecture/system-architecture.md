@@ -174,6 +174,28 @@ This layer should be understood as part of the production system, not as “extr
 
 ---
 
+## 6. Terminal / Raw SSE Layer
+
+### What it includes
+- `/api/cli/stream`
+- `/api/memory/cli`
+- local CLI shims and terminal-native consumers
+
+### Responsibilities
+- stream assistant responses as raw SSE
+- emit typed lifecycle deltas for text, tool use, completion, and local execution
+- preserve line-framed chunk semantics across proxy/CDN hops
+- support CLI orchestration, local approval matrices, and memory calls without browser middleware
+
+### Why this matters
+This layer is terminal-native by design. It cannot rely on browser retry behavior, ServiceWorker buffering, or framework fetch wrappers. It depends on:
+- stable chunked transfer semantics
+- explicit event taxonomy
+- client-side timeout and recovery rules
+- proxy policies that do not buffer or rewrite SSE frames
+
+---
+
 ## Cross-Cutting Architecture Themes
 
 ## A. Workspace-First Model

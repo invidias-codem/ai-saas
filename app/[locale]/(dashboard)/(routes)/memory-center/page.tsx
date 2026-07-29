@@ -83,9 +83,10 @@ export default function MemoryCenterPage() {
       .catch((error) => console.debug('[MemoryCenter] SW skip:', error));
   }, []);
 
-  const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
   useEffect(() => {
-    setNetworkReady(online);
+    if (typeof navigator !== 'undefined') {
+      setNetworkReady(navigator.onLine);
+    }
     if (typeof window === 'undefined') return;
     const handleOnline = () => setNetworkReady(true);
     const handleOffline = () => setNetworkReady(false);
@@ -95,7 +96,7 @@ export default function MemoryCenterPage() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [online]);
+  }, []);
 
   const refresh = async () => {
     setLoading(true);
