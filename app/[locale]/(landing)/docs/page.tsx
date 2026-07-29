@@ -444,11 +444,13 @@ export default function DocsPage() {
                     </section>
 
                     <section id="start-here" className="scroll-mt-24 border-t border-border pt-10 md:scroll-mt-32 md:pt-16">
-                        <h2 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">New user path</h2>
-                        <p className="text-muted-foreground mb-8 max-w-3xl">
-                            If someone just received access, this is the shortest path from zero context to a working local Lattice OS instance.
-                        </p>
-                        <div className="grid gap-4">
+                        <div className="max-w-[58rem]">
+                            <h2 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">New user path</h2>
+                            <p className="text-muted-foreground mb-8 max-w-2xl">
+                                If someone just received access, this is the shortest path from zero context to a working local Lattice OS instance.
+                            </p>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2">
                             {onboardingPath.map((item) => (
                                 <div key={item.step} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
