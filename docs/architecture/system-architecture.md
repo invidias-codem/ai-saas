@@ -23,6 +23,7 @@ The root Next.js app depends on the workspace packages at `workspace:*` versions
 | API/server behavior | `app/api/**/*` route handlers |
 | Persistence | Supabase + PostgreSQL (server-side only) |
 | Automation/integration | Cron jobs, webhook routes, MCP adapters |
+| Terminal / Raw SSE | `/api/cli/stream`, `/api/memory/cli`, local CLI shim path |
 
 ## Build & Deploy
 
@@ -46,13 +47,14 @@ This document is a backbone architecture overview, not a full subsystem spec.
 
 ## High-Level View
 
-At a broad level, Lattice OS consists of five major architectural layers:
+At a broad level, Lattice OS consists of six major architectural layers:
 
 1. **Public web surface**
 2. **Authenticated application surface**
 3. **API and server behavior layer**
 4. **Data / persistence layer**
 5. **Automation / integration layer**
+6. **Terminal / Raw SSE layer**
 
 These layers are connected, but they serve different audiences and have different trust boundaries.
 

@@ -214,15 +214,17 @@ Verify:
 - request/response contract alignment
 - any relevant debug headers or backend indicators
 
-## Schema-Dependent Changes
-Verify:
-- required tables/functions/columns exist in live DB
-- no schema-cache or missing-table errors remain
-
 ## Cron/Automation Changes
 Verify:
 - job runs actually complete
 - operational logs over time remain healthy
+
+## Terminal / Raw SSE Changes
+Verify:
+- stream remains line-framed after proxy/CDN hops
+- chunked transfer is preserved
+- client recovers cleanly from timeout or dropped connection
+- `/api/cli/stream` does not buffer or prematurely terminate idle connections
 
 ---
 
