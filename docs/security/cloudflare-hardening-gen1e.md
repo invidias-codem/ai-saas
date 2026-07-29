@@ -203,3 +203,61 @@ curl -sI https://gen1e.xyz | grep strict-transport
 | **LOW** | Strip x-clerk-* headers | ⬜ Add Transform Rules |
 | **BONUS** | WAF rules (wp-config, rate limit) | ⬜ Add if Pro plan |
 | **BONUS** | SSL/TLS Full Strict | ⬜ Verify in SSL settings |
+
+---
+
+## 7. SSE /cli/stream Proxy and Timeout Behavior
+
+The new terminal-native architecture depends on `/api/cli/stream` behaving like raw SSE. Cloudflare, by default, applies 100-second idle timeouts and may buffer or coalesce small chunks. Both behaviors break long agent tool sequences.
+
+### Required settings
+
+- `/api/cli/stream` **must** bypass unnecessary caching and buffering at the edge.
+- Do **not** use `Cache Level: Standard` for this route.
+- Use `Cache Level: Bypass` so Cloudflare does not store or coalesce chunked frames.
+- Ensure chunked transfer support remains enabled so `Transfer-Encoding: chunked` is honored end-to-end.
+
+### Cloudflare timeout reality
+
+- Cloudflare can terminate an idle SSE connection after about `100` seconds.
+- If the assistant is silent or only emitting keepalive whitespace, client reads will stop.
+- Document recovery behavior in CLI clients and backend tool loops, rather than trying to avoid silence entirely.
+
+### Client reconnection behavior
+
+- On timeout or dropped connection, terminate the stream gracefully instead of blocking indefinitely.
+- Surface "stream timeout" to the user rather than leaving the shell loop waiting forever.
+- Optional: client-side resume/retry with idempotent request reconstruction if workflow requires it.
+
+### Verification
+
+```bash
+# 1. Confirm chunked transfer support
+curl -N -I -X POST http://localhost:3000/api/cli/stream \
+  -H "Content-Type: application/json" \
+  -H "x-lattice-user-id: local-dev" \
+  -d '{"messages":[{"role":"user","text":"ping"}],"options":{}}' \
+  | grep -i "transfer-encoding"
+
+# Expected: transfer-encoding: chunked
+
+# 2. Confirm SSE line framing is preserved through Cloudflare
+curl -N -s http://localhost:3000/api/cli/stream \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "x-lattice-user-id: local-dev" \
+  -d '{"messages":[{"role":"user","text":"ping"}],"options":{}}' \
+  | sed -n '1,5p'
+
+# Expected: event:/data: lines with no buffering/rewrap
+```
+
+### Operational note
+
+If the deployment introduces additional proxy or CDN hops beyond Cloudflare, each hop must preserve:
+- chunked streaming semantics
+- keepalive behavior
+- SSE event ordering
+
+Any future rewrite or caching layer must preserve these properties for `/api/cli/stream` and `/api/memory/cli`.
+
