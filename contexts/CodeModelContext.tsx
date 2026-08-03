@@ -2,10 +2,13 @@
 
 import React, { createContext, useContext, useSyncExternalStore } from "react";
 import { CodeAgentMode } from "@/lib/llm/types";
+import type { ProviderKeyState } from "@/lib/llm/codeModels";
 
 interface CodeModelContextType {
-    codeModel: CodeAgentMode;
-    setCodeModel: (mode: CodeAgentMode) => void;
+    codeModel: string;
+    setCodeModel: (mode: string) => void;
+    providerKeyState: ProviderKeyState;
+    setProviderKeyState: (state: ProviderKeyState) => void;
 }
 
 const CodeModelContext = createContext<CodeModelContextType | undefined>(undefined);
@@ -24,26 +27,30 @@ export function CodeModelProvider({ children }: { children: React.ReactNode }) {
         listeners.current.forEach((l) => l());
     };
 
-    // codeModel is a client-only snapshot of localStorage; reading it during
-    // render (via useSyncExternalStore) avoids a mount-time setState.
+    const [codeModelRaw, setCodeModelRaw] = React.useState<string>(() => {
+        if (typeof window === 'undefined') return 'fast';
+        const saved = localStorage.getItem('codeModel');
+        return saved && ['fast', 'quality', 'agentic', 'reasoning', 'openrouter-llama-4', 'openrouter-qwen3-235b', 'openrouter-deepseek-r1'].includes(saved)
+            ? saved
+            : 'fast';
+    });
+
+    const [providerKeyState, setProviderKeyState] = React.useState<ProviderKeyState>({});
+
     const codeModel = useSyncExternalStore(
         subscribe,
-        () => {
-            const saved = localStorage.getItem("codeModel") as CodeAgentMode;
-            return saved && ["fast", "quality", "agentic"].includes(saved)
-                ? saved
-                : "fast";
-        },
-        () => "fast" as CodeAgentMode
+        () => codeModelRaw,
+        () => 'fast'
     );
 
-    const setCodeModel = (mode: CodeAgentMode) => {
-        localStorage.setItem("codeModel", mode);
+    const setCodeModel = (mode: string) => {
+        localStorage.setItem('codeModel', mode);
+        setCodeModelRaw(mode);
         emit();
     };
 
     return (
-        <CodeModelContext.Provider value={{ codeModel, setCodeModel }}>
+        <CodeModelContext.Provider value={{ codeModel, setCodeModel, providerKeyState, setProviderKeyState }}>
             {children}
         </CodeModelContext.Provider>
     );
@@ -52,7 +59,7 @@ export function CodeModelProvider({ children }: { children: React.ReactNode }) {
 export function useCodeModel() {
     const context = useContext(CodeModelContext);
     if (context === undefined) {
-        throw new Error("useCodeModel must be used within a CodeModelProvider");
+        throw new Error('useCodeModel must be used within a CodeModelProvider');
     }
     return context;
 }

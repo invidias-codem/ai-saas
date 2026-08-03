@@ -128,6 +128,7 @@ export async function runCodeEngine({
   const enhancedPromptText = gatheredPromptText + buildAttachmentPromptBlock(resolvedAttachment);
   const systemInstruction = CODE_SYSTEM_INSTRUCTION_TEXT + "\n\n" + HARNESS_INSTRUCTIONS;
   const providerKeys = await getUserProviderApiKeys(userId);
+  const nativeProviderKeys = await (await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys);
 
   const responseText = await executeAgentLoop({
     enhancedPromptText,
@@ -140,7 +141,7 @@ export async function runCodeEngine({
       base64Data: resolvedAttachment.base64Data,
     } : undefined,
     systemInstruction,
-    providerKeys,
+    providerKeys: nativeProviderKeys,
   });
 
   // ── Sovereign telemetry: emit UDIF 2.0 interaction-audit (non-blocking) ──

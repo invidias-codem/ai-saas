@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
-export type ProviderName = 'openai' | 'anthropic' | 'google';
+export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter';
 
 export type ProviderApiKeys = Partial<Record<ProviderName, string>>;
 
@@ -10,7 +10,7 @@ export type ProviderKeyStatus = Record<ProviderName, {
   updatedAt: string | null;
 }>;
 
-const PROVIDERS: ProviderName[] = ['openai', 'anthropic', 'google'];
+const PROVIDERS: ProviderName[] = ['openai', 'anthropic', 'google', 'openrouter'];
 
 export function isProviderName(provider: string): provider is ProviderName {
   return PROVIDERS.includes(provider as ProviderName);
@@ -27,6 +27,9 @@ export function maskProviderKey(apiKey: string | null | undefined): string | nul
   if (apiKey.startsWith('AIza') && apiKey.length > 12) {
     return `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}`;
   }
+  if (apiKey.startsWith('sk-or-v1-') && apiKey.length > 14) {
+    return `${apiKey.slice(0, 9)}...${apiKey.slice(-4)}`;
+  }
   if (apiKey.startsWith('sk-') && apiKey.length > 12) {
     return `${apiKey.slice(0, 5)}...${apiKey.slice(-4)}`;
   }
@@ -38,6 +41,7 @@ export function emptyProviderKeyStatus(): ProviderKeyStatus {
     openai: { configured: false, preview: null, updatedAt: null },
     anthropic: { configured: false, preview: null, updatedAt: null },
     google: { configured: false, preview: null, updatedAt: null },
+    openrouter: { configured: false, preview: null, updatedAt: null },
   };
 }
 

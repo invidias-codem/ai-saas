@@ -7,6 +7,16 @@
   ],
   "permissions": [
     "core:default",
-    "flush_telemetry"
+    "ping_daemon",
+    "flush_telemetry",
+    "stronghold:allow-initialize",
+    "stronghold:allow-load-client",
+    "stronghold:allow-create-client",
+    "stronghold:allow-save",
+    "stronghold:allow-insert",
+    "stronghold:allow-get",
+    "stronghold:allow-remove",
+    "window:allow-get-current-window",
+    "window:default"
   ]
 }

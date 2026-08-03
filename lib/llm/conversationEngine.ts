@@ -175,6 +175,7 @@ export async function generateConversationReply(
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
   const providerKeys = await getUserProviderApiKeys(userId);
+  const nativeProviderKeys = await (await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys);
 
   // ---------------------------------------------------------
   // UCOL AGENTIC MODE — Claude + ReAct Loop
@@ -290,8 +291,8 @@ export async function generateConversationReply(
     // ------------------------------------
     const { runSwarmOrchestrator } = await import('@/lib/agents/core/orchestrator');
     const { anthropic, createAnthropic } = await import('@ai-sdk/anthropic');
-    const anthropicProvider = providerKeys.anthropic
-      ? createAnthropic({ apiKey: providerKeys.anthropic })
+    const anthropicProvider = nativeProviderKeys.anthropic
+      ? createAnthropic({ apiKey: nativeProviderKeys.anthropic })
       : anthropic;
 
     const initialState = {
@@ -400,7 +401,7 @@ export async function generateConversationReply(
 
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
-  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType), providerKeys });
+  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys });
   let { provider, modelId: actualModelId } = providerResolution.execution;
   // Sovereign telemetry: the initially-requested model (before any confidence
   // override or 429 fallback) and the serving provider id.
@@ -489,7 +490,7 @@ export async function generateConversationReply(
         const upgradeMode = confidenceSignal.recommendedTier === 'claude-sonnet'
           ? 'quality'
           : 'reasoning';
-        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments: Boolean(fileData && mimeType), providerKeys });
+        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys });
         provider = providerResolution.execution.provider;
         actualModelId = providerResolution.execution.modelId;
         confidenceOverrideApplied = true;
@@ -704,7 +705,7 @@ export async function generateConversationReply(
     } catch {}
     if (err?.status === 429 || String(err).includes('429')) {
       console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to fast mode`);
-      const fallback = resolveProviderForMode({ mode: 'fast', hasAttachments: Boolean(fileData && mimeType), providerKeys });
+      const fallback = resolveProviderForMode({ mode: 'fast', hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys });
       actualModelId = fallback.execution.modelId;
       streamResult = await fallback.execution.provider.generateStream(history, enhancedSystemInstruction, {
         model: actualModelId,

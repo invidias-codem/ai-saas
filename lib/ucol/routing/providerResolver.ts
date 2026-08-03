@@ -3,6 +3,7 @@ import { GeminiProvider } from '@/lib/llm/providers/gemini';
 import { ClaudeProvider } from '@/lib/llm/providers/claude';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { HermesProvider } from '@/lib/llm/providers/hermes';
+import { OpenRouterProvider } from '@/lib/llm/providers/openrouter';
 import type { UcolProviderPlan } from './types';
 import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
@@ -10,6 +11,7 @@ const FAST_MODEL = process.env.HERMES_MODEL_ID || 'hermes3';
 const QUALITY_MODEL = 'gemini-3.1-pro-preview';
 const AGENTIC_MODEL = 'claude-sonnet-4-6';
 const REASONING_MODEL = 'deepseek-r1';
+const OPENROUTER_FAST_MODEL = process.env.OPENROUTER_FAST_MODEL || 'openrouter/auto';
 
 export type ProviderResolutionInput = {
   mode: AgentMode;
@@ -18,7 +20,7 @@ export type ProviderResolutionInput = {
 };
 
 export type ProviderResolution = {
-  providerId: 'gemini' | 'claude' | 'deepseek' | 'hermes';
+  providerId: 'gemini' | 'claude' | 'deepseek' | 'hermes' | 'openrouter';
   execution: {
     provider: LLMProvider;
     modelId: string;
@@ -65,6 +67,24 @@ export function resolveProviderForMode(input: ProviderResolutionInput): Provider
   }
 
   if (mode === 'fast') {
+    const hasOpenRouterKey = Boolean(providerKeys.openrouter);
+    if (hasOpenRouterKey) {
+      return {
+        providerId: 'openrouter',
+        execution: {
+          provider: new OpenRouterProvider(providerKeys),
+          modelId: OPENROUTER_FAST_MODEL,
+        },
+        routing: {
+          selectionStrategy: 'primary_plus_fallback',
+          preferredModelRefs: ['openrouter.fast'],
+          fallbackModelRefs: hasAttachments ? ['hermes.fast', 'gemini.quality'] : ['hermes.fast', 'gemini.fast_fallback'],
+          embeddingLanePreference: ['primary_768', 'secondary_3072'],
+        },
+        reason: 'fast mode routes to OpenRouter when a user API key is configured',
+      };
+    }
+
     return {
       providerId: 'hermes',
       execution: {

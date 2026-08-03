@@ -11,24 +11,34 @@ export interface HarnessEvent {
   payload?: any;
 }
 
-export function useHarnessHeartbeat() {
+export interface HarnessState {
+  isDaemonRunning: boolean;
+  lastHeartbeat: Date | null;
+  auditLogs: HarnessEvent[];
+  appFocused: boolean;
+}
+
+export function useHarnessHeartbeat(): HarnessState {
   const [isDaemonRunning, setIsDaemonRunning] = useState<boolean>(false);
   const [lastHeartbeat, setLastHeartbeat] = useState<Date | null>(null);
   const [auditLogs, setAuditLogs] = useState<HarnessEvent[]>([]);
+  const [appFocused, setAppFocused] = useState<boolean>(true);
   const missedPings = useRef(0);
 
   useEffect(() => {
     if (!isTauri) {
-      // When not running in the Tauri shell, the daemon cannot be present —
-      // this is a genuine environment guard, not derived state.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsDaemonRunning(false);
       return;
     }
 
     let interval: NodeJS.Timeout;
+    let unlistenWindow: (() => void) | undefined;
 
     const pingDaemon = async () => {
+      if (!appFocused) {
+        missedPings.current = 0;
+        return;
+      }
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         
@@ -71,9 +81,35 @@ export function useHarnessHeartbeat() {
     pingDaemon();
     // Poll every 3 seconds for a responsive heartbeat
     interval = setInterval(pingDaemon, 3000);
-    
-    return () => clearInterval(interval);
-  }, [isDaemonRunning]);
 
-  return { isDaemonRunning, lastHeartbeat, auditLogs };
+    // Tauri window focus/blur: throttle heartbeat when backgrounded.
+    (async () => {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        const window = getCurrentWindow();
+        const unlistenFocus = await window.onFocusChanged(({ payload: focused }) => {
+          setAppFocused(focused);
+        });
+        const unlistenClose = await window.onCloseRequested((event) => {
+          missedPings.current = 0;
+          setIsDaemonRunning(false);
+          event.preventDefault();
+          window.close();
+        });
+        unlistenWindow = () => {
+          unlistenFocus();
+          unlistenClose();
+        };
+      } catch (err) {
+        console.warn('[useHarnessHeartbeat] Window lifecycle listeners unavailable:', err);
+      }
+    })();
+
+    return () => {
+      clearInterval(interval);
+      if (unlistenWindow) unlistenWindow();
+    };
+  }, [isDaemonRunning, appFocused]);
+
+  return { isDaemonRunning, lastHeartbeat, auditLogs, appFocused };
 }

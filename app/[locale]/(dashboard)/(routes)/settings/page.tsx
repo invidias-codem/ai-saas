@@ -44,24 +44,27 @@ interface Integration {
   email?: string;
 }
 
-type ProviderName = 'openai' | 'anthropic' | 'google';
+type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter';
 
 const providerLabels: Record<ProviderName, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
   google: 'Google Gemini',
+  openrouter: 'OpenRouter',
 };
 
 const providerPlaceholders: Record<ProviderName, string> = {
   openai: 'sk-... or proj-...',
   anthropic: 'sk-ant-...',
   google: 'AIza...',
+  openrouter: 'sk-or-v1-...',
 };
 
 const providerDescriptions: Record<ProviderName, string> = {
   openai: 'Used first by Code Builder planning when configured.',
   anthropic: 'Used by Code Builder code generation and agentic conversation/code modes.',
   google: 'Used by Gemini planning, review, multimodal fallback, and quality conversation modes.',
+  openrouter: 'Optional fast-mode gateway to open models. Only used when an OpenRouter key is saved.',
 };
 
 // Credits overview + top-up entry point
@@ -105,11 +108,12 @@ const SettingsPage = () => {
   const [dailyDigestEnabled, setDailyDigestEnabled] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [repoSelectorOpen, setRepoSelectorOpen] = useState(false);
-  const [apiKeyInputs, setApiKeyInputs] = useState<Record<ProviderName, string>>({ openai: '', anthropic: '', google: '' });
+  const [apiKeyInputs, setApiKeyInputs] = useState<Record<ProviderName, string>>({ openai: '', anthropic: '', google: '', openrouter: '' });
   const [configuredKeys, setConfiguredKeys] = useState<Record<ProviderName, { configured: boolean; preview: string | null }>>({
     openai: { configured: false, preview: null },
     anthropic: { configured: false, preview: null },
     google: { configured: false, preview: null },
+    openrouter: { configured: false, preview: null },
   });
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keyError, setKeyError] = useState("");
@@ -170,28 +174,45 @@ const SettingsPage = () => {
       ? (apiKey.startsWith('sk-') || apiKey.startsWith('proj-'))
       : provider === 'anthropic'
         ? apiKey.startsWith('sk-ant-')
-        : apiKey.startsWith('AIza');
+        : provider === 'openrouter'
+          ? apiKey.startsWith('sk-or-v1-')
+          : apiKey.startsWith('AIza');
 
     if (!validFormat) {
       setKeyError(`Invalid ${providerLabels[provider]} API key format.`);
       return;
     }
-    
+
     setIsSavingKey(true);
     try {
-      const res = await fetch('/api/settings/keys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, apiKey })
-      });
-      
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText);
+      let savedViaNative = false;
+      if (provider === 'openrouter') {
+        try {
+          const { createSecretStore } = await import('@/lib/native/secretStore');
+          const store = await createSecretStore();
+          await store.setSecret('openrouter_api_key', apiKey);
+          savedViaNative = true;
+        } catch (nativeErr) {
+          console.warn('[Settings] Native secret store unavailable, falling back to API:', nativeErr);
+        }
       }
-      
-      const data = await res.json();
-      if (data.providers) setConfiguredKeys(data.providers);
+
+      if (!savedViaNative) {
+        const res = await fetch('/api/settings/keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, apiKey })
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(errText);
+        }
+
+        const data = await res.json();
+        if (data.providers) setConfiguredKeys(data.providers);
+      }
+
       setApiKeyInputs(prev => ({ ...prev, [provider]: '' }));
       setKeySuccess(`${providerLabels[provider]} API key securely stored!`);
     } catch (err: any) {
@@ -447,7 +468,7 @@ const SettingsPage = () => {
             </div>
 
             <div className="grid gap-4">
-              {(['openai', 'anthropic', 'google'] as ProviderName[]).map((provider) => {
+              {(['openai', 'anthropic', 'google', 'openrouter'] as ProviderName[]).map((provider) => {
                 const status = configuredKeys[provider];
                 const inputValue = apiKeyInputs[provider];
                 return (

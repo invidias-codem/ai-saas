@@ -1,7 +1,7 @@
 "use client";
 
 import { useLocale } from "next-intl";
-import { Terminal, Shield, Activity, HardDrive, Zap, CheckCircle2, XCircle } from "lucide-react";
+import { Terminal, Shield, Activity, HardDrive, Zap, CheckCircle2, XCircle, Monitor, Lock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useHarnessHeartbeat } from "@/hooks/useHarnessHeartbeat";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 
 export default function LocalCapabilitiesPage() {
   const locale = useLocale();
-  const { isDaemonRunning, lastHeartbeat, auditLogs } = useHarnessHeartbeat();
+  const { isDaemonRunning, lastHeartbeat, auditLogs, appFocused } = useHarnessHeartbeat();
 
   return (
     <div className="min-h-screen px-4 md:px-10 lg:px-16 py-8 space-y-8">
@@ -52,34 +52,42 @@ export default function LocalCapabilitiesPage() {
         <Card className="p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold flex items-center gap-2">
-              <HardDrive className="w-5 h-5 text-blue-500" />
-              Local File Sync
+              <Monitor className="w-5 h-5 text-purple-500" />
+              Runtime Environment
             </h2>
-            {isDaemonRunning ? (
-              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Active</Badge>
+            {typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI_IPC__' in window) ? (
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Desktop
+              </Badge>
             ) : (
-              <Badge variant="outline" className="bg-slate-500/10 text-slate-500 border-slate-500/20">Inactive</Badge>
+              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">
+                <Monitor className="w-3 h-3 mr-1" /> Browser
+              </Badge>
             )}
           </div>
           <p className="text-sm text-muted-foreground">
-            Allows the Multi-Agent Swarm to directly read and mutate your local workspace files safely.
+            Indicates whether Lattice is running as a native Tauri desktop app or in a standard web browser.
           </p>
         </Card>
 
         <Card className="p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold flex items-center gap-2">
-              <Activity className="w-5 h-5 text-rose-500" />
-              Telemetry Engine
+              <Lock className="w-5 h-5 text-amber-500" />
+              Native Secret Vault
             </h2>
-            {isDaemonRunning ? (
-              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">Active</Badge>
+            {(typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI_IPC__' in window)) ? (
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Stronghold
+              </Badge>
             ) : (
-              <Badge variant="outline" className="bg-slate-500/10 text-slate-500 border-slate-500/20">Inactive</Badge>
+              <Badge variant="outline" className="bg-slate-500/10 text-slate-500 border-slate-500/20">
+                <Lock className="w-3 h-3 mr-1" /> Web Storage
+              </Badge>
             )}
           </div>
           <p className="text-sm text-muted-foreground">
-            Tracks diagnostic heartbeat signals and hardware resource allocation limits.
+            Provider API keys are stored in Tauri’s encrypted Stronghold vault on desktop, or in the standard web secret store in browser mode.
           </p>
         </Card>
       </div>
@@ -93,7 +101,7 @@ export default function LocalCapabilitiesPage() {
                 Boot the Local Harness
               </h2>
               <p className="text-muted-foreground max-w-3xl">
-                Lattice is running in standard web mode. To unlock the Tier 2 capabilities, you need to boot the Tauri shell and the Go daemon locally on your machine.
+                Lattice is running in standard web mode. To unlock Tier 2 capabilities, start the Tauri shell and the Go daemon locally on your machine.
               </p>
             </div>
 
@@ -112,7 +120,7 @@ export default function LocalCapabilitiesPage() {
                   <span className="text-green-400">pnpm</span> install
                 </div>
                 <div className="flex items-center gap-4 mt-2">
-                  <span className="text-slate-500"># Start the native Tauri app and daemon</span>
+                  <span className="text-slate-500"># Start the native Tauri app + daemon</span>
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="text-slate-500">$</span>

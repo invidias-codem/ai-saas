@@ -29,6 +29,7 @@ import { GitHubConsentModal } from "@/components/github-consent-modal";
 
 import { CodeModelProvider, useCodeModel } from "@/contexts/CodeModelContext";
 import { CodeModelToggle } from "@/components/chat/CodeModelToggle";
+import { CODE_MODELS, ProviderKeyState } from "@/lib/llm/codeModels";
 import {
   getSessionMemoryFromStorage,
   saveSessionMemoryToStorage,
@@ -111,7 +112,29 @@ const getLocalCodeSessionId = (workspaceId?: string | null, operatingProfileId?:
   `local-code-session:${workspaceId || "global"}:${operatingProfileId || "global"}`;
 
 function CodePageContent() {
-  const { codeModel } = useCodeModel(); // Hook used inside provider
+  const { codeModel, setCodeModel, providerKeyState, setProviderKeyState } = useCodeModel();
+
+  // OpenRouter visibility: refresh configured-provider state from settings API.
+  useEffect(() => {
+    async function loadProviderKeyState() {
+      try {
+        const res = await fetch('/api/settings/keys');
+        if (!res.ok) return;
+        const data = await res.json();
+        const next: ProviderKeyState = {};
+        for (const [provider, info] of Object.entries(data.providers || {})) {
+          const entry = info as { configured?: boolean } | undefined;
+          if (entry?.configured) next[provider] = { configured: true };
+        }
+        setProviderKeyState(next);
+      } catch (e) {
+        console.error('[PROVIDER_KEY_STATE_LOAD]', e);
+      }
+    }
+
+    loadProviderKeyState();
+  }, [setProviderKeyState]);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [codeContext, setCodeContext] = useState<CodeContext>({ workspaceId: null, workspaceName: null, operatingProfileId: null, operatingProfileName: null, operatingProfileMode: null });

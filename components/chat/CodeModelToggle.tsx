@@ -3,7 +3,7 @@
 import React from "react";
 import { Zap, Brain, Bot, Lightbulb, ChevronDown } from "lucide-react";
 import { useCodeModel } from "@/contexts/CodeModelContext";
-import { CODE_MODELS } from "@/lib/llm/codeModels";
+import { CODE_MODELS, filterVisibleModels } from "@/lib/llm/codeModels";
 import { cn } from "@/lib/utils";
 import {
     DropdownMenu,
@@ -17,6 +17,9 @@ const MODE_ICONS = {
     quality: Brain,
     agentic: Bot,
     reasoning: Lightbulb,
+    'openrouter-llama-4': Lightbulb,
+    'openrouter-qwen3-235b': Brain,
+    'openrouter-deepseek-r1': Lightbulb,
 };
 
 const MODE_COLORS = {
@@ -24,12 +27,17 @@ const MODE_COLORS = {
     quality: 'text-purple-600 dark:text-purple-400',
     agentic: 'text-indigo-600 dark:text-indigo-400',
     reasoning: 'text-amber-600 dark:text-amber-400',
+    'openrouter-llama-4': 'text-amber-600 dark:text-amber-400',
+    'openrouter-qwen3-235b': 'text-purple-600 dark:text-purple-400',
+    'openrouter-deepseek-r1': 'text-amber-600 dark:text-amber-400',
 };
 
 export function CodeModelToggle({ disabled }: { disabled?: boolean }) {
-    const { codeModel, setCodeModel } = useCodeModel();
-    const activeConfig = CODE_MODELS[codeModel] || CODE_MODELS.fast;
+    const { codeModel, setCodeModel, providerKeyState } = useCodeModel();
+    const visibleModels = React.useMemo(() => filterVisibleModels(CODE_MODELS, providerKeyState), [providerKeyState]);
+    const activeConfig = visibleModels[codeModel] || CODE_MODELS.fast;
     const ActiveIcon = MODE_ICONS[codeModel as keyof typeof MODE_ICONS] || Zap;
+    const hasOpenRouterModels = Object.keys(CODE_MODELS).some(key => key.startsWith('openrouter-'));
 
     return (
         <DropdownMenu>
@@ -45,14 +53,14 @@ export function CodeModelToggle({ disabled }: { disabled?: boolean }) {
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top" className="w-[220px] mb-2 p-1 border-border/50 shadow-lg rounded-xl">
-                {Object.entries(CODE_MODELS).map(([key, config]) => {
-                    const Icon = MODE_ICONS[key as keyof typeof MODE_ICONS];
+                {Object.entries(visibleModels).map(([key, config]) => {
+                    const Icon = MODE_ICONS[key as keyof typeof MODE_ICONS] || Zap;
                     const isActive = codeModel === key;
 
                     return (
                         <DropdownMenuItem
                             key={key}
-                            onClick={() => setCodeModel(key as any)}
+                            onClick={() => setCodeModel(key)}
                             className={cn(
                                 "flex items-start gap-3 p-2.5 cursor-pointer rounded-lg mb-1 last:mb-0 transition-colors",
                                 isActive ? "bg-muted" : "hover:bg-muted/50"
@@ -68,6 +76,17 @@ export function CodeModelToggle({ disabled }: { disabled?: boolean }) {
                         </DropdownMenuItem>
                     );
                 })}
+                {hasOpenRouterModels && Object.keys(visibleModels).every(key => !key.startsWith('openrouter-')) && (
+                    <DropdownMenuItem
+                        disabled
+                        className="flex flex-col gap-0.5 p-2.5 cursor-default rounded-lg mb-1 opacity-70"
+                    >
+                        <span className="text-[13px] text-muted-foreground">More models available</span>
+                        <span className="text-[11px] leading-tight text-muted-foreground/80">
+                            Add an OpenRouter key in <span className="underline underline-offset-2">Settings</span> to unlock open models.
+                        </span>
+                    </DropdownMenuItem>
+                )}
             </DropdownMenuContent>
         </DropdownMenu>
     );
