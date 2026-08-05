@@ -1,64 +1,3 @@
-import path from 'path';
-import createMDX from '@next/mdx';
-import createNextIntlPlugin from 'next-intl/plugin';
-
-const projectRoot = path.resolve('./');
-const isTauri = process.env.TAURI_BUILD === 'true';
-
-const isVercel = Boolean(process.env.VERCEL);
-
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  output: isTauri ? 'export' : isVercel ? undefined : 'standalone',
-  // Enable MDX pages
-  pageExtensions: ['js', 'jsx', 'mdx', 'ts', 'tsx'],
-
-  images: {
-    unoptimized: isTauri,
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'replicate.delivery',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: '*.replicate.delivery',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'scoutforge.net',
-        port: '',
-        pathname: '/**',
-      },
-    ],
-  },
-
-  experimental: {},
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      config.externals = config.externals || [];
-      if (Array.isArray(config.externals)) {
-        config.externals.push(({ request }, callback) => {
-          if (request && request.includes('.agent/')) {
-            return callback(null, 'commonjs ' + request);
-          }
-          callback();
-        });
-      }
-    }
-    config.resolve.extensionAlias = {
-      '.js': ['.ts', '.tsx', '.js', '.jsx'],
-      '.mjs': ['.mts', '.mjs'],
-      '.cjs': ['.cts', '.cjs'],
-    };
-    return config;
-  },
-};
-
 const withMDX = createMDX({
   options: {
     remarkPlugins: [],
@@ -106,7 +45,6 @@ export default withMDX(
 
       return [
         {
-          // Restrictive CORS for page routes
           source: '/:path*',
           headers: [
             { key: 'X-DNS-Prefetch-Control', value: 'on' },
@@ -130,7 +68,6 @@ export default withMDX(
           ]
         },
         {
-          // API routes: CORS restricted, credentials-aware
           source: '/api/:path*',
           headers: [
             { key: 'Access-Control-Allow-Origin', value: 'https://gen1e.xyz' },
@@ -142,7 +79,6 @@ export default withMDX(
           ]
         },
         {
-          // Partner API (v1): tighter CORS — no browser origins
           source: '/api/v1/:path*',
           headers: [
             { key: 'Access-Control-Allow-Origin', value: 'https://gen1e.xyz' },
