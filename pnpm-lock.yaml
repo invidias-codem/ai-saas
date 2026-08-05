@@ -512,8 +512,8 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0
       hono:
-        specifier: ^4.12.25
-        version: 4.12.27
+        specifier: ^4.12.34
+        version: 4.12.34
       uuid:
         specifier: ^14.0.0
         version: 14.0.1
@@ -7068,6 +7068,10 @@ packages:
 
   hono@4.12.27:
     resolution: {integrity: sha512-1yrb/+w6HWQJrUCLkJ2IF5jNIPvvFkblV5RNOYl6bV+OA6p9GLcMpHFFGTosSvHvcAUibuUukRqhlYI4z32C7Q==}
+    engines: {node: '>=16.9.0'}
+
+  hono@4.12.34:
+    resolution: {integrity: sha512-GqXJqY/xJkJmuloTrnV1ZEXG3fqte+VjkUqoRNZXcrUidiUOP4fMSIHHY4tsqZBK++kVyWmt/AAfSUuy57/eSA==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@4.1.0:
@@ -18391,6 +18395,8 @@ snapshots:
       react-is: 16.13.1
 
   hono@4.12.27: {}
+
+  hono@4.12.34: {}
 
   hosted-git-info@4.1.0:
     dependencies:
