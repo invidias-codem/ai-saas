@@ -40,7 +40,7 @@ jobs:
       NEXT_PUBLIC_IS_DESKTOP: "true"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Tauri Linux system dependencies
         run: |
