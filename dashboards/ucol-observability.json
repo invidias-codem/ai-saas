@@ -1,0 +1,89 @@
+{
+  "dashboard": {
+    "title": "Lattice OS UCOL Observability",
+    "uid": "lattice-ucol-observability",
+    "tags": ["lattice-os", "ucol"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "type": "timeseries",
+        "title": "Task Throughput by Status",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PROMETHEUS_DS"
+        },
+        "targets": [
+          {
+            "expr": "sum by (status) (rate(lattice_workspace_tasks_by_status[5m]))",
+            "legendFormat": "{{status}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "type": "timeseries",
+        "title": "Firewall Intercept Rate",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PROMETHEUS_DS"
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(lattice_workspace_intercept_total[5m])) by (workspace)",
+            "legendFormat": "{{workspace}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "type": "timeseries",
+        "title": "Tool Execution Latency p95",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PROMETHEUS_DS"
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(lattice_workspace_tool_latency_ms_bucket[5m])) by (le, workspace))",
+            "legendFormat": "{{workspace}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          }
+        }
+      },
+      {
+        "type": "timeseries",
+        "title": "Task Failure Ratio",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PROMETHEUS_DS"
+        },
+        "targets": [
+          {
+            "expr": "sum(lattice_workspace_tasks_by_status{status=\"failed\"}) / sum(lattice_workspace_tasks_total) * 100",
+            "legendFormat": "failure_ratio_%"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      }
+    ]
+  }
+}
