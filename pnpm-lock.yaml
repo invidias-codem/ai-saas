@@ -72,8 +72,8 @@ importers:
         specifier: ^2.3.0
         version: 2.3.0
       '@noble/hashes':
-        specifier: ^1.8.0
-        version: 1.8.0
+        specifier: ^2.2.0
+        version: 2.2.0
       '@octokit/app':
         specifier: ^16.1.2
         version: 16.1.2
