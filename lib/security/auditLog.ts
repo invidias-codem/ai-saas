@@ -63,8 +63,15 @@ export type AuditAction =
   | 'preflight.check'
   // Agent / UCOL
   | 'agent.dispatch'
+  | 'agent.task.created'
+  | 'agent.task.cancelled'
+  | 'agent.task.completed'
+  | 'agent.task.failed'
   | 'agent.pr_opened'
   | 'agent.pr_blocked'      // Agent wanted to merge but was gated
+  | 'tool.executed'
+  | 'tool.intercepted'
+  | 'tool.failed'
   // Import / Export
   | 'import.start'
   | 'import.complete'
@@ -155,7 +162,16 @@ export async function audit(
   action: AuditAction,
   userId: string,
   metadata: Record<string, unknown> = {},
-  req?: Request
+  req?: Request,
+  enterprise?: {
+    orgId?: string;
+    actorId?: string;
+    eventType?: string;
+    harness?: string;
+    decision?: 'ALLOW' | 'DENY';
+    traceId?: string;
+    payload?: Record<string, unknown>;
+  }
 ): Promise<void> {
   if (!supabaseAdmin) return;
 
@@ -176,6 +192,13 @@ export async function audit(
         metadata: safeMetadata,
         ip_address: ip,
         user_agent: userAgent,
+        org_id: enterprise?.orgId ?? null,
+        actor_id: enterprise?.actorId ?? userId,
+        event_type: enterprise?.eventType ?? action,
+        harness: enterprise?.harness ?? null,
+        decision: enterprise?.decision ?? null,
+        trace_id: enterprise?.traceId ?? null,
+        payload: enterprise?.payload ? sanitizePayload(enterprise.payload) : null,
         created_at: new Date().toISOString(),
       });
 
@@ -212,6 +235,24 @@ export function auditAgentAction(
   agentMetadata: { targetNode?: string; taskType?: string; prUrl?: string; [key: string]: unknown }
 ): void {
   audit(action, userId, agentMetadata).catch(err => console.error("[AuditLog] Failed to write agent event:", err));
+}
+
+export function auditEnterprise(
+  action: AuditAction,
+  userId: string,
+  metadata: Record<string, unknown> = {},
+  enterprise?: {
+    orgId?: string;
+    actorId?: string;
+    eventType?: string;
+    harness?: string;
+    decision?: 'ALLOW' | 'DENY';
+    traceId?: string;
+    payload?: Record<string, unknown>;
+  },
+  req?: Request
+): void {
+  audit(action, userId, metadata, req, enterprise).catch(err => console.error("[AuditLog] Failed to write enterprise event:", err));
 }
 
 /** Log a memory operation */

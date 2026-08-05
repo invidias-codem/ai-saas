@@ -1,13 +1,14 @@
 'use client';
 
-// CodePanel — displays Claude's generated code files with a file tree + code viewer.
+// CodePanel — displays Claude's generated code files with a file tree + code viewer + live preview.
 
 import { useState } from 'react';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { useClipboard } from 'use-clipboard-copy';
 import type { GeneratedFile } from '@/lib/ucol/types';
-import { Loader2, FileCode, FolderOpen, Copy, Check, Download } from 'lucide-react';
+import { Loader2, FileCode, FolderOpen, Copy, Check, Download, Play, X, Smartphone, Monitor, Maximize2 } from 'lucide-react';
+import { useProModal } from '@/hooks/use-pro-modal';
 
 interface CodePanelProps {
     files: GeneratedFile[];
@@ -33,12 +34,63 @@ function mapLanguage(lang: string): string {
 export function CodePanel({ files, loading }: CodePanelProps) {
     const [activeFile, setActiveFile] = useState<string | null>(null);
     const clipboard = useClipboard({ copiedTimeout: 2000 });
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewDevice, setPreviewDevice] = useState<'mobile' | 'desktop'>('desktop');
+    const [creatingPreview, setCreatingPreview] = useState(false);
+    const [previewError, setPreviewError] = useState<string | null>(null);
+    const [previewInsufficientCredits, setPreviewInsufficientCredits] = useState(false);
+    const proModal = useProModal();
 
     // Filter out scaffold files for the tree, but keep them accessible
     const codeFiles = files.filter(f => f.component !== '_scaffold');
     const scaffoldFiles = files.filter(f => f.component === '_scaffold');
 
     const selectedFile = files.find(f => f.path === activeFile) || codeFiles[0] || null;
+
+    const hasPreviewable = files.some(f => ['html','css','javascript','typescript','react'].includes(f.language));
+
+    async function openPreview() {
+        if (!hasPreviewable) return;
+        try {
+            setCreatingPreview(true);
+            setPreviewError(null);
+            const primary = files.find(f => ['html','javascript','typescript','react','css'].includes(f.language)) || files[0];
+            const body: any = {
+                code: primary.content,
+                language: primary.language,
+            };
+            const res = await fetch('/api/preview/render', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify(body),
+                credentials: 'include',
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 402) {
+                    setPreviewInsufficientCredits(true);
+                    return;
+                }
+                setPreviewInsufficientCredits(false);
+                throw new Error(data?.error || `Preview creation failed: ${res.status}`);
+            }
+            setPreviewInsufficientCredits(false);
+            const data = await res.json();
+            setPreviewUrl(data.previewUrl || `/api/preview/render?id=${data.id}`);
+            setPreviewOpen(true);
+        } catch (err: any) {
+            setPreviewError(err.message || 'Failed to open preview');
+        } finally {
+            setCreatingPreview(false);
+        }
+    }
+
+    function closePreview() {
+        setPreviewOpen(false);
+        setPreviewUrl(null);
+        setPreviewError(null);
+    }
 
     // Build a simple grouped tree
     const groups = new Map<string, GeneratedFile[]>();
@@ -78,7 +130,29 @@ export function CodePanel({ files, loading }: CodePanelProps) {
                             >
                                 <Download className="h-3 w-3" />
                             </button>
+                            {hasPreviewable && (
+                                <button
+                                    onClick={openPreview}
+                                    disabled={creatingPreview}
+                                    className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                                >
+                                    {creatingPreview ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                                    <span className="hidden sm:inline">Preview</span>
+                                </button>
+                            )}
                         </>
+                    )}
+                    {previewInsufficientCredits && (
+                        <button
+                            onClick={() => proModal.onOpen()}
+                            className="text-[10px] text-amber-300 hover:text-amber-200 transition-colors max-w-[220px] truncate"
+                            title="Get more credits to unlock live preview"
+                        >
+                            Insufficient credits for preview · Upgrade
+                        </button>
+                    )}
+                    {previewError && !previewInsufficientCredits && (
+                        <div className="text-[10px] text-red-400 max-w-[180px] truncate" title={previewError}>{previewError}</div>
                     )}
                 </div>
             </div>
@@ -193,6 +267,51 @@ export function CodePanel({ files, loading }: CodePanelProps) {
                     )}
                 </div>
             </div>
+
+            {previewOpen && previewUrl && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="w-full h-full max-w-[100vw] max-h-[100dvh] bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800 bg-zinc-900/60">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-medium text-zinc-300">Live Preview</span>
+                                <span className="text-[10px] text-zinc-600 font-mono">{previewDevice}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setPreviewDevice(previewDevice === 'mobile' ? 'desktop' : 'mobile')}
+                                    className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+                                >
+                                    {previewDevice === 'mobile' ? <Monitor className="h-3 w-3" /> : <Smartphone className="h-3 w-3" />}
+                                    <span className="hidden sm:inline">{previewDevice === 'mobile' ? 'Desktop' : 'Mobile'}</span>
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const w = window.open(previewUrl || '', '_blank');
+                                        if (!w) setPreviewError('Popup blocked');
+                                    }}
+                                    className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+                                >
+                                    <Maximize2 className="h-3 w-3" />
+                                    <span className="hidden sm:inline">Open</span>
+                                </button>
+                                <button onClick={closePreview} className="text-zinc-500 hover:text-zinc-300">
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-1 min-h-0 bg-white">
+                            <iframe
+                                src={previewUrl}
+                                title="Live Preview"
+                                sandbox="allow-scripts allow-forms"
+                                allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+                                className="w-full h-full border-0"
+                                style={{ maxWidth: previewDevice === 'mobile' ? '390px' : '100%', margin: '0 auto' }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

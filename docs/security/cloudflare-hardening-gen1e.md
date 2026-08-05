@@ -203,7 +203,6 @@ curl -sI https://gen1e.xyz | grep strict-transport
 | **LOW** | Strip x-clerk-* headers | ⬜ Add Transform Rules |
 | **BONUS** | WAF rules (wp-config, rate limit) | ⬜ Add if Pro plan |
 | **BONUS** | SSL/TLS Full Strict | ⬜ Verify in SSL settings |
-
 ---
 
 ## 7. SSE /cli/stream Proxy and Timeout Behavior
@@ -260,4 +259,5 @@ If the deployment introduces additional proxy or CDN hops beyond Cloudflare, eac
 - SSE event ordering
 
 Any future rewrite or caching layer must preserve these properties for `/api/cli/stream` and `/api/memory/cli`.
+
 

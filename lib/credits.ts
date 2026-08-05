@@ -6,6 +6,7 @@ export const CREDIT_COSTS = {
     VIDEO_GENERATION: 50,
     CODE_GENERATION: 2,
     MUSIC_GENERATION: 10,
+    PREVIEW_RENDER: 1,
 };
 
 export type CreditOperation = keyof typeof CREDIT_COSTS;

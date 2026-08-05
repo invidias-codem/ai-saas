@@ -13,6 +13,10 @@ import type { SessionSetupResult } from './sessionHandler';
 import type { RuntimeContextResult } from './runtimeContextResolver';
 import type { UcolRoutingDecision } from './routing/types';
 import type { FileAttachmentInput } from '@/lib/types/attachments';
+import { startUcolSpan, type UcolSpan } from '@/lib/ucol/observability/span';
+import { emitInteractionAudit } from '@/lib/telemetry/emit';
+import { deriveContextRole } from '@/lib/telemetry/governance';
+import { logRoutingTelemetry } from '@/lib/ucol/routing/telemetryLogger';
 
 export interface ExecuteRuntimeFnInput {
   resolved: RuntimeContextResult;
@@ -21,6 +25,7 @@ export interface ExecuteRuntimeFnInput {
   messages: any[];
   fileData: FileAttachmentInput | null | undefined;
   body: any;
+  span?: import('@/lib/ucol/observability/span').UcolSpan;
 }
 
 export interface ExecuteRuntimeFnResult {
@@ -34,6 +39,7 @@ export interface ExecuteRuntimeFnResult {
   routingDecision?: UcolRoutingDecision;
   userContext?: any;
   intelligentFacts?: any;
+  span?: import('@/lib/ucol/observability/span').UcolSpan;
 }
 
 export type ExecuteRuntimeFn = (input: ExecuteRuntimeFnInput) => Promise<ExecuteRuntimeFnResult>;
@@ -117,6 +123,15 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
   const messages = body?.messages || [];
   const fileData: FileAttachmentInput | undefined = body?.fileData;
 
+  const span = startUcolSpan({
+    name: `${surface}.runtime`,
+    userId: user.userId,
+    sessionId: resolved.conversationId || undefined,
+    surface,
+    tags: [resolved.mode],
+    macroWorkflowId: resolved.conversationId ?? undefined,
+  });
+
   const billingInput: BillingInput = {
     userId: user.userId,
     clerkUser,
@@ -129,6 +144,7 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
   const billing = await (billingOverride ?? defaultBilling)(billingInput);
 
   if (!billing.bypass && billing.remaining < billing.cost) {
+    span.fail(new Error('Insufficient credits'));
     return NextResponse.json(
       {
         error: 'Insufficient credits',
@@ -137,7 +153,7 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
           : 'Credits exhausted. Please upgrade to continue.',
         remaining: billing.remaining,
       },
-      { status: 402 }
+      { status: 402, headers: buildTraceHeaders(span) }
     );
   }
 
@@ -148,14 +164,30 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
     messages,
     fileData,
     body,
+    span,
   };
 
-  const execResult = await execute(execInput);
+  let execResult: ExecuteRuntimeFnResult;
+  try {
+    execResult = await execute(execInput);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    span.fail(message);
+    return NextResponse.json(
+      {
+        error: 'Execution failed',
+        details: process.env.NODE_ENV === 'production'
+          ? 'An unexpected error occurred'
+          : message,
+      },
+      { status: 500, headers: buildTraceHeaders(span) }
+    );
+  }
 
-  let clientStream = execResult.stream;
-  if (clientStream && surface === 'chat') {
-    const [readerStream, writerStream] = clientStream.tee();
-    clientStream = writerStream;
+  const effectiveStream = execResult.stream;
+  if (effectiveStream && surface === 'chat') {
+    const [readerStream, writerStream] = effectiveStream.tee();
+    execResult = { ...execResult, stream: writerStream };
 
     waitUntil(
       drainStreamForPostGen(
@@ -166,6 +198,20 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
             .then((v: any) => v)
             .catch(() => null)
       ).then(({ text, thoughtSignature }) => {
+        const resultSpan = execResult.span || span;
+        resultSpan.end({ responseLength: text.length });
+        emitAuditFromResult(resultSpan, execResult, resolved, user.userId, billing, featureType);
+        const streamOutcome = text ? 'success' : 'failed';
+        const streamCorrectionSignal = execResult.routingDecision?.intent?.urgency === 'high' ? 'implicit' : 'none';
+        waitUntil(
+          logRoutingTelemetry({
+            decision: execResult.routingDecision,
+            latencyMs: resultSpan.durationMs,
+            estimatedCostUsd: billing.cost,
+            outcome: streamOutcome,
+            userCorrectionSignal: streamCorrectionSignal,
+          }).catch((err: any) => console.debug('[RoutingTelemetry] stream failed:', err?.message || err))
+        );
         return runPostGenerationPipeline({
           userId: user.userId,
           conversationId: resolved.conversationId,
@@ -192,19 +238,23 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
           thoughtSignature,
         } as any);
       }).catch((err: any) => {
+        span.fail(err);
         logger.error('[RuntimeBridge] Background pipeline failed', { error: err?.message || String(err) });
       })
     );
   }
 
-  if (execResult.stream && surface === 'chat') {
+  if (effectiveStream && surface === 'chat') {
     if (billing.cost > 0 && !billing.bypass) {
       waitUntil(
         deductUserCredits(user.userId, Math.max(0, billing.remaining), billing.cost)
       );
     }
 
-    return new NextResponse(clientStream, {
+    span.end({ responseVia: 'stream' });
+    emitAuditFromResult(span, execResult, resolved, user.userId, billing, featureType);
+
+    return new NextResponse(effectiveStream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'X-Debug-Model': execResult.modelId || 'unknown',
@@ -214,6 +264,7 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
         'X-Remaining-Credits': String(Math.max(0, billing.remaining)),
         'x-telemetry-model': execResult.actualModelId || execResult.modelId || 'unknown',
         'x-telemetry-provider': execResult.systemProvider || 'unknown',
+        ...buildTraceHeaders(span),
       } as Record<string, string>,
     });
   }
@@ -224,15 +275,64 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
     );
   }
 
+  span.end({ responseVia: 'json' });
+  emitAuditFromResult(span, execResult, resolved, user.userId, billing, featureType);
+
+  const outcome = execResult.text ? 'success' : 'failed';
+  const userCorrectionSignal = execResult.routingDecision?.intent?.urgency === 'high' ? 'implicit' : 'none';
+
+  waitUntil(
+    logRoutingTelemetry({
+      decision: execResult.routingDecision,
+      latencyMs: span.durationMs,
+      estimatedCostUsd: billing.cost,
+      outcome,
+      userCorrectionSignal,
+    }).catch((err: any) => console.debug('[RoutingTelemetry] failed:', err?.message || err))
+  );
+
   return NextResponse.json(
     { text: execResult.text || '' },
     {
       headers: {
         'x-telemetry-model': execResult.actualModelId || execResult.modelId || 'unknown',
         'x-telemetry-provider': execResult.systemProvider || 'unknown',
+        ...buildTraceHeaders(span),
       } as Record<string, string>,
     }
   );
+}
+
+function buildTraceHeaders(span: import('@/lib/ucol/observability/span').UcolSpan) {
+  return {
+    'X-Lattice-Trace-Id': span.traceId,
+    'X-Lattice-Span-Id': span.spanId,
+  } as Record<string, string>;
+}
+
+async function emitAuditFromResult(
+  span: import('@/lib/ucol/observability/span').UcolSpan,
+  execResult: ExecuteRuntimeFnResult,
+  resolved: RuntimeContextResult,
+  userId: string,
+  billing: { cost: number },
+  featureType: 'chat' | 'code'
+) {
+  try {
+    emitInteractionAudit(span.toAuditInput({
+      requestedModelId: execResult.requestedModelId,
+      actualModelId: execResult.actualModelId,
+      systemProvider: execResult.systemProvider,
+      agentName: resolved.mode,
+      agentRole: featureType,
+      creditCost: billing.cost,
+      contextRole: deriveContextRole({ workspaceId: resolved.workspaceId, agentMode: resolved.mode }),
+    }));
+  } catch (telemetryErr) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[observability] bridge audit emit failed (non-blocking):', telemetryErr);
+    }
+  }
 }
 
 export function bridgeErrorHandler(error: unknown): NextResponse | null {

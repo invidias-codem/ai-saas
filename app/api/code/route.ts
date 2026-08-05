@@ -1,22 +1,93 @@
 // app/api/code/route.ts
 //
 // Phase 2 refactor: atomic thin transport.
-// Route now owns ONLY: custom file validation.
+// Route now owns ONLY: custom file validation + direct execution sandbox.
 // Everything else (auth, rate-limit, context, billing, execution, post-gen, response) is delegated.
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Part } from "@google/generative-ai";
 import { runCodeEngine } from '@/lib/llm/codeEngine';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Part } from "@google/generative-ai";
 import { validateRequestSize, ValidationError, fileUploadSchema } from '@/lib/security/inputValidation';
 import { CODE_MODELS } from '@/lib/llm/codeModels';
 import { setupUcolSession } from '@/lib/ucol/sessionHandler';
 import { runRuntimeBridge } from '@/lib/ucol/runtimeBridge';
+import { isolatedRunner } from '@/lib/execution/isolatedRunner';
 import type { FileAttachmentInput } from '@/lib/types/attachments';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   try {
+    // --- Direct execution path (before auth) --------------------------
+    const bypassToken = process.env.LATTICE_CODE_BYPASS_TOKEN;
+    const isDevBypass = !!bypassToken && process.env.NODE_ENV !== 'production';
+
+    const contentType = req.headers.get('content-type') || '';
+    let executeBody: { code?: string; language?: string; timeoutMs?: number; workflow?: boolean } | null = null;
+    if (contentType.includes('application/json')) {
+      try {
+        executeBody = await req.json();
+      } catch {
+        executeBody = null;
+      }
+    }
+
+    if (executeBody && executeBody.code && typeof executeBody.code === 'string') {
+      if (isDevBypass) {
+        const provided = req.headers.get('x-lattice-bypass');
+        if (!provided || provided !== bypassToken) {
+          return new Response(JSON.stringify({ error: 'Missing bypass token' }), { status: 401 });
+        }
+      }
+
+      const language = (executeBody.language === 'python' || executeBody.language === 'javascript' || executeBody.language === 'typescript' || executeBody.language === 'sh')
+        ? executeBody.language
+        : 'typescript';
+      const timeoutMs = typeof executeBody.timeoutMs === 'number' ? executeBody.timeoutMs : 10_000;
+
+      const traceId = req.headers.get('x-lattice-trace-id') || randomUUID();
+
+      let executionResult: { executionId: string; exitCode: number | null; stdout: string; stderr: string; timedOut: boolean; durationMs: number } | null = null;
+
+      executionResult = await isolatedRunner.execute({
+        code: executeBody.code as string,
+        language,
+        timeoutMs,
+        traceId,
+      });
+
+      const responseBody: any = { ...executionResult };
+
+      if (executeBody.workflow) {
+        const { durableEngine } = await import('@/lib/ucol/runtime/durableEngine');
+        const context = await durableEngine.startWorkflow('execute', {
+          code: executeBody.code as string,
+          language,
+          timeoutMs,
+        });
+
+        await durableEngine.executeStep(context, async () => {
+          return executionResult;
+        });
+
+        return new Response(JSON.stringify({ workflowId: context.workflowId, ...responseBody }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Lattice-Trace-Id': traceId,
+          },
+        });
+      }
+
+      return new Response(JSON.stringify(responseBody), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Lattice-Trace-Id': traceId,
+        },
+      });
+    }
+
     // --- Phase 2: session bootstrap ----------------------------------
     const session = await setupUcolSession({
       req,

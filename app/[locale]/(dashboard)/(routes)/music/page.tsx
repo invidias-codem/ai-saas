@@ -1,26 +1,31 @@
 // app/(dashboard)/(routes)/music/page.tsx
 "use client";
 
-import { Input } from '@/components/ui/input';
+import React from "react";
+import { Input } from "@/components/ui/input";
 import { useTranslations } from "next-intl";
-import { useState, useEffect } from "react"; // ✅ Added useEffect
-import { formSchema } from './constants';
-import { Heading } from '@/components/heading';
-import { DiscIcon } from '@radix-ui/react-icons';
-import { Form, FormField, FormItem, FormControl } from '@/components/ui/form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import { Button } from '@/components/ui/button';
-import { z } from 'zod';
-import EmptyState from '@/components/empty';
-import axios from 'axios';
-import { ShareButton } from '@/components/share-button';
+import { useState, useEffect } from "react";
+import { formSchema } from "./constants";
+import { Heading } from "@/components/heading";
+import { DiscIcon } from "@radix-ui/react-icons";
+import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/button";
+import { z } from "zod";
+import EmptyState from "@/components/empty";
+import axios from "axios";
+import { ShareButton } from "@/components/share-button";
+import YouTubeEmbed from "@/components/music/youtube-embed";
+import StereoBars from "@/components/music/stereo-bars";
 
-// ✅ Define the structure of the prediction object
+const DEFAULT_YOUTUBE_VIDEO_ID = "5qap5aO4i9A";
+const DEFAULT_YOUTUBE_TITLE = "Lofi beats";
+
 interface ReplicatePrediction {
   id: string;
   status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
-  output?: string; // MusicGen output is a single URL string
+  output?: string;
   error?: {
     detail: string;
   };
@@ -29,25 +34,20 @@ interface ReplicatePrediction {
 const MusicPage = () => {
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // ✅ Manage loading and prediction state
   const [isLoading, setIsLoading] = useState(false);
   const [predictionId, setPredictionId] = useState<string | null>(null);
+  const [showYouTube, setShowYouTube] = useState(false);
 
   const t = useTranslations("Music");
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      prompt: '',
+      prompt: "",
     },
   });
 
-  // ✅ useEffect hook for polling
   useEffect(() => {
-    // Stop polling if there's no ID or we're not loading
-    if (!predictionId || !isLoading) {
-      return;
-    }
+    if (!predictionId || !isLoading) return;
 
     const interval = setInterval(async () => {
       try {
@@ -73,7 +73,6 @@ const MusicPage = () => {
 
           case "starting":
           case "processing":
-            // Still working, let the interval continue
             break;
         }
       } catch (err: any) {
@@ -83,26 +82,22 @@ const MusicPage = () => {
         setPredictionId(null);
         clearInterval(interval);
       }
-    }, 3000); // Poll every 3 seconds
+    }, 3000);
 
-    return () => clearInterval(interval); // Cleanup on unmount
-
+    return () => clearInterval(interval);
   }, [predictionId, isLoading, form]);
 
-  // ✅ Updated handleSubmit to *start* the prediction
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     setError(null);
     setMusicUrl(null);
-    setIsLoading(true); // Start loading
-    setPredictionId(null); // Clear old ID
+    setIsLoading(true);
+    setPredictionId(null);
 
     try {
-      // ✅ Call the API to start the prediction
       const response = await axios.post<ReplicatePrediction>("/api/music", values);
       const prediction = response.data;
 
       if (prediction && prediction.id) {
-        // ✅ Set the ID to start polling
         setPredictionId(prediction.id);
       } else {
         throw new Error("API response did not contain a prediction ID.");
@@ -111,20 +106,22 @@ const MusicPage = () => {
       console.error("[MUSIC_PAGE_ERROR]", error);
       const errorMessage = error.response?.data?.details || "Sorry, something went wrong starting the music generation.";
       setError(errorMessage);
-      setIsLoading(false); // Stop loading on immediate failure
+      setIsLoading(false);
     }
   };
+
+  const hasContent = !isLoading && !error && (musicUrl || showYouTube);
 
   return (
     <div>
       <Heading
-        title={t('title')}
-        description={t('description')}
+        title={t("title")}
+        description={t("description")}
         icon={DiscIcon}
-        iconColor='text-emerald-500'
-        bgColor='bg-emerald-500/10'
+        iconColor="text-emerald-500"
+        bgColor="bg-emerald-500/10"
       />
-      <div className='px-4 lg:px-8'>
+      <div className="px-4 lg:px-8">
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(handleSubmit)}
@@ -135,10 +132,10 @@ const MusicPage = () => {
               control={form.control}
               name="prompt"
               render={({ field }) => (
-                <FormItem className='w-full relative z-10'>
-                  <FormControl className='m-0 p-0'>
+                <FormItem className="w-full relative z-10">
+                  <FormControl className="m-0 p-0">
                     <Input
-                      className='border-0 bg-background/50 backdrop-blur-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-xl px-4 py-3 transition-all duration-200'
+                      className="border-0 bg-background/50 backdrop-blur-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-xl px-4 py-3 transition-all duration-200"
                       disabled={isLoading}
                       placeholder="🎵 Describe your sound... (e.g., Generate a relaxing lofi beat...)"
                       {...field}
@@ -164,7 +161,17 @@ const MusicPage = () => {
         </Form>
       </div>
 
-      <div className='space-y-6 mt-8 px-4 lg:px-8'>
+      <div className="flex justify-center mt-6 px-4 lg:px-8">
+        <Button
+          variant="secondary"
+          className="bg-gradient-to-r from-emerald-600/10 to-teal-600/10 hover:from-emerald-600/20 hover:to-teal-600/20 border-emerald-500/20 rounded-xl transition-all duration-300"
+          onClick={() => setShowYouTube((v) => !v)}
+        >
+          {showYouTube ? "Hide Free Beat" : "Use a Free Beat"}
+        </Button>
+      </div>
+
+      <div className="space-y-6 mt-8 px-4 lg:px-8">
         {isLoading && (
           <div className="relative rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-16 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 animate-pulse" />
@@ -191,18 +198,31 @@ const MusicPage = () => {
           </div>
         )}
 
-        {!musicUrl && !isLoading && !error && (
-          <div className="rounded-2xl border border-emerald-500/10 bg-gradient-to-br from-background to-emerald-500/5 p-12">
-            <EmptyState label={t('empty')} />
+        {showYouTube && (
+          <div className="space-y-4">
+            <YouTubeEmbed videoId={DEFAULT_YOUTUBE_VIDEO_ID} title={DEFAULT_YOUTUBE_TITLE} />
+            <div className="flex items-center justify-center gap-3">
+              <StereoBars active />
+              <p className="text-sm text-muted-foreground">
+                Free background beat — use this while you compose your own prompt.
+              </p>
+            </div>
           </div>
         )}
-        {musicUrl && (
+
+        {!musicUrl && !isLoading && !error && !showYouTube && (
+          <div className="rounded-2xl border border-emerald-500/10 bg-gradient-to-br from-background to-emerald-500/5 p-12">
+            <EmptyState label={t("empty")} />
+          </div>
+        )}
+
+        {musicUrl && !isLoading && !error && (
           <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-6 shadow-2xl shadow-emerald-500/10">
-            <audio controls className='w-full rounded-xl mb-4 shadow-lg'>
+            <audio controls className="w-full rounded-xl mb-4 shadow-lg">
               <source src={musicUrl} type="audio/mpeg" />
               Your browser does not support the audio element.
             </audio>
-            <div className="flex justify-center gap-2">
+            <div className="flex flex-wrap justify-center gap-2">
               <Button
                 onClick={() => window.open(musicUrl)}
                 variant="secondary"
@@ -228,8 +248,3 @@ const MusicPage = () => {
 };
 
 export default MusicPage;
-
-
-
-
-

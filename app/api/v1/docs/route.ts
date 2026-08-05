@@ -168,6 +168,48 @@ const spec = {
         responses: { '200': { description: 'Webhook deactivated' } },
       },
     },
+    '/api/v1/tasks': {
+      post: {
+        summary: 'Create agent task',
+        description: 'Submit an internal agent task for execution. Returns task_id immediately; completion is async. Requires stream:read scope.',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['task_type', 'input'],
+                properties: {
+                  task_type: { type: 'string', enum: ['reasoning', 'generation', 'evaluation', 'transformation'] },
+                  input: { type: 'string', description: 'Task input/prompt' },
+                  context: { type: 'string', description: 'Optional context' },
+                  routing_tier: { type: 'string', enum: ['fast', 'balanced', 'deep'], description: 'Override routing tier' },
+                  model_preference: { type: 'string', description: 'Optional model override' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '202': { description: 'Task queued', content: { 'application/json': { schema: { type: 'object', properties: { task_id: { type: 'string' }, status: { type: 'string' }, created_at: { type: 'string' } } } } } },
+          '400': { description: 'Invalid request' },
+          '401': { description: 'Unauthorized' },
+          '500': { description: 'Server error' },
+        },
+      },
+      get: {
+        summary: 'List agent tasks',
+        description: 'List recent agent tasks for the workspace. Requires memory:read scope.',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'task_id', in: 'query', schema: { type: 'string' }, description: 'Optional single task lookup' },
+        ],
+        responses: {
+          '200': { description: 'Task list', content: { 'application/json': { schema: { type: 'object', properties: { tasks: { type: 'array' }, total: { type: 'integer' } } } } } },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {

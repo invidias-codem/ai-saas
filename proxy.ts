@@ -50,6 +50,8 @@ const isPublicRoute = createRouteMatcher([
     '/api/webhooks/vercel-logs',
     '/api/cli/stream',
     '/api/memory/cli',
+    '/api/code',
+    '/api/v1/(.*)',  // partner gateway — uses its own bearer auth, not Clerk
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

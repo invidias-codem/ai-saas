@@ -21,6 +21,9 @@ import { promisify } from 'util';
 import { getToolRegistry } from './toolRegistry';
 import { recordExecution } from './proceduralMemory';
 import type { ToolStep } from './proceduralMemory';
+import { interceptTool } from './contextFirewall';
+import { startUcolSpan } from './observability/span';
+import { SPAN_ATTRS } from './observability/span';
 
 const execFile = promisify(_execFile);
 
@@ -200,6 +203,51 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolExecutionResult
     stateDiff: emptyStateDiff,
   };
 
+  const span = startUcolSpan({
+    name: 'tool_execute',
+    userId: cmd.userId,
+    metadata: {
+      harness: cmd.harness,
+      command: cmd.command,
+      surface: 'tool-executor',
+    },
+  });
+
+  const interception = interceptTool({
+    harness: cmd.harness,
+    command: cmd.command,
+    args: cmd.args ?? [],
+    toolDescription: cmd.taskDescription,
+    trustContext: cmd as any,
+  });
+
+  span.setAttribute(SPAN_ATTRS.providerId, cmd.harness);
+  span.setAttribute('tool.command', commandStr);
+
+  if (interception.decision === 'deny') {
+    span.addEvent('tool.intercepted', {
+      policy: interception.policy,
+      reason: interception.reason,
+    });
+    span.fail(interception.reason ?? 'tool_intercepted');
+
+    const durationMs = Date.now() - startMs;
+    const stateAfterFailure = captureStateSnapshot(cmd.harness, cmd.command, { error: interception.reason });
+    const failureDelta = deriveDelta(stateBefore, stateAfterFailure, cmd.harness, commandStr, false);
+
+    return {
+      ...base,
+      error: interception.reason,
+      durationMs,
+      stateDiff: {
+        before: stateBefore,
+        action: { tool: cmd.harness, command: commandStr, args: cmd.args ?? [] },
+        after: stateAfterFailure,
+        delta: ['blocked: ' + (interception.policy ?? 'trust_boundary.deny'), ...failureDelta],
+      },
+    };
+  }
+
   try {
     // ── Resolve binary via registry ──────────────────────────────────────
     const registry = await getToolRegistry();
@@ -208,7 +256,7 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolExecutionResult
     if (!tool) {
       return {
         ...base,
-        error: `Tool harness "${cmd.harness}" is not installed or not registered. Run tool-registry-sync to refresh.`,
+        error: 'Tool harness "' + cmd.harness + '" is not installed or not registered. Run tool-registry-sync to refresh.',
         durationMs: Date.now() - startMs,
       };
     }
@@ -216,7 +264,7 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolExecutionResult
     if (!registry.isInstalled(cmd.harness)) {
       return {
         ...base,
-        error: `Binary "${tool.binary}" not found in PATH.`,
+        error: 'Binary "' + tool.binary + '" not found in PATH.',
         durationMs: Date.now() - startMs,
       };
     }
@@ -228,7 +276,7 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolExecutionResult
       ...(cmd.args ?? []),
     ];
 
-    console.log(`[ToolExecutor] ${tool.binary} ${fullArgs.join(' ')}`);
+    console.log('[ToolExecutor] ' + tool.binary + ' ' + fullArgs.join(' '));
 
     // ── Execute with timeout ─────────────────────────────────────────────
     const { stdout, stderr } = await execFile(tool.binary, fullArgs, {
@@ -247,14 +295,14 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolExecutionResult
       data = JSON.parse(raw);
     } catch {
       // Harness didn't return valid JSON — keep raw string as data
-      console.warn(`[ToolExecutor] ${commandStr} returned non-JSON output`);
+      console.warn('[ToolExecutor] ' + commandStr + ' returned non-JSON output');
     }
 
     if (stderr) {
-      console.warn(`[ToolExecutor] stderr from ${commandStr}: ${stderr.substring(0, 200)}`);
+      console.warn('[ToolExecutor] stderr from ' + commandStr + ': ' + stderr.substring(0, 200));
     }
 
-    console.log(`[ToolExecutor] ✓ ${commandStr} completed in ${durationMs}ms`);
+    console.log('[ToolExecutor] ✓ ' + commandStr + ' completed in ' + durationMs + 'ms');
 
     // ── Build state diff ─────────────────────────────────────────────────
     const stateAfter = captureStateSnapshot(cmd.harness, cmd.command, data);
@@ -299,17 +347,11 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolExecutionResult
     const message = err instanceof Error ? err.message : String(err);
     const stderr = (err as { stderr?: string }).stderr ?? '';
 
-    console.error(`[ToolExecutor] ✗ ${commandStr} failed in ${durationMs}ms: ${message}`);
+    console.error('[ToolExecutor] ✗ ' + commandStr + ' failed in ' + durationMs + 'ms: ' + message);
 
     // ── Capture failure state diff ───────────────────────────────────────
     const stateAfterFailure = captureStateSnapshot(cmd.harness, cmd.command, { error: message });
-    const failureDelta = deriveDelta(
-      stateBefore,
-      stateAfterFailure,
-      cmd.harness,
-      commandStr,
-      false
-    );
+    const failureDelta = deriveDelta(stateBefore, stateAfterFailure, cmd.harness, commandStr, false);
 
     // ── Fire-and-forget failure recording ────────────────────────────────
     if (cmd.userId && cmd.taskDescription) {
@@ -328,9 +370,11 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolExecutionResult
       );
     }
 
+    span.fail(message);
+
     return {
       ...base,
-      error: `${message}${stderr ? `\nstderr: ${stderr.substring(0, 500)}` : ''}`,
+      error: message + (stderr ? '\nstderr: ' + stderr.substring(0, 500) : ''),
       durationMs,
       stateDiff: {
         before: stateBefore,
@@ -339,6 +383,16 @@ export async function executeTool(cmd: ToolCommand): Promise<ToolExecutionResult
         delta: failureDelta,
       },
     };
+  } finally {
+    if (!base.error) {
+      span.end({
+        output: {
+          durationMs: Date.now() - startMs,
+          harness: cmd.harness,
+          command: commandStr,
+        },
+      });
+    }
   }
 }
 

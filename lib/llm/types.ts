@@ -56,6 +56,7 @@ export interface CompletionOptions {
     topP?: number;
     topK?: number;
     stream?: boolean;
+    signal?: AbortSignal;
 }
 
 export interface StreamResult {

@@ -34,7 +34,7 @@ import { deriveContextRole } from "@/lib/telemetry/governance";
 import { createDistributionShiftDetector } from '@/lib/world-model/distribution-shift';
 import { createBenchmarkingPipeline } from '@/lib/world-model/benchmarking';
 import { ModelStore } from '@/lib/world-model/ml/ModelStore';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseAdmin } from '@/lib/supabaseClient';
 import type { AIOutputAudit } from '@/lib/world-model/types';
 import { deltaEngine } from '@/lib/world-model/delta';
 import { critiqueLLMOutput } from '@/lib/ucol/critics/OutputCritic';
@@ -289,6 +289,47 @@ export async function generateConversationReply(
         }
     }
     // ------------------------------------
+
+    // --- P1 ORG CONTEXT RESOLUTION ---
+    let orgContext = undefined;
+    try {
+      const workspaceId = parsed.workspaceId;
+      if (workspaceId && supabaseAdmin) {
+        const { data: ws } = await supabaseAdmin
+          .from('workspaces')
+          .select('org_id')
+          .eq('id', workspaceId)
+          .maybeSingle();
+
+        const orgId = ws?.org_id;
+        if (orgId) {
+          const { data: member } = await supabaseAdmin
+            .from('organization_members')
+            .select('role')
+            .eq('org_id', orgId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          const roleToPermissions: Record<string, string[]> = {
+            owner: ['org:read','org:update','org:delete','member:invite','member:update','member:remove','sensitive_tools:use','external_actions:use','audit:read'],
+            admin: ['org:read','member:invite','member:update','member:remove','sensitive_tools:use','audit:read'],
+            developer: ['org:read','external_actions:use'],
+            auditor: ['org:read','audit:read'],
+          };
+
+          const permissions = member?.role ? roleToPermissions[member.role] ?? [] : [];
+          if (permissions.length > 0) {
+            orgContext = { orgId, userId, permissions };
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[OrgContext] Resolution failed, using zero-trust fallback:', e);
+    }
+    if (!orgContext) {
+      orgContext = { orgId: '', userId, permissions: [] };
+    }
+    // ------------------------------------
     const { runSwarmOrchestrator } = await import('@/lib/agents/core/orchestrator');
     const { anthropic, createAnthropic } = await import('@ai-sdk/anthropic');
     const anthropicProvider = nativeProviderKeys.anthropic
@@ -324,6 +365,7 @@ export async function generateConversationReply(
             history: [],
             enableTelemetry: true,
             ioHarness: options.ioHarness,
+            orgContext,
             onStep: (step: any) => {
               onStreamEvent(step.thought);
               if (options.slackStreamCallback) options.slackStreamCallback(step);

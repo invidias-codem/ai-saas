@@ -1,31 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'crypto';
 import { generateConversationReply } from '@/lib/llm/conversationEngine';
 import { ConversationRequestSchema } from '@/lib/llm/conversationEngine';
+import { supabaseAdmin } from '@/lib/supabaseClient';
+import { startUcolSpan } from '@/lib/ucol/observability/span';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 function sseEncode(data: string, event = 'message') {
   const payload = `event: ${event}\ndata: ${data}\n\n`;
   return new TextEncoder().encode(payload);
 }
 
-const LATTICE_CLI_TOKEN = process.env.LATTICE_CLI_TOKEN || '';
+async function resolveCliToken(authHeader: string): Promise<{ tenantId: string; userId: string } | null> {
+  if (!authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const rawToken = authHeader.slice('Bearer '.length).trim();
+  if (!rawToken) {
+    return null;
+  }
+
+  if (!supabaseAdmin) {
+    return null;
+  }
+
+  const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+  const { data, error } = await supabaseAdmin
+    .from('tenant_cli_tokens')
+    .select('id, tenant_id, user_id, revoked')
+    .eq('token_hash', tokenHash)
+    .eq('revoked', false)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  // Update last used timestamp
+  await supabaseAdmin
+    .from('tenant_cli_tokens')
+    .update({ last_used_at: new Date().toISOString() })
+    .eq('id', data.id);
+
+  return {
+    tenantId: data.tenant_id,
+    userId: data.user_id,
+  };
+}
 
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization') || '';
-    const provided = authHeader.startsWith('Bearer ')
-      ? authHeader.slice('Bearer '.length).trim()
-      : null;
 
-    if (!LATTICE_CLI_TOKEN || !provided || provided !== LATTICE_CLI_TOKEN) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const tokenContext = await resolveCliToken(authHeader);
+    if (!tokenContext) {
+      return NextResponse.json({ error: 'Invalid or revoked CLI token' }, { status: 401 });
     }
 
-    const userId = req.headers.get('x-lattice-user-id') || 'cli-token-auth';
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing x-lattice-user-id header' }, { status: 401 });
-    }
+    const userId = tokenContext.userId;
+    const tenantId = tokenContext.tenantId;
+
+    const span = startUcolSpan({
+      name: 'api:cli:stream',
+      userId,
+      metadata: { tenantId, surface: 'cli' },
+    });
 
     let body: any;
     try {
@@ -47,7 +90,8 @@ export async function POST(req: NextRequest) {
         userId,
         clerkUser: null,
         request: validationResult.data,
-      },
+        tenantId,
+      } as any,
       {
         disableSideEffects: process.env.DISABLE_SIDE_EFFECTS === 'true',
         disableExternalContext: process.env.DISABLE_EXTERNAL_CONTEXT === 'true',
@@ -101,6 +145,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
+        'X-Lattice-Trace-Id': span.traceId,
       },
     });
   } catch (error: any) {
@@ -110,6 +155,3 @@ export async function POST(req: NextRequest) {
     );
   }
 }
-
-export const runtime = 'nodejs';
-

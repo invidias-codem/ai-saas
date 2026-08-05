@@ -45,37 +45,35 @@ export interface Tool<TInput = any, TOutput = any> {
 
 /**
  * Context available to the agent during execution.
- */
-export interface AgentContext {
-    userId: string;
-    sessionId: string;
-    workspaceId?: string | null;
+ /** Context available to the agent during execution. */
+ export interface AgentContext {
+     userId: string;
+     sessionId: string;
+     workspaceId?: string | null;
 
-    /**
-     * User's verified identity/permissions.
-     */
-    userRole?: 'admin' | 'user';
+     /** User's verified identity/permissions. */
+     userRole?: 'admin' | 'user';
 
-    /**
-     * Short-term memory / conversation history.
-     */
-    history: any[]; // Using any[] for now, should map to ChatMessage
+     /** Enterprise org access for multi-tenant RBAC and context isolation. */
+     orgContext?: {
+       orgId: string;
+       userId: string;
+       role?: string;
+       permissions: string[];
+     };
 
-    /**
-     * Telemetry / Debugging
-     */
-    enableTelemetry: boolean;
+     /** Short-term memory / conversation history. */
+     history: any[]; // Using any[] for now, should map to ChatMessage
 
-    /**
-     * Execution Harness for local workspace changes
-     */
-    ioHarness?: IOHarness;
+     /** Telemetry / Debugging */
+     enableTelemetry: boolean;
 
-    /**
-     * Callback fired whenever the agent updates its thought or executes a tool.
-     */
-    onStep?: (step: TrajectoryStep) => void;
-}
+     /** Execution Harness for local workspace changes */
+     ioHarness?: IOHarness;
+
+     /** Callback fired whenever the agent updates its thought or executes a tool. */
+     onStep?: (step: TrajectoryStep) => void;
+ }
 
 /**
  * Structured log of an agent's reasoning step.

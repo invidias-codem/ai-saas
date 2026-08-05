@@ -12,6 +12,8 @@
 
 import type { TraceContext } from "./udif";
 
+export type { TraceContext } from "./udif";
+
 function uuid(): string {
   // crypto.randomUUID is global in Node >=19 and all modern browsers.
   const c = (globalThis as { crypto?: Crypto }).crypto;
