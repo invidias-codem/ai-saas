@@ -37,6 +37,7 @@ export type AuditAction =
   | 'chat.request'
   | 'chat.blocked'          // Security agent blocked a prompt
   | 'chat.budget_exceeded'
+  | 'chat.insufficient_credits'
   // Memory
   | 'memory.write'
   | 'memory.delete'
