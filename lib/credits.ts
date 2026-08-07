@@ -116,29 +116,6 @@ export interface SpendResult {
     error?: string;
 }
 
-export function creditLimitExceededResponse(userId: string, required: number, remaining: number) {
-    const isMaster = hasUnlimitedUsageAccess(userId);
-    if (isMaster) {
-        return { allowed: true as const };
-    }
-
-    const topUpUrl = '/settings#credits';
-
-    return {
-        allowed: false as const,
-        response: NextResponse.json(
-            {
-                error: 'Insufficient credits',
-                message: `This request requires ${required} credits.`,
-                remaining,
-                topUpUrl,
-                code: 'insufficient_credits',
-            },
-            { status: 402 }
-        ),
-    };
-}
-
 export async function ensureSufficientCreditsOrRespond(userId: string, required: number) {
     const current = await getCredits(userId);
     if (current >= required) return { allowed: true as const };

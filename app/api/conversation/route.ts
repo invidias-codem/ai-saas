@@ -95,10 +95,7 @@ export async function POST(req: Request) {
             }
           );
         } catch (error) {
-          if (!spendResult.duplicate) {
-            logger.info(`[Conversation API] Generation failed, refunding ${cost} credits to ${userId}`);
-            await refundCredits(userId, cost, "Refund for failed chat generation");
-          }
+          console.error("[Conversation API] Generation failed:", error);
           throw error;
         }
 

@@ -34,7 +34,7 @@ export function CreditLimitError({ payload, onTopUp }: { payload: CreditLimitErr
           }
         }}
       >
-        {t('Settings.topUp', 'Top Up')}
+        {t('Settings.topUp')}
       </Button>
     </div>
   );
