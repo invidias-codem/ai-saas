@@ -7,7 +7,7 @@ import {
   ConversationRequestSchema,
   generateConversationReply,
 } from "@/lib/llm/conversationEngine";
-import { spendCreditsAtomic, refundCredits, CREDIT_COSTS, hasUnlimitedUsageAccess } from "@/lib/credits";
+import { spendCreditsAtomic, refundCredits, CREDIT_COSTS, hasUnlimitedUsageAccess, ensureSufficientCreditsOrRespond } from "@/lib/credits";
 import { withProtectedRoute } from "@/lib/core-api/protectedRoute";
 import { checkTokenBudget, recordTokenUsage } from "@/lib/security/budgetGuard";
 import { estimateTokenCount } from "@/lib/ragMemory";
