@@ -8,6 +8,7 @@ import {
   calculateInteractionCost,
   getUserCredits,
   deductUserCredits,
+  hasUnlimitedUsageAccess,
 } from '@/lib/subscription/credits';
 import type { SessionSetupResult } from './sessionHandler';
 import type { RuntimeContextResult } from './runtimeContextResolver';
@@ -142,6 +143,11 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
   };
 
   const billing = await (billingOverride ?? defaultBilling)(billingInput);
+
+  const masterAccess = await hasUnlimitedUsageAccess(user.userId, clerkUser?.emailAddresses?.[0]?.emailAddress || null);
+  if (masterAccess) {
+    Object.assign(billing, { bypass: true, remaining: billing.cost });
+  }
 
   if (!billing.bypass && billing.remaining < billing.cost) {
     span.fail(new Error('Insufficient credits'));

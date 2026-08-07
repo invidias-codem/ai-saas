@@ -9,7 +9,7 @@ import { z } from "zod";
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { musicGenerationSchema, ValidationError } from '@/lib/security/inputValidation';
-import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
+import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS, ensureSufficientCreditsOrRespond } from "@/lib/credits";
 import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 
 // 1. Initialize Replicate client

@@ -9,7 +9,7 @@ import { z } from 'zod'; // For input validation
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { videoGenerationSchema, ValidationError } from '@/lib/security/inputValidation';
-import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
+import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS, ensureSufficientCreditsOrRespond } from "@/lib/credits";
 import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 
 // Initialize the Replicate client using the API token from your environment
@@ -76,10 +76,10 @@ export async function POST(request: Request) {
     const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Video generation");
 
     if (!spendResult.success && !spendResult.duplicate) {
-      return NextResponse.json(
-        { error: 'Insufficient credits', message: `You need ${cost} credits for this request.`, remaining: spendResult.remaining },
-        { status: 402 }
-      );
+        return NextResponse.json(
+            { error: 'Insufficient credits', message: `You need ${cost} credits for this request.`, remaining: spendResult.remaining, topUpUrl: '/settings#credits' },
+            { status: 402 }
+        );
     }
 
     console.log(`Starting Replicate prediction for ${VEO_MODEL} with input:`, input);

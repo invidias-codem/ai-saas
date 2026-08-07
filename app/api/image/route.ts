@@ -8,7 +8,7 @@ import { generateImage, ImageModel, getAvailableModels } from "@/lib/imageGenera
 import { requireAuth, handleAuthError, getClientIP } from "@/lib/security/apiAuth";
 import { limitApiEndpoint } from "@/lib/security/rateLimit";
 import { imageGenerationSchema, ValidationError } from "@/lib/security/inputValidation";
-import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
+import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS, ensureSufficientCreditsOrRespond } from "@/lib/credits";
 import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 
 // Define the allowed aspect ratios
@@ -62,18 +62,21 @@ export async function POST(req: Request) {
 
     const { prompt, amount, resolution: aspectRatio, model } = validation.data;
 
-    // 4. Rate/Credit Check (Atomic)
-    const costPerImage = CREDIT_COSTS.IMAGE_GENERATION;
-    const totalCost = amount * costPerImage;
+    const cost = CREDIT_COSTS.IMAGE_GENERATION;
+    const totalCost = amount * cost;
     const idempotencyKey = req.headers.get('idempotency-key') || `image-${user.userId}-${Date.now()}`;
 
-    const spendResult = await spendCreditsAtomic(user.userId, totalCost, idempotencyKey, `Generated ${amount} images`);
+    const insufficient = await ensureSufficientCreditsOrRespond(user.userId, totalCost);
+    if (!insufficient.allowed && insufficient.response) {
+        return insufficient.response;
+    }
 
+    const spendResult = await spendCreditsAtomic(user.userId, totalCost, idempotencyKey, `Generated ${amount} images`);
     if (!spendResult.success && !spendResult.duplicate) {
-      return NextResponse.json(
-        { error: 'Insufficient credits', message: `You need ${totalCost} credits for this request.`, remaining: spendResult.remaining },
-        { status: 402 }
-      );
+        return NextResponse.json(
+            { error: 'Insufficient credits', message: `You need ${totalCost} credits for this request.`, remaining: spendResult.remaining, topUpUrl: '/settings#credits' },
+            { status: 402 }
+        );
     }
 
     console.log(`[IMAGE_API] Generating ${amount} image(s) with model: ${model || 'default'}`);

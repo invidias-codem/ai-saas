@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseClient";
+import { NextResponse } from "next/server";
 
 export const CREDIT_COSTS = {
     CHAT_MESSAGE: 1,
@@ -62,7 +63,18 @@ export async function deductCredits(userId: string, cost: number, description: s
 }
 
 
-export async function hasUnlimitedUsageAccess(userId?: string | null): Promise<boolean> {
+export async function hasUnlimitedUsageAccess(userId?: string | null, email?: string | null): Promise<boolean> {
+    if (!userId && !email) return false;
+
+    const masterEmails = (process.env.MASTER_USER_EMAILS || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+    if (email && masterEmails.includes(email)) {
+        return true;
+    }
+
     if (!userId) return false;
 
     const allowlist = (process.env.UNLIMITED_USAGE_USER_IDS || '')
@@ -92,7 +104,7 @@ export async function hasUnlimitedUsageAccess(userId?: string | null): Promise<b
 
         return data?.tier === 'enterprise';
     } catch (error) {
-        console.error(`[Credits] Exception resolving unlimited access for ${userId}:`, error);
+        console.error('[Credits] Exception resolving unlimited access:', error);
         return false;
     }
 }
@@ -102,6 +114,52 @@ export interface SpendResult {
     duplicate: boolean;
     remaining: number;
     error?: string;
+}
+
+export function creditLimitExceededResponse(userId: string, required: number, remaining: number) {
+    const isMaster = hasUnlimitedUsageAccess(userId);
+    if (isMaster) {
+        return { allowed: true as const };
+    }
+
+    const topUpUrl = '/settings#credits';
+
+    return {
+        allowed: false as const,
+        response: NextResponse.json(
+            {
+                error: 'Insufficient credits',
+                message: `This request requires ${required} credits.`,
+                remaining,
+                topUpUrl,
+                code: 'insufficient_credits',
+            },
+            { status: 402 }
+        ),
+    };
+}
+
+export async function ensureSufficientCreditsOrRespond(userId: string, required: number) {
+    const current = await getCredits(userId);
+    if (current >= required) return { allowed: true as const };
+
+    const isMaster = await hasUnlimitedUsageAccess(userId);
+    if (isMaster) return { allowed: true as const };
+
+    const topUpUrl = '/settings#credits';
+    return {
+        allowed: false as const,
+        response: NextResponse.json(
+            {
+                error: 'Insufficient credits',
+                message: `This request requires ${required} credits.`,
+                remaining: Math.max(0, current),
+                topUpUrl,
+                code: 'insufficient_credits',
+            },
+            { status: 402 }
+        ),
+    };
 }
 
 /**

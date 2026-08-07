@@ -15,6 +15,7 @@ import { useCredits } from "@/hooks/use-credits";
 import SlackIntegration from "@/components/slack-integration";
 import { ConversationHistory } from "@/components/conversation-history";
 import { RepoSelectorModal } from "@/components/integrations/RepoSelectorModal";
+import { CreditLimitError } from "@/components/credit-limit-error";
 
 // Loading fallback for Slack integration
 function SlackIntegrationSkeleton() {

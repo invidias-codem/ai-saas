@@ -7,7 +7,7 @@ import {
   ConversationRequestSchema,
   generateConversationReply,
 } from "@/lib/llm/conversationEngine";
-import { spendCreditsAtomic, refundCredits, CREDIT_COSTS } from "@/lib/credits";
+import { spendCreditsAtomic, refundCredits, CREDIT_COSTS, hasUnlimitedUsageAccess } from "@/lib/credits";
 import { withProtectedRoute } from "@/lib/core-api/protectedRoute";
 import { checkTokenBudget, recordTokenUsage } from "@/lib/security/budgetGuard";
 import { estimateTokenCount } from "@/lib/ragMemory";
@@ -66,17 +66,18 @@ export async function POST(req: Request) {
         void audit("chat.request", userId, { estimatedTokens, tier: budgetCheck.tier }, req);
 
         const cost = CREDIT_COSTS.CHAT_MESSAGE;
-        const spendResult = await spendCreditsAtomic(userId, cost, ctx.idempotencyKey, "Chat message");
-
-        if (!spendResult.success && !spendResult.duplicate) {
-          return NextResponse.json(
-            {
-              error: "Insufficient credits",
-              message: `You need ${cost} credits for this request.`,
-              remaining: spendResult.remaining,
-            },
-            { status: 402 }
-          );
+        const hasUnlimited = await hasUnlimitedUsageAccess(userId);
+        if (!hasUnlimited) {
+            const creditCheck = await ensureSufficientCreditsOrRespond(userId, cost);
+            if (!creditCheck.allowed && creditCheck.response) {
+                void audit(
+                    "chat.insufficient_credits",
+                    userId,
+                    { cost, remaining: 0 },
+                    req
+                );
+                return creditCheck.response;
+            }
         }
 
         const conversationStart = Date.now();
