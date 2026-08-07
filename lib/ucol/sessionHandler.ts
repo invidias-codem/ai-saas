@@ -17,6 +17,7 @@ export interface SessionSetupOptions {
     surface: 'web' | 'api';
     rateLimitFeature?: 'ai' | 'query' | 'mutation' | 'webhook';
     strictValidation?: boolean;
+    requestBody?: any;
 }
 
 export interface SessionSetupResult {
@@ -35,7 +36,8 @@ export async function setupUcolSession({
     maxRequestSizeBytes,
     surface,
     rateLimitFeature = 'ai',
-    strictValidation = false
+    strictValidation = false,
+    requestBody,
 }: SessionSetupOptions): Promise<SessionSetupResult> {
     const user = await requireAuth();
     const clerkUser = await currentUser();
@@ -63,7 +65,7 @@ export async function setupUcolSession({
         };
     }
 
-    const body = await req.json();
+    const body = requestBody ?? await req.json();
     validateRequestSize(body, maxRequestSizeBytes);
 
     const rawInput = body.prompt || body.currentUserPrompt || '';

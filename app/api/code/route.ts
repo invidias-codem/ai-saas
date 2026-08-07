@@ -89,12 +89,22 @@ export async function POST(req: Request) {
     }
 
     // --- Phase 2: session bootstrap ----------------------------------
-    const session = await setupUcolSession({
-      req,
-      maxRequestSizeBytes: 10 * 1024 * 1024,
-      surface: 'api',
-      strictValidation: true,
-    });
+    let session;
+    try {
+      session = await setupUcolSession({
+        req,
+        maxRequestSizeBytes: 10 * 1024 * 1024,
+        surface: 'api',
+        strictValidation: true,
+        requestBody: executeBody ?? undefined,
+      });
+    } catch (sessionErr: any) {
+      console.error('[code] session bootstrap failed', sessionErr);
+      return NextResponse.json(
+        { error: 'Session setup failed', details: sessionErr?.message || String(sessionErr) },
+        { status: 500 }
+      );
+    }
     if (session.errorResponse) return session.errorResponse;
 
     const { user, clerkUser, body, resolvedContext } = session;
@@ -142,61 +152,82 @@ export async function POST(req: Request) {
     const requestId = req.headers.get('x-request-id') || randomUUID();
 
     // --- Phase 2: delegate to bridge ---------------------------------
-    return runRuntimeBridge({
-      surface: 'code',
-      session,
-      requestId,
-      featureType: 'code',
-      body,
-      execute: async ({ resolved: ctx, rawInput, messages: msgs, fileData: attachedFileData }) => {
-        const history = (msgs || []).slice(0, -1).map((msg: {
-          role: string;
-          text: string;
-          fileData?: FileAttachmentInput;
-        }) => {
-          const parts: Part[] = [{ text: msg.text || '' }];
-          if (msg.fileData && msg.fileData.base64Data) {
-            parts.push({
-              inlineData: {
-                mimeType: msg.fileData.mimeType || msg.fileData.type || 'text/plain',
-                data: msg.fileData.base64Data
+    try {
+      return await runRuntimeBridge({
+        surface: 'code',
+        session,
+        requestId,
+        featureType: 'code',
+        body,
+        execute: async ({ resolved: ctx, rawInput, messages: msgs, fileData: attachedFileData }) => {
+          try {
+            const history = (msgs || []).slice(0, -1).map((msg: {
+              role: string;
+              text: string;
+              fileData?: FileAttachmentInput;
+            }) => {
+              const parts: Part[] = [{ text: msg.text || '' }];
+              if (msg.fileData && msg.fileData.base64Data) {
+                parts.push({
+                  inlineData: {
+                    mimeType: msg.fileData.mimeType || msg.fileData.type || 'text/plain',
+                    data: msg.fileData.base64Data
+                  }
+                });
               }
+              return {
+                role: msg.role === 'bot' ? 'model' : 'user',
+                parts,
+              };
             });
+
+            const {
+              responseText,
+              modelConfig: finalModelConfig,
+              routingDecision,
+              intelligentFacts,
+              userContext
+            } = await runCodeEngine({
+              userId: user.userId,
+              clerkUser,
+              userQuery: rawInput,
+              history,
+              fileData: attachedFileData ?? undefined,
+              activeRepo,
+              initialModelConfig: modelConfig,
+              resolvedContext: ctx,
+              requestId,
+              messagesLength: msgs?.length || 0,
+            });
+
+            return {
+              text: responseText,
+              modelId: finalModelConfig.modelId,
+              routingDecision,
+              intelligentFacts,
+              userContext,
+            };
+          } catch (engineErr: any) {
+            console.error('[code] engine execution failed', engineErr);
+            throw new Error(`Code engine failed: ${engineErr?.message || String(engineErr)}`);
           }
-          return {
-            role: msg.role === 'bot' ? 'model' : 'user',
-            parts,
-          };
-        });
-
-        const {
-          responseText,
-          modelConfig: finalModelConfig,
-          routingDecision,
-          intelligentFacts,
-          userContext
-        } = await runCodeEngine({
-          userId: user.userId,
-          clerkUser,
-          userQuery: rawInput,
-          history,
-          fileData: attachedFileData ?? undefined,
-          activeRepo,
-          initialModelConfig: modelConfig,
-          resolvedContext: ctx,
-          requestId,
-          messagesLength: msgs?.length || 0,
-        });
-
-        return {
-          text: responseText,
-          modelId: finalModelConfig.modelId,
-          routingDecision,
-          intelligentFacts,
-          userContext,
-        };
-      },
-    });
+        },
+      });
+    } catch (bridgeErr: any) {
+      console.error('[code] runtimeBridge failed', bridgeErr);
+      const message = bridgeErr?.message || String(bridgeErr);
+      const status = message.includes('Insufficient credits') ? 402 : 500;
+      return NextResponse.json(
+        {
+          error: 'Code generation failed',
+          details: process.env.NODE_ENV === 'production'
+            ? 'An unexpected error occurred'
+            : message,
+          ...(process.env.NODE_ENV !== 'production' ? { stack: bridgeErr?.stack } : {}),
+        },
+        { status }
+      );
+    }
 
   } catch (error: any) {
     if (error instanceof ValidationError) {

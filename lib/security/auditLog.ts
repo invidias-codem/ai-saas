@@ -71,6 +71,7 @@ export type AuditAction =
   | 'agent.pr_blocked'      // Agent wanted to merge but was gated
   | 'tool.executed'
   | 'tool.intercepted'
+  | 'tool.external_action' // Remote API execution via synthesized tool
   | 'tool.failed'
   // Import / Export
   | 'import.start'

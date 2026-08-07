@@ -254,7 +254,9 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
     span.end({ responseVia: 'stream' });
     emitAuditFromResult(span, execResult, resolved, user.userId, billing, featureType);
 
-    return new NextResponse(effectiveStream, {
+    const responseStream = execResult.stream || effectiveStream;
+
+    return new NextResponse(responseStream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'X-Debug-Model': execResult.modelId || 'unknown',

@@ -79,15 +79,15 @@ export class OpenRouterProvider implements LLMProvider {
       throw new Error('No response body received from OpenRouter.');
     }
 
+    const bodyReader = response.body.getReader();
+
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const reader = response.body!.getReader();
         let buffer = '';
         try {
           while (true) {
-            const { done, value } = await reader.read();
+            const { done, value } = await bodyReader.read();
             if (done) break;
-
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
             buffer = lines.pop() ?? '';
@@ -102,23 +102,6 @@ export class OpenRouterProvider implements LLMProvider {
                 const delta = json?.choices?.[0]?.delta;
                 if (!delta) continue;
 
-                if (delta.tool_calls) {
-                  for (const tc of delta.tool_calls) {
-                    const idx = tc.index ?? 0;
-                    if (!accumulatedToolCalls.has(idx)) {
-                      accumulatedToolCalls.set(idx, {
-                        id: tc.id ?? `call_${idx}`,
-                        type: 'function',
-                        function: { name: tc.function?.name ?? '', arguments: '' },
-                      });
-                    }
-                    const existing = accumulatedToolCalls.get(idx)!;
-                    if (tc.function?.name) existing.function.name = tc.function.name;
-                    if (tc.function?.arguments) existing.function.arguments += tc.function.arguments;
-                    if (tc.id) existing.id = tc.id;
-                  }
-                }
-
                 const text = delta.content ?? '';
                 if (text) controller.enqueue(encoder.encode(text));
               } catch {
@@ -126,11 +109,9 @@ export class OpenRouterProvider implements LLMProvider {
               }
             }
           }
+          controller.close();
         } catch (err) {
           controller.error(err);
-        } finally {
-          try { controller.close(); } catch {}
-          reader.releaseLock();
         }
       },
     });

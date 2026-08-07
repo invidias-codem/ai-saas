@@ -247,26 +247,26 @@ export class HermesProvider implements LLMProvider {
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
     const bodyStream = response.body;
+    const bodyReader = bodyStream.getReader();
     const accumulatedToolCalls: Map<number, HermesToolCall> = new Map();
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        const reader = bodyStream.getReader();
-        let buffer = "";
+        let buffer = '';
 
         try {
           while (true) {
-            const { done, value } = await reader.read();
+            const { done, value } = await bodyReader.read();
             if (done) break;
 
             buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
 
             for (const line of lines) {
               const trimmed = line.trim();
-              if (!trimmed || trimmed === "data: [DONE]") continue;
-              if (!trimmed.startsWith("data: ")) continue;
+              if (!trimmed || trimmed === 'data: [DONE]') continue;
+              if (!trimmed.startsWith('data: ')) continue;
 
               try {
                 const json = JSON.parse(trimmed.slice(6));
@@ -279,8 +279,8 @@ export class HermesProvider implements LLMProvider {
                     if (!accumulatedToolCalls.has(idx)) {
                       accumulatedToolCalls.set(idx, {
                         id: tc.id ?? `call_${idx}`,
-                        type: "function",
-                        function: { name: tc.function?.name ?? "", arguments: "" },
+                        type: 'function',
+                        function: { name: tc.function?.name ?? '', arguments: '' },
                       });
                     }
                     const existing = accumulatedToolCalls.get(idx)!;
@@ -290,7 +290,7 @@ export class HermesProvider implements LLMProvider {
                   }
                 }
 
-                const text = delta.content ?? "";
+                const text = delta.content ?? '';
                 if (text) controller.enqueue(encoder.encode(text));
               } catch {
                 // skip malformed chunk
@@ -358,8 +358,48 @@ export class HermesProvider implements LLMProvider {
       throw new Error(`Ollama-compatible endpoint (${response.status}): ${errText}`);
     }
 
+    const bodyStream = response.body;
+    const bodyReader = bodyStream.getReader();
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder('utf-8');
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let buffer = '';
+        try {
+          while (true) {
+            const { done, value } = await bodyReader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed === 'data: [DONE]') continue;
+              if (!trimmed.startsWith('data: ')) continue;
+
+              try {
+                const json = JSON.parse(trimmed.slice(6));
+                const delta = json?.choices?.[0]?.delta;
+                if (!delta) continue;
+
+                const text = delta.content ?? '';
+                if (text) controller.enqueue(encoder.encode(text));
+              } catch {
+                // skip malformed chunk
+              }
+            }
+          }
+          controller.close();
+        } catch (err) {
+          controller.error(err);
+        }
+      },
+    });
+
     return {
-      stream: response.body,
+      stream,
       debug: {
         model: `ollama/${OLLAMA_MODEL}`,
       },

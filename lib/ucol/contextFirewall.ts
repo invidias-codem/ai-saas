@@ -62,7 +62,17 @@ export function interceptTool(input: ToolInterceptionInput): ToolInterceptionRes
   }
 
   const isInternalTool = harness.startsWith('auto_db_');
-  if (!isInternalTool && !trustContext.canUseExternalActions && !hasPermission(orgContext, 'external_actions:use')) {
+  const isExternalApiTool = !isInternalTool && (harness.startsWith('gql_') || harness.startsWith('api_'));
+
+  if (!isInternalTool && (trustContext.canUseExternalActions || isExternalApiTool)) {
+    if (!hasPermission(orgContext, 'external_actions:use')) {
+      return {
+        decision: 'deny',
+        reason: `Execution blocked: '${harness}' is classified as an external action. The active session lacks the required 'external_actions:use' permission.`,
+        policy: 'trust_boundary.external_actions_deny',
+      };
+    }
+  } else if (!isInternalTool && !trustContext.canUseExternalActions && !hasPermission(orgContext, 'external_actions:use')) {
     return {
       decision: 'deny',
       reason: 'External actions are disabled for this request.',
