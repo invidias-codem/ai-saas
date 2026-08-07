@@ -8,8 +8,8 @@ import {
   calculateInteractionCost,
   getUserCredits,
   deductUserCredits,
-  hasUnlimitedUsageAccess,
 } from '@/lib/subscription/credits';
+import { hasUnlimitedUsageAccess } from '@/lib/credits';
 import type { SessionSetupResult } from './sessionHandler';
 import type { RuntimeContextResult } from './runtimeContextResolver';
 import type { UcolRoutingDecision } from './routing/types';
