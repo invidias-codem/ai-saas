@@ -25,12 +25,19 @@ export class GoIOHarness implements IOHarness {
     const suffix = os.platform() === 'win32' ? '.exe' : '';
     const binaryName = `lattice-harness${suffix}`;
 
+    const platformSuffix = os.platform() === 'win32' ? '.exe' : os.platform() === 'darwin' ? '-darwin' : '';
+    const platformBinaryName = `lattice-harness${platformSuffix}`;
+
     const pathsToTry = [
       process.env.LATTICE_HARNESS_BINARY_PATH,
       path.resolve(process.cwd(), `go-harness/bin/${binaryName}`),
       path.resolve(__dirname, `../../go-harness/bin/${binaryName}`),
       path.resolve(__dirname, `../go-harness/bin/${binaryName}`),
       path.resolve(__dirname, `../../../standalone/go-harness/bin/${binaryName}`),
+      path.resolve(process.cwd(), `go-harness/bin/${platformBinaryName}`),
+      path.resolve(__dirname, `../../go-harness/bin/${platformBinaryName}`),
+      path.resolve(__dirname, `../go-harness/bin/${platformBinaryName}`),
+      path.resolve(__dirname, `../../../standalone/go-harness/bin/${platformBinaryName}`),
     ].filter((p): p is string => typeof p === 'string' && p.length > 0);
 
     let found = false;
