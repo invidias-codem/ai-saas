@@ -95,3 +95,6 @@ packages/lattice-mcp-remote/node_modules/
 packages/lattice-ai-skills/dist/
 packages/lattice-ai-skills/node_modules/
 packages/ucol-node/node_modules/
+
+# Go harness build artifacts
+go-harness/bin/
