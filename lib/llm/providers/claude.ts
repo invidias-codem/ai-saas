@@ -96,14 +96,29 @@ export class ClaudeProvider implements LLMProvider {
         })) as Anthropic.MessageParam[];
 
         const anthropic = getAnthropicClient(this.apiKey);
-        const result = await anthropic.messages.create({
-            model: modelId,
-            max_tokens: options.maxTokens || 4096,
-            temperature: options.temperature,
-            system: systemInstruction,
-            messages: anthropicMessages,
-            stream: true,
-        });
+        let result;
+        try {
+            result = await anthropic.messages.create({
+                model: modelId,
+                max_tokens: options.maxTokens || 4096,
+                temperature: options.temperature,
+                system: systemInstruction,
+                messages: anthropicMessages,
+                stream: true,
+            });
+        } catch (err: any) {
+            const status = err?.status || err?.statusCode;
+            if (status === 404) {
+                throw new Error(`Claude model not found: ${modelId}. This model ID may be invalid or unavailable.`);
+            }
+            if (status === 401 || String(err?.message || '').includes('invalid_api_key') || String(err?.message || '').includes('authentication')) {
+                throw new Error('Claude API key is invalid or missing. Add your Anthropic API key in Settings > API Keys.');
+            }
+            if (status === 429) {
+                throw new Error('Claude rate limit exceeded. Please wait and try again.');
+            }
+            throw err;
+        }
 
         const textEncoder = new TextEncoder();
 

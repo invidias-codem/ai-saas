@@ -216,13 +216,38 @@ export async function POST(req: Request) {
     } catch (bridgeErr: any) {
       console.error('[code] runtimeBridge failed', bridgeErr);
       const message = bridgeErr?.message || String(bridgeErr);
-      const status = message.includes('Insufficient credits') ? 402 : 500;
+      const isProviderAuth = /Claude API key is invalid or missing/i.test(message);
+      const isProviderModel = /Claude model not found/i.test(message);
+      const isProviderRateLimit = /Claude rate limit exceeded/i.test(message);
+      
+      let status = 500;
+      let userError = 'Code generation failed';
+      let userDetails = process.env.NODE_ENV === 'production'
+        ? 'An unexpected error occurred'
+        : message;
+
+      if (isProviderAuth) {
+        status = 401;
+        userError = 'Claude API key required';
+        userDetails = 'Add your Anthropic API key in Settings > API Keys to use the Quality model.';
+      } else if (isProviderModel) {
+        status = 400;
+        userError = 'Claude model unavailable';
+        userDetails = message;
+      } else if (isProviderRateLimit) {
+        status = 429;
+        userError = 'Claude rate limit exceeded';
+        userDetails = 'Please wait a moment and try again.';
+      } else if (message.includes('Insufficient credits')) {
+        status = 402;
+        userError = 'Insufficient credits';
+        userDetails = 'Weaver Code requires credits before generation starts.';
+      }
+
       return NextResponse.json(
         {
-          error: 'Code generation failed',
-          details: process.env.NODE_ENV === 'production'
-            ? 'An unexpected error occurred'
-            : message,
+          error: userError,
+          details: userDetails,
           ...(process.env.NODE_ENV !== 'production' ? { stack: bridgeErr?.stack } : {}),
         },
         { status }
