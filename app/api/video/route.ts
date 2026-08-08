@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       if (!insufficient.allowed && insufficient.response) return insufficient.response;
     }
 
-    const idempotencyKey = req.headers.get('idempotency-key') || `video-${user.userId}-${Date.now()}`;
+    const idempotencyKey = request.headers.get('idempotency-key') || `video-${user.userId}-${Date.now()}`;
     const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Video generation");
 
     if (!spendResult.success && !spendResult.duplicate) {
