@@ -10,11 +10,13 @@
 # Exclude legacy/generated UCOL node package only
 /packages/ucol-node/
 
-# Exclude Go harness binary artifacts
-/go-harness/
+# Exclude Go harness source tree from root-relative paths; binary is still
+# needed at runtime by `lib/harness/GoIOHarness.ts`, so we keep it under
+# Vercel deployment by not ignoring the top-level `go-harness/` directory.
+# /go-harness/
 
-# Exclude Python venvs
-**/venv/
+# Exclude Firebase/Cloud Functions (has its own node_modules with symlinks)
+/functions/
 **/__pycache__/
 
 # Exclude Tauri build artifacts

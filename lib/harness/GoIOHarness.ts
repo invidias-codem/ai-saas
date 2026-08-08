@@ -30,6 +30,7 @@ export class GoIOHarness implements IOHarness {
       path.resolve(process.cwd(), `go-harness/bin/${binaryName}`),
       path.resolve(__dirname, `../../go-harness/bin/${binaryName}`),
       path.resolve(__dirname, `../go-harness/bin/${binaryName}`),
+      path.resolve(__dirname, `../../../standalone/go-harness/bin/${binaryName}`),
     ].filter((p): p is string => typeof p === 'string' && p.length > 0);
 
     let found = false;
