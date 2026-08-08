@@ -12,6 +12,7 @@ import type { ToolExecutionResult } from './types';
 export class GoIOHarness implements IOHarness {
   private workspaceRoot: string;
   private binaryPath: string = '';
+  private available = false;
   
   private child: ChildProcess | null = null;
   private daemonPort: number | null = null;
@@ -52,15 +53,23 @@ export class GoIOHarness implements IOHarness {
     }
 
     if (!found) {
-      throw new Error(`Go harness execution binary not found or not executable. Checked paths: ${pathsToTry.join(', ')}`);
+      console.warn('[Lattice OS] Go harness binary not found; continuing without local execution bridge.');
+      this.available = false;
+      return;
     }
 
     return new Promise((resolve, reject) => {
-      this.child = spawn(this.binaryPath, ['--port=0'], {
-        cwd: this.workspaceRoot,
-        env: process.env,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
+      try {
+        this.child = spawn(this.binaryPath, ['--port=0'], {
+          cwd: this.workspaceRoot,
+          env: process.env,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+      } catch (err: any) {
+        console.warn(`[Lattice OS] Failed to spawn Go harness execution bridge: ${err.message}`);
+        this.available = false;
+        return resolve();
+      }
 
       this.child.stderr?.on('data', (chunk: Buffer) => {
         process.stderr.write(`[Go Daemon Debug] ${chunk.toString('utf-8')}`);
@@ -80,6 +89,7 @@ export class GoIOHarness implements IOHarness {
             if (data.status === 'ready' && data.port) {
               this.daemonPort = data.port;
               portFound = true;
+              this.available = true;
               resolve();
             }
           } catch (e) {
@@ -89,8 +99,9 @@ export class GoIOHarness implements IOHarness {
       });
 
       this.child.on('error', (err) => {
-        console.error(`[Lattice OS] Failed to spawn Go harness execution bridge: ${err.message}`);
-        reject(err);
+        console.warn(`[Lattice OS] Go harness execution bridge errored: ${err.message}`);
+        this.available = false;
+        resolve();
       });
 
       this.child.on('close', (code) => {
@@ -98,12 +109,14 @@ export class GoIOHarness implements IOHarness {
           console.warn(`[Lattice OS] Go Harness Daemon closed unexpectedly with exit code: ${code}`);
         }
         this.daemonPort = null;
+        this.available = false;
       });
       
       // Safety timeout
       setTimeout(() => {
         if (!portFound) {
-          reject(new Error('Timed out waiting for Go daemon to bind port.'));
+          this.available = false;
+          resolve();
         }
       }, 5000);
     });
