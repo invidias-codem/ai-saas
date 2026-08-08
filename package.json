@@ -137,7 +137,7 @@
     "octokit": "^5.0.5",
     "openai": "^6.45.0",
     "pdf-parse": "^2.4.5",
-    "pdfjs-dist": "^6.1.200",
+    "pdfjs-dist": "^6.2.108",
     "pptxgenjs": "^4.0.1",
     "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
