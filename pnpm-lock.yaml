@@ -214,7 +214,7 @@ importers:
         version: 4.11.0(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))(express@5.2.1)(hono@4.12.27)(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(zod@3.25.76)
       js-yaml:
         specifier: ^4.2.0
-        version: 4.3.0
+        version: 4.3.1
       jszip:
         specifier: ^3.10.1
         version: 3.10.1
@@ -5839,6 +5839,7 @@ packages:
 
   crypto-js@4.2.0:
     resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
+    deprecated: Active development of CryptoJS has been discontinued. This library is no longer maintained.
 
   css-background-parser@0.1.0:
     resolution: {integrity: sha512-2EZLisiZQ+7m4wwur/qiYJRniHX4K5Tc9w93MT3AS0WS1u5kaZ4FKXlOTBhOjc+CgEgPiGY+fX1yWD8UwpEqUA==}
@@ -7843,8 +7844,8 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@4.3.0:
-    resolution: {integrity: sha512-1td788aAnnZ5qs7V2QIRl1owjtYpbKt749Y3xauqQgwIIGF/xXWz1wMTEBx5O3LK3lXLVuqXPdPxj2BoFHaW9Q==}
+  js-yaml@4.3.1:
+    resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
     hasBin: true
 
   jsc-safe-url@0.2.4:
@@ -9956,8 +9957,8 @@ packages:
   temporal-spec@0.2.4:
     resolution: {integrity: sha512-lDMFv4nKQrSjlkHKAlHVqKrBG4DyFfa9F74cmBZ3Iy3ed8yvWnlWSIdi4IKfSqwmazAohBNwiN64qGx4y5Q3IQ==}
 
-  terser@5.49.1:
-    resolution: {integrity: sha512-7A2xlQ5EnGT8KPA92dUh6RbRYTVw8hEaEN9L1K68l4UOXFuV511NnAqObGoRqGOQofQcMypisu1s3xawCEHrvA==}
+  terser@5.49.2:
+    resolution: {integrity: sha512-rGbJiKeQ4WDe3EXlDAIaQcwftVfv2Q8o1awFNfvXolJYKkb1AuZY1RTOmqx4LJXZENbWZA7eIsYGHuEzHsi1nQ==}
     engines: {node: '>=10'}
     hasBin: true
 
@@ -10498,8 +10499,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  ws@8.21.2:
-    resolution: {integrity: sha512-54dMVAo4WIe6SKy3vBgN+9bJZqqQ8IMRevAkOLQALhi49qkkQDQfWdAZ8KQlXiEabw88ARXXdUrlvtbKQX+aKw==}
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -11482,7 +11483,7 @@ snapshots:
       globals: 14.0.0
       ignore: 5.3.2
       import-fresh: 3.3.1
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       minimatch: 3.1.5
       strip-json-comments: 3.1.1
     transitivePeerDependencies:
@@ -11969,7 +11970,7 @@ snapshots:
       camelcase: 5.3.1
       find-up: 4.1.0
       get-package-type: 0.1.0
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       resolve-from: 5.0.0
 
   '@istanbuljs/schema@0.1.6': {}
@@ -14155,7 +14156,7 @@ snapshots:
       nullthrows: 1.1.1
       open: 7.4.2
       serve-static: 1.16.3
-      ws: 8.21.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -15926,7 +15927,7 @@ snapshots:
       hosted-git-info: 4.1.0
       isbinaryfile: 5.0.7
       jiti: 2.7.0
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       json5: 2.2.3
       lazy-val: 1.0.5
       minimatch: 10.2.5
@@ -16336,7 +16337,7 @@ snapshots:
       fs-extra: 10.1.0
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       sanitize-filename: 1.6.4
       source-map-support: 0.5.21
       stat-mode: 1.0.0
@@ -16883,7 +16884,7 @@ snapshots:
       app-builder-lib: 26.15.3(dmg-builder@26.15.3)(electron-builder-squirrel-windows@26.15.3)
       builder-util: 26.15.3
       fs-extra: 10.1.0
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
     transitivePeerDependencies:
       - electron-builder-squirrel-windows
       - supports-color
@@ -18812,9 +18813,9 @@ snapshots:
 
   iso-datestring-validator@2.2.2: {}
 
-  isomorphic-ws@4.0.1(ws@8.21.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
+  isomorphic-ws@4.0.1(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
     dependencies:
-      ws: 8.21.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
   isows@1.0.7(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)):
     dependencies:
@@ -18899,11 +18900,11 @@ snapshots:
       delay: 5.0.0
       es6-promisify: 5.0.0
       eyes: 0.1.8
-      isomorphic-ws: 4.0.1(ws@8.21.2(bufferutil@4.1.0)(utf-8-validate@6.0.6))
+      isomorphic-ws: 4.0.1(ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6))
       json-stringify-safe: 5.0.1
       stream-json: 1.9.1
       uuid: 11.1.1
-      ws: 8.21.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -19551,7 +19552,7 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@4.3.0:
+  js-yaml@4.3.1:
     dependencies:
       argparse: 2.0.1
 
@@ -20118,7 +20119,7 @@ snapshots:
   metro-minify-terser@0.84.4:
     dependencies:
       flow-enums-runtime: 0.0.6
-      terser: 5.49.1
+      terser: 5.49.2
 
   metro-resolver@0.84.4:
     dependencies:
@@ -20224,7 +20225,7 @@ snapshots:
       serialize-error: 2.1.0
       source-map: 0.5.7
       throat: 5.0.0
-      ws: 8.21.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       yargs: 17.7.3
     transitivePeerDependencies:
       - bufferutil
@@ -21220,7 +21221,7 @@ snapshots:
   react-devtools-core@6.1.5(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       shell-quote: 1.8.4
-      ws: 8.21.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -21292,7 +21293,7 @@ snapshots:
       stacktrace-parser: 0.1.11
       tinyglobby: 0.2.17
       whatwg-fetch: 3.6.20
-      ws: 8.21.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       yargs: 17.7.3
     optionalDependencies:
       '@types/react': 18.3.31
@@ -21700,7 +21701,7 @@ snapshots:
       buffer: 6.0.3
       eventemitter3: 5.0.4
       uuid: 14.0.1
-      ws: 8.21.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
       bufferutil: 4.1.0
       utf-8-validate: 6.0.6
@@ -22265,7 +22266,7 @@ snapshots:
 
   temporal-spec@0.2.4: {}
 
-  terser@5.49.1:
+  terser@5.49.2:
     dependencies:
       '@jridgewell/source-map': 0.3.11
       acorn: 8.18.0
@@ -22900,7 +22901,7 @@ snapshots:
       bufferutil: 4.1.0
       utf-8-validate: 6.0.6
 
-  ws@8.21.2(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+  ws@8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     optionalDependencies:
       bufferutil: 4.1.0
       utf-8-validate: 6.0.6
