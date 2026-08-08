@@ -13,7 +13,7 @@ export const CODE_MODELS: Record<string, CodeModelConfig> = {
         id: 'quality',
         name: 'Quality',
         provider: 'claude',
-        modelId: 'claude-3-5-sonnet-20240620',
+        modelId: 'claude-sonnet-4-20250514',
         description: 'Best code quality and reasoning',
         maxTokens: 8192,
     },

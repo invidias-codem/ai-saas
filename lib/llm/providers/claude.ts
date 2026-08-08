@@ -28,7 +28,6 @@ export class ClaudeProvider implements LLMProvider {
         logger.debug(`[Claude] Generating with model: ${modelId}, messages: ${messages.length}`);
 
         // Convert to Anthropic format
-        // Anthropic expects roles: 'user' | 'assistant'
         const anthropicMessages = await Promise.all(messages.map(async (msg) => {
             const content: Anthropic.ContentBlockParam[] = [{ type: 'text', text: msg.text }];
             if (msg.attachments) {
