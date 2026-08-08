@@ -9,7 +9,7 @@ import { z } from "zod";
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { musicGenerationSchema, ValidationError } from '@/lib/security/inputValidation';
-import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS, ensureSufficientCreditsOrRespond } from "@/lib/credits";
+import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS, ensureSufficientCreditsOrRespond, hasUnlimitedUsageAccess } from "@/lib/credits";
 import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
 
 // 1. Initialize Replicate client
@@ -73,8 +73,13 @@ export async function POST(req: Request) {
 
     // 4. Rate/Credit Check (Atomic)
     const cost = CREDIT_COSTS.MUSIC_GENERATION;
-    const idempotencyKey = req.headers.get('idempotency-key') || `music-${user.userId}-${Date.now()}`;
+    const hasUnlimited = await hasUnlimitedUsageAccess(user.userId);
+    if (!hasUnlimited) {
+      const insufficient = await ensureSufficientCreditsOrRespond(user.userId, cost);
+      if (!insufficient.allowed && insufficient.response) return insufficient.response;
+    }
 
+    const idempotencyKey = req.headers.get('idempotency-key') || `music-${user.userId}-${Date.now()}`;
     const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Music generation");
 
     if (!spendResult.success && !spendResult.duplicate) {
