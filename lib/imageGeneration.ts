@@ -70,9 +70,30 @@ async function generateWithModel(
             output_format: "jpg",
             output_quality: 90,
         },
-    }) as string[];
+    });
 
-    return Array.isArray(output) ? output : [output as any];
+    const outputArray = Array.isArray(output) ? output : [output];
+    const urls: string[] = [];
+
+    for (const item of outputArray) {
+        let resolved: string | undefined;
+
+        if (typeof item === 'string') {
+            resolved = item;
+        } else if (item && typeof item === 'object') {
+            const candidate = item as any;
+            resolved = candidate.url ?? candidate.href ?? candidate.uri ?? candidate.src ?? candidate.file;
+        }
+
+        if (!resolved || !/^https?:\/\//.test(resolved)) {
+            const preview = typeof item === 'object' ? JSON.stringify(item).slice(0, 200) : String(item).slice(0, 200);
+            throw new Error(`Replicate returned an unsupported image output and Slack requires an HTTPS image URL. Output: ${preview}`);
+        }
+
+        urls.push(resolved);
+    }
+
+    return urls;
 }
 
 /**

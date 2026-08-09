@@ -173,8 +173,11 @@ export async function handleImageGeneration(
 
         // 5. Final sanitization: remove stray markdown/special chars from prompt before use
         if (prompt) {
-            prompt = prompt.replace(/[*`]+$/g, '').trim();
+            prompt = prompt.replace(/[*`'"]+$/g, '').trim();
         }
+
+        // Build a Slack-safe caption without markdown emphasis
+        const caption = `🎨 Generated Image: "${prompt}"`;
 
         // 4. If still no valid prompt, ASK the user
         if (!prompt) {
@@ -231,7 +234,7 @@ export async function handleImageGeneration(
                 config.botToken,
                 channel,
                 imageUrl,
-                `🎨 Generated Image: "${prompt}"`,
+                caption,
                 threadTs
             );
         }
