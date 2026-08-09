@@ -57,14 +57,29 @@ export async function GET(req: NextRequest) {
   const prompt = url.searchParams.get('prompt')?.trim();
   const taskType = url.searchParams.get('task_type')?.trim() || 'blog_post';
   const userId = url.searchParams.get('user_id')?.trim() || 'cli-user';
+  const resumeTraceId = url.searchParams.get('trace_id')?.trim();
+  const lastEventId = url.searchParams.get('last_event_id')?.trim();
 
   if (!prompt) {
     return new NextResponse('Missing prompt', { status: 400 });
   }
 
   const taskId = randomUUID();
-  const traceId = randomUUID();
+  const traceId = resumeTraceId || randomUUID();
   const createdAtMs = Date.now();
+
+  // If resuming, look up the existing task for this trace
+  let existingTask: any = null;
+  if (resumeTraceId && supabaseAdmin) {
+    const { data } = await supabaseAdmin
+      .from('agent_tasks')
+      .select('id, status, result, error')
+      .eq('workspace_id', 'cli')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    existingTask = data?.[0] ?? null;
+  }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -82,6 +97,58 @@ export async function GET(req: NextRequest) {
         try { controller.close(); } catch { }
       };
 
+      const persistEvent = async (eventType: string, eventData: any) => {
+        if (!supabaseAdmin) return;
+        try {
+          await supabaseAdmin.from('agent_task_stream_events').insert({
+            task_id: taskId,
+            trace_id: traceId,
+            event_type: eventType,
+            event_data: eventData,
+          });
+        } catch {}
+      };
+
+      // Replay mode: send cached events then possibly continue live
+      if (resumeTraceId && lastEventId && supabaseAdmin) {
+        const { data: cached } = await supabaseAdmin
+          .from('agent_task_stream_events')
+          .select('event_type, event_data')
+          .eq('trace_id', resumeTraceId)
+          .gt('id', lastEventId)
+          .order('id', { ascending: true });
+
+        if (cached?.length) {
+          for (const ev of cached) {
+            send(ev.event_type, ev.event_data);
+          }
+        }
+
+        // If task already completed in a previous session, send final status and stop
+        if (existingTask && existingTask.status === 'completed') {
+          send('done', {
+            status: 'completed',
+            durationMs: Date.now() - createdAtMs,
+            traceId,
+            result: existingTask.result,
+            resumed: true,
+          });
+          try { controller.close(); } catch { }
+          return;
+        }
+        if (existingTask && existingTask.status === 'failed') {
+          send('done', {
+            status: 'failed',
+            durationMs: Date.now() - createdAtMs,
+            traceId,
+            result: existingTask.error,
+            resumed: true,
+          });
+          try { controller.close(); } catch { }
+          return;
+        }
+      }
+
       const span = startUcolSpan({
         name: 'cli.stream',
         traceId,
@@ -92,7 +159,7 @@ export async function GET(req: NextRequest) {
       span.setAttribute(SPAN_ATTRS.surface, 'cli-terminal');
 
       // Insert task row
-      if (supabaseAdmin) {
+      if (supabaseAdmin && !existingTask) {
         await supabaseAdmin.from('agent_tasks').insert({
           id: taskId,
           user_id: userId,
@@ -105,6 +172,7 @@ export async function GET(req: NextRequest) {
         });
       }
 
+      await persistEvent('meta', { taskId, traceId, model: 'gemini-2.5-flash', taskType });
       send('meta', { taskId, traceId, model: 'gemini-2.5-flash', taskType });
 
       try {
@@ -123,10 +191,12 @@ export async function GET(req: NextRequest) {
           enableTelemetry: true,
           rootSpan: span,
           onStep: (step: any) => {
-            send('thought', {
+            const payload = {
               step: step.stepNumber,
               text: String(step.thought ?? '').slice(0, 200),
-            });
+            };
+            void persistEvent('thought', payload);
+            send('thought', payload);
           },
         };
 
@@ -139,12 +209,16 @@ export async function GET(req: NextRequest) {
             const result = await originalExecute(name, input, context);
             const latencyMs = Date.now() - toolStart;
             const outputSize = typeof result?.data === 'string' ? result.data.length : JSON.stringify(result?.data ?? {}).length;
-            send('tool', { name, status: result?.success ? 'success' : 'error', latencyMs, outputSize, error: result?.error });
+            const payload = { name, status: result?.success ? 'success' : 'error', latencyMs, outputSize, error: result?.error };
+            await persistEvent('tool', payload);
+            send('tool', payload);
             childSpan.end({ metadata: { status: result?.success ? 'success' : 'error', latencyMs, outputSize } });
             return result;
           } catch (err: any) {
             const latencyMs = Date.now() - toolStart;
-            send('tool', { name, status: 'error', latencyMs, outputSize: 0, error: err.message });
+            const payload = { name, status: 'error', latencyMs, outputSize: 0, error: err.message };
+            await persistEvent('tool', payload);
+            send('tool', payload);
             childSpan.fail(err.message ?? String(err), { latencyMs });
             throw err;
           }
@@ -190,10 +264,14 @@ export async function GET(req: NextRequest) {
           }
         );
 
-        send('done', { status: isSuccess ? 'completed' : 'failed', durationMs, traceId, result: reactResult.answer });
+        const donePayload = { status: isSuccess ? 'completed' : 'failed', durationMs, traceId, result: reactResult.answer };
+        await persistEvent('done', donePayload);
+        send('done', donePayload);
       } catch (err: any) {
         const message = err.message || 'Stream error';
         span.fail(message);
+        const errPayload = { message, phase: 'stream', timestamp: Date.now() };
+        await persistEvent('error', errPayload);
         sendError(message, 'stream');
       } finally {
         try { controller.close(); } catch { }

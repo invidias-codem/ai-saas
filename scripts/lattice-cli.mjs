@@ -147,79 +147,129 @@ async function runPrompt(promptText) {
   url.searchParams.set('task_type', 'blog_post');
   url.searchParams.set('user_id', env.userId);
 
-  const curlArgs = [
-    '--silent',
-    '--show-error',
-    '-N',
-    '-X',
-    'GET',
-    '-H',
-    'Accept: text/event-stream',
-    '-H',
-    `Authorization: Bearer ${env.authHeader}`,
-    ...(env.bypassSecret
-      ? [
-          '-H',
-          `x-vercel-protection-bypass: ${env.bypassSecret}`,
-          '-H',
-          'x-vercel-set-bypass-cookie: true',
-        ]
-      : []),
-    url.toString(),
-  ];
+  const maxAttempts = 3;
+  let attempt = 0;
 
-  const curl = spawn('curl', curlArgs, { stdio: ['pipe', 'pipe', 'inherit'] });
-  let buffer = '';
+  while (attempt < maxAttempts) {
+    attempt++;
+    let buffer = '';
+    let traceIdForRetry = null;
+    let lastEventId = null;
 
-  curl.stdout.on('data', (data) => {
-    buffer += data.toString('utf8');
-    const events = parseSseLines(buffer);
-    const keep = events.length > 0 ? buffer.slice(buffer.lastIndexOf('\n\n') + 2) : buffer;
-    buffer = keep;
+    const curlArgs = [
+      '--silent',
+      '--show-error',
+      '-N',
+      '-X',
+      'GET',
+      '-H',
+      'Accept: text/event-stream',
+      '-H',
+      `Authorization: Bearer ${env.authHeader}`,
+      ...(env.bypassSecret
+        ? [
+            '-H',
+            `x-vercel-protection-bypass: ${env.bypassSecret}`,
+            '-H',
+            'x-vercel-set-bypass-cookie: true',
+          ]
+        : []),
+      url.toString(),
+    ];
 
-    for (const event of events) {
-      const raw = (event.data ?? '').trim();
-      if (!raw) continue;
-      switch (event.event) {
-        case 'meta': {
-          const meta = JSON.parse(raw);
-          console.log(`\n[task ${meta.taskId?.slice(0, 8)}] trace=${meta.traceId?.slice(0, 8)} model=${meta.model}\n`);
-          break;
+    const curl = spawn('curl', curlArgs, { stdio: ['pipe', 'pipe', 'inherit'] });
+    let finished = false;
+
+    curl.stdout.on('data', (data) => {
+      buffer += data.toString('utf8');
+      const events = parseSseLines(buffer);
+      const keep = events.length > 0 ? buffer.slice(buffer.lastIndexOf('\n\n') + 2) : buffer;
+      buffer = keep;
+
+      for (const event of events) {
+        const raw = (event.data ?? '').trim();
+        if (!raw) continue;
+
+        if (event.event === 'meta') {
+          try {
+            const meta = JSON.parse(raw);
+            traceIdForRetry = meta.traceId;
+            lastEventId = meta.taskId;
+            url.searchParams.set('trace_id', traceIdForRetry);
+            url.searchParams.set('last_event_id', String(lastEventId));
+          } catch {}
         }
-        case 'thought': {
-          const thought = JSON.parse(raw);
-          console.log(`  [thought ${thought.step}] ${thought.text}\n`);
-          break;
+
+        switch (event.event) {
+          case 'meta': {
+            const meta = JSON.parse(raw);
+            console.log(`\n[task ${meta.taskId?.slice(0, 8)}] trace=${meta.traceId?.slice(0, 8)} model=${meta.model}\n`);
+            break;
+          }
+          case 'thought': {
+            const thought = JSON.parse(raw);
+            console.log(`  [thought ${thought.step}] ${thought.text}\n`);
+            break;
+          }
+          case 'tool': {
+            const tool = JSON.parse(raw);
+            const status = tool.status === 'success' ? '✓' : '✗';
+            console.log(`  [tool ${status} ${tool.name}] ${tool.latencyMs}ms output=${tool.outputSize}`);
+            if (tool.error) console.log(`         error: ${tool.error}`);
+            break;
+          }
+          case 'error': {
+            const err = JSON.parse(raw);
+            console.error(`\n[error] ${err.message} phase=${err.phase}\n`);
+            break;
+          }
+          case 'done': {
+            const done = JSON.parse(raw);
+            console.log(`\n[done] status=${done.status} durationMs=${done.durationMs} trace=${done.traceId?.slice(0, 8)}`);
+            if (done.result) console.log(`\n${done.result}\n`);
+            finished = true;
+            break;
+          }
+          default:
+            console.log(`[${event.event ?? 'event'}] ${raw}`);
         }
-        case 'tool': {
-          const tool = JSON.parse(raw);
-          const status = tool.status === 'success' ? '✓' : '✗';
-          console.log(`  [tool ${status} ${tool.name}] ${tool.latencyMs}ms output=${tool.outputSize}`);
-          if (tool.error) console.log(`         error: ${tool.error}`);
-          break;
-        }
-        case 'error': {
-          const err = JSON.parse(raw);
-          console.error(`\n[error] ${err.message} phase=${err.phase}\n`);
-          break;
-        }
-        case 'done': {
-          const done = JSON.parse(raw);
-          console.log(`\n[done] status=${done.status} durationMs=${done.durationMs} trace=${done.traceId?.slice(0, 8)}`);
-          if (done.result) console.log(`\n${done.result}\n`);
-          break;
-        }
-        default:
-          console.log(`[${event.event ?? 'event'}] ${raw}`);
       }
-    }
-  });
+    });
 
-  curl.on('exit', (code) => process.exitCode = code);
-  curl.on('error', (err) => {
-    console.error('curl failed:', err.message);
-    process.exit(1);
-  });
+    curl.on('close', (code) => {
+      if (finished || code === 0) {
+        process.exitCode = code;
+        return;
+      }
+      if (attempt >= maxAttempts) {
+        console.error(`\n[stream] exited after ${attempt} attempts`);
+        process.exitCode = code;
+        return;
+      }
+      const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+      console.warn(`\n[stream] connection lost, retrying in ${backoffMs}ms... (attempt ${attempt}/${maxAttempts})`);
+      setTimeout(() => {}, backoffMs);
+    });
+
+    curl.on('error', (err) => {
+      console.error('curl failed:', err.message);
+      if (attempt >= maxAttempts) process.exit(1);
+      const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+      console.warn(`\n[stream] network error, retrying in ${backoffMs}ms... (attempt ${attempt}/${maxAttempts})`);
+      setTimeout(() => {}, backoffMs);
+    });
+
+    await new Promise((resolve) => {
+      const checkDone = setInterval(() => {
+        if (finished || curl.exitCode != null || !curl.pid) {
+          clearInterval(checkDone);
+          resolve(undefined);
+        }
+      }, 200);
+    });
+
+    if (finished) break;
+  }
 }
 
 async function main() {
