@@ -11,6 +11,28 @@ import { getAuthor } from './authors';
 
 const BLOG_DIR = path.join(process.cwd(), 'content/blog');
 
+const VALID_CATEGORIES: BlogCategory[] = [
+  'ai-memory',
+  'ai-productivity',
+  'integrations',
+  'industry-insights',
+  'security',
+  'tutorials',
+  'updates',
+  'ai-architecture',
+  'engineering',
+];
+
+const VALID_CATEGORY_SET = new Set<BlogCategory>(VALID_CATEGORIES);
+
+function normalizeCategory(category: string): BlogCategory {
+  const normalized = category.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  if (VALID_CATEGORY_SET.has(normalized as BlogCategory)) {
+    return normalized as BlogCategory;
+  }
+  return 'industry-insights';
+}
+
 type ParsedPostRecord = {
   slug: string;
   post: BlogPost;
@@ -70,7 +92,7 @@ const parsePostFile = cache((slug: string): BlogPost | null => {
       updatedAt: meta.updatedAt,
       author: getAuthor(meta.author),
       coAuthors: meta.coAuthors?.map(getAuthor),
-      category: meta.category,
+      category: normalizeCategory(meta.category),
       tags: meta.tags || [],
       readingTime: Math.ceil(stats.minutes),
       featured: meta.featured || false,

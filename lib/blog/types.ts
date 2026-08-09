@@ -32,7 +32,11 @@ export type BlogCategory =
   | 'ai-productivity'
   | 'integrations'
   | 'industry-insights'
-  | 'security';
+  | 'security'
+  | 'tutorials'
+  | 'updates'
+  | 'ai-architecture'
+  | 'engineering';
 
 export interface BlogCategoryInfo {
   slug: BlogCategory;
@@ -97,5 +101,33 @@ export const BLOG_CATEGORIES: Record<BlogCategory, BlogCategoryInfo> = {
     description: 'Updates on how we protect your data, handle auth, and compliance.',
     color: 'text-red-400',
     bgColor: 'bg-red-500/10',
+  },
+  'tutorials': {
+    slug: 'tutorials',
+    name: 'Tutorials',
+    description: 'Step-by-step guides and hands-on walkthroughs.',
+    color: 'text-teal-400',
+    bgColor: 'bg-teal-500/10',
+  },
+  'updates': {
+    slug: 'updates',
+    name: 'Updates',
+    description: 'Product updates, changelogs, and release notes.',
+    color: 'text-indigo-400',
+    bgColor: 'bg-indigo-500/10',
+  },
+  'ai-architecture': {
+    slug: 'ai-architecture',
+    name: 'AI Architecture',
+    description: 'Architecture patterns and design for AI-native systems.',
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/10',
+  },
+  'engineering': {
+    slug: 'engineering',
+    name: 'Engineering',
+    description: 'Engineering practices, internals, and build notes.',
+    color: 'text-amber-400',
+    bgColor: 'bg-amber-500/10',
   },
 };
