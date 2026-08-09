@@ -62,6 +62,9 @@ async function sendImageToSlack(
 
         if (!data.ok) {
             console.error('[IMAGE_HANDLER] Failed to send image to Slack:', data.error);
+            console.error('[IMAGE_HANDLER] Slack response payload:', JSON.stringify(data).slice(0, 2000));
+            console.error('[IMAGE_HANDLER] Image payload caption:', caption);
+            console.error('[IMAGE_HANDLER] Image payload image_url:', imageUrl);
             throw new Error(data.error);
         }
 
