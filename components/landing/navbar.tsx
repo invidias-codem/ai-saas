@@ -2,16 +2,26 @@
 
 import { useState, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { CheckIcon, Cross2Icon, FileTextIcon, QuestionMarkCircledIcon, StarFilledIcon, EnterIcon, RocketIcon } from "@radix-ui/react-icons";
 import { Slack } from "lucide-react";
+import { PACKS, kofiPackUrl } from "@/lib/subscription/packs";
+
+const KOFI_BASE = `https://ko-fi.com/${process.env.NEXT_PUBLIC_KOFI_PAGE || "joshuajair"}`;
+
+function checkoutForTier(index: number, tierPrice: string): string | null {
+  if (index === 0) return null; // free tier handled separately
+  if (tierPrice === "$5.00") return kofiPackUrl(PACKS[0], KOFI_BASE);
+  if (tierPrice === "$20.00") return kofiPackUrl(PACKS[1], KOFI_BASE);
+  if (index === 3) return kofiPackUrl(PACKS[2], KOFI_BASE); // $50 Scale Pack
+  return null;
+}
 
 export const LandingNavbar = () => {
     const t = useTranslations("Landing");
@@ -21,6 +31,7 @@ export const LandingNavbar = () => {
     const [scrolled, setScrolled] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
+    const { locale } = useParams() as { locale?: string };
 
     const pricingTiers = [
         {
@@ -404,6 +415,16 @@ export const LandingNavbar = () => {
                                                     ? "landing-cta-primary"
                                                     : "landing-cta-secondary"
                                             )}
+                                            onClick={() => {
+                                                if (tier.name === t('pricing.freeTierName') || pricingTiers.indexOf(tier) === 0) {
+                                                    window.location.href = `/${locale || ''}/sign-up`;
+                                                    return;
+                                                }
+                                                const checkout = checkoutForTier(pricingTiers.indexOf(tier), tier.price);
+                                                if (checkout) {
+                                                    window.open(checkout, "_blank", "noopener,noreferrer");
+                                                }
+                                            }}
                                         >
                                             {t('pricing.startCreating')}
                                         </Button>

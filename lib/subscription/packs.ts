@@ -66,8 +66,17 @@ export function matchPack(amountUsd: number): CreditPack | null {
   return PACKS.find((p) => p.priceUsd === rounded) ?? null;
 }
 
-/** Build a Ko-fi checkout URL for a pack (falls back to the base page). */
+/**
+ * Build a Ko-fi checkout URL for a pack.
+ *
+ * Ko-fi shop products are hosted under `/shop/<page>/<slug>`. If a pack has
+ * no `kofiSlug`, we fall back to the base page so the widget/donation flow
+ * is still reachable.
+ */
 export function kofiPackUrl(pack: CreditPack, basePage: string): string {
   const page = basePage.replace(/\/+$/, '');
-  return pack.kofiSlug ? `${page}/${pack.kofiSlug}` : page;
+  if (pack.kofiSlug) {
+    return `https://ko-fi.com/shop/${page.replace(/^https?:\/\/(www\.)?ko-fi\.com\//, '')}/${pack.kofiSlug}`;
+  }
+  return page;
 }

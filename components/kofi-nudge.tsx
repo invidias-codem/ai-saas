@@ -65,7 +65,7 @@ export const KoFiNudge = ({ isOpen, onClose }: KoFiNudgeProps) => {
                         {t('supportProject')}
                     </p>
                     <a
-                        href="https://ko-fi.com/P5P61T3JJA"
+                        href={`https://ko-fi.com/${process.env.NEXT_PUBLIC_KOFI_PAGE || "joshuajair"}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center justify-center px-4 py-1.5 bg-[#FF5E5B] hover:bg-[#FF5E5B]/90 text-white text-xs font-bold rounded-full shadow-md hover:shadow-lg transition-all transform hover:scale-105"
