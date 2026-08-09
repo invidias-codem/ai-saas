@@ -72,6 +72,12 @@ async function generateWithModel(
         },
     });
 
+    console.log('[IMAGE_GEN] Raw Replicate output type:', typeof output, Array.isArray(output) ? 'array' : typeof output === 'object' ? 'object' : 'other');
+    if (typeof output === 'object' && output !== null) {
+        console.log('[IMAGE_GEN] Raw Replicate output keys:', Object.keys(output));
+        console.log('[IMAGE_GEN] Raw Replicate output preview:', JSON.stringify(output).slice(0, 500));
+    }
+
     const outputArray = Array.isArray(output) ? output : [output];
     const urls: string[] = [];
 
