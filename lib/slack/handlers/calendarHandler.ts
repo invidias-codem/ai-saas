@@ -11,8 +11,6 @@ import { SlackConfig } from '@/lib/slack';
 const SLACK_API_BASE = 'https://slack.com/api';
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 interface MeetingDetails {
     title: string;
     datetime: string;
@@ -173,18 +171,6 @@ async function createCalendarEvent(details: MeetingDetails): Promise<string> {
         const endTime = new Date(startTime.getTime() + (details.duration || 60) * 60000);
 
         // Create event
-        const validAttendees = (details.attendees || [])
-            .filter((a) => typeof a === 'string' && EMAIL_RE.test(a))
-            .map((email) => ({ email }));
-
-        const invalidAttendees = (details.attendees || []).filter(
-            (a) => !(typeof a === 'string' && EMAIL_RE.test(a))
-        );
-
-        if (invalidAttendees.length > 0) {
-            console.warn('[CALENDAR_HANDLER] Skipping invalid attendees:', invalidAttendees);
-        }
-
         const event = {
             summary: details.title,
             description: details.description || `Created by Genie AI via Slack`,
@@ -196,7 +182,6 @@ async function createCalendarEvent(details: MeetingDetails): Promise<string> {
                 dateTime: endTime.toISOString(),
                 timeZone: 'America/New_York',
             },
-            attendees: validAttendees,
             reminders: {
                 useDefault: true,
             },
@@ -205,7 +190,7 @@ async function createCalendarEvent(details: MeetingDetails): Promise<string> {
         const response = await calendar.events.insert({
             calendarId: 'primary',
             requestBody: event,
-            sendUpdates: 'all',
+            sendUpdates: 'none',
         });
 
         console.log('[CALENDAR_HANDLER] Event created:', response.data.id);
@@ -422,24 +407,7 @@ export async function handleCalendarEvent(
         console.log('[CALENDAR_HANDLER] Final attendee list:', details.attendees);
 
         // Create calendar event
-        let eventLink = '';
-        try {
-            eventLink = await createCalendarEvent(details);
-        } catch (error: any) {
-            const msg = error?.message || '';
-            if (msg.includes('Service accounts cannot invite attendees') || msg.includes('Domain-Wide Delegation')) {
-                console.warn('[CALENDAR_HANDLER] Google Calendar attendee invite blocked by service-account policy; retrying without attendees');
-                try {
-                    eventLink = await createCalendarEvent({ ...details, attendees: [] });
-                } catch (retryError: any) {
-                    console.error('[CALENDAR_HANDLER] Google Calendar fallback without attendees failed:', retryError?.message || retryError);
-                    eventLink = '';
-                }
-            } else {
-                console.error('[CALENDAR_HANDLER] Google Calendar creation failed:', error?.message || error);
-                eventLink = '';
-            }
-        }
+        const eventLink = await createCalendarEvent(details);
 
         // Generate universal ICS fallback so the user can add this to any calendar
         const icsContent = buildICS(details);
