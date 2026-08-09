@@ -4,9 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { BlogPost, BLOG_CATEGORIES } from "@/lib/blog/types";
 import { formatDate } from "@/lib/blog/utils";
-import { Clock, Calendar, ArrowLeft, Twitter, Linkedin, Link2 } from "lucide-react";
+import { Clock, Calendar, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { ShareButton } from "@/components/share-button";
 
 interface BlogHeaderProps {
   post: BlogPost;
@@ -18,32 +18,11 @@ export function BlogHeader({ post }: BlogHeaderProps) {
     bgColor: 'bg-gray-500/10',
     color: 'text-gray-600 dark:text-gray-400'
   };
-  const [copied, setCopied] = useState(false);
 
-  const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/blog/${post.slug}`
-    : `/blog/${post.slug}`;
-
-  const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
-
-  const shareOnTwitter = () => {
-    const text = encodeURIComponent(`${post.title} by @genieai`);
-    const url = encodeURIComponent(shareUrl);
-    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank');
-  };
-
-  const shareOnLinkedIn = () => {
-    const url = encodeURIComponent(shareUrl);
-    window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}`, '_blank');
-  };
+  const shareUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/blog/${post.slug}`
+      : `/blog/${post.slug}`;
 
   return (
     <header className="mb-10">
@@ -111,33 +90,15 @@ export function BlogHeader({ post }: BlogHeaderProps) {
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
-          <span className="text-slate-500 dark:text-gray-500 text-sm mr-2">Share:</span>
-          <button
-            onClick={shareOnTwitter}
-            className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-            aria-label="Share on Twitter"
-          >
-            <Twitter className="w-4 h-4" />
-          </button>
-          <button
-            onClick={shareOnLinkedIn}
-            className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-            aria-label="Share on LinkedIn"
-          >
-            <Linkedin className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleCopyLink}
-            className={cn(
-              "p-2 rounded-lg transition-colors",
-              copied
-                ? "bg-green-500/20 text-green-600 dark:text-green-400"
-                : "bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
-            )}
-            aria-label="Copy link"
-          >
-            <Link2 className="w-4 h-4" />
-          </button>
+          <ShareButton
+            content={{
+              title: post.title,
+              text: post.description,
+              url: shareUrl,
+            }}
+            variant="ghost"
+            size="default"
+          />
         </div>
       </div>
 
