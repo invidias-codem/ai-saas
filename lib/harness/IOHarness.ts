@@ -1,81 +1,21 @@
 import type { ToolExecutionResult } from './types';
 import { LocalIOHarness } from './LocalIOHarness';
 import { GoIOHarness } from './GoIOHarness';
+import { supabaseAdmin } from '@/lib/supabaseClient';
 
-/**
- * The IOHarness is the abstract execution boundary for all tool actions.
- * 
- * The model should not know whether it is interacting with a local file system,
- * a remote sandboxed container (Antigravity), or a VM. All tools are dispatched
- * through this interface.
- */
 export interface IOHarness {
-  /**
-   * Initializes or verifies the harness environment.
-   */
   initialize(): Promise<void>;
-
-  /**
-   * Reads a file at the given path.
-   * Implementation must enforce workspace boundary checks.
-   */
   readFile(filePath: string): Promise<ToolExecutionResult>;
-
-  /**
-   * Writes content to a file at the given path.
-   * Implementation must enforce workspace boundary checks.
-   */
   writeFile(filePath: string, content: string): Promise<ToolExecutionResult>;
-
-  /**
-   * Patches a file by replacing an exact search block with a replace block.
-   */
   patchFile(filePath: string, searchBlock: string, replaceBlock: string): Promise<ToolExecutionResult>;
-
-  /**
-   * Executes a shell command securely within the harness environment.
-   * Implementation enforces strict context timeouts, non-interactive execution, and output truncation.
-   */
   executeCommandSecure(command: string, timeoutSeconds: number, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
-
-  /**
-   * Discovers documents within the workspace, honoring exclusion lists.
-   */
   discoverDocuments(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
-
-  /**
-   * Safely reads text/code files, enforcing size constraints and extensions.
-   */
   extractText(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
-
-  /**
-   * Summarizes the repository structure and configuration.
-   */
   summarizeRepo(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
-
-  /**
-   * Executes an in-memory cosine similarity search against local SQLite chunks.
-   */
   semanticSearch(query: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
-
-  /**
-   * Initiates an asynchronous background ingestion of the workspace into the local Vector DB.
-   */
   ingestWorkspace(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
-
-  /**
-   * Inserts a new episodic event into the local SQLite ledger.
-   */
   insertEpisodicEvent(workspaceId: string, eventType: string, content: string, metadata: string, embedding: number[]): Promise<ToolExecutionResult>;
-
-  /**
-   * Searches the episodic ledger using an embedded query.
-   */
   searchEpisodicEvents(workspaceId: string, queryEmbedding: number[], topK: number): Promise<ToolExecutionResult>;
-
-  /**
-   * Optional shutdown to gracefully terminate the persistent harness process if it's stateful.
-   */
   shutdown?: () => void;
 }
 
@@ -84,6 +24,9 @@ export interface HarnessConfig {
   workspaceRoot: string;
   antigravityEndpoint?: string;
   antigravityToken?: string;
+  workspaceId?: string;
+  userId?: string;
+  traceId?: string;
 }
 
 export class HarnessFactory {
@@ -96,17 +39,86 @@ export class HarnessFactory {
       process.env.LATTICE_ENABLE_LOCAL_HARNESS === 'true' ||
       !!process.env.LATTICE_HARNESS_BINARY_PATH;
 
+    let selectedHarness: 'GoIOHarness' | 'LocalIOHarness' = 'LocalIOHarness';
+    let selectionReason = 'default_web_fallback';
+
     if (config.env === 'local' && isLocalExecutionAllowed) {
-      const harness = new GoIOHarness(config.workspaceRoot);
+      selectedHarness = 'GoIOHarness';
+      selectionReason = process.env.LATTICE_HARNESS_BINARY_PATH
+        ? 'explicit_binary_path'
+        : 'local_execution_enabled';
+    }
+
+    const harness =
+      selectedHarness === 'GoIOHarness'
+        ? new GoIOHarness(config.workspaceRoot)
+        : new LocalIOHarness(config.workspaceRoot);
+
+    try {
       await harness.initialize();
-      return harness;
+    } catch (error: any) {
+      if (selectedHarness === 'GoIOHarness') {
+        const fallback = new LocalIOHarness(config.workspaceRoot);
+        try {
+          await fallback.initialize();
+          void HarnessFactory.recordHarnessSelection({
+            selectedHarness: 'LocalIOHarness',
+            selectionReason: 'go_daemon_init_failed_fallback',
+            workspaceId: config.workspaceId,
+            userId: config.userId,
+            traceId: config.traceId,
+            workspaceRoot: config.workspaceRoot,
+          });
+          return fallback;
+        } catch {
+          throw error;
+        }
+      }
+      throw error;
     }
 
-    if (config.env === 'local') {
-      return new LocalIOHarness(config.workspaceRoot);
-    }
+    void HarnessFactory.recordHarnessSelection({
+      selectedHarness,
+      selectionReason,
+      workspaceId: config.workspaceId,
+      userId: config.userId,
+      traceId: config.traceId,
+      workspaceRoot: config.workspaceRoot,
+    });
 
-    throw new Error(`Unsupported harness environment: ${(config as any).env}`);
+    return harness;
+  }
+
+  private static async recordHarnessSelection(params: {
+    selectedHarness: 'GoIOHarness' | 'LocalIOHarness';
+    selectionReason: string;
+    workspaceId?: string;
+    userId?: string;
+    traceId?: string;
+    workspaceRoot: string;
+  }): Promise<void> {
+    try {
+      if (!supabaseAdmin) return;
+      const payload: any = {
+        event_type: 'harness_selection',
+        operation_type: params.selectedHarness,
+        path_accessed: params.workspaceRoot,
+        success: true,
+        duration_ms: 0,
+        metadata: {
+          selection_reason: params.selectionReason,
+          selected_harness: params.selectedHarness,
+        },
+      };
+      if (params.workspaceId) payload.workspace_id = params.workspaceId;
+      if (params.userId) payload.user_id = params.userId;
+      if (params.traceId) payload.metadata.trace_id = params.traceId;
+
+      void supabaseAdmin
+        .from('harness_telemetry_events')
+        .insert(payload);
+    } catch {
+      // Never fail factory creation due to telemetry backend issues.
+    }
   }
 }
-

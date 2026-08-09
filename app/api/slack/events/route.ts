@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { randomUUID } from "crypto";
 import { waitUntil } from "@vercel/functions";
 import { getSlackConfig } from "@/lib/slack/tokenManager";
-import { GoIOHarness } from "@/lib/harness/GoIOHarness";
-import { LocalIOHarness } from "@/lib/harness/LocalIOHarness";
+import { HarnessFactory } from "@/lib/harness/IOHarness";
 import { generateConversationReply } from "@/lib/llm/conversationEngine";
 import { TrajectoryStep } from "@/lib/agents/core/types";
 import { SlackTraceFormatter } from "@/lib/slack/slackTraceFormatter";
@@ -123,13 +123,14 @@ export async function POST(req: NextRequest) {
                         }
                     };
 
-                    let ioHarness: IOHarness;
-                    if (process.env.LATTICE_ENABLE_LOCAL_HARNESS === 'true' || !!process.env.LATTICE_HARNESS_BINARY_PATH) {
-                        ioHarness = new GoIOHarness(slackConfig.workspacePath);
-                    } else {
-                        ioHarness = new LocalIOHarness(slackConfig.workspacePath);
-                    }
-                    await ioHarness.initialize();
+                    const traceId = randomUUID();
+                    const ioHarness = await HarnessFactory.create({
+                      env: 'local',
+                      workspaceRoot: slackConfig.workspacePath,
+                      workspaceId: slackConfig.workspaceId || undefined,
+                      userId: slackConfig.userId || undefined,
+                      traceId,
+                    });
 
                     const userQuery = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
 
