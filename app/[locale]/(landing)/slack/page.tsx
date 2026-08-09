@@ -165,7 +165,7 @@ const SlackLandingPage = () => {
                   index % 2 === 1 && "lg:col-start-1 lg:row-start-1"
                 )}>
                   <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-all" />
-                  <div className="relative aspect-[3/2] lg:aspect-[5/3] rounded-2xl border border-white/10 bg-gradient-to-br from-gray-900 to-black overflow-hidden">
+                  <div className="relative aspect-[9/20] lg:aspect-[9/16] rounded-2xl border border-white/10 bg-gradient-to-br from-gray-900 to-black overflow-hidden">
                     {useCase.title === 'Image Generation' ? (
                       <video
                         className="w-full h-full object-cover"
