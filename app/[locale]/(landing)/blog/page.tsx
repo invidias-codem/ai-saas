@@ -99,32 +99,29 @@ export default function BlogPage({ searchParams }: BlogPageProps) {
         {/* Category Filters */}
         <section className="px-4 pb-8 max-w-7xl mx-auto">
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <Link href="/blog">
-              <Button
-                variant="ghost"
+            <Link
+              href="/blog"
+              className={cn(
+                "inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                !activeCategory && !activeTag
+                  ? "bg-white/10 text-white"
+                  : "text-gray-400 hover:text-white hover:bg-white/5"
+              )}
+            >
+              All Posts
+            </Link>
+            {categories.map((category) => (
+              <Link
+                key={category.slug}
+                href={`/blog?category=${category.slug}`}
                 className={cn(
-                  "rounded-full",
-                  !activeCategory && !activeTag
-                    ? "bg-white/10 text-white"
+                  "inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  activeCategory === category.slug
+                    ? cn(category.bgColor, category.color)
                     : "text-gray-400 hover:text-white hover:bg-white/5"
                 )}
               >
-                All Posts
-              </Button>
-            </Link>
-            {categories.map((category) => (
-              <Link key={category.slug} href={`/blog?category=${category.slug}`}>
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    "rounded-full",
-                    activeCategory === category.slug
-                      ? cn(category.bgColor, category.color)
-                      : "text-gray-400 hover:text-white hover:bg-white/5"
-                  )}
-                >
-                  {category.name}
-                </Button>
+                {category.name}
               </Link>
             ))}
           </div>
