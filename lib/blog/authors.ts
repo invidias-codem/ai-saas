@@ -9,7 +9,6 @@ export const authors: Record<string, Author> = {
     role: 'Founder & Lead Engineer',
     avatar: '/blog/authors/joshua-jair.png',
     bio: 'Founder of Lattice OS, focused on memory-native AI, hybrid inference, agent routing, and durable workspace infrastructure.',
-    twitter: 'joshua_jair',
     linkedin: 'joshua-jair-e-mohammed',
     github: 'joshua-jair',
   },
