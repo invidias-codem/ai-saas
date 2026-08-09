@@ -3,10 +3,17 @@
     {
       "path": "/api/cron/slack-indexer",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/blog-weekly",
+      "schedule": "0 9 * * 1"
     }
   ],
   "functions": {
     "app/api/cron/slack-indexer/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/blog-weekly/route.ts": {
       "maxDuration": 300
     }
   }

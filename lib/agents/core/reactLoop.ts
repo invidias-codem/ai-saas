@@ -124,7 +124,29 @@ export async function runReActLoop(
       const toolName = func.name;
       const toolArgs = func.args;
 
-      const execResult = await registry.executeTool(toolName, toolArgs, context);
+      let childSpan = context.rootSpan ? context.rootSpan.startChild({ name: `tool:${toolName}` }) : undefined;
+      const toolStart = Date.now();
+      let execResult: ToolResult;
+
+      try {
+        execResult = await registry.executeTool(toolName, toolArgs, context);
+      } catch (error: any) {
+        childSpan?.fail(error.message ?? String(error), { toolName, inputSize: JSON.stringify(toolArgs ?? {}).length });
+        childSpan?.end({ metadata: { status: 'error', latencyMs: Date.now() - toolStart } });
+        console.warn(`[ReActLoop] Tool Error: ${error.message}`);
+        consecutiveFailures++;
+        trajectory[trajectory.length - 1].observation = { status: 'error', error: error.message };
+        if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
+        promptToSend = [{
+          functionResponse: {
+            name: toolName,
+            response: { name: toolName, content: { error: error.message } },
+          },
+        }];
+        continue;
+      } finally {
+        // noop: child span closed in success/failure branches above
+      }
 
       trajectory[trajectory.length - 1].action.toolName = toolName;
       trajectory[trajectory.length - 1].action.toolInput = toolArgs;

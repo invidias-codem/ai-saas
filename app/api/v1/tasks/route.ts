@@ -350,6 +350,7 @@ async function runAgentTask(input: {
       const blogAgentContext = {
         ...agentContext,
         sessionId: `blog-${taskId}`,
+        rootSpan: span,
       };
 
       const reactResult = await runReActLoop(blogPrompt, blogAgentContext, registry, resolved.execution.modelId);

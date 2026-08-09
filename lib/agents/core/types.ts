@@ -73,7 +73,10 @@ export interface Tool<TInput = any, TOutput = any> {
 
      /** Callback fired whenever the agent updates its thought or executes a tool. */
      onStep?: (step: TrajectoryStep) => void;
- }
+
+     /** Optional root span for per-tool child span instrumentation. */
+     rootSpan?: import('@/lib/ucol/observability/span').UcolSpan;
+     }
 
 /**
  * Structured log of an agent's reasoning step.
