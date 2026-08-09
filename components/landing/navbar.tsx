@@ -409,7 +409,7 @@ export const LandingNavbar = () => {
                                                     return;
                                                 }
                                                 setIsPricingOpen(false);
-                                                window.open(`https://ko-fi.com/${process.env.NEXT_PUBLIC_KOFI_PAGE || "joshuajair"}?hidefeed=true&widget=true&embed=true&preview=true`, "_blank", "noopener,noreferrer");
+                                                window.open(`/${locale || ''}/checkout`, "_blank", "noopener,noreferrer");
                                             }}
                                         >
                                             {t('pricing.startCreating')}
