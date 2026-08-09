@@ -142,24 +142,21 @@ function parseSseLines(text) {
 
 async function runPrompt(promptText) {
   const env = parseCliEnv();
-  const body = JSON.stringify({
-    messages: [{ role: 'user', text: promptText }],
-    options: {},
-  });
+  const url = new URL(`${env.apiBase}/api/cli/stream`);
+  url.searchParams.set('prompt', promptText);
+  url.searchParams.set('task_type', 'blog_post');
+  url.searchParams.set('user_id', env.userId);
 
-  const urlStr = `${env.apiBase}/api/cli/stream`;
   const curlArgs = [
     '--silent',
     '--show-error',
     '-N',
     '-X',
-    'POST',
+    'GET',
     '-H',
-    'Content-Type: application/json',
+    'Accept: text/event-stream',
     '-H',
     `Authorization: Bearer ${env.authHeader}`,
-    '-H',
-    `x-lattice-user-id: ${env.userId}`,
     ...(env.bypassSecret
       ? [
           '-H',
@@ -168,9 +165,7 @@ async function runPrompt(promptText) {
           'x-vercel-set-bypass-cookie: true',
         ]
       : []),
-    '-d',
-    body,
-    urlStr,
+    url.toString(),
   ];
 
   const curl = spawn('curl', curlArgs, { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -185,13 +180,38 @@ async function runPrompt(promptText) {
     for (const event of events) {
       const raw = (event.data ?? '').trim();
       if (!raw) continue;
-      if (event.event === 'done' || event.event === 'error') {
-        process.stdout.write(
-          `\n[event:${event.event ?? 'unknown'}] ${raw}\n`
-        );
-        continue;
+      switch (event.event) {
+        case 'meta': {
+          const meta = JSON.parse(raw);
+          console.log(`\n[task ${meta.taskId?.slice(0, 8)}] trace=${meta.traceId?.slice(0, 8)} model=${meta.model}\n`);
+          break;
+        }
+        case 'thought': {
+          const thought = JSON.parse(raw);
+          console.log(`  [thought ${thought.step}] ${thought.text}\n`);
+          break;
+        }
+        case 'tool': {
+          const tool = JSON.parse(raw);
+          const status = tool.status === 'success' ? '✓' : '✗';
+          console.log(`  [tool ${status} ${tool.name}] ${tool.latencyMs}ms output=${tool.outputSize}`);
+          if (tool.error) console.log(`         error: ${tool.error}`);
+          break;
+        }
+        case 'error': {
+          const err = JSON.parse(raw);
+          console.error(`\n[error] ${err.message} phase=${err.phase}\n`);
+          break;
+        }
+        case 'done': {
+          const done = JSON.parse(raw);
+          console.log(`\n[done] status=${done.status} durationMs=${done.durationMs} trace=${done.traceId?.slice(0, 8)}`);
+          if (done.result) console.log(`\n${done.result}\n`);
+          break;
+        }
+        default:
+          console.log(`[${event.event ?? 'event'}] ${raw}`);
       }
-      process.stdout.write(raw);
     }
   });
 
