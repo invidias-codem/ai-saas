@@ -37,6 +37,10 @@ async function sendImageToSlack(
                     type: "image",
                     image_url: imageUrl,
                     alt_text: caption,
+                    title: {
+                        type: "plain_text",
+                        text: caption.length > 100 ? caption.slice(0, 97) + '...' : caption,
+                    },
                 },
             ],
         };
