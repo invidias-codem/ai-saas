@@ -11,6 +11,8 @@ import { SlackConfig } from '@/lib/slack';
 const SLACK_API_BASE = 'https://slack.com/api';
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 interface MeetingDetails {
     title: string;
     datetime: string;
@@ -171,6 +173,18 @@ async function createCalendarEvent(details: MeetingDetails): Promise<string> {
         const endTime = new Date(startTime.getTime() + (details.duration || 60) * 60000);
 
         // Create event
+        const validAttendees = (details.attendees || [])
+            .filter((a) => typeof a === 'string' && EMAIL_RE.test(a))
+            .map((email) => ({ email }));
+
+        const invalidAttendees = (details.attendees || []).filter(
+            (a) => !(typeof a === 'string' && EMAIL_RE.test(a))
+        );
+
+        if (invalidAttendees.length > 0) {
+            console.warn('[CALENDAR_HANDLER] Skipping invalid attendees:', invalidAttendees);
+        }
+
         const event = {
             summary: details.title,
             description: details.description || `Created by Genie AI via Slack`,
@@ -182,7 +196,7 @@ async function createCalendarEvent(details: MeetingDetails): Promise<string> {
                 dateTime: endTime.toISOString(),
                 timeZone: 'America/New_York',
             },
-            attendees: details.attendees?.map(email => ({ email })) || [],
+            attendees: validAttendees,
             reminders: {
                 useDefault: true,
             },
@@ -191,21 +205,102 @@ async function createCalendarEvent(details: MeetingDetails): Promise<string> {
         const response = await calendar.events.insert({
             calendarId: 'primary',
             requestBody: event,
-            sendUpdates: 'all', // Send email invites to attendees
+            sendUpdates: 'all',
         });
 
         console.log('[CALENDAR_HANDLER] Event created:', response.data.id);
         return response.data.htmlLink || response.data.id || 'Event created';
-
     } catch (error) {
         console.error('[CALENDAR_HANDLER] Error creating calendar event:', error);
         throw error;
     }
 }
 
-/**
- * Set loading status
- */
+/** Generate an RFC 5545 ICS string from meeting details */
+function buildICS(details: MeetingDetails, eventId?: string): string {
+    const now = new Date();
+    const startTime = new Date(details.datetime);
+    const endTime = new Date(startTime.getTime() + (details.duration || 60) * 60000);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const fmt = (d: Date) =>
+        `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+
+    const uid = eventId ? `${eventId}@genie` : `${Date.now()}@genie`;
+    const attendees = (details.attendees || [])
+        .filter((a) => typeof a === 'string' && a.includes('@'))
+        .map((a) => `ATTENDEE;CN=${a};RSVP=TRUE:mailto:${a}`)
+        .join('\n');
+
+    return [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Genie//Slack Calendar//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        `UID:${uid}`,
+        `DTSTAMP:${fmt(now)}`,
+        `DTSTART;TZID=America/New_York:${fmt(startTime)}`,
+        `DTEND;TZID=America/New_York:${fmt(endTime)}`,
+        `SUMMARY:${details.title}`,
+        details.description ? `DESCRIPTION:${details.description.replace(/\n/g, '\\n')}` : undefined,
+        attendees || undefined,
+        'BEGIN:VALARM',
+        'TRIGGER:-PT15M',
+        'ACTION:DISPLAY',
+        `DESCRIPTION:Reminder: ${details.title}`,
+        'END:VALARM',
+        'END:VCALENDAR',
+    ]
+        .filter(Boolean)
+        .join('\r\n');
+}
+
+/** Upload an ICS file to Slack and return a shareable file URL */
+async function uploadICSFile(
+    botToken: string,
+    channel: string,
+    filename: string,
+    content: string,
+    threadTs?: string
+): Promise<string | null> {
+    try {
+        const form = new FormData();
+        const blob = new Blob([content], { type: 'text/calendar; charset=utf-8' });
+        form.append('file', blob, filename);
+        form.append('channels', channel);
+        form.append('title', filename);
+        form.append('filetype', 'ical');
+        form.append(
+            'initial_comment',
+            '📅 Add this to any calendar app: Google Calendar, Outlook, Apple Calendar, etc.'
+        );
+        if (threadTs) {
+            form.append('thread_ts', threadTs);
+        }
+
+        const response = await fetch(`${SLACK_API_BASE}/files.upload`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${botToken}`,
+            },
+            body: form,
+        });
+
+        const data = await response.json();
+        if (data.ok && data.file) {
+            return data.file.url_private || data.file.permalink || data.file.id || null;
+        }
+
+        console.warn('[CALENDAR_HANDLER] files.upload failed:', data.error);
+        return null;
+    } catch (error: any) {
+        console.error('[CALENDAR_HANDLER] Error uploading ICS:', error.message);
+        return null;
+    }
+}
+
+/** Set loading status */
 async function setLoadingStatus(
     botToken: string,
     channel: string,
@@ -329,12 +424,22 @@ export async function handleCalendarEvent(
         // Create calendar event
         const eventLink = await createCalendarEvent(details);
 
+        // Generate universal ICS fallback so the user can add this to any calendar
+        const icsContent = buildICS(details);
+        const icsLink = await uploadICSFile(
+            config.botToken,
+            channel,
+            `${details.title.replace(/[^a-z0-9-_]+/gi, '_').slice(0, 40) || 'meeting'}.ics`,
+            icsContent,
+            threadTs
+        );
+
         // Format attendees list
         const attendeesList = details.attendees && details.attendees.length > 0
             ? `\n👥 *Attendees:* ${details.attendees.join(', ')}`
             : '';
 
-        // Send confirmation message
+        const calendarLink = icsLink ? `\n📎 <${icsLink}|Download ICS>` : '';
         const confirmationMessage = `✅ *Meeting Scheduled!*
 
 📅 *${details.title}*
@@ -347,7 +452,7 @@ export async function handleCalendarEvent(
             minute: '2-digit',
             timeZoneName: 'short'
         })}
-⏱️ Duration: ${details.duration || 60} minutes${attendeesList}
+⏱️ Duration: ${details.duration || 60} minutes${attendeesList}${calendarLink}
 
 🔗 <${eventLink}|View in Google Calendar>`;
 
