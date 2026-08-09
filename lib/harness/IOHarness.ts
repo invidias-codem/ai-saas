@@ -88,14 +88,24 @@ export interface HarnessConfig {
 
 export class HarnessFactory {
   public static async create(config: HarnessConfig): Promise<IOHarness> {
-    if (config.env === 'local') {
+    if (config.env === 'antigravity') {
+      throw new Error('Antigravity harness not yet implemented.');
+    }
+
+    const isLocalExecutionAllowed =
+      process.env.LATTICE_ENABLE_LOCAL_HARNESS === 'true' ||
+      !!process.env.LATTICE_HARNESS_BINARY_PATH;
+
+    if (config.env === 'local' && isLocalExecutionAllowed) {
       const harness = new GoIOHarness(config.workspaceRoot);
       await harness.initialize();
       return harness;
     }
-    if (config.env === 'antigravity') {
-      throw new Error('Antigravity harness not yet implemented.');
+
+    if (config.env === 'local') {
+      return new LocalIOHarness(config.workspaceRoot);
     }
+
     throw new Error(`Unsupported harness environment: ${(config as any).env}`);
   }
 }
