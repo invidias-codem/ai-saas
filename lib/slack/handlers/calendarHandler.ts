@@ -422,7 +422,24 @@ export async function handleCalendarEvent(
         console.log('[CALENDAR_HANDLER] Final attendee list:', details.attendees);
 
         // Create calendar event
-        const eventLink = await createCalendarEvent(details);
+        let eventLink = '';
+        try {
+            eventLink = await createCalendarEvent(details);
+        } catch (error: any) {
+            const msg = error?.message || '';
+            if (msg.includes('Service accounts cannot invite attendees') || msg.includes('Domain-Wide Delegation')) {
+                console.warn('[CALENDAR_HANDLER] Google Calendar attendee invite blocked by service-account policy; retrying without attendees');
+                try {
+                    eventLink = await createCalendarEvent({ ...details, attendees: [] });
+                } catch (retryError: any) {
+                    console.error('[CALENDAR_HANDLER] Google Calendar fallback without attendees failed:', retryError?.message || retryError);
+                    eventLink = '';
+                }
+            } else {
+                console.error('[CALENDAR_HANDLER] Google Calendar creation failed:', error?.message || error);
+                eventLink = '';
+            }
+        }
 
         // Generate universal ICS fallback so the user can add this to any calendar
         const icsContent = buildICS(details);
@@ -440,6 +457,7 @@ export async function handleCalendarEvent(
             : '';
 
         const calendarLink = icsLink ? `\n📎 <${icsLink}|Download ICS>` : '';
+        const googleLink = eventLink ? `\n🔗 <${eventLink}|View in Google Calendar>` : '';
         const confirmationMessage = `✅ *Meeting Scheduled!*
 
 📅 *${details.title}*
@@ -452,9 +470,7 @@ export async function handleCalendarEvent(
             minute: '2-digit',
             timeZoneName: 'short'
         })}
-⏱️ Duration: ${details.duration || 60} minutes${attendeesList}${calendarLink}
-
-🔗 <${eventLink}|View in Google Calendar>`;
+⏱️ Duration: ${details.duration || 60} minutes${attendeesList}${calendarLink}${googleLink}`;
 
         await sendSlackMessage(
             config.botToken,
