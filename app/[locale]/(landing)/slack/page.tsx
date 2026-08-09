@@ -166,13 +166,27 @@ const SlackLandingPage = () => {
                 )}>
                   <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-all" />
                   <div className="relative aspect-[4/3] rounded-2xl border border-white/10 bg-gradient-to-br from-gray-900 to-black overflow-hidden">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <useCase.icon className="w-24 h-24 text-white/10" />
-                    </div>
-                    <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black to-transparent">
-                      <div className="text-white font-semibold">{useCase.title}</div>
-                      <div className="text-gray-400 text-sm">{useCase.category}</div>
-                    </div>
+                    {useCase.title === 'Image Generation' ? (
+                      <video
+                        className="w-full h-full object-cover"
+                        src="/videos/slack-image-gen.mp4"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        controls={false}
+                      />
+                    ) : (
+                      <>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <useCase.icon className="w-24 h-24 text-white/10" />
+                        </div>
+                        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black to-transparent">
+                          <div className="text-white font-semibold">{useCase.title}</div>
+                          <div className="text-gray-400 text-sm">{useCase.category}</div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
