@@ -11,11 +11,13 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { CheckIcon, Cross2Icon, FileTextIcon, QuestionMarkCircledIcon, StarFilledIcon, EnterIcon, RocketIcon } from "@radix-ui/react-icons";
 import { Slack } from "lucide-react";
+import { CheckoutModal } from "@/components/checkout-modal";
 export const LandingNavbar = () => {
     const t = useTranslations("Landing");
     const tHero = useTranslations("Landing.hero");
     const [isOpen, setIsOpen] = useState(false);
     const [isPricingOpen, setIsPricingOpen] = useState(false);
+    const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
@@ -409,7 +411,7 @@ export const LandingNavbar = () => {
                                                     return;
                                                 }
                                                 setIsPricingOpen(false);
-                                                window.open(`/${locale || ''}/checkout`, "_blank", "noopener,noreferrer");
+                                                setIsCheckoutOpen(true);
                                             }}
                                         >
                                             {t('pricing.startCreating')}
@@ -427,6 +429,8 @@ export const LandingNavbar = () => {
                     </div>
                 )}
             </AnimatePresence>
+
+            <CheckoutModal open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen} />
         </>
     );
 }
