@@ -176,6 +176,16 @@ const SlackLandingPage = () => {
                         playsInline
                         controls={false}
                       />
+                    ) : useCase.title === 'Slide Decks' ? (
+                      <video
+                        className="w-full h-full object-cover"
+                        src="/videos/slack-slides.mp4"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        controls={false}
+                      />
                     ) : (
                       <>
                         <div className="absolute inset-0 flex items-center justify-center">
