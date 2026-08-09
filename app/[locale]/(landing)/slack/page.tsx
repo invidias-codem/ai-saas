@@ -114,7 +114,7 @@ const SlackLandingPage = () => {
         </section>
 
         {/* Ways to Use - Manus-inspired with time savings */}
-        <section id="features" className="py-24 px-4 max-w-7xl mx-auto">
+        <section id="features" className="py-24 px-4 lg:max-w-7xl lg:mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-white mb-4">Ways to Use Lattice OS in Slack</h2>
             <p className="text-gray-400 text-lg">Transform hours of work into minutes</p>
