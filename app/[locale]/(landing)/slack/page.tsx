@@ -186,6 +186,16 @@ const SlackLandingPage = () => {
                         playsInline
                         controls={false}
                       />
+                    ) : useCase.title === 'Calendar Events' ? (
+                      <video
+                        className="w-full h-full object-cover"
+                        src="/videos/slack-calendar.mp4"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        controls={false}
+                      />
                     ) : (
                       <>
                         <div className="absolute inset-0 flex items-center justify-center">
