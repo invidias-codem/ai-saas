@@ -171,6 +171,11 @@ export async function handleImageGeneration(
             }
         }
 
+        // 5. Final sanitization: remove stray markdown/special chars from prompt before use
+        if (prompt) {
+            prompt = prompt.replace(/[*`]+$/g, '').trim();
+        }
+
         // 4. If still no valid prompt, ASK the user
         if (!prompt) {
             console.log('[IMAGE_HANDLER] No valid prompt. Asking user for clarification.');
@@ -226,7 +231,7 @@ export async function handleImageGeneration(
                 config.botToken,
                 channel,
                 imageUrl,
-                `🎨 *Generated Image:* "${prompt}"`,
+                `🎨 Generated Image: "${prompt}"`,
                 threadTs
             );
         }
