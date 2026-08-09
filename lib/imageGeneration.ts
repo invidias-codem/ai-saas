@@ -88,7 +88,12 @@ async function generateWithModel(
             resolved = item;
         } else if (item && typeof item === 'object') {
             const candidate = item as any;
-            resolved = candidate.url ?? candidate.href ?? candidate.uri ?? candidate.src ?? candidate.file;
+
+            if (typeof candidate.url === 'function') {
+                resolved = candidate.url().toString();
+            } else {
+                resolved = candidate.url ?? candidate.href ?? candidate.uri ?? candidate.src ?? candidate.file;
+            }
         }
 
         if (!resolved || !/^https?:\/\//.test(resolved)) {
