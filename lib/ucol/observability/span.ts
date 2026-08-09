@@ -140,6 +140,15 @@ export class UcolSpan {
       },
     };
   }
+
+  public startChild(options: UcolSpanOptions): UcolSpan {
+    const childTrace = newSpan({ trace_id: this.traceId, span_id: this.spanId, parent_span_id: this.spanId });
+    return new UcolSpan({
+      ...options,
+      traceId: childTrace.trace_id,
+      parentSpanId: childTrace.parent_span_id ?? undefined,
+    });
+  }
 }
 
 export function startUcolSpan(input: UcolSpanOptions) {

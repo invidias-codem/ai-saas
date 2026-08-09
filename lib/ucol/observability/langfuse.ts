@@ -12,6 +12,7 @@ export interface CreateSpanParams {
   userId?: string;
   sessionId?: string;
   metadata?: Record<string, unknown>;
+  parentSpanId?: string;
 }
 
 export interface EndSpanParams {
@@ -47,6 +48,7 @@ class LangfuseAdapter {
       const span = trace.span({
         id: params.spanId,
         name: params.name,
+        ...(params.parentSpanId ? { metadata: { parentSpanId: params.parentSpanId } } : {}),
       });
 
       return {

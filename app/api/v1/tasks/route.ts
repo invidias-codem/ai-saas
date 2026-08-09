@@ -303,7 +303,6 @@ async function runAgentTask(input: {
       });
     }
 
-    const useAgenticExecution = taskType === 'evaluation';
     const agentContext = {
       userId,
       sessionId: `task-${taskId}`,
@@ -317,6 +316,83 @@ async function runAgentTask(input: {
         });
       },
     };
+
+    const useBlogExecution = taskType === 'blog_post';
+    const useAgenticExecution = taskType === 'evaluation';
+
+    if (useBlogExecution) {
+      const { runReActLoop } = await import('@/lib/agents/core/reactLoop');
+      const { ToolRegistry } = await import('@/lib/agents/core/registry');
+      const { ghCommitsTool } = await import('@/lib/agents/tools/ghCommits');
+      const { createBlogPrTool } = await import('@/lib/agents/tools/createBlogPr');
+      const { webSearchTool } = await import('@/lib/agents/tools/webSearch');
+      const { readFileTool } = await import('@/lib/agents/tools/harnessTools');
+      const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
+
+      const registry = new ToolRegistry();
+      registry.register(ghCommitsTool);
+      registry.register(createBlogPrTool);
+      registry.register(webSearchTool);
+      registry.register(readFileTool);
+      registry.register(searchCodebaseTool);
+
+      const blogPrompt = [
+        'You are the Lattice OS Blog Writer.',
+        'Your goal is to write a weekly blog post draft about Lattice OS progress and relevant AI news.',
+        'Use gh_commits to get recent high-signal commits.',
+        'Use web_search to find relevant external AI news.',
+        'Use read_file to inspect vision.md and existing blog posts for tone.',
+        'Use search_codebase to find shipped features, sprint progress, or changelogs.',
+        'When you have enough context, call create_blog_pr with the final MDX post and metadata.',
+        'Return the create_blog_pr result exactly, including prUrl and prNumber.',
+      ].join('\n');
+
+      const blogAgentContext = {
+        ...agentContext,
+        sessionId: `blog-${taskId}`,
+      };
+
+      const reactResult = await runReActLoop(blogPrompt, blogAgentContext, registry, resolved.execution.modelId);
+
+      const isSuccess = reactResult.status === 'success';
+      await supabaseAdmin!
+        .from('agent_tasks')
+        .update({
+          status: isSuccess ? 'completed' : 'failed',
+          result: reactResult.answer,
+          error: isSuccess ? null : reactResult.answer,
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', taskId);
+
+      span.end({ responseLength: reactResult.answer.length });
+      void exportTaskTraceToOpik({
+        traceId: span.traceId,
+        workspaceId,
+        orgId: orgContext?.orgId ?? '',
+        taskType,
+        memoryNodeIds: [],
+        executionSteps: reactResult.trajectory?.length ?? 0,
+        interceptedCount: 0,
+        durationMs: Date.now() - createdAtMs,
+      });
+      void auditEnterprise(
+        isSuccess ? 'agent.task.completed' : 'agent.task.failed',
+        userId,
+        { taskId, taskType, routingTier, modelPreference, responseLength: reactResult.answer.length, reactStatus: reactResult.status, ...(isSuccess ? {} : { error: reactResult.answer }) },
+        {
+          orgId: orgContext?.orgId,
+          actorId: actorUserId,
+          eventType: isSuccess ? 'task.completed' : 'task.failed',
+          traceId: span.traceId,
+          decision: isSuccess ? 'ALLOW' : 'DENY',
+          payload: { reactStatus: reactResult.status, ...(isSuccess ? {} : { reason: reactResult.answer }) },
+        }
+      );
+
+      return;
+    }
 
     if (useAgenticExecution) {
       const providerEnv = process.env.MODEL_PROVIDER || process.env.NEXT_PUBLIC_MODEL_PROVIDER;
