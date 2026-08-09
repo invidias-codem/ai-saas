@@ -36,6 +36,10 @@ function taskTypeToMode(taskType: AgentTaskType): AgentMode {
       return 'agentic';
     case 'transformation':
       return 'fast';
+    case 'blog_post':
+      return 'quality';
+    default:
+      return 'fast';
   }
 }
 

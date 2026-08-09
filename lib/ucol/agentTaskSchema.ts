@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const AgentTaskTypeSchema = z.enum(['reasoning', 'generation', 'evaluation', 'transformation']);
+export const AgentTaskTypeSchema = z.enum(['reasoning', 'generation', 'evaluation', 'transformation', 'blog_post']);
 export type AgentTaskType = z.infer<typeof AgentTaskTypeSchema>;
 
 export const RoutingTierSchema = z.enum(['fast', 'balanced', 'deep']).optional();
