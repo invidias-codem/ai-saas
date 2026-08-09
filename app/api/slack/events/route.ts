@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { waitUntil } from "@vercel/functions";
 import { getSlackConfig } from "@/lib/slack/tokenManager";
 import { GoIOHarness } from "@/lib/harness/GoIOHarness";
+import { LocalIOHarness } from "@/lib/harness/LocalIOHarness";
 import { generateConversationReply } from "@/lib/llm/conversationEngine";
 import { TrajectoryStep } from "@/lib/agents/core/types";
 import { SlackTraceFormatter } from "@/lib/slack/slackTraceFormatter";
@@ -122,7 +123,12 @@ export async function POST(req: NextRequest) {
                         }
                     };
 
-                    const ioHarness = new GoIOHarness(slackConfig.workspacePath);
+                    let ioHarness: IOHarness;
+                    if (process.env.LATTICE_ENABLE_LOCAL_HARNESS === 'true' || !!process.env.LATTICE_HARNESS_BINARY_PATH) {
+                        ioHarness = new GoIOHarness(slackConfig.workspacePath);
+                    } else {
+                        ioHarness = new LocalIOHarness(slackConfig.workspacePath);
+                    }
                     await ioHarness.initialize();
 
                     const userQuery = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
