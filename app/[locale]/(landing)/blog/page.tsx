@@ -11,10 +11,10 @@ import { BookOpen, Sparkles } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Blog | Lattice OS - Memory-Native AI, Routing & Workflow Insights",
-  description: "Explore memory-native AI, model routing, hybrid inference, and workflow design from the team building Lattice OS.",
+  description: "Explore memory-native AI, hybrid inference, model routing, and workflow design from the team building Lattice OS.",
   openGraph: {
     title: "Lattice OS Blog - Memory-Native AI, Routing & Workflow Insights",
-    description: "Explore memory-native AI, model routing, hybrid inference, and workflow design from the team building Lattice OS.",
+    description: "Explore memory-native AI, hybrid inference, model routing, and workflow design from the team building Lattice OS.",
     type: "website",
     images: [
       {
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Lattice OS Blog - Memory-Native AI, Routing & Workflow Insights",
-    description: "Explore memory-native AI, model routing, hybrid inference, and workflow design.",
+    description: "Explore memory-native AI, hybrid inference, model routing, and workflow design.",
     images: ["/blog/og-image.png"],
   },
 };
@@ -37,20 +37,19 @@ export const metadata: Metadata = {
 export const revalidate = 60;
 
 interface BlogPageProps {
-  searchParams: { category?: string; tag?: string };
+  searchParams: Promise<{ category?: string; tag?: string }>;
 }
 
-export default function BlogPage({ searchParams }: BlogPageProps) {
+export default async function BlogPage({ searchParams }: BlogPageProps) {
+  const { category: activeCategory, tag: activeTag } = await searchParams;
   const allPosts = getAllPosts();
   const featuredPosts = getFeaturedPosts(1);
   const featuredPost = featuredPosts[0];
 
   // Filter posts based on search params
   let filteredPosts = allPosts;
-  const activeCategory = searchParams.category as BlogCategory | undefined;
-  const activeTag = searchParams.tag;
 
-  if (activeCategory && BLOG_CATEGORIES[activeCategory]) {
+  if (activeCategory && BLOG_CATEGORIES[activeCategory as BlogCategory]) {
     filteredPosts = allPosts.filter((post) => post.category === activeCategory);
   }
 
@@ -130,13 +129,13 @@ export default function BlogPage({ searchParams }: BlogPageProps) {
           {(activeCategory || activeTag) && (
             <div className="flex items-center justify-center gap-2 mt-4">
               <span className="text-gray-500 text-sm">Showing:</span>
-              {activeCategory && BLOG_CATEGORIES[activeCategory] && (
+              {activeCategory && (activeCategory as BlogCategory) in BLOG_CATEGORIES && (
                 <span className={cn(
                   "px-3 py-1 rounded-full text-sm",
-                  BLOG_CATEGORIES[activeCategory].bgColor,
-                  BLOG_CATEGORIES[activeCategory].color
+                  BLOG_CATEGORIES[activeCategory as BlogCategory].bgColor,
+                  BLOG_CATEGORIES[activeCategory as BlogCategory].color
                 )}>
-                  {BLOG_CATEGORIES[activeCategory].name}
+                  {BLOG_CATEGORIES[activeCategory as BlogCategory].name}
                 </span>
               )}
               {activeTag && (
