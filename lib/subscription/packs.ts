@@ -25,8 +25,6 @@ export interface CreditPack {
   credits: number;
   /** Short selling-point shown under the button. */
   blurb: string;
-  /** Ko-fi product slug (the part after ko-fi.com/<page>/<slug>). Optional. */
-  kofiSlug?: string;
 }
 
 export const PACKS: CreditPack[] = [
@@ -36,7 +34,6 @@ export const PACKS: CreditPack[] = [
     priceUsd: 5,
     credits: 5 * CREDITS_PER_DOLLAR, // 250
     blurb: '250 credits — ~250 chats or 5 images',
-    kofiSlug: 'S6S41XW1LK',
   },
   {
     id: 'pro',
@@ -44,7 +41,6 @@ export const PACKS: CreditPack[] = [
     priceUsd: 20,
     credits: 20 * CREDITS_PER_DOLLAR, // 1000
     blurb: '1,000 credits — heavy media workloads',
-    kofiSlug: 'R5R2YZV2MZ',
   },
   {
     id: 'scale',
@@ -52,7 +48,6 @@ export const PACKS: CreditPack[] = [
     priceUsd: 50,
     credits: 50 * CREDITS_PER_DOLLAR, // 2500
     blurb: '2,500 credits — teams & power users',
-    kofiSlug: 'T7T3ZWX3NZ',
   },
 ];
 
@@ -66,17 +61,7 @@ export function matchPack(amountUsd: number): CreditPack | null {
   return PACKS.find((p) => p.priceUsd === rounded) ?? null;
 }
 
-/**
- * Build a Ko-fi checkout URL for a pack.
- *
- * Ko-fi shop products are hosted under `/shop/<page>/<slug>`. If a pack has
- * no `kofiSlug`, we fall back to the base page so the widget/donation flow
- * is still reachable.
- */
+/** Fallback: open the Ko-fi page/widget for free-form support. */
 export function kofiPackUrl(pack: CreditPack, basePage: string): string {
-  const page = basePage.replace(/\/+$/, '');
-  if (pack.kofiSlug) {
-    return `https://ko-fi.com/shop/${page.replace(/^https?:\/\/(www\.)?ko-fi\.com\//, '')}/${pack.kofiSlug}`;
-  }
-  return page;
+  return basePage.replace(/\/+$/, '');
 }

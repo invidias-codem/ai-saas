@@ -11,18 +11,6 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { CheckIcon, Cross2Icon, FileTextIcon, QuestionMarkCircledIcon, StarFilledIcon, EnterIcon, RocketIcon } from "@radix-ui/react-icons";
 import { Slack } from "lucide-react";
-import { PACKS, kofiPackUrl } from "@/lib/subscription/packs";
-
-const KOFI_BASE = `https://ko-fi.com/${process.env.NEXT_PUBLIC_KOFI_PAGE || "joshuajair"}`;
-
-function checkoutForTier(index: number, tierPrice: string): string | null {
-  if (index === 0) return null; // free tier handled separately
-  if (tierPrice === "$5.00") return kofiPackUrl(PACKS[0], KOFI_BASE);
-  if (tierPrice === "$20.00") return kofiPackUrl(PACKS[1], KOFI_BASE);
-  if (index === 3) return kofiPackUrl(PACKS[2], KOFI_BASE); // $50 Scale Pack
-  return null;
-}
-
 export const LandingNavbar = () => {
     const t = useTranslations("Landing");
     const tHero = useTranslations("Landing.hero");
@@ -420,10 +408,8 @@ export const LandingNavbar = () => {
                                                     window.location.href = `/${locale || ''}/sign-up`;
                                                     return;
                                                 }
-                                                const checkout = checkoutForTier(pricingTiers.indexOf(tier), tier.price);
-                                                if (checkout) {
-                                                    window.open(checkout, "_blank", "noopener,noreferrer");
-                                                }
+                                                setIsPricingOpen(false);
+                                                window.open(`https://ko-fi.com/${process.env.NEXT_PUBLIC_KOFI_PAGE || "joshuajair"}?hidefeed=true&widget=true&embed=true&preview=true`, "_blank", "noopener,noreferrer");
                                             }}
                                         >
                                             {t('pricing.startCreating')}

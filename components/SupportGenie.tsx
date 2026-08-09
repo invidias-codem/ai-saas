@@ -5,7 +5,7 @@ import { Zap } from "lucide-react";
 import Link from "next/link";
 import { KoFiWidget } from "@/components/kofi-widget";
 import { useTranslations } from "next-intl";
-import { PACKS, kofiPackUrl } from "@/lib/subscription/packs";
+import { PACKS } from "@/lib/subscription/packs";
 
 interface SupportGenieProps {
     onSuccess?: () => void;
@@ -32,21 +32,18 @@ export const SupportGenie = ({ onSuccess }: SupportGenieProps) => {
                 </p>
             </div>
 
-            {/* Fixed credit packs — deep-link to curated Ko-fi products */}
+            {/* Fixed credit packs — informational; payment via the widget below */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-none">
                 {PACKS.map((pack) => (
-                    <a
+                    <div
                         key={pack.id}
-                        href={kofiPackUrl(pack, `https://ko-fi.com/${KOFI_PAGE}`)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-xl border border-pink-500/30 bg-pink-500/5 hover:bg-pink-500/10 transition-colors p-4 text-center"
+                        className="rounded-xl border border-pink-500/30 bg-pink-500/5 p-4 text-center"
                     >
                         <div className="font-bold text-foreground">{pack.name}</div>
                         <div className="text-lg font-extrabold text-pink-500">${pack.priceUsd}</div>
                         <div className="text-xs text-muted-foreground">{pack.credits.toLocaleString()} credits</div>
                         <div className="text-[11px] text-muted-foreground mt-1">{pack.blurb}</div>
-                    </a>
+                    </div>
                 ))}
             </div>
 
