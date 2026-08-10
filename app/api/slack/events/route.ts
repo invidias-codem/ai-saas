@@ -7,6 +7,7 @@ import { HarnessFactory } from "@/lib/harness/IOHarness";
 import { generateConversationReply } from "@/lib/llm/conversationEngine";
 import { TrajectoryStep } from "@/lib/agents/core/types";
 import { SlackTraceFormatter } from "@/lib/slack/slackTraceFormatter";
+import { exportTaskTraceToOpik, OpikTracePayload } from "@/lib/telemetry/opikExporter";
 
 export const maxDuration = 300;
 
@@ -172,6 +173,31 @@ export async function POST(req: NextRequest) {
                             text: "Execution Completed"
                         })
                     });
+
+                    const durationMs = Date.now() - startTimeMs;
+                    const slackTrace: OpikTracePayload = {
+                        traceId,
+                        workspaceId: slackConfig.workspaceId || `slack-${teamId}`,
+                        orgId: '',
+                        taskType: 'slack_event',
+                        memoryNodeIds: [],
+                        executionSteps: currentTrajectory.length,
+                        interceptedCount: 0,
+                        durationMs,
+                        metadata: {
+                            slack_team_id: teamId,
+                            slack_channel: event.channel,
+                            slack_user: event.user,
+                            slack_message_ts: event.ts,
+                        },
+                        tags: ['slack', ...(event.channel ? [`channel:${event.channel}`] : [])],
+                    };
+
+                    try {
+                        void exportTaskTraceToOpik(slackTrace);
+                    } catch {
+                        // Do not fail Slack delivery due to observability backend issues.
+                    }
 
                     ioHarness.shutdown();
                 } catch (err: any) {

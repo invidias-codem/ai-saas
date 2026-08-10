@@ -17,6 +17,8 @@ export interface OpikTracePayload {
   executionSteps: number;
   interceptedCount: number;
   durationMs: number;
+  metadata?: Record<string, any>;
+  tags?: string[];
 }
 
 export async function exportTaskTraceToOpik(payload: OpikTracePayload): Promise<void> {
@@ -42,8 +44,9 @@ export async function exportTaskTraceToOpik(payload: OpikTracePayload): Promise<
           execution_steps: payload.executionSteps,
           intercepted_count: payload.interceptedCount,
           duration_ms: payload.durationMs,
+          ...(payload.metadata || {}),
         },
-        tags: ['lattice-os', payload.taskType],
+        tags: ['lattice-os', payload.taskType, ...(payload.tags || [])],
       }),
     });
   } catch {
