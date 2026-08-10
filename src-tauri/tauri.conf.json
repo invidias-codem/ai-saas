@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "NEXT_PUBLIC_IS_DESKTOP=true pnpm dev",
-    "beforeBuildCommand": "NEXT_PUBLIC_IS_DESKTOP=true pnpm build"
+    "beforeDevCommand": "cross-env NEXT_PUBLIC_IS_DESKTOP=true pnpm dev",
+    "beforeBuildCommand": "cross-env NEXT_PUBLIC_IS_DESKTOP=true pnpm build"
   },
   "app": {
     "windows": [
