@@ -11,9 +11,9 @@
     "stronghold:allow-load-client",
     "stronghold:allow-create-client",
     "stronghold:allow-save",
-    "stronghold:allow-insert",
-    "stronghold:allow-get",
-    "stronghold:allow-remove",
+    "stronghold:allow-save-store-record",
+    "stronghold:allow-get-store-record",
+    "stronghold:allow-remove-store-record",
     "window:allow-get-current-window",
     "window:default"
   ]
