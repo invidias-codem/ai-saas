@@ -52,6 +52,7 @@ This repo includes a first-class desktop shell in `src-tauri/`. The web app is t
 - If `rustup` is not found after install, restart the terminal or your editor's integrated shell.
 - If Rust was installed via Chocolatey, the GNU toolchain and `rustup` may still be missing; the rustup-init installer above is the most reliable path on Windows.
 - If `pnpm tauri dev` fails immediately on the before-command, this repo now uses `cross-env` so `NEXT_PUBLIC_IS_DESKTOP=true` works in PowerShell/CMD.
+- If you install MinGW/MSYS2 separately, make sure your PATH points to the `bin` directory, not to an executable inside it. For example, use `C:\msys64\mingw64\bin`, not `C:\msys64\mingw64\bin\gcc.exe`.
 
 ## Install
 
