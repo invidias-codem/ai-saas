@@ -274,7 +274,6 @@ Additional scripts exist for evaluation, RAG/indexing, import verification, rate
 ## Desktop / Local Capability Direction
 
 Lattice already includes an Electron/Desktop packaging path and a growing Go-based local harness.
-
 This part of the product is still an evolving capability layer rather than a fully simplified mass-user install story. The direction includes:
 - trusted local execution boundaries
 - scoped local file/repo capability growth
@@ -283,6 +282,8 @@ This part of the product is still an evolving capability layer rather than a ful
 - future architecture/code-map artifact generation
 
 Treat this as an advanced product lane until the install and runtime story is more consolidated.
+
+**Windows users:** see `TAURI_BUILD.md` for Windows-specific prerequisites and troubleshooting before running `pnpm tauri dev`.
 
 ---
 
