@@ -8,6 +8,7 @@ import { generateConversationReply } from "@/lib/llm/conversationEngine";
 import { TrajectoryStep } from "@/lib/agents/core/types";
 import { SlackTraceFormatter } from "@/lib/slack/slackTraceFormatter";
 import { exportTaskTraceToOpik, OpikTracePayload } from "@/lib/telemetry/opikExporter";
+import { recordThreadTerminated } from "@/lib/telemetry/evaluation";
 
 export const maxDuration = 300;
 
@@ -195,6 +196,19 @@ export async function POST(req: NextRequest) {
 
                     try {
                         void exportTaskTraceToOpik(slackTrace);
+                    } catch {
+                        // Do not fail Slack delivery due to observability backend issues.
+                    }
+
+                    try {
+                        void recordThreadTerminated({
+                            traceId,
+                            channel: event.channel,
+                            threadTs: event.thread_ts || event.ts,
+                            teamId,
+                            workspaceId: slackConfig.workspaceId || `slack-${teamId}`,
+                            userId: slackConfig.userId || undefined,
+                        });
                     } catch {
                         // Do not fail Slack delivery due to observability backend issues.
                     }
