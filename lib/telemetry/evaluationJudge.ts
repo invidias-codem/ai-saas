@@ -16,6 +16,7 @@
  */
 
 import { generateObject, generateText, type LanguageModel } from 'ai';
+import { z } from 'zod';
 
 /* ------------------------------------------------------------------ */
 /*  Result types                                                      */
@@ -97,17 +98,13 @@ ${selectedHarness ? `Execution harness: ${selectedHarness}` : ''}`;
   try {
     const result = await generateObject({
       model,
-      schema: {
-        type: 'object',
-        properties: {
-          score: { type: 'number', minimum: 0, maximum: 1 },
-          reasoning: { type: 'string' },
-          hallucinatedArgs: { type: 'boolean' },
-          unsupportedTool: { type: 'boolean' },
-          environmentMismatch: { type: 'boolean' },
-        },
-        required: ['score', 'reasoning', 'hallucinatedArgs', 'unsupportedTool', 'environmentMismatch'],
-      },
+      schema: z.object({
+        score: z.number().min(0).max(1),
+        reasoning: z.string(),
+        hallucinatedArgs: z.boolean(),
+        unsupportedTool: z.boolean(),
+        environmentMismatch: z.boolean(),
+      }),
       prompt,
     });
 
@@ -171,17 +168,13 @@ ${harnessSelectionReason ? `- Harness selection reason: ${harnessSelectionReason
   try {
     const result = await generateObject({
       model,
-      schema: {
-        type: 'object',
-        properties: {
-          score: { type: 'number', minimum: 0, maximum: 1 },
-          goalAchieved: { type: 'boolean' },
-          missingSteps: { type: 'array', items: { type: 'string' } },
-          unnecessarySteps: { type: 'array', items: { type: 'string' } },
-          notes: { type: 'string' },
-        },
-        required: ['score', 'goalAchieved', 'missingSteps', 'unnecessarySteps', 'notes'],
-      },
+      schema: z.object({
+        score: z.number().min(0).max(1),
+        goalAchieved: z.boolean(),
+        missingSteps: z.array(z.string()),
+        unnecessarySteps: z.array(z.string()),
+        notes: z.string(),
+      }),
       prompt,
     });
 
