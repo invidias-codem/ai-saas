@@ -11,7 +11,47 @@ This repo includes a first-class desktop shell in `src-tauri/`. The web app is t
 - OS build deps:
   - macOS: Xcode Command Line Tools
   - Linux: `build-essential`, `libssl-dev`, `libwebkit2gtk-4.1-dev`
-  - Windows: Visual Studio C++ Build Tools + Microsoft WebView2
+  - Windows: Visual Studio C++ Build Tools + Microsoft WebView2 + GNU toolchain (`dlltool.exe` / `x86_64-pc-windows-gnu`)
+
+## Windows Setup
+
+1. **Install build tools**
+   - Install [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the "Desktop development with C++" workload.
+   - Install [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+
+2. **Install pnpm**
+   ```powershell
+   npm install -g pnpm
+   ```
+
+3. **Install Rust + GNU toolchain**
+   - Download and run the installer from https://rustup.rs/
+   - When prompted, select the GNU toolchain: `stable-x86_64-pc-windows-gnu`
+   - After install, **close PowerShell completely** and reopen it so PATH reloads.
+   - Verify:
+     ```powershell
+     rustup --version
+     cargo --version
+     ```
+
+   **Why GNU?** The Tauri/Rust build on Windows expects the MinGW/GNU ABI. The default MSVC toolchain can fail with linker errors like `dlltool.exe: program not found`.
+
+4. **Clone and install**
+   ```bash
+   git clone https://github.com/invidias-codem/ai-saas.git
+   cd ai-saas
+   pnpm install
+   ```
+
+5. **Run**
+   ```bash
+   pnpm tauri dev
+   ```
+
+**Notes**
+- If `rustup` is not found after install, restart the terminal or your editor's integrated shell.
+- If Rust was installed via Chocolatey, the GNU toolchain and `rustup` may still be missing; the rustup-init installer above is the most reliable path on Windows.
+- If `pnpm tauri dev` fails immediately on the before-command, this repo now uses `cross-env` so `NEXT_PUBLIC_IS_DESKTOP=true` works in PowerShell/CMD.
 
 ## Install
 
