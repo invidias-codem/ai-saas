@@ -17,6 +17,15 @@ export const CODE_MODELS: Record<string, CodeModelConfig> = {
         description: 'Best code quality and reasoning',
         maxTokens: 8192,
     },
+    'claude-3-5-sonnet': {
+        id: 'claude-3-5-sonnet',
+        name: 'Claude 3.5 Sonnet',
+        provider: 'claude',
+        modelId: 'claude-3-5-sonnet-20241022',
+        description: 'Artifact-friendly Sonnet for code, UI, and diagrams',
+        maxTokens: 8192,
+        supportsArtifacts: true,
+    },
     agentic: {
         id: 'agentic',
         name: 'Agentic',

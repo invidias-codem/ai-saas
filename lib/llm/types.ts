@@ -47,6 +47,7 @@ export interface CodeModelConfig {
     description: string;
     maxTokens: number;
     supportsCodeExecution?: boolean;
+    supportsArtifacts?: boolean;
 }
 
 export interface CompletionOptions {

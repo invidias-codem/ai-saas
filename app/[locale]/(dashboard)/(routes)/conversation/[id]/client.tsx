@@ -60,6 +60,8 @@ import { useRuntimeStore } from "@/lib/store/runtimeStore";
 import { ModelProvider, useModel } from "@/contexts/ModelContext";
 import { ModelToggle } from "@/components/chat/ModelToggle";
 import { SourceDisplay, Source } from "@/components/chat/SourceDisplay";
+import { ArtifactCard } from "@/components/chat/ArtifactCard";
+import { parseArtifacts } from "@/lib/llm/artifacts";
 
 // Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
 
@@ -1035,41 +1037,51 @@ function ConversationPage({
                 )}>
                   {msg.role === "bot" ? (
                     <>
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          table: RenderTableAsChart,
-                          pre: ({ node, ...props }) => (
-                            <div className="relative w-full overflow-hidden my-4 rounded-xl border bg-zinc-950 dark:bg-zinc-900 shadow-md">
-                              <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800">
-                                <span className="text-xs text-zinc-400 font-mono">code</span>
-                              </div>
-                              <pre {...props} className="p-4 overflow-x-auto text-xs text-zinc-50 font-mono leading-relaxed scrollbar-thin scrollbar-thumb-zinc-700" />
-                            </div>
-                          ),
-                          code({ node, className, children, ...props }) {
-                            const match = /language-(\w+)/.exec(className || '');
-                            return match ? (
-                              <code className={className} {...props}>{children}</code>
-                            ) : (
-                              <code className="bg-muted px-1.5 py-0.5 rounded-md font-mono text-[13px] text-pink-600 dark:text-pink-400" {...props}>{children}</code>
-                            );
-                          },
-                          p: ({ node, ...props }) => <p {...props} className="mb-4 last:mb-0" />,
-                          ul: ({ node, ...props }) => <ul {...props} className="list-disc list-outside ml-4 mb-4 space-y-2 marker:text-muted-foreground" />,
-                          ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-outside ml-4 mb-4 space-y-2 marker:text-muted-foreground" />,
-                          li: ({ node, ...props }) => <li {...props} className="pl-1" />,
-                          h1: ({ node, ...props }) => <h1 {...props} className="text-2xl font-semibold mb-4 mt-6 first:mt-0 tracking-tight" />,
-                          h2: ({ node, ...props }) => <h2 {...props} className="text-xl font-semibold mb-3 mt-5 tracking-tight" />,
-                          h3: ({ node, ...props }) => <h3 {...props} className="text-lg font-medium mb-2 mt-4" />,
-                          blockquote: ({ node, ...props }) => <blockquote {...props} className="border-l-4 border-primary/40 pl-4 italic text-muted-foreground my-4" />,
-                          a: ({ node, ...props }) => <a {...props} className="text-indigo-500 hover:text-indigo-600 font-medium underline underline-offset-4 transition-colors" target="_blank" rel="noreferrer" />,
-                          th: ({ node, ...props }) => <th {...props} className="border-b border-border px-4 py-2 text-left font-semibold bg-muted/30" />,
-                          td: ({ node, ...props }) => <td {...props} className="border-b border-border px-4 py-2" />,
-                        }}
-                      >
-                        {msg.text}
-                      </ReactMarkdown>
+                      {(() => {
+                        const { text: artifactFreeText, artifacts } = parseArtifacts(msg.text);
+                        return (
+                          <>
+                            {artifacts.map((artifact, artifactIndex) => (
+                              <ArtifactCard key={`${conversationId}:${index}:artifact:${artifactIndex}`} artifact={artifact} />
+                            ))}
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                table: RenderTableAsChart,
+                                pre: ({ node, ...props }) => (
+                                  <div className="relative w-full overflow-hidden my-4 rounded-xl border bg-zinc-950 dark:bg-zinc-900 shadow-md">
+                                    <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-zinc-800">
+                                      <span className="text-xs text-zinc-400 font-mono">code</span>
+                                    </div>
+                                    <pre {...props} className="p-4 overflow-x-auto text-xs text-zinc-50 font-mono leading-relaxed scrollbar-thin scrollbar-thumb-zinc-700" />
+                                  </div>
+                                ),
+                                code({ node, className, children, ...props }) {
+                                  const match = /language-(\w+)/.exec(className || '');
+                                  return match ? (
+                                    <code className={className} {...props}>{children}</code>
+                                  ) : (
+                                    <code className="bg-muted px-1.5 py-0.5 rounded-md font-mono text-[13px] text-pink-600 dark:text-pink-400" {...props}>{children}</code>
+                                  );
+                                },
+                                p: ({ node, ...props }) => <p {...props} className="mb-4 last:mb-0" />,
+                                ul: ({ node, ...props }) => <ul {...props} className="list-disc list-outside ml-4 mb-4 space-y-2 marker:text-muted-foreground" />,
+                                ol: ({ node, ...props }) => <ol {...props} className="list-decimal list-outside ml-4 mb-4 space-y-2 marker:text-muted-foreground" />,
+                                li: ({ node, ...props }) => <li {...props} className="pl-1" />,
+                                h1: ({ node, ...props }) => <h1 {...props} className="text-2xl font-semibold mb-4 mt-6 first:mt-0 tracking-tight" />,
+                                h2: ({ node, ...props }) => <h2 {...props} className="text-xl font-semibold mb-3 mt-5 tracking-tight" />,
+                                h3: ({ node, ...props }) => <h3 {...props} className="text-lg font-medium mb-2 mt-4" />,
+                                blockquote: ({ node, ...props }) => <blockquote {...props} className="border-l-4 border-primary/40 pl-4 italic text-muted-foreground my-4" />,
+                                a: ({ node, ...props }) => <a {...props} className="text-indigo-500 hover:text-indigo-600 font-medium underline underline-offset-4 transition-colors" target="_blank" rel="noreferrer" />,
+                                th: ({ node, ...props }) => <th {...props} className="border-b border-border px-4 py-2 text-left font-semibold bg-muted/30" />,
+                                td: ({ node, ...props }) => <td {...props} className="border-b border-border px-4 py-2" />,
+                              }}
+                            >
+                              {artifactFreeText}
+                            </ReactMarkdown>
+                          </>
+                        );
+                      })()}
 
                       {/* Action Bar (Copy/Share + Feedback) - fades in */}
                       <div className="mt-2 flex gap-2 items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
