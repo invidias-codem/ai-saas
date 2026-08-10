@@ -7,8 +7,6 @@
   ],
   "permissions": [
     "core:default",
-    "ping_daemon",
-    "flush_telemetry",
     "stronghold:allow-initialize",
     "stronghold:allow-load-client",
     "stronghold:allow-create-client",
