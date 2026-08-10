@@ -213,7 +213,9 @@ export async function POST(req: NextRequest) {
                         // Do not fail Slack delivery due to observability backend issues.
                     }
 
-                    ioHarness.shutdown();
+                    if (ioHarness?.shutdown) {
+                        ioHarness.shutdown();
+                    }
                 } catch (err: any) {
                     console.error("[Slack Event Error]", err);
                 }
