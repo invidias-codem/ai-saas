@@ -25,6 +25,7 @@ export interface SlackConfig {
   botUserId: string;
   scopes: string[];
   userId?: string; // Linked Supabase User ID (owner of the integration)
+  workspaceId?: string; // Linked workspace ID for telemetry
   workspacePath?: string;
 }
 
