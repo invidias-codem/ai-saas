@@ -35,6 +35,7 @@ import { createBlogPrTool } from '@/lib/agents/tools/createBlogPr';
 import { webSearchTool } from '@/lib/agents/tools/webSearch';
 import { readFileTool } from '@/lib/agents/tools/harnessTools';
 import { searchCodebaseTool } from '@/lib/agents/tools/searchCodebase';
+import { registerStream, unregisterStream } from '@/lib/telemetry/cliStreamRegistry';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -97,6 +98,18 @@ export async function GET(req: NextRequest) {
         try { controller.close(); } catch { }
       };
 
+      registerStream({
+        traceId,
+        userId,
+        taskId,
+        send,
+        close: () => {
+          try { controller.close(); } catch { }
+        },
+      });
+
+      const cleanup = () => unregisterStream(traceId);
+
       const persistEvent = async (eventType: string, eventData: any) => {
         if (!supabaseAdmin) return;
         try {
@@ -133,7 +146,7 @@ export async function GET(req: NextRequest) {
             result: existingTask.result,
             resumed: true,
           });
-          try { controller.close(); } catch { }
+          cleanup();
           return;
         }
         if (existingTask && existingTask.status === 'failed') {
@@ -144,7 +157,7 @@ export async function GET(req: NextRequest) {
             result: existingTask.error,
             resumed: true,
           });
-          try { controller.close(); } catch { }
+          cleanup();
           return;
         }
       }

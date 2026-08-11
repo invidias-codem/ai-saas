@@ -19,6 +19,7 @@
 import { DEFAULT_ALERT_RULES, type AlertRuleSet } from '@/lib/telemetry/alertConfig';
 import { evaluateThresholds, type Metric } from '@/lib/telemetry/thresholdEvaluator';
 import { dispatchSlackAlert } from '@/lib/telemetry/alertTransport';
+import { broadcastAlert } from '@/lib/telemetry/cliStreamRegistry';
 
 const DEFAULT_BASE_URL = 'http://localhost:3000';
 const DEFAULT_SLACK_WEBHOOK_URL = process.env.LATTICE_RISK_SLACK_WEBHOOK_URL || '';
@@ -80,6 +81,19 @@ async function runWatcher(options?: { url?: string; webhookUrl?: string }) {
           threshold: alert.threshold,
           unit: alert.unit,
         });
+      }
+
+      const sent = broadcastAlert({
+        severity: alert.severity,
+        event_type: alert.event_type,
+        reason: alert.reason,
+        actual: alert.actual,
+        threshold: alert.threshold,
+        unit: alert.unit,
+      });
+
+      if (sent > 0) {
+        console.log(`[watcher] injected alert into ${sent} active SSE stream(s)`);
       }
     }
   } catch (err) {
