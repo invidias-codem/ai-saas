@@ -3,11 +3,11 @@
 import https from 'node:https';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import readline from 'node:readline';
 
 function printHelpAndExit() {
   console.log(`usage:
   node scripts/lattice-cli.mjs prompt "your prompt"
-  node scripts/lattice-cli.mjs prompt -- "your prompt with --flags"
   node scripts/lattice-cli.mjs doctor
 `);
   process.exit(0);
@@ -30,7 +30,7 @@ function parseCliEnv() {
   const trimmed = LATTICE_API_URL.replace(/\/$/, '');
   const url = new URL(trimmed);
   const isHttps = url.protocol === 'https:';
-  const headers: Record<string, string> = {};
+  const headers = {};
   if (bypassSecret) {
     headers['x-vercel-protection-bypass'] = bypassSecret;
     headers['x-vercel-set-bypass-cookie'] = 'true';
@@ -110,9 +110,7 @@ function parseSseLines(text) {
       continue;
     }
 
-    if (line.startsWith(':')) {
-      continue;
-    }
+    if (line.startsWith(':')) continue;
 
     if (line.startsWith('event:')) {
       current = current ?? {};
@@ -128,16 +126,84 @@ function parseSseLines(text) {
       continue;
     }
 
-    if (line.startsWith('retry:')) {
-      continue;
-    }
+    if (line.startsWith('retry:')) continue;
   }
 
-  if (current) {
-    events.push(current);
-  }
-
+  if (current) events.push(current);
   return events;
+}
+
+const ANSI = {
+  reset: '\u001b[0m',
+  bold: '\u001b[1m',
+  redBg: '\u001b[41m',
+  whiteFg: '\u001b[37m',
+  yellowBg: '\u001b[43m',
+  blackFg: '\u001b[30m',
+};
+
+function renderAlertBanner(alert) {
+  const severity = (alert?.severity || 'warn').toLowerCase();
+  const isCritical = severity === 'critical';
+  const bg = isCritical ? ANSI.redBg : ANSI.yellowBg;
+  const fg = isCritical ? ANSI.whiteFg : ANSI.blackFg;
+  const title = isCritical ? 'CRITICAL' : 'WARN';
+  const lines = [
+    '',
+    `${bg}${fg}${ANSI.bold}   ⚠  LATTICE RISK ALERT   ${ANSI.reset}`,
+    `${bg}${fg} severity=${title} event=${alert?.event_type || 'unknown'} reason=${alert?.reason || 'unknown'} ${ANSI.reset}`,
+    `${bg}${fg} actual=${alert?.actual ?? '?'} threshold=${alert?.threshold ?? '?'} unit=${alert?.unit || ''} ${ANSI.reset}`,
+    `${bg}${fg}${ANSI.bold}   Press ENTER to acknowledge and resume...   ${ANSI.reset}`,
+    '',
+  ];
+  process.stderr.write(lines.join('\n'));
+}
+
+async function waitForAcknowledgment() {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+  try {
+    await new Promise((resolve) => {
+      rl.question('', () => resolve(undefined));
+    });
+  } finally {
+    rl.close();
+  }
+}
+
+function handleEvent(event, raw) {
+  if (!raw) return;
+  switch (event) {
+    case 'meta': {
+      const meta = JSON.parse(raw);
+      console.log(`\n[task ${meta.taskId?.slice(0, 8)}] trace=${meta.traceId?.slice(0, 8)} model=${meta.model}\n`);
+      break;
+    }
+    case 'thought': {
+      const thought = JSON.parse(raw);
+      console.log(`  [thought ${thought.step}] ${thought.text}\n`);
+      break;
+    }
+    case 'tool': {
+      const tool = JSON.parse(raw);
+      const status = tool.status === 'success' ? '✓' : '✗';
+      console.log(`  [tool ${status} ${tool.name}] ${tool.latencyMs}ms output=${tool.outputSize}`);
+      if (tool.error) console.log(`         error: ${tool.error}`);
+      break;
+    }
+    case 'error': {
+      const err = JSON.parse(raw);
+      console.error(`\n[error] ${err.message} phase=${err.phase}\n`);
+      break;
+    }
+    case 'done': {
+      const done = JSON.parse(raw);
+      console.log(`\n[done] status=${done.status} durationMs=${done.durationMs} trace=${done.traceId?.slice(0, 8)}`);
+      if (done.result) console.log(`\n${done.result}\n`);
+      break;
+    }
+    default:
+      console.log(`[${event ?? 'event'}] ${raw}`);
+  }
 }
 
 async function runPrompt(promptText) {
@@ -155,6 +221,9 @@ async function runPrompt(promptText) {
     let buffer = '';
     let traceIdForRetry = null;
     let lastEventId = null;
+    let paused = false;
+    let pendingEvents = [];
+    let streamFinished = false;
 
     const curlArgs = [
       '--silent',
@@ -178,7 +247,6 @@ async function runPrompt(promptText) {
     ];
 
     const curl = spawn('curl', curlArgs, { stdio: ['pipe', 'pipe', 'inherit'] });
-    let finished = false;
 
     curl.stdout.on('data', (data) => {
       buffer += data.toString('utf8');
@@ -200,44 +268,36 @@ async function runPrompt(promptText) {
           } catch {}
         }
 
-        switch (event.event) {
-          case 'meta': {
-            const meta = JSON.parse(raw);
-            console.log(`\n[task ${meta.taskId?.slice(0, 8)}] trace=${meta.traceId?.slice(0, 8)} model=${meta.model}\n`);
-            break;
-          }
-          case 'thought': {
-            const thought = JSON.parse(raw);
-            console.log(`  [thought ${thought.step}] ${thought.text}\n`);
-            break;
-          }
-          case 'tool': {
-            const tool = JSON.parse(raw);
-            const status = tool.status === 'success' ? '✓' : '✗';
-            console.log(`  [tool ${status} ${tool.name}] ${tool.latencyMs}ms output=${tool.outputSize}`);
-            if (tool.error) console.log(`         error: ${tool.error}`);
-            break;
-          }
-          case 'error': {
-            const err = JSON.parse(raw);
-            console.error(`\n[error] ${err.message} phase=${err.phase}\n`);
-            break;
-          }
-          case 'done': {
-            const done = JSON.parse(raw);
-            console.log(`\n[done] status=${done.status} durationMs=${done.durationMs} trace=${done.traceId?.slice(0, 8)}`);
-            if (done.result) console.log(`\n${done.result}\n`);
-            finished = true;
-            break;
-          }
-          default:
-            console.log(`[${event.event ?? 'event'}] ${raw}`);
+        if (event.event === 'done') {
+          streamFinished = true;
         }
+
+        if (paused) {
+          pendingEvents.push({ event: event.event, raw });
+          continue;
+        }
+
+        if (event.event === 'alert') {
+          paused = true;
+          try {
+            renderAlertBanner(JSON.parse(raw));
+            waitForAcknowledgment().then(() => {
+              for (const buffered of pendingEvents) handleEvent(buffered.event, buffered.raw);
+              pendingEvents = [];
+              paused = false;
+            });
+          } finally {
+            // do not process same alert again until acknowledged
+          }
+          continue;
+        }
+
+        handleEvent(event.event, raw);
       }
     });
 
     curl.on('close', (code) => {
-      if (finished || code === 0) {
+      if (streamFinished || code === 0) {
         process.exitCode = code;
         return;
       }
@@ -261,14 +321,14 @@ async function runPrompt(promptText) {
 
     await new Promise((resolve) => {
       const checkDone = setInterval(() => {
-        if (finished || curl.exitCode != null || !curl.pid) {
+        if (streamFinished || curl.exitCode != null || !curl.pid) {
           clearInterval(checkDone);
           resolve(undefined);
         }
       }, 200);
     });
 
-    if (finished) break;
+    if (streamFinished) break;
   }
 }
 
