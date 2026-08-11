@@ -2,7 +2,7 @@
 import { Tool, SecurityPolicy, AgentContext, ToolResult } from './types';
 import { z } from 'zod';
 import { interceptTool } from '@/lib/ucol/contextFirewall';
-import { sandboxManager, type SandboxWriteRequest, type SandboxPatchRequest } from '@/lib/execution/sandboxManager';
+import { sandboxManager, type SandboxExecutionRequest, type SandboxWriteRequest, type SandboxPatchRequest } from '@/lib/execution/sandboxManager';
 import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { tmpdir } from 'os';
