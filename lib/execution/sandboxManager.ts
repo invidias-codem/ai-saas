@@ -15,7 +15,7 @@
 
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
-import { mkdir, rm, writeFile } from 'fs/promises';
+import { mkdir, rm, readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { UcolSpan } from '../ucol/observability/span';
@@ -44,12 +44,45 @@ export interface SandboxExecutionResult {
   bufferWarning?: string;
 }
 
+export interface SandboxWriteRequest {
+  type: 'write';
+  filePath: string;
+  content: string;
+  maxBytes?: number;
+  scratchDir: string;
+}
+
+export interface SandboxPatchRequest {
+  type: 'patch';
+  filePath: string;
+  searchBlock: string;
+  replaceBlock: string;
+  scratchDir: string;
+}
+
+export type FileSandboxRequest = SandboxWriteRequest | SandboxPatchRequest;
+
+export interface FileSandboxResult {
+  success: boolean;
+  path?: string;
+  error?: string;
+  bytesWritten?: number;
+  patched?: boolean;
+  exitCode?: number | null;
+}
+
 export interface SandboxRunner {
   execute(req: SandboxExecutionRequest): Promise<SandboxExecutionResult>;
+  writeFile(req: SandboxWriteRequest): Promise<FileSandboxResult>;
+  patchFile(req: SandboxPatchRequest): Promise<FileSandboxResult>;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB log cap
+const MAX_FILE_PAYLOAD_BYTES = 5 * 1024 * 1024; // 5MB write ceiling
+const PATH_TRAVERSAL_DENY_REGEX = /(?:^|[\\/])(?:\.\.[\\/])+/;
+const DOTFILE_DENY_REGEX = /(?:^|[\\/])(?:\.env|\.gitconfig|\.npmrc|\.ssh|\.aws|\.pem|\.docker)(?:[\\/]|$)/;
+const DOT_GIT_DIR_REGEX = /(?:^|[\\/])\.git(?:[\\/]|$)/;
 const DEFAULT_ALLOWED_ENV = new Set([
   'PATH',
   'HOME',
@@ -174,7 +207,6 @@ export class LocalSandboxRunner implements SandboxRunner {
   } {
     switch (language) {
       case 'node':
-      case 'typescript':
         return { command: 'node', args: ['--no-warnings'], fileName: 'script.js' } as {
           command: string;
           args: string[];
@@ -223,6 +255,89 @@ export class LocalSandboxRunner implements SandboxRunner {
 
     return env;
   }
+
+  private validateWritePath(filePath: string, scratchDir: string): void {
+    const resolved = resolvePath(filePath);
+    if (!resolved.startsWith(scratchDir)) {
+      throw new Error(`Path traversal denied: ${filePath} resolves outside sandbox`);
+    }
+
+    const relative = resolved.slice(scratchDir.length);
+    const normalized = relative.replace(/\\/g, '/');
+
+    if (DOT_GIT_DIR_REGEX.test(normalized) || DOTFILE_DENY_REGEX.test(normalized)) {
+      throw new Error(`Write denied for protected path: ${filePath}`);
+    }
+  }
+
+  private validatePatchPath(filePath: string, scratchDir: string): void {
+    const resolved = resolvePath(filePath);
+    if (!resolved.startsWith(scratchDir)) {
+      throw new Error(`Path traversal denied: ${filePath} resolves outside sandbox`);
+    }
+
+    const relative = resolved.slice(scratchDir.length);
+    const normalized = relative.replace(/\\/g, '/');
+
+    if (DOT_GIT_DIR_REGEX.test(normalized) || DOTFILE_DENY_REGEX.test(normalized)) {
+      throw new Error(`Patch denied for protected path: ${filePath}`);
+    }
+  }
+
+  public async writeFile(req: SandboxWriteRequest): Promise<FileSandboxResult> {
+    const maxBytes = req.maxBytes ?? MAX_FILE_PAYLOAD_BYTES;
+    if (Buffer.byteLength(req.content, 'utf8') > maxBytes) {
+      return { success: false, error: `Payload exceeds ${maxBytes} bytes`, exitCode: 1 };
+    }
+
+    try {
+      this.validateWritePath(req.filePath, req.scratchDir);
+    } catch (err: any) {
+      return { success: false, error: err.message, exitCode: 1 };
+    }
+
+    const resolved = resolvePath(req.filePath);
+    const absolute = join(req.scratchDir, resolved);
+
+    try {
+      await mkdir(join(absolute, '..'), { recursive: true });
+      await writeFile(absolute, req.content, { mode: 0o600 });
+      return { success: true, path: absolute, bytesWritten: Buffer.byteLength(req.content, 'utf8'), exitCode: 0 };
+    } catch (err: any) {
+      return { success: false, error: err.message, exitCode: 1 };
+    }
+  }
+
+  public async patchFile(req: SandboxPatchRequest): Promise<FileSandboxResult> {
+    try {
+      this.validatePatchPath(req.filePath, req.scratchDir);
+    } catch (err: any) {
+      return { success: false, error: err.message, exitCode: 1 };
+    }
+
+    const resolved = resolvePath(req.filePath);
+    const absolute = join(req.scratchDir, resolved);
+
+    try {
+      const data = await readFile(absolute, 'utf8');
+      const updated = data.replace(req.searchBlock, req.replaceBlock);
+
+      if (updated === data) {
+        return { success: false, error: 'search block not found', exitCode: 1 };
+      }
+
+      await writeFile(absolute, updated, { mode: 0o600 });
+      return { success: true, path: absolute, patched: true, exitCode: 0 };
+    } catch (err: any) {
+      return { success: false, error: err.message, exitCode: 1 };
+    }
+  }
+}
+
+function resolvePath(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const segments = normalized.split('/').filter((segment) => !PATH_TRAVERSAL_DENY_REGEX.test(segment));
+  return segments.join('/');
 }
 
 export function shouldUseSandbox(tool: any): boolean {
@@ -234,6 +349,14 @@ export class SandboxManager {
 
   async execute(req: SandboxExecutionRequest): Promise<SandboxExecutionResult> {
     return this.runner.execute(req);
+  }
+
+  async writeFile(req: SandboxWriteRequest): Promise<FileSandboxResult> {
+    return this.runner.writeFile(req);
+  }
+
+  async patchFile(req: SandboxPatchRequest): Promise<FileSandboxResult> {
+    return this.runner.patchFile(req);
   }
 }
 

@@ -45,6 +45,11 @@ export const writeFileTool: Tool<{ filePath: string; content: string }, any> = {
     }),
     risk: "mutative",
     requiresApproval: true,
+    requiresSandbox: true,
+    sandbox: {
+      kind: 'write',
+      allowedEnv: ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'SHELL', 'NODE_ENV'],
+    },
     execute: async (input, context) => {
         if (!context.ioHarness) {
             return { success: false, error: "Execution harness is not available in the current context." };
@@ -64,6 +69,11 @@ export const patchFileTool: Tool<{ filePath: string; searchBlock: string; replac
     }),
     risk: "mutative",
     requiresApproval: true,
+    requiresSandbox: true,
+    sandbox: {
+      kind: 'patch',
+      allowedEnv: ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'SHELL', 'NODE_ENV'],
+    },
     execute: async (input, context) => {
         if (!context.ioHarness) {
             return { success: false, error: "Execution harness is not available in the current context." };
