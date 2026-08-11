@@ -2,7 +2,10 @@
 import { Tool, SecurityPolicy, AgentContext, ToolResult } from './types';
 import { z } from 'zod';
 import { interceptTool } from '@/lib/ucol/contextFirewall';
-import { sandboxManager, type SandboxExecutionRequest } from '@/lib/execution/sandboxManager';
+import { sandboxManager, type SandboxWriteRequest, type SandboxPatchRequest } from '@/lib/execution/sandboxManager';
+import { randomUUID } from 'crypto';
+import { join } from 'path';
+import { tmpdir } from 'os';
 
 /**
  * Registry to manage available tools and enforce security policies.
@@ -209,12 +212,46 @@ export class ToolRegistry {
 
     private async executeViaSandbox(tool: Tool, input: any, context: AgentContext): Promise<any> {
       const sandbox = tool.sandbox;
-      if (!sandbox?.buildCommand) {
-        throw new Error(`Tool '${tool.name}' requires sandbox but does not define sandbox.buildCommand`);
+      if (!sandbox?.kind) {
+        throw new Error(`Tool '${tool.name}' requires sandbox but does not define sandbox.kind`);
       }
 
-      const command = sandbox.buildCommand(input);
-      const req: SandboxExecutionRequest = {
+      const scratchDir = this.ensureScratchDir(context.sessionId);
+
+      if (sandbox.kind === 'write') {
+        const req: SandboxWriteRequest = {
+          type: 'write',
+          filePath: input.filePath,
+          content: input.content,
+          maxBytes: 5 * 1024 * 1024,
+          scratchDir,
+        };
+
+        const result = await sandboxManager.writeFile(req);
+        if (!result.success) {
+          throw new Error(result.error || 'sandbox write failed');
+        }
+        return { path: result.path, bytesWritten: result.bytesWritten, exitCode: result.exitCode };
+      }
+
+      if (sandbox.kind === 'patch') {
+        const req: SandboxPatchRequest = {
+          type: 'patch',
+          filePath: input.filePath,
+          searchBlock: input.searchBlock,
+          replaceBlock: input.replaceBlock,
+          scratchDir,
+        };
+
+        const result = await sandboxManager.patchFile(req);
+        if (!result.success) {
+          throw new Error(result.error || 'sandbox patch failed');
+        }
+        return { path: result.path, patched: result.patched, exitCode: result.exitCode };
+      }
+
+      const command = sandbox.buildCommand ? sandbox.buildCommand(input) : JSON.stringify(input);
+      const execReq: SandboxExecutionRequest = {
         command,
         language: sandbox.language || 'sh',
         allowedEnv: sandbox.allowedEnv,
@@ -223,7 +260,7 @@ export class ToolRegistry {
         metadata: { tool: tool.name },
       };
 
-      const result = await sandboxManager.execute(req);
+      const result = await sandboxManager.execute(execReq);
 
       if (result.timedOut) {
         throw new Error('Sandbox execution timed out');
@@ -238,6 +275,12 @@ export class ToolRegistry {
       }
 
       return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode, timedOut: false };
+    }
+
+    private ensureScratchDir(traceId: string): string {
+      const executionId = typeof randomUUID !== 'undefined' ? randomUUID() : `${Date.now()}-${Math.random()}`;
+      const scratchDir = join(tmpdir(), `lattice-sandbox-${executionId}`);
+      return scratchDir;
     }
 
     /**

@@ -46,6 +46,7 @@ export interface Tool<TInput = any, TOutput = any> {
      * Optional runtime hints for the sandbox runner.
      */
     sandbox?: {
+      kind?: 'exec' | 'write' | 'patch' | 'read';
       language?: 'sh' | 'python' | 'node';
       allowedEnv?: string[];
       isolatedEnv?: Record<string, string>;
