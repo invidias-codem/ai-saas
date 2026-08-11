@@ -31,6 +31,7 @@ export interface SandboxExecutionRequest {
   isolatedEnv?: Record<string, string>;
   traceId?: string;
   metadata?: Record<string, string>;
+  allowedNetworkHosts?: string[];
 }
 
 export interface SandboxExecutionResult {
@@ -80,9 +81,6 @@ export interface SandboxRunner {
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB log cap
 const MAX_FILE_PAYLOAD_BYTES = 5 * 1024 * 1024; // 5MB write ceiling
-const PATH_TRAVERSAL_DENY_REGEX = /(?:^|[\\/])(?:\.\.[\\/])+/;
-const DOTFILE_DENY_REGEX = /(?:^|[\\/])(?:\.env|\.gitconfig|\.npmrc|\.ssh|\.aws|\.pem|\.docker)(?:[\\/]|$)/;
-const DOT_GIT_DIR_REGEX = /(?:^|[\\/])\.git(?:[\\/]|$)/;
 const DEFAULT_ALLOWED_ENV = new Set([
   'PATH',
   'HOME',
@@ -94,6 +92,26 @@ const DEFAULT_ALLOWED_ENV = new Set([
   'SHELL',
   'NODE_ENV',
 ]);
+const SECRETS_DENY_PREFIXES = [
+  'AWS_',
+  'SUPABASE_',
+  'LATTICE_',
+  'GCP_',
+  'GOOGLE_APPLICATION_CREDENTIALS',
+  'GITHUB_',
+  'SLACK_',
+  'OPENAI_',
+  'ANTHROPIC_',
+  'XAI_',
+  'DEEPSEEK_',
+  'TOKEN',
+  'SECRET',
+  'PRIVATE_KEY',
+  'DOCKER_',
+];
+const PATH_TRAVERSAL_DENY_REGEX = /(?:^|[\\/])(?:\.[\\.][\\/])+/;
+const DOTFILE_DENY_REGEX = /(?:^|[\\/])(?:\.env|\.gitconfig|\.npmrc|\.ssh|\.aws|\.pem|\.docker)(?:[\\/]|$)/;
+const DOT_GIT_DIR_REGEX = /(?:^|[\\/])\.git(?:[\\/]|$)/;
 
 export class LocalSandboxRunner implements SandboxRunner {
   public async execute(req: SandboxExecutionRequest): Promise<SandboxExecutionResult> {
@@ -242,18 +260,56 @@ export class LocalSandboxRunner implements SandboxRunner {
 
     for (const key of allowedSet) {
       const value = process.env[key];
-      if (value) env[key] = value;
+      if (value && !isSecretKey(key)) {
+        env[key] = value;
+      }
     }
 
     if (isolatedEnv) {
       for (const [key, value] of Object.entries(isolatedEnv)) {
-        if (typeof value === 'string' && value.trim().length > 0) {
+        if (typeof value === 'string' && value.trim().length > 0 && !isSecretKey(key)) {
           env[key] = value.trim();
         }
       }
     }
 
     return env;
+  }
+
+  private validateNetworkAccess(command: string, allowedNetworkHosts: string[] | undefined): void {
+    if (!allowedNetworkHosts || allowedNetworkHosts.length === 0) {
+      return;
+    }
+
+    const normalizedCommand = command.toLowerCase();
+    const riskyPatterns = [
+      'curl ',
+      'wget ',
+      'nc ',
+      'netcat ',
+      'telnet ',
+      'ssh ',
+      'scp ',
+      'rsync ',
+      'git clone',
+      'git push',
+      'git fetch',
+      'npm install',
+      'npm publish',
+      'npx ',
+      'python3 -c',
+      'python -c',
+      'node -e',
+    ];
+
+    for (const pattern of riskyPatterns) {
+      if (normalizedCommand.includes(pattern)) {
+        const hasAllowedTarget = allowedNetworkHosts.some((host) => normalizedCommand.includes(host.toLowerCase()));
+        if (!hasAllowedTarget) {
+          throw new Error(`Network access denied: command '${command}' requires explicit allowedNetworkHosts`);
+        }
+      }
+    }
   }
 
   private validateWritePath(filePath: string, scratchDir: string): void {
@@ -334,10 +390,9 @@ export class LocalSandboxRunner implements SandboxRunner {
   }
 }
 
-function resolvePath(filePath: string): string {
-  const normalized = filePath.replace(/\\/g, '/');
-  const segments = normalized.split('/').filter((segment) => !PATH_TRAVERSAL_DENY_REGEX.test(segment));
-  return segments.join('/');
+function isSecretKey(key: string): boolean {
+  const upperKey = key.toUpperCase();
+  return SECRETS_DENY_PREFIXES.some((prefix) => upperKey.startsWith(prefix) || upperKey === prefix);
 }
 
 export function shouldUseSandbox(tool: any): boolean {
@@ -362,3 +417,9 @@ export class SandboxManager {
 
 export const localSandboxRunner = new LocalSandboxRunner();
 export const sandboxManager = new SandboxManager(localSandboxRunner);
+
+function resolvePath(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/');
+  const segments = normalized.split('/').filter((segment) => !PATH_TRAVERSAL_DENY_REGEX.test(segment));
+  return segments.join('/');
+}
