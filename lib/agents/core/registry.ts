@@ -2,6 +2,7 @@
 import { Tool, SecurityPolicy, AgentContext, ToolResult } from './types';
 import { z } from 'zod';
 import { interceptTool } from '@/lib/ucol/contextFirewall';
+import { sandboxManager, type SandboxExecutionRequest } from '@/lib/execution/sandboxManager';
 
 /**
  * Registry to manage available tools and enforce security policies.
@@ -69,141 +70,184 @@ export class ToolRegistry {
     }
 
     /**
-     /** Execute a tool with security checks. */
-     /** Execute a tool with security checks. */
-     async executeTool(name: string, input: any, context: AgentContext): Promise<ToolResult> {
-         const tool = this.tools.get(name);
-         if (!tool) {
-             return { success: false, error: `Tool '${name}' not found.` };
-         }
+     * Execute a tool with security checks.
+     */
+    /** Execute a tool with security checks. */
+    /** Execute a tool with security checks. */
+    async executeTool(name: string, input: any, context: AgentContext): Promise<ToolResult> {
+        const tool = this.tools.get(name);
+        if (!tool) {
+            return { success: false, error: `Tool '${name}' not found.` };
+        }
 
-         const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
-         // 0. P1 Enterprise Context Firewall: permission check before execution
-         const interception = interceptTool({
-           harness: name,
-           command: [name],
-           args: input?.args ? (Array.isArray(input.args) ? input.args : Object.values(input.args)) : [],
-           orgContext: context.orgContext,
-         });
-         const interceptDuration = typeof performance !== 'undefined' ? performance.now() - startTime : Date.now() - startTime;
-         if (interception.decision === 'deny') {
-           try {
-             const { auditEnterprise } = await import('@/lib/security/auditLog');
-             void auditEnterprise(
-               'tool.intercepted',
-               context.userId,
-               {
-                 harness: name,
-                 input,
-                 reason: interception.reason ?? 'tool_intercepted',
-                 durationMs: Math.round(interceptDuration * 100) / 100,
-               },
-               {
-                 orgId: context.orgContext?.orgId ?? undefined,
-                 actorId: context.userId,
-                 eventType: 'tool.intercepted',
-                 harness: name,
-                 decision: 'DENY',
-                 traceId: context.sessionId,
-                 payload: { input, reason: interception.reason ?? 'tool_intercepted', durationMs: Math.round(interceptDuration * 100) / 100 },
-               }
-             );
-           } catch (e) {
-             console.error('[ToolRegistry] audit write failed:', e);
-           }
+        // 0. P1 Enterprise Context Firewall: permission check before execution
+        const interception = interceptTool({
+          harness: name,
+          command: [name],
+          args: input?.args ? (Array.isArray(input.args) ? input.args : Object.values(input.args)) : [],
+          orgContext: context.orgContext,
+        });
+        const interceptDuration = typeof performance !== 'undefined' ? performance.now() - startTime : Date.now() - startTime;
+        if (interception.decision === 'deny') {
+          try {
+            const { auditEnterprise } = await import('@/lib/security/auditLog');
+            void auditEnterprise(
+              'tool.intercepted',
+              context.userId,
+              {
+                harness: name,
+                input,
+                reason: interception.reason ?? 'tool_intercepted',
+                durationMs: Math.round(interceptDuration * 100) / 100,
+              },
+              {
+                orgId: context.orgContext?.orgId ?? undefined,
+                actorId: context.userId,
+                eventType: 'tool.intercepted',
+                harness: name,
+                decision: 'DENY',
+                traceId: context.sessionId,
+                payload: { input, reason: interception.reason ?? 'tool_intercepted', durationMs: Math.round(interceptDuration * 100) / 100 },
+              }
+            );
+          } catch (e) {
+            console.error('[ToolRegistry] audit write failed:', e);
+          }
 
-           try {
-             const { emitRiskEvent } = await import('@/lib/telemetry/riskAdapter');
-             void emitRiskEvent({
-               eventType: 'context_firewall_deny',
-               traceId: context.sessionId,
-               workspaceId: context.orgContext?.orgId,
-               userId: context.userId,
-               metadata: { harness: name, reason: interception.reason ?? 'tool_intercepted' },
-             });
-           } catch {
-             // do not fail execution due to risk telemetry
-           }
+          try {
+            const { emitRiskEvent } = await import('@/lib/telemetry/riskAdapter');
+            void emitRiskEvent({
+              eventType: 'context_firewall_deny',
+              traceId: context.sessionId,
+              workspaceId: context.orgContext?.orgId,
+              userId: context.userId,
+              metadata: { harness: name, reason: interception.reason ?? 'tool_intercepted' },
+            });
+          } catch {
+            // do not fail execution due to risk telemetry
+          }
 
-           return {
-             success: false,
-             error: interception.reason ?? 'tool_intercepted',
-           };
-         }
+          return {
+            success: false,
+            error: interception.reason ?? 'tool_intercepted',
+          };
+        }
 
-         // 1. P0 Security Check: Role-based Access
-         if (tool.risk === 'mutative' && context.userRole !== 'admin') {
-             return {
-                 success: false,
-                 error: `Security Violation: User '${context.userId}' is not authorized to use mutative tool '${name}'.`
-             };
-         }
+        // 1. P0 Security Check: Role-based Access
+        if (tool.risk === 'mutative' && context.userRole !== 'admin') {
+            return {
+                success: false,
+                error: `Security Violation: User '${context.userId}' is not authorized to use mutative tool '${name}'.`
+            };
+        }
 
-         // 2. Human-in-the-Loop Check
-         if (tool.requiresApproval) {
-             return {
-                 success: false,
-                 userApprovalNeeded: true,
-                 error: `Tool '${name}' requires human approval.`
-             };
-         }
+        // 2. Human-in-the-Loop Check
+        if (tool.requiresApproval) {
+            return {
+                success: false,
+                userApprovalNeeded: true,
+                error: `Tool '${name}' requires human approval.`
+            };
+        }
 
-         // 3. Schema Validation
-         const validation = tool.schema.safeParse(input);
-         if (!validation.success) {
-             return {
-                 success: false,
-                 error: `Input validation failed for '${name}': ${JSON.stringify(validation.error.format())}`
-             };
-         }
+        // 3. Schema Validation
+        const validation = tool.schema.safeParse(input);
+        if (!validation.success) {
+            return {
+                success: false,
+                error: `Input validation failed for '${name}': ${JSON.stringify(validation.error.format())}`
+            };
+        }
 
-         // 4. Execution with Timeout
-         try {
-             // Simple timeout wrapper
-             const execStartTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
-             const timeoutMs = tool.timeoutMs || 30000; // Default 30s
-             const result = await Promise.race([
-                 tool.execute(validation.data, context),
-                 new Promise((_, reject) => setTimeout(() => reject(new Error('Tool execution timed out')), timeoutMs))
-             ]);
-             const execDuration = typeof performance !== 'undefined' ? performance.now() - execStartTime : Date.now() - execStartTime;
+        // 4. Execution with Timeout
+        try {
+            // Simple timeout wrapper
+            const execStartTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+            const timeoutMs = tool.timeoutMs || 30000; // Default 30s
 
-             const toolResult = { success: true, data: result };
-             try {
-               const { auditEnterprise } = await import('@/lib/security/auditLog');
-               void auditEnterprise(
-                 'tool.executed',
-                 context.userId,
-                 { harness: name, input: validation.data, output: result, durationMs: Math.round(execDuration * 100) / 100 },
-                 {
-                   orgId: context.orgContext?.orgId,
-                   actorId: context.userId,
-                   eventType: 'tool.executed',
-                   harness: name,
-                   decision: 'ALLOW',
-                   traceId: context.sessionId,
-                   payload: { input: validation.data, output: result, durationMs: Math.round(execDuration * 100) / 100 },
-                 }
-               );
-             } catch (e) {
-               console.error('[ToolRegistry] tool.executed audit write failed:', e);
-             }
+            let result: any;
+            if (tool.requiresSandbox) {
+              result = await this.executeViaSandbox(tool, validation.data, context);
+            } else {
+              result = await Promise.race([
+                  tool.execute(validation.data, context),
+                  new Promise((_, reject) => setTimeout(() => reject(new Error('Tool execution timed out')), timeoutMs))
+              ]);
+            }
+            const execDuration = typeof performance !== 'undefined' ? performance.now() - execStartTime : Date.now() - execStartTime;
 
-             return toolResult;
+            const toolResult = { success: true, data: result };
+            try {
+              const { auditEnterprise } = await import('@/lib/security/auditLog');
+              void auditEnterprise(
+                'tool.executed',
+                context.userId,
+                { harness: name, input: validation.data, output: result, durationMs: Math.round(execDuration * 100) / 100 },
+                {
+                  orgId: context.orgContext?.orgId,
+                  actorId: context.userId,
+                  eventType: 'tool.executed',
+                  harness: name,
+                  decision: 'ALLOW',
+                  traceId: context.sessionId,
+                  payload: { input: validation.data, output: result, durationMs: Math.round(execDuration * 100) / 100 },
+                }
+              );
+            } catch (e) {
+              console.error('[ToolRegistry] tool.executed audit write failed:', e);
+            }
 
-         } catch (error: any) {
-             console.error(`[ToolRegistry] Execution failed for '${name}':`, error);
-             return { success: false, error: error.message || 'Unknown execution error' };
-         }
-     }
+            return toolResult;
+
+        } catch (error: any) {
+            console.error(`[ToolRegistry] Execution failed for '${name}':`, error);
+            return { success: false, error: error.message || 'Unknown execution error' };
+        }
+    }
+
+    private async executeViaSandbox(tool: Tool, input: any, context: AgentContext): Promise<any> {
+      const sandbox = tool.sandbox;
+      if (!sandbox?.buildCommand) {
+        throw new Error(`Tool '${tool.name}' requires sandbox but does not define sandbox.buildCommand`);
+      }
+
+      const command = sandbox.buildCommand(input);
+      const req: SandboxExecutionRequest = {
+        command,
+        language: sandbox.language || 'sh',
+        allowedEnv: sandbox.allowedEnv,
+        isolatedEnv: sandbox.isolatedEnv,
+        traceId: context.sessionId,
+        metadata: { tool: tool.name },
+      };
+
+      const result = await sandboxManager.execute(req);
+
+      if (result.timedOut) {
+        throw new Error('Sandbox execution timed out');
+      }
+
+      if (result.exitCode !== 0) {
+        throw new Error(result.stderr || `Sandbox exited with code ${result.exitCode}`);
+      }
+
+      if (!result.stdout && result.stderr) {
+        return { stderr: result.stderr, exitCode: result.exitCode, timedOut: false };
+      }
+
+      return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode, timedOut: false };
+    }
 
     /**
      * Helper to convert Zod schema to Gemini's expected JSON Schema format.
-     * Note: This is a simplified mapper. For complex nested schemas, use 'zod-to-json-schema'.
+     * Note: This is a simplified implementation. For complex nested schemas, rely on `zod-to-json-schema` package.
+     *
+     * Check if it's a ZodObject
      */
     private zodToGeminiParameters(schema: z.ZodType<any>): any {
-        // This is a basic implementation. 
+        // This is a basic implementation.
         // In a real app, rely on `zod-to-json-schema` package.
 
         // Check if it's a ZodObject
@@ -258,7 +302,8 @@ export class ToolRegistry {
             type: 'object',
             properties: {
                 input: { type: 'string', description: 'Input value' }
-            }
+            },
+            required: ['input']
         };
     }
 }

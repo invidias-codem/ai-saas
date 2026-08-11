@@ -10,6 +10,11 @@ export const executeCommandTool: Tool<{ command: string; timeoutSeconds: number 
     }),
     risk: "mutative",
     requiresApproval: true,
+    requiresSandbox: true,
+    sandbox: {
+      language: 'sh',
+      buildCommand: (input) => `set -e\n${input.command}`,
+    },
     execute: async (input, context) => {
         if (!context.ioHarness) {
             return { success: false, error: "Execution harness is not available in the current context." };

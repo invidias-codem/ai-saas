@@ -8,6 +8,8 @@ export const readFileTool: Tool<{ filePath: string }, any> = {
         filePath: z.string().describe("Path to the file relative to the workspace root, or absolute path.")
     }),
     risk: "read-only",
+    requiresSandbox: false,
+    sandbox: undefined,
     execute: async (input, context) => {
         if (!context.ioHarness) {
             return { success: false, error: "Execution harness is not available in the current context." };
@@ -15,6 +17,23 @@ export const readFileTool: Tool<{ filePath: string }, any> = {
         const res = await context.ioHarness.readFile(input.filePath);
         return { success: res.ok, data: res.ok ? res : undefined, error: res.ok ? undefined : res.error };
     }
+};
+
+export const readFileSandboxTool: Tool<{ filePath: string }, any> = {
+    name: "read_file_sandbox",
+    description: "Read the contents of a file from an isolated scratch workspace.",
+    schema: z.object({
+        filePath: z.string().describe("Path to the file relative to the workspace root, or absolute path.")
+    }),
+    risk: "read-only",
+    requiresSandbox: true,
+    requiresApproval: false,
+    sandbox: {
+      language: 'node',
+      allowedEnv: ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'SHELL', 'NODE_ENV'],
+      buildCommand: (input) => `const fs = require('fs');\nconst path = require('path');\nconst filePath = ${JSON.stringify(input.filePath)};\ntry {\n  const data = fs.readFileSync(filePath, 'utf8');\n  console.log(JSON.stringify({ ok: true, data }));\n} catch (e) {\n  console.log(JSON.stringify({ ok: false, error: e.message }));\n}\n`,
+    },
+    execute: async () => ({ success: false, error: 'Sandbox execution is required for read_file_sandbox' })
 };
 
 export const writeFileTool: Tool<{ filePath: string; content: string }, any> = {
@@ -63,6 +82,15 @@ export const runCommandTool: Tool<{ command: string; timeoutMs?: number }, any> 
     }),
     risk: "mutative",
     requiresApproval: true,
+    requiresSandbox: true,
+    sandbox: {
+      language: 'sh',
+      allowedEnv: ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'SHELL', 'NODE_ENV'],
+      buildCommand: (input) => {
+        const timeoutSeconds = input.timeoutMs ? Math.ceil(input.timeoutMs / 1000) : 30;
+        return `set -e\n${input.command}`;
+      },
+    },
     execute: async (input, context) => {
         if (!context.ioHarness) {
             return { success: false, error: "Execution harness is not available in the current context." };

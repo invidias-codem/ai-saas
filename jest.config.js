@@ -20,6 +20,15 @@ const customJestConfig = {
     '**/__tests__/**/*.test.tsx',
     '!**/anycrawl/**',
   ],
+  modulePathIgnorePatterns: [
+    '<rootDir>/.next/',
+    '<rootDir>/dist/',
+    '<rootDir>/build/',
+  ],
+  testPathIgnorePatterns: [
+    '<rootDir>/.next/',
+    '<rootDir>/node_modules/',
+  ],
   collectCoverageFrom: [
     'lib/**/*.{js,jsx,ts,tsx}',
     'app/api/**/*.{js,jsx,ts,tsx}',

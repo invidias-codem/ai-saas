@@ -38,6 +38,21 @@ export interface Tool<TInput = any, TOutput = any> {
     requiresApproval?: boolean;
 
     /**
+     * If true, execute through SandboxManager instead of calling `execute` directly.
+     */
+    requiresSandbox?: boolean;
+
+    /**
+     * Optional runtime hints for the sandbox runner.
+     */
+    sandbox?: {
+      language?: 'sh' | 'python' | 'node';
+      allowedEnv?: string[];
+      isolatedEnv?: Record<string, string>;
+      buildCommand?: (input: TInput) => string;
+    };
+
+    /**
      * The actual function to execute.
      */
     execute: (input: TInput, context: AgentContext) => Promise<TOutput>;
