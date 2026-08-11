@@ -30,7 +30,7 @@
     "rag:index": "tsx scripts/index-codebase.ts",
     "rag:index:dry": "tsx scripts/index-codebase.ts --dry-run",
     "rag:test": "tsx scripts/test-rag-integration.ts",
-    "prebuild": "rm -rf functions/vector-agent-python/venv && echo prebuild: cleaned venv symlinks && pnpm --dir packages/lattice-core run build && pnpm --dir packages/lattice-mcp-local run build && pnpm --dir packages/lattice-mcp-remote run build && pnpm --dir packages/lattice-ai-skills run build",
+    "prebuild": "rm -rf functions/vector-agent-python/venv && echo prebuild: cleaned venv symlinks && pnpm --dir packages/lattice-core run build && pnpm --dir packages/lattice-mcp-local run build && pnpm --dir packages/lattice-mcp-remote run build && pnpm --dir packages/lattice-ai-skills run build && tsx scripts/generateAssetManifest.ts",
     "dev:electron": "tsc -p electron/tsconfig.json && concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "build:electron:main": "tsc -p electron/tsconfig.json",
     "build:electron": "npm run build:electron:main && electron-builder",

@@ -121,6 +121,13 @@ export const envSchema = z.object({
   SENTRY_DSN: z.string().optional(),
   NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
 
+  // Agentic routing
+  LATTICE_AGENTIC_MODEL: z
+    .preprocess((val) => (typeof val === 'string' && val.trim() === '' ? undefined : val), z.string().optional())
+    .default('Hermes-4-70B'),
+  NOUSE_API_KEY: z.string().optional(),
+  NOUS_MODEL_ID: z.string().optional(),
+
   // Billing / Payment
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),

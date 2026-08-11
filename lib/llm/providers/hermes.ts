@@ -1,6 +1,7 @@
 import { LLMProvider, ChatMessage, CompletionOptions, StreamResult } from "../types";
 import { logger } from "@/lib/logger";
-import type { ProviderApiKeys } from '@/lib/userProviderKeys';
+import type { ProviderApiKeys } from "@/lib/userProviderKeys";
+import { supabaseAdmin } from "@/lib/supabaseClient";
 
 /**
  * Fast Provider — Self-hosted vLLM (Vast.ai) + Nous Research Inference API
@@ -18,7 +19,7 @@ const NOUS_API_KEY = process.env.NOUSE_API_KEY;
 const NOUS_BASE_URL = "https://inference-api.nousresearch.com/v1";
 
 // Separate cloud fallback model id from local/self-hosted naming.
-const NOUS_MODEL = process.env.NOUS_MODEL_ID || "Hermes-4-70B";
+const NOUS_MODEL = process.env.NOUS_MODEL_ID || process.env.LATTICE_AGENTIC_MODEL || "Hermes-4-70B";
 
 // Vast.ai vLLM (primary)
 const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || "";
@@ -30,6 +31,34 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "hf.co/Qwen/Qwen3.5-35B-A3B";
 
 // Final cloud fallback must use the GA model id, not preview.
 const FALLBACK_MODEL = "gemini-3.1-flash-lite";
+
+function extractThinkingBlocks(text: string): { thoughts: string[]; cleaned: string } {
+  const thoughts: string[] = [];
+  const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, (match) => {
+    const inner = match.replace(/<\/?think>/gi, "").trim();
+    if (inner) thoughts.push(inner);
+    return "";
+  });
+  return { thoughts, cleaned: cleaned.trim() };
+}
+
+async function recordNousFallbackTelemetry(reason: string, err?: unknown) {
+  if (!supabaseAdmin) return;
+  try {
+    void supabaseAdmin.from("harness_telemetry_events").insert({
+      event_type: "provider_fallback",
+      provider_id: "hermes",
+      model_id: NOUS_MODEL,
+      success: false,
+      metadata: {
+        fallback_reason: reason,
+        error: err instanceof Error ? err.message : String(err ?? ""),
+      },
+    });
+  } catch {
+    // never break streaming due to telemetry
+  }
+}
 
 const HERMES_AGENTIC_SYSTEM_PROMPT = `You are operating inside Lattice OS, a workspace-native, memory-aware intelligence system. Your role is to help carry work forward across conversations, projects, tools, and durable context.
 
@@ -88,7 +117,12 @@ export class HermesProvider implements LLMProvider {
   async generateStream(
     messages: ChatMessage[],
     systemInstruction?: string,
-    options: CompletionOptions & { thinking?: boolean; tools?: HermesTool[]; agentic?: boolean } = {}
+    options: CompletionOptions & {
+      thinking?: boolean;
+      tools?: HermesTool[];
+      agentic?: boolean;
+      onReasoning?: (text: string) => void;
+    } = {}
   ): Promise<HermesStreamResultWithTools> {
     // If any message has media attachments, forward to Gemini which supports multimodal.
     // Hermes/Nous/Ollama are text-only; silently discarding attachments would lose the user's media.
@@ -153,9 +187,11 @@ export class HermesProvider implements LLMProvider {
           logger.info("[HermesProvider] Routing to Nous AI primary in production");
           return await this.streamFromNousAI(formattedMessages, options, useThinking);
         } catch (err) {
+          await recordNousFallbackTelemetry("production_nous_primary_failed", err);
           logger.warn("[HermesProvider] Nous AI primary failed, falling back to Gemini", err);
         }
       } else {
+        await recordNousFallbackTelemetry("production_nous_disabled_missing_key_or_model");
         logger.warn("[HermesProvider] Nous primary disabled in production: missing NOUSE_API_KEY or NOUS_MODEL_ID");
       }
 
@@ -164,7 +200,7 @@ export class HermesProvider implements LLMProvider {
           const remoteUp = await this.pingOllamaEndpoint(remoteFastUrl);
           if (remoteUp) {
             logger.info("[HermesProvider] Routing to explicitly enabled remote fast model in production");
-            return await this.streamFromOllamaEndpoint(remoteFastUrl, formattedMessages, options);
+            return await this.streamFromOllamaEndpoint(remoteFastUrl, formattedMessages, options, useThinking);
           }
         } catch (err) {
           logger.warn("[HermesProvider] Explicit remote fast production path failed, falling back to Gemini", err);
@@ -182,9 +218,10 @@ export class HermesProvider implements LLMProvider {
         const remoteUp = await this.pingOllamaEndpoint(remoteFastUrl);
         if (remoteUp) {
           logger.info("[HermesProvider] Routing to remote fast model in development");
-          return await this.streamFromOllamaEndpoint(remoteFastUrl, formattedMessages, options);
+          return await this.streamFromOllamaEndpoint(remoteFastUrl, formattedMessages, options, useThinking);
         }
       } catch (err) {
+        await recordNousFallbackTelemetry("dev_remote_fast_failed", err);
         logger.warn("[HermesProvider] Remote fast dev path failed, continuing fallback chain", err);
       }
     }
@@ -194,6 +231,7 @@ export class HermesProvider implements LLMProvider {
         logger.info("[HermesProvider] Routing to Nous AI in development");
         return await this.streamFromNousAI(formattedMessages, options, useThinking);
       } catch (err) {
+        await recordNousFallbackTelemetry("dev_nous_failed", err);
         logger.warn("[HermesProvider] Nous AI dev path failed, continuing fallback chain", err);
       }
     }
@@ -202,19 +240,21 @@ export class HermesProvider implements LLMProvider {
       const ollamaUp = await this.pingOllamaEndpoint(OLLAMA_BASE_URL);
       if (ollamaUp) {
         logger.info("[HermesProvider] Routing to local Ollama fallback in development");
-        return await this.streamFromOllamaEndpoint(OLLAMA_BASE_URL, formattedMessages, options);
+        return await this.streamFromOllamaEndpoint(OLLAMA_BASE_URL, formattedMessages, options, useThinking);
       }
     } catch (err) {
+      await recordNousFallbackTelemetry("dev_local_ollama_failed", err);
       logger.warn("[HermesProvider] Local Ollama unavailable, falling back to Gemini Flash-Lite", err);
     }
 
+    await recordNousFallbackTelemetry("final_gemini_fallback");
     // 4. Final cloud fallback
     return await this.streamFromGeminiFallback(formattedMessages, systemInstruction, options);
   }
 
   private async streamFromNousAI(
     messages: { role: string; content: string }[],
-    options: CompletionOptions & { tools?: HermesTool[] },
+    options: CompletionOptions & { tools?: HermesTool[]; onReasoning?: (text: string) => void },
     useThinking: boolean
   ): Promise<HermesStreamResultWithTools> {
     const body: Record<string, unknown> = {
@@ -291,7 +331,11 @@ export class HermesProvider implements LLMProvider {
                 }
 
                 const text = delta.content ?? '';
-                if (text) controller.enqueue(encoder.encode(text));
+                const { cleaned, thoughts } = useThinking ? extractThinkingBlocks(text) : { cleaned: text, thoughts: [] };
+                if (thoughts.length > 0 && options.onReasoning) {
+                  options.onReasoning(thoughts.join('\n'));
+                }
+                if (cleaned) controller.enqueue(encoder.encode(cleaned));
               } catch {
                 // skip malformed chunk
               }
@@ -331,7 +375,8 @@ export class HermesProvider implements LLMProvider {
   private async streamFromOllamaEndpoint(
     baseUrl: string,
     messages: { role: string; content: string }[],
-    options: CompletionOptions & { tools?: HermesTool[]; agentic?: boolean }
+    options: CompletionOptions & { tools?: HermesTool[]; agentic?: boolean; onReasoning?: (text: string) => void },
+    useThinking: boolean
   ): Promise<HermesStreamResultWithTools> {
     const body: Record<string, unknown> = {
       model: OLLAMA_MODEL,
@@ -385,7 +430,11 @@ export class HermesProvider implements LLMProvider {
                 if (!delta) continue;
 
                 const text = delta.content ?? '';
-                if (text) controller.enqueue(encoder.encode(text));
+                const { cleaned, thoughts } = useThinking ? extractThinkingBlocks(text) : { cleaned: text, thoughts: [] };
+                if (thoughts.length > 0 && options.onReasoning) {
+                  options.onReasoning(thoughts.join('\n'));
+                }
+                if (cleaned) controller.enqueue(encoder.encode(cleaned));
               } catch {
                 // skip malformed chunk
               }

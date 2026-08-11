@@ -158,6 +158,12 @@ export async function GET(req: NextRequest) {
       span.setAttribute(SPAN_ATTRS.taskType, taskType);
       span.setAttribute(SPAN_ATTRS.surface, 'cli-terminal');
 
+      const sendReasoning = (text: string) => {
+        const payload = { text: String(text).slice(0, 400), traceId };
+        void persistEvent('reasoning', payload);
+        send('reasoning', payload);
+      };
+
       // Insert task row
       if (supabaseAdmin && !existingTask) {
         await supabaseAdmin.from('agent_tasks').insert({
@@ -197,6 +203,9 @@ export async function GET(req: NextRequest) {
             };
             void persistEvent('thought', payload);
             send('thought', payload);
+          },
+          onReasoning: (text: string) => {
+            sendReasoning(text);
           },
         };
 

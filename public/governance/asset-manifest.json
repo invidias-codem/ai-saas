@@ -1,0 +1,157 @@
+{
+  "generated_at": "2026-08-11T15:11:02.135Z",
+  "generated_by": "scripts/generateAssetManifest.ts",
+  "phase": "Phase 1: Governance Baseline",
+  "providers": [
+    {
+      "id": "hermes",
+      "mode": [
+        "agentic",
+        "fast",
+        "quality"
+      ],
+      "envKey": "missing",
+      "modelEnv": "NOUS_MODEL_ID",
+      "defaultModel": null,
+      "note": "Primary agentic rider; falls back to Gemini when NOUSE_API_KEY is absent"
+    },
+    {
+      "id": "gemini",
+      "mode": [
+        "fast",
+        "quality",
+        "agentic-fallback"
+      ],
+      "envKey": "missing",
+      "modelEnv": "HERMES_MODEL_ID",
+      "defaultModel": "gemini-3.1-pro-preview",
+      "note": "Cloud fallback and multimodal forwarding"
+    },
+    {
+      "id": "claude-byok",
+      "mode": [
+        "agentic-fallback"
+      ],
+      "envKey": "missing",
+      "modelEnv": "ANTHROPIC_MODEL",
+      "defaultModel": "claude-sonnet-4-6",
+      "note": "BYOK only; not default unless Anthropic key is present"
+    }
+  ],
+  "tools": [
+    {
+      "name": "web_search",
+      "registry": "agentic",
+      "risk": "analysis",
+      "envScoped": false
+    },
+    {
+      "name": "read_file",
+      "registry": "agentic",
+      "risk": "read-only",
+      "envScoped": false
+    },
+    {
+      "name": "write_file",
+      "registry": "agentic",
+      "risk": "mutative",
+      "envScoped": false
+    },
+    {
+      "name": "patch_file",
+      "registry": "agentic",
+      "risk": "mutative",
+      "envScoped": false
+    },
+    {
+      "name": "execute_command",
+      "registry": "agentic",
+      "risk": "mutative",
+      "envScoped": true,
+      "note": "Phase 1 local mutable capability"
+    },
+    {
+      "name": "search_codebase",
+      "registry": "agentic",
+      "risk": "analysis",
+      "envScoped": false
+    },
+    {
+      "name": "discover_documents",
+      "registry": "agentic",
+      "risk": "analysis",
+      "envScoped": false
+    },
+    {
+      "name": "extract_text",
+      "registry": "agentic",
+      "risk": "analysis",
+      "envScoped": false
+    },
+    {
+      "name": "summarize_repo",
+      "registry": "agentic",
+      "risk": "analysis",
+      "envScoped": false
+    },
+    {
+      "name": "semantic_search",
+      "registry": "agentic",
+      "risk": "analysis",
+      "envScoped": false
+    },
+    {
+      "name": "deal_sentinel",
+      "registry": "agentic",
+      "risk": "analysis",
+      "envScoped": false
+    },
+    {
+      "name": "research_writer",
+      "registry": "agentic",
+      "risk": "mutative",
+      "envScoped": false
+    },
+    {
+      "name": "novel_writer",
+      "registry": "agentic",
+      "risk": "mutative",
+      "envScoped": false
+    },
+    {
+      "name": "gh_commits",
+      "registry": "cli",
+      "risk": "analysis",
+      "envScoped": true
+    },
+    {
+      "name": "create_blog_pr",
+      "registry": "cli",
+      "risk": "mutative",
+      "envScoped": true
+    },
+    {
+      "name": "gh_mock",
+      "registry": "tasks",
+      "risk": "analysis",
+      "envScoped": true
+    },
+    {
+      "name": "db_select_mock",
+      "registry": "tasks",
+      "risk": "analysis",
+      "envScoped": true
+    }
+  ],
+  "evidence": {
+    "governance_document": "governance/ai-boundaries.yaml",
+    "build_step": "prebuild",
+    "compliance_frameworks": [
+      "NIST AI RMF",
+      "ISO 42001",
+      "OWASP AI Exchange",
+      "OWASP Agentic Top 10",
+      "CSA AICM"
+    ]
+  }
+}

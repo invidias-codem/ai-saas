@@ -5,6 +5,10 @@ import { ToolRegistry } from './registry';
 const MAX_LOOPS = 7;
 const CIRCUIT_BREAKER_THRESHOLD = 3;
 
+function stripThinkingBlocks(text: string): string {
+  return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+}
+
 export interface ReActResult {
     answer: string;
     trajectory: TrajectoryStep[];
@@ -99,7 +103,8 @@ export async function runReActLoop(
       const functionCallPart = parts.find(p => p.functionCall);
       const textPart = parts.find(p => p.text);
 
-      const thought = textPart?.text || "Processing...";
+      const thoughtRaw = textPart?.text || "Processing...";
+      const thought = stripThinkingBlocks(thoughtRaw);
 
       trajectory.push({
         stepNumber: loopCount,
@@ -111,10 +116,13 @@ export async function runReActLoop(
       if (context.onStep) {
         context.onStep(trajectory[trajectory.length - 1]);
       }
+      if (thought && context.onReasoning) {
+        context.onReasoning(thought);
+      }
 
       if (!functionCallPart) {
         return {
-          answer: thought,
+          answer: stripThinkingBlocks(thought),
           trajectory,
           status: 'success'
         };

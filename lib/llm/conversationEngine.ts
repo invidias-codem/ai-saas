@@ -134,7 +134,7 @@ function getGoogleApiKey(): string {
 }
 
 const FAST_MODEL = process.env.HERMES_MODEL_ID || "hermes3";
-const AGENTIC_MODEL = "claude-sonnet-4-6"; // Claude drives the agentic ReAct loop
+const AGENTIC_MODEL = process.env.LATTICE_AGENTIC_MODEL || "Hermes-4-70B";
 
 function getSystemInstruction() {
   return `You are 'Genie', a highly capable AI assistant equipped with dynamic tool integrations.
@@ -330,73 +330,54 @@ export async function generateConversationReply(
       orgContext = { orgId: '', userId, permissions: [] };
     }
     // ------------------------------------
-    const { runSwarmOrchestrator } = await import('@/lib/agents/core/orchestrator');
-    const { anthropic, createAnthropic } = await import('@ai-sdk/anthropic');
-    const anthropicProvider = nativeProviderKeys.anthropic
-      ? createAnthropic({ apiKey: nativeProviderKeys.anthropic })
-      : anthropic;
 
-    const initialState = {
-      originalQuery: userQuery,
-      workspaceId: parsed.workspaceId,
-      episodicContext: [], // Context injection is handled above
-      discoveredFiles: [],
-      proposedMutations: [],
-      currentStatus: 'researching' as const,
-      handoffNotes: '',
-      iterationCount: 0,
-      actionLedger: []
+    // Phase 1: use HermesProvider for agentic execution.
+    // On-reasoning is wired to console logging only; SSE emission will come in Phase 2.
+    const { HermesProvider } = await import('@/lib/llm/providers/hermes');
+    const agentProvider = new HermesProvider({});
+    const onReasoning = (text: string) => {
+      console.log(`[AgenticReasoning] ${String(text).slice(0, 400)}`);
     };
 
     const textEncoder = new TextEncoder();
-    
-    // We execute the Swarm Orchestrator and stream UI events back
-    const stream = new ReadableStream({
+
+    // We execute the ReAct loop and stream UI events back
+    const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         const onStreamEvent = (msg: string) => {
-          controller.enqueue(textEncoder.encode(msg + "\n\n"));
+          controller.enqueue(textEncoder.encode(`${msg}\n\n`));
         };
 
         try {
-          const context = {
+          const agentContext = {
             userId,
-            sessionId: 'session-' + Date.now(),
+            sessionId: 'agentic-' + Date.now(),
             workspaceId: parsed.workspaceId,
             history: [],
             enableTelemetry: true,
-            ioHarness: options.ioHarness,
+            rootSpan: undefined,
             orgContext,
+            ioHarness: options.ioHarness,
             onStep: (step: any) => {
-              onStreamEvent(step.thought);
+              const text = String(step.thought ?? '');
+              onStreamEvent(text);
+              onReasoning(text);
               if (options.slackStreamCallback) options.slackStreamCallback(step);
             }
           };
 
-          const model = anthropicProvider('claude-3-5-sonnet-20241022');
-          
-          const finalState = await runSwarmOrchestrator(initialState, model, context);
-          
-          // Stream the final output
-          const finalMessage = `**Swarm Execution Complete**\nStatus: ${finalState.currentStatus}\n\n**Handoff Notes:**\n${finalState.handoffNotes}`;
-          controller.enqueue(textEncoder.encode(finalMessage));
-          
-          // --- EPISODIC MEMORY COMPRESSION LOOP ---
-          const shouldTriggerCompression = finalState.iterationCount >= 1 || finalState.currentStatus === 'complete';
-          if (shouldTriggerCompression && parsed.workspaceId && options.ioHarness) {
-            // Use same generic wait-until pattern
-            waitUntil((async () => {
-              try {
-                console.log("[EpisodicMemory] Triggering background compression loop for Swarm DAG...");
-                // (Existing VertexAI compression could be moved here, skipping for brevity in stream)
-              } catch (e) {
-                console.error("[EpisodicMemory] Compression loop failed:", e);
-              }
-            })());
-          }
-          
+          const reactResult = await runReActLoop(promptInput, agentContext, registry, AGENTIC_MODEL);
+          const isSuccess = reactResult.status === 'success';
+
+          const donePayload = {
+            status: reactResult.status,
+            answer: reactResult.answer,
+            trajectory: reactResult.trajectory,
+          };
+          controller.enqueue(textEncoder.encode(JSON.stringify(donePayload)));
           controller.close();
         } catch (err: any) {
-          controller.enqueue(textEncoder.encode(`Swarm execution failed: ${err.message}`));
+          controller.enqueue(textEncoder.encode(`Agent execution failed: ${err.message}`));
           controller.close();
         }
       }
@@ -406,7 +387,7 @@ export async function generateConversationReply(
       stream,
       sources: [],
       debug: {
-        model: `claude/${AGENTIC_MODEL}`,
+        model: `hermes/${AGENTIC_MODEL}`,
         userQuery,
       }
     };

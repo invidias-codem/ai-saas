@@ -44,7 +44,6 @@ export interface Tool<TInput = any, TOutput = any> {
 }
 
 /**
- * Context available to the agent during execution.
  /** Context available to the agent during execution. */
  export interface AgentContext {
      userId: string;
@@ -76,7 +75,10 @@ export interface Tool<TInput = any, TOutput = any> {
 
      /** Optional root span for per-tool child span instrumentation. */
      rootSpan?: import('@/lib/ucol/observability/span').UcolSpan;
-     }
+
+     /** Streaming callback for raw reasoning/thinking chunks from the provider. */
+     onReasoning?: (text: string) => void;
+ }
 
 /**
  * Structured log of an agent's reasoning step.

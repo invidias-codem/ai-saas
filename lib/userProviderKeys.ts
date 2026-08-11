@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
-export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter';
+export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'nous';
 
 export type ProviderApiKeys = Partial<Record<ProviderName, string>>;
 
@@ -10,7 +10,7 @@ export type ProviderKeyStatus = Record<ProviderName, {
   updatedAt: string | null;
 }>;
 
-const PROVIDERS: ProviderName[] = ['openai', 'anthropic', 'google', 'openrouter'];
+const PROVIDERS: ProviderName[] = ['openai', 'anthropic', 'google', 'openrouter', 'nous'];
 
 export function isProviderName(provider: string): provider is ProviderName {
   return PROVIDERS.includes(provider as ProviderName);
@@ -42,6 +42,7 @@ export function emptyProviderKeyStatus(): ProviderKeyStatus {
     anthropic: { configured: false, preview: null, updatedAt: null },
     google: { configured: false, preview: null, updatedAt: null },
     openrouter: { configured: false, preview: null, updatedAt: null },
+    nous: { configured: false, preview: null, updatedAt: null },
   };
 }
 

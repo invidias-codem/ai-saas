@@ -9,7 +9,7 @@ import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
 const FAST_MODEL = process.env.HERMES_MODEL_ID || 'hermes3';
 const QUALITY_MODEL = 'gemini-3.1-pro-preview';
-const AGENTIC_MODEL = 'claude-sonnet-4-6';
+const AGENTIC_MODEL = process.env.LATTICE_AGENTIC_MODEL || 'Hermes-4-70B';
 const REASONING_MODEL = 'deepseek-r1';
 const OPENROUTER_FAST_MODEL = process.env.OPENROUTER_FAST_MODEL || 'openrouter/auto';
 
@@ -33,11 +33,33 @@ export function resolveProviderForMode(input: ProviderResolutionInput): Provider
   const { mode, hasAttachments = false, providerKeys = {} } = input;
 
   if (mode === 'agentic') {
+    const nousConfigured = Boolean(providerKeys.nous || (process.env.NOUSE_API_KEY && process.env.NOUSE_API_KEY.trim()));
+    const anthropicConfigured = Boolean(providerKeys.anthropic);
+
+    if (nousConfigured || !anthropicConfigured) {
+      return {
+        providerId: 'hermes',
+        execution: {
+          provider: new HermesProvider(providerKeys),
+          modelId: AGENTIC_MODEL,
+        },
+        routing: {
+          selectionStrategy: 'primary_plus_fallback',
+          preferredModelRefs: ['hermes.agentic'],
+          fallbackModelRefs: ['gemini.quality', 'claude.agentic'],
+          embeddingLanePreference: ['primary_768', 'secondary_3072'],
+        },
+        reason: nousConfigured
+          ? 'agentic mode routes to Nous/Step via HermesProvider'
+          : 'agentic mode defaults to Hermes/Nous; no Anthropic key configured',
+      };
+    }
+
     return {
       providerId: 'claude',
       execution: {
         provider: new ClaudeProvider(providerKeys.anthropic),
-        modelId: AGENTIC_MODEL,
+        modelId: 'claude-sonnet-4-6',
       },
       routing: {
         selectionStrategy: 'single_model',
@@ -45,7 +67,7 @@ export function resolveProviderForMode(input: ProviderResolutionInput): Provider
         fallbackModelRefs: ['gemini.quality'],
         embeddingLanePreference: ['primary_768', 'secondary_3072'],
       },
-      reason: 'agentic mode routes to Claude orchestrator',
+      reason: 'agentic mode routes to Claude orchestrator because Anthropic key is configured',
     };
   }
 

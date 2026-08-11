@@ -2,6 +2,7 @@ import { estimateTokenCount } from '@/lib/ragMemory';
 import { ClaudeProvider } from '@/lib/llm/providers/claude';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
+import { HermesProvider } from '@/lib/llm/providers/hermes';
 import { ChatMessage } from '@/lib/llm/types';
 import { HarnessFactory } from '@/lib/harness/IOHarness';
 import { ToolRouter } from '@/lib/harness/ToolRouter';
@@ -55,8 +56,10 @@ export async function executeAgentLoop(params: AgentExecutorParams) {
         ? new ClaudeProvider(providerKeys.anthropic)
         : modelConfig.provider === 'gemini'
           ? new GeminiProvider(providerKeys.google)
-          : new ProviderClass();
-      
+          : modelConfig.provider === 'hermes'
+            ? new HermesProvider({})
+            : new ProviderClass();
+
       const chatHistory: ChatMessage[] = dynamicHistory.map((msg: any) => {
         let attachments;
         const inlineDataPart = msg.parts?.find((p: any) => p.inlineData);
@@ -87,12 +90,17 @@ export async function executeAgentLoop(params: AgentExecutorParams) {
       let temp = 0.7;
       if (modelConfig.provider === 'deepseek') temp = 0.6;
 
+      const onReasoning = (text: string) => {
+        console.log(`[AgenticReasoning] ${String(text).slice(0, 400)}`);
+      };
+
       const streamResult = await provider.generateStream(chatHistory, systemInstruction, {
         model: modelConfig.modelId,
         maxTokens: modelConfig.maxTokens,
         temperature: temp,
         topP: modelConfig.provider === 'gemini' ? 0.7 : undefined,
         topK: modelConfig.provider === 'gemini' ? 40 : undefined,
+        onReasoning,
       });
 
       const textDecoder = new TextDecoder();
@@ -113,7 +121,8 @@ export async function executeAgentLoop(params: AgentExecutorParams) {
 
       responseText += stepResponse + "\n";
 
-      const toolCallMatch = stepResponse.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+      const stepResponseClean = stepResponse.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+      const toolCallMatch = stepResponseClean.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
       if (toolCallMatch) {
         try {
           const toolCallJson = JSON.parse(toolCallMatch[1]);
