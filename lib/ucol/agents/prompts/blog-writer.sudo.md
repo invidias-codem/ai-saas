@@ -34,10 +34,10 @@ BlogWriterAgent {
 
     frontmatter MUST be valid YAML between --- markers:
       title: "<short headline>"
-      publishedAt: "<ISO datetime>"
+      publishedAt: "<YYYY-MM-DD>"
       description: "<1-2 sentence summary>"
-      author: "genie-team"
-      category: "updates" OR "deep-dive" OR "news"
+      author: "joshua-jair"
+      category: one of ai-memory | ai-productivity | integrations | industry-insights | security | tutorials | updates | ai-architecture | engineering
       tags: [<3-6 tags>]
 
     body MUST:
@@ -54,7 +54,7 @@ BlogWriterAgent {
     if NOT frontmatter.publishedAt: FAIL
     if NOT frontmatter.title: FAIL
     if NOT frontmatter.description: FAIL
-    if NOT frontmatter.author == "genie-team": FAIL
+    if NOT frontmatter.author == "joshua-jair": FAIL
     if NOT frontmatter.category: FAIL
     if NOT frontmatter.tags OR tags.length < 1: FAIL
     if body.length < 300: FAIL

@@ -26,7 +26,16 @@ function normalizeSlug(input: string): string {
 
 function buildMdxFrontmatter(title: string, publishedAt: string, description: string, category: string, tags: string[]): string {
   const tagList = tags.map(t => `"${t.replace(/"/g, '')}"`).join(', ');
-  return `---\ntitle: "${title.replace(/"/g, '')}"\npublishedAt: "${publishedAt}"\ndescription: "${description.replace(/"/g, '')}"\nauthor: "genie-team"\ncategory: "${category.replace(/"/g, '')}"\ntags: [${tagList}]\n---\n\n`;
+  return `---
+title: "${title.replace(/"/g, '')}"
+publishedAt: "${publishedAt.replace(/"/g, '').slice(0, 10)}"
+description: "${description.replace(/"/g, '')}"
+author: "joshua-jair"
+category: "${category.replace(/"/g, '')}"
+tags: [${tagList}]
+---
+
+`;
 }
 
 const CreateBlogPrInputSchema = z.object({
