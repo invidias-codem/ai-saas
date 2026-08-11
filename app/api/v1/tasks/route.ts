@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
             reject(new Error('client_disconnected'));
           }, { once: true });
         });
-        const result = await runAgentTask({
+        await runAgentTask({
           taskId,
           userId,
           workspaceId: systemWorkspaceId,
@@ -125,7 +125,10 @@ export async function POST(req: NextRequest) {
           actorUserId: 'system',
           createdAtMs,
         });
-        return result;
+        return {
+          result: NextResponse.json({ task_id: taskId, status: 'queued', created_at: now }),
+          statusCode: 202,
+        };
       });
     }
     return auth.response;
