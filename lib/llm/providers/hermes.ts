@@ -55,6 +55,12 @@ async function recordNousFallbackTelemetry(reason: string, err?: unknown) {
         error: err instanceof Error ? err.message : String(err ?? ""),
       },
     });
+
+    const { emitRiskEvent } = await import("@/lib/telemetry/riskAdapter");
+    void emitRiskEvent({
+      eventType: "provider_fallback",
+      metadata: { fallback_reason: reason },
+    });
   } catch {
     // never break streaming due to telemetry
   }

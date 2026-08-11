@@ -112,6 +112,20 @@ export class ToolRegistry {
            } catch (e) {
              console.error('[ToolRegistry] audit write failed:', e);
            }
+
+           try {
+             const { emitRiskEvent } = await import('@/lib/telemetry/riskAdapter');
+             void emitRiskEvent({
+               eventType: 'context_firewall_deny',
+               traceId: context.sessionId,
+               workspaceId: context.orgContext?.orgId,
+               userId: context.userId,
+               metadata: { harness: name, reason: interception.reason ?? 'tool_intercepted' },
+             });
+           } catch {
+             // do not fail execution due to risk telemetry
+           }
+
            return {
              success: false,
              error: interception.reason ?? 'tool_intercepted',
