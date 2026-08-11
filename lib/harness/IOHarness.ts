@@ -2,6 +2,7 @@ import type { ToolExecutionResult } from './types';
 import { LocalIOHarness } from './LocalIOHarness';
 import { GoIOHarness } from './GoIOHarness';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { emitRiskEvent } from '@/lib/telemetry/riskAdapter';
 
 export interface IOHarness {
   initialize(): Promise<void>;
@@ -117,6 +118,16 @@ export class HarnessFactory {
       void supabaseAdmin
         .from('harness_telemetry_events')
         .insert(payload);
+      void emitRiskEvent({
+        eventType: 'harness_selection_fallback',
+        traceId: params.traceId,
+        workspaceId: params.workspaceId,
+        userId: params.userId,
+        metadata: {
+          selection_reason: params.selectionReason,
+          selected_harness: params.selectedHarness,
+        },
+      });
     } catch {
       // Never fail factory creation due to telemetry backend issues.
     }
