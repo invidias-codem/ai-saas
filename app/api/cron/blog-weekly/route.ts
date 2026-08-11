@@ -30,6 +30,7 @@ export async function GET(req: Request) {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${process.env.CRON_SECRET}`,
+                'x-cron-blog': '1',
             },
             body: JSON.stringify(payload),
             signal: controller.signal,

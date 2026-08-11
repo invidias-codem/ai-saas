@@ -59,7 +59,77 @@ function tierToMode(tier: 'fast' | 'balanced' | 'deep' | undefined): AgentMode |
 
 export async function POST(req: NextRequest) {
   const auth = await authenticatePartner(req, 'stream:read');
-  if (!auth.ok) return auth.response;
+  if (!auth.ok) {
+    const internalBlog = req.headers.get('x-cron-blog') === '1';
+    const secret = req.headers.get('authorization')?.replace('Bearer ', '')?.trim();
+    const cronSecret = (process.env.CRON_SECRET || '').trim();
+    if (internalBlog && secret && cronSecret && secret === cronSecret) {
+      const body = await req.json().catch(() => ({}));
+      const parsed = CreateAgentTaskSchema.safeParse({
+        task_type: 'blog_post',
+        input: body?.input ?? 'weekly blog post: write about Lattice OS progress and relevant AI news',
+        context: body?.context ?? { source: 'vercel-cron', schedule: 'weekly' },
+      });
+      if (!parsed.success) {
+        return NextResponse.json({ error: 'Validation Error', details: parsed.error.flatten() }, { status: 400 });
+      }
+      const task = parsed.data;
+      const taskId = randomUUID();
+      const systemWorkspaceId = process.env.SYSTEM_WORKSPACE_ID || '00000000-0000-0000-0000-000000000000';
+      const userId = `partner_ws_${systemWorkspaceId}`;
+      const now = new Date().toISOString();
+      const createdAtMs = Date.now();
+      const effectiveMode = taskTypeToMode(task.task_type);
+
+      if (!supabaseAdmin) {
+        return NextResponse.json({ error: 'Backend not configured' }, { status: 500 });
+      }
+      const { error: insertError } = await supabaseAdmin.from('agent_tasks').insert({
+        id: taskId,
+        user_id: userId,
+        workspace_id: systemWorkspaceId,
+        task_type: task.task_type,
+        input: task.input,
+        context: task.context ?? null,
+        routing_tier: task.routing_tier ?? null,
+        model_preference: task.model_preference ?? null,
+        status: 'queued',
+        created_at: now,
+        updated_at: now,
+      });
+      if (insertError) {
+        return NextResponse.json({ error: 'Failed to create task', details: insertError.message }, { status: 500 });
+      }
+
+      return withMetering({ keyId: 'cron-blog', workspaceId: systemWorkspaceId, endpoint: '/api/v1/tasks', method: 'POST' }, async () => {
+        const controller = new AbortController();
+        const signal = controller.signal;
+        const disconnected = new Promise<void>((_, reject) => {
+          req.signal?.addEventListener?.('abort', () => {
+            controller.abort();
+            reject(new Error('client_disconnected'));
+          }, { once: true });
+        });
+        const result = await runAgentTask({
+          taskId,
+          userId,
+          workspaceId: systemWorkspaceId,
+          taskType: task.task_type,
+          input: task.input,
+          context: task.context,
+          routingTier: task.routingTier,
+          modelPreference: task.modelPreference,
+          effectiveMode,
+          signal,
+          orgContext: undefined,
+          actorUserId: 'system',
+          createdAtMs,
+        });
+        return result;
+      });
+    }
+    return auth.response;
+  }
 
   const controller = new AbortController();
   const signal = controller.signal;
