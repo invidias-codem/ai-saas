@@ -258,11 +258,11 @@ export class LocalSandboxRunner implements SandboxRunner {
 
   private validateWritePath(filePath: string, scratchDir: string): void {
     const resolved = resolvePath(filePath);
-    if (!resolved.startsWith(scratchDir)) {
+    if (!resolved.startsWith(scratchDir + '/')) {
       throw new Error(`Path traversal denied: ${filePath} resolves outside sandbox`);
     }
 
-    const relative = resolved.slice(scratchDir.length);
+    const relative = resolved.slice(scratchDir.length + 1);
     const normalized = relative.replace(/\\/g, '/');
 
     if (DOT_GIT_DIR_REGEX.test(normalized) || DOTFILE_DENY_REGEX.test(normalized)) {
@@ -272,11 +272,11 @@ export class LocalSandboxRunner implements SandboxRunner {
 
   private validatePatchPath(filePath: string, scratchDir: string): void {
     const resolved = resolvePath(filePath);
-    if (!resolved.startsWith(scratchDir)) {
+    if (!resolved.startsWith(scratchDir + '/')) {
       throw new Error(`Path traversal denied: ${filePath} resolves outside sandbox`);
     }
 
-    const relative = resolved.slice(scratchDir.length);
+    const relative = resolved.slice(scratchDir.length + 1);
     const normalized = relative.replace(/\\/g, '/');
 
     if (DOT_GIT_DIR_REGEX.test(normalized) || DOTFILE_DENY_REGEX.test(normalized)) {

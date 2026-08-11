@@ -16,6 +16,7 @@ jest.mock('child_process', () => ({
 jest.mock('fs/promises', () => ({
   mkdir: jest.fn(),
   rm: jest.fn(),
+  readFile: jest.fn(),
   writeFile: jest.fn(),
 }));
 jest.mock('os', () => ({
@@ -33,7 +34,7 @@ jest.mock('@/lib/ucol/observability/span', () => ({
 }));
 
 const { spawn } = require('child_process');
-const { mkdir, rm, writeFile } = require('fs/promises');
+const { mkdir, rm, readFile, writeFile } = require('fs/promises');
 const { tmpdir } = require('os');
 const path = require('path');
 
@@ -212,5 +213,73 @@ describe('sandboxManager', () => {
     expect(result.truncated).toBeUndefined();
     expect(result.bufferWarning).toBeUndefined();
     expect(result.stdout).toBe('small output');
+  });
+
+  test('writeFile rejects path traversal outside scratchDir', async () => {
+    const runner = new LocalSandboxRunner();
+    const result = await runner.writeFile({
+      type: 'write',
+      filePath: '../../etc/passwd',
+      content: 'root:x:0:0',
+      scratchDir: '/tmp/sandbox',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Path traversal denied');
+  });
+
+  test('writeFile rejects protected dotfiles even inside sandbox', async () => {
+    const runner = new LocalSandboxRunner();
+    const result = await runner.writeFile({
+      type: 'write',
+      filePath: '/tmp/sandbox/.env',
+      content: 'SECRET=leak',
+      scratchDir: '/tmp/sandbox',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Write denied for protected path');
+  });
+
+  test('writeFile rejects payload exceeding 5MB ceiling', async () => {
+    const runner = new LocalSandboxRunner();
+    const bigContent = 'x'.repeat(5 * 1024 * 1024 + 1);
+    const result = await runner.writeFile({
+      type: 'write',
+      filePath: '/tmp/sandbox/big.txt',
+      content: bigContent,
+      scratchDir: '/tmp/sandbox',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Payload exceeds');
+  });
+
+  test('patchFile rejects path traversal outside scratchDir', async () => {
+    const runner = new LocalSandboxRunner();
+    const result = await runner.patchFile({
+      type: 'patch',
+      filePath: '../.ssh/id_rsa',
+      searchBlock: 'old',
+      replaceBlock: 'new',
+      scratchDir: '/tmp/sandbox',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Path traversal denied');
+  });
+
+  test('patchFile rejects writes to .git directory', async () => {
+    const runner = new LocalSandboxRunner();
+    const result = await runner.patchFile({
+      type: 'patch',
+      filePath: '/tmp/sandbox/.git/hooks/pre-commit',
+      searchBlock: 'old',
+      replaceBlock: 'new',
+      scratchDir: '/tmp/sandbox',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Patch denied for protected path');
   });
 });
