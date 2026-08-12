@@ -79,7 +79,7 @@ export interface ContextFlowEntry {
     id: string;
     timestamp: number;
     source: 'user' | 'gemini' | 'claude' | 'ucol' | string;
-    target: string;
+    target: 'user' | 'gemini' | 'claude' | 'ucol' | string;
     action: string;
     reasoning: string;
     status: 'active' | 'complete' | 'error';
