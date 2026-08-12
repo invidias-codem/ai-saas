@@ -37,7 +37,8 @@ function resolveProvider(providerName: string, providerKeys: ProviderApiKeys): L
     case 'openrouter':
       return new OpenRouterProvider(providerKeys);
     case 'claude':
-      return new ClaudeProvider(providerKeys.claude || '');
+    case 'anthropic':
+      return new ClaudeProvider(providerKeys.anthropic || '');
     case 'google':
       return new GeminiProvider(providerKeys.google || '');
     case 'deepseek':

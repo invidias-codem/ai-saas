@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
-export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'nous' | 'huggingface';
+export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'nous' | 'huggingface' | 'deepseek';
 
 export type ProviderApiKeys = Partial<Record<ProviderName, string>>;
 
@@ -47,6 +47,7 @@ export function emptyProviderKeyStatus(): ProviderKeyStatus {
     openrouter: { configured: false, preview: null, updatedAt: null },
     nous: { configured: false, preview: null, updatedAt: null },
     huggingface: { configured: false, preview: null, updatedAt: null },
+    deepseek: { configured: false, preview: null, updatedAt: null },
   };
 }
 
