@@ -218,12 +218,14 @@ export async function POST(req: NextRequest) {
       if (!isUnlimited && spendResult && !spendResult.duplicate) {
         void refundCredits(userId, cost, 'Refund for failed preview session creation');
       }
-      return NextResponse.json({ error: 'Failed to create preview session' }, { status: 500 });
+      console.error('[Preview:Render] Insert failed:', error, { userId, cost, spendResult, codeLength: code.length, language });
+      return NextResponse.json({ error: 'Failed to create preview session', details: error?.message || 'unknown' }, { status: 500 });
     }
 
     const previewUrl = `/api/preview/render?id=${data.id}`;
     return NextResponse.json({ id: data.id, previewUrl }, { status: 201 });
   } catch (error: any) {
+    console.error('[Preview:Render] POST failed:', error);
     return NextResponse.json({ error: 'Internal Server Error', details: error?.message || 'unknown error' }, { status: 500 });
   }
 }

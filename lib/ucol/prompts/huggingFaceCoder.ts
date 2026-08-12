@@ -158,7 +158,12 @@ export async function generateComponentHuggingFace(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => response.statusText);
-    throw new Error(`HuggingFace API Error: ${response.status} - ${errorText}`);
+    const reason = `HuggingFace API Error: ${response.status} - ${errorText}`;
+    if (response.status === 401) {
+      const masked = apiKey ? `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}` : 'missing';
+      console.error('[UCOL:HFCoder] 401 with key=', masked, 'model=', modelId, 'url=', 'https://router.huggingface.co/v1/chat/completions');
+    }
+    throw new Error(reason);
   }
 
   const data = await response.json();
