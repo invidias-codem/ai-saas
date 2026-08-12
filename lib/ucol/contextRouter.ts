@@ -263,12 +263,6 @@ export class ContextRouter {
                         COMPONENT_TIMEOUT_MS,
                         component.name
                     );
-                } else if (selectedModel.modelId === 'claude-sonnet-4-20250514' || selectedModel.modelId === 'claude-3-5-sonnet-20241022') {
-                    latestFiles = await this.withTimeout(
-                        generateComponent(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                        COMPONENT_TIMEOUT_MS,
-                        component.name
-                    );
                 } else {
                     latestFiles = await this.withTimeout(
                         generateComponentGemini(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
@@ -290,19 +284,16 @@ export class ContextRouter {
                     status: 'error',
                 });
 
-                // Fallback chain: openrouter -> claude -> gemini
                 try {
-                    latestFiles = await this.withTimeout(
-                        generateComponent(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                        COMPONENT_TIMEOUT_MS,
-                        component.name
-                    );
-                } catch {
                     latestFiles = await this.withTimeout(
                         generateComponentGemini(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
                         COMPONENT_TIMEOUT_MS,
                         component.name
                     );
+                } catch (geminiErr: any) {
+                    const geminiReason = geminiErr.message?.substring(0, 120) || 'Unknown error';
+                    console.warn(`[UCOL] Gemini fallback failed for ${component.name}: ${geminiReason}`);
+                    throw new Error(`Code generation failed: ${reason}; fallback also failed: ${geminiReason}`);
                 }
             }
 
