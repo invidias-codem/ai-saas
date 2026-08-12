@@ -78,7 +78,7 @@ export interface ContextPackage {
 export interface ContextFlowEntry {
     id: string;
     timestamp: number;
-    source: string;
+    source: 'user' | 'gemini' | 'claude' | 'ucol' | string;
     target: string;
     action: string;
     reasoning: string;
