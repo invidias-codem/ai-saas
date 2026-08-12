@@ -68,6 +68,14 @@ function getAnthropicClient(apiKeyOverride?: string): Anthropic {
     return new Anthropic({ apiKey });
 }
 
+function sanitizeReviewJson(text: string): string {
+    let cleaned = text.trim();
+    const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (fenceMatch) cleaned = fenceMatch[1].trim();
+    cleaned = cleaned.replace(/\\\n/g, '\n').replace(/[ \t]+\\$/gm, '');
+    return cleaned.trim();
+}
+
 // Condensed plan summary — avoids sending full JSON (pages, dataModel, apiRoutes) every time
 function condensePlan(plan: any): string {
     return [
@@ -167,6 +175,22 @@ ${discoveredPatterns.map((p, i) => `${i + 1}. **${p.component}** — ${p.pattern
         messages: [
             { role: 'user', content: userPrompt },
         ],
+    }).catch(async (err: any) => {
+        console.error('[UCOL:Claude] API error:', {
+            status: err.status,
+            error: err.error,
+            message: err.message,
+            model: 'claude-sonnet-4-20250514',
+        });
+        if (err.status === 404) {
+            return await anthropic.messages.create({
+                model: 'claude-3-5-sonnet-20241022',
+                max_tokens: 4096,
+                system: systemPrompt,
+                messages: [{ role: 'user', content: userPrompt }],
+            });
+        }
+        throw err;
     });
 
     const responseText = response.content

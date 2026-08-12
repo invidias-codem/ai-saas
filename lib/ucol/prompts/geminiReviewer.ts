@@ -172,7 +172,8 @@ Output your review as JSON.`;
     const text = result.response.text();
 
     try {
-        let parsed = JSON.parse(text);
+        const cleaned = sanitizeReviewJson(text);
+        let parsed = JSON.parse(cleaned);
         if (Array.isArray(parsed)) parsed = parsed[0];
 
         const feedback: ReviewFeedback = {
@@ -210,4 +211,12 @@ function defaultFeedback(reason: string): ReviewFeedback {
         originalityNotes: 'Unable to evaluate originality — review failed',
         pragmatismScore: 5,
     };
+}
+
+function sanitizeReviewJson(text: string): string {
+    let cleaned = text.trim();
+    const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (fenceMatch) cleaned = fenceMatch[1].trim();
+    cleaned = cleaned.replace(/\\\n/g, '\n').replace(/[ \t]+\\$/gm, '');
+    return cleaned.trim();
 }
