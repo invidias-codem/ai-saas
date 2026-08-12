@@ -36,7 +36,7 @@ export const transpileCode = async (rawCode: string): Promise<string> => {
         };
       });
 
-      build.onLoad({ filter: /.*/, namespace: 'virtual-fs' }, () => {
+      build.onLoad({ filter: /^index\.tsx$/, namespace: 'virtual-fs' }, () => {
         return {
           contents: rawCode,
           loader: 'tsx',
