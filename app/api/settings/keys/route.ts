@@ -17,6 +17,7 @@ type ProviderPayload = {
 };
 
 function validateKeyShape(provider: ProviderName, apiKey: string | null) {
+  if (!apiKey) return 'API key is required.';
   if (provider === 'openai' && !(apiKey.startsWith('sk-') || apiKey.startsWith('proj-'))) {
     return 'Invalid OpenAI API key format.';
   }
