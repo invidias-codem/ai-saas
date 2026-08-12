@@ -159,8 +159,13 @@ export function isUnrestrictedGoogleKeyError(error: unknown): boolean {
 }
 
 function parseAndValidatePlan(text: string, provider: string): ProjectPlan {
+    let cleaned = text.trim();
+    // Strip markdown fences if present
+    const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (fenceMatch) cleaned = fenceMatch[1].trim();
+
     try {
-        let parsed = JSON.parse(text);
+        let parsed = JSON.parse(cleaned);
 
         // Sometimes wraps the plan in an array — unwrap it
         if (Array.isArray(parsed)) {
@@ -189,7 +194,33 @@ function parseAndValidatePlan(text: string, provider: string): ProjectPlan {
 
         return plan;
     } catch (parseError: any) {
-        console.error(`[UCOL:${provider}] Failed to parse plan JSON:`, text.substring(0, 500));
-        throw new Error(`[UCOL:${provider}] Plan parsing failed: ${parseError.message}`);
+        // Lenient repair: try to fix common Gemini formatting issues
+        try {
+            let repaired = cleaned
+                .replace(/'/g, '"')
+                .replace(/,\s*}/g, '}')
+                .replace(/,\s*\]/g, ']')
+                .replace(/\/\*[\s\S]*?\*\//g, '') // strip block comments
+                .replace(/\/\/.*$/gm, ''); // strip line comments
+
+            let parsed = JSON.parse(repaired);
+            if (Array.isArray(parsed)) parsed = parsed[0];
+            const plan: ProjectPlan = parsed;
+
+            if (!plan.appName || !plan.components || !Array.isArray(plan.components)) {
+                throw new Error('Invalid plan structure after repair');
+            }
+
+            for (const comp of plan.components) {
+                if (!Array.isArray(comp.dependencies)) comp.dependencies = [];
+                if (!Array.isArray(comp.props)) comp.props = [];
+            }
+
+            console.warn(`[UCOL:${provider}] Repaired malformed plan JSON`);
+            return plan;
+        } catch {
+            console.error(`[UCOL:${provider}] Failed to parse plan JSON:`, text.substring(0, 500));
+            throw new Error(`[UCOL:${provider}] Plan parsing failed: ${parseError.message}`);
+        }
     }
 }
