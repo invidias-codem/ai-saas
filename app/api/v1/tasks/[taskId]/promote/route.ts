@@ -18,7 +18,7 @@ export async function POST(
   { params }: { params: { taskId: string } },
 ) {
   const taskId = params.taskId;
-  const auth = await authenticatePartner(req, 'stream:write');
+  const auth = await authenticatePartner(req, 'stream:read');
   if (!auth.ok) return auth.response;
 
   const { workspaceId, userId } = auth.context;
