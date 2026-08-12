@@ -1,6 +1,7 @@
 'use client';
 
 // CodePanel — displays Claude's generated code files with a file tree + code viewer + live preview.
+// Hybrid preview: frontend esbuild-wasm fast-path for UI-only builds, backend quarantine for full-stack.
 
 import { useState } from 'react';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
@@ -9,13 +10,44 @@ import { useClipboard } from 'use-clipboard-copy';
 import type { GeneratedFile } from '@/lib/ucol/types';
 import { Loader2, FileCode, FolderOpen, Copy, Check, Download, Play, X, Smartphone, Monitor, Maximize2 } from 'lucide-react';
 import { useProModal } from '@/hooks/use-pro-modal';
+import { useTranspiler } from '@/lib/bundler/useTranspiler';
 
 interface CodePanelProps {
     files: GeneratedFile[];
     loading: boolean;
 }
 
-// Map common extensions to SyntaxHighlighter language keys
+function isFrontendOnly(files: GeneratedFile[]): boolean {
+    // Escalate to backend sandbox when any file indicates server-side intent
+    const backendIndicators = [
+        /\/api\//i,
+        /\/server\//i,
+        /\/middleware\//i,
+        /\/trpc\//i,
+        /\/pages\/api\//i,
+        /\/app\/api\//i,
+        /server\.(ts|js|mjs|cjs)/i,
+        /middleware\.(ts|js|mjs|cjs)/i,
+        /\.env/i,
+        /prisma/i,
+        /drizzle/i,
+        /next\.config/i,
+        /express/i,
+        /fastify/i,
+        /hono/i,
+        /node_modules/i,
+        /native/i,
+        /go\.mod/i,
+        /Cargo\.toml/i,
+        /pyproject\.toml/i,
+        /requirements\.txt/i,
+        /Dockerfile/i,
+        /docker-compose/i,
+    ];
+
+    return !files.some((f) => backendIndicators.some((re) => re.test(f.path)));
+}
+
 function mapLanguage(lang: string): string {
     const map: Record<string, string> = {
         tsx: 'tsx',
@@ -40,7 +72,9 @@ export function CodePanel({ files, loading }: CodePanelProps) {
     const [creatingPreview, setCreatingPreview] = useState(false);
     const [previewError, setPreviewError] = useState<string | null>(null);
     const [previewInsufficientCredits, setPreviewInsufficientCredits] = useState(false);
+    const [previewMode, setPreviewMode] = useState<'fast' | 'backend' | null>(null);
     const proModal = useProModal();
+    const { compile, isReady, isTranspiling, error: transpilerError } = useTranspiler();
 
     // Filter out scaffold files for the tree, but keep them accessible
     const codeFiles = files.filter(f => f.component !== '_scaffold');
@@ -50,11 +84,54 @@ export function CodePanel({ files, loading }: CodePanelProps) {
 
     const hasPreviewable = files.some(f => ['html','css','javascript','typescript','react'].includes(f.language));
 
-    async function openPreview() {
-        if (!hasPreviewable) return;
+    const frontendFastPath = isFrontendOnly(files);
+
+    function buildRunnerCode(bundledJS: string) {
+        return `
+            import React from 'https://esm.sh/react@18.2.0';
+            import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+
+            ${bundledJS}
+
+            const root = createRoot(document.getElementById('root'));
+            root.render(React.createElement(App));
+        `;
+    }
+
+    async function openFrontendPreview() {
+        if (!frontendFastPath) return;
         try {
             setCreatingPreview(true);
             setPreviewError(null);
+            setPreviewMode('fast');
+            setPreviewInsufficientCredits(false);
+
+            const primary = files.find(f => ['html','javascript','typescript','react','css'].includes(f.language)) || files[0];
+            const bundledJS = await compile(primary.content);
+            if (!bundledJS) {
+                throw new Error(transpilerError || 'Transpilation failed');
+            }
+
+            const runnerCode = buildRunnerCode(bundledJS);
+            const blob = new Blob([runnerCode], { type: 'application/javascript' });
+            const url = URL.createObjectURL(blob);
+            setPreviewUrl(url);
+            setPreviewOpen(true);
+        } catch (err: any) {
+            setPreviewError(err.message || 'Frontend preview failed');
+        } finally {
+            setCreatingPreview(false);
+        }
+    }
+
+    async function openBackendPreview() {
+        if (frontendFastPath) return;
+        try {
+            setCreatingPreview(true);
+            setPreviewError(null);
+            setPreviewMode('backend');
+            setPreviewInsufficientCredits(false);
+
             const primary = files.find(f => ['html','javascript','typescript','react','css'].includes(f.language)) || files[0];
             const body: any = {
                 code: primary.content,
@@ -86,10 +163,24 @@ export function CodePanel({ files, loading }: CodePanelProps) {
         }
     }
 
+    async function openPreview() {
+        if (!hasPreviewable) return;
+
+        if (frontendFastPath && isReady) {
+            await openFrontendPreview();
+        } else if (frontendFastPath && !isReady) {
+            setPreviewError('Compiler engine not ready yet');
+        } else {
+            await openBackendPreview();
+        }
+    }
+
     function closePreview() {
         setPreviewOpen(false);
         setPreviewUrl(null);
         setPreviewError(null);
+        setPreviewInsufficientCredits(false);
+        setPreviewMode(null);
     }
 
     // Build a simple grouped tree
@@ -153,6 +244,11 @@ export function CodePanel({ files, loading }: CodePanelProps) {
                     )}
                     {previewError && !previewInsufficientCredits && (
                         <div className="text-[10px] text-red-400 max-w-[180px] truncate" title={previewError}>{previewError}</div>
+                    )}
+                    {previewMode && (
+                        <span className="text-[10px] text-zinc-600 font-mono">
+                            {previewMode === 'fast' ? 'fast-path' : 'backend'}
+                        </span>
                     )}
                 </div>
             </div>
@@ -275,6 +371,7 @@ export function CodePanel({ files, loading }: CodePanelProps) {
                             <div className="flex items-center gap-2">
                                 <span className="text-xs font-medium text-zinc-300">Live Preview</span>
                                 <span className="text-[10px] text-zinc-600 font-mono">{previewDevice}</span>
+                                <span className="text-[10px] text-zinc-600 font-mono">{previewMode}</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
