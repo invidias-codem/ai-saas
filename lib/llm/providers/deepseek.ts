@@ -7,7 +7,12 @@ const DEEPSEEK_MODEL_ID = "deepseek-r1"; // Or specific version if needed
 
 export class DeepSeekProvider implements LLMProvider {
     id = "deepseek";
-    name = "DeepSeek R1 (Vertex AI)";
+    name = "DeepSeek R1";
+    private readonly apiKey?: string;
+
+    constructor(apiKey?: string) {
+        this.apiKey = apiKey;
+    }
 
     private getAuthToken(): string {
         // TODO: Implement proper auth token retrieval for Vertex AI
