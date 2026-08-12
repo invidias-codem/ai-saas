@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
-export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'nous';
+export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'nous' | 'huggingface';
 
 export type ProviderApiKeys = Partial<Record<ProviderName, string>>;
 
@@ -10,7 +10,7 @@ export type ProviderKeyStatus = Record<ProviderName, {
   updatedAt: string | null;
 }>;
 
-const PROVIDERS: ProviderName[] = ['openai', 'anthropic', 'google', 'openrouter', 'nous'];
+const PROVIDERS: ProviderName[] = ['openai', 'anthropic', 'google', 'openrouter', 'nous', 'huggingface'];
 
 export function isProviderName(provider: string): provider is ProviderName {
   return PROVIDERS.includes(provider as ProviderName);
@@ -30,6 +30,9 @@ export function maskProviderKey(apiKey: string | null | undefined): string | nul
   if (apiKey.startsWith('sk-or-v1-') && apiKey.length > 14) {
     return `${apiKey.slice(0, 9)}...${apiKey.slice(-4)}`;
   }
+  if (apiKey.startsWith('hf_') && apiKey.length > 10) {
+    return `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}`;
+  }
   if (apiKey.startsWith('sk-') && apiKey.length > 12) {
     return `${apiKey.slice(0, 5)}...${apiKey.slice(-4)}`;
   }
@@ -43,6 +46,7 @@ export function emptyProviderKeyStatus(): ProviderKeyStatus {
     google: { configured: false, preview: null, updatedAt: null },
     openrouter: { configured: false, preview: null, updatedAt: null },
     nous: { configured: false, preview: null, updatedAt: null },
+    huggingface: { configured: false, preview: null, updatedAt: null },
   };
 }
 

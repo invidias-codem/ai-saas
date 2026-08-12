@@ -16,7 +16,7 @@ type ProviderPayload = {
   apiKey?: string;
 };
 
-function validateKeyShape(provider: ProviderName, apiKey: string): string | null {
+function validateKeyShape(provider: ProviderName, apiKey: string | null) {
   if (provider === 'openai' && !(apiKey.startsWith('sk-') || apiKey.startsWith('proj-'))) {
     return 'Invalid OpenAI API key format.';
   }
@@ -25,6 +25,9 @@ function validateKeyShape(provider: ProviderName, apiKey: string): string | null
   }
   if (provider === 'google' && !apiKey.startsWith('AIza')) {
     return 'Invalid Google API key format.';
+  }
+  if (provider === 'huggingface' && !apiKey.startsWith('hf_')) {
+    return 'Invalid Hugging Face API key format.';
   }
   return null;
 }
@@ -46,6 +49,16 @@ async function validateProviderKey(provider: ProviderName, apiKey: string): Prom
     return;
   }
 
+  if (provider === 'huggingface') {
+    const client = new OpenAI({ apiKey, baseURL: 'https://router.huggingface.co/v1' });
+    await client.chat.completions.create({
+      model: 'openai/gpt-oss-120b:fastest',
+      messages: [{ role: 'user', content: 'Reply with OK.' }],
+      max_tokens: 1,
+    });
+    return;
+  }
+
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   await model.generateContent({
@@ -60,7 +73,7 @@ export async function GET() {
     if (!userId) return new NextResponse('Unauthorized', { status: 401 });
 
     const providers = await getConfiguredProviderKeys(userId);
-    return NextResponse.json({ providers, configured: providers.openai.configured });
+    return NextResponse.json({ providers, configured: providers.openai.configured || providers.huggingface.configured });
   } catch (error) {
     console.error('[PROVIDER_KEYS_GET]', error);
     return new NextResponse('Internal Server Error', { status: 500 });

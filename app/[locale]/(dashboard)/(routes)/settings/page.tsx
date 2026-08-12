@@ -45,13 +45,14 @@ interface Integration {
   email?: string;
 }
 
-type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter';
+type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'huggingface';
 
 const providerLabels: Record<ProviderName, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
   google: 'Google Gemini',
   openrouter: 'OpenRouter',
+  huggingface: 'Hugging Face',
 };
 
 const providerPlaceholders: Record<ProviderName, string> = {
@@ -59,6 +60,7 @@ const providerPlaceholders: Record<ProviderName, string> = {
   anthropic: 'sk-ant-...',
   google: 'AIza...',
   openrouter: 'sk-or-v1-...',
+  huggingface: 'hf_...',
 };
 
 const providerDescriptions: Record<ProviderName, string> = {
@@ -66,6 +68,7 @@ const providerDescriptions: Record<ProviderName, string> = {
   anthropic: 'Used by Code Builder code generation and agentic conversation/code modes.',
   google: 'Used by Gemini planning, review, multimodal fallback, and quality conversation modes.',
   openrouter: 'Optional fast-mode gateway to open models. Only used when an OpenRouter key is saved.',
+  huggingface: 'Bring your own Hugging Face Inference Providers token for open-weight model routing.',
 };
 
 // Credits overview + top-up entry point
@@ -109,12 +112,13 @@ const SettingsPage = () => {
   const [dailyDigestEnabled, setDailyDigestEnabled] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [repoSelectorOpen, setRepoSelectorOpen] = useState(false);
-  const [apiKeyInputs, setApiKeyInputs] = useState<Record<ProviderName, string>>({ openai: '', anthropic: '', google: '', openrouter: '' });
+  const [apiKeyInputs, setApiKeyInputs] = useState<Record<ProviderName, string>>({ openai: '', anthropic: '', google: '', openrouter: '', huggingface: '' });
   const [configuredKeys, setConfiguredKeys] = useState<Record<ProviderName, { configured: boolean; preview: string | null }>>({
     openai: { configured: false, preview: null },
     anthropic: { configured: false, preview: null },
     google: { configured: false, preview: null },
     openrouter: { configured: false, preview: null },
+    huggingface: { configured: false, preview: null },
   });
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keyError, setKeyError] = useState("");
@@ -177,7 +181,9 @@ const SettingsPage = () => {
         ? apiKey.startsWith('sk-ant-')
         : provider === 'openrouter'
           ? apiKey.startsWith('sk-or-v1-')
-          : apiKey.startsWith('AIza');
+          : provider === 'huggingface'
+            ? apiKey.startsWith('hf_')
+            : apiKey.startsWith('AIza');
 
     if (!validFormat) {
       setKeyError(`Invalid ${providerLabels[provider]} API key format.`);
@@ -469,7 +475,7 @@ const SettingsPage = () => {
             </div>
 
             <div className="grid gap-4">
-              {(['openai', 'anthropic', 'google', 'openrouter'] as ProviderName[]).map((provider) => {
+              {(['openai', 'anthropic', 'google', 'openrouter', 'huggingface'] as ProviderName[]).map((provider) => {
                 const status = configuredKeys[provider];
                 const inputValue = apiKeyInputs[provider];
                 return (
