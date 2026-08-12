@@ -76,7 +76,7 @@ export async function generatePlan(contextPackage: ContextPackage, providerKeys:
     try {
         const anthropicApiKey = providerKeys.anthropic || process.env.ANTHROPIC_API_KEY;
         if (anthropicApiKey) {
-            const anthropic = new Anthropic({ apiKey: *** });
+            const anthropic = new Anthropic({ apiKey: anthropicApiKey });
             const response = await anthropic.messages.create({
                 model: 'claude-sonnet-4-20250514',
                 max_tokens: 8192,
