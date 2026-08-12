@@ -63,8 +63,8 @@ export interface GeneratedFile {
 // ─── Context Routing ───
 
 export interface ContextPackage {
-    source: 'gemini' | 'claude' | 'user';
-    target: 'gemini' | 'claude';
+    source: 'gemini' | 'claude' | 'user' | 'ucol' | string;
+    target: 'gemini' | 'claude' | 'ucol' | string;
     payload: {
         type: 'plan' | 'code' | 'review' | 'refinement';
         content: any;
