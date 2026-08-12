@@ -11,9 +11,11 @@ FluxTrust LLC holding company.
 
 **Current state:** Multi-model chat (Gemini, Claude, DeepSeek) with conversation memory,
 knowledge graph, RAG integration, fact extraction, and Code Builder (AI debate loop).
+Sandbox quarantine promotion gate with operator approval flow is active in production.
 
 **Destination:** The operating layer for AI work — a shared intelligence substrate that
 preserves context, routes models, and compounds with use while model quality is commoditized.
+Primary consumer product: **Chameleon Consultant** — Weaver packaged as a rentable domain expert.
 
 ---
 
@@ -29,6 +31,9 @@ and enables cross-model learning at scale.
 - Stabilize Code Builder (UCOL debate loop: Gemini plans → Claude codes → Gemini reviews)
 - World model Phase 1-3: temporal graph + causal edges + delta engine
 - Grow the Lattice OS user base to PMF signal
+- **Develop the Data Refinery Engine**: Systematize the scraping of fragmented, high-value sites to convert unstructured web information into clean, actionable fuel for our agents [00:10:34].
+- **Ship the Chameleon Consultant**: package Weaver as a rentable domain expert, starting with the first two verticals [00:23:46].
+- **Harden the sandbox promotion gate**: offline test vectors, dependency inversion, production non-interactive approval flow, and stream serialization for operator review.
 
 ### Business Goals
 - $47.5M ARR by Year 5 (2030)
@@ -36,6 +41,7 @@ and enables cross-model learning at scale.
 - Non-dilutive: NSF SBIR ($275k), Delaware EDGE Grant ($100k), R&D Tax Credits
 - UCOL becomes shared AI infrastructure for all JJEM subsidiaries
 - Merchandise supports brand growth and helps fund future product development
+- **Consumer Subscription Revenue**: Launch the chameleon-like consultant feature, monetizing packaged domain expertise via a monthly rental model [00:23:46].
 
 ---
 
@@ -70,8 +76,8 @@ and enables cross-model learning at scale.
 - UCOL routing is async and non-blocking — user response latency must never increase
 - Human gate on all AI-generated code — agents propose, humans approve
 - Knowledge graph writes are append-only with temporal validity (valid_from / valid_until)
-- All LLM calls must be traceable (Langfuse integration — planned)
-- Brand architecture should stay coherent: **Lattice OS** is the product, **Weaver** is the customer-facing agent, **Relay** is the internal workspace/orchestration agent
+- All LLM calls must be traceable (Opik integration — current backend)
+- Brand architecture should stay coherent: **Lattice OS** is the product, **Weaver** is the customer-facing agent, **Relay** is the internal workspace/orchestration agent, and **Chameleon Consultant** is the rentable packaged expert [00:23:46]
 
 ### Business
 - GDPR/privacy compliance required (user data export, deletion)
@@ -91,6 +97,9 @@ model-agnostic.
 Knowledge graph (nodes + edges + embeddings), vector store, world model state, and
 agent interaction logs all live in Supabase. This is the shared memory layer — the
 strategic asset that compounds with use.
+
+### The Niche Data Refinery
+The intelligence layer actively ingests messy, fragmented internet data from targeted sources and refines it into structured agent tools [00:10:34]. This proprietary clean data feeds the knowledge graph and powers specific expert workflows.
 
 ### UCOL as async side-effect
 Every conversation fires UCOL routing as a non-blocking side-effect. Users never
@@ -133,6 +142,7 @@ The platform actively penalizes addictive loops and optimizes for high-utility o
 
 ## User Experience Principles
 
+- **The Chameleon Consultant (Weaver)**: The customer-facing agent acts as an adaptive expert. Powered by the data refinery, Weaver packages deep, specific domains of knowledge into functional tools, allowing users to rent a tailored consultant on demand [00:23:46]. 
 - **Speed first**: Streaming responses, non-blocking memory — users feel AI that thinks fast
 - **Transparency**: Users can see what the system knows about them (knowledge graph export)
 - **Multi-model without friction**: Model switching is seamless, not a settings menu
@@ -153,6 +163,7 @@ The platform actively penalizes addictive loops and optimizes for high-utility o
 
 ### Business
 - [ ] 1,000 active users on the new Lattice OS domain (PMF signal)
+- [ ] 100 active monthly subscribers renting the consumer-facing chameleon consultant
 - [ ] Bluesky agent driving measurable traffic to the new Lattice OS domain
 - [ ] Series A deck ready with UCOL demo
 - [ ] At least one JJEM subsidiary using UCOL infrastructure
@@ -170,8 +181,7 @@ The platform actively penalizes addictive loops and optimizes for high-utility o
 1. **Read this file before starting any task.** If your task conflicts with the goals
    or constraints above, stop and ask before proceeding.
 
-2. **UCOL is the moat.** Features that feed the knowledge graph or improve routing
-   are higher priority than features that don't.
+2. **UCOL is the moat.** Features that feed the knowledge graph, construct expert tools, or improve routing are higher priority than features that don't.
 
 3. **Never auto-merge.** All AI-generated changes go through PR review. No exceptions.
 
