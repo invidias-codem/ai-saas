@@ -49,7 +49,7 @@ export async function POST(
       .single();
 
     if (taskError || !task) {
-      span.end({ status: 'not_found' });
+      span.end({ metadata: { status: 'not_found' } });
       return NextResponse.json(
         { error: { code: 'not_found', message: 'Task not found' } },
         { status: 404 },
@@ -57,7 +57,7 @@ export async function POST(
     }
 
     if (task.workspace_id !== workspaceId) {
-      span.end({ status: 'forbidden' });
+      span.end({ metadata: { status: 'forbidden' } });
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Task does not belong to workspace' } },
         { status: 403 },
@@ -107,7 +107,7 @@ export async function POST(
         }
       );
 
-      span.end({ status: 'rejected' });
+      span.end({ metadata: { status: 'rejected' } });
       void exportTaskTraceToOpik({
         traceId: span.traceId,
         workspaceId,
@@ -222,7 +222,7 @@ export async function POST(
       }
     );
 
-    span.end({ status: 'approved' });
+    span.end({ metadata: { status: 'approved' } });
     void exportTaskTraceToOpik({
       traceId: span.traceId,
       workspaceId,
