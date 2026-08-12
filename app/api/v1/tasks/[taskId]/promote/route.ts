@@ -32,9 +32,11 @@ export async function POST(
 
   const span = startUcolSpan({
     name: 'task.promote',
-    'task.id': taskId,
-    'task.workspace_id': workspaceId,
-    'task.decision': body.decision,
+    metadata: {
+      'task.id': taskId,
+      'task.workspace_id': workspaceId,
+      'task.decision': body.decision,
+    },
   });
 
   const createdAtMs = Date.now();
