@@ -1,19 +1,12 @@
-/**
- * Quarantine Promotion Manager
- *
- * Manages the lifecycle of sandbox artifacts from quarantine staging through
- * live-workspace promotion or rejection, with SHA-1 integrity and ALE telemetry.
- */
-
 import { mkdir, rm, readFile, writeFile, stat, readdir } from 'fs/promises';
 import { join, dirname as pathDir } from 'path';
 import { execSync } from 'child_process';
 import type { IPromotionManager, QuarantineArtifact } from './sandboxManager';
 
-export function createQuarantinePromotionManager(
+function buildLocalAdapter(
   quarantineRoot: string,
   liveRoot: string,
-  emitRiskEvent: (event: string, payload: Record<string, unknown>) => void = () => {},
+  emitRiskEvent: (event: string, payload: Record<string, unknown>) => void,
 ): IPromotionManager {
   const sha1 = (filePath: string): string => {
     const raw = execSync(`openssl sha1 -hex "${filePath}"`, { encoding: 'utf8' }).trim();
@@ -123,4 +116,12 @@ export function createQuarantinePromotionManager(
       return scanArtifacts(sessionId);
     },
   };
+}
+
+export function createQuarantinePromotionManager(
+  quarantineRoot: string,
+  liveRoot: string,
+  emitRiskEvent: (event: string, payload: Record<string, unknown>) => void = () => {},
+): IPromotionManager {
+  return buildLocalAdapter(quarantineRoot, liveRoot, emitRiskEvent);
 }
