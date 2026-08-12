@@ -18,6 +18,7 @@ import {
   type AgentTaskRecord,
 } from '@/lib/ucol/agentTaskSchema';
 import { waitUntil } from '@vercel/functions';
+import type { AgentContext } from '@/lib/agents/core/types';
 import { SPAN_ATTRS } from '@/lib/ucol/observability/span';
 import { auditEnterprise } from '@/lib/security/auditLog';
 import { getOrgAccess, type OrgAccess } from '@/lib/security/orgAccess';
@@ -376,7 +377,7 @@ async function runAgentTask(input: {
       });
     }
 
-    const agentContext = {
+    const agentContext: AgentContext = {
       userId,
       sessionId: `task-${taskId}`,
       workspaceId,
