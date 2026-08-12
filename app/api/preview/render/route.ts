@@ -23,7 +23,7 @@ function sb() {
 
 const CSP_HEADER = [
   "default-src 'none'",
-  "script-src 'unsafe-inline' 'unsafe-eval' https:",
+  "script-src 'unsafe-inline' 'unsafe-eval' https: https://static.cloudflareinsights.com",
   "style-src 'unsafe-inline' https:",
   "img-src data: https:",
   "font-src https:",
