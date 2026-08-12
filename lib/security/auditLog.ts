@@ -68,6 +68,7 @@ export type AuditAction =
   | 'agent.task.cancelled'
   | 'agent.task.completed'
   | 'agent.task.failed'
+  | 'agent.task.pending_approval'
   | 'agent.pr_opened'
   | 'agent.pr_blocked'      // Agent wanted to merge but was gated
   | 'tool.executed'
