@@ -219,8 +219,9 @@ export async function POST(req: NextRequest) {
         void refundCredits(userId, cost, 'Refund for failed preview session creation');
       }
       console.error('[Preview:Render] Insert failed:', error, { userId, cost, spendResult, codeLength: code.length, language });
-      const details = error?.details || error?.message || error?.code || JSON.stringify(error);
-      return NextResponse.json({ error: 'Failed to create preview session', details }, { status: 500 });
+      const supabaseDetails = error?.details || error?.message || error?.code || JSON.stringify(error);
+      const responseDetails = `Supabase insert failed: ${supabaseDetails}`;
+      return NextResponse.json({ error: responseDetails, details: supabaseDetails, userId, codeLength: code.length, language }, { status: 500 });
     }
 
     const previewUrl = `/api/preview/render?id=${data.id}`;
