@@ -37,11 +37,13 @@ function resolveProvider(providerName: string, providerKeys: ProviderApiKeys): L
     case 'openrouter':
       return new OpenRouterProvider(providerKeys);
     case 'claude':
-      return new ClaudeProvider(providerKeys);
+      return new ClaudeProvider(providerKeys.claude || '');
     case 'google':
-      return new GeminiProvider(providerKeys);
+      return new GeminiProvider(providerKeys.google || '');
     case 'deepseek':
-      return new DeepSeekProvider(providerKeys);
+      return new DeepSeekProvider(providerKeys.deepseek || '');
+    case 'huggingface':
+      return new OpenRouterProvider(providerKeys);
     default:
       return new OpenRouterProvider(providerKeys);
   }
