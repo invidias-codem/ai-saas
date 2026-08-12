@@ -112,6 +112,29 @@ const TOKEN_SATURATION_THRESHOLD = 0.8;
 const THRASH_THRESHOLD = 2; // failures before escalation within one component loop
 const MAX_PROMPT_TOKENS_ESTIMATE = (text: string) => Math.ceil(text.length / 3.5); // rough chars→tokens
 
+// Periodic / modular / cyclic signatures that imply deeper geometric representations.
+// Routing these to a heavy reasoning model avoids thrashing on edge cases.
+const CYCLIC_SIGNATURES = [
+  /\bmodulo\b/i,
+  /\bmod\b/i,
+  /\bcron\b/i,
+  /\bschedul(e|er|ing)\b/i,
+  /\bcircular\b/i,
+  /\bsinusoidal\b/i,
+  /\bsin\b/i,
+  /\bcos\b/i,
+  /\btan\b/i,
+  /\bperiodic\b/i,
+  /\bcycle\b/i,
+  /\boscillat/i,
+  /\bwave\b/i,
+  /\bfourier\b/i,
+  /\bphase\b/i,
+  /\bfinite state machine\b/i,
+  /\bfsm\b/i,
+  /\bstate machine\b/i,
+];
+
 function matchModels(component: ComponentSpec, plan: ProjectPlan): ModelTarget[] {
   const blob = `${component.name} ${component.description} ${component.filePath} ${plan.description} ${plan.techStack.join(' ')} ${component.dependencies.join(' ')}`.toLowerCase();
 
@@ -202,6 +225,25 @@ export class ModelRouter {
         reason: `Thrash trigger: ${thrashCount} failures in ${component.name}`,
         preemptive: true,
         telemetry: { promptTokens: primaryTokens },
+      };
+    }
+
+    // ── New: periodic/modular/cyclic semantic preemption ──
+    const cyclicBlob = `${component.name} ${component.description} ${component.filePath} ${plan.description} ${plan.techStack.join(' ')} ${component.dependencies.join(' ')} ${promptText}`;
+    const cyclicMatch = CYCLIC_SIGNATURES.find(re => re.test(cyclicBlob));
+    if (cyclicMatch) {
+      const heavy = MODEL_CATALOG.find(m => m.tier === 'L3' && m.strengths.includes('reasoning')) || MODEL_CATALOG.find(m => m.tier === 'L3')!;
+      this.emit('UCOL:Router', `Cyclic signature detected in ${component.name}, preemptively routed to ${heavy.modelId}`, {
+        component: component.name,
+        trigger: cyclicMatch.source,
+      });
+      return {
+        componentName: component.name,
+        primaryModel: heavy,
+        escalationModel: heavy,
+        reason: `Math mismatch trigger: cyclic/modular signature matched (${cyclicMatch.source})`,
+        preemptive: true,
+        telemetry: { promptTokens: primaryTokens, cyclicTrigger: cyclicMatch.source },
       };
     }
 
