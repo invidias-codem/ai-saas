@@ -123,7 +123,12 @@ export async function GET(req: NextRequest) {
       .eq('id', sessionId)
       .maybeSingle();
 
-    if (error || !data) {
+    if (error) {
+      console.error('[Preview:Render] DB error:', error);
+      return new NextResponse('Preview lookup failed', { status: 500 });
+    }
+
+    if (!data) {
       return new NextResponse('Preview not found', { status: 404 });
     }
 
