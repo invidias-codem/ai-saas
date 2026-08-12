@@ -250,7 +250,13 @@ export class ContextRouter {
 
             // ── Step 1: Generate code via routed model ──
             try {
-                if (selectedModel.provider === 'openrouter') {
+                if (selectedModel.provider === 'huggingface') {
+                    latestFiles = await this.withTimeout(
+                        generateComponentHuggingFace(selectedModel.modelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
+                        COMPONENT_TIMEOUT_MS,
+                        component.name
+                    );
+                } else if (selectedModel.provider === 'openrouter') {
                     latestFiles = await this.withTimeout(
                         generateComponentOpenRouter(selectedModel.modelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
                         COMPONENT_TIMEOUT_MS,
