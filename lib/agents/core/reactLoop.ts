@@ -1,6 +1,7 @@
 import { VertexAI, GenerativeModel, GenerateContentRequest, Part } from '@google-cloud/vertexai';
 import { AgentContext, ToolResult, TrajectoryStep, AgentActionType } from './types';
 import { ToolRegistry } from './registry';
+import { withPromotionGate, NeedsApprovalError } from '@/lib/cli/promotionPrompt';
 
 const MAX_LOOPS = 7;
 const CIRCUIT_BREAKER_THRESHOLD = 3;
@@ -10,9 +11,15 @@ function stripThinkingBlocks(text: string): string {
 }
 
 export interface ReActResult {
-    answer: string;
-    trajectory: TrajectoryStep[];
-    status: 'success' | 'max_loops' | 'error' | 'halted_for_approval';
+  answer: string;
+  trajectory: TrajectoryStep[];
+  status: 'success' | 'max_loops' | 'error' | 'halted_for_approval';
+  promotionState?: {
+    sessionId: string;
+    artifacts: import('@/lib/cli/promotionPrompt').QuarantineArtifact[];
+    rejectionCount: number;
+    circuitBreakerTripped: boolean;
+  };
 }
 
 export async function runReActLoop(
@@ -185,6 +192,64 @@ export async function runReActLoop(
           data: execResult.data
         };
         if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
+
+        // Operator approval gate for pending quarantine artifacts before final answer
+        if (context.promotionManager) {
+          const sessionId = context.sessionId;
+          const rejectionCounter = {
+            count: context.promotionRejectionCount || 0,
+            tripped: false,
+          };
+
+          const pending = await context.promotionManager.getPendingArtifacts(sessionId);
+
+          if (pending.length > 0) {
+            const gateResult = await withPromotionGate(
+              sessionId,
+              context.promotionManager,
+              pending,
+              rejectionCounter,
+              async (decision) => {
+                if (decision === 'reset') {
+                  return {
+                    answer: 'Quarantine circuit breaker reset. Awaiting operator confirmation to continue.',
+                    trajectory,
+                    status: 'halted_for_approval' as const,
+                  };
+                }
+
+                if (decision === 'reject') {
+                  const rejectedObservation = {
+                    status: 'error' as const,
+                    error: 'system_error: promotion rejected by operator',
+                    observability: 'operator_rejected',
+                  };
+
+                  // Append the rejection as an additional trajectory step
+                  trajectory.push({
+                    stepNumber: trajectory.length + 1,
+                    timestamp: new Date().toISOString(),
+                    thought: 'The operator rejected the pending quarantine artifacts. Adjusting strategy.',
+                    action: { type: 'final_answer' as const },
+                    observation: rejectedObservation,
+                  });
+
+                  return {
+                    answer: 'The operator rejected the pending artifacts. I need to adjust my approach and retry without writing those files.',
+                    trajectory,
+                    status: 'success' as const,
+                  };
+                }
+
+                return null;
+              },
+            );
+
+            if (gateResult) {
+              return gateResult;
+            }
+          }
+        }
 
         promptToSend = [{
           functionResponse: {

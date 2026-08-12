@@ -30,6 +30,7 @@ import { extractFactsFromConversation } from "@/lib/agents/factExtractor";
 import { SecurityAgent } from "@/lib/security/securityAgent";
 import { emitInteractionAudit } from "@/lib/telemetry/emit";
 import { deriveContextRole } from "@/lib/telemetry/governance";
+import { emitRiskEvent } from "@/lib/telemetry/riskAdapter";
 // ── World Model: Distribution Shift + Self-Benchmarking ──────────────────────
 import { createDistributionShiftDetector } from '@/lib/world-model/distribution-shift';
 import { createBenchmarkingPipeline } from '@/lib/world-model/benchmarking';
@@ -42,6 +43,8 @@ import type { UcolMemoryPlan, UcolMemoryScope } from '@/lib/ucol/routing/types';
 import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
 import { createTrace } from '@/lib/observability/langfuse';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
+import { createQuarantinePromotionManager } from '@/lib/execution/quarantinePromotionManager';
+import { sandboxManager } from '@/lib/execution/sandboxManager';
 
 // ChatMessageSchema imported from types
 
@@ -341,6 +344,24 @@ export async function generateConversationReply(
 
     const textEncoder = new TextEncoder();
 
+    const workspaceRoot = process.cwd();
+    const sessionId = 'agentic-' + Date.now();
+    const promotionManager = createQuarantinePromotionManager(
+      workspaceRoot,
+      workspaceRoot,
+      (event, payload) => {
+        void emitRiskEvent({
+          eventType: event as any,
+          traceId: sessionId,
+          workspaceId: parsed.workspaceId || undefined,
+          userId,
+          metadata: payload,
+        });
+      },
+    );
+    const { sandboxManager } = await import('@/lib/execution/sandboxManager');
+    sandboxManager.setPromotionManager(promotionManager);
+
     // We execute the ReAct loop and stream UI events back
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -351,7 +372,7 @@ export async function generateConversationReply(
         try {
           const agentContext = {
             userId,
-            sessionId: 'agentic-' + Date.now(),
+            sessionId,
             workspaceId: parsed.workspaceId,
             history: [],
             enableTelemetry: true,
@@ -363,7 +384,9 @@ export async function generateConversationReply(
               onStreamEvent(text);
               onReasoning(text);
               if (options.slackStreamCallback) options.slackStreamCallback(step);
-            }
+            },
+            promotionManager,
+            promotionRejectionCount: 0,
           };
 
           const reactResult = await runReActLoop(promptInput, agentContext, registry, AGENTIC_MODEL);

@@ -23,7 +23,15 @@ jest.mock('os', () => ({
   tmpdir: jest.fn(),
 }));
 jest.mock('path', () => ({
-  join: jest.fn((...parts) => parts.join('/')),
+  join: jest.fn((...parts) => {
+    const joined = parts.join('/').replace(/\/+/g, '/');
+    return joined.endsWith('/') ? joined.slice(0, -1) : joined;
+  }),
+  relative: jest.fn((from, to) => {
+    const prefix = from.endsWith('/') ? from : from + '/';
+    if (to.startsWith(prefix)) return to.slice(prefix.length);
+    return to.replace(prefix, '');
+  }),
 }));
 jest.mock('@/lib/ucol/observability/span', () => ({
   UcolSpan: jest.fn().mockImplementation(() => ({
@@ -281,5 +289,52 @@ describe('sandboxManager', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('Patch denied for protected path');
+  });
+
+  test('SandboxManager forwards injected promotion manager to runner.writeFile()', async () => {
+    (mkdir as jest.Mock).mockResolvedValue(undefined);
+    (writeFile as jest.Mock).mockResolvedValue(undefined);
+
+    const runner = new LocalSandboxRunner();
+    const manager = new SandboxManager(runner);
+
+    const promotionManager = {
+      stageArtifact: jest.fn().mockResolvedValue({
+        sessionId: 's1',
+        relativePath: 'a.txt',
+        digest: 'd1',
+        absPath: '/q/a.txt',
+      }),
+      promote: jest.fn(),
+      reject: jest.fn(),
+    } as any;
+
+    manager.setPromotionManager(promotionManager);
+
+    const result = await manager.writeFile({
+      type: 'write',
+      filePath: '/tmp/sandbox/a.txt',
+      content: 'hello',
+      scratchDir: '/tmp/sandbox',
+      sessionId: 's1',
+    });
+
+    expect(result.success).toBe(true);
+    expect(promotionManager.stageArtifact).toHaveBeenCalledWith('s1', expect.stringMatching(/a\.txt$/), expect.any(Buffer));
+  });
+
+  test('writeFile does not call stageArtifact when no promotion manager is set', async () => {
+    (mkdir as jest.Mock).mockResolvedValue(undefined);
+    (writeFile as jest.Mock).mockResolvedValue(undefined);
+
+    const runner = new LocalSandboxRunner();
+    const result = await runner.writeFile({
+      type: 'write',
+      filePath: '/tmp/sandbox/b.txt',
+      content: 'hello',
+      scratchDir: '/tmp/sandbox',
+    });
+
+    expect(result.success).toBe(true);
   });
 });

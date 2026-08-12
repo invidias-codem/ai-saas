@@ -16,7 +16,7 @@
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { mkdir, rm, readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { join, relative } from 'path';
 import { tmpdir } from 'os';
 import { UcolSpan } from '../ucol/observability/span';
 
@@ -51,6 +51,7 @@ export interface SandboxWriteRequest {
   content: string;
   maxBytes?: number;
   scratchDir: string;
+  sessionId?: string;
 }
 
 export interface SandboxPatchRequest {
@@ -76,6 +77,20 @@ export interface SandboxRunner {
   execute(req: SandboxExecutionRequest): Promise<SandboxExecutionResult>;
   writeFile(req: SandboxWriteRequest): Promise<FileSandboxResult>;
   patchFile(req: SandboxPatchRequest): Promise<FileSandboxResult>;
+}
+
+export interface QuarantineArtifact {
+  sessionId: string;
+  relativePath: string;
+  digest: string;
+  absPath: string;
+}
+
+export interface IPromotionManager {
+  stageArtifact(sessionId: string, relativePath: string, content: Buffer): Promise<QuarantineArtifact>;
+  promote(sessionId: string, filePaths: string[]): Promise<void>;
+  reject(sessionId: string): Promise<void>;
+  getPendingArtifacts(sessionId: string): Promise<QuarantineArtifact[]>;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -114,6 +129,13 @@ const DOTFILE_DENY_REGEX = /(?:^|[\\/])(?:\.env|\.gitconfig|\.npmrc|\.ssh|\.aws|
 const DOT_GIT_DIR_REGEX = /(?:^|[\\/])\.git(?:[\\/]|$)/;
 
 export class LocalSandboxRunner implements SandboxRunner {
+  protected promotionManagerRef: IPromotionManager | null = null;
+
+  constructor() {}
+
+  public setPromotionManager(promotionManager: IPromotionManager | null): void {
+    this.promotionManagerRef = promotionManager;
+  }
   public async execute(req: SandboxExecutionRequest): Promise<SandboxExecutionResult> {
     const executionId = randomUUID();
     const timeoutMs = req.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -358,6 +380,13 @@ export class LocalSandboxRunner implements SandboxRunner {
     try {
       await mkdir(join(absolute, '..'), { recursive: true });
       await writeFile(absolute, req.content, { mode: 0o600 });
+
+      if (this.promotionManagerRef) {
+        const rel = relative(req.scratchDir, absolute);
+        const sessionId = req.sessionId ?? req.scratchDir;
+        await this.promotionManagerRef.stageArtifact(sessionId, rel, Buffer.from(req.content, 'utf8'));
+      }
+
       return { success: true, path: absolute, bytesWritten: Buffer.byteLength(req.content, 'utf8'), exitCode: 0 };
     } catch (err: any) {
       return { success: false, error: err.message, exitCode: 1 };
@@ -400,7 +429,17 @@ export function shouldUseSandbox(tool: any): boolean {
 }
 
 export class SandboxManager {
-  constructor(private runner: SandboxRunner) {}
+  constructor(
+    private runner: LocalSandboxRunner,
+    private promotionManager: IPromotionManager | null = null,
+  ) {
+    runner.setPromotionManager(promotionManager);
+  }
+
+  setPromotionManager(promotionManager: IPromotionManager | null): void {
+    this.promotionManager = promotionManager;
+    this.runner.setPromotionManager(promotionManager);
+  }
 
   async execute(req: SandboxExecutionRequest): Promise<SandboxExecutionResult> {
     return this.runner.execute(req);

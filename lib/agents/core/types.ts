@@ -1,6 +1,7 @@
 
 import { z } from "zod";
 import type { IOHarness } from "@/lib/harness/IOHarness";
+import type { IPromotionManager } from "@/lib/execution/sandboxManager";
 
 /**
  * Capability-based security levels for tools.
@@ -94,7 +95,16 @@ export interface Tool<TInput = any, TOutput = any> {
 
      /** Streaming callback for raw reasoning/thinking chunks from the provider. */
      onReasoning?: (text: string) => void;
- }
+
+     /** Quarantine promotion manager for operator approval gate. */
+     promotionManager?: IPromotionManager;
+
+     /** Rejection counter for circuit breaker logic. */
+     promotionRejectionCount?: number;
+
+     /** Approval mode: 'interactive' blocks for stdin, 'non-interactive' yields structured approval event. */
+     operatorApprovalMode?: 'interactive' | 'non-interactive';
+     }
 
 /**
  * Structured log of an agent's reasoning step.

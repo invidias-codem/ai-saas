@@ -388,6 +388,7 @@ async function runAgentTask(input: {
           thought: String(step.thought ?? '').slice(0, 200),
         });
       },
+      operatorApprovalMode: 'non-interactive',
     };
 
     const useBlogExecution = taskType === 'blog_post';
