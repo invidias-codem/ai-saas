@@ -43,6 +43,7 @@ const SIMILARITY_THRESHOLD = 0.95;
 const ORIGINALITY_THRESHOLD = 4;
 const PRAGMATISM_THRESHOLD = 5;
 const COMPONENT_TIMEOUT_MS = 25_000;
+const PROVIDER_TIMEOUT_MS = 12_000;
 
 const CREATIVITY_CONSTRAINTS = [
     'Extract at least one reusable custom hook that encapsulates the core logic of this component',
@@ -269,25 +270,25 @@ export class ContextRouter {
                     if (provider === 'huggingface') {
                         files = await this.withTimeout(
                             generateComponentHuggingFace(selectedModel.modelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                            COMPONENT_TIMEOUT_MS,
+                            PROVIDER_TIMEOUT_MS,
                             component.name
                         );
                     } else if (provider === 'openrouter') {
                         files = await this.withTimeout(
                             generateComponentOpenRouter(selectedModel.modelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                            COMPONENT_TIMEOUT_MS,
+                            PROVIDER_TIMEOUT_MS,
                             component.name
                         );
                     } else if (provider === 'anthropic') {
                         files = await this.withTimeout(
                             generateComponent(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                            COMPONENT_TIMEOUT_MS,
+                            PROVIDER_TIMEOUT_MS,
                             component.name
                         );
                     } else if (provider === 'google') {
                         files = await this.withTimeout(
                             generateComponentGemini(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                            COMPONENT_TIMEOUT_MS,
+                            PROVIDER_TIMEOUT_MS,
                             component.name
                         );
                     }
@@ -325,7 +326,7 @@ export class ContextRouter {
             }
 
             if (!latestFiles || latestFiles.length === 0) {
-                throw new Error(`Code generation failed for ${component.name}: all providers exhausted. Last error: ${generationError || 'Unknown'}`);
+                throw new Error(`Code generation failed for ${component.name}: providers exhausted after trying [${triedProviders.join(', ')}]. Last error: ${generationError || 'Unknown'}`);
             }
 
             const currentCode = latestFiles.map(f => f.content).join('\n---\n');
