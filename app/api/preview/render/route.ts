@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
     });
     if (session.errorResponse) return session.errorResponse;
 
-    const body = await req.json().catch(() => ({}));
+    const body = session.body ?? await req.json().catch(() => ({}));
     const code = typeof body.code === 'string' ? body.code : '';
     const language = ['html', 'javascript', 'typescript', 'css', 'react', 'sh', 'python'].includes(body.language) ? body.language : 'html';
 
