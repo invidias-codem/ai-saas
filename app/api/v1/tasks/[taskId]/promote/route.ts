@@ -30,7 +30,8 @@ export async function POST(
     );
   }
 
-  const span = startUcolSpan('task.promote', {
+  const span = startUcolSpan({
+    name: 'task.promote',
     'task.id': taskId,
     'task.workspace_id': workspaceId,
     'task.decision': body.decision,
