@@ -243,7 +243,7 @@ export async function POST(
     });
   } catch (error: any) {
     console.error('[Promote] Error:', error);
-    span.end({ error: error.message });
+    span.fail(error.message, { taskId });
     return NextResponse.json(
       { error: { code: 'server_error', message: 'Promotion failed.' } },
       { status: 500 },
