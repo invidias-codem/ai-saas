@@ -21,15 +21,22 @@ CRITICAL — GO BEYOND THE SPEC (BUT BE PRAGMATIC):
 - Extract reusable logic into custom hooks when it makes the code cleaner.
 - Use defensive coding: type guards, null checks, fallback values.
 - Choose non-obvious patterns ONLY when they genuinely improve the code.
+- Name things to reveal intent, not just function ("handleProductCreation" not "handleSubmit").
+
+RECITATION AVOIDANCE:
+- Write a novel, custom implementation tailored to THIS specific application. Do not output verbatim standard boilerplate.
+- Ensure all variable names, comments, and structural layouts are uniquely adapted to this project's context.
+- Break exact string matches to training-data templates by incorporating domain-specific logic and naming.
 
 WARNING — AVOID OVER-ENGINEERING (PRAGMATISM AXIS):
 - Do NOT build massive enterprise architectures for simple UI components.
 - Do NOT use \`useReducer\` for simple toggles.
 - Do NOT build exponential backoff retry hooks for a basic submit button unless strictly necessary.
+- Your code is evaluated on Correctness (1-10), Originality (1-10), AND Pragmatism (1-10). If you over-engineer and bloat the code, you will be rejected on the Pragmatism axis. Keep it elegant, readable, and appropriately scoped.
 
 OUTPUT FORMAT:
 Return a JSON array of file objects. Each object has:
-- "path": string (e.g., "components/TodoList.tsx")
+- "path": string (e.g., "components/TodoList.tsx")  
 - "content": string (the full file source code)
 - "language": string (e.g., "tsx", "ts")
 

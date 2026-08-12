@@ -76,13 +76,26 @@ export async function generatePlan(contextPackage: ContextPackage, providerKeys:
     try {
         const anthropicApiKey = providerKeys.anthropic || process.env.ANTHROPIC_API_KEY;
         if (anthropicApiKey) {
-            const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+            const anthropic = new Anthropic({ apiKey: *** });
             const response = await anthropic.messages.create({
                 model: 'claude-sonnet-4-20250514',
                 max_tokens: 8192,
                 temperature: 0.7,
                 system: PLANNER_SYSTEM_PROMPT,
                 messages: [{ role: 'user', content: userPrompt }],
+            }).catch(async (anthropicError: any) => {
+                // Claude Sonnet 4 may 404 on accounts without access; fall back to
+                // the stable 3.5 snapshot so planning still succeeds.
+                if (anthropicError?.status === 404) {
+                    return await anthropic.messages.create({
+                        model: 'claude-3-5-sonnet-20241022',
+                        max_tokens: 8192,
+                        temperature: 0.7,
+                        system: PLANNER_SYSTEM_PROMPT,
+                        messages: [{ role: 'user', content: userPrompt }],
+                    });
+                }
+                throw anthropicError;
             });
 
             const text = response.content

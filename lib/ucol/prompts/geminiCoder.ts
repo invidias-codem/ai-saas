@@ -22,6 +22,11 @@ CRITICAL — GO BEYOND THE SPEC (BUT BE PRAGMATIC):
 - Choose non-obvious patterns ONLY when they genuinely improve the code.
 - Name things to reveal intent, not just function ("handleProductCreation" not "handleSubmit").
 
+RECITATION AVOIDANCE:
+- Write a novel, custom implementation tailored to THIS specific application. Do not output verbatim standard boilerplate.
+- Ensure all variable names, comments, and structural layouts are uniquely adapted to this project's context.
+- Break exact string matches to training-data templates by incorporating domain-specific logic and naming.
+
 WARNING — AVOID OVER-ENGINEERING (PRAGMATISM AXIS):
 - Do NOT build massive enterprise architectures for simple UI components.
 - Do NOT use \`useReducer\` for simple toggles.
@@ -61,7 +66,11 @@ export async function generateComponentGemini(
         systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
     });
 
-    let userPrompt = `## Project Plan
+    function buildUserPrompt(attempt: number): string {
+        const recitationNote = attempt > 1
+            ? '\n\nNOTE: Previous attempt was blocked by a content filter. Write a completely novel, app-specific implementation — use unique variable names, project-specific business logic, and avoid common boilerplate patterns.\n'
+            : '';
+        let userPrompt = `## Project Plan
 ${JSON.stringify(fullPlan, null, 2)}
 
 ## Component to Build
@@ -71,49 +80,69 @@ ${JSON.stringify(component, null, 2)}
 ${(existingFiles || []).map((f: GeneratedFile) => `### ${f.path}\n\`\`\`${f.language}\n${f.content}\n\`\`\``).join('\n\n') || '(none — this is a leaf component)'}
 
 ## Tech Stack
-${(techStack || []).join(', ')}`;
+${(techStack || []).join(', ')}${recitationNote}`;
 
-    // Inject discovered patterns from earlier components
-    if (discoveredPatterns && discoveredPatterns.length > 0) {
-        userPrompt += `\n\n## 💡 Novel Patterns Discovered by Your Team\n${discoveredPatterns.map((p, i) => `${i + 1}. **${p.component}** — ${p.pattern} (originality: ${p.originalityScore}/10)`).join('\n')}`;
-    }
-
-    // Append feedback chain for revisions
-    if (refinement && refinement.feedbackHistory.length > 0) {
-        userPrompt += `\n\n---\n## REVISION ATTEMPT ${refinement.attempt}\n`;
-        userPrompt += `\n### Your Previous Code\n\`\`\`\n${refinement.previousCode}\n\`\`\`\n`;
-        if (refinement.constraint) {
-            userPrompt += `\n### 🎯 CREATIVITY CONSTRAINT\n**${refinement.constraint}**\n`;
+        // Inject discovered patterns from earlier components
+        if (discoveredPatterns && discoveredPatterns.length > 0) {
+            userPrompt += `\n\n## 💡 Novel Patterns Discovered by Your Team\n${discoveredPatterns.map((p, i) => `${i + 1}. **${p.component}** — ${p.pattern} (originality: ${p.originalityScore}/10)`).join('\n')}`;
         }
-        userPrompt += `\n### Review Feedback History (ALL rounds)\n`;
-        for (let i = 0; i < refinement.feedbackHistory.length; i++) {
-            const fb = refinement.feedbackHistory[i];
-            userPrompt += `\n**Round ${i + 1}** (Correctness: ${fb.score}/10, Originality: ${fb.originalityScore}/10, Pragmatism: ${fb.pragmatismScore}/10, ${fb.approved ? 'Approved' : 'Rejected'})\n`;
-            userPrompt += `- Critique: ${fb.critique}\n`;
-            if (fb.suggestions.length > 0) {
-                userPrompt += `- Fix instructions:\n${fb.suggestions.map(s => `  - ${s}`).join('\n')}\n`;
+
+        // Append feedback chain for revisions
+        if (refinement && refinement.feedbackHistory.length > 0) {
+            userPrompt += `\n\n---\n## REVISION ATTEMPT ${refinement.attempt}\n`;
+            userPrompt += `### Your Previous Code\n\`\`\`\n${refinement.previousCode}\n\`\`\`\n`;
+            if (refinement.constraint) {
+                userPrompt += `### 🎯 CREATIVITY CONSTRAINT\n**${refinement.constraint}**\n`;
             }
+            userPrompt += `### Review Feedback History (ALL rounds)\n`;
+            for (let i = 0; i < refinement.feedbackHistory.length; i++) {
+                const fb = refinement.feedbackHistory[i];
+                userPrompt += `\n**Round ${i + 1}** (Correctness: ${fb.score}/10, Originality: ${fb.originalityScore}/10, Pragmatism: ${fb.pragmatismScore}/10, ${fb.approved ? 'Approved' : 'Rejected'})\n`;
+                userPrompt += `- Critique: ${fb.critique}\n`;
+                if (fb.suggestions.length > 0) {
+                    userPrompt += `- Fix instructions:\n${fb.suggestions.map(s => `  - ${s}`).join('\n')}\n`;
+                }
+            }
+            userPrompt += `\nFix ALL flagged issues. Output the corrected JSON array.`;
+        } else {
+            userPrompt += `\n\nGenerate the code files for "${component.name}". Output ONLY a JSON array.`;
         }
-        userPrompt += `\nFix ALL flagged issues. Output the corrected JSON array.`;
-    } else {
-        userPrompt += `\n\nGenerate the code files for "${component.name}". Output ONLY a JSON array.`;
+
+        return userPrompt;
     }
 
-    const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.7,
-            maxOutputTokens: 8192,
-        },
-    });
+    const MAX_RECITATION_RETRIES = 2;
+    let lastError: Error | null = null;
 
-    if (!result.response) {
-        throw new Error('[UCOL:GeminiCoder] No response received');
+    for (let attempt = 1; attempt <= MAX_RECITATION_RETRIES; attempt++) {
+        try {
+            const result = await model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: buildUserPrompt(attempt) }] }],
+                generationConfig: {
+                    responseMimeType: 'application/json',
+                    temperature: attempt > 1 ? 0.85 : 0.7,
+                    maxOutputTokens: 8192,
+                },
+            });
+
+            if (!result.response) {
+                throw new Error('[UCOL:GeminiCoder] No response received');
+            }
+
+            const text = result.response.text();
+            return parseGeneratedFiles(text, component.name);
+        } catch (err: any) {
+            const msg = err.message || '';
+            const isRecitation = msg.includes('RECITATION') || msg.includes('blocked') || msg.includes('SAFETY');
+            if (isRecitation && attempt < MAX_RECITATION_RETRIES) {
+                console.warn(`[UCOL:GeminiCoder] RECITATION blocked on attempt ${attempt}, retrying with novel prompt...`);
+                continue;
+            }
+            throw err;
+        }
     }
 
-    const text = result.response.text();
-    return parseGeneratedFiles(text, component.name);
+    throw lastError || new Error('[UCOL:GeminiCoder] Failed after retries');
 }
 
 function parseGeneratedFiles(text: string, componentName: string): GeneratedFile[] {

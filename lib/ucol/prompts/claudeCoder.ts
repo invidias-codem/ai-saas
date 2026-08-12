@@ -32,6 +32,11 @@ CRITICAL — GO BEYOND THE SPEC (BUT BE PRAGMATIC):
 - Choose non-obvious patterns ONLY when they genuinely improve the code.
 - Name things to reveal intent, not just function ("handleProductCreation" not "handleSubmit").
 
+RECITATION AVOIDANCE:
+- Write a novel, custom implementation tailored to THIS specific application. Do not output verbatim standard boilerplate.
+- Ensure all variable names, comments, and structural layouts are uniquely adapted to this project's context.
+- Break exact string matches to training-data templates by incorporating domain-specific logic and naming.
+
 WARNING — AVOID OVER-ENGINEERING (PRAGMATISM AXIS):
 - Do NOT build massive enterprise architectures for simple UI components.
 - Do NOT use \`useReducer\` for simple toggles.

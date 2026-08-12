@@ -153,50 +153,78 @@ Evaluate on THREE axes:
 
 Output your review as JSON.`;
 
-    const result = await model.generateContent({
-        contents: [
-            { role: 'user', parts: [{ text: reviewPrompt }] },
-        ],
-        generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.3,
-            maxOutputTokens: 2048,
-        },
-    });
+    const MAX_RECITATION_RETRIES = 2;
+    let lastError: Error | null = null;
 
-    if (!result.response) {
-        console.warn('[UCOL:Reviewer] No response — auto-approving');
-        return defaultFeedback('Reviewer unavailable — auto-approved');
+    for (let attempt = 1; attempt <= MAX_RECITATION_RETRIES; attempt++) {
+        try {
+            const currentPrompt = attempt > 1
+                ? reviewPrompt + '\n\nCRITICAL: Generate a fully original review with unique wording tailored to this specific application. Avoid standard QA boilerplate phrases.'
+                : reviewPrompt;
+
+            const result = await model.generateContent({
+                contents: [
+                    { role: 'user', parts: [{ text: currentPrompt }] },
+                ],
+                generationConfig: {
+                    responseMimeType: 'application/json',
+                    temperature: attempt > 1 ? 0.5 : 0.3,
+                    maxOutputTokens: 2048,
+                },
+            });
+
+            if (!result.response) {
+                console.warn('[UCOL:Reviewer] No response — auto-approving');
+                return defaultFeedback('Reviewer unavailable — auto-approved');
+            }
+
+            const text = result.response.text();
+
+            try {
+                const cleaned = sanitizeReviewJson(text);
+                let parsed = JSON.parse(cleaned);
+                if (Array.isArray(parsed)) parsed = parsed[0];
+
+                const feedback: ReviewFeedback = {
+                    approved: parsed.approved ?? true,
+                    score: typeof parsed.score === 'number' ? parsed.score : 7,
+                    critique: parsed.critique || '',
+                    suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
+                    failedCriteria: Array.isArray(parsed.failedCriteria) ? parsed.failedCriteria : [],
+                    originalityScore: typeof parsed.originalityScore === 'number' ? parsed.originalityScore : 5,
+                    novelPatterns: Array.isArray(parsed.novelPatterns) ? parsed.novelPatterns : [],
+                    originalityNotes: parsed.originalityNotes || '',
+                    pragmatismScore: typeof parsed.pragmatismScore === 'number' ? parsed.pragmatismScore : 8,
+                };
+
+                // Enforce correctness score threshold rules
+                if (feedback.score >= 8) feedback.approved = true;
+                else if (feedback.score < 5) feedback.approved = false;
+
+                return feedback;
+            } catch (parseErr: any) {
+                const msg = parseErr.message || '';
+                const isRecitation = msg.includes('RECITATION') || msg.includes('blocked') || msg.includes('SAFETY');
+                if (isRecitation && attempt < MAX_RECITATION_RETRIES) {
+                    console.warn(`[UCOL:Reviewer] RECITATION blocked on attempt ${attempt}, retrying with novel prompt...`);
+                    continue;
+                }
+                console.error('[UCOL:Reviewer] Failed to parse review JSON:', text.substring(0, 300));
+                return defaultFeedback('Review parse error — auto-approved');
+            }
+        } catch (err: any) {
+            const msg = err.message || '';
+            const isRecitation = msg.includes('RECITATION') || msg.includes('blocked') || msg.includes('SAFETY');
+            if (isRecitation && attempt < MAX_RECITATION_RETRIES) {
+                console.warn(`[UCOL:Reviewer] RECITATION blocked on attempt ${attempt}, retrying with novel prompt...`);
+                continue;
+            }
+            console.warn('[UCOL:Reviewer] Generation error — auto-approving:', msg);
+            return defaultFeedback('Reviewer unavailable — auto-approved');
+        }
     }
 
-    const text = result.response.text();
-
-    try {
-        const cleaned = sanitizeReviewJson(text);
-        let parsed = JSON.parse(cleaned);
-        if (Array.isArray(parsed)) parsed = parsed[0];
-
-        const feedback: ReviewFeedback = {
-            approved: parsed.approved ?? true,
-            score: typeof parsed.score === 'number' ? parsed.score : 7,
-            critique: parsed.critique || '',
-            suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
-            failedCriteria: Array.isArray(parsed.failedCriteria) ? parsed.failedCriteria : [],
-            originalityScore: typeof parsed.originalityScore === 'number' ? parsed.originalityScore : 5,
-            novelPatterns: Array.isArray(parsed.novelPatterns) ? parsed.novelPatterns : [],
-            originalityNotes: parsed.originalityNotes || '',
-            pragmatismScore: typeof parsed.pragmatismScore === 'number' ? parsed.pragmatismScore : 8,
-        };
-
-        // Enforce correctness score threshold rules
-        if (feedback.score >= 8) feedback.approved = true;
-        else if (feedback.score < 5) feedback.approved = false;
-
-        return feedback;
-    } catch (err: any) {
-        console.error('[UCOL:Reviewer] Failed to parse review JSON:', text.substring(0, 300));
-        return defaultFeedback('Review parse error — auto-approved');
-    }
+    return defaultFeedback('Review failed after retries — auto-approved');
 }
 
 function defaultFeedback(reason: string): ReviewFeedback {

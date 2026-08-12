@@ -249,52 +249,83 @@ export class ContextRouter {
                 }
                 : undefined;
 
-            // ── Step 1: Generate code via routed model ──
-            try {
-                if (selectedModel.provider === 'huggingface') {
-                    latestFiles = await this.withTimeout(
-                        generateComponentHuggingFace(selectedModel.modelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                        COMPONENT_TIMEOUT_MS,
-                        component.name
-                    );
-                } else if (selectedModel.provider === 'openrouter') {
-                    latestFiles = await this.withTimeout(
-                        generateComponentOpenRouter(selectedModel.modelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                        COMPONENT_TIMEOUT_MS,
-                        component.name
-                    );
-                } else {
-                    latestFiles = await this.withTimeout(
-                        generateComponentGemini(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                        COMPONENT_TIMEOUT_MS,
-                        component.name
-                    );
-                }
-            } catch (err: any) {
-                const reason = err.message?.substring(0, 120) || 'Unknown error';
-                console.warn(`[UCOL] ${selectedModel.modelId} failed for ${component.name}: ${reason}`);
-                this.modelRouter.recordThrash(component.name);
-                this.emitContextFlow({
-                    id: crypto.randomUUID(),
-                    timestamp: Date.now(),
-                    source: selectedModel.provider,
-                    target: 'ucol',
-                    action: `✗ ${selectedModel.modelId} failed for ${component.name}`,
-                    reasoning: reason,
-                    status: 'error',
-                });
+            // ── Step 1: Generate code with cascading multi-provider fallback ──
+            const primaryProvider = selectedModel.provider;
+            const triedProviders: string[] = [];
+            let generationError: string | undefined;
 
+            const providerSequence = [
+                primaryProvider,
+                ...(this.providerKeys.huggingface && !triedProviders.includes('huggingface') ? ['huggingface'] : []),
+                ...(this.providerKeys.openrouter && !triedProviders.includes('openrouter') ? ['openrouter'] : []),
+                ...(this.providerKeys.anthropic && !triedProviders.includes('anthropic') ? ['anthropic'] : []),
+                ...((this.providerKeys.google || process.env.GOOGLE_API_KEY) && !triedProviders.includes('google') ? ['google'] : []),
+            ];
+
+            for (const provider of providerSequence) {
+                triedProviders.push(provider);
                 try {
-                    latestFiles = await this.withTimeout(
-                        generateComponentGemini(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                        COMPONENT_TIMEOUT_MS,
-                        component.name
-                    );
-                } catch (geminiErr: any) {
-                    const geminiReason = geminiErr.message?.substring(0, 120) || 'Unknown error';
-                    console.warn(`[UCOL] Gemini fallback failed for ${component.name}: ${geminiReason}`);
-                    throw new Error(`Code generation failed: ${reason}; fallback also failed: ${geminiReason}`);
+                    let files: GeneratedFile[] | undefined;
+                    if (provider === 'huggingface') {
+                        files = await this.withTimeout(
+                            generateComponentHuggingFace(selectedModel.modelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
+                            COMPONENT_TIMEOUT_MS,
+                            component.name
+                        );
+                    } else if (provider === 'openrouter') {
+                        files = await this.withTimeout(
+                            generateComponentOpenRouter(selectedModel.modelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
+                            COMPONENT_TIMEOUT_MS,
+                            component.name
+                        );
+                    } else if (provider === 'anthropic') {
+                        files = await this.withTimeout(
+                            generateComponent(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
+                            COMPONENT_TIMEOUT_MS,
+                            component.name
+                        );
+                    } else if (provider === 'google') {
+                        files = await this.withTimeout(
+                            generateComponentGemini(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
+                            COMPONENT_TIMEOUT_MS,
+                            component.name
+                        );
+                    }
+
+                    if (files && files.length > 0) {
+                        latestFiles = files;
+                        if (provider !== primaryProvider) {
+                            this.emitContextFlow({
+                                id: crypto.randomUUID(),
+                                timestamp: Date.now(),
+                                source: provider,
+                                target: 'ucol',
+                                action: `↪ ${provider} fallback succeeded for ${component.name}`,
+                                reasoning: `Primary provider ${primaryProvider} failed`,
+                                status: 'complete',
+                            });
+                        }
+                        break;
+                    }
+                } catch (err: any) {
+                    const reason = err.message?.substring(0, 120) || 'Unknown error';
+                    generationError = reason;
+                    this.modelRouter.recordThrash(component.name);
+                    this.emitContextFlow({
+                        id: crypto.randomUUID(),
+                        timestamp: Date.now(),
+                        source: provider,
+                        target: 'ucol',
+                        action: `✗ ${provider} failed for ${component.name}`,
+                        reasoning: reason,
+                        status: 'error',
+                    });
+                    continue;
                 }
+            }
+
+            if (!latestFiles || latestFiles.length === 0) {
+                throw new Error(`Code generation failed for ${component.name}: all providers exhausted. Last error: ${generationError || 'Unknown'}`);
             }
 
             const currentCode = latestFiles.map(f => f.content).join('\n---\n');
