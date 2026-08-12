@@ -422,7 +422,7 @@ async function runAgentTask(input: {
         'Return the create_blog_pr result exactly, including prUrl and prNumber.',
       ].join('\n');
 
-      const blogAgentContext = {
+      const blogAgentContext: AgentContext = {
         ...agentContext,
         sessionId: `blog-${taskId}`,
         rootSpan: span,
