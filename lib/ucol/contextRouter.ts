@@ -15,6 +15,7 @@ import { generatePlan } from './prompts/geminiPlanner';
 import { generateComponent } from './prompts/claudeCoder';
 import { generateComponentGemini } from './prompts/geminiCoder';
 import { generateComponentOpenRouter } from './prompts/openRouterCoder';
+import { generateComponentHuggingFace } from './prompts/huggingFaceCoder';
 import { reviewCode } from './prompts/geminiReviewer';
 import { ModelRouter } from './modelRouter';
 import type {
