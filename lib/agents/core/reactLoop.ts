@@ -2,6 +2,7 @@ import { VertexAI, GenerativeModel, GenerateContentRequest, Part } from '@google
 import { AgentContext, ToolResult, TrajectoryStep, AgentActionType } from './types';
 import { ToolRegistry } from './registry';
 import { withPromotionGate, NeedsApprovalError } from '@/lib/cli/promotionPrompt';
+import type { QuarantineArtifact } from '@/lib/execution/sandboxManager';
 
 const MAX_LOOPS = 7;
 const CIRCUIT_BREAKER_THRESHOLD = 3;
@@ -16,7 +17,7 @@ export interface ReActResult {
   status: 'success' | 'max_loops' | 'error' | 'halted_for_approval';
   promotionState?: {
     sessionId: string;
-    artifacts: import('@/lib/cli/promotionPrompt').QuarantineArtifact[];
+    artifacts: QuarantineArtifact[];
     rejectionCount: number;
     circuitBreakerTripped: boolean;
   };
