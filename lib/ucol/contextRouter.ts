@@ -43,7 +43,7 @@ const SIMILARITY_THRESHOLD = 0.95;
 const ORIGINALITY_THRESHOLD = 4;
 const PRAGMATISM_THRESHOLD = 5;
 const COMPONENT_TIMEOUT_MS = 25_000;
-const PROVIDER_TIMEOUT_MS = 12_000;
+const PROVIDER_TIMEOUT_MS = 15_000;
 
 const CREATIVITY_CONSTRAINTS = [
     'Extract at least one reusable custom hook that encapsulates the core logic of this component',
@@ -252,19 +252,20 @@ export class ContextRouter {
 
             // ── Step 1: Generate code with cascading multi-provider fallback ──
             const primaryProvider = selectedModel.provider;
-            const triedProviders: string[] = [];
+            const attemptedProviders: string[] = [];
+            const providerErrors: string[] = [];
             let generationError: string | undefined;
 
             const providerSequence = [
                 primaryProvider,
-                ...(this.providerKeys.huggingface && !triedProviders.includes('huggingface') ? ['huggingface'] : []),
-                ...(this.providerKeys.openrouter && !triedProviders.includes('openrouter') ? ['openrouter'] : []),
-                ...(this.providerKeys.anthropic && !triedProviders.includes('anthropic') ? ['anthropic'] : []),
-                ...((this.providerKeys.google || process.env.GOOGLE_API_KEY) && !triedProviders.includes('google') ? ['google'] : []),
+                ...(this.providerKeys.huggingface && !attemptedProviders.includes('huggingface') ? ['huggingface'] : []),
+                ...(this.providerKeys.openrouter && !attemptedProviders.includes('openrouter') ? ['openrouter'] : []),
+                ...(this.providerKeys.anthropic && !attemptedProviders.includes('anthropic') ? ['anthropic'] : []),
+                ...((this.providerKeys.google || process.env.GOOGLE_API_KEY) && !attemptedProviders.includes('google') ? ['google'] : []),
             ];
 
             for (const provider of providerSequence) {
-                triedProviders.push(provider);
+                attemptedProviders.push(provider);
                 try {
                     let files: GeneratedFile[] | undefined;
                     if (provider === 'huggingface') {
@@ -311,6 +312,7 @@ export class ContextRouter {
                 } catch (err: any) {
                     const reason = err.message?.substring(0, 120) || 'Unknown error';
                     generationError = reason;
+                    providerErrors.push(`[${provider}]: ${reason}`);
                     this.modelRouter.recordThrash(component.name);
                     this.emitContextFlow({
                         id: crypto.randomUUID(),
@@ -326,7 +328,13 @@ export class ContextRouter {
             }
 
             if (!latestFiles || latestFiles.length === 0) {
-                throw new Error(`Code generation failed for ${component.name}: providers exhausted after trying [${triedProviders.join(', ')}]. Last error: ${generationError || 'Unknown'}`);
+                const sequence = attemptedProviders.join(' -> ');
+                const errors = providerErrors.join('\n');
+                throw new Error(
+                    `Code generation failed for ${component.name}.\n` +
+                    `Exhausted provider sequence: ${sequence}.\n` +
+                    `Errors encountered:\n${errors}`
+                );
             }
 
             const currentCode = latestFiles.map(f => f.content).join('\n---\n');
