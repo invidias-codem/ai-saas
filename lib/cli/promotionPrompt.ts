@@ -135,9 +135,7 @@ export async function withPromotionGate<T>(
 
   if (options.nonInteractive) {
     const err = new NeedsApprovalError(sessionId, artifacts, rejectionCounter.count, rejectionCounter.tripped);
-    return onDecision('reject', artifacts).catch(() => {
-      throw err;
-    });
+    throw err;
   }
 
   const decision = await promptForPromotion(

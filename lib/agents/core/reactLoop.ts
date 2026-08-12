@@ -204,6 +204,26 @@ export async function runReActLoop(
           const pending = await context.promotionManager.getPendingArtifacts(sessionId);
 
           if (pending.length > 0) {
+            if (context.operatorApprovalMode === 'non-interactive') {
+              const result: ReActResult = {
+                answer: 'NeedsApproval: pending quarantine artifacts require operator approval.',
+                trajectory,
+                status: 'halted_for_approval',
+                promotionState: {
+                  sessionId,
+                  artifacts: pending.map((a) => ({
+                    sessionId: a.sessionId,
+                    relativePath: a.relativePath,
+                    digest: a.digest,
+                    absPath: a.absPath,
+                  })),
+                  rejectionCount: context.promotionRejectionCount || 0,
+                  circuitBreakerTripped: false,
+                },
+              };
+              return result;
+            }
+
             const gateResult = await withPromotionGate(
               sessionId,
               context.promotionManager,

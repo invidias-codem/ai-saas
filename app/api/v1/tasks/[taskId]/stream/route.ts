@@ -55,14 +55,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ task
             if (seenStatus !== task.status || seenUpdatedAt !== task.updated_at) {
               seenStatus = task.status;
               seenUpdatedAt = task.updated_at;
-              send('task.update', {
+              const payload: any = {
                 id: task.id,
                 status: task.status,
                 result: task.result,
                 error: task.error,
                 updated_at: task.updated_at,
                 completed_at: task.completed_at,
-              });
+              };
+
+              if (task.status === 'pending_approval' && task.result) {
+                try {
+                  payload.promotionState = JSON.parse(task.result);
+                } catch {
+                  payload.promotionState = null;
+                }
+              }
+
+              send('task.update', payload);
             }
           }
 
