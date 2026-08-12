@@ -219,7 +219,8 @@ export async function POST(req: NextRequest) {
         void refundCredits(userId, cost, 'Refund for failed preview session creation');
       }
       console.error('[Preview:Render] Insert failed:', error, { userId, cost, spendResult, codeLength: code.length, language });
-      return NextResponse.json({ error: 'Failed to create preview session', details: error?.message || 'unknown' }, { status: 500 });
+      const details = error?.details || error?.message || error?.code || JSON.stringify(error);
+      return NextResponse.json({ error: 'Failed to create preview session', details }, { status: 500 });
     }
 
     const previewUrl = `/api/preview/render?id=${data.id}`;
