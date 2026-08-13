@@ -88,6 +88,42 @@ export class ContextRouter {
         }
     }
 
+    private resolveModelIdForProvider(model: { provider: string; modelId: string; tier?: string; strengths?: string[]; contextLimit?: number; maxTokens?: number }): string {
+        const candidate = (model.modelId || '').toLowerCase();
+
+        const map: Record<string, string> = {
+            huggingface: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+            openrouter: 'qwen/qwen3-coder-480b-a35b',
+            anthropic: 'claude-sonnet-4-20250514',
+            google: 'gemini-2.5-pro',
+            together: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+            replicate: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
+            openai: 'gpt-4o',
+            nous: 'nousresearch/gpt-oss-120b',
+        };
+
+        const isAlreadyProviderCorrect =
+            (model.provider === 'openrouter' && candidate.includes('/')) ||
+            (model.provider === 'huggingface' && candidate.includes('/')) ||
+            (model.provider === 'anthropic' && candidate.startsWith('claude-')) ||
+            (model.provider === 'google' && candidate.startsWith('gemini-'));
+
+        if (isAlreadyProviderCorrect) {
+            return model.modelId;
+        }
+
+        const fallback = map[model.provider];
+        if (!fallback) {
+            return model.modelId;
+        }
+
+        if (model.provider === 'anthropic') {
+            return 'claude-sonnet-4-20250514';
+        }
+
+        return fallback;
+    }
+
     async planProject(prompt: string, session: BuildSession): Promise<ProjectPlan> {
         this.emitContextFlow({
             id: crypto.randomUUID(),
@@ -203,6 +239,7 @@ export class ContextRouter {
 
         const routerDecision = this.modelRouter.decide(component, plan, session, promptText);
         const selectedModel = routerDecision.primaryModel;
+        const modelIdForProvider = this.resolveModelIdForProvider(selectedModel);
 
         while (attempt < MAX_REVIEW_ATTEMPTS) {
             attempt++;
@@ -213,7 +250,7 @@ export class ContextRouter {
                 source: 'ucol',
                 target: selectedModel.provider,
                 action: attempt === 1
-                    ? `Generating ${component.name} on ${selectedModel.modelId}`
+                    ? `Generating ${component.name} on ${modelIdForProvider}`
                     : activeConstraint
                         ? `🎯 Revising ${component.name} with constraint (attempt ${attempt})`
                         : `Revising ${component.name} (attempt ${attempt})`,
@@ -262,21 +299,29 @@ export class ContextRouter {
                 ...(primaryProvider !== 'openrouter' && (this.providerKeys.openrouter || process.env.OPENROUTER_API_KEY) ? ['openrouter'] : []),
                 ...(primaryProvider !== 'anthropic' && (this.providerKeys.anthropic || process.env.ANTHROPIC_API_KEY) ? ['anthropic'] : []),
                 ...(primaryProvider !== 'google' && (this.providerKeys.google || process.env.GOOGLE_API_KEY) ? ['google'] : []),
-            ];
+            ].filter((v, i, arr) => arr.indexOf(v) === i);
 
             for (const provider of providerSequence) {
                 attemptedProviders.push(provider);
                 try {
                     let files: GeneratedFile[] | undefined;
+                    const providerModelId = this.resolveModelIdForProvider({
+                      provider,
+                      modelId: modelIdForProvider,
+                      tier: selectedModel.tier,
+                      strengths: selectedModel.strengths,
+                      contextLimit: selectedModel.contextLimit,
+                      maxTokens: selectedModel.maxTokens,
+                    } as any);
                     if (provider === 'huggingface') {
                         files = await this.withTimeout(
-                            generateComponentHuggingFace(selectedModel.modelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
+                            generateComponentHuggingFace(providerModelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
                             PROVIDER_TIMEOUT_MS,
                             component.name
                         );
                     } else if (provider === 'openrouter') {
                         files = await this.withTimeout(
-                            generateComponentOpenRouter(selectedModel.modelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
+                            generateComponentOpenRouter(providerModelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
                             PROVIDER_TIMEOUT_MS,
                             component.name
                         );
