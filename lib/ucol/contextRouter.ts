@@ -258,10 +258,10 @@ export class ContextRouter {
 
             const providerSequence = [
                 primaryProvider,
-                ...(this.providerKeys.huggingface || process.env.HUGGINGFACE_API_KEY ? ['huggingface'] : []),
-                ...(this.providerKeys.openrouter || process.env.OPENROUTER_API_KEY ? ['openrouter'] : []),
-                ...(this.providerKeys.anthropic || process.env.ANTHROPIC_API_KEY ? ['anthropic'] : []),
-                ...(this.providerKeys.google || process.env.GOOGLE_API_KEY ? ['google'] : []),
+                ...(primaryProvider !== 'huggingface' && (this.providerKeys.huggingface || process.env.HUGGINGFACE_API_KEY) ? ['huggingface'] : []),
+                ...(primaryProvider !== 'openrouter' && (this.providerKeys.openrouter || process.env.OPENROUTER_API_KEY) ? ['openrouter'] : []),
+                ...(primaryProvider !== 'anthropic' && (this.providerKeys.anthropic || process.env.ANTHROPIC_API_KEY) ? ['anthropic'] : []),
+                ...(primaryProvider !== 'google' && (this.providerKeys.google || process.env.GOOGLE_API_KEY) ? ['google'] : []),
             ];
 
             for (const provider of providerSequence) {
