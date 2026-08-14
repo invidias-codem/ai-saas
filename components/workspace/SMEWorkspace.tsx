@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { Shield, Database, Terminal, CheckCircle2, Loader2, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { useConversationStream, ConversationMessage } from '@/hooks/useConversationStream';
 
 interface SMEWorkspaceProps {
   consultant: {
@@ -12,9 +13,6 @@ interface SMEWorkspaceProps {
   };
 }
 
-type IngestionStatus = 'processing' | 'complete' | 'error';
-
-// Mock proprietary base pipelines — replace with real fetch from the workspace API
 const PROPRIETARY_BASE = [
   'Global Textile Sourcing',
   'Hardware & Zippers',
@@ -23,17 +21,66 @@ const PROPRIETARY_BASE = [
 
 export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [ingestionStatus, setIngestionStatus] = useState<IngestionStatus>('processing');
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // TODO: Wire ingestionStatus to workspace API polling/SSE
-  // (see app/api/conversation/route.ts for the SSE entrypoint)
+  const {
+    messages,
+    sendMessage,
+    isProcessing,
+    ingestionStatus,
+    activeSources,
+  } = useConversationStream({
+    consultantId: consultant.id,
+    onIngestionStatusChange: (status) => {
+      // TODO: Replace with real workspace API polling/SSE
+      // (see app/api/conversation/route.ts for the SSE entrypoint)
+    },
+  });
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
+
+  const handleSend = async () => {
+    const text = message.trim();
+    if (!text || isProcessing) return;
+    setMessage('');
+    await sendMessage(text);
+    // Scroll after React flushes the new messages
+    setTimeout(scrollToBottom, 0);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const renderMessage = (msg: ConversationMessage) => {
+    const isUser = msg.role === 'user';
+    return (
+      <div key={msg.id} className={`flex gap-4 max-w-4xl mx-auto w-full ${isUser ? 'flex-row-reverse' : ''}`}>
+        <div
+          className={`w-8 h-8 rounded-full border flex items-center justify-center shrink-0 ${
+            isUser
+              ? 'bg-zinc-800 border-zinc-700'
+              : 'bg-zinc-900 border-zinc-800'
+          }`}
+        >
+          <Terminal className={`w-4 h-4 ${isUser ? 'text-zinc-300' : 'text-white'}`} />
+        </div>
+        <div className={`flex-1 space-y-2 pt-1 ${isUser ? 'text-right' : ''}`}>
+          <p className={`text-sm leading-relaxed ${isUser ? 'text-zinc-200' : 'text-zinc-300'}`}>
+            {msg.content}
+            {msg.isStreaming && <span className="inline-block w-1.5 h-4 ml-1 align-middle bg-emerald-500 animate-pulse" />}
+          </p>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-screen w-full bg-[#050505] text-zinc-300 font-sans overflow-hidden">
@@ -41,7 +88,7 @@ export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
       {/* Main Interaction Surface */}
       <div className="flex-1 flex flex-col relative min-w-0">
 
-        {/* The Identity Header */}
+        {/* Identity Header */}
         <header className="h-16 border-b border-zinc-900/80 bg-[#0a0a0a] flex items-center justify-between px-6 shrink-0">
           <div className="flex items-center gap-4">
             <div className="flex flex-col">
@@ -73,23 +120,29 @@ export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
         {/* Chat / Execution Feed */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
           {/* Initial Greeting */}
-          <div className="flex gap-4 max-w-4xl mx-auto w-full">
-            <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-              <Terminal className="w-4 h-4 text-white" />
+          {messages.length === 0 && (
+            <div className="flex gap-4 max-w-4xl mx-auto w-full">
+              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
+                <Terminal className="w-4 h-4 text-white" />
+              </div>
+              <div className="flex-1 space-y-2 pt-1">
+                <p className="text-sm text-zinc-300 leading-relaxed">
+                  Initialization complete.
+                  <br />
+                  I have loaded the proprietary data pipelines for{' '}
+                  <span className="text-white font-medium">technical apparel manufacturing</span> and{' '}
+                  <span className="text-white font-medium">high-density print specifications</span>.
+                </p>
+                <p className="text-sm text-zinc-400 leading-relaxed">
+                  I am currently processing the custom tech packs and loopwheel cotton specs you provided. While that completes, how would you like to structure the initial dimensional puff-print graphics?
+                </p>
+              </div>
             </div>
-            <div className="flex-1 space-y-2 pt-1">
-              <p className="text-sm text-zinc-300 leading-relaxed">
-                Initialization complete.
-                <br />
-                I have loaded the proprietary data pipelines for{' '}
-                <span className="text-white font-medium">technical apparel manufacturing</span> and{' '}
-                <span className="text-white font-medium">high-density print specifications</span>.
-              </p>
-              <p className="text-sm text-zinc-400 leading-relaxed">
-                I am currently processing the custom tech packs and loopwheel cotton specs you provided. While that completes, how would you like to structure the initial dimensional puff-print graphics?
-              </p>
-            </div>
-          </div>
+          )}
+
+          {/* Message Feed */}
+          {messages.map(renderMessage)}
+
           <div ref={messagesEndRef} />
         </div>
 
@@ -100,18 +153,15 @@ export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
               ref={inputRef}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  // TODO: wire to /api/conversation SSE stream
-                }
-              }}
+              onKeyDown={handleKeyDown}
               placeholder="Define your parameters..."
+              rows={1}
               className="w-full bg-[#0a0a0a] border border-zinc-800 rounded-xl py-4 pl-4 pr-12 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600 resize-none h-14 transition-colors"
             />
             <button
+              onClick={handleSend}
+              disabled={!message.trim() || isProcessing}
               className="absolute right-3 top-3.5 p-1.5 bg-white text-black rounded-lg hover:bg-zinc-200 transition-colors disabled:opacity-40"
-              disabled={!message.trim()}
             >
               <Terminal className="w-4 h-4" />
             </button>
@@ -124,11 +174,10 @@ export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
         <aside className="w-80 border-l border-zinc-900/80 bg-[#0a0a0a] shrink-0 flex flex-col overflow-hidden">
           <div className="p-4 border-b border-zinc-900/80 shrink-0">
             <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-500 mb-1">Knowledge Substrate</h2>
-            <p className="text-xs text-zinc-400">Active data pipelines &amp; context</p>
+            <p className="text-xs text-zinc-400">Active data pipelines & context</p>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
-
             {/* Core Forgery Pipelines */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold text-white uppercase tracking-wider">Proprietary Base</h3>
@@ -178,12 +227,27 @@ export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
                 </div>
               </div>
 
-              {/* Placeholder for additional injected sources */}
+              {/* Additional injected sources */}
+              {activeSources.length > 0 && (
+                <div className="space-y-2">
+                  {activeSources.map((source: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 p-2 rounded-lg bg-zinc-900/50 border border-zinc-800/50"
+                    >
+                      <Database className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                      <span className="text-xs text-zinc-300 truncate">
+                        {typeof source === 'string' ? source : source?.title || `Source ${idx + 1}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="text-xs text-zinc-600 italic">
-                +{0} more injected sources
+                +{activeSources.length} more injected sources
               </div>
             </div>
-
           </div>
         </aside>
       )}
