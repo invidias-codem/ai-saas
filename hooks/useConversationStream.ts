@@ -29,6 +29,7 @@ interface UseConversationStreamReturn {
   isProcessing: boolean;
   ingestionStatus: 'processing' | 'complete' | 'error';
   activeSources: unknown[];
+  trajectory: unknown[];
   sendMessage: (text: string) => Promise<void>;
   reset: () => void;
 }
@@ -44,6 +45,7 @@ export function useConversationStream({
   const [isProcessing, setIsProcessing] = useState(false);
   const [ingestionStatus, setIngestionStatus] = useState<'processing' | 'complete' | 'error'>('processing');
   const [activeSources, setActiveSources] = useState<unknown[]>([]);
+  const [trajectory, setTrajectory] = useState<unknown[]>([]);
 
   const abortRef = useRef<AbortController | null>(null);
   const streamingIdRef = useRef(0);
@@ -56,8 +58,9 @@ export function useConversationStream({
       reader: ReadableStreamDefaultReader<Uint8Array>,
       decoder: TextDecoder,
       assistantMsgId: string,
-    ) => {
+    ): Promise<{ trajectory: unknown[] }> => {
       let buffer = '';
+      let trajectory: unknown[] = [];
 
       while (true) {
         const { value, done: doneReading } = await reader.read();
@@ -77,8 +80,11 @@ export function useConversationStream({
           // Attempt to intercept the final JSON payload
           if (trimmed.startsWith('{') && trimmed.includes('"status"')) {
             try {
-              const payload = JSON.parse(trimmed) as { answer?: string };
+              const payload = JSON.parse(trimmed) as { answer?: string; trajectory?: unknown[] };
               if (payload.answer !== undefined) {
+                if (Array.isArray(payload.trajectory)) {
+                  trajectory = payload.trajectory;
+                }
                 setMessages((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMsgId
@@ -107,8 +113,11 @@ export function useConversationStream({
       // Flush any remaining data in the buffer after the stream closes
       if (buffer.trim()) {
         try {
-          const payload = JSON.parse(buffer.trim()) as { answer?: string };
+          const payload = JSON.parse(buffer.trim()) as { answer?: string; trajectory?: unknown[] };
           if (payload.answer !== undefined) {
+            if (Array.isArray(payload.trajectory)) {
+              trajectory = payload.trajectory;
+            }
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === assistantMsgId
@@ -135,6 +144,8 @@ export function useConversationStream({
           );
         }
       }
+
+      return { trajectory };
     },
     [],
   );
@@ -208,9 +219,14 @@ export function useConversationStream({
         }
 
         const decoder = new TextDecoder('utf-8');
-        await readStream(reader, decoder, assistantMsgId);
+        const { trajectory: streamTrajectory } = await readStream(reader, decoder, assistantMsgId);
 
         if (!isLatest()) return;
+
+        // Capture trajectory for the "View Reasoning" toggle
+        if (streamTrajectory.length > 0) {
+          setTrajectory(streamTrajectory);
+        }
       } catch (error) {
         if (!isLatest()) return;
         console.error('Stream failure:', error);
@@ -242,6 +258,7 @@ export function useConversationStream({
     setIsProcessing(false);
     setIngestionStatus('processing');
     setActiveSources([]);
+    setTrajectory([]);
     onIngestionStatusChange?.('processing');
   }, [onIngestionStatusChange]);
 
@@ -256,5 +273,5 @@ export function useConversationStream({
     };
   }, []);
 
-  return { messages, sendMessage, isProcessing, ingestionStatus, activeSources, reset };
+  return { messages, sendMessage, isProcessing, ingestionStatus, activeSources, trajectory, reset };
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import { Shield, Database, Terminal, CheckCircle2, Loader2, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Shield, Database, Terminal, CheckCircle2, Loader2, PanelRightClose, PanelRightOpen, Activity } from 'lucide-react';
 import { useConversationStream, ConversationMessage } from '@/hooks/useConversationStream';
 
 interface SMEWorkspaceProps {
@@ -22,6 +22,7 @@ const PROPRIETARY_BASE = [
 export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [message, setMessage] = useState('');
+  const [showTrajectory, setShowTrajectory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -31,6 +32,7 @@ export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
     isProcessing,
     ingestionStatus,
     activeSources,
+    trajectory,
   } = useConversationStream({
     consultantId: consultant.id,
     onIngestionStatusChange: (status) => {
@@ -46,6 +48,7 @@ export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
   const handleSend = async () => {
     const text = message.trim();
     if (!text || isProcessing) return;
+    setShowTrajectory(false);
     setMessage('');
     await sendMessage(text);
     // Scroll after React flushes the new messages
@@ -143,6 +146,26 @@ export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
           {/* Message Feed */}
           {messages.map(renderMessage)}
 
+          {/* Reasoning / Trajectory Toggle Panel */}
+          {showTrajectory && trajectory.length > 0 && (
+            <div className="max-w-4xl mx-auto w-full rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Activity className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                  Agent Trajectory ({trajectory.length} steps)
+                </span>
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
+                {trajectory.map((step: any, idx: number) => (
+                  <div key={idx} className="text-xs text-zinc-400 border-l border-zinc-800 pl-3 py-1">
+                    <span className="text-zinc-500 font-mono mr-2">{String(idx + 1).padStart(2, '0')}</span>
+                    {typeof step === 'string' ? step : JSON.stringify(step)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 
@@ -161,10 +184,18 @@ export const SMEWorkspace: React.FC<SMEWorkspaceProps> = ({ consultant }) => {
             <button
               onClick={handleSend}
               disabled={!message.trim() || isProcessing}
-              className="absolute right-3 top-3.5 p-1.5 bg-white text-black rounded-lg hover:bg-zinc-200 transition-colors disabled:opacity-40"
+              className="p-1.5 bg-white text-black rounded-lg hover:bg-zinc-200 transition-colors disabled:opacity-40"
             >
               <Terminal className="w-4 h-4" />
             </button>
+            {trajectory.length > 0 && (
+              <button
+                onClick={() => setShowTrajectory((v) => !v)}
+                className="absolute right-14 top-3.5 px-2 py-1.5 text-[10px] font-mono uppercase tracking-wider border rounded-lg transition-colors text-zinc-400 border-zinc-700 hover:border-zinc-500 hover:text-zinc-200"
+              >
+                {showTrajectory ? 'Hide Reasoning' : 'View Reasoning'}
+              </button>
+            )}
           </div>
         </div>
       </div>
