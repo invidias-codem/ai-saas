@@ -80,21 +80,32 @@ export async function generatePlan(contextPackage: ContextPackage, providerKeys:
         if (anthropicApiKey) {
             const anthropic = new Anthropic({ apiKey: anthropicApiKey });
             const response = await anthropic.messages.create({
-                model: 'claude-sonnet-4-20250514',
+                model: 'claude-sonnet-4-5',
                 max_tokens: 8192,
                 temperature: 0.7,
                 system: PLANNER_SYSTEM_PROMPT,
                 messages: [{ role: 'user', content: userPrompt }],
             }).catch(async (anthropicError: any) => {
-                // Claude Sonnet 4 may 404 on accounts without access; fall back to
-                // the stable 3.5 snapshot so planning still succeeds.
+                // Fall back through available snapshots if the primary ID 404s
+                // (account access / model availability differs per key).
                 if (anthropicError?.status === 404) {
                     return await anthropic.messages.create({
-                        model: 'claude-3-5-sonnet-20241022',
+                        model: 'claude-sonnet-4-20250514',
                         max_tokens: 8192,
                         temperature: 0.7,
                         system: PLANNER_SYSTEM_PROMPT,
                         messages: [{ role: 'user', content: userPrompt }],
+                    }).catch(async (second404: any) => {
+                        if (second404?.status === 404) {
+                            return await anthropic.messages.create({
+                                model: 'claude-haiku-4-5',
+                                max_tokens: 8192,
+                                temperature: 0.7,
+                                system: PLANNER_SYSTEM_PROMPT,
+                                messages: [{ role: 'user', content: userPrompt }],
+                            });
+                        }
+                        throw second404;
                     });
                 }
                 throw anthropicError;

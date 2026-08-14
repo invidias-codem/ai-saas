@@ -174,7 +174,7 @@ ${discoveredPatterns.map((p, i) => `${i + 1}. **${p.component}** — ${p.pattern
     }
 
     const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         max_tokens: 4096, // 8192 → 4096: components rarely need more; cuts latency ~40%
         system: systemPrompt,
         messages: [
@@ -185,11 +185,11 @@ ${discoveredPatterns.map((p, i) => `${i + 1}. **${p.component}** — ${p.pattern
             status: err.status,
             error: err.error,
             message: err.message,
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-5',
         });
         if (err.status === 404) {
             return await anthropic.messages.create({
-                model: 'claude-3-5-sonnet-20241022',
+                model: 'claude-haiku-4-5',
                 max_tokens: 4096,
                 system: systemPrompt,
                 messages: [{ role: 'user', content: userPrompt }],

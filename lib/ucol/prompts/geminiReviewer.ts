@@ -169,7 +169,9 @@ Output your review as JSON.`;
                 generationConfig: {
                     responseMimeType: 'application/json',
                     temperature: attempt > 1 ? 0.5 : 0.3,
-                    maxOutputTokens: 2048,
+                    // gemini-2.5-flash thinking tokens count against this budget;
+                    // 2048 truncated every review mid-string. Raise + salvage.
+                    maxOutputTokens: 8192,
                 },
             });
 
@@ -246,5 +248,47 @@ function sanitizeReviewJson(text: string): string {
     const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
     if (fenceMatch) cleaned = fenceMatch[1].trim();
     cleaned = cleaned.replace(/\\\n/g, '\n').replace(/[ \t]+\\$/gm, '');
-    return cleaned.trim();
+    cleaned = cleaned.trim();
+
+    // If it parses as-is, done.
+    try { JSON.parse(cleaned); return cleaned; } catch {}
+
+    // Otherwise: likely truncated mid-output (token limit). Trim any dangling
+    // partial value and close open strings/brackets so the review still parses.
+    const start = cleaned.indexOf('{');
+    if (start === -1) return cleaned;
+    let inString = false, escaped = false;
+    let lastGood = -1;
+    for (let i = start; i < cleaned.length; i++) {
+        const ch = cleaned[i];
+        if (inString) {
+            if (escaped) { escaped = false; continue; }
+            if (ch === '\\') { escaped = true; continue; }
+            if (ch === '"') { inString = false; lastGood = i + 1; }
+            continue;
+        }
+        if (ch === '"') { inString = true; continue; }
+        if (ch === '}' || ch === ']') lastGood = i + 1;
+        else if (/[0-9a-zA-Z.]/.test(ch)) lastGood = i + 1;
+    }
+    if (lastGood > start) {
+        let candidate = cleaned.slice(start, lastGood)
+            .replace(/,\s*$/, '')
+            .replace(/,?\s*"[^"]*"\s*:\s*$/, '')
+            .replace(/([{,])\s*"[^"]*"\s*$/, '$1')
+            .replace(/,\s*$/, '');
+        const stack: string[] = [];
+        let s = false, e = false;
+        for (const ch of candidate) {
+            if (s) { if (e) { e = false; continue; } if (ch === '\\') { e = true; continue; } if (ch === '"') s = false; continue; }
+            if (ch === '"') { s = true; continue; }
+            if (ch === '{') stack.push('}');
+            else if (ch === '[') stack.push(']');
+            else if (ch === '}' || ch === ']') stack.pop();
+        }
+        if (s) candidate += '"';
+        while (stack.length) candidate += stack.pop();
+        try { JSON.parse(candidate); return candidate; } catch {}
+    }
+    return cleaned;
 }
