@@ -43,7 +43,35 @@ const SIMILARITY_THRESHOLD = 0.95;
 const ORIGINALITY_THRESHOLD = 4;
 const PRAGMATISM_THRESHOLD = 5;
 const COMPONENT_TIMEOUT_MS = 25_000;
-const PROVIDER_TIMEOUT_MS = 15_000;
+// 480B-class open coders routinely take 30-60s for a full component.
+// 15s was killing legitimately-working generations mid-flight.
+const PROVIDER_TIMEOUT_MS = 90_000;
+
+// Canonical OpenRouter slugs for IDs that arrive in HF/other-provider form.
+// resolveModelIdForProvider previously accepted ANY id containing '/' as
+// "openrouter-correct", which sent HF-style ids (Qwen/Qwen3-Coder-480B-…)
+// straight to OpenRouter → 404. Normalize explicitly instead.
+const OPENROUTER_ID_ALIASES: Record<string, string> = {
+    'qwen/qwen3-coder-480b-a35b': 'qwen/qwen3-coder',        // old invalid slug
+    'qwen/qwen3-coder-480b-a35b-instruct': 'qwen/qwen3-coder',
+    'nousresearch/gpt-oss-120b': 'openai/gpt-oss-120b',       // old invalid slug
+    'moonshotai/kimi-k2.6': 'moonshotai/kimi-k2.6',
+    'moonshotai/kimi-k3': 'moonshotai/kimi-k3',
+    'deepseek-ai/deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
+    'deepseek-ai/deepseek-r1': 'deepseek/deepseek-r1',
+    'thudm/glm-5.2': 'z-ai/glm-5.2',
+};
+
+// OpenRouter slugs we know are valid (kept in sync with modelRouter catalog).
+const OPENROUTER_KNOWN_SLUGS = new Set([
+    'qwen/qwen3-coder',
+    'openai/gpt-oss-120b',
+    'moonshotai/kimi-k2.6',
+    'moonshotai/kimi-k3',
+    'deepseek/deepseek-v4-pro',
+    'deepseek/deepseek-r1',
+    'z-ai/glm-5.2',
+]);
 
 const CREATIVITY_CONSTRAINTS = [
     'Extract at least one reusable custom hook that encapsulates the core logic of this component',
@@ -93,17 +121,25 @@ export class ContextRouter {
 
         const map: Record<string, string> = {
             huggingface: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
-            openrouter: 'qwen/qwen3-coder-480b-a35b',
+            openrouter: 'qwen/qwen3-coder',
             anthropic: 'claude-sonnet-4-20250514',
             google: 'gemini-2.5-pro',
             together: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
             replicate: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
             openai: 'gpt-4o',
-            nous: 'nousresearch/gpt-oss-120b',
+            nous: 'openai/gpt-oss-120b',
         };
 
+        // OpenRouter: normalize via alias table, accept known slugs,
+        // otherwise fall back to the default coder. Never pass through
+        // an unverified id just because it contains '/'.
+        if (model.provider === 'openrouter') {
+            if (OPENROUTER_ID_ALIASES[candidate]) return OPENROUTER_ID_ALIASES[candidate];
+            if (OPENROUTER_KNOWN_SLUGS.has(candidate)) return candidate;
+            return map.openrouter;
+        }
+
         const isAlreadyProviderCorrect =
-            (model.provider === 'openrouter' && candidate.includes('/')) ||
             (model.provider === 'huggingface' && candidate.includes('/')) ||
             (model.provider === 'anthropic' && candidate.startsWith('claude-')) ||
             (model.provider === 'google' && candidate.startsWith('gemini-'));
@@ -295,10 +331,13 @@ export class ContextRouter {
 
             const providerSequence = [
                 primaryProvider,
-                ...(primaryProvider !== 'huggingface' && (this.providerKeys.huggingface || process.env.HUGGINGFACE_API_KEY) ? ['huggingface'] : []),
+                // OpenRouter first: HF inference quota is depleted, so open-model
+                // traffic should land on OpenRouter before anything else.
                 ...(primaryProvider !== 'openrouter' && (this.providerKeys.openrouter || process.env.OPENROUTER_API_KEY) ? ['openrouter'] : []),
                 ...(primaryProvider !== 'anthropic' && (this.providerKeys.anthropic || process.env.ANTHROPIC_API_KEY) ? ['anthropic'] : []),
                 ...(primaryProvider !== 'google' && (this.providerKeys.google || process.env.GOOGLE_API_KEY) ? ['google'] : []),
+                // HF last: kept as emergency fallback only (quota exhausted).
+                ...(primaryProvider !== 'huggingface' && (this.providerKeys.huggingface || process.env.HUGGINGFACE_API_KEY) ? ['huggingface'] : []),
             ].filter((v, i, arr) => arr.indexOf(v) === i);
 
             for (const provider of providerSequence) {

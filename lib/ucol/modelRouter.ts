@@ -51,12 +51,28 @@ export interface RouterDecision {
 
 const MODEL_CATALOG: ModelTarget[] = [
   {
+    provider: 'openrouter',
+    modelId: 'qwen/qwen3-coder',
+    tier: 'L1',
+    contextLimit: 256_000,
+    maxTokens: 8192,
+    strengths: ['react', 'typescript', 'ui-components', 'fullstack', 'repo-scale'],
+  },
+  {
     provider: 'huggingface',
     modelId: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
     tier: 'L1',
     contextLimit: 256_000,
     maxTokens: 8192,
     strengths: ['react', 'typescript', 'ui-components', 'fullstack', 'repo-scale'],
+  },
+  {
+    provider: 'openrouter',
+    modelId: 'openai/gpt-oss-120b',
+    tier: 'L1',
+    contextLimit: 128_000,
+    maxTokens: 8192,
+    strengths: ['algorithmic', 'fast-reasoning', 'async-logic'],
   },
   {
     provider: 'huggingface',
@@ -67,12 +83,28 @@ const MODEL_CATALOG: ModelTarget[] = [
     strengths: ['algorithmic', 'fast-reasoning', 'async-logic'],
   },
   {
+    provider: 'openrouter',
+    modelId: 'moonshotai/kimi-k2.6',
+    tier: 'L2',
+    contextLimit: 128_000,
+    maxTokens: 16384,
+    strengths: ['agentic', 'multi-step', 'tool-use', 'iterative'],
+  },
+  {
     provider: 'huggingface',
     modelId: 'moonshotai/Kimi-K2.6',
     tier: 'L2',
     contextLimit: 128_000,
     maxTokens: 16384,
     strengths: ['agentic', 'multi-step', 'tool-use', 'iterative'],
+  },
+  {
+    provider: 'openrouter',
+    modelId: 'moonshotai/kimi-k3',
+    tier: 'L2',
+    contextLimit: 128_000,
+    maxTokens: 16384,
+    strengths: ['agentic', 'long-horizon', 'tool-use'],
   },
   {
     provider: 'huggingface',
@@ -83,6 +115,14 @@ const MODEL_CATALOG: ModelTarget[] = [
     strengths: ['agentic', 'long-horizon', 'tool-use'],
   },
   {
+    provider: 'openrouter',
+    modelId: 'deepseek/deepseek-v4-pro',
+    tier: 'L3',
+    contextLimit: 128_000,
+    maxTokens: 32768,
+    strengths: ['reasoning', 'systems', 'complex-algorithm', 'rust', 'low-level'],
+  },
+  {
     provider: 'huggingface',
     modelId: 'deepseek-ai/DeepSeek-V4-Pro',
     tier: 'L3',
@@ -91,12 +131,28 @@ const MODEL_CATALOG: ModelTarget[] = [
     strengths: ['reasoning', 'systems', 'complex-algorithm', 'rust', 'low-level'],
   },
   {
+    provider: 'openrouter',
+    modelId: 'deepseek/deepseek-r1',
+    tier: 'L3',
+    contextLimit: 64_000,
+    maxTokens: 32768,
+    strengths: ['reasoning', 'step-by-step', 'math', 'codeforces'],
+  },
+  {
     provider: 'huggingface',
     modelId: 'deepseek-ai/DeepSeek-R1',
     tier: 'L3',
     contextLimit: 64_000,
     maxTokens: 32768,
     strengths: ['reasoning', 'step-by-step', 'math', 'codeforces'],
+  },
+  {
+    provider: 'openrouter',
+    modelId: 'z-ai/glm-5.2',
+    tier: 'L3',
+    contextLimit: 1_000_000,
+    maxTokens: 8192,
+    strengths: ['massive-context', 'repo-scaffold', 'sandbox-architecture', 'logs'],
   },
   {
     provider: 'huggingface',

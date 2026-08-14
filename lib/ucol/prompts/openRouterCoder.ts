@@ -97,6 +97,12 @@ function parseGeneratedFiles(text: string, componentName: string): GeneratedFile
     if (Array.isArray(parsed) && parsed.length === 1 && Array.isArray(parsed[0])) {
       parsed = parsed[0];
     }
+    // Some models wrap the array when response_format json_object is honored:
+    // {"files": [...]} / {"result": [...]} — unwrap the first array value found.
+    if (!Array.isArray(parsed) && parsed && typeof parsed === 'object') {
+      const arrValue = Object.values(parsed).find(v => Array.isArray(v));
+      if (arrValue) parsed = arrValue;
+    }
     const items = Array.isArray(parsed) ? parsed : [parsed];
     return items.map((f: any) => ({
       path: f.path || f.filePath || `${componentName}.tsx`,
@@ -146,32 +152,62 @@ export async function generateComponentOpenRouter(
     throw new Error('OPENROUTER_API_KEY is not configured');
   }
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-      'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://lattice-os.local',
-      'X-Title': 'Lattice OS',
-    },
-    body: JSON.stringify({
-      model: modelId,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.7,
-      max_tokens: 8192,
-    }),
-  });
+  const callOpenRouter = async (model: string, useJsonFormat: boolean) => {
+    return fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL || 'https://lattice-os.local',
+        'X-Title': 'Lattice OS',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        // json_object is not honored by every open-model provider on OpenRouter;
+        // when unsupported we retry without it and rely on tolerant parsing.
+        ...(useJsonFormat ? { response_format: { type: 'json_object' } } : {}),
+        temperature: 0.7,
+        max_tokens: 8192,
+      }),
+    });
+  };
+
+  let response = await callOpenRouter(modelId, true);
+
+  // Retry once without response_format if the provider rejects it (400/404 on format)
+  if (!response.ok && (response.status === 400 || response.status === 404)) {
+    const firstError = await response.text().catch(() => '');
+    if (/response_format|json_object|not supported/i.test(firstError) || response.status === 400) {
+      response = await callOpenRouter(modelId, false);
+    } else if (response.status === 404) {
+      // Model slug not found — fall back to the default coder slug
+      response = await callOpenRouter('qwen/qwen3-coder', true);
+    }
+  }
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => response.statusText);
-    throw new Error(`OpenRouter API Error: ${response.status} - ${errorText}`);
+    if (response.status === 402) {
+      throw new Error('OpenRouter: insufficient credits (402). Top up at openrouter.ai/credits');
+    }
+    if (response.status === 429) {
+      throw new Error('OpenRouter: rate limited (429). Retry shortly or add credits to raise limits.');
+    }
+    throw new Error(`OpenRouter API Error: ${response.status} - ${errorText.substring(0, 300)}`);
   }
 
   const data = await response.json();
+  // OpenRouter surfaces upstream provider failures as 200 + error payload
+  if (data.error) {
+    throw new Error(`OpenRouter upstream error: ${data.error.message || JSON.stringify(data.error).substring(0, 200)}`);
+  }
   const text = data.choices?.[0]?.message?.content || '';
+  if (!text.trim()) {
+    throw new Error(`OpenRouter returned empty content for ${modelId} (finish_reason: ${data.choices?.[0]?.finish_reason || 'unknown'})`);
+  }
   return parseGeneratedFiles(text, component.name);
 }

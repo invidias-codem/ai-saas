@@ -87,6 +87,17 @@ export default clerkMiddleware(async (auth, req) => {
         // injects its internal auth headers. Without this, auth() calls inside
         // route handlers throw "Clerk can't detect usage of clerkMiddleware()".
         if (isPublicRoute(req)) return NextResponse.next();
+
+        // DEV BYPASS (never in production): route handlers implement their own
+        // ?dev_token= check, but Clerk middleware ran first and 401'd the request
+        // before the handler could. Honor the same token here.
+        if (process.env.NODE_ENV !== 'production' && process.env.DEV_BYPASS_TOKEN) {
+            const devToken = req.nextUrl.searchParams.get('dev_token');
+            if (devToken && devToken === process.env.DEV_BYPASS_TOKEN) {
+                return NextResponse.next();
+            }
+        }
+
         const { userId } = await auth();
         if (!userId) {
             return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
