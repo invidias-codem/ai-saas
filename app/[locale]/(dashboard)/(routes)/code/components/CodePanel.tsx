@@ -19,11 +19,13 @@ interface CodePanelProps {
 }
 
 function isFrontendOnly(files: GeneratedFile[]): boolean {
-    // Escalate to backend sandbox when any file indicates server-side intent
+    // Only actual generated source files count toward the frontend/backend
+    // decision — scaffold configs (next.config.js, tailwind, postcss) always
+    // ship with every build and must not force the backend sandbox path.
+    const codeFiles = files.filter(f => f.component !== '_scaffold');
     const backendIndicators = [
         /\/api\//i,
         /\/server\//i,
-        /\/middleware\//i,
         /\/trpc\//i,
         /\/pages\/api\//i,
         /\/app\/api\//i,
@@ -32,12 +34,9 @@ function isFrontendOnly(files: GeneratedFile[]): boolean {
         /\.env/i,
         /prisma/i,
         /drizzle/i,
-        /next\.config/i,
         /express/i,
         /fastify/i,
         /hono/i,
-        /node_modules/i,
-        /native/i,
         /go\.mod/i,
         /Cargo\.toml/i,
         /pyproject\.toml/i,
@@ -46,7 +45,7 @@ function isFrontendOnly(files: GeneratedFile[]): boolean {
         /docker-compose/i,
     ];
 
-    return !files.some((f) => backendIndicators.some((re) => re.test(f.path)));
+    return !codeFiles.some((f) => backendIndicators.some((re) => re.test(f.path)));
 }
 
 function mapLanguage(lang: string): string {
@@ -110,35 +109,16 @@ root.render(React.createElement(App));
             setPreviewMode('fast');
             setPreviewInsufficientCredits(false);
 
-            const primary = files.find(f => ['html','javascript','typescript','react','css'].includes(f.language)) || files[0];
-            const isHtml = primary.language === 'html';
-            const isCss = primary.language === 'css';
-
-            if (isCss) {
-                const html = buildCssPreviewHtml(primary.content);
-                const blob = new Blob([html], { type: 'text/html' });
-                const url = URL.createObjectURL(blob);
-                setPreviewUrl(url);
-                setPreviewOpen(true);
-                return;
-            }
-
-            if (isHtml) {
-                const html = buildHtmlPreviewHtml(primary.content);
-                const blob = new Blob([html], { type: 'text/html' });
-                const url = URL.createObjectURL(blob);
-                setPreviewUrl(url);
-                setPreviewOpen(true);
-                return;
-            }
-
-            const bundledJS = await compile(primary.content);
+            // Bundle the WHOLE generated app into a self-mounting module so
+            // the preview renders the running app, not a single component.
+            const bundledJS = await transpileProject(
+                files.map(f => ({ path: f.path, content: f.content }))
+            );
             if (!bundledJS) {
-                throw new Error(transpilerError || 'Transpilation failed');
+                throw new Error(transpilerError || 'Bundling failed');
             }
 
-            const runnerCode = buildRunnerCode(bundledJS);
-            const html = buildReactPreviewHtml(runnerCode);
+            const html = buildReactPreviewHtml(bundledJS);
             const blob = new Blob([html], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             setPreviewUrl(url);
@@ -158,8 +138,8 @@ root.render(React.createElement(App));
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
-    #root { width: 100%; height: 100%; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #ffffff; }
+    #preview-host, #root { width: 100%; height: 100%; min-height: 100vh; }
   </style>
   <script>
     window.addEventListener('error', function(evt) {
@@ -172,12 +152,13 @@ root.render(React.createElement(App));
   </script>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="preview-host"></div>
   <script type="module">
     try {
       ${moduleCode}
     } catch (err) {
       parent.postMessage({ type: 'preview-error', message: err && err.message ? err.message : String(err) }, '*');
+      document.getElementById('preview-host').textContent = 'Preview error: ' + (err && err.message ? err.message : String(err));
     }
   </script>
 </body>

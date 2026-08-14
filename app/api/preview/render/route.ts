@@ -43,6 +43,7 @@ const HTML_TEMPLATE = (code: string, language: string, sessionId: string) => `<!
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#0a0a0a">
   <title>Lattice OS Preview</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
   <style>
     :root {
       --safe-top: env(safe-area-inset-top, 0px);

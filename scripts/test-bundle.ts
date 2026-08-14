@@ -55,12 +55,16 @@ const projectPlugin: esbuild.Plugin = {
         import { createRoot } from 'react-dom/client';
         import * as __entry from './${entry.replace(/\.(tsx|ts|jsx|js)$/, '')}';
         const App = __entry.default || __entry['${base}'] || Object.values(__entry).find(v => typeof v === 'function');
-        const host = document.getElementById('preview-host') || document.body;
-        const mount = document.createElement('div');
-        mount.id = 'root';
-        host.innerHTML = '';
-        host.appendChild(mount);
-        createRoot(mount).render(React.createElement(App));
+        function mount() {
+          let host = document.getElementById('preview-host');
+          if (!host) { host = document.createElement('div'); host.id='preview-host'; document.body.appendChild(host); }
+          const mount = document.createElement('div');
+          mount.id = 'root';
+          host.innerHTML = '';
+          host.appendChild(mount);
+          createRoot(mount).render(React.createElement(App));
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
       `,
       loader: 'tsx',
       resolveDir: '/',

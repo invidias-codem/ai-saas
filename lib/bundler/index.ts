@@ -158,13 +158,25 @@ export const transpileProject = async (files: VirtualFile[]): Promise<string> =>
 
           const App = __entry.default || __entry['${base}'] || Object.values(__entry).find(v => typeof v === 'function');
 
-          const host = document.getElementById('preview-host') || document.body;
-          const mount = document.createElement('div');
-          mount.id = 'root';
-          mount.style.height = '100%';
-          host.innerHTML = '';
-          host.appendChild(mount);
-          createRoot(mount).render(React.createElement(App));
+          function mount() {
+            let host = document.getElementById('preview-host');
+            if (!host) {
+              host = document.createElement('div');
+              host.id = 'preview-host';
+              document.body.appendChild(host);
+            }
+            const mount = document.createElement('div');
+            mount.id = 'root';
+            mount.style.height = '100%';
+            host.innerHTML = '';
+            host.appendChild(mount);
+            createRoot(mount).render(React.createElement(App));
+          }
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', mount);
+          } else {
+            mount();
+          }
         `,
           loader: 'tsx',
           resolveDir: '/',
