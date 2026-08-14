@@ -3,7 +3,7 @@
 // CodePanel — displays Claude's generated code files with a file tree + code viewer + live preview.
 // Hybrid preview: frontend esbuild-wasm fast-path for UI-only builds, backend quarantine for full-stack.
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { useClipboard } from 'use-clipboard-copy';
@@ -87,15 +87,18 @@ export function CodePanel({ files, loading }: CodePanelProps) {
     const frontendFastPath = isFrontendOnly(files);
 
     function buildRunnerCode(bundledJS: string) {
+        // esbuild outputs an ESM bundle for the automatic JSX runtime.
+        // We keep React on the page so the render call can use createElement.
+        // The bundle already imports react/jsx-runtime internally.
         return `
-            import React from 'https://esm.sh/react@18.2.0';
-            import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+import React from 'https://esm.sh/react@18.2.0';
+import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
 
-            ${bundledJS}
+${bundledJS}
 
-            const root = createRoot(document.getElementById('root'));
-            root.render(React.createElement(App));
-        `;
+const root = createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
+`;
     }
 
     async function openFrontendPreview() {
@@ -107,13 +110,35 @@ export function CodePanel({ files, loading }: CodePanelProps) {
             setPreviewInsufficientCredits(false);
 
             const primary = files.find(f => ['html','javascript','typescript','react','css'].includes(f.language)) || files[0];
+            const isHtml = primary.language === 'html';
+            const isCss = primary.language === 'css';
+
+            if (isCss) {
+                const html = buildCssPreviewHtml(primary.content);
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                setPreviewUrl(url);
+                setPreviewOpen(true);
+                return;
+            }
+
+            if (isHtml) {
+                const html = buildHtmlPreviewHtml(primary.content);
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                setPreviewUrl(url);
+                setPreviewOpen(true);
+                return;
+            }
+
             const bundledJS = await compile(primary.content);
             if (!bundledJS) {
                 throw new Error(transpilerError || 'Transpilation failed');
             }
 
             const runnerCode = buildRunnerCode(bundledJS);
-            const blob = new Blob([runnerCode], { type: 'application/javascript' });
+            const html = buildReactPreviewHtml(runnerCode);
+            const blob = new Blob([html], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             setPreviewUrl(url);
             setPreviewOpen(true);
@@ -122,6 +147,88 @@ export function CodePanel({ files, loading }: CodePanelProps) {
         } finally {
             setCreatingPreview(false);
         }
+    }
+
+    function buildReactPreviewHtml(moduleCode: string) {
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
+    #root { width: 100%; height: 100%; }
+  </style>
+  <script>
+    window.addEventListener('error', function(evt) {
+      parent.postMessage({ type: 'preview-error', message: evt.message, filename: evt.filename, lineno: evt.lineno }, '*');
+    });
+    window.addEventListener('unhandledrejection', function(evt) {
+      var reason = evt.reason && evt.reason.message ? evt.reason.message : String(evt.reason);
+      parent.postMessage({ type: 'preview-error', message: reason }, '*');
+    });
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    try {
+      ${moduleCode}
+    } catch (err) {
+      parent.postMessage({ type: 'preview-error', message: err && err.message ? err.message : String(err) }, '*');
+    }
+  </script>
+</body>
+</html>`;
+    }
+
+    function buildCssPreviewHtml(css: string) {
+        return buildPreviewDocument(`
+            <style>${escapeHtml(css)}</style>
+            <div id="root">Preview</div>
+        `);
+    }
+
+    function buildHtmlPreviewHtml(html: string) {
+        return buildPreviewDocument(`
+            <div id="root">${escapeHtml(html)}</div>
+        `);
+    }
+
+    function buildPreviewDocument(body: string) {
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: transparent; }
+    #root { width: 100%; height: 100%; }
+  </style>
+  <script>
+    window.addEventListener('error', function(evt) {
+      parent.postMessage({ type: 'preview-error', message: evt.message }, '*');
+    });
+    window.addEventListener('unhandledrejection', function(evt) {
+      var reason = evt.reason && evt.reason.message ? evt.reason.message : String(evt.reason);
+      parent.postMessage({ type: 'preview-error', message: reason }, '*');
+    });
+  </script>
+</head>
+<body>
+  ${body}
+</body>
+</html>`;
+    }
+
+    function escapeHtml(value: string) {
+        return value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 
     async function openBackendPreview() {
@@ -166,6 +273,11 @@ export function CodePanel({ files, loading }: CodePanelProps) {
     async function openPreview() {
         if (!hasPreviewable) return;
 
+        // Default the preview frame to the viewer's actual form factor
+        if (typeof window !== 'undefined') {
+            setPreviewDevice(window.innerWidth < 768 ? 'mobile' : 'desktop');
+        }
+
         if (frontendFastPath && isReady) {
             await openFrontendPreview();
         } else if (frontendFastPath && !isReady) {
@@ -182,6 +294,19 @@ export function CodePanel({ files, loading }: CodePanelProps) {
         setPreviewInsufficientCredits(false);
         setPreviewMode(null);
     }
+
+    useEffect(() => {
+        if (!previewOpen) return;
+
+        const handler = (event: MessageEvent) => {
+            if (event.data && event.data.type === 'preview-error') {
+                setPreviewError(event.data.message || 'Preview runtime error');
+            }
+        };
+
+        window.addEventListener('message', handler);
+        return () => window.removeEventListener('message', handler);
+    }, [previewOpen]);
 
     // Build a simple grouped tree
     const groups = new Map<string, GeneratedFile[]>();
@@ -255,9 +380,9 @@ export function CodePanel({ files, loading }: CodePanelProps) {
 
             {/* Body */}
             <div className="flex-1 flex overflow-hidden">
-                {/* File tree sidebar */}
+                {/* File tree sidebar (md+ only — mobile uses chip strip below) */}
                 {files.length > 0 && (
-                    <div className="w-48 shrink-0 border-r border-zinc-800/60 overflow-y-auto bg-zinc-950/40">
+                    <div className="hidden md:block w-48 shrink-0 border-r border-zinc-800/60 overflow-y-auto bg-zinc-950/40">
                         {/* Code files */}
                         {Array.from(groups.entries()).map(([dir, dirFiles]) => (
                             <div key={dir}>
@@ -305,7 +430,26 @@ export function CodePanel({ files, loading }: CodePanelProps) {
                 )}
 
                 {/* Code viewer */}
-                <div className="flex-1 overflow-auto">
+                <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+                    {/* Mobile file chip strip */}
+                    {files.length > 0 && (
+                        <div className="md:hidden flex-none flex gap-1.5 overflow-x-auto px-3 py-2 border-b border-zinc-800/40 bg-zinc-950/40">
+                            {[...codeFiles, ...scaffoldFiles].map(file => (
+                                <button
+                                    key={file.path}
+                                    onClick={() => setActiveFile(file.path)}
+                                    className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-mono border transition-colors ${selectedFile?.path === file.path
+                                        ? 'bg-orange-500/10 text-orange-300 border-orange-500/30'
+                                        : 'text-zinc-500 border-zinc-800/60 hover:text-zinc-300'
+                                        }`}
+                                >
+                                    {file.path.split('/').pop()}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="flex-1 overflow-auto">
                     {loading && files.length === 0 && (
                         <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-500">
                             <Loader2 className="h-8 w-8 animate-spin text-orange-400/50" />
@@ -349,7 +493,7 @@ export function CodePanel({ files, loading }: CodePanelProps) {
                                 customStyle={{
                                     margin: 0,
                                     padding: '1rem',
-                                    fontSize: '0.8rem',
+                                    fontSize: '0.75rem',
                                     lineHeight: '1.5',
                                     background: 'transparent',
                                     minHeight: '100%',
@@ -361,13 +505,14 @@ export function CodePanel({ files, loading }: CodePanelProps) {
                             </SyntaxHighlighter>
                         </div>
                     )}
+                    </div>
                 </div>
             </div>
 
             {previewOpen && previewUrl && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="w-full h-full max-w-[100vw] max-h-[100dvh] bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden flex flex-col">
-                        <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800 bg-zinc-900/60">
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center">
+                    <div className="w-full h-full max-w-[100vw] max-h-[100dvh] bg-zinc-950 border border-zinc-800 sm:rounded-xl overflow-hidden flex flex-col sm:m-4">
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-zinc-900/60">
                             <div className="flex items-center gap-2">
                                 <span className="text-xs font-medium text-zinc-300">Live Preview</span>
                                 <span className="text-[10px] text-zinc-600 font-mono">{previewDevice}</span>
@@ -396,7 +541,7 @@ export function CodePanel({ files, loading }: CodePanelProps) {
                                 </button>
                             </div>
                         </div>
-                        <div className="flex-1 min-h-0 bg-white">
+                        <div className="flex-1 min-h-0 bg-white flex items-start justify-center">
                             <iframe
                                 src={previewUrl}
                                 title="Live Preview"

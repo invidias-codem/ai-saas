@@ -20,6 +20,8 @@ export default function CodeBuilderPage() {
     const [files, setFiles] = useState<GeneratedFile[]>([]);
     const [contextFlow, setContextFlow] = useState<ContextFlowEntry[]>([]);
     const [error, setError] = useState<string | null>(null);
+    // Mobile: single-panel tab view (< md). Desktop keeps side-by-side.
+    const [mobileTab, setMobileTab] = useState<'plan' | 'code'>('plan');
 
     const handleBuild = useCallback(async (prompt: string) => {
         // Reset state
@@ -52,6 +54,8 @@ export default function CodeBuilderPage() {
                 try {
                     const file: GeneratedFile = JSON.parse(e.data);
                     setFiles(prev => [...prev, file]);
+                    // First file: pull mobile users over to the code panel
+                    setMobileTab('code');
                 } catch { }
             });
 
@@ -96,6 +100,7 @@ export default function CodeBuilderPage() {
         setFiles([]);
         setContextFlow([]);
         setError(null);
+        setMobileTab('plan');
     };
 
     return (
@@ -161,11 +166,39 @@ export default function CodeBuilderPage() {
                 </div>
             )}
 
-            {/* Main content: Plan + Code side by side */}
+            {/* Mobile tab switcher (hidden on md+) */}
             {(plan || files.length > 0 || phase === 'planning' || phase === 'coding') && (
-                <div className="flex-1 flex gap-3 p-4 overflow-hidden min-h-0">
-                    <PlanPanel plan={plan} loading={phase === 'planning'} />
-                    <CodePanel files={files} loading={phase === 'coding'} />
+                <div className="md:hidden flex-none flex gap-1 px-4 pt-3">
+                    <button
+                        onClick={() => setMobileTab('plan')}
+                        className={`flex-1 text-[11px] font-medium py-2 rounded-lg border transition-colors ${mobileTab === 'plan'
+                            ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
+                            : 'text-zinc-500 border-zinc-800/60 hover:text-zinc-300'
+                            }`}
+                    >
+                        🧠 Plan{plan ? ` · ${plan.components.length}` : ''}
+                    </button>
+                    <button
+                        onClick={() => setMobileTab('code')}
+                        className={`flex-1 text-[11px] font-medium py-2 rounded-lg border transition-colors ${mobileTab === 'code'
+                            ? 'bg-orange-500/10 text-orange-300 border-orange-500/30'
+                            : 'text-zinc-500 border-zinc-800/60 hover:text-zinc-300'
+                            }`}
+                    >
+                        ⚙️ Code{files.length > 0 ? ` · ${files.length}` : ''}
+                    </button>
+                </div>
+            )}
+
+            {/* Main content: tabs on mobile, Plan + Code side by side on md+ */}
+            {(plan || files.length > 0 || phase === 'planning' || phase === 'coding') && (
+                <div className="flex-1 flex gap-3 p-3 sm:p-4 overflow-hidden min-h-0">
+                    <div className={`${mobileTab === 'plan' ? 'flex' : 'hidden'} md:flex flex-1 min-w-0 min-h-0`}>
+                        <PlanPanel plan={plan} loading={phase === 'planning'} />
+                    </div>
+                    <div className={`${mobileTab === 'code' ? 'flex' : 'hidden'} md:flex flex-1 min-w-0 min-h-0`}>
+                        <CodePanel files={files} loading={phase === 'coding'} />
+                    </div>
                 </div>
             )}
         </div>
