@@ -75,6 +75,14 @@ function buildLocalAdapter(
     async promote(sessionId: string, filePaths: string[]): Promise<void> {
       const dir = sessionDir(sessionId);
 
+      // Resolve the staged digest for each file so we can verify integrity
+      // before the file leaves quarantine. Failure to reconcile means the
+      // live bytes no longer match what was staged — promotion is denied.
+      const pending = new Map<string, QuarantineArtifact>();
+      for (const a of await scanArtifacts(sessionId)) {
+        pending.set(a.relativePath, a);
+      }
+
       for (const relativePath of filePaths) {
         if (relativePath.includes('..')) {
           emitRiskEvent('quarantine_traversal_attempt', { sessionId, relativePath });
@@ -87,6 +95,16 @@ function buildLocalAdapter(
         }
 
         const liveDigest = sha1(sourcePath);
+        const staged = pending.get(relativePath);
+        if (!staged) {
+          throw new Error(`Promotion failed: Artifact ${relativePath} not found in quarantine.`);
+        }
+
+        if (staged.digest !== liveDigest) {
+          emitRiskEvent('promotion_integrity_fail', { sessionId, relativePath, stagedDigest: staged.digest, liveDigest });
+          throw new Error(`Promotion denied: integrity failure on ${relativePath}`);
+        }
+
         if (isDeniedPath(relativePath)) {
           emitRiskEvent('promotion_denied_denylist', { sessionId, relativePath });
           throw new Error(`Promotion denied for denylisted path: ${relativePath}`);

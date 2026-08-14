@@ -15,7 +15,7 @@
 
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
-import { mkdir, rm, readFile, writeFile } from 'fs/promises';
+import { mkdir, rm, readFile, writeFile, readdir, stat } from 'fs/promises';
 import { join, relative } from 'path';
 import { tmpdir } from 'os';
 import { UcolSpan } from '../ucol/observability/span';
@@ -32,6 +32,9 @@ export interface SandboxExecutionRequest {
   traceId?: string;
   metadata?: Record<string, string>;
   allowedNetworkHosts?: string[];
+  /** Optional execution session id used to bind quarantine lifecycle
+   * (stage / promote / reject) when a promotion manager is injected. */
+  sessionId?: string;
 }
 
 export interface SandboxExecutionResult {
@@ -140,6 +143,7 @@ export class LocalSandboxRunner implements SandboxRunner {
     const executionId = randomUUID();
     const timeoutMs = req.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const scratchDir = req.workdir || join(tmpdir(), `lattice-sandbox-${executionId}`);
+    const sessionId = req.sessionId;
 
     const span = new UcolSpan({
       name: `sandbox:${req.language || 'sh'}`,
@@ -157,6 +161,55 @@ export class LocalSandboxRunner implements SandboxRunner {
     let stdoutTruncated = false;
     let stderrTruncated = false;
     const safeEnv = this.buildSandboxEnvironment(req.allowedEnv, req.isolatedEnv, executionId);
+
+    // Lifecycle control: whether to perform the quarantine stage/promote/reject
+    // cycle. Only when a promotion manager is injected AND a session id is
+    // bound does the runner participate in the promotion gate.
+    const lifecyclePresent = !!(this.promotionManagerRef && sessionId);
+    // Capture the injected manager into a local so the nested stage closure
+    // (a plain function, where `this` is not preserved) can reach it.
+    const promotionManager: IPromotionManager | null = this.promotionManagerRef;
+
+    // Track artifacts staged during the execution so we can promote the exact
+    // set on success or reject the session on failure/timeout.
+    let stagedPaths: string[] = [];
+
+    function stageArtifactsFromScratch(): Promise<void> {
+      if (!lifecyclePresent || !promotionManager) return Promise.resolve();
+      return (async () => {
+        // Walk the scratch dir and stage every real artifact except the
+        // runner script itself. Relative paths are relative to the scratch
+        // root so they land in the quarantine session dir on promote.
+        const files: string[] = [];
+        const walk = async (current: string, prefix: string) => {
+          let entries;
+          try {
+            entries = await readdir(current, { withFileTypes: true });
+          } catch {
+            return;
+          }
+          for (const entry of entries) {
+            const full = join(current, entry.name);
+            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+            if (entry.isDirectory()) {
+              await walk(full, rel);
+            } else if (entry.isFile()) {
+              // Exclude the runner script that we wrote into the scratch root.
+              if (entry.name !== fileName) {
+                files.push(rel);
+              }
+            }
+          }
+        };
+        await walk(scratchDir, '');
+        for (const rel of files) {
+          const abs = join(scratchDir, rel);
+          const buf = await readFile(abs);
+          await promotionManager.stageArtifact(sessionId!, rel, buf);
+          stagedPaths.push(rel);
+        }
+      })();
+    }
 
     try {
       await mkdir(scratchDir, { recursive: true, mode: 0o700 });
@@ -222,6 +275,19 @@ export class LocalSandboxRunner implements SandboxRunner {
         metadata: { timedOut, exitCode, truncated },
       });
 
+      // Success path: if a lifecycle is bound and artifacts were staged,
+      // attempt promotion. Note that `promote()` now verifies the staged
+      // SHA-1 digest before moving the file to the live root.
+      if (lifecyclePresent && promotionManager && stagedPaths.length > 0) {
+        try {
+          await promotionManager.promote(sessionId!, stagedPaths);
+        } catch (err) {
+          // Promotion failure is a security event — log it on the span but
+          // do NOT throw, so the execution result still returns cleanly.
+          span.addEvent('promotion:failed', { sessionId: sessionId!, error: String(err) });
+        }
+      }
+
       return {
         executionId,
         exitCode: timedOut ? 124 : exitCode,
@@ -234,6 +300,17 @@ export class LocalSandboxRunner implements SandboxRunner {
       };
     } catch (error: any) {
       span.fail(error, { scratchDir });
+
+      // Failure or timeout: reject the quarantine session so any artifacts
+      // already staged (or staged during the failing stage attempt) are wiped.
+      if (lifecyclePresent && promotionManager && sessionId) {
+        try {
+          await promotionManager.reject(sessionId);
+        } catch (err) {
+          span.addEvent('promotion:rejectFailed', { sessionId: sessionId, error: String(err) });
+        }
+      }
+
       throw error;
     } finally {
       await rm(scratchDir, { recursive: true, force: true }).catch(() => {});
