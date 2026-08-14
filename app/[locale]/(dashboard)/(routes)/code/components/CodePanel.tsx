@@ -11,6 +11,7 @@ import type { GeneratedFile } from '@/lib/ucol/types';
 import { Loader2, FileCode, FolderOpen, Copy, Check, Download, Play, X, Smartphone, Monitor, Maximize2 } from 'lucide-react';
 import { useProModal } from '@/hooks/use-pro-modal';
 import { useTranspiler } from '@/lib/bundler/useTranspiler';
+import { transpileProject } from '@/lib/bundler';
 
 interface CodePanelProps {
     files: GeneratedFile[];
@@ -239,11 +240,24 @@ root.render(React.createElement(App));
             setPreviewMode('backend');
             setPreviewInsufficientCredits(false);
 
-            const primary = files.find(f => ['html','javascript','typescript','react','css'].includes(f.language)) || files[0];
-            const body: any = {
-                code: primary.content,
-                language: primary.language,
-            };
+            // Send the WHOLE app, not one raw file: bundle all generated
+            // sources into a single executable module so the preview renders
+            // the running app instead of a placeholder.
+            let code: string;
+            let language: string;
+            try {
+                code = await transpileProject(
+                    files.map(f => ({ path: f.path, content: f.content }))
+                );
+                language = 'bundle';
+            } catch {
+                // Bundle failed (e.g. entry detection) — fall back to the
+                // primary file so at least something renders.
+                const primary = files.find(f => ['html','javascript','typescript','react','css'].includes(f.language)) || files[0];
+                code = primary.content;
+                language = primary.language;
+            }
+            const body: any = { code, language };
             const res = await fetch('/api/preview/render', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },

@@ -84,6 +84,13 @@ const HTML_TEMPLATE = (code: string, language: string, sessionId: string) => `<!
         const raw = ${JSON.stringify(code)};
         if (lang === 'html') {
           host.innerHTML = raw;
+        } else if (lang === 'bundle') {
+          // Self-mounting ESM bundle produced by the code builder: it ends
+          // by rendering its default-export App into #root via esm.sh React.
+          const runner = document.createElement('script');
+          runner.type = 'module';
+          runner.textContent = raw;
+          document.body.appendChild(runner);
         } else if (lang === 'javascript' || lang === 'typescript') {
           const script = document.createElement('script');
           script.type = 'text/javascript';
@@ -171,7 +178,7 @@ export async function POST(req: NextRequest) {
 
     const body = session.body ?? await req.json().catch(() => ({}));
     const code = typeof body.code === 'string' ? body.code : '';
-    const language = ['html', 'javascript', 'typescript', 'css', 'react', 'sh', 'python'].includes(body.language) ? body.language : 'html';
+    const language = ['html', 'javascript', 'typescript', 'css', 'react', 'sh', 'python', 'bundle'].includes(body.language) ? body.language : 'html';
 
     if (!code) {
       return NextResponse.json({ error: 'code is required' }, { status: 400 });
