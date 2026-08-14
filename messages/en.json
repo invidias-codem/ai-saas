@@ -145,6 +145,56 @@
       "card3Body": "Optimized for ~5µW inference on ARM devices. Event-gated execution means models only run when needed — not always-on polling. Built for low-power, high-reliability environments.",
       "card4Title": "Cryptographic Provenance",
       "card4Body": "Every memory write is signed. Every knowledge graph mutation is traceable. Audit logs prove your AI's reasoning chain for compliance reviews, HIPAA safeguards, and forensic analysis."
+    },
+    "expert": {
+      "badge": "Expert as a Service",
+      "headline1": "Rentable intellect.",
+      "headline2": "Precision execution.",
+      "subhead": "Onboard a curated domain expert. Its knowledge substrate is pre-loaded with your context. The execution environment is quarantined. The reasoning is transparent.",
+      "ctaPrimary": "Consult an Expert",
+      "ctaSecondary": "Inspect the mechanics",
+      "mechanics": {
+        "eyebrow": "The Moat",
+        "title": "Not a wrapper.",
+        "subtitle": "The difference is in the execution layer. Every interaction passes through quarantined inference, isolated context, and verifiable reasoning.",
+        "item1Title": "Sandboxed Execution",
+        "item1Body": "Every mutation is quarantined and integrity-verified before promotion. No side effects. No leakage.",
+        "item2Title": "Refined Data Forgery",
+        "item2Body": "Dynamic RAG isolates context boundaries so the expert reasons strictly from your curated sources.",
+        "item3Title": "Trajectory Transparency",
+        "item3Body": "Observe the raw reasoning stream. Inspect the agent trajectory before accepting the output.",
+        "item4Title": "Precision Execution",
+        "item4Body": "Clinical tool use. No approximation. Rentable intellect for operators who need exact outputs."
+      },
+      "cta": {
+        "title": "Initialize your session.",
+        "subtitle": "Three steps. No sales call. No enterprise contract. Just instant access to a quarantined, trajectory-visible execution environment.",
+        "button": "Consult an Expert",
+        "roster": {
+          "eyebrow": "The Roster",
+          "title": "Specialized intellect, on demand.",
+          "subtitle": "Each expert is a curated execution environment with a proprietary knowledge substrate. Choose the operator for your domain.",
+          "cta": "Open session",
+          "technical-apparel": {
+            "role": "Production Specialist",
+            "title": "Technical Apparel",
+            "description": "Expert in dimensional puff-print graphics, tech pack review, and heavy-weight textile sourcing specifications.",
+            "tags": "Puff Print,Tech Pack,Sourcing"
+          },
+          "systems-architect": {
+            "role": "Systems Architect",
+            "title": "Infrastructure",
+            "description": "Multi-model orchestration, secure serverless RAG deployments, and event-gated execution at scale.",
+            "tags": "RAG,Orchestration,Edge"
+          },
+          "commerce-engineer": {
+            "role": "Commerce Engineer",
+            "title": "Storefront",
+            "description": "Headless Next.js/Shopify architecture, conversion optimization, and premium product storytelling.",
+            "tags": "Next.js,Shopify,Analytics"
+          }
+        }
+      }
     }
   },
   "Sidebar": {
