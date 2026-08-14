@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Check, Brain, Zap, Search, FileText, FolderKanban } from 'lucide-react';
+import { Check, Brain, Zap, Search, FileText, FolderKanban, Link2, StickyNote, X, Plus } from 'lucide-react';
 
 const intents = [
   { key: 'copilot', label: 'Think and chat with AI', icon: Brain },
@@ -33,6 +33,13 @@ const priorities = [
   { key: 'more_control_review', label: 'More control/review' },
 ] as const;
 
+interface PendingSource {
+  kind: 'note' | 'url';
+  title: string;
+  text?: string;
+  url?: string;
+}
+
 export default function OnboardingWizard() {
   const router = useRouter();
   const locale = useLocale();
@@ -44,12 +51,89 @@ export default function OnboardingWizard() {
   const [workspaceDescription, setWorkspaceDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Chameleon: domain intent + seed knowledge sources
+  const [domainIntent, setDomainIntent] = useState('');
+  const [sources, setSources] = useState<PendingSource[]>([]);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [urlDraft, setUrlDraft] = useState('');
+
   const togglePriority = (key: string) => {
     setSelectedPriorities((prev) => {
       if (prev.includes(key)) return prev.filter((item) => item !== key);
       if (prev.length >= 2) return [...prev.slice(1), key];
       return [...prev, key];
     });
+  };
+
+  const addNoteSource = () => {
+    const text = noteDraft.trim();
+    if (!text) return;
+    const title = text.split('\n')[0].slice(0, 60) || 'Note';
+    setSources((prev) => [...prev, { kind: 'note', title, text }]);
+    setNoteDraft('');
+  };
+
+  const addUrlSource = () => {
+    const url = urlDraft.trim();
+    if (!url) return;
+    setSources((prev) => [...prev, { kind: 'url', title: url, url }]);
+    setUrlDraft('');
+  };
+
+  const removeSource = (index: number) => {
+    setSources((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // After the workspace exists, seed its knowledge substrate with the
+  // captured sources so the consultant is born with context. Best-effort:
+  // failures here must not block entering the workspace.
+  const seedSources = async (workspaceId: string) => {
+    const payloads = sources
+      .map((s) => {
+        if (s.kind === 'note' && s.text) {
+          return {
+            source_type: 'note',
+            title: s.title,
+            raw_text: s.text,
+            metadata: { via: 'onboarding' },
+          };
+        }
+        if (s.kind === 'url' && s.url) {
+          return {
+            source_type: 'url',
+            title: s.title,
+            origin_uri: s.url,
+            raw_text: `Source URL captured during onboarding: ${s.url}`,
+            metadata: { via: 'onboarding', needs_scrape: true },
+            cleanse: false,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean);
+
+    // Domain intent itself becomes the first high-signal knowledge chunk so
+    // the persona + retrieval layer immediately know what this consultant is.
+    if (domainIntent.trim()) {
+      payloads.unshift({
+        source_type: 'note',
+        title: 'Consultant domain intent',
+        raw_text: `This consultant's domain and purpose: ${domainIntent.trim()}`,
+        metadata: { via: 'onboarding', kind: 'domain_intent' },
+      } as any);
+    }
+
+    if (payloads.length === 0) return;
+
+    try {
+      await fetch(`/api/workspaces/${workspaceId}/sources/ingest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sources: payloads }),
+      });
+    } catch (e) {
+      console.warn('Source seeding failed (non-fatal):', e);
+    }
   };
 
   const completeOnboarding = async () => {
@@ -68,6 +152,15 @@ export default function OnboardingWizard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to complete onboarding');
+
+      // Seed the knowledge substrate before entering, so Weaver opens with
+      // the consultant's domain + sources already in place.
+      // Fire-and-forget: the workspace enters immediately; ingestion runs
+      // in the background so the final onboarding step never blocks on it.
+      if (data?.workspace?.id) {
+        seedSources(data.workspace.id).catch((e) => console.warn('Source seeding failed (non-fatal):', e));
+      }
+
       router.push(`/${locale}${data.redirectTo}`);
     } catch (error) {
       console.error('Onboarding failed:', error);
@@ -196,17 +289,104 @@ export default function OnboardingWizard() {
 
       {step === 5 && (
         <Card className="p-6 space-y-5">
-          <h2 className="text-xl font-semibold">5. Confirm your setup</h2>
+          <h2 className="text-xl font-semibold">5. Give your consultant its expertise</h2>
+          <p className="text-sm text-muted-foreground">
+            This is what makes it a chameleon. Tell it what domain to master and seed it with
+            your own sources — notes, reference text, or links — so it opens already knowing your world.
+          </p>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">What should this consultant be an expert in?</label>
+            <textarea
+              value={domainIntent}
+              onChange={(e) => setDomainIntent(e.target.value)}
+              placeholder="e.g. Reef aquarium husbandry and local fish store pricing, or B2B SaaS sales strategy for early-stage founders…"
+              className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3 min-h-[80px]"
+            />
+          </div>
+
+          {/* Note source */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <StickyNote className="w-4 h-4 text-violet-500" /> Add a note / reference text
+            </label>
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              placeholder="Paste notes, a NotebookLM export, key facts, pricing you already know…"
+              className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3 min-h-[90px]"
+            />
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={addNoteSource} disabled={!noteDraft.trim()}>
+                <Plus className="w-4 h-4 mr-1" /> Add note
+              </Button>
+            </div>
+          </div>
+
+          {/* URL source */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <Link2 className="w-4 h-4 text-sky-500" /> Add a source link
+            </label>
+            <div className="flex gap-2">
+              <input
+                value={urlDraft}
+                onChange={(e) => setUrlDraft(e.target.value)}
+                placeholder="https://… (pricing page, docs, directory — we'll refine it)"
+                className="flex-1 rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3"
+              />
+              <Button variant="outline" size="sm" onClick={addUrlSource} disabled={!urlDraft.trim()}>
+                <Plus className="w-4 h-4 mr-1" /> Add link
+              </Button>
+            </div>
+          </div>
+
+          {/* Pending sources */}
+          {sources.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Seeded sources ({sources.length})</div>
+              <div className="space-y-2">
+                {sources.map((s, i) => (
+                  <div key={i} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-white/10 px-4 py-2.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {s.kind === 'note' ? <StickyNote className="w-4 h-4 text-violet-500 shrink-0" /> : <Link2 className="w-4 h-4 text-sky-500 shrink-0" />}
+                      <span className="text-sm truncate">{s.title}</span>
+                    </div>
+                    <button onClick={() => removeSource(i)} className="text-muted-foreground hover:text-foreground shrink-0">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-between">
+            <Button variant="outline" onClick={() => setStep(4)}>Back</Button>
+            <Button onClick={() => setStep(6)}>Continue</Button>
+          </div>
+        </Card>
+      )}
+
+      {step === 6 && (
+        <Card className="p-6 space-y-5">
+          <h2 className="text-xl font-semibold">6. Confirm your setup</h2>
           <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-5 space-y-3">
             <div><span className="font-medium">Workspace:</span> {workspaceName}</div>
             <div><span className="font-medium">Mode:</span> {operatingMode}</div>
             <div><span className="font-medium">Priorities:</span> {selectedPriorities.length ? selectedPriorities.join(', ') : 'None selected'}</div>
+            {domainIntent.trim() && (
+              <div><span className="font-medium">Expertise:</span> {domainIntent.trim()}</div>
+            )}
+            {sources.length > 0 && (
+              <div><span className="font-medium">Knowledge sources:</span> {sources.length} seeded</div>
+            )}
             <p className="text-sm text-muted-foreground">
-              Tech Genie will create a workspace and tune its operating profile around this setup.
+              Tech Genie will create a workspace, seed its knowledge, and tune its operating profile around this setup.
             </p>
           </div>
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep(4)}>Back</Button>
+            <Button variant="outline" onClick={() => setStep(5)}>Back</Button>
             <Button onClick={completeOnboarding} disabled={submitting}>
               {submitting ? 'Creating workspace...' : 'Enter workspace'}
             </Button>
