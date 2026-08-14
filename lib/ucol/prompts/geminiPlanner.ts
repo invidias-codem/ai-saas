@@ -32,6 +32,8 @@ CRITICAL RULES:
 - Generate a COMPLETE app. Include layout, pages, and all UI components.
 - For props, use TypeScript type syntax (e.g., "string", "number", "() => void", "Todo[]").
 - For techStack, ONLY list packages that are in the AVAILABLE DEPENDENCIES provided below. Do NOT add packages that aren't installed.
+- HARD LIMIT: at most 12 components. Consolidate small pieces into their parent rather than exceeding this.
+- Keep every "description" and "reasoning" under 2 sentences. Output compact JSON — the response must stay well under the token limit or it will be cut off mid-string and rejected.
 
 Output a single JSON object (NOT an array). No markdown fences, no explanation text.`;
 
@@ -132,7 +134,9 @@ export async function generatePlan(contextPackage: ContextPackage, providerKeys:
             generationConfig: {
                 responseMimeType: 'application/json',
                 temperature: 0.7,
-                maxOutputTokens: 16384, // Increased from 8192 to handle complex apps
+                // gemini-2.5-flash is a thinking model: reasoning tokens count
+                // against this budget, so 16384 left plans truncated mid-string.
+                maxOutputTokens: 32768,
             },
         });
 
@@ -156,6 +160,63 @@ export function isUnrestrictedGoogleKeyError(error: unknown): boolean {
     const candidate = error as { status?: number; message?: string; statusText?: string };
     const message = `${candidate?.message ?? ''} ${candidate?.statusText ?? ''}`.toLowerCase();
     return candidate?.status === 403 && message.includes('unrestricted') && message.includes('gemini');
+}
+
+// Salvage JSON that was cut off mid-output (token-limit truncation).
+// Walks the text tracking string/escape state and bracket depth, trims any
+// dangling partial value, then closes every open bracket.
+function repairTruncatedJson(text: string): string | null {
+    const start = text.indexOf('{');
+    if (start === -1) return null;
+    let inString = false;
+    let escaped = false;
+    const stack: string[] = [];
+    let lastGood = -1; // index just past the last complete value/close
+
+    for (let i = start; i < text.length; i++) {
+        const ch = text[i];
+        if (inString) {
+            if (escaped) { escaped = false; continue; }
+            if (ch === '\\') { escaped = true; continue; }
+            if (ch === '"') { inString = false; lastGood = i + 1; }
+            continue;
+        }
+        if (ch === '"') { inString = true; continue; }
+        if (ch === '{' || ch === '[') { stack.push(ch === '{' ? '}' : ']'); continue; }
+        if (ch === '}' || ch === ']') { stack.pop(); lastGood = i + 1; continue; }
+        if (/[0-9el]/.test(ch) || ch === 'true'[0] || ch === 'f') { lastGood = i + 1; }
+    }
+
+    if (lastGood <= start) return null;
+    let candidate = text.slice(start, lastGood);
+    // Drop a trailing comma, a dangling `"key":` fragment, or a closed-but-
+    // valueless key/partial string left behind by the truncation point.
+    candidate = candidate
+        .replace(/,\s*$/, '')
+        .replace(/,?\s*"[^"]*"\s*:\s*$/, '')
+        .replace(/([{,])\s*"[^"]*"\s*$/, '$1')
+        .replace(/,\s*$/, '')
+        .replace(/\{\s*$/, '')
+        .replace(/,\s*$/, '');
+
+    // Recompute open brackets on the trimmed candidate and close them
+    const closeStack: string[] = [];
+    let inStr = false, esc = false;
+    for (const ch of candidate) {
+        if (inStr) {
+            if (esc) { esc = false; continue; }
+            if (ch === '\\') { esc = true; continue; }
+            if (ch === '"') inStr = false;
+            continue;
+        }
+        if (ch === '"') { inStr = true; continue; }
+        if (ch === '{') closeStack.push('}');
+        else if (ch === '[') closeStack.push(']');
+        else if (ch === '}' || ch === ']') closeStack.pop();
+    }
+    if (inStr) candidate += '"';
+    while (closeStack.length) candidate += closeStack.pop();
+    return candidate;
 }
 
 function parseAndValidatePlan(text: string, provider: string): ProjectPlan {
@@ -219,8 +280,29 @@ function parseAndValidatePlan(text: string, provider: string): ProjectPlan {
             console.warn(`[UCOL:${provider}] Repaired malformed plan JSON`);
             return plan;
         } catch {
-            console.error(`[UCOL:${provider}] Failed to parse plan JSON:`, text.substring(0, 500));
-            throw new Error(`[UCOL:${provider}] Plan parsing failed: ${parseError.message}`);
+            // Last resort: the output was truncated at the token limit —
+            // close open strings/brackets and salvage the complete components.
+            try {
+                const salvaged = repairTruncatedJson(cleaned);
+                if (!salvaged) throw parseError;
+                let parsed = JSON.parse(salvaged);
+                if (Array.isArray(parsed)) parsed = parsed[0];
+                const plan: ProjectPlan = parsed;
+
+                if (!plan.appName || !plan.components || !Array.isArray(plan.components) || plan.components.length === 0) {
+                    throw new Error('Salvaged plan missing appName/components');
+                }
+                for (const comp of plan.components) {
+                    if (!Array.isArray(comp.dependencies)) comp.dependencies = [];
+                    if (!Array.isArray(comp.props)) comp.props = [];
+                }
+                plan.reasoning = plan.reasoning || 'Plan recovered from truncated model output';
+                console.warn(`[UCOL:${provider}] Salvaged truncated plan JSON (${plan.components.length} components)`);
+                return plan;
+            } catch {
+                console.error(`[UCOL:${provider}] Failed to parse plan JSON:`, text.substring(0, 500));
+                throw new Error(`[UCOL:${provider}] Plan parsing failed: ${parseError.message}`);
+            }
         }
     }
 }
