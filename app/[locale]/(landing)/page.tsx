@@ -1,17 +1,11 @@
-import { Metadata } from 'next';
+"use client";
+
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { motion } from 'framer-motion';
 import { ArrowRightIcon, ShieldCheckIcon, ActivityIcon, DatabaseIcon, TerminalIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RosterGrid } from '@/components/marketing/RosterGrid';
-
-export async function generateMetadata(): Promise<Metadata> {
-  return {
-    title: 'Expert as a Service | Lattice OS',
-    description: 'Rentable domain expertise with sandboxed execution, trajectory transparency, and curated knowledge substrates.',
-  };
-}
 
 const MECHANICS_ITEMS = [
   {
