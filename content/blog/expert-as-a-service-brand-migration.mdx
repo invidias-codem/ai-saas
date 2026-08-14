@@ -1,0 +1,67 @@
+---
+title: "Introducing Expert as a Service: Rentable Intellect, Precision Execution"
+description: "We are migrating the Lattice OS brand to focus on what we actually build: curated domain experts, sandboxed execution, and transparent reasoning. Here is the roadmap, the moat, and what it means for operators."
+publishedAt: "2026-08-14"
+author: "joshua-jair"
+category: "updates"
+tags: ["product", "expert-as-a-service", "brand", "roadmap"]
+featured: true
+ogImage: "/blog/expert-as-a-service.png"
+---
+
+*By Joshua Jair*
+
+---
+
+The old positioning was about infrastructure sovereignty. That framing was accurate, but it described the chassis instead of the vehicle. What we actually ship is not a self-hosted appliance — it is a **curated expert workspace**: a domain-specific execution environment with a pre-loaded knowledge substrate, quarantined mutations, and a visible reasoning trace.
+
+Today we are migrating the brand to match the product.
+
+---
+
+## The Migration
+
+The root landing page is now the **Expert as a Service** experience. The sovereign infrastructure story is not gone; it has been reframed as the execution layer underneath the expert. That is where it belongs. Buyers do not hire a consultant because of the chassis. They hire the consultant because of what the chassis lets them do.
+
+The new landing page follows a simple flow:
+
+1. **Hook** — Rentable intellect. Precision execution.
+2. **The Roster** — Specialized operators for specific domains: production, infrastructure, commerce.
+3. **The Moat** — Sandboxed execution, refined data forgery, trajectory transparency, precision tool use.
+4. **CTA** — Initialize a session. Three steps. No sales call.
+
+Every section is translated and componentized. The Roster Grid is reusable; the same component can surface on the onboarding page or in future marketplace views without rewriting layout logic.
+
+---
+
+## What Changed in the Stack
+
+- **`components/marketing/RosterGrid.tsx`** — discrete expert card grid with role, title, description, and tags
+- **`app/[locale]/(landing)/expert/page.tsx`** — the new preview landing page, currently mounted at `/{locale}/expert`
+- **`messages/en.json`** — all new copy externalized under `Landing.expert.*` for i18n scaling
+
+The old Lattice OS landing page remains intact at `app/[locale]/(landing)/page.tsx` until the final promotion review is complete.
+
+---
+
+## The Moat, Restated
+
+The technical capabilities that differentiate this platform from a generic LLM wrapper are now positioned as premium features, not backend documentation:
+
+- **Sandboxed Execution** — mutations are quarantined and integrity-verified before promotion
+- **Refined Data Forgery** — dynamic RAG isolates context boundaries so the expert reasons strictly from curated sources
+- **Trajectory Transparency** — observe the raw reasoning stream and inspect the agent trajectory before accepting the output
+- **Precision Execution** — clinical tool use, no approximation, rentable intellect for operators who need exact outputs
+
+These are not marketing abstractions. They are live behaviors in the stack: `LocalSandboxRunner`, `QuarantinePromotionManager`, `useConversationStream`, and the SSE stream contract in `app/api/conversation/route.ts`.
+
+---
+
+## What Is Next
+
+1. Promote the preview landing page onto the root route
+2. Wire the Roster Grid into the onboarding wizard completion state
+3. Expand the consultant profile schema in Supabase to support dynamic roster population
+4. Add locale translations for the new landing sections
+
+If you want to review the preview before the root swap, it is live at `/{locale}/expert`.
