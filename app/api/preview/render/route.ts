@@ -200,12 +200,18 @@ export async function POST(req: NextRequest) {
     }
 
     const id = randomUUID();
+    // tenant_id is a uuid column; only set it when we have a real workspace
+    // UUID — a Clerk user id fallback violates the type and fails the insert.
+    const workspaceId = session.resolvedContext?.workspaceId;
+    const tenantId = workspaceId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workspaceId)
+      ? workspaceId
+      : null;
     const { data, error } = await sb()
       .from('preview_sessions')
       .insert({
         id,
         user_id: userId,
-        tenant_id: session.resolvedContext?.workspaceId || userId,
+        tenant_id: tenantId,
         code,
         language,
         status: 'ready',
