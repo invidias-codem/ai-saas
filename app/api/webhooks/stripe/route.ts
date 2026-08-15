@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
-  apiVersion: '2026-07-29.dahlia',
-});
+function getStripe() {
+  const apiKey = process.env.STRIPE_SECRET_KEY;
+  if (!apiKey) {
+    throw new Error('STRIPE_SECRET_KEY is not configured');
+  }
+  return new Stripe(apiKey, {
+    apiVersion: '2026-07-29.dahlia',
+  });
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +33,7 @@ async function upsertSubscriptionFromCheckout(session: Stripe.Checkout.Session) 
     return;
   }
 
+  const stripe = getStripe();
   const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
     expand: ['data.price'],
   });
@@ -93,6 +100,7 @@ export async function POST(req: NextRequest) {
 
     let event: Stripe.Event;
     try {
+      const stripe = getStripe();
       event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     } catch (err: any) {
       console.error('[Stripe:Webhook] Signature verification failed:', err);
