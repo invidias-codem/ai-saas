@@ -110,7 +110,7 @@
         "price": "$0",
         "unit": "forever free",
         "subtitle": "For individuals moving beyond generic chat wrappers.",
-        "cta": "Start Building",
+        "cta": "Start 7-Day Trial",
         "feature1": "Multi-model chat interface (Gemini, Claude, DeepSeek)",
         "feature2": "Basic persistent conversation memory",
         "feature3": "Standard workspace source ingestion (PDFs, URLs, text)",
@@ -132,13 +132,14 @@
         "price": "Custom",
         "unit": "license & deployment",
         "subtitle": "For organizations integrating the Unified Context Orchestration Layer across their data.",
-        "cta": "Contact Sales",
+        "cta": "Get Started",
         "feature1": "Shared workspace knowledge graphs with role-based access control",
         "feature2": "Custom Data Refinery scraping targets for your specific niche",
         "feature3": "Dedicated Relay orchestration agents for internal workflows",
         "feature4": "SOC2 & GDPR compliant data export and deletion"
       },
-      "disclaimer": "Prices reflect the consultant rental model. Credits are no longer the primary billing unit for expert tiers."
+      "disclaimer": "Prices reflect the consultant rental model. Credits are no longer the primary billing unit for expert tiers.",
+      "startCreating": "Start 7-Day Trial"
     },
     "footer": {
       "rights": "© {year} Lattice OS. All rights reserved."

@@ -13,7 +13,7 @@ export default function PricingPage() {
     {
       key: "standardOS",
       popular: false,
-      href: "/sign-up",
+      href: "/onboarding",
     },
     {
       key: "theExpert",
@@ -23,7 +23,7 @@ export default function PricingPage() {
     {
       key: "enterprise",
       popular: false,
-      href: "/support",
+      href: "/onboarding",
     },
   ] as const;
 
@@ -42,7 +42,7 @@ export default function PricingPage() {
               <Link href="/" className="hover:text-foreground transition-colors">Home</Link>
               <Link href="/support" className="hover:text-foreground transition-colors">Support</Link>
             </nav>
-            <Link href="/sign-up">
+            <Link href="/onboarding">
               <Button className="rounded-full px-6 py-2 text-sm font-semibold">
                 {t("pricing.startCreating")}
               </Button>
