@@ -102,33 +102,42 @@
         "button": "Deploy Lattice OS"
     },
     "pricing": {
-      "title": "Simple, credit-based pricing",
-      "subtitle": "Buy credits, then spend them across the tools you use—no hidden subscriptions.",
-      "freeTierName": "Free",
-      "freeTierUnit": "to start",
-      "freeTierSubtitle": "Get started with welcome credits, no credit card required.",
-      "freeTierFeature1": "Welcome credits on signup",
-      "freeTierFeature2": "Access to core assistants",
-      "freeTierFeature3": "Pay-as-you-go top-ups",
-      "creatorBundle": "Starter Pack",
-      "creatorBundleUnit": "one-time · 250 credits",
-      "creatorBundleFeature1": "250 compute credits ($1 = 50 credits)",
-      "creatorBundleFeature2": "Use across chat, code, image, and music",
-      "creatorBundleFeature3": "No expiration",
-      "proStudio": "Pro Pack",
-      "proStudioUnit": "one-time · 1,000 credits",
-      "proStudioFeature1": "1,000 compute credits ($1 = 50 credits)",
-      "proStudioFeature2": "Covers heavy media generation workloads",
-      "proStudioFeature3": "Workspace-ready environment",
-      "enterprise": "Enterprise / OEM",
-      "enterprisePriceLabel": "Talk to sales",
-      "enterpriseUnit": "license & deployment",
-      "enterpriseSubtitle": "Workspace isolation, private deployment, and licensed feature access.",
-      "enterpriseFeature1": "License-gated feature access",
-      "enterpriseFeature2": "Self-hosted Docker appliance",
-      "enterpriseFeature3": "Workspace and seat controls",
-      "startCreating": "Get started",
-      "disclaimer": "Credits are consumed per operation depending on the tool and context used."
+      "title": "Intelligence as a Service.",
+      "subtitle": "Stop paying by the token or wrestling with prompt engineering. Rent a customized, data-backed expert designed to compound your workflow.",
+      "standardOS": {
+        "name": "Standard OS",
+        "price": "$0",
+        "unit": "forever free",
+        "subtitle": "For individuals moving beyond generic chat wrappers.",
+        "cta": "Start Building",
+        "feature1": "Multi-model chat interface (Gemini, Claude, DeepSeek)",
+        "feature2": "Basic persistent conversation memory",
+        "feature3": "Standard workspace source ingestion (PDFs, URLs, text)",
+        "feature4": "Access to the standard Weaver base persona"
+      },
+      "theExpert": {
+        "name": "The Expert",
+        "price": "$49",
+        "unit": "per month",
+        "subtitle": "For operators, founders, and agencies who need on-demand, hyper-specialized domain consulting.",
+        "cta": "Rent Your Consultant",
+        "feature1": "The Chameleon Engine: dynamic persona synthesis tailored to your exact workspace constraints",
+        "feature2": "Data Refinery access for continuously updated, temporal market intelligence",
+        "feature3": "UCOL debate loops: full Code Builder and multi-agent reasoning",
+        "feature4": "Priority orchestration: uncapped, zero-latency routing to the optimal LLM"
+      },
+      "enterprise": {
+        "name": "Team / Infrastructure",
+        "price": "Custom",
+        "unit": "license & deployment",
+        "subtitle": "For organizations integrating the Unified Context Orchestration Layer across their data.",
+        "cta": "Contact Sales",
+        "feature1": "Shared workspace knowledge graphs with role-based access control",
+        "feature2": "Custom Data Refinery scraping targets for your specific niche",
+        "feature3": "Dedicated Relay orchestration agents for internal workflows",
+        "feature4": "SOC2 & GDPR compliant data export and deletion"
+      },
+      "disclaimer": "Prices reflect the consultant rental model. Credits are no longer the primary billing unit for expert tiers."
     },
     "footer": {
       "rights": "© {year} Lattice OS. All rights reserved."
@@ -151,7 +160,8 @@
       "headline1": "Rentable intellect.",
       "headline2": "Precision execution.",
       "subhead": "Onboard a curated domain expert. Its knowledge substrate is pre-loaded with your context. The execution environment is quarantined. The reasoning is transparent.",
-      "ctaPrimary": "View Pricing",
+      "ctaNav": "Start 7-Day Trial",
+      "ctaHeroPrimary": "Deploy Your Consultant",
       "ctaSecondary": "Inspect the mechanics",
       "mechanics": {
         "eyebrow": "The Moat",
@@ -159,8 +169,8 @@
         "subtitle": "Use the onboarding wizard to select an expert, load your knowledge substrate, and launch a quarantined execution environment with transparent trajectory.",
         "item1Title": "Sandboxed Execution",
         "item1Body": "Every mutation is quarantined and integrity-verified before promotion. No side effects. No leakage.",
-        "item2Title": "Refined Data Forgery",
-        "item2Body": "Dynamic RAG isolates context boundaries so the expert reasons strictly from your curated sources.",
+        "item2Title": "The Data Refinery",
+        "item2Body": "We continuously scrape, verify, and structure niche market data so your consultant is always operating on the freshest intelligence.",
         "item3Title": "Trajectory Transparency",
         "item3Body": "Observe the raw reasoning stream. Inspect the agent trajectory before accepting the output.",
         "item4Title": "Precision Execution",
@@ -175,23 +185,29 @@
           "title": "Specialized intellect, on demand.",
           "subtitle": "Each expert is a curated execution environment with a proprietary knowledge substrate. Choose the operator for your domain.",
           "cta": "View pricing",
-          "technical-apparel": {
-            "role": "Production Specialist",
-            "title": "Technical Apparel",
-            "description": "Expert in dimensional puff-print graphics, tech pack review, and heavy-weight textile sourcing specifications.",
-            "tags": "Puff Print,Tech Pack,Sourcing"
+          "local-market-analyst": {
+            "role": "Local Market Analyst",
+            "title": "Competitive Pricing Monitor",
+            "description": "Scrapes competitor pricing, reviews, and positioning for med spas, salons, and local services. Delivers a weekly competitive brief with pricing gaps and promotional opportunities.",
+            "tags": ["Pricing Scraper", "Competitive Intel", "Local SEO"]
           },
-          "systems-architect": {
-            "role": "Systems Architect",
-            "title": "Infrastructure",
-            "description": "Multi-model orchestration, secure serverless RAG deployments, and event-gated execution at scale.",
-            "tags": "RAG,Orchestration,Edge"
+          "b2b-sales-strategist": {
+            "role": "B2B Sales Strategist",
+            "title": "Cold Outreach Rewriter",
+            "description": "Analyzes target company docs, job posts, and recent news to rewrite outreach sequences that sound bespoke. Turns generic templates into account-specific pitches that get replies.",
+            "tags": ["Cold Email", "Account Research", "Copywriting"]
           },
-          "commerce-engineer": {
-            "role": "Commerce Engineer",
-            "title": "Storefront",
-            "description": "Headless Next.js/Shopify architecture, conversion optimization, and premium product storytelling.",
-            "tags": "Next.js,Shopify,Analytics"
+          "headless-commerce-architect": {
+            "role": "Headless Commerce Architect",
+            "title": "Shopify / Next.js Stack Review",
+            "description": "Audits headless storefront architecture for performance, SEO, and conversion leaks. Maps every critical path from product view to checkout and flags optimization opportunities.",
+            "tags": ["Shopify", "Next.js", "Conversion"]
+          },
+          "devops-security-reviewer": {
+            "role": "DevOps Security Reviewer",
+            "title": "CodeQL & Infrastructure Audit",
+            "description": "Runs static analysis, dependency audits, and infrastructure posture reviews. Surfaces critical vulnerabilities, misconfigurations, and remediation steps in an operator-ready format.",
+            "tags": ["CodeQL", "Infrastructure", "Compliance"]
           }
         }
       }

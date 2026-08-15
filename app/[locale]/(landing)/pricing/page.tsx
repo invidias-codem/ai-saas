@@ -3,55 +3,29 @@
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { CheckIcon, RocketIcon, StarFilledIcon } from "@radix-ui/react-icons";
+import { CheckIcon } from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
-import { CheckoutModal } from "@/components/checkout-modal";
-
-const PLANS = [
-  {
-    nameKey: "freeTierName",
-    price: "Free",
-    unitKey: "freeTierUnit",
-    descKey: "freeTierSubtitle",
-    features: ["freeTierFeature1", "freeTierFeature2", "freeTierFeature3"],
-    popular: false,
-    href: "/sign-up",
-    cta: "Get started",
-  },
-  {
-    nameKey: "creatorBundle",
-    price: "$5",
-    unitKey: "creatorBundleUnit",
-    descKey: "subtitle",
-    features: ["creatorBundleFeature1", "creatorBundleFeature2", "creatorBundleFeature3"],
-    popular: true,
-    href: "#checkout",
-    cta: "Start with Starter",
-  },
-  {
-    nameKey: "proStudio",
-    price: "$20",
-    unitKey: "proStudioUnit",
-    descKey: "subtitle",
-    features: ["proStudioFeature1", "proStudioFeature2", "proStudioFeature3"],
-    popular: false,
-    href: "#checkout",
-    cta: "Start with Pro",
-  },
-  {
-    nameKey: "enterprise",
-    price: "Talk to sales",
-    unitKey: "enterpriseUnit",
-    descKey: "enterpriseSubtitle",
-    features: ["enterpriseFeature1", "enterpriseFeature2", "enterpriseFeature3"],
-    popular: false,
-    href: "/support",
-    cta: "Contact sales",
-  },
-];
 
 export default function PricingPage() {
   const t = useTranslations("Landing");
+
+  const plans = [
+    {
+      key: "standardOS",
+      popular: false,
+      href: "/sign-up",
+    },
+    {
+      key: "theExpert",
+      popular: true,
+      href: "/onboarding",
+    },
+    {
+      key: "enterprise",
+      popular: false,
+      href: "/support",
+    },
+  ] as const;
 
   return (
     <div className="relative min-h-screen bg-background text-foreground overflow-hidden">
@@ -94,67 +68,83 @@ export default function PricingPage() {
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {PLANS.map((plan, idx) => (
-              <motion.div
-                key={plan.nameKey}
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: idx * 0.1 }}
-                className={`relative rounded-2xl border p-6 flex flex-col ${
-                  plan.popular
-                    ? "border-purple-500 bg-gradient-to-br from-purple-500/5 to-pink-500/5 shadow-[0_0_35px_-8px_rgba(168,85,247,0.35)]"
-                    : "border-border bg-card"
-                }`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold">
-                    Free tier glow
-                  </div>
-                )}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {plans.map((plan, idx) => {
+              const planData = t.rich(`pricing.${plan.key}`, {
+                name: "",
+                price: "",
+                unit: "",
+                subtitle: "",
+                cta: "",
+                feature1: "",
+                feature2: "",
+                feature3: "",
+                feature4: "",
+              }) as unknown as {
+                name: string;
+                price: string;
+                unit: string;
+                subtitle: string;
+                cta: string;
+                feature1: string;
+                feature2: string;
+                feature3: string;
+                feature4: string;
+              };
 
-                <div className="text-center mb-6">
-                  <h3 className="text-lg font-bold text-foreground mb-2">{t(`pricing.${plan.nameKey}`)}</h3>
-                  <div className="flex items-baseline justify-center gap-2">
-                    <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400">
-                      {plan.price}
-                    </span>
-                    <span className="text-sm text-muted-foreground">{t(`pricing.${plan.unitKey}`)}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">{t(`pricing.${plan.descKey}`)}</p>
-                </div>
-
-                <ul className="space-y-3 mb-8 flex-1">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
-                      <CheckIcon className="w-4 h-4 text-purple-500 dark:text-purple-400 mt-0.5 flex-shrink-0" />
-                      <span>{t(`pricing.${feature}`)}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <Button
-                  className={`w-full rounded-xl font-semibold ${
+              return (
+                <motion.div
+                  key={plan.key}
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: idx * 0.1 }}
+                  className={`relative rounded-2xl border p-6 flex flex-col ${
                     plan.popular
-                      ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:opacity-90"
-                      : ""
+                      ? "border-purple-500 bg-gradient-to-br from-purple-500/5 to-pink-500/5 shadow-[0_0_35px_-8px_rgba(168,85,247,0.35)]"
+                      : "border-border bg-card"
                   }`}
-                  onClick={() => {
-                    if (plan.href.startsWith("#")) {
-                      const el = document.getElementById("checkout");
-                      if (el) el.scrollIntoView({ behavior: "smooth" });
-                    }
-                  }}
                 >
-                  {plan.cta}
-                </Button>
-              </motion.div>
-            ))}
-          </div>
+                  {plan.popular && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold">
+                      Recommended
+                    </div>
+                  )}
 
-          <div id="checkout" className="mt-24">
-            <CheckoutModal open={false} onOpenChange={() => {}} />
+                  <div className="text-center mb-6">
+                    <h3 className="text-lg font-bold text-foreground mb-2">{planData.name}</h3>
+                    <div className="flex items-baseline justify-center gap-2">
+                      <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400">
+                        {planData.price}
+                      </span>
+                      <span className="text-sm text-muted-foreground">{planData.unit}</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">{planData.subtitle}</p>
+                  </div>
+
+                  <ul className="space-y-3 mb-8 flex-1">
+                    {[planData.feature1, planData.feature2, planData.feature3, planData.feature4].map((feature) => (
+                      <li key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <CheckIcon className="w-4 h-4 text-purple-500 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Link href={plan.href}>
+                    <Button
+                      className={`w-full rounded-xl font-semibold ${
+                        plan.popular
+                          ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:opacity-90"
+                          : ""
+                      }`}
+                    >
+                      {planData.cta}
+                    </Button>
+                  </Link>
+                </motion.div>
+              );
+            })}
           </div>
 
           <p className="text-xs text-center text-muted-foreground mt-12">
@@ -165,7 +155,7 @@ export default function PricingPage() {
         <footer className="border-t border-border py-8">
           <div className="mx-auto max-w-7xl px-6 flex items-center justify-between text-xs text-muted-foreground">
             <span>© {new Date().getFullYear()} Lattice OS. All rights reserved.</span>
-            <span>Expert as a Service</span>
+            <span>Intelligence as a Service</span>
           </div>
         </footer>
       </div>
