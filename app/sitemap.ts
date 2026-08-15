@@ -4,7 +4,7 @@ import { getSiteUrl } from '@/lib/site-url';
 export default function sitemap(): MetadataRoute.Sitemap {
     const baseUrl = getSiteUrl();
     const locales = ['en', 'th', 'vi', 'es', 'fr', 'de'];
-    const routes = ['', '/dashboard', '/blog', '/pricing', '/support'];
+    const routes = ['', '/dashboard', '/blog', '/pricing', '/support', '/checkout'];
 
     const sitemap: MetadataRoute.Sitemap = [];
 

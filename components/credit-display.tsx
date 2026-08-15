@@ -3,18 +3,17 @@
 import { useCredits } from "@/hooks/use-credits";
 import { Button } from "@/components/ui/button";
 import { Zap } from "lucide-react";
-import { useProModal } from "@/hooks/use-pro-modal";
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 export const CreditDisplay = () => {
     const { credits, isLoading } = useCredits();
-    const proModal = useProModal();
-
     // Warn if low credits (below 10)
     const isLow = credits < 10;
 
     if (isLoading) return <div className="text-muted-foreground text-xs animate-pulse">Loading...</div>;
+
+    const paypalUrl = process.env.NEXT_PUBLIC_PAYPAL_DONATION_URL || "https://www.paypal.com/joshuajair";
 
     return (
         <div className="flex items-center gap-x-2">
@@ -28,8 +27,10 @@ export const CreditDisplay = () => {
                 </span>
                 <span className="text-xs ml-1 opacity-70">credits</span>
             </div>
-            <Button onClick={proModal.onOpen} variant="outline" size="sm" className="h-8 text-xs">
-                Top up
+            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+                <a href={paypalUrl} target="_blank" rel="noopener noreferrer">
+                    Top up via PayPal
+                </a>
             </Button>
         </div>
     );

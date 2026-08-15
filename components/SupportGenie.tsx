@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Zap } from "lucide-react";
 import Link from "next/link";
 import { KoFiWidget } from "@/components/kofi-widget";
+import { PayPalButton } from "@/components/paypal-button";
 import { useTranslations } from "next-intl";
 import { PACKS } from "@/lib/subscription/packs";
 
@@ -49,6 +50,7 @@ export const SupportGenie = ({ onSuccess }: SupportGenieProps) => {
 
             {/* Donation Widget (free-form / tips) */}
             <div className="flex-1 w-full">
+                <PayPalButton />
                 <KoFiWidget />
             </div>
 

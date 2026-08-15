@@ -2,6 +2,7 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { KoFiWidget } from "@/components/kofi-widget";
+import { PayPalButton } from "@/components/paypal-button";
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 

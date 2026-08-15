@@ -54,7 +54,7 @@ export default function ExpertLandingPage() {
               <span className="hover:text-white transition-colors cursor-pointer">Experts</span>
               <span className="hover:text-white transition-colors cursor-pointer">Pricing</span>
             </nav>
-            <Link href="/expert/technical-apparel">
+            <Link href="/pricing">
               <Button className="bg-white text-black hover:bg-white/90 rounded-full px-6 py-2 text-sm font-semibold">
                 {t('ctaPrimary')}
               </Button>
@@ -85,7 +85,7 @@ export default function ExpertLandingPage() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4">
-              <Link href="/expert/technical-apparel">
+              <Link href="/pricing">
                 <Button size="lg" className="bg-white text-black hover:bg-white/90 rounded-full px-8 py-6 text-base font-semibold">
                   {t('ctaPrimary')}
                   <ArrowRightIcon className="ml-2 h-5 w-5" />
@@ -163,7 +163,7 @@ export default function ExpertLandingPage() {
               <p className="text-white/60 text-lg max-w-xl mx-auto mb-10">
                 {t('cta.subtitle')}
               </p>
-              <Link href="/expert/technical-apparel">
+              <Link href="/pricing">
                 <Button size="lg" className="bg-white text-black hover:bg-white/90 rounded-full px-10 py-6 text-lg font-semibold">
                   {t('cta.button')}
                   <ArrowRightIcon className="ml-2 h-5 w-5" />

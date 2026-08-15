@@ -10,7 +10,6 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@clerk/nextjs";
 import { useTranslations } from "next-intl";
-import { useProModal } from "@/hooks/use-pro-modal";
 import { useCredits } from "@/hooks/use-credits";
 import SlackIntegration from "@/components/slack-integration";
 import { ConversationHistory } from "@/components/conversation-history";
@@ -74,8 +73,9 @@ const providerDescriptions: Record<ProviderName, string> = {
 // Credits overview + top-up entry point
 function CreditsCard() {
   const { credits, isLoading } = useCredits();
-  const proModal = useProModal();
   const t = useTranslations("Settings");
+
+  const paypalUrl = process.env.NEXT_PUBLIC_PAYPAL_DONATION_URL || "https://www.paypal.com/joshuajair";
 
   return (
     <Card className="p-6 border-black/5">
@@ -94,11 +94,10 @@ function CreditsCard() {
             </p>
           </div>
         </div>
-        <Button
-          onClick={proModal.onOpen}
-          className="bg-yellow-500 hover:bg-yellow-600 text-black"
-        >
-          {t("topUp")}
+        <Button asChild className="bg-yellow-500 hover:bg-yellow-600 text-black">
+          <a href={paypalUrl} target="_blank" rel="noopener noreferrer">
+            {t("topUp")} via PayPal
+          </a>
         </Button>
       </div>
     </Card>

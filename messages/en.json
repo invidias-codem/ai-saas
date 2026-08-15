@@ -151,12 +151,12 @@
       "headline1": "Rentable intellect.",
       "headline2": "Precision execution.",
       "subhead": "Onboard a curated domain expert. Its knowledge substrate is pre-loaded with your context. The execution environment is quarantined. The reasoning is transparent.",
-      "ctaPrimary": "Consult an Expert",
+      "ctaPrimary": "View Pricing",
       "ctaSecondary": "Inspect the mechanics",
       "mechanics": {
         "eyebrow": "The Moat",
-        "title": "Not a wrapper.",
-        "subtitle": "The difference is in the execution layer. Every interaction passes through quarantined inference, isolated context, and verifiable reasoning.",
+        "title": "Curate your own Consultant.",
+        "subtitle": "Use the onboarding wizard to select an expert, load your knowledge substrate, and launch a quarantined execution environment with transparent trajectory.",
         "item1Title": "Sandboxed Execution",
         "item1Body": "Every mutation is quarantined and integrity-verified before promotion. No side effects. No leakage.",
         "item2Title": "Refined Data Forgery",
@@ -169,12 +169,12 @@
       "cta": {
         "title": "Initialize your session.",
         "subtitle": "Three steps. No sales call. No enterprise contract. Just instant access to a quarantined, trajectory-visible execution environment.",
-        "button": "Consult an Expert",
+        "button": "View Pricing",
         "roster": {
           "eyebrow": "The Roster",
           "title": "Specialized intellect, on demand.",
           "subtitle": "Each expert is a curated execution environment with a proprietary knowledge substrate. Choose the operator for your domain.",
-          "cta": "Open session",
+          "cta": "View pricing",
           "technical-apparel": {
             "role": "Production Specialist",
             "title": "Technical Apparel",

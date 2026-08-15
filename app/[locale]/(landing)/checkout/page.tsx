@@ -2,6 +2,7 @@
 
 import { useUser } from "@clerk/nextjs";
 import { KoFiWidget } from "@/components/kofi-widget";
+import { PayPalButton } from "@/components/paypal-button";
 import Link from "next/link";
 
 export default function CheckoutPage() {
@@ -21,6 +22,8 @@ export default function CheckoutPage() {
         <div className="w-full bg-[#f9f9f9] rounded-xl overflow-hidden border border-border">
           <KoFiWidget />
         </div>
+
+        <PayPalButton />
 
         {/* Post-payment instructions */}
         <div className="bg-card border border-border rounded-xl p-6 space-y-4">
