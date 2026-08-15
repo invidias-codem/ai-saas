@@ -58,7 +58,7 @@ export default function PricingPage() {
             className="max-w-3xl mx-auto text-center mb-16"
           >
             <span className="inline-block rounded-full border border-purple-500/30 bg-purple-500/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-purple-300 mb-8">
-              Pricing
+              {t("pricing.eyebrow")}
             </span>
             <h1 className="font-heading font-bold tracking-tight leading-[1.05] mb-6" style={{ fontSize: 'clamp(2.6rem, 6vw, 4.6rem)' }}>
               {t("pricing.title")}

@@ -102,6 +102,7 @@
         "button": "Deploy Lattice OS"
     },
     "pricing": {
+      "eyebrow": "Intelligence as a Service",
       "title": "Intelligence as a Service.",
       "subtitle": "Stop paying by the token or wrestling with prompt engineering. Rent a customized, data-backed expert designed to compound your workflow.",
       "standardOS": {
@@ -180,6 +181,7 @@
         "title": "Initialize your session.",
         "subtitle": "Three steps. No sales call. No enterprise contract. Just instant access to a quarantined, trajectory-visible execution environment.",
         "button": "View Pricing",
+        "ctaFooterPrimary": "Rent Your Expert Today",
         "roster": {
           "eyebrow": "The Roster",
           "title": "Specialized intellect, on demand.",
