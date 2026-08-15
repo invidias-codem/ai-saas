@@ -110,7 +110,7 @@
         "price": "$0",
         "unit": "forever free",
         "subtitle": "For individuals moving beyond generic chat wrappers.",
-        "cta": "Start 7-Day Trial",
+        "cta": "Start Building",
         "feature1": "Multi-model chat interface (Gemini, Claude, DeepSeek)",
         "feature2": "Basic persistent conversation memory",
         "feature3": "Standard workspace source ingestion (PDFs, URLs, text)",
@@ -119,7 +119,7 @@
       "theExpert": {
         "name": "The Expert",
         "price": "$49",
-        "unit": "per month",
+        "unit": "per month or $100/year",
         "subtitle": "For operators, founders, and agencies who need on-demand, hyper-specialized domain consulting.",
         "cta": "Rent Your Consultant",
         "feature1": "The Chameleon Engine: dynamic persona synthesis tailored to your exact workspace constraints",
@@ -128,11 +128,11 @@
         "feature4": "Priority orchestration: uncapped, zero-latency routing to the optimal LLM"
       },
       "enterprise": {
-        "name": "Team / Infrastructure",
+        "name": "Enterprise",
         "price": "Custom",
         "unit": "license & deployment",
         "subtitle": "For organizations integrating the Unified Context Orchestration Layer across their data.",
-        "cta": "Get Started",
+        "cta": "Contact Sales",
         "feature1": "Shared workspace knowledge graphs with role-based access control",
         "feature2": "Custom Data Refinery scraping targets for your specific niche",
         "feature3": "Dedicated Relay orchestration agents for internal workflows",

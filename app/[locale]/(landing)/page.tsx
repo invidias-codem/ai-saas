@@ -164,7 +164,7 @@ export default function ExpertLandingPage() {
               </p>
               <Link href="/onboarding">
                 <Button size="lg" className="bg-white text-black hover:bg-white/90 rounded-full px-10 py-6 text-lg font-semibold">
-                  {t('ctaFooterPrimary')}
+                  {t('cta.ctaFooterPrimary')}
                   <ArrowRightIcon className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
