@@ -99,6 +99,9 @@ export type ConversationEngineOptions = {
 
   /** Optional SudoLang prompt names to inject into the system instruction for this request. */
   sudoPromptNames?: string[];
+
+  /** Optional synthesized persona/system instruction to prepend to the base system prompt. */
+  systemInstruction?: string;
 };
 
 export type ConversationEngineResult = {
@@ -568,7 +571,12 @@ export async function generateConversationReply(
     }
   );
 
-  let enhancedSystemInstruction = getSystemInstruction() +
+  let baseSystemInstruction = getSystemInstruction();
+  if (options.systemInstruction) {
+    baseSystemInstruction = `${options.systemInstruction}\n\n${baseSystemInstruction}`;
+  }
+
+  let enhancedSystemInstruction = baseSystemInstruction +
     "\n\n" + allocation.packedContext;
 
   if (options.sudoPromptNames?.length) {

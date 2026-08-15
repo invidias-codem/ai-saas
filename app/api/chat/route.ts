@@ -19,6 +19,25 @@ import { runRuntimeBridge } from '@/lib/ucol/runtimeBridge';
 import { logger } from '@/lib/logger';
 import type { UcolRequestPacket } from '@/lib/ucol/routing/types';
 import type { FileAttachmentInput } from '@/lib/types/attachments';
+import { supabaseAdmin } from '@/lib/supabaseClient';
+
+async function loadWorkspacePersona(workspaceId: string): Promise<string | null> {
+  try {
+    if (!supabaseAdmin) return null;
+    const { data, error } = await supabaseAdmin
+      .from('workspace_personas')
+      .select('content')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data?.content) return null;
+    return data.content;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: Request) {
     try {
@@ -234,6 +253,7 @@ export async function POST(req: Request) {
                     {
                         mode: effectiveMode,
                         memoryPlan: routingDecision.memoryPlan,
+                        systemInstruction: resolved.ucolContext.workspaceId ? (await loadWorkspacePersona(resolved.ucolContext.workspaceId)) ?? undefined : undefined,
                     }
                 );
 
