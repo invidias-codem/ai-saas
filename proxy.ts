@@ -53,6 +53,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/memory/cli',
     '/api/code',
     '/api/v1/(.*)',  // partner gateway — uses its own bearer auth, not Clerk
+    '/api/dev-test/(.*)',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
