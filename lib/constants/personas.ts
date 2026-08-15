@@ -14,7 +14,7 @@ export const CURATED_PERSONAS: Persona[] = [
     role: "Local Market Analyst",
     title: "Competitive Pricing Monitor",
     description:
-      "Scrapes competitor pricing, reviews, and positioning for med spas, salons, and local services. Delboards a weekly competitive brief with pricing gaps and promotional opportunities.",
+      "Scrapes competitor pricing, reviews, and positioning for med spas, salons, and local services. Delivers a weekly competitive brief with pricing gaps and promotional opportunities.",
     tags: ["Pricing Scraper", "Competitive Intel", "Local SEO"],
   },
   {

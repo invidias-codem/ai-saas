@@ -181,37 +181,12 @@
       "cta": {
         "title": "Initialize your session.",
         "subtitle": "Three steps. No sales call. No enterprise contract. Just instant access to a quarantined, trajectory-visible execution environment.",
-        "button": "View Pricing",
         "ctaFooterPrimary": "Rent Your Expert Today",
         "roster": {
           "eyebrow": "The Roster",
           "title": "Specialized intellect, on demand.",
           "subtitle": "Each expert is a curated execution environment with a proprietary knowledge substrate. Choose the operator for your domain.",
-          "cta": "View pricing",
-          "local-market-analyst": {
-            "role": "Local Market Analyst",
-            "title": "Competitive Pricing Monitor",
-            "description": "Scrapes competitor pricing, reviews, and positioning for med spas, salons, and local services. Delivers a weekly competitive brief with pricing gaps and promotional opportunities.",
-            "tags": ["Pricing Scraper", "Competitive Intel", "Local SEO"]
-          },
-          "b2b-sales-strategist": {
-            "role": "B2B Sales Strategist",
-            "title": "Cold Outreach Rewriter",
-            "description": "Analyzes target company docs, job posts, and recent news to rewrite outreach sequences that sound bespoke. Turns generic templates into account-specific pitches that get replies.",
-            "tags": ["Cold Email", "Account Research", "Copywriting"]
-          },
-          "headless-commerce-architect": {
-            "role": "Headless Commerce Architect",
-            "title": "Shopify / Next.js Stack Review",
-            "description": "Audits headless storefront architecture for performance, SEO, and conversion leaks. Maps every critical path from product view to checkout and flags optimization opportunities.",
-            "tags": ["Shopify", "Next.js", "Conversion"]
-          },
-          "devops-security-reviewer": {
-            "role": "DevOps Security Reviewer",
-            "title": "CodeQL & Infrastructure Audit",
-            "description": "Runs static analysis, dependency audits, and infrastructure posture reviews. Surfaces critical vulnerabilities, misconfigurations, and remediation steps in an operator-ready format.",
-            "tags": ["CodeQL", "Infrastructure", "Compliance"]
-          }
+          "cta": "View pricing"
         }
       }
     }

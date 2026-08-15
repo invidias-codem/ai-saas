@@ -3,15 +3,15 @@
 // CodePanel — displays Claude's generated code files with a file tree + code viewer + live preview.
 // Hybrid preview: frontend esbuild-wasm fast-path for UI-only builds, backend quarantine for full-stack.
 
-import { useState, useEffect } from 'react';
-import SyntaxHighlighter from 'react-syntax-highlighter/dist/cjs/prism';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism';
-import { useClipboard } from 'use-clipboard-copy';
-import type { GeneratedFile } from '@/lib/ucol/types';
-import { Loader2, FileCode, FolderOpen, Copy, Check, Download, Play, X, Smartphone, Monitor, Maximize2 } from 'lucide-react';
-import { useProModal } from '@/hooks/use-pro-modal';
-import { useTranspiler } from '@/lib/bundler/useTranspiler';
-import { transpileProject } from '@/lib/bundler';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import SyntaxHighlighter from "react-syntax-highlighter/dist/cjs/prism";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import { useClipboard } from "use-clipboard-copy";
+import type { GeneratedFile } from "@/lib/ucol/types";
+import { Loader2, FileCode, FolderOpen, Copy, Check, Download, Play, X, Smartphone, Monitor, Maximize2 } from "lucide-react";
+import { useTranspiler } from "@/lib/bundler/useTranspiler";
+import { transpileProject } from "@/lib/bundler";
 
 interface CodePanelProps {
     files: GeneratedFile[];
@@ -73,7 +73,7 @@ export function CodePanel({ files, loading }: CodePanelProps) {
     const [previewError, setPreviewError] = useState<string | null>(null);
     const [previewInsufficientCredits, setPreviewInsufficientCredits] = useState(false);
     const [previewMode, setPreviewMode] = useState<'fast' | 'backend' | null>(null);
-    const proModal = useProModal();
+    const router = useRouter();
     const { compile, isReady, isTranspiling, error: transpilerError } = useTranspiler();
 
     // Filter out scaffold files for the tree, but keep them accessible
@@ -355,7 +355,7 @@ root.render(React.createElement(App));
                     )}
                     {previewInsufficientCredits && (
                         <button
-                            onClick={() => proModal.onOpen()}
+                            onClick={() => router.push("/pricing")}
                             className="text-[10px] text-amber-300 hover:text-amber-200 transition-colors max-w-[220px] truncate"
                             title="Get more credits to unlock live preview"
                         >

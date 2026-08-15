@@ -2,9 +2,7 @@
 
 import Navbar from "@/components/navbar";
 import Sidebar from "@/components/sidebar";
-import { KofiDonationModal } from "@/components/kofi-donation-modal";
 
-// ✅ ADD THIS LINE to force dynamic rendering for this layout
 export const dynamic = 'force-dynamic';
 
 const DashboardLayout = ({
@@ -24,7 +22,6 @@ const DashboardLayout = ({
                 <div className="flex-1 overflow-auto h-full relative">
                     {children}
                 </div>
-                <KofiDonationModal />
             </main>
         </div>
     )

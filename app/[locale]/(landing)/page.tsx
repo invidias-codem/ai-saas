@@ -42,25 +42,6 @@ export default function ExpertLandingPage() {
       }} />
 
       <div className="relative z-10">
-        {/* Navbar */}
-        <header className="border-b border-white/10 backdrop-blur-md">
-          <div className="mx-auto max-w-7xl px-6 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-gradient-to-br from-white to-white/60" />
-              <span className="text-lg font-bold tracking-tight font-heading">Lattice OS</span>
-            </div>
-            <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-white/70">
-              <span className="hover:text-white transition-colors cursor-pointer">Mechanics</span>
-              <span className="hover:text-white transition-colors cursor-pointer">Experts</span>
-            </nav>
-            <Link href="/onboarding">
-              <Button className="bg-white text-black hover:bg-white/90 rounded-full px-6 py-2 text-sm font-semibold">
-                {t('ctaNav')}
-              </Button>
-            </Link>
-          </div>
-        </header>
-
         {/* Hero */}
         <section className="mx-auto max-w-7xl px-6 pt-24 pb-20 md:pt-28 md:pb-24">
           <motion.div

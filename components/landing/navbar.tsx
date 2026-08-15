@@ -9,75 +9,29 @@ import { motion, AnimatePresence, Variants } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
-import { CheckIcon, Cross2Icon, FileTextIcon, QuestionMarkCircledIcon, StarFilledIcon, EnterIcon, RocketIcon } from "@radix-ui/react-icons";
+import { FileTextIcon, QuestionMarkCircledIcon, EnterIcon, RocketIcon } from "@radix-ui/react-icons";
 import { Slack } from "lucide-react";
-import { CheckoutModal } from "@/components/checkout-modal";
+
 export const LandingNavbar = () => {
     const t = useTranslations("Landing");
     const tHero = useTranslations("Landing.hero");
     const [isOpen, setIsOpen] = useState(false);
-    const [isPricingOpen, setIsPricingOpen] = useState(false);
-    const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
     const { locale } = useParams() as { locale?: string };
 
-    const pricingTiers = [
-        {
-            name: t('pricing.freeTierName'),
-            price: 'Free',
-            unit: t('pricing.freeTierUnit'),
-            description: t('pricing.freeTierSubtitle'),
-            features: [
-                t('pricing.freeTierFeature1'),
-                t('pricing.freeTierFeature2'),
-                t('pricing.freeTierFeature3'),
-            ],
-            popular: false,
-        },
-        {
-            name: t('pricing.creatorBundle'),
-            price: '$5.00',
-            unit: t('pricing.creatorBundleUnit'),
-            description: t('pricing.subtitle'),
-            features: [
-                t('pricing.creatorBundleFeature1'),
-                t('pricing.creatorBundleFeature2'),
-                t('pricing.creatorBundleFeature3'),
-            ],
-            popular: true,
-        },
-        {
-            name: t('pricing.proStudio'),
-            price: '$20.00',
-            unit: t('pricing.proStudioUnit'),
-            description: t('pricing.subtitle'),
-            features: [
-                t('pricing.proStudioFeature1'),
-                t('pricing.proStudioFeature2'),
-                t('pricing.proStudioFeature3'),
-            ],
-            popular: false,
-        },
-        {
-            name: t('pricing.enterprise'),
-            price: t('pricing.enterprisePriceLabel'),
-            unit: t('pricing.enterpriseUnit'),
-            description: t('pricing.enterpriseSubtitle'),
-            features: [
-                t('pricing.enterpriseFeature1'),
-                t('pricing.enterpriseFeature2'),
-                t('pricing.enterpriseFeature3'),
-            ],
-            popular: false,
-        },
-    ];
+    const isLandingPage = pathname === "/" || pathname === `/${locale}`;
 
     const navLinks = [
         { href: "/blog", label: "Blog", icon: FileTextIcon },
         { href: "/slack", label: "Slack", icon: Slack },
         { href: "/support", label: "Support", icon: QuestionMarkCircledIcon },
+    ];
+
+    const landingAnchors = [
+        { href: "#mechanics", label: "Mechanics" },
+        { href: "#roster", label: "Experts" },
     ];
 
     const mounted = useSyncExternalStore(
@@ -93,9 +47,6 @@ export const LandingNavbar = () => {
     }, []);
 
     useEffect(() => {
-        // Close the mobile menu when the route changes. This is a genuine
-        // navigation side-effect, not derived state.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsOpen(false);
     }, [pathname]);
 
@@ -154,13 +105,14 @@ export const LandingNavbar = () => {
                         </div>
 
                         <div className="flex items-center gap-3">
-                            <Button
-                                onClick={() => setIsPricingOpen(true)}
-                                variant="ghost"
-                                className="landing-nav-ghost rounded-full"
-                            >
-                                Pricing
-                            </Button>
+                            <Link href="/pricing">
+                                <Button
+                                    variant="ghost"
+                                    className="landing-nav-ghost rounded-full"
+                                >
+                                    Pricing
+                                </Button>
+                            </Link>
                             <Link href="/dashboard">
                                 <Button
                                     variant="ghost"
@@ -263,15 +215,43 @@ export const LandingNavbar = () => {
                                         );
                                     })}
 
+                                    {isLandingPage && landingAnchors.map((anchor) => (
+                                        <motion.div key={anchor.href} variants={itemVariants} className="w-full">
+                                            <Link
+                                                href={anchor.href}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    setIsOpen(false);
+                                                    document.querySelector(anchor.href)?.scrollIntoView({ behavior: "smooth" });
+                                                }}
+                                                className="group relative block w-full"
+                                            >
+                                                <div className="relative overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-xl p-4 transition-all duration-300 hover:border-purple-500/50 hover:bg-accent/50 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.3)] hover:scale-[1.02] active:scale-[0.98]">
+                                                    <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/5 to-pink-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                                                    <div className="relative flex items-center justify-center gap-3">
+                                                        <span className="text-2xl font-semibold text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-500 group-hover:to-pink-500 transition-all duration-300">
+                                                            {anchor.label}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-foreground/5 to-transparent" />
+                                                </div>
+                                            </Link>
+                                        </motion.div>
+                                    ))}
+
                                     <motion.div variants={itemVariants} className="w-full flex items-center justify-center my-2">
                                         <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent w-full" />
                                     </motion.div>
 
                                     <motion.div variants={itemVariants} className="w-full">
-                                        <button
-                                            onClick={() => {
+                                        <Link
+                                            href="/pricing"
+                                            onClick={(e) => {
+                                                e.preventDefault();
                                                 setIsOpen(false);
-                                                setIsPricingOpen(true);
+                                                router.push("/pricing");
                                             }}
                                             className="group relative block w-full"
                                         >
@@ -279,7 +259,6 @@ export const LandingNavbar = () => {
                                                 <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
                                                 <div className="relative flex items-center justify-center gap-3">
-                                                    <StarFilledIcon className="h-6 w-6 text-purple-500 dark:text-purple-400 group-hover:text-pink-500 dark:group-hover:text-pink-400 transition-colors" />
                                                     <span className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400">
                                                         Pricing
                                                     </span>
@@ -287,7 +266,7 @@ export const LandingNavbar = () => {
 
                                                 <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-foreground/5 to-transparent" />
                                             </div>
-                                        </button>
+                                        </Link>
                                     </motion.div>
 
                                     <motion.div variants={itemVariants} className="w-full">
@@ -337,100 +316,6 @@ export const LandingNavbar = () => {
                 </AnimatePresence>,
                 document.body
             )}
-
-            <AnimatePresence>
-                {isPricingOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-end justify-center p-0 sm:items-center sm:p-4">
-                        <div
-                            className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
-                            onClick={() => setIsPricingOpen(false)}
-                        />
-
-                        <div className="relative flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-2xl border border-border bg-background shadow-2xl sm:rounded-2xl">
-                            <div className="flex items-center justify-between border-b border-border p-6">
-                                <div>
-                                    <h2 className="text-xl font-bold text-foreground font-heading">{t('pricing.title')}</h2>
-                                    <p className="text-sm text-muted-foreground mt-1">{t('pricing.subtitle')}</p>
-                                </div>
-                                <button
-                                    onClick={() => setIsPricingOpen(false)}
-                                    className="w-8 h-8 rounded-full bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground transition-colors flex items-center justify-center"
-                                    aria-label="Close pricing modal"
-                                >
-                                    <Cross2Icon className="w-4 h-4" />
-                                </button>
-                            </div>
-
-                            <div className="overflow-y-auto p-6 space-y-4">
-                                {pricingTiers.map((tier) => (
-                                    <div
-                                        key={tier.name}
-                                        className={cn(
-                                            "relative rounded-2xl border p-5 transition-all duration-300",
-                                            tier.popular
-                                                ? "border-purple-500 bg-gradient-to-br from-purple-500/5 to-pink-500/5 shadow-lg shadow-purple-500/10"
-                                                : "border-border bg-card"
-                                        )}
-                                    >
-                                        {tier.popular && (
-                                            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold">
-                                                Most Popular
-                                            </div>
-                                        )}
-
-                                        <div className="text-center mb-4">
-                                            <h3 className="text-lg font-bold text-foreground mb-1">{tier.name}</h3>
-                                            <div className="flex items-baseline justify-center gap-1">
-                                                <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400">
-                                                    {tier.price}
-                                                </span>
-                                                <span className="text-sm text-muted-foreground">{tier.unit}</span>
-                                            </div>
-                                            <p className="text-sm text-muted-foreground mt-2">{tier.description}</p>
-                                        </div>
-
-                                        <ul className="space-y-2 mb-5">
-                                            {tier.features.map((feature) => (
-                                                <li key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
-                                                    <CheckIcon className="w-4 h-4 text-purple-500 dark:text-purple-400 mt-0.5 flex-shrink-0" />
-                                                    <span>{feature}</span>
-                                                </li>
-                                            ))}
-                                        </ul>
-
-                                        <Button
-                                            className={cn(
-                                                "w-full rounded-xl font-semibold",
-                                                tier.popular
-                                                    ? "landing-cta-primary"
-                                                    : "landing-cta-secondary"
-                                            )}
-                                            onClick={() => {
-                                                if (tier.name === t('pricing.freeTierName') || pricingTiers.indexOf(tier) === 0) {
-                                                    window.location.href = `/${locale || ''}/sign-up`;
-                                                    return;
-                                                }
-                                                setIsPricingOpen(false);
-                                                setIsCheckoutOpen(true);
-                                            }}
-                                        >
-                                            {t('pricing.startCreating')}
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="border-t border-border px-6 py-4">
-                                <p className="text-xs text-muted-foreground text-center">
-                                    {t('pricing.disclaimer')}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            <CheckoutModal open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen} />
         </>
     );
 }
