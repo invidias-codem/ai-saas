@@ -373,7 +373,7 @@ function ConversationPage({
   const [streaming, setStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [showGreeting, setShowGreeting] = useState(true);
+  const [showGreeting, setShowGreeting] = useState<boolean>(() => Boolean(initialConsultantGreeting));
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [showFilePreview, setShowFilePreview] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);

@@ -148,6 +148,24 @@ export default function OnboardingWizard() {
         }).catch((e) => console.warn("Source seeding failed (non-fatal):", e));
       }
 
+      const urlsForWorker = sources
+        .filter((s) => s.kind === "url" && s.url)
+        .map((s) => s.url as string);
+      const notesForWorker = sources
+        .filter((s) => s.kind === "note" && s.text)
+        .map((s) => s.text as string);
+
+      fetch(`/api/onboarding/worker`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: data.workspace.id,
+          domainIntent: intentData.objective,
+          urls: urlsForWorker,
+          notes: notesForWorker,
+        }),
+      }).catch((e) => console.warn("Background worker trigger failed (non-fatal):", e));
+
       router.push(`/${locale}/onboarding/building?workspaceId=${data.workspace.id}`);
     } catch (err) {
       console.error("Onboarding failed:", err);
