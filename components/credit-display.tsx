@@ -13,7 +13,7 @@ export const CreditDisplay = () => {
 
     if (isLoading) return <div className="text-muted-foreground text-xs animate-pulse">Loading...</div>;
 
-    const paypalUrl = process.env.NEXT_PUBLIC_PAYPAL_DONATION_URL || "https://www.paypal.com/joshuajair";
+    const paypalUrl = process.env.NEXT_PUBLIC_PAYPAL_DONATION_URL || "https://ko-fi.com/joshuajair/?hidefeed=true&widget=true&embed=true&preview=true";
 
     return (
         <div className="flex items-center gap-x-2">

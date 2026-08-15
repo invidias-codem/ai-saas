@@ -75,7 +75,7 @@ function CreditsCard() {
   const { credits, isLoading } = useCredits();
   const t = useTranslations("Settings");
 
-  const paypalUrl = process.env.NEXT_PUBLIC_PAYPAL_DONATION_URL || "https://www.paypal.com/joshuajair";
+  const paypalUrl = process.env.NEXT_PUBLIC_PAYPAL_DONATION_URL || "https://ko-fi.com/joshuajair/?hidefeed=true&widget=true&embed=true&preview=true";
 
   return (
     <Card className="p-6 border-black/5">
