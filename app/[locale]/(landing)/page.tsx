@@ -62,7 +62,7 @@ export default function ExpertLandingPage() {
         </header>
 
         {/* Hero */}
-        <section className="mx-auto max-w-7xl px-6 pt-24 pb-20 md:pt-32 md:pb-28">
+        <section className="mx-auto max-w-7xl px-6 pt-24 pb-20 md:pt-28 md:pb-24">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
