@@ -14,18 +14,44 @@ export default function PricingPage() {
       key: "standardOS",
       popular: false,
       href: "/onboarding",
+      checkout: false,
     },
     {
       key: "theExpert",
       popular: true,
       href: "/onboarding",
+      checkout: true,
     },
     {
       key: "enterprise",
       popular: false,
       href: "/onboarding",
+      checkout: false,
     },
   ] as const;
+
+  const handleExpertCheckout = async () => {
+    try {
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        console.error('Failed to create checkout session:', data);
+        alert(data.error || 'Failed to start checkout. Please try again.');
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      alert('Failed to start checkout. Please try again.');
+    }
+  };
 
   return (
     <div className="relative min-h-screen bg-background text-foreground overflow-hidden">
@@ -131,17 +157,30 @@ export default function PricingPage() {
                     ))}
                   </ul>
 
-                  <Link href={plan.href}>
+                  {plan.checkout ? (
                     <Button
                       className={`w-full rounded-xl font-semibold ${
                         plan.popular
                           ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:opacity-90"
                           : ""
                       }`}
+                      onClick={handleExpertCheckout}
                     >
                       {planData.cta}
                     </Button>
-                  </Link>
+                  ) : (
+                    <Link href={plan.href}>
+                      <Button
+                        className={`w-full rounded-xl font-semibold ${
+                          plan.popular
+                            ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:opacity-90"
+                            : ""
+                        }`}
+                      >
+                        {planData.cta}
+                      </Button>
+                    </Link>
+                  )}
                 </motion.div>
               );
             })}

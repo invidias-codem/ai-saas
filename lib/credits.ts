@@ -102,9 +102,21 @@ export async function hasUnlimitedUsageAccess(userId?: string | null, email?: st
             return false;
         }
 
-        return data?.tier === 'enterprise';
+        if (data?.tier === 'enterprise') return true;
+
+        if (!supabaseAdmin) {
+            return false;
+        }
+
+        const { data: subscriptionData } = await supabaseAdmin
+            .from('subscriptions')
+            .select('tier, stripe_status')
+            .eq('clerk_user_id', userId)
+            .maybeSingle();
+
+        return subscriptionData?.tier === 'pro' && subscriptionData?.stripe_status === 'active';
     } catch (error) {
-        console.error('[Credits] Exception resolving unlimited access:', error);
+        console.error('[Credits] Exception resolving subscription access:', error);
         return false;
     }
 }

@@ -41,6 +41,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/integrations/slack/interactivity',
     '/api/integrations/slack/auth',
     '/api/webhooks/kofi',
+    '/api/webhooks/stripe',
     '/api/support/verify-donation',
     '/api/integrations/telegram/webhook',
     '/api/internal/jklaw',
