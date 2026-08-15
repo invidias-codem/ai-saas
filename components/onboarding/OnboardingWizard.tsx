@@ -148,7 +148,7 @@ export default function OnboardingWizard() {
         }).catch((e) => console.warn("Source seeding failed (non-fatal):", e));
       }
 
-      router.push(`/${locale}/workspaces/${data.workspace.id}`);
+      router.push(`/${locale}/onboarding/building?workspaceId=${data.workspace.id}`);
     } catch (err) {
       console.error("Onboarding failed:", err);
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -250,23 +250,34 @@ export default function OnboardingWizard() {
       )}
 
       {step === "sources" && (
-        <Card className="p-6 space-y-6">
+        <Card className="p-6 space-y-6 border-neutral-800 bg-neutral-900/40">
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-2">
               <Link2 className="w-4 h-4 text-sky-500" /> Add a source link
             </label>
-            <div className="flex gap-2">
-              <input
-                value={urlDraft}
-                onChange={(e) => setUrlDraft(e.target.value)}
-                placeholder="https://... (pricing page, competitor docs, directory listings)"
-                className="flex-1 rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3"
-              />
-              <Button variant="outline" size="sm" onClick={addUrlSource} disabled={!urlDraft.trim()}>
-                <Plus className="w-4 h-4 mr-1" /> Add link
-              </Button>
+            <input
+              value={urlDraft}
+              onChange={(e) => setUrlDraft(e.target.value)}
+              placeholder="https://... (pricing page, competitor docs, directory listings)"
+              className="flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-400 focus:outline-none"
+            />
+            <div className="flex flex-wrap gap-2 pt-1">
+              {[
+                'https://competitor.com/pricing',
+                'https://directory.com/med-spas',
+                'https://docs.example.com/reference',
+              ].map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => setUrlDraft(example)}
+                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-2.5 py-1 text-[11px] font-mono text-neutral-400 transition hover:border-neutral-500 hover:text-neutral-200"
+                >
+                  {example}
+                </button>
+              ))}
             </div>
-            <p className="text-xs text-muted-foreground">Lead with URLs so the Data Refinery can scrape, structure, and index them automatically.</p>
+            <p className="text-xs text-neutral-500">Lead with URLs so the Data Refinery can scrape, structure, and index them automatically.</p>
           </div>
 
           <div className="space-y-2">
@@ -277,10 +288,10 @@ export default function OnboardingWizard() {
               value={noteDraft}
               onChange={(e) => setNoteDraft(e.target.value)}
               placeholder="Paste internal notes, pricing assumptions, or reference context..."
-              className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3 min-h-[90px]"
+              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-400 focus:outline-none min-h-[90px]"
             />
             <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={addNoteSource} disabled={!noteDraft.trim()}>
+              <Button variant="outline" size="sm" onClick={addNoteSource} disabled={!noteDraft.trim()} className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
                 <Plus className="w-4 h-4 mr-1" /> Add note
               </Button>
             </div>
@@ -288,19 +299,19 @@ export default function OnboardingWizard() {
 
           {sources.length > 0 && (
             <div className="space-y-2">
-              <div className="text-sm font-medium">Seeded sources ({sources.length})</div>
+              <div className="text-sm font-medium text-neutral-300">Seeded sources ({sources.length})</div>
               <div className="space-y-2">
                 {sources.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-white/10 px-4 py-2.5">
+                  <div key={i} className="flex items-center justify-between rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5">
                     <div className="flex items-center gap-2 min-w-0">
                       {s.kind === "note" ? (
                         <StickyNote className="w-4 h-4 text-violet-500 shrink-0" />
                       ) : (
                         <Link2 className="w-4 h-4 text-sky-500 shrink-0" />
                       )}
-                      <span className="text-sm truncate">{s.title}</span>
+                      <span className="text-sm truncate text-neutral-300">{s.title}</span>
                     </div>
-                    <button onClick={() => removeSource(i)} className="text-muted-foreground hover:text-foreground shrink-0">
+                    <button onClick={() => removeSource(i)} className="text-neutral-500 hover:text-neutral-300 shrink-0">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -310,10 +321,10 @@ export default function OnboardingWizard() {
           )}
 
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("intent")}>
+            <Button variant="outline" onClick={() => setStep("intent")} className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
               Back
             </Button>
-            <Button onClick={() => setStep("building")}>Create workspace</Button>
+            <Button onClick={() => setStep("building")} className="bg-white text-neutral-900 hover:bg-neutral-200">Create workspace</Button>
           </div>
         </Card>
       )}

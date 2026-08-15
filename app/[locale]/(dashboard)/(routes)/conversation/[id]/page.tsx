@@ -21,7 +21,6 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     console.error('Auth error on conversation load', err);
   }
 
-  // Declared up-front so the early-return guards below can reference them.
   let initialMessages: any[] = [];
   let conversationContext: ConversationContext = {
     workspaceId: null,
@@ -30,16 +29,15 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
     operatingProfileName: null,
     operatingProfileMode: null,
   };
+  let initialConsultantGreeting: string | null = null;
 
-  // Guard: no admin client available — render the client with empty context
-  // outside the try/catch (JSX must not be constructed inside try).
   if (!supabaseAdmin) {
-    console.warn('supabaseAdmin is null, skipping conversation context fetch');
     return (
       <ChatClient
         conversationId={conversationId}
         initialMessages={initialMessages}
         conversationContext={conversationContext}
+        initialConsultantGreeting={initialConsultantGreeting}
       />
     );
   }
@@ -98,6 +96,43 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
         sources: [],
       }));
     }
+
+    // Build onboarding-aware greeting when the conversation is fresh.
+    const hasMessages = initialMessages.length > 0;
+    const workspaceIdForGreeting = conversation?.workspace_id || conversationContext.workspaceId;
+    if (!hasMessages && workspaceIdForGreeting) {
+      const { data: domainIntentRow } = await supabaseAdmin
+        .from('workspace_sources')
+        .select('id, title')
+        .eq('workspace_id', workspaceIdForGreeting)
+        .eq('metadata->>kind', 'domain_intent')
+        .maybeSingle();
+
+      const { count: sourceCount } = await supabaseAdmin
+        .from('workspace_sources')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', workspaceIdForGreeting);
+
+      const hasDomainIntent = Boolean(domainIntentRow);
+      const hasSources = typeof sourceCount === 'number' && sourceCount > 0;
+
+      if (hasDomainIntent || hasSources) {
+        const parts = [
+          hasDomainIntent
+            ? "I've initialized our workspace and processed the context you provided"
+            : null,
+          hasSources
+            ? `through the Data Refinery${hasDomainIntent ? ';' : '.'} I'm fully calibrated to your domain constraints.`
+            : hasDomainIntent
+              ? '.'
+              : null,
+        ].filter(Boolean);
+
+        if (parts.length > 0) {
+          initialConsultantGreeting = `${parts.join(' ')} What specific analysis or strategy are we executing first?`;
+        }
+      }
+    }
   } catch (err) {
     console.error('Exception loading conversation page data:', err);
   }
@@ -107,6 +142,7 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
       conversationId={conversationId}
       initialMessages={initialMessages}
       conversationContext={conversationContext}
+      initialConsultantGreeting={initialConsultantGreeting}
     />
   );
 }

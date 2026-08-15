@@ -300,10 +300,12 @@ function ConversationPageGlobalWrapper({
   conversationId,
   initialMessages = [],
   conversationContext,
+  initialConsultantGreeting,
 }: {
   conversationId: string;
   initialMessages?: any[];
   conversationContext: ConversationContext;
+  initialConsultantGreeting?: string | null;
 }) {
   return (
     <ModelProvider>
@@ -311,6 +313,7 @@ function ConversationPageGlobalWrapper({
         conversationId={conversationId}
         initialMessages={initialMessages}
         conversationContext={conversationContext}
+        initialConsultantGreeting={initialConsultantGreeting}
       />
     </ModelProvider>
   )
@@ -321,10 +324,12 @@ function ConversationPage({
   conversationId,
   initialMessages,
   conversationContext,
+  initialConsultantGreeting,
 }: {
   conversationId: string;
   initialMessages: any[];
   conversationContext: ConversationContext;
+  initialConsultantGreeting?: string | null;
 }) {
   const t = useTranslations("Conversation");
 
@@ -978,10 +983,12 @@ function ConversationPage({
               </div>
               <div className="space-y-2 max-w-xl mb-6">
                 <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-foreground">
-                  What would you like to explore?
+                  {initialConsultantGreeting ? 'Your consultant is ready' : 'What would you like to explore?'}
                 </h2>
                 <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
-                  Start a conversation, attach a file, or choose a prompt below to see Lattice in action.
+                  {initialConsultantGreeting
+                    ? initialConsultantGreeting
+                    : 'Start a conversation, attach a file, or choose a prompt below to see Lattice in action.'}
                 </p>
               </div>
 
