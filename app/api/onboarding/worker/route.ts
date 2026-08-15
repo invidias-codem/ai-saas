@@ -2,13 +2,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 import { waitUntil } from '@vercel/functions';
-import { prepareSourceChunks, SOURCE_TYPES } from '@/lib/ai/sourceIngest';
+import { prepareSourceChunks } from '@/lib/ai/sourceIngest';
 import { generateEmbedding } from '@/lib/memory/embedding';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import * as cheerio from 'cheerio';
+
+type IngestStatus = {
+  stage: 'ingest:start' | 'scrape:fetch' | 'gemini:cleanse' | 'vector:upsert' | 'persona:synth' | 'ingest:complete';
+  workspaceId: string;
+  totalUrls: number;
+  successfulScrapes: number;
+  failedUrl?: string;
+  error?: string;
+  durationMs?: number;
+};
+
+const log = (event: IngestStatus) => {
+  console.log('[OnboardingWorker]', JSON.stringify(event));
+};
 
 async function fetchAndExtractText(url: string): Promise<string> {
   const res = await fetch(url, {
@@ -102,66 +116,85 @@ export async function POST(req: NextRequest) {
     const allUrlSources = Array.isArray(urls) ? urls.filter(Boolean) : [];
     const allNotes = Array.isArray(notes) ? notes.filter(Boolean) : [];
 
-    const ingest = async () => {
-      if (!supabaseAdmin) return;
-      const urlPayloads: any[] = [];
-      for (const url of allUrlSources.slice(0, 8)) {
+    waitUntil(
+      (async () => {
+        const t0 = Date.now();
+        const status: IngestStatus = {
+          stage: 'ingest:start',
+          workspaceId,
+          totalUrls: allUrlSources.length,
+          successfulScrapes: 0,
+        };
+        log(status);
+
         try {
-          const chunks = await scrapeAndChunk(url);
-          const rows = await Promise.all(
-            chunks.map(async (c) => ({
-              workspace_id: workspaceId,
-              user_id: userId,
-              source_type: c.source_type,
-              title: c.title,
-              origin_uri: c.origin_uri,
-              raw_text: c.raw_text,
-              content: c.content,
-              embedding: await generateEmbedding(c.content).catch(() => null),
-              metadata: c.metadata,
-            }))
-          );
-          urlPayloads.push(...rows);
-        } catch (e) {
-          console.error('[OnboardingWorker] scrape failed:', url, e);
+          const urlPayloads: any[] = [];
+          for (const url of allUrlSources.slice(0, 8)) {
+            try {
+              log({ ...status, stage: 'scrape:fetch', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: urlPayloads.length });
+              const chunks = await scrapeAndChunk(url);
+              log({ ...status, stage: 'gemini:cleanse', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: urlPayloads.length });
+
+              const rows = await Promise.all(
+                chunks.map(async (c) => ({
+                  workspace_id: workspaceId,
+                  user_id: userId,
+                  source_type: c.source_type,
+                  title: c.title,
+                  origin_uri: c.origin_uri,
+                  raw_text: c.raw_text,
+                  content: c.content,
+                  embedding: await generateEmbedding(c.content).catch(() => null),
+                  metadata: c.metadata,
+                }))
+              );
+              urlPayloads.push(...rows);
+              status.successfulScrapes = urlPayloads.length;
+            } catch (e: any) {
+              log({ ...status, stage: 'ingest:start', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: urlPayloads.length, failedUrl: url, error: e?.message || 'scrape_failed' });
+            }
+          }
+
+          const notePayloads = allNotes.map((text: string) => ({
+            workspace_id: workspaceId,
+            user_id: userId,
+            source_type: 'note',
+            title: text.split('\n')[0].slice(0, 60) || 'Note',
+            origin_uri: null,
+            raw_text: text,
+            content: text,
+            embedding: null,
+            metadata: { via: 'onboarding' },
+          }));
+
+          const domainPayload = {
+            workspace_id: workspaceId,
+            user_id: userId,
+            source_type: 'note',
+            title: 'Consultant domain intent',
+            origin_uri: null,
+            raw_text: `This consultant's domain and purpose: ${domainIntent}`,
+            content: `This consultant's domain and purpose: ${domainIntent}`,
+            embedding: null,
+            metadata: { via: 'onboarding', kind: 'domain_intent' },
+          };
+
+          const toInsert = [...notePayloads, domainPayload, ...urlPayloads];
+          if (toInsert.length > 0 && supabaseAdmin) {
+            log({ ...status, stage: 'vector:upsert', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: status.successfulScrapes });
+            await supabaseAdmin.from('workspace_sources').insert(toInsert);
+          }
+
+          log({ ...status, stage: 'persona:synth', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: status.successfulScrapes });
+          await synthesizePersona(workspaceId, domainIntent);
+
+          const durationMs = Date.now() - t0;
+          log({ ...status, stage: 'ingest:complete', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: status.successfulScrapes, durationMs });
+        } catch (e: any) {
+          log({ ...status, stage: 'ingest:complete', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: status.successfulScrapes, error: e?.message || 'worker_failed' });
         }
-      }
-
-      const notePayloads = allNotes.map((text: string) => ({
-        workspace_id: workspaceId,
-        user_id: userId,
-        source_type: 'note',
-        title: text.split('\n')[0].slice(0, 60) || 'Note',
-        origin_uri: null,
-        raw_text: text,
-        content: text,
-        embedding: null,
-        metadata: { via: 'onboarding' },
-      }));
-
-      const domainPayload = {
-        workspace_id: workspaceId,
-        user_id: userId,
-        source_type: 'note',
-        title: 'Consultant domain intent',
-        origin_uri: null,
-        raw_text: `This consultant's domain and purpose: ${domainIntent}`,
-        content: `This consultant's domain and purpose: ${domainIntent}`,
-        embedding: null,
-        metadata: { via: 'onboarding', kind: 'domain_intent' },
-      };
-
-      const toInsert = [...notePayloads, domainPayload, ...urlPayloads];
-      if (toInsert.length > 0 && supabaseAdmin) {
-        await supabaseAdmin.from('workspace_sources').insert(toInsert);
-      }
-    };
-
-    const personaBuild = async () => {
-      await synthesizePersona(workspaceId, domainIntent);
-    };
-
-    waitUntil(Promise.all([ingest(), personaBuild()]).catch((e) => console.error('[OnboardingWorker] failed:', e)));
+      })().catch((e) => console.error('[OnboardingWorker] unhandled background failure:', e))
+    );
 
     return NextResponse.json({ accepted: true });
   } catch (error: any) {

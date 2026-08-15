@@ -197,7 +197,7 @@ export async function generateConversationReply(
     const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
     const { readFileTool, writeFileTool, patchFileTool } = await import('@/lib/agents/tools/harnessTools');
     const { executeCommandTool } = await import('@/lib/agents/tools/executionTools');
-    const { discoverDocumentsTool, extractTextTool, summarizeRepoTool, semanticSearchTool } = await import('@/lib/agents/tools/intelligenceTools');
+    const { discoverDocumentsTool, extractTextTool, summarizeRepoTool, semanticSearchTool, workspaceSourcesSearchTool } = await import('@/lib/agents/tools/intelligenceTools');
 
     // 1. Initialize Registry with all agentic tools
     const registry = new ToolRegistry();
@@ -219,6 +219,7 @@ export async function generateConversationReply(
       registry.register(extractTextTool);
       registry.register(summarizeRepoTool);
       registry.register(semanticSearchTool);
+      registry.register(workspaceSourcesSearchTool);
     }
 
     // 2. Construct Prompt (Multimodal support)

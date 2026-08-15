@@ -116,3 +116,49 @@ export const semanticSearchTool: Tool<{ query: string }, any> = {
         return { success: true, data: res };
     }
 };
+
+export const workspaceSourcesSearchTool: Tool<{ query: string }, any> = {
+    name: "query_workspace_sources",
+    description: "Searches the user's dedicated workspace knowledge base (Data Refinery) for factual market data, competitor intelligence, and provided documentation. Always use this to verify facts before answering domain-specific queries.",
+    schema: z.object({
+        query: z.string().describe("The semantic search term derived from the user's prompt.")
+    }),
+    risk: "read-only",
+    timeoutMs: 15_000,
+    execute: async (input, context) => {
+        if (!context.workspaceId) {
+            return { success: false, error: "Missing workspace context." };
+        }
+        if (!context.userId) {
+            return { success: false, error: "Missing user context." };
+        }
+
+        try {
+            const { queryWorkspaceSources } = await import('@/lib/workspace/sources');
+            const results = await queryWorkspaceSources({
+                workspaceId: context.workspaceId,
+                userId: context.userId,
+                query: input.query,
+                matchCount: 8,
+                matchThreshold: 0.7,
+            });
+
+            if (!results.length) {
+                return { success: true, data: "No relevant sources found in the Data Refinery for this query." };
+            }
+
+            const formatted = results
+                .map((r, idx) => {
+                    const title = r.title || r.origin_uri || `Source ${idx + 1}`;
+                    const uri = r.origin_uri ? `\nURI: ${r.origin_uri}` : '';
+                    const sim = typeof r.similarity === 'number' ? `\nSimilarity: ${(r.similarity * 100).toFixed(1)}%` : '';
+                    return `[${title}]${uri}${sim}\n${r.content}`;
+                })
+                .join('\n\n---\n\n');
+
+            return { success: true, data: formatted };
+        } catch (e: any) {
+            return { success: false, error: e?.message || 'workspace_source_query_failed' };
+        }
+    }
+};
