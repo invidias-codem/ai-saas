@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseClient';
 import { waitUntil } from '@vercel/functions';
 import { prepareSourceChunks } from '@/lib/ai/sourceIngest';
 import { generateEmbedding } from '@/lib/memory/embedding';
+import { detectDelta, supersedeAndCreateCausalLinks } from '@/lib/workspace/delta-detection';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -11,7 +12,7 @@ export const maxDuration = 60;
 import * as cheerio from 'cheerio';
 
 type IngestStatus = {
-  stage: 'ingest:start' | 'scrape:fetch' | 'gemini:cleanse' | 'vector:upsert' | 'persona:synth' | 'ingest:complete';
+  stage: 'ingest:start' | 'scrape:fetch' | 'gemini:cleanse' | 'vector:upsert' | 'persona:synth' | 'ingest:complete' | 'delta:new' | 'delta:unchanged' | 'delta:updated';
   workspaceId: string;
   totalUrls: number;
   successfulScrapes: number;
@@ -135,20 +136,66 @@ export async function POST(req: NextRequest) {
               const chunks = await scrapeAndChunk(url);
               log({ ...status, stage: 'gemini:cleanse', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: urlPayloads.length });
 
-              const rows = await Promise.all(
+              // Generate embeddings for delta detection
+              const chunksWithEmbeddings = await Promise.all(
                 chunks.map(async (c) => ({
-                  workspace_id: workspaceId,
-                  user_id: userId,
-                  source_type: c.source_type,
-                  title: c.title,
-                  origin_uri: c.origin_uri,
-                  raw_text: c.raw_text,
                   content: c.content,
                   embedding: await generateEmbedding(c.content).catch(() => null),
-                  metadata: c.metadata,
                 }))
               );
-              urlPayloads.push(...rows);
+
+              // Run delta detection
+              const delta = await detectDelta(workspaceId, url, chunksWithEmbeddings);
+              const deltaStage = `delta:${delta.verdict.toLowerCase()}` as 'delta:new' | 'delta:unchanged' | 'delta:updated';
+              log({ ...status, stage: deltaStage, workspaceId, totalUrls: allUrlSources.length, successfulScrapes: urlPayloads.length });
+
+              if (delta.verdict === 'UNCHANGED') {
+                // Content unchanged — skip insert to save tokens
+                continue;
+              }
+
+              // For UPDATED: supersede old rows first, then insert new ones
+              if (delta.verdict === 'UPDATED') {
+                // Insert new rows first (to get their IDs for causal edge creation)
+                const rows = chunksWithEmbeddings.map((c) => ({
+                  workspace_id: workspaceId,
+                  user_id: userId,
+                  source_type: 'url',
+                  title: new URL(url).hostname,
+                  origin_uri: url,
+                  raw_text: c.content,
+                  content: c.content,
+                  embedding: c.embedding,
+                  metadata: { via: 'onboarding', needs_scrape: true },
+                }));
+
+                const { data: insertedRows } = await supabaseAdmin
+                  .from('workspace_sources')
+                  .insert(rows)
+                  .select('id');
+
+                if (insertedRows && insertedRows.length > 0) {
+                  const newIds = insertedRows.map((r) => r.id);
+                  // Supersede old rows and create causal links
+                  await supersedeAndCreateCausalLinks(workspaceId, url, newIds);
+                  urlPayloads.push(...insertedRows);
+                }
+              } else {
+                // NEW: insert directly
+                const rows = chunksWithEmbeddings.map((c) => ({
+                  workspace_id: workspaceId,
+                  user_id: userId,
+                  source_type: 'url',
+                  title: new URL(url).hostname,
+                  origin_uri: url,
+                  raw_text: c.content,
+                  content: c.content,
+                  embedding: c.embedding,
+                  metadata: { via: 'onboarding', needs_scrape: true },
+                }));
+                urlPayloads.push(...rows);
+              }
+
               status.successfulScrapes = urlPayloads.length;
             } catch (e: any) {
               log({ ...status, stage: 'ingest:start', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: urlPayloads.length, failedUrl: url, error: e?.message || 'scrape_failed' });
