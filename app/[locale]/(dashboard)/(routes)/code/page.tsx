@@ -335,18 +335,22 @@ function CodePageContent() {
 
 
   // Initial memory-count load on mount — a data-fetch effect.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMemoryCount();
   }, []);
 
   // Trigger fetch on new message (bot response)
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (messages.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchMemoryCount();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsMemoryPulsing(true);
-      const timer = setTimeout(() => setIsMemoryPulsing(false), 2000);
+      const timer = setTimeout(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setIsMemoryPulsing(false);
+      }, 2000);
       return () => clearTimeout(timer);
     }
   }, [messages.length]);

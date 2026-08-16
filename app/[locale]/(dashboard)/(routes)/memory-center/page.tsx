@@ -84,9 +84,9 @@ export default function MemoryCenterPage() {
   }, []);
 
   // Mount-only: read browser APIs (navigator.onLine, serviceWorker)
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNetworkReady(navigator.onLine);
     }
     if (typeof window === 'undefined') return;
