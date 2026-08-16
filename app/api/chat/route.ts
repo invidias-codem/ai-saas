@@ -20,6 +20,7 @@ import { logger } from '@/lib/logger';
 import type { UcolRequestPacket } from '@/lib/ucol/routing/types';
 import type { FileAttachmentInput } from '@/lib/types/attachments';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { trackFreeInteraction } from '@/lib/subscription/interaction-tracker';
 
 async function loadWorkspacePersona(workspaceId: string): Promise<string | null> {
   try {
@@ -268,6 +269,12 @@ export async function POST(req: Request) {
                 };
             },
         });
+
+        // Track free-tier interaction and signal nudge at threshold
+        const tracking = await trackFreeInteraction(user.userId);
+        if (tracking.shouldNudge) {
+            result.headers.set("x-trigger-nudge", "true");
+        }
 
         return result;
 

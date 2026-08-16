@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { FileTextIcon, QuestionMarkCircledIcon, EnterIcon, RocketIcon } from "@radix-ui/react-icons";
 import { Slack } from "lucide-react";
+import { usePricingModal } from "@/lib/store/pricing-modal-store";
 
 export const LandingNavbar = () => {
     const t = useTranslations("Landing");
@@ -22,6 +23,7 @@ export const LandingNavbar = () => {
     const { locale } = useParams() as { locale?: string };
 
     const isLandingPage = pathname === "/" || pathname === `/${locale}`;
+    const { open: openPricingModal } = usePricingModal();
 
     const navLinks = [
         { href: "/blog", label: "Blog", icon: FileTextIcon },
@@ -105,14 +107,13 @@ export const LandingNavbar = () => {
                         </div>
 
                         <div className="flex items-center gap-3">
-                            <Link href="/pricing">
-                                <Button
-                                    variant="ghost"
-                                    className="landing-nav-ghost rounded-full"
-                                >
-                                    Pricing
-                                </Button>
-                            </Link>
+                            <Button
+                                variant="ghost"
+                                className="landing-nav-ghost rounded-full"
+                                onClick={() => openPricingModal()}
+                            >
+                                Pricing
+                            </Button>
                             <Link href="/dashboard">
                                 <Button
                                     variant="ghost"
@@ -246,12 +247,11 @@ export const LandingNavbar = () => {
                                     </motion.div>
 
                                     <motion.div variants={itemVariants} className="w-full">
-                                        <Link
-                                            href="/pricing"
+                                        <button
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 setIsOpen(false);
-                                                router.push("/pricing");
+                                                openPricingModal();
                                             }}
                                             className="group relative block w-full"
                                         >
@@ -266,7 +266,7 @@ export const LandingNavbar = () => {
 
                                                 <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-foreground/5 to-transparent" />
                                             </div>
-                                        </Link>
+                                        </button>
                                     </motion.div>
 
                                     <motion.div variants={itemVariants} className="w-full">

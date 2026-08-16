@@ -55,6 +55,7 @@ import {
 } from "@/lib/conversationManager";
 import { useSupabaseChat, Message as SupabaseMessage } from "@/app/hooks/useSupabaseChat";
 import { useRuntimeStore } from "@/lib/store/runtimeStore";
+import { usePricingModal } from "@/lib/store/pricing-modal-store";
 
 // New Agentic Integration
 import { ModelProvider, useModel } from "@/contexts/ModelContext";
@@ -377,6 +378,7 @@ function ConversationPage({
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [showFilePreview, setShowFilePreview] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const { open: openPricingModal } = usePricingModal();
   const [sessionId, setSessionId] = useState("");
   const [sessionRestored, setSessionRestored] = useState(false);
   const [deviceId, setDeviceId] = useState("");
@@ -740,6 +742,11 @@ function ConversationPage({
       const debugIntent = response.headers.get("X-Debug-Intent") || undefined;
       setDebugExecutionMode(debugExecutionMode);
       setDebugIntent(debugIntent);
+
+      // Check for pricing nudge trigger from server
+      if (response.headers.get("x-trigger-nudge") === "true") {
+        openPricingModal();
+      }
 
       const cleanedAccum = accum.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim();
       setMessages(prev => [...prev, { text: cleanedAccum, role: "bot", timestamp: new Date(), sources }]);
