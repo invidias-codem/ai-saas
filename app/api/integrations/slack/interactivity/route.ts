@@ -363,6 +363,15 @@ async function handleBlockActions(
         userId: user?.id,
         responseUrl: response_url,
       });
+
+      // Telemetry: bluesky draft action
+      const { logEvent } = await import('@/lib/telemetry');
+      logEvent({
+        eventType: action_id === 'bluesky_approve' ? 'bluesky_draft_approved' : 'bluesky_draft_rejected',
+        userId: user?.id,
+        metadata: { queueItemId: value },
+      });
+
       continue;
     }
 

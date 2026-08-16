@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { logEvent } from '@/lib/telemetry';
 
 function getStripe() {
   const apiKey = process.env.STRIPE_SECRET_KEY;
@@ -64,6 +65,9 @@ async function upsertSubscriptionFromCheckout(session: Stripe.Checkout.Session) 
   }
 
   console.log(`[Stripe:Webhook] Unlocked expert access for ${clerkUserId}`);
+
+  // Telemetry: checkout completed
+  logEvent({ eventType: 'stripe_checkout_completed', userId: clerkUserId });
 }
 
 async function markSubscriptionCancelled(subscriptionId: string) {

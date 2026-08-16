@@ -13,6 +13,7 @@ import { supabaseAdmin } from "@/lib/supabaseClient";
 import { processChunkForKnowledgeGraph } from "@/lib/workspace/entity-extraction";
 import { extractEntities } from "@/lib/workspace/entity-extraction";
 import { requireCronAuth } from "@/lib/security/cronAuth";
+import { logEvent } from "@/lib/telemetry";
 
 export const maxDuration = 300;
 const MAX_FEEDS_PER_RUN = 5;
@@ -135,6 +136,13 @@ export async function GET(req: NextRequest) {
                     confidence: extraction.entities[0]?.confidence ?? 0.5,
                   });
                   repliesDrafted++;
+
+                  // Telemetry: draft created
+                  logEvent({
+                    eventType: 'bluesky_draft_created',
+                    userId: 'bluesky-agent',
+                    metadata: { source_author: post.author.handle, source_uri: post.uri },
+                  });
                 }
               }
             }

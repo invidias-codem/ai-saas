@@ -6,6 +6,7 @@ import { prepareSourceChunks } from '@/lib/ai/sourceIngest';
 import { generateEmbedding } from '@/lib/memory/embedding';
 import { detectDelta, supersedeAndCreateCausalLinks } from '@/lib/workspace/delta-detection';
 import { processChunkForKnowledgeGraph } from '@/lib/workspace/entity-extraction';
+import { logEvent } from '@/lib/telemetry';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -149,6 +150,14 @@ export async function POST(req: NextRequest) {
               const delta = await detectDelta(workspaceId, url, chunksWithEmbeddings);
               const deltaStage = `delta:${delta.verdict.toLowerCase()}` as 'delta:new' | 'delta:unchanged' | 'delta:updated';
               log({ ...status, stage: deltaStage, workspaceId, totalUrls: allUrlSources.length, successfulScrapes: urlPayloads.length });
+
+              // Telemetry: delta verdict
+              logEvent({
+                eventType: 'delta_detected',
+                workspaceId,
+                userId,
+                metadata: { verdict: delta.verdict, origin_uri: url },
+              });
 
               if (delta.verdict === 'UNCHANGED') {
                 // Content unchanged — skip insert to save tokens

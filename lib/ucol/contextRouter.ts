@@ -17,6 +17,7 @@ import { generateComponentGemini } from './prompts/geminiCoder';
 import { generateComponentOpenRouter } from './prompts/openRouterCoder';
 import { generateComponentHuggingFace } from './prompts/huggingFaceCoder';
 import { reviewCode } from './prompts/geminiReviewer';
+import { logEvent } from '@/lib/telemetry';
 import { ModelRouter } from './modelRouter';
 import type {
     ProjectPlan,
@@ -580,6 +581,19 @@ export class ContextRouter {
                     reasoning: review.originalityNotes || review.critique || 'Meets quality criteria',
                     status: 'complete',
                 });
+
+                // Telemetry: debate loop accepted
+                logEvent({
+                    eventType: 'debate_loop_accepted',
+                    workspaceId: session.userId,
+                    metadata: {
+                        component: component.name,
+                        attempts: attempt,
+                        finalScore: review.score,
+                        reviewRounds: session.reviewRounds,
+                    },
+                });
+
                 return latestFiles;
             }
 
