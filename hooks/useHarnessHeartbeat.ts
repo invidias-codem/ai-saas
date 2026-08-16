@@ -25,8 +25,10 @@ export function useHarnessHeartbeat(): HarnessState {
   const [appFocused, setAppFocused] = useState<boolean>(true);
   const missedPings = useRef(0);
 
+  // Mount-only: detect Tauri environment
   useEffect(() => {
     if (!isTauri) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsDaemonRunning(false);
       return;
     }

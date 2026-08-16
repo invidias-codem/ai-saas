@@ -48,9 +48,10 @@ export const LandingNavbar = () => {
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // Close mobile menu on route change
     useEffect(() => {
-        setIsOpen(false);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsOpen(false);
     }, [pathname]);
 
     const menuVariants: Variants = {
@@ -322,15 +323,16 @@ export const LandingNavbar = () => {
 }
 
 // Module-scoped so its identity is stable across renders (react-hooks/static-components)
+const SPARKLE_SEED = Array.from({ length: 25 }).map(() => ({
+    x: Math.random() * 100,
+    y: Math.random() * 100,
+    duration: 2 + Math.random() * 3,
+    delay: Math.random() * 5,
+}));
+
 function Sparkles() {
     const sparkles = Array.from({ length: 25 });
-    const randomValues = React.useMemo(() => 
-        sparkles.map(() => ({
-            x: Math.random() * 100,
-            y: Math.random() * 100,
-            duration: 2 + Math.random() * 3,
-            delay: Math.random() * 5,
-        })), [sparkles.length]);
+    const randomValues = SPARKLE_SEED;
     
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
