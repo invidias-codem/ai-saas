@@ -37,11 +37,11 @@ export function DocumentPreviewModal({
       // Initialize loading/error/cta state before fetching the preview.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setError(null);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setCta(null);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setPreviewData(null);
 
       const params = new URLSearchParams();

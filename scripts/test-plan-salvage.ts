@@ -6,7 +6,7 @@ const src = readFileSync('lib/ucol/prompts/geminiPlanner.ts', 'utf8');
 const m = src.match(/function repairTruncatedJson[\s\S]*?\n}\n/);
 if (!m) throw new Error('fn not found');
 const fnSrc = m[0].replace(/: string \| null/, '').replace(/: string\)/, ')').replace(/const stack: string\[\]/, 'const stack').replace(/const closeStack: string\[\]/, 'const closeStack').replace(/let inString = false;/, 'let inString = false;').replace(/(let \w+)(: \w+)/g, '$1');
-// eslint-disable-next-line no-eval
+ 
 const repairTruncatedJson = eval(`(${fnSrc})`);
 
 const full = {

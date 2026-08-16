@@ -21,7 +21,7 @@ export function log(
   };
 
   const json = JSON.stringify(entry);
-  // eslint-disable-next-line no-console
+   
   console[level === 'debug' ? 'log' : level](json);
 }
 

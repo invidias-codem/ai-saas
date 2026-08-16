@@ -69,17 +69,6 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
   const searchParams = useSearchParams();
   const { open: openModal, close: closeModal } = usePricingModal();
 
-  // After auth redirect: if plan is in URL and user is authenticated, trigger checkout
-  useEffect(() => {
-    const plan = searchParams.get("plan");
-    if (plan && userId && isLoaded && plan === "theExpert") {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("plan");
-      window.history.replaceState(null, "", url.toString());
-      handleCheckout();
-    }
-  }, [searchParams, userId, isLoaded]);
-
   const handleCheckout = useCallback(async () => {
     try {
       const response = await fetch("/api/stripe/checkout", {
@@ -99,6 +88,17 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
       alert("Failed to start checkout. Please try again.");
     }
   }, [closeModal]);
+
+  // After auth redirect: if plan is in URL and user is authenticated, trigger checkout
+  useEffect(() => {
+    const plan = searchParams.get("plan");
+    if (plan && userId && isLoaded && plan === "theExpert") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("plan");
+      window.history.replaceState(null, "", url.toString());
+      handleCheckout();
+    }
+  }, [searchParams, userId, isLoaded, handleCheckout]);
 
   const handleTierClick = useCallback(
     async (tier: typeof TIERS[number]) => {

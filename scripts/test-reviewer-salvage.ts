@@ -4,7 +4,7 @@ const m = src.match(/function sanitizeReviewJson[\s\S]*?\n}\n/);
 const fnSrc = m![0]
   .replace(/: string/g, '')
   .replace(/const stack\[\] = \[\]/, 'const stack = []');
-// eslint-disable-next-line no-eval
+ 
 const sanitize = eval(`(${fnSrc})`);
 
 // A review truncated mid-string in "critique" (exactly like the prod logs)

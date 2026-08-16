@@ -48,9 +48,12 @@ export const LandingNavbar = () => {
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => {
         setIsOpen(false);
     }, [pathname]);
+
+    const { open: openPricingModal } = usePricingModal();
 
     const menuVariants: Variants = {
         closed: {
@@ -323,33 +326,34 @@ export const LandingNavbar = () => {
 // Module-scoped so its identity is stable across renders (react-hooks/static-components)
 function Sparkles() {
     const sparkles = Array.from({ length: 25 });
+    const randomValues = React.useMemo(() => 
+        sparkles.map(() => ({
+            x: Math.random() * 100,
+            y: Math.random() * 100,
+            duration: 2 + Math.random() * 3,
+            delay: Math.random() * 5,
+        })), [sparkles.length]);
+    
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-            {sparkles.map((_, i) => (
-                <motion.div
-                    key={i}
-                    className="absolute w-1 h-1 bg-white rounded-full"
-                    initial={{
-                        opacity: 0,
-                        scale: 0,
-                        x: Math.random() * 100 + "%",
-                        y: Math.random() * 100 + "%",
-                    }}
-                    animate={{
-                        opacity: [0, 1, 0],
-                        scale: [0, 1, 0],
-                    }}
-                    transition={{
-                        duration: 2 + Math.random() * 3,
-                        repeat: Infinity,
-                        delay: Math.random() * 5,
-                        ease: "easeInOut",
-                    }}
-                    style={{
-                        boxShadow: "0 0 8px 1px rgba(255, 255, 255, 0.4)",
-                    }}
-                />
-            ))}
+            {sparkles.map((_, i) => {
+                const rv = randomValues[i];
+                return (
+                    <motion.div
+                        key={i}
+                        className="absolute w-1 h-1 bg-white rounded-full"
+                        initial={{ opacity: 0, scale: 0, x: `${rv.x}%`, y: `${rv.y}%` }}
+                        animate={{ opacity: [0, 1, 0], scale: [0, 1, 0] }}
+                        transition={{
+                            duration: rv.duration,
+                            repeat: Infinity,
+                            delay: rv.delay,
+                            ease: "easeInOut",
+                        }}
+                        style={{ boxShadow: "0 0 8px 1px rgba(255, 255, 255, 0.4)" }}
+                    />
+                );
+            })}
         </div>
     );
 };

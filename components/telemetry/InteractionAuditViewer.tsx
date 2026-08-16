@@ -31,7 +31,7 @@ export function InteractionAuditViewer() {
   }, [refresh]);
 
   const flush = useCallback(async () => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     setFlushMsg("Flushing...");
     const res = await flushNativeTelemetry({ clearOnSuccess: true });
     setFlushMsg(`Sent ${res.sent}/${res.attempted} (failed ${res.failed}) — mode: ${res.mode}.`);

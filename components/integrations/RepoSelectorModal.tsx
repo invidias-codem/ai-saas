@@ -81,7 +81,7 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
       // Async data loads on open.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchRepos();
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       fetchWorkspaces();
     }
   }, [isOpen]);
@@ -93,7 +93,7 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
       fetchAllowedRepos(selectedWorkspaceId);
     } else {
       // Reset repos when the modal closes or workspace changes.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setAllowedRepos(new Set());
     }
   }, [selectedWorkspaceId, isOpen]);

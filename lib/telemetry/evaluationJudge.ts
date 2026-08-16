@@ -44,7 +44,7 @@ export interface TaskCompletionResult {
 
 function resolveJudgeModel(): LanguageModel {
   // Lazy import so telemetry never forces provider initialization at import time.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const { createOpenAI } = require('@ai-sdk/openai');
   const apiKey = process.env.OPENAI_API_KEY || process.env.EVAL_OPENAI_API_KEY;
   if (!apiKey) {

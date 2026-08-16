@@ -92,7 +92,7 @@ export const AgentShowcase = () => {
         // state transition, not derived state.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setStatus("idle");
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+         
         setCurrentStep(0);
     }, [activeScenario]);
 

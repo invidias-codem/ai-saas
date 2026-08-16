@@ -75,7 +75,7 @@ export function SlackIntegration({ userId }: SlackIntegrationProps) {
         'token_exchange_failed': 'Failed to complete the connection. Please try again.',
         'callback_failed': 'Connection failed. Please try again.',
       };
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setErrorMessage(errorMessages[slackError] || `Connection error: ${slackError}`);
       // Clear URL params
       const timeout = setTimeout(() => {

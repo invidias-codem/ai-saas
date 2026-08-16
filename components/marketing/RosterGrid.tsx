@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useSyncExternalStore } from "react";
 import { motion } from "framer-motion";
 import { useTranslations } from "next-intl";
 import { ArrowRightIcon } from "lucide-react";
@@ -8,17 +8,15 @@ import { CURATED_PERSONAS } from "@/lib/constants/personas";
 import { usePricingModal } from "@/lib/store/pricing-modal-store";
 
 function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(false);
-
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    const listener = (e: MediaQueryListEvent) => setMatches(e.matches);
-    setMatches(media.matches);
-    media.addEventListener("change", listener);
-    return () => media.removeEventListener("change", listener);
-  }, [query]);
-
-  return matches;
+  return useSyncExternalStore(
+    (callback) => {
+      const media = window.matchMedia(query);
+      media.addEventListener("change", callback);
+      return () => media.removeEventListener("change", callback);
+    },
+    () => window.matchMedia(query).matches,
+    () => false // server snapshot
+  );
 }
 
 export const RosterGrid = () => {
