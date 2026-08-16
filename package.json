@@ -19,6 +19,7 @@
     "test:rate-limits": "./scripts/test-rate-limits.sh",
     "typecheck": "NODE_OPTIONS='--max-old-space-size=8192' tsc --noEmit --skipLibCheck --project tsconfig.build.json",
     "test:slack-stress": "./scripts/run-slack-stress-tests.sh",
+    "test:world-model": "tsx scripts/test-world-model.ts",
     "setup:hooks": "./scripts/setup-git-hooks.sh",
     "deploy:check": "./scripts/pre-deployment-check.sh",
     "deploy:check:lite": "./scripts/pre-deployment-check-lite.sh",
