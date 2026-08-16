@@ -355,6 +355,17 @@ async function handleBlockActions(
       userId: user?.id,
     });
 
+    if (action_id === 'bluesky_approve' || action_id === 'bluesky_reject') {
+      const { handleBlueskyApproval } = await import('@/lib/bluesky/slack-approval');
+      await handleBlueskyApproval(action_id === 'bluesky_approve', value, {
+        channel: channel?.id,
+        messageTs: message?.ts,
+        userId: user?.id,
+        responseUrl: response_url,
+      });
+      continue;
+    }
+
     if (action_id === 'feedback_helpful' || action_id === 'feedback_not_helpful') {
       // Try to capture the AI response text from the Slack message so we can store it as `output`.
       const responseText = message?.text ??

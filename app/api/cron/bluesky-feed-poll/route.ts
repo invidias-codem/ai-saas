@@ -186,6 +186,18 @@ export async function GET(req: NextRequest) {
     };
 
     console.log(JSON.stringify({ runId, event: "bluesky_poll_complete", ...summary }));
+
+    // Notify Slack of pending approvals
+    try {
+      const { notifyPendingApprovals } = await import("@/lib/bluesky/slack-approval");
+      const notified = await notifyPendingApprovals();
+      if (notified > 0) {
+        console.log(JSON.stringify({ runId, event: "bluesky_slack_notifications", count: notified }));
+      }
+    } catch (notifyErr: any) {
+      console.warn(JSON.stringify({ runId, event: "bluesky_slack_notification_error", error: notifyErr.message }));
+    }
+
     return NextResponse.json(summary);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
