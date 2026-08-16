@@ -3,13 +3,32 @@
 import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
 import { ArrowRightIcon } from "lucide-react";
-import { CURATED_PERSONAS, ROSTER_VISIBLE_COUNT } from "@/lib/constants/personas";
+import { CURATED_PERSONAS } from "@/lib/constants/personas";
+import { usePricingModal } from "@/lib/store/pricing-modal-store";
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const listener = (e: MediaQueryListEvent) => setMatches(e.matches);
+    setMatches(media.matches);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
+  }, [query]);
+
+  return matches;
+}
 
 export const RosterGrid = () => {
   const t = useTranslations("Landing.expert.cta.roster");
   const [startIndex, setStartIndex] = useState(0);
+  const { open: openPricingModal } = usePricingModal();
+
+  // Show 1 card on mobile, 3 on desktop
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const visibleCount = isDesktop ? 3 : 1;
 
   const rotate = useCallback(() => {
     setStartIndex((prev) => (prev + 1) % CURATED_PERSONAS.length);
@@ -27,7 +46,7 @@ export const RosterGrid = () => {
   ];
 
   const offset = CURATED_PERSONAS.length;
-  const cardWidth = 100 / ROSTER_VISIBLE_COUNT;
+  const cardWidth = 100 / visibleCount;
 
   return (
     <section id="roster" className="border-t border-white/10">
@@ -89,13 +108,13 @@ export const RosterGrid = () => {
                   </div>
 
                   <div className="relative z-10 mt-8">
-                    <Link
-                      href="/onboarding"
+                    <button
+                      onClick={() => openPricingModal()}
                       className="group/link inline-flex items-center gap-2 text-sm font-semibold text-white/80 hover:text-white transition-colors"
                     >
                       {t("cta")}
                       <ArrowRightIcon className="h-4 w-4 transition-transform group-hover/link:translate-x-1" />
-                    </Link>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -111,7 +130,7 @@ export const RosterGrid = () => {
               className={`h-2 rounded-full transition-all duration-300 ${
                 idx === startIndex ? "w-6 bg-white" : "w-2 bg-white/30 hover:bg-white/50"
               }`}
-              aria-label={`Show personas ${idx + 1}-${idx + ROSTER_VISIBLE_COUNT}`}
+              aria-label={`Show personas ${idx + 1}-${idx + visibleCount}`}
             />
           ))}
         </div>

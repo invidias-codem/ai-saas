@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { ArrowRightIcon, ShieldCheckIcon, ActivityIcon, DatabaseIcon, TerminalIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RosterGrid } from '@/components/marketing/RosterGrid';
+import { usePricingModal } from '@/lib/store/pricing-modal-store';
 
 const MECHANICS_ITEMS = [
   {
@@ -28,17 +29,24 @@ const MECHANICS_ITEMS = [
 
 export default function ExpertLandingPage() {
   const t = useTranslations('Landing.expert');
+  const { open: openPricingModal } = usePricingModal();
 
   return (
     <div className="relative min-h-screen bg-[#050505] text-white overflow-hidden">
-      {/* Ambient chrome glow */}
-      <div className="absolute top-[-20%] left-[-10%] h-[600px] w-[600px] rounded-full bg-gradient-to-br from-white/[0.07] to-transparent blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-5%] h-[500px] w-[500px] rounded-full bg-gradient-to-tl from-white/[0.05] to-transparent blur-[100px] pointer-events-none" />
+      {/* Animated gradient orbs for depth */}
+      <div className="absolute top-[-20%] left-[-10%] h-[800px] w-[800px] rounded-full bg-gradient-to-br from-purple-600/20 via-violet-500/10 to-transparent blur-[120px] pointer-events-none animate-pulse" />
+      <div className="absolute bottom-[-10%] right-[-5%] h-[600px] w-[600px] rounded-full bg-gradient-to-tl from-blue-500/15 via-cyan-400/10 to-transparent blur-[100px] pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
+      <div className="absolute top-[40%] left-[60%] h-[400px] w-[400px] rounded-full bg-gradient-to-br from-pink-500/10 via-rose-400/5 to-transparent blur-[80px] pointer-events-none animate-pulse" style={{ animationDelay: '4s' }} />
 
-      {/* Grid texture */}
-      <div className="absolute inset-0 opacity-[0.04] pointer-events-none" style={{
+      {/* Subtle grid overlay for texture */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
         backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
         backgroundSize: '64px 64px',
+      }} />
+
+      {/* Noise texture overlay for premium feel */}
+      <div className="absolute inset-0 opacity-[0.015] pointer-events-none mix-blend-overlay" style={{
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
       }} />
 
       <div className="relative z-10">
