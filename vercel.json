@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/blog-weekly",
       "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/cron/bluesky-feed-poll",
+      "schedule": "*/3 * * * *"
     }
   ],
   "functions": {

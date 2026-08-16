@@ -184,29 +184,36 @@ export async function insertExtractionWithEdges(
       nodeIds.push(node.id);
     }
 
-    // 2. Create DERIVED_FROM edges (link nodes to source chunk)
-    const sourceChunkNodeId = sourceChunkId;
-    const derivedFromEdges = insertedNodes.map((node) => ({
-      source_node_id: node.id,
-      target_node_id: sourceChunkNodeId,
-      weight: 1.0,
-      metadata: {
-        relationship_subtype: "DERIVED_FROM",
-        reason: "Extracted from source chunk",
-        workspace_id: workspaceId,
-      },
-    }));
+    // 2. Create DERIVED_FROM edges (only if source chunk exists as a node)
+    const { data: sourceExists } = await supabaseAdmin
+      .from("knowledge_nodes")
+      .select("id")
+      .eq("id", sourceChunkId)
+      .maybeSingle();
 
-    const { data: derivedEdges, error: derivedError } = await supabaseAdmin
-      .from("knowledge_edges")
-      .insert(derivedFromEdges)
-      .select("id");
+    if (sourceExists) {
+      const derivedFromEdges = insertedNodes.map((node) => ({
+        source_node_id: node.id,
+        target_node_id: sourceChunkId,
+        weight: 1.0,
+        metadata: {
+          relationship_subtype: "DERIVED_FROM",
+          reason: "Extracted from source chunk",
+          workspace_id: workspaceId,
+        },
+      }));
 
-    if (derivedError) {
-      console.error("[EntityExtraction] DERIVED_FROM edge insert error:", derivedError);
-    } else if (derivedEdges) {
-      for (const edge of derivedEdges) {
-        edgeIds.push(edge.id);
+      const { data: derivedEdges, error: derivedError } = await supabaseAdmin
+        .from("knowledge_edges")
+        .insert(derivedFromEdges)
+        .select("id");
+
+      if (derivedError) {
+        console.error("[EntityExtraction] DERIVED_FROM edge insert error:", derivedError);
+      } else if (derivedEdges) {
+        for (const edge of derivedEdges) {
+          edgeIds.push(edge.id);
+        }
       }
     }
 
