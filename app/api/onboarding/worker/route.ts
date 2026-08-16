@@ -5,6 +5,7 @@ import { waitUntil } from '@vercel/functions';
 import { prepareSourceChunks } from '@/lib/ai/sourceIngest';
 import { generateEmbedding } from '@/lib/memory/embedding';
 import { detectDelta, supersedeAndCreateCausalLinks } from '@/lib/workspace/delta-detection';
+import { processChunkForKnowledgeGraph } from '@/lib/workspace/entity-extraction';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -12,7 +13,7 @@ export const maxDuration = 60;
 import * as cheerio from 'cheerio';
 
 type IngestStatus = {
-  stage: 'ingest:start' | 'scrape:fetch' | 'gemini:cleanse' | 'vector:upsert' | 'persona:synth' | 'ingest:complete' | 'delta:new' | 'delta:unchanged' | 'delta:updated';
+  stage: 'ingest:start' | 'scrape:fetch' | 'gemini:cleanse' | 'vector:upsert' | 'persona:synth' | 'ingest:complete' | 'delta:new' | 'delta:unchanged' | 'delta:updated' | 'entity:extract';
   workspaceId: string;
   totalUrls: number;
   successfulScrapes: number;
@@ -230,6 +231,24 @@ export async function POST(req: NextRequest) {
           if (toInsert.length > 0 && supabaseAdmin) {
             log({ ...status, stage: 'vector:upsert', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: status.successfulScrapes });
             await supabaseAdmin.from('workspace_sources').insert(toInsert);
+          }
+
+          // Entity extraction pass: distill new URL chunks into knowledge_nodes
+          if (urlPayloads.length > 0 && supabaseAdmin) {
+            log({ ...status, stage: 'entity:extract', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: status.successfulScrapes });
+            for (const chunk of urlPayloads) {
+              try {
+                await processChunkForKnowledgeGraph({
+                  workspaceId,
+                  userId,
+                  sourceChunkId: chunk.id,
+                  content: chunk.content,
+                  originUri: chunk.origin_uri,
+                });
+              } catch (e: any) {
+                log({ ...status, stage: 'entity:extract', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: status.successfulScrapes, error: e?.message || 'extraction_failed' });
+              }
+            }
           }
 
           log({ ...status, stage: 'persona:synth', workspaceId, totalUrls: allUrlSources.length, successfulScrapes: status.successfulScrapes });
