@@ -1,3 +1,7 @@
+"use client";
+
+import { useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CheckIcon } from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
@@ -18,7 +22,7 @@ const plans = [
   {
     key: "enterprise",
     popular: false,
-    href: "/onboarding",
+    href: "/support",
     checkout: false,
   },
 ] as const;
@@ -84,6 +88,8 @@ export default function PricingPage() {
 
 function PricingCard({ plan, index }: { plan: typeof plans[number]; index: number }) {
   const isExpert = plan.key === "theExpert";
+  const { user, isLoaded } = useUser();
+  const router = useRouter();
 
   const content = {
     standardOS: {
@@ -130,6 +136,13 @@ function PricingCard({ plan, index }: { plan: typeof plans[number]; index: numbe
   const data = content[plan.key];
 
   const handleExpertCheckout = async () => {
+    if (!isLoaded) return;
+
+    if (!user) {
+      router.push("/sign-up?redirectUrl=/pricing");
+      return;
+    }
+
     try {
       const response = await fetch("/api/stripe/checkout", {
         method: "POST",
