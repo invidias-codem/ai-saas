@@ -24,8 +24,11 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build Workspace Packages
+        run: pnpm --recursive --filter @lattice-os/core run build && pnpm --recursive --filter @lattice-os/mcp-remote run build
 
       - name: Lint
         run: pnpm lint
