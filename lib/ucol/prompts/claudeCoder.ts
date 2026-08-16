@@ -81,21 +81,49 @@ function sanitizeReviewJson(text: string): string {
     return cleaned.trim();
 }
 
-// Condensed plan summary — avoids sending full JSON (pages, dataModel, apiRoutes) every time
-function condensePlan(plan: any): string {
-    return [
+// Enriched plan summary — includes dataModel, apiRoutes, and reasoning
+// so the coder doesn't hallucinate types or violate architectural constraints.
+function buildPlanContext(plan: any): string {
+    const lines = [
         `App: ${plan.appName}`,
         `Description: ${plan.description}`,
         `Tech stack: ${(plan.techStack || []).join(', ')}`,
         `Components: ${(plan.components || []).map((c: any) => c.name).join(', ')}`,
-    ].join('\n');
+    ];
+
+    // Include reasoning (architectural decisions)
+    if (plan.reasoning) {
+        lines.push(`\n## Architecture Reasoning\n${plan.reasoning}`);
+    }
+
+    // Include data model (type definitions the coder MUST use)
+    if (plan.dataModel && plan.dataModel.length > 0) {
+        lines.push('\n## Data Model (use these exact types)');
+        for (const model of plan.dataModel) {
+            lines.push(`\n### ${model.name}`);
+            for (const field of model.fields) {
+                lines.push(`- ${field.name}: ${field.type} — ${field.description}`);
+            }
+        }
+    }
+
+    // Include API routes (contracts the coder must respect)
+    if (plan.apiRoutes && plan.apiRoutes.length > 0) {
+        lines.push('\n## API Routes');
+        for (const route of plan.apiRoutes) {
+            lines.push(`- ${route.method} ${route.path} — ${route.description}`);
+        }
+    }
+
+    return lines.join('\n');
 }
 
-// Trim dependency file content to the first 600 chars (enough to see exports/types)
+// Trim dependency file content — increased to 1500 chars to capture
+// exported types, hooks, and function signatures that the coder needs.
 function trimDependencyContent(files: GeneratedFile[]): string {
     if (!files || files.length === 0) return '(none — this is a leaf component)';
     return files.map(f => {
-        const preview = f.content.length > 600 ? f.content.substring(0, 600) + '\n// ... (truncated)' : f.content;
+        const preview = f.content.length > 1500 ? f.content.substring(0, 1500) + '\n// ... (truncated)' : f.content;
         return `### ${f.path}\n\`\`\`${f.language}\n${preview}\n\`\`\``;
     }).join('\n\n');
 }
@@ -111,7 +139,7 @@ export async function generateComponent(
     const anthropic = getAnthropicClient(providerKeys.anthropic);
 
     let userPrompt = `## Project Context
-${condensePlan(fullPlan)}
+${buildPlanContext(fullPlan)}
 
 ## Component to Build
 Name: ${component.name}

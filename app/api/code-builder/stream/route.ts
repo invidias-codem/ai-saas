@@ -119,6 +119,8 @@ export async function GET(req: Request) {
                     reviewRounds: 0,
                     constraintRounds: 0,
                     discoveredPatterns: [],
+                    refinementLog: [],
+                    userPrompt: prompt,
                 };
 
                 const providerKeys = await getUserProviderApiKeys(user.userId);

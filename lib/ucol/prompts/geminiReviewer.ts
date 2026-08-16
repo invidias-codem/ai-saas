@@ -109,8 +109,14 @@ export async function reviewCode(
     files: GeneratedFile[],
     component: ComponentSpec,
     plan: ProjectPlan,
-    providerKeys: ProviderApiKeys = {}
+    providerKeys: ProviderApiKeys = {},
+    options: {
+        userPrompt?: string;
+        dependencyFiles?: GeneratedFile[];
+        previousReviews?: ReviewFeedback[];
+    } = {}
 ): Promise<ReviewFeedback> {
+    const { userPrompt, dependencyFiles, previousReviews } = options;
     const genAI = new GoogleGenerativeAI(providerKeys.google || requireEnv('GOOGLE_API_KEY'));
     const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
@@ -134,24 +140,50 @@ export async function reviewCode(
 
     const techStackStr = plan.techStack.join(', ');
 
-    const reviewPrompt = `Review this generated code for the "${component.name}" component.
+    // Build the review prompt with enriched context
+    let reviewPrompt = `Review this generated code for the "${component.name}" component.`;
 
-## Component Spec
-\`\`\`json
-${specBlock}
-\`\`\`
+    // Include original user prompt for grounding
+    if (userPrompt) {
+        reviewPrompt += `\n\n## Original User Request\n${userPrompt}`;
+    }
 
-## Tech Stack: ${techStackStr}
+    reviewPrompt += `\n\n## Component Spec\n\`\`\`json\n${specBlock}\n\`\`\``;
 
-## Generated Code
-${codeBlock}
+    // Include data model from plan
+    if (plan.dataModel && plan.dataModel.length > 0) {
+        reviewPrompt += `\n\n## Data Model (verify types match exactly)`;
+        for (const model of plan.dataModel) {
+            reviewPrompt += `\n### ${model.name}`;
+            for (const field of model.fields) {
+                reviewPrompt += `\n- ${field.name}: ${field.type}`;
+            }
+        }
+    }
 
-Evaluate on THREE axes:
-1. Correctness (5 criteria) → score + approved/rejected
-2. Originality (5 criteria) → originalityScore + novelPatterns
-3. Pragmatism (3 criteria) → pragmatismScore
+    // Include dependency files so reviewer can verify imports
+    if (dependencyFiles && dependencyFiles.length > 0) {
+        reviewPrompt += `\n\n## Dependency Files (verify imports resolve to these)`;
+        for (const dep of dependencyFiles) {
+            reviewPrompt += `\n### ${dep.path}\n\`\`\`${dep.language}\n${dep.content}\n\`\`\``;
+        }
+    }
 
-Output your review as JSON.`;
+    reviewPrompt += `\n\n## Tech Stack: ${techStackStr}`;
+
+    // Include previous review history for stateful handoff
+    if (previousReviews && previousReviews.length > 0) {
+        reviewPrompt += `\n\n## Previous Review History`;
+        for (let i = 0; i < previousReviews.length; i++) {
+            const prev = previousReviews[i];
+            reviewPrompt += `\n### Round ${i + 1}: ${prev.approved ? 'APPROVED' : 'REJECTED'} (correctness: ${prev.score}/10)`;
+            if (prev.critique) reviewPrompt += `\nCritique: ${prev.critique}`;
+            if (prev.suggestions.length > 0) reviewPrompt += `\nSuggestions: ${prev.suggestions.join('; ')}`;
+        }
+        reviewPrompt += `\n\nIMPORTANT: Check whether the issues flagged in previous rounds have been fixed. Do NOT re-approve if the same correctness issues persist.`;
+    }
+
+    reviewPrompt += `\n\n## Generated Code\n${codeBlock}\n\nEvaluate on THREE axes:\n1. Correctness (5 criteria) → score + approved/rejected\n2. Originality (5 criteria) → originalityScore + novelPatterns\n3. Pragmatism (3 criteria) → pragmatismScore\n\nOutput your review as JSON.`;
 
     const MAX_RECITATION_RETRIES = 2;
     let lastError: Error | null = null;
@@ -176,8 +208,7 @@ Output your review as JSON.`;
             });
 
             if (!result.response) {
-                console.warn('[UCOL:Reviewer] No response — auto-approving');
-                return defaultFeedback('Reviewer unavailable — auto-approved');
+                throw new Error('[UCOL:Reviewer] No response from Gemini');
             }
 
             const text = result.response.text();
@@ -188,7 +219,7 @@ Output your review as JSON.`;
                 if (Array.isArray(parsed)) parsed = parsed[0];
 
                 const feedback: ReviewFeedback = {
-                    approved: parsed.approved ?? true,
+                    approved: parsed.approved ?? false,
                     score: typeof parsed.score === 'number' ? parsed.score : 7,
                     critique: parsed.critique || '',
                     suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [],
@@ -196,7 +227,7 @@ Output your review as JSON.`;
                     originalityScore: typeof parsed.originalityScore === 'number' ? parsed.originalityScore : 5,
                     novelPatterns: Array.isArray(parsed.novelPatterns) ? parsed.novelPatterns : [],
                     originalityNotes: parsed.originalityNotes || '',
-                    pragmatismScore: typeof parsed.pragmatismScore === 'number' ? parsed.pragmatismScore : 8,
+                    pragmatismScore: typeof parsed.pragmatismScore === 'number' ? parsed.pragmatismScore : 5,
                 };
 
                 // Enforce correctness score threshold rules
@@ -212,7 +243,7 @@ Output your review as JSON.`;
                     continue;
                 }
                 console.error('[UCOL:Reviewer] Failed to parse review JSON:', text.substring(0, 300));
-                return defaultFeedback('Review parse error — auto-approved');
+                throw new Error('Review parse error — code gate failed');
             }
         } catch (err: any) {
             const msg = err.message || '';
@@ -221,18 +252,18 @@ Output your review as JSON.`;
                 console.warn(`[UCOL:Reviewer] RECITATION blocked on attempt ${attempt}, retrying with novel prompt...`);
                 continue;
             }
-            console.warn('[UCOL:Reviewer] Generation error — auto-approving:', msg);
-            return defaultFeedback('Reviewer unavailable — auto-approved');
+            console.warn('[UCOL:Reviewer] Generation error — code gate failed:', msg);
+            throw new Error(`Reviewer unavailable — code gate failed: ${msg}`);
         }
     }
 
-    return defaultFeedback('Review failed after retries — auto-approved');
+    throw new Error('Review failed after retries — code gate failed');
 }
 
 function defaultFeedback(reason: string): ReviewFeedback {
     return {
-        approved: true,
-        score: 6,
+        approved: false,
+        score: 0,
         critique: reason,
         suggestions: [],
         failedCriteria: [],

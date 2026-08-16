@@ -73,21 +73,60 @@ const OPENROUTER_KNOWN_SLUGS = new Set([
     'z-ai/glm-5.2',
 ]);
 
-const CREATIVITY_CONSTRAINTS = [
-    'Extract at least one reusable custom hook that encapsulates the core logic of this component',
-    'Handle at least 3 edge cases NOT mentioned in the spec (empty state, error state, loading, overflow, accessibility, etc.)',
-    'Use useReducer instead of useState for the primary state management — model the state transitions explicitly',
-    'Implement the component using a compound pattern (Provider + sub-components) instead of monolithic props',
-    'Add at least 2 defensive type guards and make all external data access null-safe',
-    'Extract a utility or helper module that this component uses — it should be independently testable',
+// ── Constraint Tracking ──────────────────────────────────────────────────────
+// Prevents ping-ponging between opposing constraints by tracking which
+// constraints have been applied and tagging them with semantic metadata.
+
+interface Constraint {
+    text: string;
+    type: 'complexity' | 'simplicity';
+    target: 'originality' | 'pragmatism';
+}
+
+const CONSTRAINTS: Constraint[] = [
+    // Complexity constraints (boost originality)
+    { text: 'Extract at least one reusable custom hook that encapsulates the core logic of this component', type: 'complexity', target: 'originality' },
+    { text: 'Handle at least 3 edge cases NOT mentioned in the spec (empty state, error state, loading, overflow, accessibility, etc.)', type: 'complexity', target: 'originality' },
+    { text: 'Use useReducer instead of useState for the primary state management — model the state transitions explicitly', type: 'complexity', target: 'originality' },
+    { text: 'Implement the component using a compound pattern (Provider + sub-components) instead of monolithic props', type: 'complexity', target: 'originality' },
+    { text: 'Add at least 2 defensive type guards and make all external data access null-safe', type: 'complexity', target: 'originality' },
+    { text: 'Extract a utility or helper module that this component uses — it should be independently testable', type: 'complexity', target: 'originality' },
+    // Simplicity constraints (boost pragmatism)
+    { text: 'REMOVE over-engineered abstractions. Do NOT use useReducer or compound components for this simple UI element.', type: 'simplicity', target: 'pragmatism' },
+    { text: 'Simplify the state management. Remove unnecessary useMemo/useCallback hooks and consolidate state.', type: 'simplicity', target: 'pragmatism' },
+    { text: 'Reduce the code footprint. This component is bloated. Implement only what is necessary for the spec.', type: 'simplicity', target: 'pragmatism' },
+    { text: 'Remove "enterprisey" patterns like exponential backoff or overly generic type factories for this basic component.', type: 'simplicity', target: 'pragmatism' },
 ];
 
-const SIMPLICITY_CONSTRAINTS = [
-    'REMOVE over-engineered abstractions. Do NOT use useReducer or compound components for this simple UI element.',
-    'Simplify the state management. Remove unnecessary useMemo/useCallback hooks and consolidate state.',
-    'Reduce the code footprint. This component is bloated. Implement only what is necessary for the spec.',
-    'Remove "enterprisey" patterns like exponential backoff or overly generic type factories for this basic component.',
-];
+function selectConstraint(
+    session: BuildSession,
+    componentName: string,
+    target: 'originality' | 'pragmatism'
+): Constraint | undefined {
+    // Get previously applied constraints for this component
+    const applied = new Set(
+        session.refinementLog
+            ?.filter(r => r.component === componentName)
+            .map(r => r.constraint)
+            .filter(Boolean) ?? []
+    );
+
+    // Filter: don't re-apply, don't oppose last applied
+    const candidates = CONSTRAINTS.filter(c => {
+        if (applied.has(c.text)) return false;
+        if (c.target !== target) return false;
+        // Don't apply simplicity right after complexity (or vice versa)
+        const lastApplied = session.refinementLog?.slice(-1)[0];
+        if (lastApplied && lastApplied.constraintType === 'complexity' && c.type === 'simplicity') return false;
+        if (lastApplied && lastApplied.constraintType === 'simplicity' && c.type === 'complexity') return false;
+        return true;
+    });
+
+    if (candidates.length === 0) return undefined;
+
+    // Deterministic selection: pick first unused constraint of target type
+    return candidates[0];
+}
 
 export class ContextRouter {
     private onContextFlow: ContextFlowCallback;
@@ -439,16 +478,34 @@ export class ContextRouter {
             if (attempt > 1 && previousCode) {
                 const similarity = this.computeSimilarity(previousCode, currentCode);
                 if (similarity >= SIMILARITY_THRESHOLD) {
-                    this.emitContextFlow({
-                        id: crypto.randomUUID(),
-                        timestamp: Date.now(),
-                        source: 'system',
-                        target: 'user',
-                        action: `⚡ Auto-approved ${component.name} (code unchanged)`,
-                        reasoning: `Similarity ${(similarity * 100).toFixed(0)}% ≥ ${(SIMILARITY_THRESHOLD * 100).toFixed(0)}%`,
-                        status: 'complete',
-                    });
-                    return latestFiles;
+                    // Don't auto-approve on similarity if the previous round was
+                    // rejected for correctness — the coder is stuck producing
+                    // the same broken code.
+                    const lastReview = feedbackHistory[feedbackHistory.length - 1];
+                    const wasCorrectnessRejection = lastReview && lastReview.score < 7;
+
+                    if (!wasCorrectnessRejection) {
+                        this.emitContextFlow({
+                            id: crypto.randomUUID(),
+                            timestamp: Date.now(),
+                            source: 'system',
+                            target: 'user',
+                            action: `⚡ Auto-approved ${component.name} (code unchanged after stylistic rejection)`,
+                            reasoning: `Similarity ${(similarity * 100).toFixed(0)}% ≥ ${(SIMILARITY_THRESHOLD * 100).toFixed(0)}%`,
+                            status: 'complete',
+                        });
+                        return latestFiles;
+                    } else {
+                        this.emitContextFlow({
+                            id: crypto.randomUUID(),
+                            timestamp: Date.now(),
+                            source: 'system',
+                            target: 'user',
+                            action: `⚠ Coder stuck — similarity high but previous rejection was for correctness. Continuing review.`,
+                            reasoning: `Similarity ${(similarity * 100).toFixed(0)}% but last score was ${lastReview.score}/10`,
+                            status: 'active',
+                        });
+                    }
                 }
             }
 
@@ -466,7 +523,26 @@ export class ContextRouter {
             });
 
             session.reviewRounds++;
-            const review = await reviewCode(latestFiles, component, plan, this.providerKeys);
+            let review: ReviewFeedback;
+            try {
+                review = await reviewCode(latestFiles, component, plan, this.providerKeys, {
+                    userPrompt: session.userPrompt,
+                    dependencyFiles: dependencies,
+                    previousReviews: feedbackHistory,
+                });
+            } catch (reviewErr: any) {
+                // Reviewer hard-fail: code did NOT pass the gate. Do not ship unverified code.
+                this.emitContextFlow({
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    source: 'gemini',
+                    target: 'user',
+                    action: `✗ ${component.name} — reviewer failed: ${reviewErr.message?.substring(0, 100)}`,
+                    reasoning: 'Code gate failed — reviewer could not verify code. Component rejected.',
+                    status: 'error',
+                });
+                throw new Error(`Code gate failed for ${component.name}: ${reviewErr.message}`);
+            }
 
             // ── Step 3: Novel pattern extraction ──
             if (review.originalityScore >= 7 && review.novelPatterns.length > 0) {
@@ -510,35 +586,49 @@ export class ContextRouter {
             feedbackHistory.push(review);
 
             if (isPragmatismIssue && !activeConstraint) {
-                activeConstraint = SIMPLICITY_CONSTRAINTS[
-                    Math.floor(Math.random() * SIMPLICITY_CONSTRAINTS.length)
-                ];
-                session.constraintRounds++;
+                const constraint = selectConstraint(session, component.name, 'pragmatism');
+                if (constraint) {
+                    activeConstraint = constraint.text;
+                    session.constraintRounds++;
+                    session.refinementLog.push({
+                        component: component.name,
+                        constraint: constraint.text,
+                        constraintType: constraint.type,
+                        appliedAt: Date.now(),
+                    });
 
-                this.emitContextFlow({
-                    id: crypto.randomUUID(),
-                    timestamp: Date.now(),
-                    source: 'gemini',
-                    target: selectedModel.provider,
-                    action: `🎯 Simplicity constraint for ${component.name}`,
-                    reasoning: `Over-engineered! ${activeConstraint}`,
-                    status: 'active',
-                });
+                    this.emitContextFlow({
+                        id: crypto.randomUUID(),
+                        timestamp: Date.now(),
+                        source: 'gemini',
+                        target: selectedModel.provider,
+                        action: `🎯 Simplicity constraint for ${component.name}`,
+                        reasoning: `Over-engineered! ${activeConstraint}`,
+                        status: 'active',
+                    });
+                }
             } else if (isOriginalityIssue && !activeConstraint) {
-                activeConstraint = CREATIVITY_CONSTRAINTS[
-                    Math.floor(Math.random() * CREATIVITY_CONSTRAINTS.length)
-                ];
-                session.constraintRounds++;
+                const constraint = selectConstraint(session, component.name, 'originality');
+                if (constraint) {
+                    activeConstraint = constraint.text;
+                    session.constraintRounds++;
+                    session.refinementLog.push({
+                        component: component.name,
+                        constraint: constraint.text,
+                        constraintType: constraint.type,
+                        appliedAt: Date.now(),
+                    });
 
-                this.emitContextFlow({
-                    id: crypto.randomUUID(),
-                    timestamp: Date.now(),
-                    source: 'gemini',
-                    target: selectedModel.provider,
-                    action: `🎯 Creativity constraint for ${component.name}`,
-                    reasoning: activeConstraint,
-                    status: 'active',
-                });
+                    this.emitContextFlow({
+                        id: crypto.randomUUID(),
+                        timestamp: Date.now(),
+                        source: 'gemini',
+                        target: selectedModel.provider,
+                        action: `🎯 Creativity constraint for ${component.name}`,
+                        reasoning: activeConstraint,
+                        status: 'active',
+                    });
+                }
             } else {
                 this.emitContextFlow({
                     id: crypto.randomUUID(),
