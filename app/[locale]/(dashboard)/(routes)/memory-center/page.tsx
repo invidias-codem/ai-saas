@@ -83,6 +83,8 @@ export default function MemoryCenterPage() {
       .catch((error) => console.debug('[MemoryCenter] SW skip:', error));
   }, []);
 
+  // Mount-only: read browser APIs (navigator.onLine, serviceWorker)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (typeof navigator !== 'undefined') {
       setNetworkReady(navigator.onLine);

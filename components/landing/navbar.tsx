@@ -53,8 +53,6 @@ export const LandingNavbar = () => {
         setIsOpen(false);
     }, [pathname]);
 
-    const { open: openPricingModal } = usePricingModal();
-
     const menuVariants: Variants = {
         closed: {
             opacity: 0,

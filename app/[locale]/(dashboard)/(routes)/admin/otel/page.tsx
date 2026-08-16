@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 
@@ -24,7 +24,7 @@ export default function OTelRankedMetrics() {
   const [error, setError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
 
-  const fetchRanked = async () => {
+  const fetchRanked = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -66,7 +66,7 @@ export default function OTelRankedMetrics() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (hasLoaded.current) return;
