@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/bluesky-feed-poll",
-      "schedule": "*/3 * * * *"
+      "schedule": "0 12 * * *"
     }
   ],
   "functions": {
