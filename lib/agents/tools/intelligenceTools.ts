@@ -119,7 +119,7 @@ export const semanticSearchTool: Tool<{ query: string }, any> = {
 
 export const workspaceSourcesSearchTool: Tool<{ query: string }, any> = {
     name: "query_workspace_sources",
-    description: "Searches the user's dedicated workspace knowledge base (Data Refinery) for factual market data, competitor intelligence, and provided documentation. Always use this to verify facts before answering domain-specific queries.",
+    description: "Searches the user's dedicated workspace knowledge base (Data Refinery) for factual market data, competitor intelligence, and provided documentation. Always use this to verify facts before answering domain-specific queries. Each result contains: (1) content — the factual text you must cite, and (2) lineage — optional metadata showing SUPERSEDES/CAUSES transitions. Use lineage ONLY to explain WHY state changed, never as a citation target. Cite content using [1], [2], etc.",
     schema: z.object({
         query: z.string().describe("The semantic search term derived from the user's prompt.")
     }),
@@ -152,7 +152,20 @@ export const workspaceSourcesSearchTool: Tool<{ query: string }, any> = {
                     const title = r.title || r.origin_uri || `Source ${idx + 1}`;
                     const uri = r.origin_uri ? `\nURI: ${r.origin_uri}` : '';
                     const sim = typeof r.similarity === 'number' ? `\nSimilarity: ${(r.similarity * 100).toFixed(1)}%` : '';
-                    return `[${title}]${uri}${sim}\n${r.content}`;
+                    
+                    // Format lineage metadata (SUPERSEDES edges, causal transitions)
+                    let lineageText = '';
+                    if (r.lineage && r.lineage.length > 0) {
+                        const transitions = r.lineage
+                            .filter((l: any) => l.relationship === 'SUPERSEDES' || l.relationship === 'CAUSES')
+                            .map((l: any) => `  - ${l.relationship}: ${l.content} (${(l.confidence * 100).toFixed(0)}% confidence)`)
+                            .join('\n');
+                        if (transitions) {
+                            lineageText = `\nLineage:\n${transitions}`;
+                        }
+                    }
+                    
+                    return `[${idx + 1}] ${title}${uri}${sim}\n${r.content}${lineageText}`;
                 })
                 .join('\n\n---\n\n');
 
