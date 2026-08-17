@@ -112,16 +112,22 @@ export async function storeMemory(
                 : {}),
         };
 
+        const insertPayload: any = {
+            user_id: normalizedUserId,
+            content: compressedContent,
+            type,
+            scope,
+            metadata: normalizedMetadata,
+        };
+
+        const embeddingPatch = buildEmbeddingColumnPatch(embeddingResult);
+        if (embeddingPatch) {
+            Object.assign(insertPayload, embeddingPatch);
+        }
+
         const { data, error } = await supabase
             .from('memory_bank')
-            .insert({
-                user_id: normalizedUserId,
-                content: compressedContent,
-                type,
-                scope,
-                metadata: normalizedMetadata,
-                ...buildEmbeddingColumnPatch(embeddingResult),
-            })
+            .insert(insertPayload)
             .select('id')
             .single();
 

@@ -140,11 +140,15 @@ export async function POST(req: NextRequest) {
 
         console.log(`[GitHub Index] Completed: ${indexedCount}/${codeFiles.length} files indexed`);
 
+        const storedOk = indexedCount > 0 || errors.length === 0;
         return NextResponse.json({
-            success: true,
+            success: storedOk,
             indexedFiles: indexedCount,
             totalFiles: codeFiles.length,
             errors: errors.length > 0 ? errors : undefined,
+            note: storedOk
+                ? undefined
+                : 'Indexing completed but no chunks were stored. Check Vercel logs for Supabase/embedding errors.',
         });
 
     } catch (error: any) {
