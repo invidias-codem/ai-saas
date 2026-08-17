@@ -154,6 +154,29 @@ function CodePageContent() {
   // GitHub State
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
   const [isRepoModalOpen, setIsRepoModalOpen] = useState(false);
+  const [linkedRepos, setLinkedRepos] = useState<string[]>([]);
+
+  // Hydrate repo context from workspace-linked repos once code context is available.
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLinkedRepos() {
+      const workspaceId = codeContext.workspaceId;
+      if (!workspaceId) return;
+      try {
+        const res = await fetch(`/api/workspaces/${workspaceId}/repos`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const repos: string[] = Array.isArray(data.repos) ? data.repos : [];
+        if (cancelled) return;
+        setLinkedRepos(repos);
+        setActiveRepo(prev => prev || repos[0] || null);
+      } catch (err) {
+        console.error('[CodePage] Failed to fetch workspace repos:', err);
+      }
+    }
+    loadLinkedRepos();
+    return () => { cancelled = true; };
+  }, [codeContext.workspaceId]);
 
   // GitHub Consent State (for Actions - separate from Context)
   const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
@@ -506,24 +529,25 @@ function CodePageContent() {
         {/* Right Actions */}
         <div className="flex gap-2 items-center">
           {/* Active Repo Badge */}
-          {activeRepo && (
-            <div className="flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-md text-xs font-medium border border-green-500/20">
+          {activeRepo ? (
+            <button
+              onClick={() => setIsRepoModalOpen(true)}
+              className="flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-md text-xs font-medium border border-green-500/20 hover:border-green-500/40 transition"
+            >
               <Github className="h-3 w-3" />
-              <span className="max-w-[100px] truncate">{activeRepo}</span>
-              <button onClick={() => setActiveRepo(null)} className="ml-1 hover:text-green-800 dark:hover:text-green-200"><X className="h-3 w-3" /></button>
-            </div>
+              <span className="max-w-[120px] truncate">{activeRepo}</span>
+            </button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsRepoModalOpen(true)}
+              className="gap-2 text-xs"
+            >
+              <Github className="h-3.5 w-3.5" />
+              Connect GitHub Repo
+            </Button>
           )}
-
-          {/* GitHub Connect Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", activeRepo && "text-green-600")}
-            onClick={handleGitHubClick}
-            title={activeRepo ? "Manage Repository" : "Load Repository Context"}
-          >
-            <Github className="h-4 w-4" />
-          </Button>
 
           {messages.length > 0 && (
             <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
@@ -784,7 +808,10 @@ function CodePageContent() {
       <GitHubRepoModal
         isOpen={isRepoModalOpen}
         onClose={() => setIsRepoModalOpen(false)}
-        onIndexComplete={handleRepoIndexComplete}
+        onIndexComplete={(repoInfo) => {
+          setActiveRepo(`${repoInfo.owner}/${repoInfo.repo}`);
+          setIsRepoModalOpen(false);
+        }}
       />
     </div>
   );
