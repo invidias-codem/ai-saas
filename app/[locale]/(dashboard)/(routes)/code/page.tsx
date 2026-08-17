@@ -189,13 +189,29 @@ function CodePageContent() {
     setIsRepoModalOpen(true);
   };
 
-  const handleRepoIndexComplete = (repoInfo: { owner: string; repo: string; fileCount: number }) => {
-    setActiveRepo(`${repoInfo.owner}/${repoInfo.repo}`);
+  const handleRepoIndexComplete = async (repoInfo: { owner: string; repo: string; fileCount: number }) => {
+    const fullName = `${repoInfo.owner}/${repoInfo.repo}`;
+    setActiveRepo(fullName);
     setIsRepoModalOpen(false);
+
+    // Persist this repo as the workspace's active GitHub repo so it survives
+    // across page reloads and is shared with Settings.
+    try {
+      const workspaceId = codeContext.workspaceId;
+      if (workspaceId) {
+        await fetch(`/api/workspaces/${workspaceId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active_github_repo: fullName }),
+        });
+      }
+    } catch (err) {
+      console.error('[CodePage] Failed to persist active repo:', err);
+    }
 
     // Add a system message to confirm context is loaded
     const botMessage: Message = {
-      text: `📚 **Repository Linked:** \`${repoInfo.owner}/${repoInfo.repo}\`\nI have indexed ${repoInfo.fileCount} code files from this repository. You can now ask questions about the codebase!`,
+      text: `📚 **Repository Linked:** \`${fullName}\`\nI have indexed ${repoInfo.fileCount} code files from this repository. You can now ask questions about the codebase!`,
       role: "bot",
       timestamp: new Date()
     };

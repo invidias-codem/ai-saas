@@ -119,7 +119,6 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
         }
         setAllowedRepos(prev => new Set(prev).add(repoFullName));
 
-        // Persist active selection when a new repo is linked.
         const patchRes = await fetch(`/api/workspaces/${selectedWorkspaceId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -129,7 +128,10 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
           const text = await patchRes.text().catch(() => '');
           throw new Error(`Failed to save active repo${text ? ': ' + text : ''}`);
         }
-        setSaveSuccess(`Saved to workspace`);
+
+        const patchData = await patchRes.json().catch(() => ({}));
+        const confirmedActive = patchData?.workspace?.active_github_repo || repoFullName;
+        setSaveSuccess(`Active repo saved: ${confirmedActive}`);
       } else {
         const deleteRes = await fetch(`/api/workspaces/${selectedWorkspaceId}/repos?repo_full_name=${encodeURIComponent(repoFullName)}`, {
           method: "DELETE"
