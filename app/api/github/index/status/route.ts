@@ -11,6 +11,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: "Supabase admin client not initialized" }, { status: 500 });
+    }
+
     const repo = req.nextUrl.searchParams.get("repo");
     if (!repo) {
       return NextResponse.json({ error: "Missing repo" }, { status: 400 });

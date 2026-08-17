@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, ArrowDown, Github } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, ArrowDown, Github, RefreshCcw } from "lucide-react";
 import { CodeIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
 import { PersonIcon } from "@radix-ui/react-icons";
@@ -235,7 +235,7 @@ function CodePageContent() {
     let cancelled = false;
     async function loadStatus() {
       try {
-        const res = await fetch(`/api/github/index/status?repo=${encodeURIComponent(activeRepo)}`);
+        const res = await fetch(`/api/github/index/status?repo=${encodeURIComponent(String(activeRepo))}`);
         const data = await res.json().catch(() => ({} as any));
         if (cancelled) return;
         setRepoIndexed(Boolean(data?.indexed));
