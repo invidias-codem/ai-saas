@@ -35,16 +35,16 @@ export async function GET(req: NextRequest, { params }: { params: { workspaceId:
 
         if (reposError) {
             console.error("[Workspace Repos] Supabase fetch error:", reposError);
-            throw new Error("Failed to fetch workspace repositories");
+            return NextResponse.json({ error: "Failed to fetch workspace repositories", details: reposError.message || String(reposError) }, { status: 500 });
         }
 
         const repos = (reposData || []).map((r: any) => r.repo_full_name);
         const activeGithubRepo = workspaceData?.active_github_repo || null;
 
         return NextResponse.json({ repos, active_github_repo: activeGithubRepo });
-    } catch (error) {
+    } catch (error: any) {
         console.error("[Workspace Repos] Error:", error);
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+        return NextResponse.json({ error: error?.message || "Internal Server Error" }, { status: 500 });
     }
 }
 
