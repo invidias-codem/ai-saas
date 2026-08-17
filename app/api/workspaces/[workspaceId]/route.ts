@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: { workspaceId:
 
   const { data, error } = await supabaseAdmin
     .from('workspaces')
-    .select('id, org_id, user_id, name, created_at, updated_at, active_github_repo')
+    .select('id, user_id, name, created_at, updated_at, active_github_repo')
     .eq('id', requestedWorkspaceId)
     .maybeSingle();
 
@@ -66,7 +66,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { workspaceI
       .from('workspaces')
       .update(updates)
       .eq('id', workspaceId)
-      .select('id, org_id, user_id, name, created_at, updated_at, active_github_repo')
+      .select('id, user_id, name, created_at, updated_at, active_github_repo')
       .maybeSingle();
 
     if (error) {
