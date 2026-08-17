@@ -228,10 +228,7 @@ function CodePageContent() {
   };
 
   useEffect(() => {
-    if (!activeRepo) {
-      setRepoIndexed(null);
-      return;
-    }
+    if (!activeRepo) return;
     let cancelled = false;
     async function loadStatus() {
       try {
