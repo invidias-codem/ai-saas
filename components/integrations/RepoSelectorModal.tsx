@@ -32,6 +32,9 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
   const [allowedRepos, setAllowedRepos] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
   async function fetchWorkspaces() {
     try {
@@ -100,36 +103,53 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
 
   const toggleRepo = async (repoFullName: string, checked: boolean) => {
     if (!selectedWorkspaceId) return;
+    setSaveError(null);
+    setSaveSuccess(null);
+    setSaving(true);
     try {
       if (checked) {
-        await fetch(`/api/workspaces/${selectedWorkspaceId}/repos`, {
+        const linkRes = await fetch(`/api/workspaces/${selectedWorkspaceId}/repos`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ repo_full_name: repoFullName })
         });
-        setAllowedRepos(prev => new Set(prev).add(repoFullName));
-        // Persist active selection when a new repo is linked.
-        try {
-          await fetch(`/api/workspaces/${selectedWorkspaceId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ active_github_repo: repoFullName })
-          });
-        } catch (e) {
-          console.error("[RepoSelectorModal] Failed to persist active_github_repo:", e);
+        if (!linkRes.ok) {
+          const text = await linkRes.text().catch(() => '');
+          throw new Error(`Failed to link repo${text ? ': ' + text : ''}`);
         }
+        setAllowedRepos(prev => new Set(prev).add(repoFullName));
+
+        // Persist active selection when a new repo is linked.
+        const patchRes = await fetch(`/api/workspaces/${selectedWorkspaceId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active_github_repo: repoFullName })
+        });
+        if (!patchRes.ok) {
+          const text = await patchRes.text().catch(() => '');
+          throw new Error(`Failed to save active repo${text ? ': ' + text : ''}`);
+        }
+        setSaveSuccess(`Saved to workspace`);
       } else {
-        await fetch(`/api/workspaces/${selectedWorkspaceId}/repos?repo_full_name=${encodeURIComponent(repoFullName)}`, {
+        const deleteRes = await fetch(`/api/workspaces/${selectedWorkspaceId}/repos?repo_full_name=${encodeURIComponent(repoFullName)}`, {
           method: "DELETE"
         });
+        if (!deleteRes.ok) {
+          const text = await deleteRes.text().catch(() => '');
+          throw new Error(`Failed to unlink repo${text ? ': ' + text : ''}`);
+        }
         setAllowedRepos(prev => {
           const next = new Set(prev);
           next.delete(repoFullName);
           return next;
         });
+        setSaveSuccess(`Removed from workspace`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to toggle repo", err);
+      setSaveError(err?.message || "Something went wrong while saving.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -160,6 +180,13 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        )}
+
+        {(saveError || saveSuccess) && (
+          <div className="mt-3 text-xs">
+            {saveError && <p className="text-destructive">{saveError}</p>}
+            {saveSuccess && <p className="text-emerald-600">{saveSuccess}</p>}
           </div>
         )}
 
