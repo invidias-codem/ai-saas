@@ -204,6 +204,29 @@ function CodePageContent() {
 
   // Check indexing status for the active repo so the UI can show whether chunks exist.
   const [repoIndexed, setRepoIndexed] = useState<boolean | null>(null);
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexError, setReindexError] = useState<string | null>(null);
+
+  const reindexActiveRepo = async () => {
+    if (!activeRepo || reindexing) return;
+    setReindexing(true);
+    setReindexError(null);
+    try {
+      const res = await fetch('/api/github/index', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner: activeRepo.split('/')[0], repo: activeRepo.split('/')[1] }),
+      });
+      const text = await res.text().catch(() => '');
+      if (!res.ok) throw new Error(text || 'Indexing failed');
+      setReindexError(null);
+    } catch (err: any) {
+      setReindexError(err?.message || 'Re-index failed');
+    } finally {
+      setReindexing(false);
+    }
+  };
+
   useEffect(() => {
     if (!activeRepo) {
       setRepoIndexed(null);
@@ -603,6 +626,15 @@ function CodePageContent() {
               {repoIndexed === false && (
                 <span className="text-[10px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full">indexing</span>
               )}
+              <button
+                type="button"
+                onClick={reindexActiveRepo}
+                disabled={reindexing}
+                className="ml-1 inline-flex items-center gap-1 text-[10px] font-medium bg-slate-500/10 text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded-full hover:bg-slate-500/20 transition disabled:opacity-50"
+              >
+                <RefreshCcw className="h-3 w-3" />
+                {reindexing ? 'indexing' : 're-index'}
+              </button>
             </button>
           ) : (
             <Button

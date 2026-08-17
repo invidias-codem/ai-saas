@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, RefreshCcw } from "lucide-react";
 
 interface Repo {
   id: number;
@@ -35,6 +35,8 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [indexing, setIndexing] = useState<Record<string, boolean>>({});
+  const [indexErrors, setIndexErrors] = useState<Record<string, string>>({});
 
   async function fetchWorkspaces() {
     try {
@@ -135,11 +137,34 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
         emitWorkspaceRepoSync();
 
         // Kick off background indexing so the repo is actually searchable.
+        setIndexing((prev) => ({ ...prev, [repoFullName]: true }));
+        setIndexErrors((prev) => {
+          const next = { ...prev };
+          delete next[repoFullName];
+          return next;
+        });
         fetch('/api/github/index', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ owner: repoFullName.split('/')[0], repo: repoFullName.split('/')[1] }),
-        }).catch((err) => console.error('[RepoSelectorModal] background indexing failed:', err));
+        })
+          .then(async (res) => {
+            const text = await res.text().catch(() => '');
+            if (!res.ok) {
+              throw new Error(text || 'Indexing request failed');
+            }
+          })
+          .catch((err) => {
+            console.error('[RepoSelectorModal] background indexing failed:', err);
+            setIndexErrors((prev) => ({ ...prev, [repoFullName]: err?.message || 'Indexing failed' }));
+          })
+          .finally(() => {
+            setIndexing((prev) => {
+              const next = { ...prev };
+              delete next[repoFullName];
+              return next;
+            });
+          });
       } else {
         const deleteRes = await fetch(`/api/workspaces/${selectedWorkspaceId}/repos?repo_full_name=${encodeURIComponent(repoFullName)}`, {
           method: "DELETE"
