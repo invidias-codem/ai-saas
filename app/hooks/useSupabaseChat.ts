@@ -66,7 +66,7 @@ export function useSupabaseChat(conversationId: string, initialData?: Message[])
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [conversationId]);
+    }, [conversationId, initialData]);
 
     return { messages };
 }
