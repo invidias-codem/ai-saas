@@ -235,7 +235,7 @@ function CodePageContent() {
     let cancelled = false;
     async function loadStatus() {
       try {
-        const res = await fetch(`/api/github/index/status?repo=${encodeURIComponent(String(activeRepo))}`);
+        const res = await fetch(`/api/github/index/status?repo=${encodeURIComponent(activeRepo!)}`);
         const data = await res.json().catch(() => ({} as any));
         if (cancelled) return;
         setRepoIndexed(Boolean(data?.indexed));
