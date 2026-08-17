@@ -133,6 +133,13 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
         const confirmedActive = patchData?.workspace?.active_github_repo || repoFullName;
         setSaveSuccess(`Active repo saved: ${confirmedActive}`);
         emitWorkspaceRepoSync();
+
+        // Kick off background indexing so the repo is actually searchable.
+        fetch('/api/github/index', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ owner: repoFullName.split('/')[0], repo: repoFullName.split('/')[1] }),
+        }).catch((err) => console.error('[RepoSelectorModal] background indexing failed:', err));
       } else {
         const deleteRes = await fetch(`/api/workspaces/${selectedWorkspaceId}/repos?repo_full_name=${encodeURIComponent(repoFullName)}`, {
           method: "DELETE"
