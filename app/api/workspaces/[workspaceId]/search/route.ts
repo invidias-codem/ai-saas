@@ -5,7 +5,8 @@ import { generateEmbedding } from "@/lib/ai/embeddings";
 import { PremiumRequiredError } from "@/lib/ai/auth";
 
 export async function POST(req: NextRequest, { params }: { params: { workspaceId: string } }) {
-    try {
+  const { workspaceId } = await params;
+  try {
         const { userId } = await auth();
         
         if (!userId) {

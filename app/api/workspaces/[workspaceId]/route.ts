@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
-import { requireWorkspacePermission } from '@/lib/security/workspaceAccess';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: { workspaceId: string } }) {
+  const { workspaceId } = await params;
   if (!supabaseAdmin) {
     return NextResponse.json({ error: 'Backend not configured' }, { status: 500 });
   }
 
   const { searchParams } = new URL(req.url);
-  const requestedWorkspaceId = searchParams.get('workspaceId') || params.workspaceId;
+  const requestedWorkspaceId = searchParams.get('workspaceId') || workspaceId;
 
   const { data, error } = await supabaseAdmin
     .from('workspaces')
@@ -27,13 +27,13 @@ export async function GET(req: NextRequest, { params }: { params: { workspaceId:
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { workspaceId: string } }) {
+  const { workspaceId } = await params;
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const workspaceId = params.workspaceId;
     if (!supabaseAdmin) {
       return NextResponse.json({ error: 'Backend not configured' }, { status: 500 });
     }

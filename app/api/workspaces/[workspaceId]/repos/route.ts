@@ -5,13 +5,13 @@ import { audit } from "@/lib/security/auditLog";
 
 export const dynamic = 'force-dynamic';
 
-async function getAuthorizedWorkspace(req: NextRequest, params: { workspaceId: string }, permission?: string) {
+async function getAuthorizedWorkspace(req: NextRequest, paramsPromise: Promise<{ workspaceId: string }>, permission?: string) {
   const { userId } = await auth();
   if (!userId) {
     throw { status: 401, message: 'Unauthorized' } as any;
   }
 
-  const workspaceId = params?.workspaceId?.trim();
+  const { workspaceId } = await paramsPromise;
   if (!workspaceId) {
     throw { status: 400, message: 'Missing workspaceId from route params' } as any;
   }
@@ -38,11 +38,9 @@ async function getAuthorizedWorkspace(req: NextRequest, params: { workspaceId: s
   return { userId, workspaceId };
 }
 
-export async function GET(req: NextRequest, { params }: { params: { workspaceId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
   try {
-    await getAuthorizedWorkspace(req, params, 'workspace:read');
-
-    const workspaceId = params.workspaceId;
+    const { workspaceId } = await getAuthorizedWorkspace(req, params, 'workspace:read');
 
     const [{ data: reposData, error: reposError }, { data: workspaceData, error: workspaceError }] =
         await Promise.all([
@@ -73,10 +71,9 @@ export async function GET(req: NextRequest, { params }: { params: { workspaceId:
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { workspaceId: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
   try {
-    const { userId } = await getAuthorizedWorkspace(req, params, 'repository:link');
-    const workspaceId = params.workspaceId;
+    const { userId, workspaceId } = await getAuthorizedWorkspace(req, params, 'repository:link');
     const body = await req.json();
     const { repo_full_name } = body;
 
@@ -114,10 +111,9 @@ export async function POST(req: NextRequest, { params }: { params: { workspaceId
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { workspaceId: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ workspaceId: string }> }) {
   try {
-    const { userId } = await getAuthorizedWorkspace(req, params, 'repository:unlink');
-    const workspaceId = params.workspaceId;
+    const { userId, workspaceId } = await getAuthorizedWorkspace(req, params, 'repository:unlink');
     const searchParams = req.nextUrl.searchParams;
     const repo_full_name = searchParams.get('repo_full_name');
 

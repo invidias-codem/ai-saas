@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 60 seconds (up to 300 on Pro, but batching makes 60 safe)
 
 export async function POST(req: NextRequest, { params }: { params: { workspaceId: string } }) {
-    try {
+  const { workspaceId } = await params;
+  try {
         const { userId } = await auth();
         
         if (!userId) {
