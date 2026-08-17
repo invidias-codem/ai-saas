@@ -202,6 +202,28 @@ function CodePageContent() {
     return () => window.removeEventListener('workspace:repo-sync', handler as EventListener);
   }, [codeContext.workspaceId]);
 
+  // Check indexing status for the active repo so the UI can show whether chunks exist.
+  const [repoIndexed, setRepoIndexed] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!activeRepo) {
+      setRepoIndexed(null);
+      return;
+    }
+    let cancelled = false;
+    async function loadStatus() {
+      try {
+        const res = await fetch(`/api/github/index/status?repo=${encodeURIComponent(activeRepo)}`);
+        const data = await res.json().catch(() => ({} as any));
+        if (cancelled) return;
+        setRepoIndexed(Boolean(data?.indexed));
+      } catch {
+        if (!cancelled) setRepoIndexed(null);
+      }
+    }
+    loadStatus();
+    return () => { cancelled = true; };
+  }, [activeRepo]);
+
   // GitHub Consent State (for Actions - separate from Context)
   const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
   const [gitHubAction, setGitHubAction] = useState<any>(null);
@@ -568,7 +590,6 @@ function CodePageContent() {
 
         {/* Right Actions */}
         <div className="flex gap-2 items-center">
-          {/* Active Repo Badge */}
           {activeRepo ? (
             <button
               onClick={() => setIsRepoModalOpen(true)}
@@ -576,6 +597,12 @@ function CodePageContent() {
             >
               <Github className="h-3 w-3" />
               <span className="max-w-[120px] truncate">{activeRepo}</span>
+              {repoIndexed === true && (
+                <span className="text-[10px] font-medium bg-green-500/20 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded-full">indexed</span>
+              )}
+              {repoIndexed === false && (
+                <span className="text-[10px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full">indexing</span>
+              )}
             </button>
           ) : (
             <Button
