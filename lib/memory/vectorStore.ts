@@ -44,13 +44,6 @@ function buildEmbeddingColumnPatch(embeddingResult: Awaited<ReturnType<typeof ge
         embedding_updated_at: now,
       };
 }
-      : {
-          embedding_3072: embeddingResult.vector,
-          embedding_provider: embeddingResult.provider,
-          embedding_model: embeddingResult.model,
-          embedding_updated_at: now,
-        };
-}
 
 function getMemoryRpcName(dimension: 768 | 3072): 'match_memories_768' | 'match_memories_3072' {
     return dimension === 768 ? 'match_memories_768' : 'match_memories_3072';

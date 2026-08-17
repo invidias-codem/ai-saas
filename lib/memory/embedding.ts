@@ -16,6 +16,44 @@ const L1_CACHE_TTL_MS = 1000 * 60 * 60;
 const L2_CACHE_TTL_SEC = 60 * 60 * 24;
 const MAX_L1_CACHE_SIZE = 100;
 const OLLAMA_TIMEOUT_MS = 10_000;
+const EMBED_RETRY_MAX_ATTEMPTS = 4;
+const EMBED_RETRY_BASE_MS = 500;
+const EMBED_RETRY_MAX_MS = 4000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(err: any): boolean {
+  if (!err) return false;
+  const status = err?.status;
+  const message = String(err?.message || err);
+  return status === 429 || status === '429' || message.includes('429') || /rate ?limit/i.test(message);
+}
+
+async function withExponentialBackoff<T>(fn: () => Promise<T>): Promise<T> {
+  let attempt = 0;
+  let lastError: any;
+  while (attempt < EMBED_RETRY_MAX_ATTEMPTS) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (!isRateLimitError(err)) {
+        throw err;
+      }
+      attempt++;
+      if (attempt >= EMBED_RETRY_MAX_ATTEMPTS) {
+        break;
+      }
+      const jitter = Math.floor(Math.random() * 250);
+      const delay = Math.min(EMBED_RETRY_BASE_MS * 2 ** (attempt - 1) + jitter, EMBED_RETRY_MAX_MS);
+      console.warn(`[Embedding] Rate limited on attempt ${attempt}/${EMBED_RETRY_MAX_ATTEMPTS}, backing off ${delay}ms`);
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
 const REDIS_KEY_PREFIX = 'embed:v2:';
 
 export type EmbeddingDimension = 768 | 3072;
@@ -186,13 +224,15 @@ async function embedWithGemini(text: string): Promise<EmbeddingResult> {
 
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-  // Using the latest multimodal embedding model which natively outputs 3072 dimensions
   const modelName = 'gemini-embedding-2-preview';
   const model = genAI.getGenerativeModel({ model: modelName });
-  const result = await model.embedContent(text);
-  const values = result.embedding?.values ?? [];
-  if (values.length === 0) throw new Error('[Embedding] Gemini returned empty embedding');
-  return buildEmbeddingResult(values, 'gemini', modelName);
+
+  return withExponentialBackoff(async () => {
+    const result = await model.embedContent(text);
+    const values = result.embedding?.values ?? [];
+    if (values.length === 0) throw new Error('[Embedding] Gemini returned empty embedding');
+    return buildEmbeddingResult(values, 'gemini', modelName);
+  });
 }
 
 export async function generateEmbeddingWithMetadata(text: string): Promise<EmbeddingResult> {
