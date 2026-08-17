@@ -11,7 +11,10 @@ async function getAuthorizedWorkspace(req: NextRequest, params: { workspaceId: s
     throw { status: 401, message: 'Unauthorized' } as any;
   }
 
-  const workspaceId = params.workspaceId;
+  const workspaceId = params?.workspaceId?.trim();
+  if (!workspaceId) {
+    throw { status: 400, message: 'Missing workspaceId from route params' } as any;
+  }
   if (!supabaseAdmin) {
     throw { status: 500, message: 'Supabase Admin client not initialized' } as any;
   }
