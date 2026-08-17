@@ -132,6 +132,7 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
         const patchData = await patchRes.json().catch(() => ({}));
         const confirmedActive = patchData?.workspace?.active_github_repo || repoFullName;
         setSaveSuccess(`Active repo saved: ${confirmedActive}`);
+        emitWorkspaceRepoSync();
       } else {
         const deleteRes = await fetch(`/api/workspaces/${selectedWorkspaceId}/repos?repo_full_name=${encodeURIComponent(repoFullName)}`, {
           method: "DELETE"
@@ -146,6 +147,7 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
           return next;
         });
         setSaveSuccess(`Removed from workspace`);
+        emitWorkspaceRepoSync();
       }
     } catch (err: any) {
       console.error("Failed to toggle repo", err);
@@ -158,6 +160,12 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
   const filteredRepos = repos.filter(repo => 
     repo.full_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const emitWorkspaceRepoSync = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('workspace:repo-sync', { detail: { workspaceId: selectedWorkspaceId } }));
+    }
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>

@@ -170,7 +170,6 @@ function CodePageContent() {
         if (cancelled) return;
         setLinkedRepos(repos);
         const savedActive = typeof data.active_github_repo === 'string' ? data.active_github_repo : null;
-        // If the saved active repo is still linked, use it; otherwise fall back to first linked repo.
         const hydrated = savedActive && repos.includes(savedActive) ? savedActive : repos[0] || null;
         setActiveRepo(hydrated);
       } catch (err) {
@@ -179,6 +178,28 @@ function CodePageContent() {
     }
     loadLinkedRepos();
     return () => { cancelled = true; };
+  }, [codeContext.workspaceId]);
+
+  // Reload workspace repo selection when Settings persists changes in the same tab.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => {
+      const workspaceId = codeContext.workspaceId;
+      if (!workspaceId) return;
+      fetch(`/api/workspaces/${workspaceId}/repos`)
+        .then(res => res.ok ? res.json() : Promise.resolve(null))
+        .then(data => {
+          if (!data) return;
+          const repos: string[] = Array.isArray(data.repos) ? data.repos : [];
+          setLinkedRepos(repos);
+          const savedActive = typeof data.active_github_repo === 'string' ? data.active_github_repo : null;
+          const hydrated = savedActive && repos.includes(savedActive) ? savedActive : repos[0] || null;
+          setActiveRepo(hydrated);
+        })
+        .catch(err => console.error('[CodePage] Failed to reload workspace repos after settings sync:', err));
+    };
+    window.addEventListener('workspace:repo-sync', handler as EventListener);
+    return () => window.removeEventListener('workspace:repo-sync', handler as EventListener);
   }, [codeContext.workspaceId]);
 
   // GitHub Consent State (for Actions - separate from Context)
