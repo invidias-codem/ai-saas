@@ -34,17 +34,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { workspaceI
     }
 
     const workspaceId = params.workspaceId;
-    await requireWorkspacePermission(userId, workspaceId, 'workspace:update');
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Backend not configured' }, { status: 500 });
+    }
+
+    const { data: workspace, error: workspaceError } = await supabaseAdmin
+      .from('workspaces')
+      .select('id, user_id')
+      .eq('id', workspaceId)
+      .maybeSingle();
+
+    if (workspaceError || !workspace || workspace.user_id !== userId) {
+      return NextResponse.json({ error: 'Forbidden: insufficient workspace permissions' }, { status: 403 });
+    }
 
     const body = await req.json().catch(() => ({}));
     const { active_github_repo } = body as { active_github_repo?: string | null };
 
     if (active_github_repo !== undefined && typeof active_github_repo !== 'string') {
       return NextResponse.json({ error: 'active_github_repo must be a string or null' }, { status: 400 });
-    }
-
-    if (!supabaseAdmin) {
-      return NextResponse.json({ error: 'Backend not configured' }, { status: 500 });
     }
 
     const updates: Record<string, any> = {
