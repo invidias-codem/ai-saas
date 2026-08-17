@@ -126,7 +126,10 @@ export async function runCodeEngine({
   });
 
   const enhancedPromptText = gatheredPromptText + buildAttachmentPromptBlock(resolvedAttachment);
-  const systemInstruction = CODE_SYSTEM_INSTRUCTION_TEXT + "\n\n" + HARNESS_INSTRUCTIONS;
+  const repoGroundingBlock = activeRepo
+    ? `\n\nThe user is working in the GitHub repository: ${activeRepo}. Relevant code context from this repo is included below in the conversation context as <code_context>. Base architectural and syntax decisions on that retrieved repo context when answering. If the retrieved snippets do not cover the request, state your assumptions explicitly instead of inventing missing files, imports, or identifiers.\n`
+    : '';
+  const systemInstruction = CODE_SYSTEM_INSTRUCTION_TEXT + "\n\n" + HARNESS_INSTRUCTIONS + repoGroundingBlock;
   const providerKeys = await getUserProviderApiKeys(userId);
   const nativeProviderKeys = await (await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys);
 
