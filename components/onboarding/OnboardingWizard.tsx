@@ -339,10 +339,12 @@ export default function OnboardingWizard() {
           )}
 
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep("intent")} className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+            <Button variant="outline" onClick={() => setStep('intent')} className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
               Back
             </Button>
-            <Button onClick={() => setStep("building")} className="bg-white text-neutral-900 hover:bg-neutral-200">Create workspace</Button>
+            <Button onClick={completeOnboarding} disabled={submitting} className="bg-white text-neutral-900 hover:bg-neutral-200">
+              {submitting ? 'Creating...' : 'Create workspace'}
+            </Button>
           </div>
         </Card>
       )}
