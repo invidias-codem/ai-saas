@@ -20,17 +20,28 @@ export async function GET(req: NextRequest, { params }: { params: { workspaceId:
             throw new Error("Supabase Admin client not initialized");
         }
 
-        const { data, error } = await supabaseAdmin
-            .from('workspace_repositories')
-            .select('repo_full_name, provider')
-            .eq('workspace_id', workspaceId);
+        const [{ data: reposData, error: reposError }, { data: workspaceData, error: workspaceError }] =
+            await Promise.all([
+                supabaseAdmin
+                    .from('workspace_repositories')
+                    .select('repo_full_name')
+                    .eq('workspace_id', workspaceId),
+                supabaseAdmin
+                    .from('workspaces')
+                    .select('active_github_repo')
+                    .eq('id', workspaceId)
+                    .maybeSingle(),
+            ]);
 
-        if (error) {
-            console.error("[Workspace Repos] Supabase fetch error:", error);
+        if (reposError) {
+            console.error("[Workspace Repos] Supabase fetch error:", reposError);
             throw new Error("Failed to fetch workspace repositories");
         }
 
-        return NextResponse.json({ repos: data.map(r => r.repo_full_name) });
+        const repos = (reposData || []).map((r: any) => r.repo_full_name);
+        const activeGithubRepo = workspaceData?.active_github_repo || null;
+
+        return NextResponse.json({ repos, active_github_repo: activeGithubRepo });
     } catch (error) {
         console.error("[Workspace Repos] Error:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

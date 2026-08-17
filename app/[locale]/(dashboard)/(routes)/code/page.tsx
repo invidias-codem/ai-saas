@@ -169,7 +169,10 @@ function CodePageContent() {
         const repos: string[] = Array.isArray(data.repos) ? data.repos : [];
         if (cancelled) return;
         setLinkedRepos(repos);
-        setActiveRepo(prev => prev || repos[0] || null);
+        const savedActive = typeof data.active_github_repo === 'string' ? data.active_github_repo : null;
+        // If the saved active repo is still linked, use it; otherwise fall back to first linked repo.
+        const hydrated = savedActive && repos.includes(savedActive) ? savedActive : repos[0] || null;
+        setActiveRepo(hydrated);
       } catch (err) {
         console.error('[CodePage] Failed to fetch workspace repos:', err);
       }

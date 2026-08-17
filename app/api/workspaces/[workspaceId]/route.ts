@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { requireWorkspacePermission } from '@/lib/security/workspaceAccess';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: { workspaceId:
 
   const { data, error } = await supabaseAdmin
     .from('workspaces')
-    .select('id, org_id, user_id, name, created_at, updated_at')
+    .select('id, org_id, user_id, name, created_at, updated_at, active_github_repo')
     .eq('id', requestedWorkspaceId)
     .maybeSingle();
 
@@ -22,4 +24,51 @@ export async function GET(req: NextRequest, { params }: { params: { workspaceId:
   }
 
   return NextResponse.json({ workspace: data ?? null });
+}
+
+export async function PATCH(req: NextRequest, { params }: { params: { workspaceId: string } }) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const workspaceId = params.workspaceId;
+    await requireWorkspacePermission(userId, workspaceId, 'workspace:update');
+
+    const body = await req.json().catch(() => ({}));
+    const { active_github_repo } = body as { active_github_repo?: string | null };
+
+    if (active_github_repo !== undefined && typeof active_github_repo !== 'string') {
+      return NextResponse.json({ error: 'active_github_repo must be a string or null' }, { status: 400 });
+    }
+
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Backend not configured' }, { status: 500 });
+    }
+
+    const updates: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (active_github_repo !== undefined) {
+      updates.active_github_repo = active_github_repo || null;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('workspaces')
+      .update(updates)
+      .eq('id', workspaceId)
+      .select('id, org_id, user_id, name, created_at, updated_at, active_github_repo')
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ workspace: data ?? null });
+  } catch (error: any) {
+    console.error('[Workspace PATCH] Error:', error);
+    const status = (error as Error & { status?: number }).status || 500;
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status });
+  }
 }

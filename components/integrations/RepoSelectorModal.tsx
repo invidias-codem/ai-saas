@@ -108,6 +108,16 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
           body: JSON.stringify({ repo_full_name: repoFullName })
         });
         setAllowedRepos(prev => new Set(prev).add(repoFullName));
+        // Persist active selection when a new repo is linked.
+        try {
+          await fetch(`/api/workspaces/${selectedWorkspaceId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ active_github_repo: repoFullName })
+          });
+        } catch (e) {
+          console.error("[RepoSelectorModal] Failed to persist active_github_repo:", e);
+        }
       } else {
         await fetch(`/api/workspaces/${selectedWorkspaceId}/repos?repo_full_name=${encodeURIComponent(repoFullName)}`, {
           method: "DELETE"
