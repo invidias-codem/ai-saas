@@ -20,20 +20,35 @@ export interface Memory {
 }
 
 function buildEmbeddingColumnPatch(embeddingResult: Awaited<ReturnType<typeof generateEmbeddingWithMetadata>>) {
-    const now = new Date().toISOString();
-    return embeddingResult.dimension === 768
-        ? {
-            embedding: embeddingResult.vector,
-            embedding_768: embeddingResult.vector,
-            embedding_provider: embeddingResult.provider,
-            embedding_model: embeddingResult.model,
-            embedding_updated_at: now,
-        }
-        : {
-            embedding_3072: embeddingResult.vector,
-            embedding_provider: embeddingResult.provider,
-            embedding_model: embeddingResult.model,
-            embedding_updated_at: now,
+  const now = new Date().toISOString();
+  if (
+    !embeddingResult ||
+    !Array.isArray(embeddingResult.vector) ||
+    embeddingResult.vector.length === 0 ||
+    embeddingResult.vector.every((v) => v === 0)
+  ) {
+    return {};
+  }
+  return embeddingResult.dimension === 768
+    ? {
+        embedding: embeddingResult.vector,
+        embedding_768: embeddingResult.vector,
+        embedding_provider: embeddingResult.provider,
+        embedding_model: embeddingResult.model,
+        embedding_updated_at: now,
+      }
+    : {
+        embedding_3072: embeddingResult.vector,
+        embedding_provider: embeddingResult.provider,
+        embedding_model: embeddingResult.model,
+        embedding_updated_at: now,
+      };
+}
+      : {
+          embedding_3072: embeddingResult.vector,
+          embedding_provider: embeddingResult.provider,
+          embedding_model: embeddingResult.model,
+          embedding_updated_at: now,
         };
 }
 
