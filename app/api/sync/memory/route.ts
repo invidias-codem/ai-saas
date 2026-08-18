@@ -16,14 +16,11 @@ import {
   filterValidFacts,
   batchMemorySync,
   calculateSyncMetrics,
-  // FIX: Removed 'MemorySyncMessage' from here, as it's a type 
-  // and is likely not exported from this utility file.
   generateMemorySyncChecksum,
   SyncMetrics,
   getDefaultPreferences,
 } from '@/lib/memorySyncUtils';
-import { ExtractedFact, UserPreferences } from '@/lib/intelligentMemory';
-// FIX: Added a direct import for the type from the dedicated schema file.
+import type { ExtractedFact, UserPreferences } from '@/lib/intelligentMemory';
 import { MemorySyncMessage } from '@/lib/memorySyncUtils';
 import { db } from '@/lib/firebaseAdmin';
 
@@ -31,8 +28,6 @@ export const dynamic = 'force-dynamic';
 
 import { z } from 'zod';
 import { extractedFactSchemaStrict, userPreferencesSchemaStrict } from '@/lib/schemas';
-import type { ExtractedFact } from '@/lib/intelligentMemory';
-import type { UserPreferences } from '@/lib/intelligentMemory';
 
 // SECURITY: Strict payload schemas at the API boundary.
 // Any extra keys from remote payloads are rejected before they reach
