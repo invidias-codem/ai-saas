@@ -2,12 +2,12 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-console.log('Starting verification script...');
+logger.info('Starting verification script...');
 
 try {
     const envPath = path.join(process.cwd(), '.env.local');
     if (fs.existsSync(envPath)) {
-        console.log('Loading .env.local...');
+        logger.info('Loading .env.local...');
         const envContent = fs.readFileSync(envPath, 'utf8');
         const lines = envContent.split(/\r?\n/);
         lines.forEach(line => {
@@ -25,24 +25,24 @@ try {
             }
         });
     } else {
-        console.log('.env.local file NOT found at:', envPath);
+        logger.info('.env.local file NOT found at:', envPath);
     }
 } catch (e) {
-    console.error('Failed to load .env.local', e);
+    logger.error('Failed to load .env.local', e);
 }
 
 const token = process.env.SLACK_BOT_TOKEN;
 
-console.log('Keys loaded:', Object.keys(process.env).filter(k => k.startsWith('SLACK')));
+logger.info('Keys loaded:', Object.keys(process.env).filter(k => k.startsWith('SLACK')));
 
 if (!token) {
-    console.error('No SLACK_BOT_TOKEN found in .env.local');
+    logger.error('No SLACK_BOT_TOKEN found in .env.local');
     process.exit(1);
 }
 
-console.log('Token found. Testing against Slack API...');
+logger.info('Token found. Testing against Slack API...');
 // Basic masking for log security
-console.log(`Token: ${token.substring(0, 5)}...${token.substring(token.length - 4)}`);
+logger.info(`Token: ${token.substring(0, 5)}...${token.substring(token.length - 4)}`);
 
 const options = {
     hostname: 'slack.com',
@@ -58,12 +58,12 @@ const req = https.request(options, (res) => {
     let data = '';
     res.on('data', chunk => data += chunk);
     res.on('end', () => {
-        console.log('Slack API Response:', data);
+        logger.info('Slack API Response:', data);
     });
 });
 
 req.on('error', (e) => {
-    console.error('Request failed:', e);
+    logger.error('Request failed:', e);
 });
 
 req.end();

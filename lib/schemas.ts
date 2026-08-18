@@ -145,4 +145,49 @@ export const extractedFactSchema = z.object({
     createdAt: z.number().optional(),
 });
 
+// Strict variant — drops unrecognized keys to prevent prototype pollution.
+export const extractedFactSchemaStrict = extractedFactSchema.strict();
+
 export type ExtractedFact = z.infer<typeof extractedFactSchema>;
+
+/**
+ * User preferences — normalized representation of learned user behavior.
+ */
+export const userPreferencesSchema = z.object({
+    communicationStyle: z.enum(["casual", "professional", "technical", "balanced"]),
+    preferredDepth: z.enum(["brief", "balanced", "detailed"]),
+    topics: z.record(z.number()),
+    sentimentPreference: z.number().min(-1).max(1),
+    learnedTopics: z.array(z.string()),
+    avgResponseLength: z.number().nonNegative(),
+    preferredFormats: z.array(z.string()),
+});
+
+export const userPreferencesSchemaStrict = userPreferencesSchema.strict();
+
+/**
+ * Feedback payload from devices for memory sync.
+ */
+export const feedbackDataSchema = z.object({
+    factId: z.string(),
+    helpful: z.boolean(),
+    rating: z.number().min(1).max(5),
+    feedback: z.string().optional(),
+    createdAt: z.number(),
+});
+
+export const feedbackDataSchemaStrict = feedbackDataSchema.strict();
+
+/**
+ * Memory sync envelope — validated before merging.
+ */
+export const memorySyncMessageSchema = z.object({
+    id: z.string(),
+    type: z.enum(["fact", "preference", "feedback"]),
+    deviceId: z.string(),
+    timestamp: z.number(),
+    data: z.union([extractedFactSchemaStrict, userPreferencesSchemaStrict, feedbackDataSchemaStrict]),
+    checksum: z.string(),
+});
+
+export const memorySyncMessageSchemaStrict = memorySyncMessageSchema.strict();

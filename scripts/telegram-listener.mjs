@@ -13,7 +13,7 @@ const __dirname = path.dirname(__filename);
 const rootDir = process.cwd();
 if (fs.existsSync(path.join(rootDir, '.env.local'))) {
     dotenv.config({ path: path.join(rootDir, '.env.local') });
-    console.log('✅ Loaded .env.local');
+    logger.info('✅ Loaded .env.local');
 } else {
     dotenv.config();
 }
@@ -31,7 +31,7 @@ if (!fs.existsSync(TMP_DIR)) {
 }
 
 if (!BOT_TOKEN) {
-    console.error('❌ Error: TELEGRAM_BOT_TOKEN is missing in environment.');
+    logger.error('❌ Error: TELEGRAM_BOT_TOKEN is missing in environment.');
     process.exit(1);
 }
 
@@ -49,7 +49,7 @@ async function sendMessage(chatId, text, replyMarkup) {
             })
         });
     } catch (e) {
-        console.error('Failed to send message:', e.message);
+        logger.error('Failed to send message:', e.message);
     }
 }
 
@@ -61,7 +61,7 @@ async function sendChatAction(chatId, action = 'typing') {
             body: JSON.stringify({ chat_id: chatId, action })
         });
     } catch (e) {
-        console.error('Failed to send action:', e.message);
+        logger.error('Failed to send action:', e.message);
     }
 }
 
@@ -75,13 +75,13 @@ const requestHandler = async (req, res) => {
     }
 
     if (req.url !== '/api/integrations/telegram/webhook') {
-        console.log(`⚠️ Received request at ${req.url} - Ignoring (expecting /api/integrations/telegram/webhook)`);
+        logger.info(`⚠️ Received request at ${req.url} - Ignoring (expecting /api/integrations/telegram/webhook)`);
         res.writeHead(404);
         res.end('Not Found');
         return;
     }
 
-    console.log('[TELEGRAM] Request received');
+    logger.info('[TELEGRAM] Request received');
 
     // Read Body
     let bodyText = '';
@@ -98,7 +98,7 @@ const requestHandler = async (req, res) => {
             }
 
             const update = JSON.parse(bodyText);
-            console.log('[TELEGRAM] Update:', JSON.stringify(update, null, 2));
+            logger.info('[TELEGRAM] Update:', JSON.stringify(update, null, 2));
 
             // 1. Handle Messages
             if (update.message) {
@@ -292,7 +292,7 @@ const requestHandler = async (req, res) => {
             res.end(JSON.stringify({ ok: true }));
 
         } catch (e) {
-            console.error('Processing Error:', e);
+            logger.error('Processing Error:', e);
             res.writeHead(500);
             res.end(JSON.stringify({ error: e.message }));
         }
@@ -303,9 +303,9 @@ const requestHandler = async (req, res) => {
 const server = http.createServer(requestHandler);
 
 server.listen(PORT, () => {
-    console.log(`\n🤖 Telegram Bot Standalone Server is running!`);
-    console.log(`📍 Listening on port: ${PORT}`);
-    console.log(`🔗 Webhook Path: /api/integrations/telegram/webhook`);
-    console.log(`\nMake sure ngrok is forwarding to this port:`);
-    console.log(`👉 ngrok http ${PORT}`);
+    logger.info(`\n🤖 Telegram Bot Standalone Server is running!`);
+    logger.info(`📍 Listening on port: ${PORT}`);
+    logger.info(`🔗 Webhook Path: /api/integrations/telegram/webhook`);
+    logger.info(`\nMake sure ngrok is forwarding to this port:`);
+    logger.info(`👉 ngrok http ${PORT}`);
 });

@@ -6,6 +6,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 
+import { logger } from "@/lib/logger";
+
+const escapeCsv = (value: string): string => {
+  const cleaned = String(value).replace(/"/g, '""');
+  if (cleaned.includes(",") || cleaned.includes('"') || cleaned.includes("\n")) {
+    return `"${cleaned}"`;
+  }
+  return cleaned;
+};
+
+function csvRow(...values: string[]) {
+  return values.map(escapeCsv).join(",") + "\n";
+}
+
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {

@@ -1,6 +1,7 @@
-import { mkdir, rm, readFile, writeFile, stat, readdir } from 'fs/promises';
+import { mkdir, rm, readFile, writeFile, stat, readdir, open, rename } from 'fs/promises';
 import { join, dirname as pathDir } from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
+import { randomUUID } from 'crypto';
 import type { IPromotionManager, QuarantineArtifact } from './sandboxManager';
 
 function buildLocalAdapter(
@@ -9,7 +10,7 @@ function buildLocalAdapter(
   emitRiskEvent: (event: string, payload: Record<string, unknown>) => void,
 ): IPromotionManager {
   const sha1 = (filePath: string): string => {
-    const raw = execSync(`openssl sha1 -hex "${filePath}"`, { encoding: 'utf8' }).trim();
+    const raw = execFileSync('openssl', ['sha1', '-hex', filePath], { encoding: 'utf8' }).trim();
     return raw.replace(/^SHA1\([^)]+\)= /, '');
   };
 
@@ -67,7 +68,16 @@ function buildLocalAdapter(
       const dir = sessionDir(sessionId);
       const absPath = join(dir, relativePath);
       await mkdir(pathDir(absPath), { recursive: true });
-      await writeFile(absPath, content);
+
+      // Atomic create-only write: fails immediately if the file already exists,
+      // closing the TOCTOU window between existence check and write.
+      const fd = await open(absPath, 'wx');
+      try {
+        await fd.write(content, 0, content.length, 0);
+      } finally {
+        await fd.close();
+      }
+
       const digest = sha1(absPath);
       return { sessionId, relativePath, digest, absPath };
     },
@@ -111,9 +121,21 @@ function buildLocalAdapter(
         }
 
         const destPath = join(liveRoot, relativePath);
-        await mkdir(pathDir(destPath), { recursive: true });
         const content = await readFile(sourcePath);
-        await writeFile(destPath, content, { mode: 0o644 });
+
+        // Write to a temp sibling path first, then atomically rename into place.
+        // This prevents partial writes in the live root and guarantees that
+        // the quarantine file is only removed after the promoted file exists.
+        const tmpSuffix = `.tmp-${randomUUID()}`;
+        const tmpDestPath = `${destPath}${tmpSuffix}`;
+        await mkdir(pathDir(tmpDestPath), { recursive: true });
+        const destFd = await open(tmpDestPath, 'wx');
+        try {
+          await destFd.write(content, 0, content.length, 0);
+        } finally {
+          await destFd.close();
+        }
+        await rename(tmpDestPath, destPath);
         await rm(sourcePath, { recursive: true, force: true }).catch(() => {});
       }
 

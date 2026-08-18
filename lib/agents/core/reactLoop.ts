@@ -1,4 +1,5 @@
 import { VertexAI, GenerativeModel, GenerateContentRequest, Part } from '@google-cloud/vertexai';
+import { logger } from '@/lib/logger';
 import { AgentContext, ToolResult, TrajectoryStep, AgentActionType } from './types';
 import { ToolRegistry } from './registry';
 import { withPromotionGate, NeedsApprovalError } from '@/lib/cli/promotionPrompt';
@@ -67,7 +68,7 @@ export async function runReActLoop(
           const credentials = JSON.parse(keyJson);
           googleAuthOptions = { credentials };
       } catch (e) {
-          console.error("Failed to parse GCP_SERVICE_ACCOUNT_KEY_JSON for Vertex AI auth", e);
+          logger.error("Failed to parse GCP_SERVICE_ACCOUNT_KEY_JSON for Vertex AI auth", e);
       }
   }
 
@@ -89,7 +90,7 @@ export async function runReActLoop(
     loopCount++;
 
     if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
-      console.warn(`[ReActLoop] Circuit breaker triggered after ${consecutiveFailures} failures.`);
+      logger.warn(`[ReActLoop] Circuit breaker triggered after ${consecutiveFailures} failures.`);
       const metaPrompt = `CRITICAL: The previous approach failed ${consecutiveFailures} times. Pivot your strategy. Do NOT repeat the same tool/arguments. Verify your assumptions.`;
 
       if (typeof promptToSend === 'string') {
@@ -149,7 +150,7 @@ export async function runReActLoop(
       } catch (error: any) {
         childSpan?.fail(error.message ?? String(error), { toolName, inputSize: JSON.stringify(toolArgs ?? {}).length });
         childSpan?.end({ metadata: { status: 'error', latencyMs: Date.now() - toolStart } });
-        console.warn(`[ReActLoop] Tool Error: ${error.message}`);
+        logger.warn(`[ReActLoop] Tool Error: ${error.message}`);
         consecutiveFailures++;
         trajectory[trajectory.length - 1].observation = { status: 'error', error: error.message };
         if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
@@ -282,7 +283,7 @@ export async function runReActLoop(
           }
         }];
       } else {
-        console.warn(`[ReActLoop] Tool Error: ${execResult.error}`);
+        logger.warn(`[ReActLoop] Tool Error: ${execResult.error}`);
         consecutiveFailures++;
         trajectory[trajectory.length - 1].observation = {
           status: 'error',
@@ -301,7 +302,7 @@ export async function runReActLoop(
         }];
       }
     } catch (error: any) {
-      console.error("[ReActLoop] Implementation Error:", error);
+      logger.error("[ReActLoop] Implementation Error:", error);
       return {
           answer: "An internal error occurred during the agent loop.",
           trajectory,

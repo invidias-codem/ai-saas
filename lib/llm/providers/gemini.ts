@@ -46,14 +46,28 @@ export class GeminiProvider implements LLMProvider {
             const parts: any[] = [];
             let textToProcess = msg.text;
 
-            // Extract thought signatures
-            const signatureRegex = /<thought_signature>([\s\S]*?)<\/thought_signature>/g;
-            let match;
-            while ((match = signatureRegex.exec(textToProcess)) !== null) {
-                parts.push({ thoughtSignature: match[1].trim() });
+            // Extract thought signatures (linear scan, no regex backtracking)
+            const marker = '<thought_signature>';
+            const endMarker = '</thought_signature>';
+            let searchFrom = 0;
+
+            while (searchFrom < textToProcess.length) {
+              const startIdx = textToProcess.indexOf(marker, searchFrom);
+              if (startIdx === -1) break;
+              const endIdx = textToProcess.indexOf(endMarker, startIdx + marker.length);
+              if (endIdx === -1) break;
+
+              const signature = textToProcess.slice(startIdx + marker.length, endIdx).trim();
+              if (signature) parts.push({ thoughtSignature: signature });
+
+              searchFrom = endIdx + endMarker.length;
             }
 
-            let remainingText = textToProcess.replace(signatureRegex, '').trim();
+            let remainingText = textToProcess
+              .split(marker)
+              .flatMap((segment) => segment.split(endMarker))
+              .join('')
+              .trim();
             if (remainingText) {
                 parts.push({ text: remainingText });
             } else if (parts.length === 0) {

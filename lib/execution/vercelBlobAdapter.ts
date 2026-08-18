@@ -21,6 +21,12 @@ export function createVercelBlobStorageAdapter(
     [blobPrefix(sessionId), relativePath.replace(/\\/g, '/')].filter(Boolean).join('/');
 
   const computeSha1 = async (url: string): Promise<string> => {
+    const parsed = new URL(url);
+    // Only compute digests for Vercel Blob storage URLs to prevent SSRF via
+    // attacker-controlled blob names.
+    if (!/\.(vercel-storage|vercel-blob)\.com$/i.test(parsed.hostname)) {
+      throw new Error(`SSRF deny: unexpected blob hostname ${parsed.hostname}`);
+    }
     const res = await fetch(url);
     const buf = Buffer.from(await res.arrayBuffer());
     const { createHash } = await import('crypto');

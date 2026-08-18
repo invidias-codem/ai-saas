@@ -80,27 +80,31 @@ export function mergeMemoryFacts(
     const existing = factMap.get(newFact.id);
 
     if (existing) {
-      // Merge logic: keep highest confidence, combine usage, average sentiment
-      const merged: ExtractedFact = {
-        ...existing,
-        confidence: Math.max(existing.confidence, newFact.confidence),
-        usageCount: (existing.usageCount || 0) + (newFact.usageCount || 0),
-        sentiment: existing.sentiment && newFact.sentiment
-          ? (existing.sentiment + newFact.sentiment) / 2
-          : existing.sentiment || newFact.sentiment,
-        impactScore: Math.max(existing.impactScore || 0, newFact.impactScore || 0),
+      // SECURITY: Use Object.assign with null-prototype target instead of spread
+      // to prevent prototype pollution via attacker-crafted __proto__ keys.
+      const sanitizedExisting = Object.assign(Object.create(null), existing);
+      const sanitizedNew = Object.assign(Object.create(null), newFact);
+      const merged: ExtractedFact = Object.assign(Object.create(null), sanitizedExisting, {
+        confidence: Math.max(sanitizedExisting.confidence, sanitizedNew.confidence),
+        usageCount: (sanitizedExisting.usageCount || 0) + (sanitizedNew.usageCount || 0),
+        sentiment: sanitizedExisting.sentiment && sanitizedNew.sentiment
+          ? (sanitizedExisting.sentiment + sanitizedNew.sentiment) / 2
+          : sanitizedExisting.sentiment || sanitizedNew.sentiment,
+        impactScore: Math.max(sanitizedExisting.impactScore || 0, sanitizedNew.impactScore || 0),
         lastUsedAt: new Date(
           Math.max(
-            existing.lastUsedAt?.getTime() || 0,
-            newFact.lastUsedAt?.getTime() || 0
+            sanitizedExisting.lastUsedAt?.getTime() || 0,
+            sanitizedNew.lastUsedAt?.getTime() || 0
           )
         ),
-      };
+      });
 
       factMap.set(newFact.id, merged);
     } else {
-      // New fact from different device
-      factMap.set(newFact.id, newFact);
+      // New fact from different device — use null-prototype to prevent
+      // prototype pollution from attacker-crafted payloads.
+      const sanitizedNew = Object.assign(Object.create(null), newFact);
+      factMap.set(newFact.id, sanitizedNew);
     }
   });
 

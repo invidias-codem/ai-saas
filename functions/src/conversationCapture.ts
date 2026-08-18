@@ -24,8 +24,27 @@ export const captureConversationMemory = functions.https.onRequest(
         return;
       }
 
+      // SECURITY: never trust caller-supplied userId from the body. Any attacker
+      // can forge a request and write memory into another user's account.
+      // Derive the uid exclusively from a verified Firebase ID token.
+      const authHeader = req.headers.authorization || '';
+      const match = authHeader.match(/^Bearer (.+)$/);
+      if (!match) {
+        res.status(401).json({ error: "Missing or invalid authorization header" });
+        return;
+      }
+      const idToken = match[1]!;
+      let decoded: admin.auth.DecodedIdToken;
+      try {
+        decoded = await admin.auth().verifyIdToken(idToken);
+      } catch (authErr) {
+        console.error('[conversationCapture] Token verification failed:', authErr);
+        res.status(401).json({ error: "Invalid or expired token" });
+        return;
+      }
+      const userId = decoded.uid;
+
       const {
-        userId,
         featureType,
         title,
         summary,

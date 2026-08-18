@@ -4,6 +4,7 @@
 
 import { supabaseAdmin } from "@/lib/supabaseClient";
 
+import { logger } from '@/lib/logger';
 const SLACK_API_BASE = "https://slack.com/api";
 
 interface SlackMessageResult {
@@ -232,7 +233,7 @@ export async function handleBlueskyApproval(
       .maybeSingle();
 
     if (!item) {
-      console.warn(`[BlueskyApproval] Queue item ${queueItemId} not found or not pending`);
+      logger.warn(`[BlueskyApproval] Queue item ${queueItemId} not found or not pending`);
       return;
     }
 
@@ -259,7 +260,7 @@ export async function handleBlueskyApproval(
         await updateApprovalMessage(context.channel, context.messageTs, "approved", result.uri);
       }
 
-      console.log(`[BlueskyApproval] Posted reply ${result.uri}`);
+      logger.info(`[BlueskyApproval] Posted reply ${result.uri}`);
     } else {
       // Reject
       await supabaseAdmin
@@ -276,10 +277,10 @@ export async function handleBlueskyApproval(
         await updateApprovalMessage(context.channel, context.messageTs, "rejected");
       }
 
-      console.log(`[BlueskyApproval] Rejected reply ${queueItemId}`);
+      logger.info(`[BlueskyApproval] Rejected reply ${queueItemId}`);
     }
   } catch (err: any) {
-    console.error("[BlueskyApproval] Error:", err.message);
+    logger.error("[BlueskyApproval] Error:", err.message);
 
     // Update queue with error
     await supabaseAdmin

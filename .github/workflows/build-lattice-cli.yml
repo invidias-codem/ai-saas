@@ -68,7 +68,7 @@ jobs:
           "$BINARY" --help | head -5
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lattice-${{ matrix.os }}-${{ matrix.arch }}
           path: dist/cli/lattice-*
@@ -84,7 +84,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: dist/cli/
           merge-multiple: true
@@ -100,7 +100,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           tag_name: ${{ steps.version.outputs.version }}
           name: "lattice-cli ${{ steps.version.outputs.version }}"
@@ -133,3 +133,4 @@ jobs:
             ```
 
             Built with Nuitka (native compilation — source not extractable).
+

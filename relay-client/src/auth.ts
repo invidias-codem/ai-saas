@@ -1,6 +1,7 @@
 import { safeStorage, app } from 'electron';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 interface TokenStore {
   encryptedAccess: string;
@@ -31,7 +32,12 @@ export const AuthManager = {
       deviceId,
     };
 
-    fs.writeFileSync(STORE_PATH, JSON.stringify(store), 'utf-8');
+    // Atomic write with restrictive permissions so the file is never left
+    // world-readable or in a partially-written state.
+    const tmpPath = `${STORE_PATH}.tmp-${crypto.randomUUID()}`;
+    fs.writeFileSync(tmpPath, JSON.stringify(store), 'utf-8');
+    fs.chmodSync(tmpPath, 0o600);
+    fs.renameSync(tmpPath, STORE_PATH);
   },
 
   getTokens() {

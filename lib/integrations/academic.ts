@@ -7,6 +7,7 @@ import { requireEnv } from "@/lib/env";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import crypto from "crypto";
 
 // Initialize Gemini components
 // Note: GoogleAIFileManager is part of @google/generative-ai/server in recent versions
@@ -91,12 +92,12 @@ export async function searchArxiv(query: string, maxResults = 5): Promise<Academ
  * @param userQuery The specific question the user wants answered from the paper
  */
 export async function analyzePaperWithGemini(pdfUrl: string, userQuery: string) {
-    const tempFilePath = path.join(os.tmpdir(), `paper-${Date.now()}.pdf`);
+    const tempFilePath = path.join(os.tmpdir(), `paper-${crypto.randomUUID()}.pdf`);
 
     try {
         console.log(`[Academic] Downloading PDF from ${pdfUrl}...`);
         const response = await axios.get(pdfUrl, { responseType: 'arraybuffer' });
-        fs.writeFileSync(tempFilePath, Buffer.from(response.data));
+        fs.writeFileSync(tempFilePath, Buffer.from(response.data), { mode: 0o600 });
 
         console.log(`[Academic] Uploading to Gemini File API...`);
         const fileManager = getFileManager();

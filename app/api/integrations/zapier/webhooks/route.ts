@@ -1,15 +1,38 @@
 import { sanitizeForLog } from '@/lib/security/urlValidator';
+import crypto from 'crypto';
 /**
  * Zapier Webhook Receiver
  * Receives events triggered from Zapier workflows
  */
 
 import { NextResponse } from 'next/server';
-import axios from 'axios';
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    // Read raw body BEFORE parsing so we can verify the signature against
+    // the exact bytes the sender signed. Parsing first would mutate the
+    // stream and invalidate the HMAC.
+    const rawBody = await req.text();
+    const signature = req.headers.get('x-zapier-signature');
+    const webhookSecret = process.env.ZAPIER_WEBHOOK_SECRET;
+
+    if (webhookSecret) {
+      if (!signature || !verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      // Production MUST have the secret; otherwise any caller can forge requests.
+      console.error('[ZAPIER_WEBHOOK] ZAPIER_WEBHOOK_SECRET missing in production');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+
+    let body: Record<string, any>;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
     const { userId, action, data } = body;
 
     if (!userId) {
@@ -17,15 +40,6 @@ export async function POST(req: Request) {
         { error: 'Missing userId' },
         { status: 400 }
       );
-    }
-
-    // Verify webhook signature when secret is configured
-    const webhookSecret = process.env.ZAPIER_WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const signature = req.headers.get('x-zapier-signature');
-      if (!signature || !verifyWebhookSignature(req, signature)) {
-        return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-      }
     }
 
     // Handle different Zapier actions
@@ -136,22 +150,34 @@ async function handleExportMemories(userId: string): Promise<NextResponse> {
 }
 
 /**
- * Verify Zapier webhook signature
+ * Verify Zapier webhook signature using HMAC-SHA256 with timing-safe comparison.
+ *
+ * Zapier typically signs the raw request body as `sha256=<hex_digest>`.
  */
 function verifyWebhookSignature(
-  req: Request,
-  signature: string
+  rawBody: string,
+  signature: string,
+  secret: string
 ): boolean {
   try {
-    // Implement signature verification based on Zapier's signing method
-    // This is a placeholder implementation
-    const crypto = require('crypto');
-    const secret = process.env.ZAPIER_WEBHOOK_SECRET || '';
+    // Accept both "sha256=..." prefix and raw hex for flexibility.
+    const provided = signature.startsWith('sha256=')
+      ? signature.slice(7)
+      : signature;
 
-    // TODO: Implement actual verification logic
-    return true;
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(rawBody)
+      .digest('hex');
+
+    if (provided.length !== expected.length) return false;
+
+    const providedBuf = Buffer.from(provided, 'hex');
+    const expectedBuf = Buffer.from(expected, 'hex');
+
+    return crypto.timingSafeEqual(providedBuf, expectedBuf);
   } catch (error) {
-    console.error('Error verifying webhook signature:', error);
+    console.error('[ZAPIER_WEBHOOK] Signature verification error:', error);
     return false;
   }
 }

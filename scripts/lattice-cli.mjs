@@ -81,17 +81,17 @@ async function runDoctor() {
 
   const health = await makeHttpRequest({
     ...env,
-    pathname: '/api/health',
-    method: 'GET',
+    pathname: "/api/health",
+    method: "GET",
     headers: env.headers,
     payload: null,
   });
   console.log(`health: ${health.status}`);
+  // Only surface a bounded slice of the raw response; never log secrets.
   console.log(health.raw.slice(0, 200));
   console.log(`userId=${env.userId}`);
-  console.log(`bearer=${env.authHeader.slice(0, 6)}...${env.authHeader.slice(-4)}`);
   if (env.bypassSecret) {
-    console.log('vercel-bypass=enabled');
+    console.log("vercel-bypass=enabled");
   }
 }
 

@@ -7,6 +7,7 @@ import PptxGenJS from "pptxgenjs";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { SlackConfig } from '@/lib/slack';
 import { downloadSlackFile, extractFileContent, isSupportedFileType } from '@/lib/slack/fileHelpers';
+import { logger } from '@/lib/logger';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
@@ -85,9 +86,9 @@ interface PresentationStructure {
  * Generate presentation structure using Gemini
  */
 async function generatePresentationStructure(topic: string, fileContent?: string): Promise<PresentationStructure> {
-    console.log('[SLIDE_HANDLER] Generating presentation structure for:', topic);
+    logger.info('[SLIDE_HANDLER] Generating presentation structure for:', topic);
     if (fileContent) {
-        console.log('[SLIDE_HANDLER] Using file content length:', fileContent.length);
+        logger.info('[SLIDE_HANDLER] Using file content length:', fileContent.length);
     }
 
     const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-flash" });
@@ -124,12 +125,12 @@ Create 5-8 slides with clear, concise content. Use "title" layout for the first 
         }
 
         const structure = JSON.parse(jsonMatch[0]) as PresentationStructure;
-        console.log('[SLIDE_HANDLER] Generated', structure.slides.length, 'slides');
+        logger.info('[SLIDE_HANDLER] Generated', structure.slides.length, 'slides');
 
         return structure;
 
     } catch (error) {
-        console.error('[SLIDE_HANDLER] Error generating structure:', error);
+        logger.error('[SLIDE_HANDLER] Error generating structure:', error);
         throw error;
     }
 }
@@ -138,7 +139,7 @@ Create 5-8 slides with clear, concise content. Use "title" layout for the first 
  * Create PowerPoint presentation using PptxGenJS
  */
 async function createPresentation(structure: PresentationStructure): Promise<Buffer> {
-    console.log('[SLIDE_HANDLER] Creating PowerPoint presentation');
+    logger.info('[SLIDE_HANDLER] Creating PowerPoint presentation');
 
     const pptx = new PptxGenJS();
 
@@ -146,7 +147,7 @@ async function createPresentation(structure: PresentationStructure): Promise<Buf
     const themeKeys = Object.keys(THEMES);
     const randomThemeKey = themeKeys[Math.floor(Math.random() * themeKeys.length)];
     const theme = THEMES[randomThemeKey];
-    console.log('[SLIDE_HANDLER] Using theme:', theme.name);
+    logger.info('[SLIDE_HANDLER] Using theme:', theme.name);
 
     // Set presentation properties
     pptx.author = 'Genie AI';
@@ -286,7 +287,7 @@ async function createPresentation(structure: PresentationStructure): Promise<Buf
 
     // Generate buffer
     const buffer = await pptx.write({ outputType: 'nodebuffer' }) as Buffer;
-    console.log('[SLIDE_HANDLER] Presentation created, size:', buffer.length, 'bytes');
+    logger.info('[SLIDE_HANDLER] Presentation created, size:', buffer.length, 'bytes');
 
     return buffer;
 }
@@ -303,7 +304,7 @@ async function uploadFileToSlack(
     title: string,
     threadTs?: string
 ): Promise<void> {
-    console.log('[SLIDE_HANDLER] Uploading file to Slack using files.uploadV2');
+    logger.info('[SLIDE_HANDLER] Uploading file to Slack using files.uploadV2');
 
     try {
         // Step 1: Get upload URL
@@ -323,9 +324,9 @@ async function uploadFileToSlack(
         const uploadUrlData = await getUploadUrlResponse.json();
 
         if (!uploadUrlData.ok) {
-            console.error('[SLIDE_HANDLER] Failed to get upload URL:', uploadUrlData.error);
-            console.error('[SLIDE_HANDLER] Full response:', JSON.stringify(uploadUrlData));
-            console.error('[SLIDE_HANDLER] Request params:', { filename, length: fileBuffer.length });
+            logger.error('[SLIDE_HANDLER] Failed to get upload URL:', uploadUrlData.error);
+            logger.error('[SLIDE_HANDLER] Full response:', JSON.stringify(uploadUrlData));
+            logger.error('[SLIDE_HANDLER] Request params:', { filename, length: fileBuffer.length });
             throw new Error(uploadUrlData.error);
         }
 
@@ -338,7 +339,7 @@ async function uploadFileToSlack(
         });
 
         if (!uploadResponse.ok) {
-            console.error('[SLIDE_HANDLER] Failed to upload file to URL');
+            logger.error('[SLIDE_HANDLER] Failed to upload file to URL');
             throw new Error('File upload to URL failed');
         }
 
@@ -369,14 +370,14 @@ async function uploadFileToSlack(
         const completeData = await completeResponse.json();
 
         if (!completeData.ok) {
-            console.error('[SLIDE_HANDLER] Failed to complete upload:', completeData.error);
+            logger.error('[SLIDE_HANDLER] Failed to complete upload:', completeData.error);
             throw new Error(completeData.error);
         }
 
-        console.log('[SLIDE_HANDLER] File uploaded successfully using files.uploadV2');
+        logger.info('[SLIDE_HANDLER] File uploaded successfully using files.uploadV2');
 
     } catch (error) {
-        console.error('[SLIDE_HANDLER] Error uploading file:', error);
+        logger.error('[SLIDE_HANDLER] Error uploading file:', error);
         throw error;
     }
 }
@@ -404,7 +405,7 @@ async function setLoadingStatus(
             }),
         });
     } catch (error) {
-        console.error('[SLIDE_HANDLER] Error setting status:', error);
+        logger.error('[SLIDE_HANDLER] Error setting status:', error);
     }
 }
 
@@ -419,7 +420,7 @@ export async function handleSlideCreation(
     const { channel, ts, thread_ts } = event;
     const threadTs = thread_ts || ts;
 
-    console.log('[SLIDE_HANDLER] Handling slide creation request');
+    logger.info('[SLIDE_HANDLER] Handling slide creation request');
 
     try {
         // Set loading status
@@ -433,7 +434,7 @@ export async function handleSlideCreation(
         // --- Handle File Attachments ---
         let fileContext = '';
         if (event.files && event.files.length > 0) {
-            console.log('[SLIDE_HANDLER] Found', event.files.length, 'attachments');
+            logger.info('[SLIDE_HANDLER] Found', event.files.length, 'attachments');
             await setLoadingStatus(
                 config.botToken,
                 channel,
@@ -443,13 +444,13 @@ export async function handleSlideCreation(
 
             for (const file of event.files) {
                 if (isSupportedFileType(file.filetype)) {
-                    console.log('[SLIDE_HANDLER] Processing file:', file.name);
+                    logger.info('[SLIDE_HANDLER] Processing file:', file.name);
                     try {
                         const buffer = await downloadSlackFile(file.url_private_download, config.botToken);
                         const content = await extractFileContent(buffer, file.filetype, file.name);
                         fileContext += `\n--- File: ${file.name} ---\n${content}\n`;
                     } catch (err) {
-                        console.error('[SLIDE_HANDLER] Failed to read file:', file.name, err);
+                        logger.error('[SLIDE_HANDLER] Failed to read file:', file.name, err);
                     }
                 }
             }
@@ -462,14 +463,14 @@ export async function handleSlideCreation(
 
         if (!topic && fileContext) {
             topic = "the provided documents";
-            console.log('[SLIDE_HANDLER] Inferring topic from file content');
+            logger.info('[SLIDE_HANDLER] Inferring topic from file content');
         }
 
         if (!topic && !fileContext) {
             throw new Error('No presentation topic or file provided');
         }
 
-        console.log('[SLIDE_HANDLER] Topic:', topic);
+        logger.info('[SLIDE_HANDLER] Topic:', topic);
 
         // Update status
         await setLoadingStatus(
@@ -506,10 +507,10 @@ export async function handleSlideCreation(
         // Clear loading status
         await setLoadingStatus(config.botToken, channel, threadTs, '');
 
-        console.log('[SLIDE_HANDLER] Slide creation complete');
+        logger.info('[SLIDE_HANDLER] Slide creation complete');
 
     } catch (error) {
-        console.error('[SLIDE_HANDLER] Error in handleSlideCreation:', error);
+        logger.error('[SLIDE_HANDLER] Error in handleSlideCreation:', error);
 
         // Send error message
         await fetch(`${SLACK_API_BASE}/chat.postMessage`, {

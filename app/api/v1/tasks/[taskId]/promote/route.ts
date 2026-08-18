@@ -157,11 +157,15 @@ export async function POST(
 
       let content: Buffer;
       if (typeof meta.absPath === 'string' && meta.absPath.startsWith('https://')) {
+        // Only allow fetch from remote URLs during promotion when the artifact
+        // was staged from a remote source (Vercel Blob, etc.).
         const res = await fetch(meta.absPath);
         content = Buffer.from(await res.arrayBuffer());
       } else {
+        // Local file: resolve relative to liveRoot to prevent path traversal.
         const { readFile } = await import('fs/promises');
-        content = await readFile(meta.absPath);
+        const safeAbsPath = join(liveRoot, relPath);
+        content = await readFile(safeAbsPath);
       }
 
       await writeFile(destPath, content, { mode: 0o644 });

@@ -4,6 +4,7 @@ import {
   generateSummary,
   estimateTokenCount,
 } from '@/lib/ragMemory';
+import { logger } from '@/lib/logger';
 import { tagMessagesForStorage, tagLLMMessage, extractWMRTMetadata } from '@/lib/world-model/trustTag';
 import { storeMemory } from '@/lib/memory/vectorStore';
 import { runBackgroundOptimization, InteractionFeedback } from '@/lib/ucol/routing/backgroundOptimizer';
@@ -68,7 +69,7 @@ async function recordTaskTokenMetrics(params: {
       latency_ms: latencyMs ?? null,
     });
   } catch (err) {
-    console.error('[OTel] task_token_metrics insert failed:', err);
+    logger.error('[OTel] task_token_metrics insert failed:', err);
   }
 }
 
@@ -191,7 +192,7 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
         fileUri: fileData?.fileUri,
         ...wmrtMeta,
       }
-    ).catch(err => console.error('[WMRT] Memory capture failed:', err));
+    ).catch(err => logger.error('[WMRT] Memory capture failed:', err));
 
     if (saveToMemory && fileData) {
       (async () => {
@@ -201,7 +202,7 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
           const fileName = resolvedAttachment.name || 'uploaded_file';
 
           if (!decodedContent) {
-            console.warn(`[Code RAG] Skipping indexing for ${fileName} - no text content available.`);
+            logger.warn(`[Code RAG] Skipping indexing for ${fileName} - no text content available.`);
             return;
           }
 
@@ -225,7 +226,7 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
             );
           }
         } catch (err) {
-          console.error('[Code RAG] Indexing failed:', err);
+          logger.error('[Code RAG] Indexing failed:', err);
         }
       })();
     }
@@ -256,7 +257,7 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
            newMemories
         });
       } catch (err) {
-        console.error('[BackgroundOptimizer] Fire-and-forget optimization failed:', err);
+        logger.error('[BackgroundOptimizer] Fire-and-forget optimization failed:', err);
       }
     })();
 
@@ -271,7 +272,7 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
           }
         }
       } catch (e) {
-        console.error('Graph update failed', e);
+        logger.error('Graph update failed', e);
       }
     })();
 
@@ -290,7 +291,7 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
               },
             });
 
-          if (persistUserError) console.error('[API] Failed to persist user message:', persistUserError);
+          if (persistUserError) logger.error('[API] Failed to persist user message:', persistUserError);
         }
 
         const { error: persistAssistantError } = await supabaseAdmin
@@ -308,13 +309,13 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
             },
           });
 
-        if (persistAssistantError) console.error('[API] Failed to persist assistant message:', persistAssistantError);
+        if (persistAssistantError) logger.error('[API] Failed to persist assistant message:', persistAssistantError);
       } catch (persistErr) {
-        console.error('[API] Exception persisting messages:', persistErr);
+        logger.error('[API] Exception persisting messages:', persistErr);
       }
     }
 
-    console.log(`[${featureType.toUpperCase()}] User: ${userContext.fullName} (${userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
+    logger.info(`[${featureType.toUpperCase()}] User: ${userContext.fullName} (${userId}) | Query: ${userQuery.substring(0, 50)}... | Tokens: ${tokensUsed}`);
 
     void trackAIGeneration({ tool: featureType, model: modelId, userId, tokenCount: tokensUsed, success: true });
     if (!bypassCredits && cost > 0) {
@@ -338,6 +339,6 @@ export async function runPostGenerationPipeline(params: PostGenerationPipelinePa
     });
 
   } catch (err) {
-    console.error(`[PostGenerationPipeline] Error in background pipeline for ${featureType}:`, err);
+    logger.error(`[PostGenerationPipeline] Error in background pipeline for ${featureType}:`, err);
   }
 }

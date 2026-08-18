@@ -460,7 +460,7 @@ export class LocalSandboxRunner implements SandboxRunner {
 
       if (this.promotionManagerRef) {
         const rel = relative(req.scratchDir, absolute);
-        const sessionId = req.sessionId ?? req.scratchDir;
+        const sessionId = req.sessionId ?? randomUUID();
         await this.promotionManagerRef.stageArtifact(sessionId, rel, Buffer.from(req.content, 'utf8'));
       }
 
