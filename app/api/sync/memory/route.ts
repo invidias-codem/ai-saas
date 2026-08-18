@@ -75,7 +75,7 @@ function normalizeFact(raw: unknown): ExtractedFact | null {
   return {
     id: f.id,
     content: f.content,
-    type: f.type === 'project' ? 'code' : f.type || 'conversation',
+    type: f.type === 'project' ? 'code' : (f.type === 'decision' || f.type === 'action_item' || f.type === 'blocker' || f.type === 'verification') ? 'conversation' : (f.type || 'conversation'),
     confidence: f.confidence ?? 0.7,
     sentiment: f.sentiment,
     impactScore: f.impactScore,
