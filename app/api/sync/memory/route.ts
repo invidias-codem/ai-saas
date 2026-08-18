@@ -35,7 +35,7 @@ import { extractedFactSchemaStrict, userPreferencesSchemaStrict } from '@/lib/sc
 const incomingFactSchema = z.object({
   id: z.string().optional(),
   content: z.string(),
-  type: z.enum(['decision', 'action_item', 'blocker', 'project', 'verification']).optional(),
+  type: z.enum(['decision', 'action_item', 'blocker', 'verification']).optional(),
   confidence: z.number().min(0).max(1).optional(),
   sentiment: z.number().optional(),
   impactScore: z.number().min(0).max(1).optional(),
@@ -75,7 +75,7 @@ function normalizeFact(raw: unknown): ExtractedFact | null {
   return {
     id: f.id,
     content: f.content,
-    type: f.type || 'conversation',
+    type: f.type === 'project' ? 'code' : f.type || 'conversation',
     confidence: f.confidence ?? 0.7,
     sentiment: f.sentiment,
     impactScore: f.impactScore,
