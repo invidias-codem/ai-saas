@@ -59,7 +59,7 @@ const incomingPreferencesSchema = z.object({
   topics: z.record(z.number()).optional(),
   sentimentPreference: z.number().min(-1).max(1).optional(),
   learnedTopics: z.array(z.string()).optional(),
-  avgResponseLength: z.number().nonNegative().optional(),
+  avgResponseLength: z.number().min(0).optional(),
   preferredFormats: z.array(z.string()).optional(),
 });
 
