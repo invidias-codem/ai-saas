@@ -159,7 +159,7 @@ export const userPreferencesSchema = z.object({
     topics: z.record(z.number()),
     sentimentPreference: z.number().min(-1).max(1),
     learnedTopics: z.array(z.string()),
-    avgResponseLength: z.number().nonNegative(),
+    avgResponseLength: z.number().min(0),
     preferredFormats: z.array(z.string()),
 });
 
