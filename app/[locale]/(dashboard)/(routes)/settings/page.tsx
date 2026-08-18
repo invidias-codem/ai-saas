@@ -36,7 +36,7 @@ function SlackIntegrationSkeleton() {
 interface Integration {
   id: string;
   label: string;
-  icon: any;
+  icon: string;
   description: string;
   connected: boolean;
   color: string;
@@ -235,7 +235,7 @@ const SettingsPage = () => {
       id: "github",
       label: "GitHub",
       description: "Sync with your repositories",
-      icon: Github,
+      icon: "Github",
       connected: false,
       color: "text-slate-700",
       bgColor: "bg-slate-700/10",
@@ -244,7 +244,7 @@ const SettingsPage = () => {
       id: "trello",
       label: "Trello",
       description: "Manage projects and tasks",
-      icon: Trello,
+      icon: "Trello",
       connected: false,
       color: "text-blue-600",
       bgColor: "bg-blue-600/10",
@@ -533,8 +533,10 @@ const SettingsPage = () => {
                   <div
                     className={cn("p-2 w-fit rounded-md", integration.bgColor)}
                   >
-                    <integration.icon
+                    <BrandIcon
+                      name={integration.icon}
                       className={cn("w-6 h-6", integration.color)}
+                      size={24}
                     />
                   </div>
                   <div>
