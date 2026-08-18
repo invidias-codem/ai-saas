@@ -12,7 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Github, Loader2, CheckCircle, XCircle, FolderGit2 } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, FolderGit2 } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 import axios from "axios";
 
 interface GitHubRepoModalProps {
@@ -145,7 +146,7 @@ export function GitHubRepoModal({ isOpen, onClose, onIndexComplete }: GitHubRepo
                             </>
                         ) : (
                             <>
-                                <Github className="mr-2 h-4 w-4" />
+                                <BrandIcon name="Github" className="mr-2 h-4 w-4" size={16} />
                                 Load Repository
                             </>
                         )}

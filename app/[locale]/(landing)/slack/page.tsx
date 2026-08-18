@@ -8,7 +8,8 @@ import {
   LightningBoltIcon,
   CheckIcon,
 } from "@radix-ui/react-icons";
-import { Slack, MessageSquare, Bot, Zap, Shield, Users, ImageIcon, Presentation, Calendar, ArrowRight, Sparkles } from "lucide-react";
+import { MessageSquare, Bot, Zap, Shield, Users, ImageIcon, Presentation, Calendar, ArrowRight, Sparkles } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 import { cn } from "@/lib/utils";
 
 const SlackLandingPage = () => {
@@ -53,7 +54,7 @@ const SlackLandingPage = () => {
                 size="lg"
                 className="w-full sm:w-auto bg-white hover:bg-gray-100 text-black rounded-xl text-lg px-10 py-7 shadow-2xl shadow-purple-500/30 flex items-center justify-center gap-3 font-semibold"
               >
-                <Slack className="w-6 h-6" />
+                <BrandIcon name="Slack" className="w-6 h-6" size={24} />
                 Connect to Slack
               </Button>
             </Link>
@@ -297,7 +298,7 @@ const SlackLandingPage = () => {
                 size="lg"
                 className="bg-white hover:bg-gray-100 text-black rounded-xl text-lg px-12 py-8 shadow-2xl shadow-purple-500/30 font-semibold"
               >
-                <Slack className="w-6 h-6 mr-3" />
+                <BrandIcon name="Slack" className="w-6 h-6 mr-3" size={24} />
                 Add to Slack — It&apos;s Free
               </Button>
             </Link>

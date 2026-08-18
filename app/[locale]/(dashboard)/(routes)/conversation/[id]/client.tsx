@@ -17,7 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 // but keeping the import if you use it elsewhere.
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Paperclip, AlertCircle, SendHorizontal, X, Plus, ArrowDown, Github, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Plus, ArrowDown, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 import { GitHubConsentModal } from "@/components/github-consent-modal";
 import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
@@ -944,7 +945,7 @@ function ConversationPage({
             onClick={handleGitHubConnect}
             title="Connect GitHub"
           >
-            <Github className="h-4 w-4" />
+            <BrandIcon name="Github" className="h-4 w-4" size={16} />
           </Button>
         </div>
       </header>

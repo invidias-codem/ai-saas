@@ -17,7 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, ArrowDown, Github, RefreshCcw } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, ArrowDown, RefreshCcw } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 import { CodeIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
 import { PersonIcon } from "@radix-ui/react-icons";
@@ -615,7 +616,7 @@ function CodePageContent() {
               onClick={() => setIsRepoModalOpen(true)}
               className="flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-md text-xs font-medium border border-green-500/20 hover:border-green-500/40 transition"
             >
-              <Github className="h-3 w-3" />
+              <BrandIcon name="Github" className="h-3 w-3" size={12} />
               <span className="max-w-[120px] truncate">{activeRepo}</span>
               {repoIndexed === true && (
                 <span className="text-[10px] font-medium bg-green-500/20 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded-full">indexed</span>
@@ -640,7 +641,7 @@ function CodePageContent() {
               onClick={() => setIsRepoModalOpen(true)}
               className="gap-2 text-xs"
             >
-              <Github className="h-3.5 w-3.5" />
+              <BrandIcon name="Github" className="h-3.5 w-3.5" size={14} />
               Connect GitHub Repo
             </Button>
           )}
@@ -672,7 +673,7 @@ function CodePageContent() {
                 </p>
                 <div className="flex justify-center pt-4">
                   <Button variant="outline" size="sm" onClick={handleGitHubClick} className="gap-2 text-xs">
-                    <Github className="h-3.5 w-3.5" />
+                    <BrandIcon name="Github" className="h-3.5 w-3.5" size={14} />
                     Load Repository Context
                   </Button>
                 </div>

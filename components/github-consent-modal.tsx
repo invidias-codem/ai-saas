@@ -10,7 +10,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Github } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 
 interface GitHubConsentModalProps {
     isOpen: boolean;
@@ -37,7 +37,7 @@ export const GitHubConsentModal = ({
             <AlertDialogContent className="sm:max-w-[425px]">
                 <AlertDialogHeader>
                     <AlertDialogTitle className="flex items-center gap-2">
-                        <Github className="h-5 w-5" />
+                        <BrandIcon name="Github" className="h-5 w-5" size={20} />
                         GitHub Action Consent
                     </AlertDialogTitle>
                     <AlertDialogDescription>

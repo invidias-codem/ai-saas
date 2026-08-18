@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { Author } from "@/lib/blog/types";
-import { Twitter, Linkedin, Github } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 
 interface AuthorCardProps {
   author: Author;
@@ -53,7 +53,7 @@ export function AuthorCard({ author, coAuthors }: AuthorCardProps) {
                     className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                     aria-label={`Follow ${auth.name} on Twitter`}
                   >
-                    <Twitter className="w-4 h-4" />
+                    <BrandIcon name="Twitter" className="w-4 h-4" size={16} />
                   </a>
                 )}
                 {auth.linkedin && (
@@ -64,7 +64,7 @@ export function AuthorCard({ author, coAuthors }: AuthorCardProps) {
                     className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                     aria-label={`Connect with ${auth.name} on LinkedIn`}
                   >
-                    <Linkedin className="w-4 h-4" />
+                    <BrandIcon name="Linkedin" className="w-4 h-4" size={16} />
                   </a>
                 )}
                 {auth.github && (
@@ -75,7 +75,7 @@ export function AuthorCard({ author, coAuthors }: AuthorCardProps) {
                     className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                     aria-label={`View ${auth.name} on GitHub`}
                   >
-                    <Github className="w-4 h-4" />
+                    <BrandIcon name="Github" className="w-4 h-4" size={16} />
                   </a>
                 )}
               </div>

@@ -160,6 +160,7 @@
     "remark-unwrap-images": "^4.0.1",
     "replicate": "^1.4.0",
     "resend": "^6.9.2",
+    "simple-icons": "^16.28.0",
     "stripe": "^22.5.0",
     "svix": "^1.87.0",
     "swr": "^2.4.1",

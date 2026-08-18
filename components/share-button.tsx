@@ -14,15 +14,13 @@ import {
   Share2,
   Copy,
   Check,
-  Twitter,
-  Facebook,
-  Linkedin,
   Mail,
   MessageCircle,
   Send,
   Link2,
   Smartphone,
 } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 import { cn } from "@/lib/utils";
 
 export interface ShareContent {
@@ -155,21 +153,21 @@ export function ShareButton({
           onClick={() => handleShareClick(shareUrls.twitter)}
           className="cursor-pointer"
         >
-          <Twitter className="mr-2 h-4 w-4 text-sky-500" />
+          <BrandIcon name="Twitter" className="mr-2 h-4 w-4 text-sky-500" size={16} />
           <span>Twitter / X</span>
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => handleShareClick(shareUrls.facebook)}
           className="cursor-pointer"
         >
-          <Facebook className="mr-2 h-4 w-4 text-blue-600" />
+          <BrandIcon name="Facebook" className="mr-2 h-4 w-4 text-blue-600" size={16} />
           <span>Facebook</span>
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => handleShareClick(shareUrls.linkedin)}
           className="cursor-pointer"
         >
-          <Linkedin className="mr-2 h-4 w-4 text-blue-700" />
+          <BrandIcon name="Linkedin" className="mr-2 h-4 w-4 text-blue-700" size={16} />
           <span>LinkedIn</span>
         </DropdownMenuItem>
         <DropdownMenuItem

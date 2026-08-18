@@ -3,7 +3,8 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { Heading } from "@/components/heading";
-import { Github, Slack, Trello, Archive, Settings, Loader2, Database, Mail, Key, Zap } from "lucide-react";
+import { Archive, Settings, Loader2, Database, Mail, Key, Zap } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";

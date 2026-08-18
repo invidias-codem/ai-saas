@@ -18,10 +18,10 @@ import {
     KeyRound,
     LockKeyhole,
     LifeBuoy,
-    Github,
     ExternalLink,
     type LucideIcon,
 } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 
 type DocItem = {
     title: string;
@@ -414,7 +414,7 @@ export default function DocsPage() {
                             </a>
                             <a href={GITHUB_DOCS_URL} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
                                 <Button variant="outline" className="h-11 w-full rounded-full border-border px-5 text-sm hover:bg-accent sm:w-auto">
-                                    <Github className="mr-2 h-4 w-4" /> Docs on GitHub
+                                    <BrandIcon name="Github" className="mr-2 h-4 w-4" size={16} /> Docs on GitHub
                                 </Button>
                             </a>
                             <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
