@@ -28,6 +28,8 @@ const isPublicRoute = createRouteMatcher([
     '/:locale/docs',
     '/docs/(.*)',
     '/:locale/docs/(.*)',
+    '/expert(.*)',
+    '/:locale/expert(.*)',
     '/slack',
     '/:locale/slack',
     '/blog(.*)',

@@ -125,7 +125,7 @@ Create 5-8 slides with clear, concise content. Use "title" layout for the first 
         }
 
         const structure = JSON.parse(jsonMatch[0]) as PresentationStructure;
-        logger.info('[SLIDE_HANDLER] Generated', structure.slides.length, 'slides');
+        logger.info(`[SLIDE_HANDLER] Generated ${structure.slides.length} slides`);
 
         return structure;
 
@@ -287,7 +287,7 @@ async function createPresentation(structure: PresentationStructure): Promise<Buf
 
     // Generate buffer
     const buffer = await pptx.write({ outputType: 'nodebuffer' }) as Buffer;
-    logger.info('[SLIDE_HANDLER] Presentation created, size:', buffer.length, 'bytes');
+    logger.info(`[SLIDE_HANDLER] Presentation created, size: ${buffer.length} bytes`);
 
     return buffer;
 }
@@ -434,7 +434,7 @@ export async function handleSlideCreation(
         // --- Handle File Attachments ---
         let fileContext = '';
         if (event.files && event.files.length > 0) {
-            logger.info('[SLIDE_HANDLER] Found', event.files.length, 'attachments');
+            logger.info(`[SLIDE_HANDLER] Found ${event.files.length} attachments`);
             await setLoadingStatus(
                 config.botToken,
                 channel,
@@ -450,7 +450,7 @@ export async function handleSlideCreation(
                         const content = await extractFileContent(buffer, file.filetype, file.name);
                         fileContext += `\n--- File: ${file.name} ---\n${content}\n`;
                     } catch (err) {
-                        logger.error('[SLIDE_HANDLER] Failed to read file:', file.name, err);
+                        logger.error(`[SLIDE_HANDLER] Failed to read file: ${file.name}`, err);
                     }
                 }
             }

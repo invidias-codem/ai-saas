@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Slack,
   CheckCircle2,
   XCircle,
   ExternalLink,

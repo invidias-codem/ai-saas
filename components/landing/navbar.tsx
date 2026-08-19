@@ -27,7 +27,7 @@ export const LandingNavbar = () => {
 
     const navLinks = [
         { href: "/blog", label: "Blog", icon: FileTextIcon },
-        { href: "/slack", label: "Slack", icon: Slack },
+        { href: "/slack", label: "Slack", icon: () => <BrandIcon name="Slack" /> },
         { href: "/support", label: "Support", icon: QuestionMarkCircledIcon },
     ];
 

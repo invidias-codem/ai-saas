@@ -189,6 +189,126 @@
           "cta": "View pricing"
         }
       }
+    },
+    "expertV2": {
+      "badge": "Expert-as-a-Service",
+      "headline1": "Turn your company's knowledge into an AI specialist that",
+      "headline2": "ships work, not just answers.",
+      "subhead": "Lattice gives you the platform to build workspace-scoped AI experts from your documents, code, and operating procedures. It remembers decisions across sessions, reasons over proprietary context, and triggers approved actions across your team's existing toolchain.",
+      "ctaHeroPrimary": "Create your first expert",
+      "ctaSecondary": "See it in action",
+      "problem": {
+        "eyebrow": "The Real Cost of Tribal Knowledge",
+        "title": "Your experts lose time answering the same questions twice.",
+        "body1": "When institutional knowledge is locked inside code repositories, Slack threads, and unindexed documents, organizations pay a heavy operational tax. New hires require weeks of hand-holding before contributing independently. Senior specialists lose hours every week recreating analysis, code briefs, and client deliverables that already exist somewhere in the organization.",
+        "body2": "Standard AI tools leave this gap because they do not retain your proprietary context across work or connect naturally to the tools where the work must be finished.",
+        "metric1Value": "[3 to 4 weeks]",
+        "metric1Label": "Lost time before new team members achieve autonomous productivity",
+        "metric2Value": "[15% to 25%]",
+        "metric2Label": "Time spent recreating existing research and specs",
+        "metric3Value": "[Days to Hours]",
+        "metric3Label": "Delay in synthesizing cross-functional context"
+      },
+      "solution": {
+        "eyebrow": "The Lattice Solution",
+        "title": "A memory-rich specialist built on your business.",
+        "outcome1": "Carry context across sessions",
+        "delivery1": "Persistent memory and retrieval keep approved documents, prior decisions, and project history available to the specialist.",
+        "outcome2": "Get answers grounded in company context",
+        "delivery2": "Context orchestration assembles relevant workspace knowledge and routes each task to an appropriate model path.",
+        "outcome3": "Keep sensitive work separated",
+        "delivery3": "Workspace-scoped access controls and isolated knowledge stores help keep team context within its intended boundary.",
+        "outcome4": "Move from response to next step",
+        "delivery4": "Connected integrations can trigger approved actions or send reports into tools such as GitHub, Slack, Google Docs, and email."
+      },
+      "socialProof": {
+        "eyebrow": "Evidence, Not Promises",
+        "title": "Show the work your specialist removes.",
+        "metric1Value": "[X]%",
+        "metric1Label": "Reduction in recurring internal onboarding questions",
+        "metric2Value": "[X] Hours",
+        "metric2Label": "Saved per specialist weekly on research and report drafting",
+        "securityNote": "Isolated vector stores with Bring-Your-Own-Key (BYOK) encryption.",
+        "testimonialQuote": "[Approved customer statement describing one measurable business outcome. Include a realistic time or human-baseline comparison.]",
+        "testimonialAuthor": "[Approved title]",
+        "testimonialCompany": "[Company or approved descriptor]",
+        "testimonialOutcome": "[X]% reduction in [verified metric]"
+      },
+      "workflow": {
+        "eyebrow": "How It Works",
+        "title": "Ask once. Keep the context. Move the work forward.",
+        "prompt": "Summarize last week's repository pull requests into a risk brief for the product team.",
+        "step1Title": "Connect Context",
+        "step1Desc": "Ingest repositories, internal documentation, and approved runbooks into an isolated workspace.",
+        "step2Title": "Prompt the Expert",
+        "step2Desc": "Ask in plain language for analysis, summaries, or structured deliverables.",
+        "step3Title": "Inspect Grounded Reasoning",
+        "step3Desc": "Review the output with workspace context and permissions visible.",
+        "step4Title": "Trigger Downstream Action",
+        "step4Desc": "Export the result to Google Docs, DOCX, email, or Slack through approved actions."
+      },
+      "useCases": {
+        "engineering": {
+          "title": "Your codebase has an expert now.",
+          "body": "Help developers understand architecture, trace decisions, search repositories, and get productive faster.",
+          "cta": "Explore the Engineering Expert"
+        },
+        "services": {
+          "title": "Turn your firm's playbook into capacity.",
+          "body": "Give consultants, legal teams, and agencies a shared expert that works from approved templates and research history.",
+          "cta": "Explore the Services Expert"
+        },
+        "operations": {
+          "title": "Make the next step part of the answer.",
+          "body": "Connect knowledge to action. Generate a report, prepare a document, send an update, or route work.",
+          "cta": "Explore the Operations Expert"
+        }
+      },
+      "trust": {
+        "eyebrow": "AI that fits the way your business is governed.",
+        "title": "Built for organizations where context is competitive advantage.",
+        "workspace": "Keep team context, knowledge, and actions organized around the workspace that owns them.",
+        "integrations": "Connect external tools deliberately and limit what the expert is allowed to do.",
+        "providers": "Use the model providers and routing strategy that fit your organization's requirements.",
+        "visibility": "Build a clear record of how experts are used and where work is sent."
+      },
+      "footer": {
+        "title": "Give your team an expert that remembers how work gets done.",
+        "body": "Start with one high-value workflow, one team, and one measurable outcome. Then expand the expert as your organization sees where persistent context creates the most leverage.",
+        "cta": "Create your first expert",
+        "secondaryCta": "Talk to an expert",
+        "microcopy": "No migration project required. Start with the knowledge your team already uses."
+      },
+      "abVariants": {
+        "a": {
+          "badge": "Expert-as-a-Service",
+          "headline1": "Stop repeating the work your team already knows how to do.",
+          "headline2": "",
+          "subhead": "Lattice turns approved company knowledge into a specialist that helps your team find context, prepare deliverables, and move routine work into the next step.",
+          "ctaHeroPrimary": "Put your knowledge to work",
+          "ctaSecondary": "See it in action"
+        },
+        "b": {
+          "badge": "Expert-as-a-Service",
+          "headline1": "AI for business context, with a clear path to controlled action.",
+          "headline2": "",
+          "subhead": "Lattice gives teams a workspace-scoped specialist that works from approved knowledge, follows defined permissions, and sends work into the tools your organization already uses.",
+          "ctaHeroPrimary": "See the platform",
+          "ctaSecondary": "See it in action"
+        },
+        "c": {
+          "badge": "Expert-as-a-Service",
+          "headline1": "Scale your best people without losing what makes them valuable.",
+          "headline2": "",
+          "subhead": "Lattice captures the expertise behind your processes and makes it available as a persistent specialist for the teams that need it.",
+          "ctaHeroPrimary": "Build a specialist for your team",
+          "ctaSecondary": "See it in action"
+        }
+      },
+      "meta": {
+        "title": "Lattice | Expert-as-a-Service for teams that need AI with context",
+        "description": "Turn your company's knowledge into a persistent AI expert that understands your documents and code, remembers context, and helps your team complete work across connected tools."
+      }
     }
   },
   "Sidebar": {

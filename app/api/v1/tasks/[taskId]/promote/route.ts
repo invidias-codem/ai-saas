@@ -164,7 +164,7 @@ export async function POST(
       } else {
         // Local file: resolve relative to liveRoot to prevent path traversal.
         const { readFile } = await import('fs/promises');
-        const safeAbsPath = join(liveRoot, relPath);
+        const safeAbsPath = join(workspaceRoot, relPath);
         content = await readFile(safeAbsPath);
       }
 

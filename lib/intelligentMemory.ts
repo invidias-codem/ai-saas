@@ -15,6 +15,11 @@ export interface ExtractedFact {
   lastUsedAt?: Date;
   userRating?: number; // 1-5 scale from feedback
   contextRelevance?: number; // For current conversation
+  // Sync-route fields (optional, backward-compatible)
+  conversationId?: string;
+  userId?: string;
+  createdAt?: number;
+  metadata?: Record<string, any>;
 }
 
 export interface UserPreferences {
