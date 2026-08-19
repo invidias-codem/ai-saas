@@ -14,7 +14,8 @@ export type TelemetryEventType =
   | "debate_loop_accepted"
   | "bluesky_draft_created"
   | "bluesky_draft_approved"
-  | "bluesky_draft_rejected";
+  | "bluesky_draft_rejected"
+  | "landing_variant_viewed";
 
 export interface TelemetryPayload {
   eventType: TelemetryEventType;

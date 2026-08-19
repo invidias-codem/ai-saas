@@ -6,8 +6,25 @@ import { ArrowRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 
-export const ExpertHero = () => {
+type Variant = "a" | "b" | "c";
+
+interface ExpertHeroProps {
+  variant?: Variant;
+}
+
+export const ExpertHero = ({ variant }: ExpertHeroProps) => {
   const t = useTranslations("Landing.expertV2");
+  const vt = useTranslations(
+    variant ? `Landing.expertV2.abVariants.${variant}` : "Landing.expertV2"
+  );
+
+  // Use variant-specific copy when available, fall back to primary hero
+  const badge = variant ? vt("badge") : t("badge");
+  const headline1 = variant ? vt("headline1") : t("headline1");
+  const headline2 = variant ? vt("headline2") : t("headline2");
+  const subhead = variant ? vt("subhead") : t("subhead");
+  const ctaPrimary = variant ? vt("ctaHeroPrimary") : t("ctaHeroPrimary");
+  const ctaSecondary = variant ? vt("ctaSecondary") : t("ctaSecondary");
 
   return (
     <div className="relative min-h-screen bg-[#050505] text-white overflow-hidden">

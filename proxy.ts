@@ -30,6 +30,8 @@ const isPublicRoute = createRouteMatcher([
     '/:locale/docs/(.*)',
     '/expert(.*)',
     '/:locale/expert(.*)',
+    '/expert/v(.*)',
+    '/:locale/expert/v(.*)',
     '/slack',
     '/:locale/slack',
     '/blog(.*)',
@@ -66,6 +68,46 @@ export default clerkMiddleware(async (auth, req) => {
     // ───────────────────────────────────────────
 
     const isApi = req.nextUrl.pathname.startsWith('/api') || req.nextUrl.pathname.startsWith('/trpc');
+
+    // ─── LANDING VARIANT ROUTING ────────────────
+    // Root locale routes (/, /en, /th, etc.) are rewritten to /[locale]/expert/[variant]
+    // based on a sticky 30-day cookie. First-touch visitors get a random variant.
+    const pathname = req.nextUrl.pathname;
+    const localeMatch = pathname.match(/^\/(th|vi|es|fr|de)(\/|$)/);
+    const isRootLocale = pathname === '/' || pathname === '/en' || !!localeMatch;
+
+    if (isRootLocale && !isApi) {
+        const VARIANT_COOKIE = 'lattice_landing_variant';
+        const VARIANT_TTL = 60 * 60 * 24 * 30; // 30 days
+        const VALID_VARIANTS = ['a', 'b', 'c'] as const;
+
+        let variant = req.cookies.get(VARIANT_COOKIE)?.value;
+
+        if (!variant || !VALID_VARIANTS.includes(variant as any)) {
+            // Deterministic random assignment on first touch
+            variant = VALID_VARIANTS[Math.floor(Math.random() * VALID_VARIANTS.length)];
+        }
+
+        // Determine target locale
+        const locale = localeMatch ? localeMatch[1] : 'en';
+        const targetPath = `/${locale}/expert/v/${variant}${req.nextUrl.search}`;
+
+        const res = NextResponse.rewrite(new URL(targetPath, req.url));
+
+        // Set sticky cookie if new or changed
+        if (req.cookies.get(VARIANT_COOKIE)?.value !== variant) {
+            res.cookies.set(VARIANT_COOKIE, variant, {
+                maxAge: VARIANT_TTL,
+                path: '/',
+                sameSite: 'lax',
+                secure: process.env.NODE_ENV === 'production',
+                httpOnly: false, // readable by client telemetry
+            });
+        }
+
+        return res;
+    }
+    // ───────────────────────────────────────────
 
     // ─── REFERRAL TRACKING (runs on ALL page requests, no auth needed) ──────────
     // Only capture on page routes (not API), and only if ?ref= is present
