@@ -47,7 +47,10 @@ export default function AdminLayout({
                     <p className="text-sm text-gray-400">Genie Monitoring</p>
                 </div>
                 <nav className="space-y-2">
+                    <Link href="/admin/analytics" className="block px-4 py-2 hover:bg-gray-800 rounded">Analytics</Link>
                     <Link href="/admin/logs" className="block px-4 py-2 hover:bg-gray-800 rounded">Logs</Link>
+                    <Link href="/admin/otel" className="block px-4 py-2 hover:bg-gray-800 rounded">Telemetry</Link>
+                    <Link href="/admin/harness" className="block px-4 py-2 hover:bg-gray-800 rounded">Harness</Link>
                     <Link href="/dashboard" className="block px-4 py-2 hover:bg-gray-800 rounded text-gray-400">Back to App</Link>
                 </nav>
             </div>
