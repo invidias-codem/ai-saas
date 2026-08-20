@@ -40,6 +40,7 @@ export type PreparedContextOptions = {
 };
 
 export type PreparedContextSections = {
+  personaContext?: string;
   userContextPrompt: string;
   userProfileContext: string;
   factContext: string;

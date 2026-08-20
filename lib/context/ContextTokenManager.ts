@@ -116,6 +116,7 @@ export class ContextTokenManager {
 
     // Build the dynamic allocation sections
     const rawSections: { key: ContextSectionKey; label: string; text: string }[] = [
+      { key: 'personaContext', label: 'Persona Directive', text: sections.personaContext || '' },
       { key: 'userContextPrompt', label: 'User Context', text: sections.userContextPrompt || '' },
       { key: 'userProfileContext', label: 'User Profile', text: sections.userProfileContext || '' },
       { key: 'factContext', label: 'Fact Context', text: sections.factContext || '' },
@@ -135,7 +136,11 @@ export class ContextTokenManager {
       let ratio = 0.15; // default proportional ratio of retrievedBudget
       let required = false;
 
-      if (sec.key === 'userContextPrompt') {
+      if (sec.key === 'personaContext') {
+        priority = 1000; // ABSOLUTE — persona is non-negotiable
+        ratio = 0.5; // Half of budget reserved for persona
+        required = true; // Never omitted, even under budget pressure
+      } else if (sec.key === 'userContextPrompt') {
         priority = 100;
         ratio = 0.1;
         required = true;
@@ -278,7 +283,7 @@ export class ContextTokenManager {
     const packedContext = allocatedSections
       // Maintain natural logical layout order of keys rather than priority order
       .sort((a, b) => {
-        const order = ['userContextPrompt', 'userProfileContext', 'factContext', 'graphContext', 'searchContext', 'memoryContext', 'attachedDocumentContext'];
+        const order = ['personaContext', 'userContextPrompt', 'userProfileContext', 'factContext', 'graphContext', 'searchContext', 'memoryContext', 'attachedDocumentContext'];
         return order.indexOf(a.key) - order.indexOf(b.key);
       })
       .map(sec => `=== ${sec.label} ===\n${sec.text.trim()}`)

@@ -245,6 +245,16 @@ export async function POST(req: Request) {
                 remaining: Math.max(0, computeCredits),
             }),
             execute: async ({ resolved: ctx, rawInput, messages: msgs, fileData: fData }) => {
+                // Build persona session if workspace has a custom persona
+                let personaSession = undefined;
+                const workspacePersona = resolved.ucolContext.workspaceId
+                    ? await loadWorkspacePersona(resolved.ucolContext.workspaceId)
+                    : null;
+                if (workspacePersona) {
+                    const { createPersonaSession } = await import("@/lib/consultant/personaSession");
+                    personaSession = createPersonaSession("custom", conversationId || randomUUID(), workspacePersona);
+                }
+
                 const reply = await generateConversationReply(
                     {
                         userId: user.userId,
@@ -255,7 +265,7 @@ export async function POST(req: Request) {
                     {
                         mode: effectiveMode,
                         memoryPlan: routingDecision.memoryPlan,
-                        systemInstruction: resolved.ucolContext.workspaceId ? (await loadWorkspacePersona(resolved.ucolContext.workspaceId)) ?? undefined : undefined,
+                        personaSession,
                     }
                 );
 
