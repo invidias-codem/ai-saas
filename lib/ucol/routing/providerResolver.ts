@@ -6,6 +6,7 @@ import { HermesProvider } from '@/lib/llm/providers/hermes';
 import { OpenRouterProvider } from '@/lib/llm/providers/openrouter';
 import type { UcolProviderPlan } from './types';
 import type { ProviderApiKeys } from '@/lib/userProviderKeys';
+import type { PersonaSession } from '@/lib/consultant/personaSession';
 
 const FAST_MODEL = process.env.HERMES_MODEL_ID || 'hermes3';
 const QUALITY_MODEL = 'gemini-3.1-pro-preview';
@@ -13,10 +14,19 @@ const AGENTIC_MODEL = process.env.LATTICE_AGENTIC_MODEL || 'Hermes-4-70B';
 const REASONING_MODEL = 'deepseek-r1';
 const OPENROUTER_FAST_MODEL = process.env.OPENROUTER_FAST_MODEL || 'openrouter/auto';
 
+/** Rank order for model tiers — higher = more capable */
+const TIER_RANK: Record<PersonaSession['minimumModelTier'], number> = {
+  fast: 0,
+  quality: 1,
+  reasoning: 2,
+};
+
 export type ProviderResolutionInput = {
   mode: AgentMode;
   hasAttachments?: boolean;
   providerKeys?: ProviderApiKeys;
+  /** Optional persona session — enforces minimum model tier */
+  personaSession?: PersonaSession;
 };
 
 export type ProviderResolution = {
@@ -27,10 +37,72 @@ export type ProviderResolution = {
   };
   routing: UcolProviderPlan;
   reason: string;
+  /** True when persona minimum tier overrode the requested mode */
+  personaOverride?: boolean;
 };
 
+/**
+ * Resolve the best provider/model for the given mode.
+ *
+ * When a persona session is active, the persona's minimumModelTier acts as
+ * a cognitive floor — if the user selects 'fast' but the persona requires
+ * 'reasoning', the resolver silently upgrades to the persona's minimum.
+ */
 export function resolveProviderForMode(input: ProviderResolutionInput): ProviderResolution {
-  const { mode, hasAttachments = false, providerKeys = {} } = input;
+  const { mode, hasAttachments = false, providerKeys = {}, personaSession } = input;
+
+  // Resolve the base provider for the requested mode
+  let resolution = resolveBaseProvider(mode, hasAttachments, providerKeys);
+
+  // Enforce persona minimum tier
+  if (personaSession) {
+    const personaTier = personaSession.minimumModelTier;
+    const personaTierRank = TIER_RANK[personaTier];
+    const requestedTierRank = getModeTierRank(mode);
+
+    if (personaTierRank > requestedTierRank) {
+      // Persona requires a more capable model — upgrade silently
+      const upgraded = resolveBaseProvider(
+        personaTier === 'reasoning' ? 'reasoning' : 'quality',
+        hasAttachments,
+        providerKeys
+      );
+      resolution = {
+        ...upgraded,
+        reason: `[Persona override] ${personaSession.personaId} requires ${personaTier} tier — upgraded from ${mode}`,
+        personaOverride: true,
+      };
+    }
+  }
+
+  return resolution;
+}
+
+/**
+ * Map an agent mode to its tier rank for persona comparison.
+ */
+function getModeTierRank(mode: AgentMode): number {
+  switch (mode) {
+    case 'fast':
+      return TIER_RANK.fast;
+    case 'quality':
+      return TIER_RANK.quality;
+    case 'reasoning':
+    case 'agentic':
+      return TIER_RANK.reasoning;
+    default:
+      return TIER_RANK.fast;
+  }
+}
+
+/**
+ * Base provider resolution without persona enforcement.
+ */
+function resolveBaseProvider(
+  mode: AgentMode,
+  hasAttachments: boolean,
+  providerKeys: ProviderApiKeys
+): ProviderResolution {
 
   if (mode === 'agentic') {
     const nousConfigured = Boolean(providerKeys.nous || (process.env.NOUSE_API_KEY && process.env.NOUSE_API_KEY.trim()));

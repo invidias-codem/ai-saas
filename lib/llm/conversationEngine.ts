@@ -462,7 +462,7 @@ export async function generateConversationReply(
 
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
-  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys });
+  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys, personaSession: options.personaSession });
   let { provider, modelId: actualModelId } = providerResolution.execution;
   // Sovereign telemetry: the initially-requested model (before any confidence
   // override or 429 fallback) and the serving provider id.
@@ -551,7 +551,7 @@ export async function generateConversationReply(
         const upgradeMode = confidenceSignal.recommendedTier === 'claude-sonnet'
           ? 'quality'
           : 'reasoning';
-        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys });
+        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys, personaSession: options.personaSession });
         provider = providerResolution.execution.provider;
         actualModelId = providerResolution.execution.modelId;
         confidenceOverrideApplied = true;
@@ -584,6 +584,42 @@ export async function generateConversationReply(
   );
 
   let baseSystemInstruction = getSystemInstruction();
+
+  // ── PERSONA DOMAIN GATE ─────────────────────────────────────────────────────
+  // Evaluate the domain gate BEFORE spending tokens on inference.
+  // Hard-blocked queries return a zero-token templated refusal.
+  // Borderline queries pass through with an outOfDomain warning injected into the persona directive.
+  if (options.personaSession) {
+    const { evaluateDomainGate } = await import("@/lib/consultant/domainGate");
+    const gateResult = evaluateDomainGate(options.personaSession, userQuery);
+
+    if (gateResult.action === "hard_block") {
+      // Zero-token refusal — intercept before any LLM calls
+      const textEncoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(textEncoder.encode(gateResult.refusalMessage || "This query falls outside the expertise of the active consultant."));
+          controller.close();
+        },
+      });
+      return {
+        stream,
+        sources: [],
+        debug: {
+          model: "domain-gate-hard-block",
+          userQuery,
+          personaInjected: true,
+          confidenceSignal: { contextConfidence: gateResult.confidence, recommendedTier: "blocked", overrideApplied: false },
+        },
+      };
+    }
+
+    if (gateResult.action === "borderline") {
+      // Inject outOfDomain warning into base system instruction
+      baseSystemInstruction += `\n\n[SYSTEM NOTICE: The following query is potentially outside the persona's defined domain. Address it strictly through the lens of your persona, or generate a polite, in-character refusal if it is clearly out of scope. Domain confidence: ${gateResult.confidence.toFixed(2)}]`;
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Inject persona directive into the system prompt if a persona session is active.
   // This moves persona from a vulnerable user-role message to a structural constraint.

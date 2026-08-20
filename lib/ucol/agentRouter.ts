@@ -127,6 +127,10 @@ export interface RoutingDecision {
     source?: 'procedural_memory' | 'llm_routing';
     /** Populated when source is 'procedural_memory' — the pre-learned tool sequence */
     proceduralSequence?: ToolStep[];
+    /** True when the query is outside the persona's defined domain */
+    outOfDomain?: boolean;
+    /** The persona session that influenced this routing decision */
+    personaSession?: import("@/lib/consultant/personaSession").PersonaSession;
 }
 
 export interface AgentRouterGoalContext {
@@ -155,6 +159,8 @@ export interface AgentRouterTask {
     goalContext?: AgentRouterGoalContext;
     /** Require human approval before performing destructive actions (T-008) */
     allowDestructiveActions?: boolean;
+    /** Active persona session — enforces domain boundaries and minimum model tier */
+    personaSession?: import("@/lib/consultant/personaSession").PersonaSession;
 }
 
 export interface AgentRouterResult {
@@ -281,6 +287,13 @@ export class AgentRouter {
             };
         }
 
+        // Persona domain check — if query is outside persona's domain, mark it
+        let personaDomainMatch = true;
+        if (task.personaSession) {
+            const { isWithinPersonaDomain } = await import('@/lib/consultant/personaSession');
+            personaDomainMatch = isWithinPersonaDomain(task.personaSession, task.query);
+        }
+
         // ── Procedural Memory Fast-Path ───────────────────────────────────
         // Check for a pre-learned tool sequence BEFORE hitting the LLM.
         // This block is purely additive — any error falls through to normal routing.
@@ -399,6 +412,8 @@ export class AgentRouter {
                 confidenceOverride: overrideApplied,
                 allowDestructiveActions: task.allowDestructiveActions ?? false,
                 source: 'llm_routing' as const,
+                outOfDomain: !personaDomainMatch,
+                personaSession: task.personaSession,
             };
         }
 
@@ -411,6 +426,8 @@ export class AgentRouter {
             ...(memorySignal ? { memorySignal, confidenceOverride: false } : {}),
             allowDestructiveActions: task.allowDestructiveActions ?? false,
             source: 'llm_routing' as const,
+            outOfDomain: !personaDomainMatch,
+            personaSession: task.personaSession,
         };
     }
 
@@ -601,14 +618,16 @@ export function getAgentRouter(): AgentRouter {
 /**
  * Quick-classify a query without full routing.
  * Pass memoryFacts to enable confidence-aware classification.
+ * Pass personaSession to enable domain gate enforcement.
  * userId defaults to 'system' for internal classification calls.
  */
 export async function classifyQuery(
     query: string,
     context?: string,
     memoryFacts?: ExtractedFact[],
-    userId: string = 'system'
+    userId: string = 'system',
+    personaSession?: import("@/lib/consultant/personaSession").PersonaSession
 ): Promise<RoutingDecision> {
     const router = getAgentRouter();
-    return router.classify({ query, context, memoryFacts, userId });
+    return router.classify({ query, context, memoryFacts, userId, personaSession });
 }

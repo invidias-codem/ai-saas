@@ -5,6 +5,8 @@ export interface Persona {
   title: string;
   description: string;
   tags: string[];
+  /** Minimum model tier required for this persona to function effectively */
+  minimumModelTier?: "fast" | "quality" | "reasoning";
 }
 
 export const CURATED_PERSONAS: Persona[] = [
@@ -16,6 +18,7 @@ export const CURATED_PERSONAS: Persona[] = [
     description:
       "Scrapes competitor pricing, reviews, and positioning for med spas, salons, and local services. Delivers a weekly competitive brief with pricing gaps and promotional opportunities.",
     tags: ["Pricing Scraper", "Competitive Intel", "Local SEO"],
+    minimumModelTier: "quality",
   },
   {
     id: "b2b-sales-strategist",
@@ -25,6 +28,7 @@ export const CURATED_PERSONAS: Persona[] = [
     description:
       "Analyzes target company docs, job posts, and recent news to rewrite outreach sequences that sound bespoke. Turns generic templates into account-specific pitches that get replies.",
     tags: ["Cold Email", "Account Research", "Copywriting"],
+    minimumModelTier: "quality",
   },
   {
     id: "headless-commerce-architect",
@@ -34,6 +38,7 @@ export const CURATED_PERSONAS: Persona[] = [
     description:
       "Audits headless storefront architecture for performance, SEO, and conversion leaks. Maps every critical path from product view to checkout and flags optimization opportunities.",
     tags: ["Shopify", "Next.js", "Conversion"],
+    minimumModelTier: "reasoning",
   },
   {
     id: "devops-security-reviewer",
@@ -43,6 +48,7 @@ export const CURATED_PERSONAS: Persona[] = [
     description:
       "Runs static analysis, dependency audits, and infrastructure posture reviews. Surfaces critical vulnerabilities, misconfigurations, and remediation steps in an operator-ready format.",
     tags: ["CodeQL", "Infrastructure", "Compliance"],
+    minimumModelTier: "reasoning",
   },
 ];
 
