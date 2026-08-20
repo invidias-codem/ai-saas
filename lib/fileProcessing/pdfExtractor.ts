@@ -1,21 +1,27 @@
 // lib/fileProcessing/pdfExtractor.ts
 // PDF text extraction for the conversation engine.
-// Uses pdf-parse (Node.js) for reliable server-side text extraction.
+// Uses pdfjs-dist (PDF.js) — the most reliable server-side PDF parser.
 
 import type { FileAttachmentInput } from '@/lib/types/attachments';
 
 /**
- * Extract text from a PDF file.
+ * Extract text from a PDF file using pdfjs-dist.
  * Supports both base64-encoded data and GCS file URIs.
  */
-export async function extractPdfText(fileData: FileAttachmentInput): Promise<string> {
-  // Dynamic import to avoid bundling pdf-parse in client code
-  const pdfParse = (await import('pdf-parse')).default;
+async function extractWithPdfjs(fileData: FileAttachmentInput): Promise<string> {
+  const pdfjs = await import('pdfjs-dist/build/pdf.min.mjs');
+  
+  // Disable worker for server-side rendering
+  pdfjs.GlobalWorkerOptions.workerSrc = '';
 
-  let buffer: Buffer;
+  let uint8Array: Uint8Array;
 
   if (fileData.base64Data) {
-    buffer = Buffer.from(fileData.base64Data, 'base64');
+    const binaryString = atob(fileData.base64Data);
+    uint8Array = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      uint8Array[i] = binaryString.charCodeAt(i);
+    }
   } else if (fileData.fileUri?.startsWith('gs://')) {
     const { getStorageClient, getStorageProjectId } = await import('@/lib/gcp/storage');
     const storage = getStorageClient();
@@ -23,13 +29,33 @@ export async function extractPdfText(fileData: FileAttachmentInput): Promise<str
     const bucketName = `genie-uploads-${projectId}`;
     const filePath = fileData.fileUri.replace(`gs://${bucketName}/`, '');
     const [fileContents] = await storage.bucket(bucketName).file(filePath).download();
-    buffer = fileContents;
+    uint8Array = new Uint8Array(fileContents);
   } else {
     throw new Error('PDF extraction requires base64Data or gs:// fileUri');
   }
 
-  const data = await pdfParse(buffer);
-  return data.text;
+  const pdf = await pdfjs.getDocument({ data: uint8Array }).promise;
+  const textParts: string[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items
+      .filter((item: any) => 'str' in item)
+      .map((item: any) => item.str)
+      .join(' ');
+    textParts.push(pageText);
+  }
+
+  return textParts.join('\n\n');
+}
+
+/**
+ * Extract text from a PDF file.
+ * Supports both base64-encoded data and GCS file URIs.
+ */
+export async function extractPdfText(fileData: FileAttachmentInput): Promise<string> {
+  return extractWithPdfjs(fileData);
 }
 
 /**

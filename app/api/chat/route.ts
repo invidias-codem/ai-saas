@@ -180,23 +180,45 @@ export async function POST(req: Request) {
             },
         });
 
+        // Extract PDF text BEFORE passing to the LLM — intercept and convert binary to text
+        let pdfExtractedText: string | null = null;
+        if (fileData && (fileData.mimeType === 'application/pdf' || fileData.name?.toLowerCase().endsWith('.pdf'))) {
+            try {
+                const { extractPdfText } = await import('@/lib/fileProcessing/pdfExtractor');
+                pdfExtractedText = await extractPdfText(fileData);
+                console.log(`[ChatRoute] PDF extracted: ${pdfExtractedText.length} chars from ${fileData.name || 'document'}`);
+            } catch (err) {
+                console.error('[ChatRoute] PDF extraction failed:', err);
+            }
+        }
+
+        // Build the file data for the LLM — strip base64 if PDF was extracted as text
         const normalizedFileData = fileData
-            ? fileData.fileUri
+            ? pdfExtractedText
                 ? {
                     name: fileData.name,
                     type: fileData.type,
                     mimeType: fileData.mimeType || fileData.type,
                     sizeBytes: fileData.sizeBytes,
-                    fileUri: fileData.fileUri,
-                    storageProvider: fileData.storageProvider,
+                    // Send extracted text instead of raw base64
+                    extractedText: pdfExtractedText,
                 }
-                : {
-                    name: fileData.name,
-                    type: fileData.type,
-                    mimeType: fileData.mimeType || fileData.type,
-                    sizeBytes: fileData.sizeBytes,
-                    base64Data: fileData.base64Data,
-                }
+                : fileData.fileUri
+                    ? {
+                        name: fileData.name,
+                        type: fileData.type,
+                        mimeType: fileData.mimeType || fileData.type,
+                        sizeBytes: fileData.sizeBytes,
+                        fileUri: fileData.fileUri,
+                        storageProvider: fileData.storageProvider,
+                    }
+                    : {
+                        name: fileData.name,
+                        type: fileData.type,
+                        mimeType: fileData.mimeType || fileData.type,
+                        sizeBytes: fileData.sizeBytes,
+                        base64Data: fileData.base64Data,
+                    }
             : undefined;
 
         const requestPayload = {

@@ -6,6 +6,8 @@ export interface FileAttachmentInput {
   base64Data?: string;
   fileUri?: string;
   storageProvider?: 'gcs';
+  /** Pre-extracted text content (e.g., from PDF parsing) */
+  extractedText?: string;
 }
 
 export interface ResolvedAttachment {

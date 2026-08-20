@@ -461,9 +461,13 @@ export async function generateConversationReply(
   // Filter out optimistic temp_ IDs that haven't been persisted to DB yet
   const documentIds = rawDocumentIds?.filter((id: string) => id && !id.startsWith('temp_'));
 
-  // Extract PDF text if a PDF was uploaded
-  let pdfText: string | null = null;
-  if (fileData && mimeType === 'application/pdf') {
+  // Handle PDF extraction — text is either pre-extracted by the API route
+  // or we extract it here if it wasn't done upstream
+  const effectiveMimeType: string | undefined = mimeType || fileData?.mimeType || fileData?.type;
+  let pdfText: string | null = fileData?.extractedText || null;
+  
+  // Fallback: extract PDF text if not pre-extracted (e.g., direct engine calls)
+  if (!pdfText && fileData && effectiveMimeType === 'application/pdf' && fileData.base64Data) {
     try {
       const { extractPdfText } = await import('@/lib/fileProcessing/pdfExtractor');
       pdfText = await extractPdfText(fileData);
@@ -728,13 +732,13 @@ export async function generateConversationReply(
   // Attach explicit files to the last message if present
   // Skip PDFs that have already been extracted as text — attaching raw binary
   // causes garbled encoded text in the prompt
-  if (fileData && mimeType && mimeType !== 'application/pdf') {
+  if (fileData && effectiveMimeType && effectiveMimeType !== 'application/pdf') {
     const lastMsg = history[history.length - 1];
     if (lastMsg && lastMsg.role === 'user') {
       lastMsg.attachments = lastMsg.attachments || [];
       lastMsg.attachments.push({
         name: parsed.fileName || 'attached_file',
-        mimeType: mimeType,
+        mimeType: mimeType || effectiveMimeType || 'application/octet-stream',
         base64Data: fileData
       });
     }
