@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { StickyActionBar, FormSection } from "@/components/ui/form-mobile";
 import { Key, Plus, Copy, Trash2, CheckCircle, XCircle, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -129,18 +130,18 @@ export default function PartnerKeysPage() {
   }
 
   return (
-    <div className="p-8 max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 sm:p-8 max-w-4xl space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Key className="w-8 h-8" />
+          <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+            <Key className="w-6 h-6 sm:w-8 sm:h-8" />
             Partner API Keys
           </h1>
-          <p className="text-gray-500 mt-2">
+          <p className="text-gray-500 mt-1 text-sm sm:text-base">
             Create and manage API keys for integrating with Lattice OS.
           </p>
         </div>
-        <Button onClick={() => { setCreateOpen(!createOpen); setNewKey(null); }}>
+        <Button onClick={() => { setCreateOpen(!createOpen); setNewKey(null); }} className="w-full sm:w-auto">
           <Plus className="w-4 h-4 mr-2" />
           Create Key
         </Button>
@@ -148,22 +149,20 @@ export default function PartnerKeysPage() {
 
       {/* Create form */}
       {createOpen && !newKey && (
-        <Card className="p-6 space-y-4">
+        <Card className="p-4 sm:p-6 space-y-3 sm:space-y-4">
           <h2 className="text-lg font-semibold">Create New API Key</h2>
 
-          <div className="space-y-2">
-            <Label>Key Name</Label>
+          <FormSection title="Key Name">
             <Input
               placeholder="e.g. Acme Production"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
             />
-          </div>
+          </FormSection>
 
-          <div className="space-y-2">
-            <Label>Workspace</Label>
+          <FormSection title="Workspace">
             <select
-              className="w-full border border-gray-300 rounded px-3 py-2 dark:bg-gray-800 dark:border-gray-700"
+              className="w-full border border-gray-300 rounded px-3 py-2 dark:bg-gray-800 dark:border-gray-700 h-11 sm:h-10"
               value={newWorkspace}
               onChange={(e) => setNewWorkspace(e.target.value)}
             >
@@ -171,10 +170,9 @@ export default function PartnerKeysPage() {
                 <option key={ws.id} value={ws.id}>{ws.name}</option>
               ))}
             </select>
-          </div>
+          </FormSection>
 
-          <div className="space-y-2">
-            <Label>Environment</Label>
+          <FormSection title="Environment">
             <div className="flex gap-4">
               <label className="flex items-center gap-2">
                 <input
@@ -197,11 +195,11 @@ export default function PartnerKeysPage() {
                 Live (1000 req/min)
               </label>
             </div>
-          </div>
+          </FormSection>
 
-          <div className="flex gap-2">
-            <Button onClick={() => setCreateOpen(false)} variant="outline">Cancel</Button>
-            <Button onClick={handleCreate} disabled={creating || !newName.trim()}>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button onClick={() => setCreateOpen(false)} variant="outline" className="flex-1 sm:flex-none">Cancel</Button>
+            <Button onClick={handleCreate} disabled={creating || !newName.trim()} className="flex-1 sm:flex-none">
               {creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Generate Key
             </Button>
@@ -250,17 +248,17 @@ export default function PartnerKeysPage() {
       {/* Existing keys list */}
       <div className="space-y-3">
         {keys.length === 0 ? (
-          <Card className="p-8 text-center text-gray-500">
+          <Card className="p-6 sm:p-8 text-center text-gray-500">
             No partner keys yet. Create one to start integrating with Lattice OS.
           </Card>
         ) : (
           keys.map((key) => (
-            <Card key={key.id} className={`p-4 ${key.revoked ? 'opacity-50' : ''}`}>
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Key className="w-4 h-4 text-gray-400" />
-                    <span className="font-medium">{key.name}</span>
+            <Card key={key.id} className={`p-3 sm:p-4 ${key.revoked ? 'opacity-50' : ''}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Key className="w-4 h-4 text-gray-400 shrink-0" />
+                    <span className="font-medium text-sm">{key.name}</span>
                     <Badge variant={key.environment === 'live' ? 'default' : 'secondary'}>
                       {key.environment}
                     </Badge>
@@ -268,17 +266,17 @@ export default function PartnerKeysPage() {
                       <Badge variant="destructive">Revoked</Badge>
                     )}
                   </div>
-                  <code className="text-sm text-gray-600 dark:text-gray-400 font-mono">
+                  <code className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-mono block truncate">
                     {key.key_prefix}••••••••••••••••
                   </code>
-                  <div className="text-xs text-gray-500 flex gap-4">
+                  <div className="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-1">
                     <span>Created {new Date(key.created_at).toLocaleDateString()}</span>
                     <span>{key.rate_limit_per_min} req/min</span>
                     {key.last_used_at && (
                       <span>Last used {new Date(key.last_used_at).toLocaleDateString()}</span>
                     )}
                   </div>
-                  <div className="flex gap-1 mt-2">
+                  <div className="flex flex-wrap gap-1 mt-1">
                     {key.scopes.map((scope) => (
                       <Badge key={scope} variant="outline" className="text-xs">
                         {scope}
@@ -291,6 +289,7 @@ export default function PartnerKeysPage() {
                     variant="destructive"
                     size="icon"
                     onClick={() => handleRevoke(key.id)}
+                    className="shrink-0"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>

@@ -12,7 +12,8 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@clerk/nextjs";
 import { useTranslations } from "next-intl";
 import { useCredits } from "@/hooks/use-credits";
-import SlackIntegration from "@/components/slack-integration";
+import { StickyActionBar, FormSection } from "@/components/ui/form-mobile";
+import { SlackIntegration } from "@/components/slack-integration";
 import { ConversationHistory } from "@/components/conversation-history";
 import { RepoSelectorModal } from "@/components/integrations/RepoSelectorModal";
 import { CreditLimitError } from "@/components/credit-limit-error";
@@ -123,6 +124,7 @@ const SettingsPage = () => {
   const [isSavingKey, setIsSavingKey] = useState(false);
   const [keyError, setKeyError] = useState("");
   const [keySuccess, setKeySuccess] = useState("");
+  const hasKeyChanges = Object.values(apiKeyInputs).some(v => v.length > 0);
 
   useEffect(() => {
     async function fetchSettings() {
@@ -375,7 +377,7 @@ const SettingsPage = () => {
         bgColor="bg-gray-700/10"
       />
 
-      <div className="px-4 lg:px-8 space-y-6">
+      <div className="px-4 lg:px-8 space-y-6 pb-20 md:pb-0">
         {/* Credits Section */}
         <CreditsCard />
 
@@ -493,19 +495,19 @@ const SettingsPage = () => {
                         <p className="text-xs text-muted-foreground">{providerDescriptions[provider]}</p>
                       </div>
                     </div>
-                    <div className="flex items-start gap-2 max-w-2xl">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2 max-w-2xl">
                       <input
                         type="password"
                         value={inputValue}
                         onChange={(e) => setApiKeyInputs(prev => ({ ...prev, [provider]: e.target.value }))}
                         placeholder={status.configured ? `Enter new ${providerLabels[provider]} key to replace existing...` : providerPlaceholders[provider]}
-                        className="w-full flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="w-full flex h-11 sm:h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={isSavingKey}
                       />
                       <Button
                         onClick={() => handleSaveApiKey(provider)}
                         disabled={!inputValue || isSavingKey}
-                        className="bg-emerald-600 hover:bg-emerald-700 w-24"
+                        className="bg-emerald-600 hover:bg-emerald-700 w-full sm:w-24 shrink-0"
                       >
                         {isSavingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
                       </Button>
@@ -587,6 +589,21 @@ const SettingsPage = () => {
         </Card>
       </div>
       <RepoSelectorModal isOpen={repoSelectorOpen} onOpenChange={setRepoSelectorOpen} />
+      <StickyActionBar visible={hasKeyChanges}>
+        <Button
+          className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+          onClick={() => {
+            // Save all providers that have input
+            (['openai', 'anthropic', 'google', 'openrouter', 'huggingface'] as ProviderName[]).forEach(provider => {
+              if (apiKeyInputs[provider]) handleSaveApiKey(provider);
+            });
+          }}
+          disabled={isSavingKey}
+        >
+          {isSavingKey ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+          Save All Keys
+        </Button>
+      </StickyActionBar>
     </div>
   );
 };
