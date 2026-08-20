@@ -13,21 +13,21 @@ export default function LocalCapabilitiesPage() {
   const { isDaemonRunning, lastHeartbeat, auditLogs, appFocused } = useHarnessHeartbeat();
 
   return (
-    <div className="min-h-screen px-4 md:px-10 lg:px-16 py-8 space-y-8">
-      <div className="space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-sm font-medium">
-          <Terminal className="w-4 h-4" />
+    <div className="min-h-screen px-3 sm:px-4 md:px-10 lg:px-16 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8">
+      <div className="space-y-2 sm:space-y:3">
+        <div className="inline-flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs sm:text-sm font-medium">
+          <Terminal className="w-3 h-3 sm:w-4 sm:h-4" />
           Advanced Setup
         </div>
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Lattice Local Command Center</h1>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight">Lattice Local Command Center</h1>
         </div>
-        <p className="text-muted-foreground max-w-2xl">
-          Monitor your local Go sidecar and Tauri IPC boundaries. When connected, Lattice unlocks deep codebase indexing, real-time file sync, and native execution capabilities.
+        <p className="text-xs sm:text-sm md:text-base text-muted-foreground max-w-2xl">
+          Monitor your local Go sidecar and Tauri IPC boundaries.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
         <Card className="p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold flex items-center gap-2">
