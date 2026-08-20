@@ -726,7 +726,9 @@ export async function generateConversationReply(
   // ─────────────────────────────────────────────────────────────────────────────
 
   // Attach explicit files to the last message if present
-  if (fileData && mimeType) {
+  // Skip PDFs that have already been extracted as text — attaching raw binary
+  // causes garbled encoded text in the prompt
+  if (fileData && mimeType && mimeType !== 'application/pdf') {
     const lastMsg = history[history.length - 1];
     if (lastMsg && lastMsg.role === 'user') {
       lastMsg.attachments = lastMsg.attachments || [];
