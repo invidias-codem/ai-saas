@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { readClientLedger, clearClientLedger } from "@/lib/telemetry/clientEmitter";
 import { flushNativeTelemetry, clientPublicKeyHex, isTauri } from "@/lib/telemetry/native";
 import type { UdifInteractionAudit } from "@/lib/telemetry/udif";
+import { ChevronDown, ChevronRight, Copy } from "lucide-react";
 
 /**
  * Observability dashboard for the sovereign client IndexedDB ledger (Phase 2.3).
@@ -15,6 +16,7 @@ export function InteractionAuditViewer() {
   const [records, setRecords] = useState<UdifInteractionAudit[]>([]);
   const [loading, setLoading] = useState(true);
   const [flushMsg, setFlushMsg] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -31,7 +33,6 @@ export function InteractionAuditViewer() {
   }, [refresh]);
 
   const flush = useCallback(async () => {
-     
     setFlushMsg("Flushing...");
     const res = await flushNativeTelemetry({ clearOnSuccess: true });
     setFlushMsg(`Sent ${res.sent}/${res.attempted} (failed ${res.failed}) — mode: ${res.mode}.`);
@@ -56,31 +57,33 @@ export function InteractionAuditViewer() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Sovereign AI Telemetry — Local Ledger</h2>
-        <div className="space-x-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={refresh}
-            className="rounded border px-3 py-1 text-sm hover:bg-neutral-100"
+            className="rounded border px-2.5 py-1.5 text-xs sm:text-sm hover:bg-neutral-100"
           >
             Refresh
           </button>
           <button
             onClick={flush}
-            className="rounded border px-3 py-1 text-sm hover:bg-neutral-100"
+            className="rounded border px-2.5 py-1.5 text-xs sm:text-sm hover:bg-neutral-100"
           >
-            Flush to enterprise
+            <span className="hidden sm:inline">Flush to enterprise</span>
+            <span className="sm:hidden">Flush</span>
           </button>
           <button
             onClick={clearLocal}
-            className="rounded border px-3 py-1 text-sm text-red-600 hover:bg-red-50"
+            className="rounded border px-2.5 py-1.5 text-xs sm:text-sm text-red-600 hover:bg-red-50"
           >
-            Clear local
+            Clear
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 text-sm">
+      {/* KPI Stats: 2-col grid on mobile, 3-col on desktop */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 text-sm">
         <Stat label="Records" value={String(stats.count)} />
         <Stat label="Credits used" value={String(stats.creditTotal)} />
         <Stat
@@ -100,7 +103,46 @@ export function InteractionAuditViewer() {
         </p>
       )}
 
-      <ul className="divide-y divide-neutral-200">
+      {/* Mobile: stacked cards with expandable JSON */}
+      <div className="sm:hidden space-y-2">
+        {records.map((r) => {
+          const id = `${r.trace_context.trace_id}:${r.trace_context.span_id}`;
+          const isExpanded = expandedId === id;
+          return (
+            <div
+              key={id}
+              className="rounded-lg border bg-white p-3 space-y-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Badge>{r.ai_ledger.system_provider}</Badge>
+                  <Badge>{r.context_baggage?.content_mode ?? "metadata"}</Badge>
+                </div>
+                <button
+                  onClick={() => setExpandedId(isExpanded ? null : id)}
+                  className="p-1 text-neutral-500"
+                >
+                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+              </div>
+              <div className="text-xs text-neutral-500">{r.timestamp}</div>
+              <div className="flex flex-wrap gap-1.5 text-xs">
+                <Badge>req: {r.ai_ledger["gen_ai.request.model"]}</Badge>
+                <Badge>res: {r.ai_ledger["gen_ai.response.model"]}</Badge>
+                <Badge>credits: {r.context_baggage?.credit_cost ?? "0"}</Badge>
+              </div>
+              {isExpanded && (
+                <div className="mt-2 rounded bg-neutral-950 p-2 text-xs text-neutral-300 font-mono overflow-x-auto">
+                  <pre className="whitespace-pre-wrap break-all">{JSON.stringify(r, null, 2)}</pre>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop: table */}
+      <ul className="hidden sm:block divide-y divide-neutral-200">
         {records.map((r) => (
           <li key={`${r.trace_context.trace_id}:${r.trace_context.span_id}`} className="py-2 text-xs">
             <div className="flex flex-wrap gap-2">
@@ -124,8 +166,8 @@ export function InteractionAuditViewer() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded border p-2">
-      <div className="text-neutral-500">{label}</div>
-      <div className="font-mono">{value}</div>
+      <div className="text-neutral-500 text-xs">{label}</div>
+      <div className="font-mono text-sm truncate">{value}</div>
     </div>
   );
 }

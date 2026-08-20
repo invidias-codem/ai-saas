@@ -109,112 +109,113 @@ export default async function HarnessDashboardPage() {
   const recentEvents = events ? events.slice(0, 10) : [];
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
+    <div className="flex-1 space-y-4 p-3 sm:p-6 md:p-8">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Local Harness Health</h2>
+        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">Local Harness Health</h2>
       </div>
 
       <LocalRootSelector workspaceId={activeWorkspaceId} />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Total Operations</h3>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+      {/* KPI Grid: 2-col mobile, 5-col desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
+        <div className="rounded-xl border bg-card text-card-foreground shadow p-3 sm:p-6">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-1">
+            <h3 className="tracking-tight text-xs sm:text-sm font-medium">Total Ops</h3>
+            <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">{totalOps}</div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Read Volume</h3>
-            <FileText className="h-4 w-4 text-blue-500" />
-          </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">{readEvents.length}</div>
+          <div className="sm:pt-2">
+            <div className="text-lg sm:text-2xl font-bold">{totalOps}</div>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Mutation Volume</h3>
-            <Database className="h-4 w-4 text-purple-500" />
+        <div className="rounded-xl border bg-card text-card-foreground shadow p-3 sm:p-6">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-1">
+            <h3 className="tracking-tight text-xs sm:text-sm font-medium">Read Volume</h3>
+            <FileText className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
           </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">{mutationEvents.length}</div>
+          <div className="sm:pt-2">
+            <div className="text-lg sm:text-2xl font-bold">{readEvents.length}</div>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Intelligence Intake</h3>
-            <Activity className="h-4 w-4 text-green-500" />
+        <div className="rounded-xl border bg-card text-card-foreground shadow p-3 sm:p-6">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-1">
+            <h3 className="tracking-tight text-xs sm:text-sm font-medium">Mutation</h3>
+            <Database className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500" />
           </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">{intelligenceEvents.length}</div>
+          <div className="sm:pt-2">
+            <div className="text-lg sm:text-2xl font-bold">{mutationEvents.length}</div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-card text-card-foreground shadow p-3 sm:p-6">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-1">
+            <h3 className="tracking-tight text-xs sm:text-sm font-medium">Intake</h3>
+            <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
+          </div>
+          <div className="sm:pt-2">
+            <div className="text-lg sm:text-2xl font-bold">{intelligenceEvents.length}</div>
             <p className="text-xs text-muted-foreground mt-1">{unsupportedInputEvents} unsupported</p>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Containment Drops</h3>
-            <ShieldAlert className="h-4 w-4 text-amber-500" />
+        <div className="rounded-xl border bg-card text-card-foreground shadow p-3 sm:p-6">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-1">
+            <h3 className="tracking-tight text-xs sm:text-sm font-medium">Drops</h3>
+            <ShieldAlert className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500" />
           </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">{containmentDrops}</div>
-            <p className="text-xs text-muted-foreground mt-1">WAF path drops</p>
-          </div>
-        </div>
-
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Mutation Denials</h3>
-            <XCircle className="h-4 w-4 text-red-500" />
-          </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">{mutationDenials}</div>
-            <p className="text-xs text-muted-foreground mt-1">Blocked by read-only roots</p>
+          <div className="sm:pt-2">
+            <div className="text-lg sm:text-2xl font-bold">{containmentDrops}</div>
+            <p className="text-xs text-muted-foreground mt-1">WAF drops</p>
           </div>
         </div>
 
-        <div className="rounded-xl border bg-card text-card-foreground shadow">
-          <div className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
-            <h3 className="tracking-tight text-sm font-medium">Avg Duration</h3>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+        <div className="rounded-xl border bg-card text-card-foreground shadow p-3 sm:p-6">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-1">
+            <h3 className="tracking-tight text-xs sm:text-sm font-medium">Denials</h3>
+            <XCircle className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
           </div>
-          <div className="p-6 pt-0">
-            <div className="text-2xl font-bold">{avgDuration}ms</div>
+          <div className="sm:pt-2">
+            <div className="text-lg sm:text-2xl font-bold">{mutationDenials}</div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-card text-card-foreground shadow p-3 sm:p-6">
+          <div className="flex flex-row items-center justify-between space-y-0 pb-1">
+            <h3 className="tracking-tight text-xs sm:text-sm font-medium">Avg Duration</h3>
+            <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+          </div>
+          <div className="sm:pt-2">
+            <div className="text-lg sm:text-2xl font-bold">{avgDuration}ms</div>
           </div>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        {/* Recent Live Telemetry */}
         <div className="col-span-4 rounded-xl border bg-card text-card-foreground shadow">
-          <div className="flex flex-col space-y-1.5 p-6">
-            <h3 className="font-semibold leading-none tracking-tight">Recent Live Telemetry</h3>
-            <p className="text-sm text-muted-foreground">Latest actions executed by your local daemon.</p>
+          <div className="flex flex-col space-y-1.5 p-4 sm:p-6">
+            <h3 className="font-semibold leading-none tracking-tight text-sm sm:text-base">Recent Live Telemetry</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground">Latest actions executed by your local daemon.</p>
           </div>
-          <div className="p-6 pt-0">
-            <div className="space-y-4">
+          <div className="p-4 sm:p-6 pt-0">
+            <div className="space-y-3 sm:space-y-4">
               {recentEvents.map((event) => (
-                <div key={event.id} className="flex items-center gap-4">
-                  <div className="bg-muted p-2 rounded-full">
+                <div key={event.id} className="flex items-center gap-3 sm:gap-4">
+                  <div className="bg-muted p-1.5 sm:p-2 rounded-full shrink-0">
                     {event.success ? (
-                      <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-500" />
                     ) : (
-                      <XCircle className="h-4 w-4 text-destructive" />
+                      <XCircle className="h-3 w-3 sm:h-4 sm:w-4 text-destructive" />
                     )}
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium leading-none">{event.event_type}</p>
-                    <p className="text-xs text-muted-foreground font-mono truncate max-w-[400px]">
+                  <div className="flex-1 space-y-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium leading-none truncate">{event.event_type}</p>
+                    <p className="text-xs text-muted-foreground font-mono truncate">
                       {event.path_accessed || event.operation_type || 'N/A'}
                     </p>
                   </div>
-                  <div className="text-sm text-muted-foreground tabular-nums">
+                  <div className="text-xs sm:text-sm text-muted-foreground tabular-nums shrink-0">
                     {event.duration_ms}ms
                   </div>
                 </div>
@@ -226,18 +227,19 @@ export default async function HarnessDashboardPage() {
           </div>
         </div>
 
+        {/* Diagnostics */}
         <div className="col-span-3 rounded-xl border bg-card text-card-foreground shadow">
-          <div className="flex flex-col space-y-1.5 p-6 pb-2">
-            <h3 className="font-semibold leading-none tracking-tight">Diagnostics</h3>
+          <div className="flex flex-col space-y-1.5 p-4 sm:p-6 pb-2">
+            <h3 className="font-semibold leading-none tracking-tight text-sm sm:text-base">Diagnostics</h3>
           </div>
-          <div className="p-6 pt-0 space-y-6">
+          <div className="p-4 sm:p-6 pt-0 space-y-4 sm:space-y-6">
             <div>
               <h4 className="text-sm font-medium mb-3">Top Denied Tools</h4>
               <div className="space-y-2">
                 {sortedDeniedTools.map(([tool, count]) => (
                   <div key={tool} className="flex justify-between items-center">
-                    <span className="text-sm font-mono text-muted-foreground">{tool}</span>
-                    <span className="text-sm font-bold">{String(count)}</span>
+                    <span className="text-xs sm:text-sm font-mono text-muted-foreground truncate max-w-[200px]">{tool}</span>
+                    <span className="text-sm font-bold shrink-0">{String(count)}</span>
                   </div>
                 ))}
                 {sortedDeniedTools.length === 0 && <p className="text-sm text-muted-foreground">No denials recorded.</p>}
@@ -250,7 +252,7 @@ export default async function HarnessDashboardPage() {
                 {sortedTopErrors.map(([errClass, count]) => (
                   <div key={errClass} className="flex justify-between items-center">
                     <span className="text-xs text-muted-foreground truncate max-w-[200px]">{errClass}</span>
-                    <span className="text-sm font-bold text-red-500">{String(count)}</span>
+                    <span className="text-sm font-bold text-red-500 shrink-0">{String(count)}</span>
                   </div>
                 ))}
                 {sortedTopErrors.length === 0 && <p className="text-sm text-muted-foreground">No errors recorded.</p>}

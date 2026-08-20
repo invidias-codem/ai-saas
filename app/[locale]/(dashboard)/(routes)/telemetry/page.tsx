@@ -10,7 +10,7 @@ import { InteractionAuditViewer } from "@/components/telemetry/InteractionAuditV
 export default function TelemetryPage() {
   const t = useTranslations("Settings");
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Registers the edge telemetry Service Worker (graceful if unavailable). */}
       <TelemetryServiceWorker />
 
@@ -23,7 +23,7 @@ export default function TelemetryPage() {
         }
       />
 
-      <Card className="p-6 border-black/5">
+      <Card className="p-4 sm:p-6 border-black/5">
         <InteractionAuditViewer />
       </Card>
     </div>
