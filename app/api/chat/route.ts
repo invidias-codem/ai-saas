@@ -234,6 +234,38 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Validation Error', details: validationResult.error.flatten() }, { status: 400 });
         }
 
+        // Async chunk storage for RAG — fire-and-forget (non-blocking)
+        // This runs while the LLM answers Turn 1 using the raw extracted text
+        if (pdfExtractedText && pdfExtractedText.trim().length > 0 && resolved.ucolContext.workspaceId && supabaseAdmin) {
+            const { storePdfChunks } = await import('@/lib/fileProcessing/chunkEmbedder');
+            // Get or create document ID for this file
+            const { data: docRecord, error: docError } = await supabaseAdmin
+                .from('workspace_documents')
+                .upsert({
+                    workspace_id: resolved.ucolContext.workspaceId,
+                    user_id: user.userId,
+                    filename: fileData?.name || 'uploaded.pdf',
+                    mime_type: 'application/pdf',
+                    content_raw: pdfExtractedText.slice(0, 10000), // Store preview
+                    embedding_tier: 'STANDARD_768',
+                }, { onConflict: 'workspace_id, filename' })
+                .select('id')
+                .single();
+
+            if (!docError && docRecord) {
+                // Fire-and-forget — don't await, don't block Turn 1 response
+                storePdfChunks(docRecord.id, pdfExtractedText)
+                    .then(result => {
+                        if (result.success) {
+                            console.log(`[ChatRoute] RAG chunks stored: ${result.chunkCount} chunks`);
+                        } else {
+                            console.warn(`[ChatRoute] RAG chunk storage failed: ${result.error}`);
+                        }
+                    })
+                    .catch(err => console.error('[ChatRoute] Unexpected chunk storage error:', err));
+            }
+        }
+
         const result = await runRuntimeBridge({
             surface: 'chat',
             session: {

@@ -628,6 +628,22 @@ export async function generateConversationReply(
     };
   }
 
+  // RAG retrieval for follow-up turns (no fileData but documentIds present)
+  // On Turn 2+, fileData is undefined but the client may pass documentIds
+  // of previously uploaded files. We retrieve semantically relevant chunks
+  // instead of injecting the full document text.
+  if (!pdfText && documentIds && documentIds.length > 0 && workspaceId) {
+    try {
+      const { retrieveRelevantChunks } = await import('@/lib/fileProcessing/chunkEmbedder');
+      const ragContext = await retrieveRelevantChunks(workspaceId, userQuery, documentIds);
+      if (ragContext) {
+        baseSystemInstruction += `\n\n${ragContext}`;
+      }
+    } catch (err) {
+      console.error('[ConversationEngine] RAG retrieval failed:', err);
+    }
+  }
+
   // ── PERSONA DOMAIN GATE ─────────────────────────────────────────────────────
   // Evaluate the domain gate BEFORE spending tokens on inference.
   // Hard-blocked queries return a zero-token templated refusal.

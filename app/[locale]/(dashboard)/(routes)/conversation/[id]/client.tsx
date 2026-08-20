@@ -707,7 +707,9 @@ function ConversationPage({
       });
 
       // Clear uploaded docs after successful send
-      setUploadedDocs([]);
+      // Note: We keep uploadedDocs in state for RAG retrieval on follow-up turns
+      // The conversation engine uses documentIds to retrieve relevant chunks
+      // setUploadedDocs([]);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
