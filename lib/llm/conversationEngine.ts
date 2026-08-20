@@ -28,6 +28,7 @@ import {
 import { addNode, addEdge, strengthenEdge } from "@/lib/memory/graphStore";
 import { extractFactsFromConversation } from "@/lib/agents/factExtractor";
 import { SecurityAgent } from "@/lib/security/securityAgent";
+import { logEvent } from "@/lib/telemetry";
 import { emitInteractionAudit } from "@/lib/telemetry/emit";
 import { deriveContextRole } from "@/lib/telemetry/governance";
 import { emitRiskEvent } from "@/lib/telemetry/riskAdapter";
@@ -1053,18 +1054,71 @@ export async function generateConversationReply(
               }
             }
 
-            // ── OutputCritic: async quality gate (fire-and-forget) ───────────────
+            // ── OutputCritic + PersonaConsistencyCritic: parallel async quality gate ──
             // Never awaited — critic must never add latency to the hot path.
-            // block verdicts → console.error; warn verdicts → console.warn.
-            critiqueLLMOutput(cleanedFullText, { userId, taskType: agentMode }).then(verdict => {
-              if (verdict.severity === 'block') {
-                console.error('[OutputCritic] BLOCK verdict:', verdict.overallReason);
-                // TODO: persist to ucol_critic_verdicts Supabase table (next PR)
-              }
-              if (!verdict.passed) {
-                console.warn('[OutputCritic] Warnings:', verdict.checks.filter(c => !c.passed));
-              }
-            }).catch(() => { /* critic never crashes the hot path */ });
+            // Both critics run in parallel to minimize TTFB impact.
+            if (options.personaSession) {
+              // Run persona consistency critic alongside existing critic
+              Promise.all([
+                critiqueLLMOutput(cleanedFullText, { userId, taskType: agentMode }),
+                (async () => {
+                  const { evaluatePersonaConsistency } = await import("@/lib/consultant/PersonaConsistencyCritic");
+                  return evaluatePersonaConsistency(options.personaSession!, userQuery, cleanedFullText);
+                })(),
+              ]).then(([outputVerdict, personaVerdict]) => {
+                // Handle existing OutputCritic verdict
+                if (outputVerdict.severity === 'block') {
+                  console.error('[OutputCritic] BLOCK verdict:', outputVerdict.overallReason);
+                }
+                if (!outputVerdict.passed) {
+                  console.warn('[OutputCritic] Warnings:', outputVerdict.checks.filter(c => !c.passed));
+                }
+
+                // Handle PersonaConsistencyCritic verdict — tiered action
+                // Note: Response is already streaming to client. We emit
+                // telemetry events that the client subscribes to for UI warnings.
+                if (personaVerdict.driftLevel === 'SEVERE_VIOLATION') {
+                  console.error('[PersonaCritic] SEVERE VIOLATION:', personaVerdict.reason);
+                  // Emit telemetry for client-side warning banner
+                  // Client receives this via SSE and overlays a system warning
+                  logEvent({
+                    eventType: 'persona_critic_verdict',
+                    userId,
+                    metadata: {
+                      driftLevel: 'SEVERE_VIOLATION',
+                      reason: personaVerdict.reason,
+                      conversationId,
+                      personaId: options.personaSession?.personaId,
+                      action: 'warn_user',
+                    },
+                  });
+                } else if (personaVerdict.driftLevel === 'DRIFT_DETECTED') {
+                  console.warn('[PersonaCritic] Drift detected:', personaVerdict.reason);
+                  // Emit telemetry for client-side soft warning
+                  logEvent({
+                    eventType: 'persona_critic_verdict',
+                    userId,
+                    metadata: {
+                      driftLevel: 'DRIFT_DETECTED',
+                      reason: personaVerdict.reason,
+                      conversationId,
+                      personaId: options.personaSession?.personaId,
+                      action: 'flag_response',
+                    },
+                  });
+                }
+              }).catch(() => { /* critic never crashes the hot path */ });
+            } else {
+              // No persona session — run existing critic only
+              critiqueLLMOutput(cleanedFullText, { userId, taskType: agentMode }).then(verdict => {
+                if (verdict.severity === 'block') {
+                  console.error('[OutputCritic] BLOCK verdict:', verdict.overallReason);
+                }
+                if (!verdict.passed) {
+                  console.warn('[OutputCritic] Warnings:', verdict.checks.filter(c => !c.passed));
+                }
+              }).catch(() => { /* critic never crashes the hot path */ });
+            }
             // ────────────────────────────────────────────────────────────────────
 
           } catch (e) {
