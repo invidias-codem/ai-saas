@@ -113,7 +113,7 @@ const MusicPage = () => {
   const hasContent = !isLoading && !error && (musicUrl || showYouTube);
 
   return (
-    <div>
+    <div className="flex flex-col min-h-screen">
       <Heading
         title={t("title")}
         description={t("description")}
@@ -125,43 +125,45 @@ const MusicPage = () => {
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(handleSubmit)}
-            className="relative rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background via-background to-emerald-500/5 backdrop-blur-xl w-full p-6 shadow-2xl shadow-emerald-500/10 hover:shadow-emerald-500/20 transition-all duration-300 flex flex-col md:flex-row gap-4 items-center"
+            className="relative rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background via-background to-emerald-500/5 backdrop-blur-xl w-full p-4 sm:p-6 shadow-2xl shadow-emerald-500/10 hover:shadow-emerald-500/20 transition-all duration-300"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-transparent to-teal-500/5 rounded-2xl pointer-events-none" />
-            <FormField
-              control={form.control}
-              name="prompt"
-              render={({ field }) => (
-                <FormItem className="w-full relative z-10">
-                  <FormControl className="m-0 p-0">
-                    <Input
-                      className="border-0 bg-background/50 backdrop-blur-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-xl px-4 py-3 transition-all duration-200"
-                      disabled={isLoading}
-                      placeholder="🎵 Describe your sound... (e.g., Generate a relaxing lofi beat...)"
-                      {...field}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-            <Button
-              className="w-full md:w-auto min-w-[120px] relative z-10 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all duration-300 rounded-xl font-semibold"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <span className="flex items-center gap-2">
-                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Generating...
-                </span>
-              ) : (
-                "🎵 Generate"
-              )}
-            </Button>
+            <div className="relative z-10 flex flex-col sm:flex-row gap-3 items-end">
+              <FormField
+                control={form.control}
+                name="prompt"
+                render={({ field }) => (
+                  <FormItem className="w-full">
+                    <FormControl className="m-0 p-0">
+                      <Input
+                        className="border-0 bg-background/50 backdrop-blur-sm outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-xl px-4 py-3 transition-all duration-200"
+                        disabled={isLoading}
+                        placeholder="🎵 Describe your sound..."
+                        {...field}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <Button
+                className="w-full sm:w-auto min-w-[120px] shrink-0 relative z-10 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all duration-300 rounded-xl font-semibold"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Generating...
+                  </span>
+                ) : (
+                  "🎵 Generate"
+                )}
+              </Button>
+            </div>
           </form>
         </Form>
       </div>
 
-      <div className="flex justify-center mt-6 px-4 lg:px-8">
+      <div className="flex justify-center mt-4 sm:mt-6 px-4 lg:px-8">
         <Button
           variant="secondary"
           className="bg-gradient-to-r from-emerald-600/10 to-teal-600/10 hover:from-emerald-600/20 hover:to-teal-600/20 border-emerald-500/20 rounded-xl transition-all duration-300"
@@ -171,9 +173,9 @@ const MusicPage = () => {
         </Button>
       </div>
 
-      <div className="space-y-6 mt-8 px-4 lg:px-8">
+      <div className="flex-1 space-y-4 sm:space-y-6 mt-4 sm:mt-8 px-4 lg:px-8">
         {isLoading && (
-          <div className="relative rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-16 overflow-hidden">
+          <div className="relative rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-8 sm:p-16 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 animate-pulse" />
             <div className="relative flex flex-col items-center justify-center gap-4">
               <div className="relative">
@@ -193,15 +195,15 @@ const MusicPage = () => {
         )}
 
         {error && (
-          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-8">
-            <p className="text-red-500 text-center">{error}</p>
+          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-6 sm:p-8">
+            <p className="text-red-500 text-center text-sm">{error}</p>
           </div>
         )}
 
         {showYouTube && (
           <div className="space-y-4">
             <YouTubeEmbed videoId={DEFAULT_YOUTUBE_VIDEO_ID} title={DEFAULT_YOUTUBE_TITLE} />
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center gap-3 flex-wrap">
               <StereoBars active />
               <p className="text-sm text-muted-foreground">
                 Free background beat — use this while you compose your own prompt.
@@ -211,18 +213,18 @@ const MusicPage = () => {
         )}
 
         {!musicUrl && !isLoading && !error && !showYouTube && (
-          <div className="rounded-2xl border border-emerald-500/10 bg-gradient-to-br from-background to-emerald-500/5 p-12">
+          <div className="rounded-2xl border border-emerald-500/10 bg-gradient-to-br from-background to-emerald-500/5 p-8 sm:p-12">
             <EmptyState label={t("empty")} />
           </div>
         )}
 
         {musicUrl && !isLoading && !error && (
-          <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-6 shadow-2xl shadow-emerald-500/10">
+          <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-4 sm:p-6 shadow-2xl shadow-emerald-500/10">
             <audio controls className="w-full rounded-xl mb-4 shadow-lg">
               <source src={musicUrl} type="audio/mpeg" />
               Your browser does not support the audio element.
             </audio>
-            <div className="flex flex-wrap justify-center gap-2">
+            <div className="flex flex-col sm:flex-row justify-center gap-2">
               <Button
                 onClick={() => window.open(musicUrl)}
                 variant="secondary"
