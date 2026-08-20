@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/select";
 import { Card, CardFooter } from "@/components/ui/card";
 import { amountOptions, resolutionOptions, modelOptions, formSchema } from "./constants";
+import { ParameterDrawer, ParameterSection } from "@/components/ui/parameter-drawer";
+import { Settings2 } from "lucide-react";
 import { ShareIconButton } from "@/components/share-button";
 
 // Interface for a single Replicate prediction
@@ -45,6 +47,7 @@ const ImagePage = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("flux-schnell");
+  const [showParameters, setShowParameters] = useState(false);
 
   // Load saved model preference from API (server-side settings)
   useEffect(() => {
@@ -140,141 +143,271 @@ const ImagePage = () => {
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(onSubmit)}
-            className="relative rounded-2xl border border-violet-500/20 bg-gradient-to-br from-background via-background to-violet-500/5 backdrop-blur-xl w-full p-6 shadow-2xl shadow-violet-500/10 hover:shadow-violet-500/20 transition-all duration-300 flex flex-col md:flex-row flex-wrap gap-4 items-end"
+            className="relative rounded-2xl border border-violet-500/20 bg-gradient-to-br from-background via-background to-violet-500/5 backdrop-blur-xl w-full p-4 sm:p-6 shadow-2xl shadow-violet-500/10 hover:shadow-violet-500/20 transition-all duration-300"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-purple-500/5 rounded-2xl pointer-events-none" />
-            <FormField
-              name="prompt"
-              render={({ field }) => (
-                <FormItem className="w-full lg:flex-1 relative z-10">
-                  <FormControl className="m-0 p-0">
-                    <Input
-                      className="border-0 bg-background/50 backdrop-blur-sm outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 rounded-xl px-4 py-3 transition-all duration-200"
-                      disabled={isLoading}
-                      placeholder="✨ Describe your vision... (e.g., Alpacas in the style of Picasso)"
-                      {...field}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="amount"
-              render={({ field }) => (
-                <FormItem className="flex-1 lg:flex-none min-w-[120px] relative z-10">
-                  <Select
-                    disabled={isLoading}
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
-                        <SelectValue defaultValue={field.value} />
-                      </SelectTrigger>
+                
+            <div className="relative z-10 flex flex-col sm:flex-row gap-3 items-end">
+              <FormField
+                name="prompt"
+                render={({ field }) => (
+                  <FormItem className="w-full">
+                    <FormControl className="m-0 p-0">
+                      <Input
+                        className="border-0 bg-background/50 backdrop-blur-sm outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 rounded-xl px-4 py-3 transition-all duration-200"
+                        disabled={isLoading}
+                        placeholder="✨ Describe your vision..."
+                        {...field}
+                      />
                     </FormControl>
-                    <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
-                      {amountOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value} className="hover:bg-violet-500/10">
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="resolution"
-              render={({ field }) => (
-                <FormItem className="flex-1 lg:flex-none min-w-[120px] relative z-10">
-                  <Select
-                    disabled={isLoading}
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
-                        <SelectValue defaultValue={field.value} />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
-                      {resolutionOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value} className="hover:bg-violet-500/10">
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="model"
-              render={({ field }) => (
-                <FormItem className="flex-1 lg:flex-none min-w-[180px] relative z-10">
-                  <Select
-                    disabled={isLoading}
-                    onValueChange={(value) => {
-                      field.onChange(value);
-                      setSelectedModel(value);
-                    }}
-                    value={field.value || selectedModel}
-                    defaultValue={field.value || selectedModel}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
-                        <SelectValue defaultValue={field.value || selectedModel} />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
-                      {modelOptions.map((option) => (
-                        <SelectItem
-                          key={option.value}
-                          value={option.value}
-                          className="hover:bg-violet-500/10"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span>{option.label}</span>
-                            {option.badge && (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400">
-                                {option.badge}
-                              </span>
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )}
-            />
-            <Button
-              className="w-full md:w-auto min-w-[120px] relative z-10 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition-all duration-300 rounded-xl font-semibold"
-              type="submit"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <span className="flex items-center gap-2">
-                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Generating...
-                </span>
-              ) : (
-                "✨ Generate"
-              )}
-            </Button>
+                  </FormItem>
+                )}
+              />
+
+              {/* Mobile: parameter drawer trigger */}
+              <div className="sm:hidden">
+                <ParameterDrawer
+                  open={showParameters}
+                  onOpenChange={setShowParameters}
+                  title="Image Settings"
+                  trigger={
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl border border-violet-500/20 bg-background/50 backdrop-blur-sm hover:border-violet-500/40 transition-colors text-sm font-medium"
+                    >
+                      <Settings2 className="h-4 w-4" />
+                      Tune
+                    </button>
+                  }
+                >
+                  <div className="space-y-6">
+                    <ParameterSection title="Model">
+                      <FormField
+                        control={form.control}
+                        name="model"
+                        render={({ field }) => (
+                          <FormItem>
+                            <Select
+                              disabled={isLoading}
+                              onValueChange={(value) => {
+                                field.onChange(value);
+                                setSelectedModel(value);
+                              }}
+                              value={field.value || selectedModel}
+                              defaultValue={field.value || selectedModel}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
+                                  <SelectValue defaultValue={field.value || selectedModel} />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
+                                {modelOptions.map((option) => (
+                                  <SelectItem
+                                    key={option.value}
+                                    value={option.value}
+                                    className="hover:bg-violet-500/10"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span>{option.label}</span>
+                                      {option.badge && (
+                                        <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400">
+                                          {option.badge}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                    </ParameterSection>
+                    <ParameterSection title="Amount">
+                      <FormField
+                        control={form.control}
+                        name="amount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <Select
+                              disabled={isLoading}
+                              onValueChange={field.onChange}
+                              value={field.value}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
+                                  <SelectValue defaultValue={field.value} />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
+                                {amountOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value} className="hover:bg-violet-500/10">
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                    </ParameterSection>
+                    <ParameterSection title="Resolution">
+                      <FormField
+                        control={form.control}
+                        name="resolution"
+                        render={({ field }) => (
+                          <FormItem>
+                            <Select
+                              disabled={isLoading}
+                              onValueChange={field.onChange}
+                              value={field.value}
+                              defaultValue={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
+                                  <SelectValue defaultValue={field.value} />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
+                                {resolutionOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value} className="hover:bg-violet-500/10">
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FormItem>
+                        )}
+                      />
+                    </ParameterSection>
+                  </div>
+                </ParameterDrawer>
+              </div>
+
+              {/* Desktop: inline parameters */}
+              <div className="hidden sm:flex gap-3 items-end">
+                <FormField
+                  control={form.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem className="flex-1 min-w-[100px]">
+                      <Select
+                        disabled={isLoading}
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
+                            <SelectValue defaultValue={field.value} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
+                          {amountOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value} className="hover:bg-violet-500/10">
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="resolution"
+                  render={({ field }) => (
+                    <FormItem className="flex-1 min-w-[100px]">
+                      <Select
+                        disabled={isLoading}
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
+                            <SelectValue defaultValue={field.value} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
+                          {resolutionOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value} className="hover:bg-violet-500/10">
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="model"
+                  render={({ field }) => (
+                    <FormItem className="flex-1 min-w-[140px]">
+                      <Select
+                        disabled={isLoading}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          setSelectedModel(value);
+                        }}
+                        value={field.value || selectedModel}
+                        defaultValue={field.value || selectedModel}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="bg-background/50 backdrop-blur-sm border-violet-500/20 rounded-xl hover:border-violet-500/40 transition-colors">
+                            <SelectValue defaultValue={field.value || selectedModel} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="bg-background/95 backdrop-blur-xl border-violet-500/20">
+                          {modelOptions.map((option) => (
+                            <SelectItem
+                              key={option.value}
+                              value={option.value}
+                              className="hover:bg-violet-500/10"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span>{option.label}</span>
+                                {option.badge && (
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400">
+                                    {option.badge}
+                                  </span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <Button
+                className="w-full sm:w-auto min-w-[120px] shrink-0 relative z-10 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white shadow-lg shadow-violet-500/30 hover:shadow-violet-500/50 transition-all duration-300 rounded-xl font-semibold"
+                type="submit"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <span className="flex items-center gap-2">
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Generating...
+                  </span>
+                ) : (
+                  "✨ Generate"
+                )}
+              </Button>
+            </div>
           </form>
         </Form>
       </div>
 
       {/* Output Area */}
-      <div className="space-y-6 mt-8 px-4 lg:px-8">
+      <div className="space-y-4 sm:space-y-6 mt-4 sm:mt-8 px-4 lg:px-8">
         {isLoading && (
-          <div className="relative rounded-2xl border border-violet-500/20 bg-gradient-to-br from-background to-violet-500/5 p-16 overflow-hidden">
+          <div className="relative rounded-2xl border border-violet-500/20 bg-gradient-to-br from-background to-violet-500/5 p-8 sm:p-16 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-violet-500/10 animate-pulse" />
             <div className="relative flex flex-col items-center justify-center gap-4">
               <div className="relative">
@@ -293,17 +426,17 @@ const ImagePage = () => {
           </div>
         )}
         {error && !isLoading && (
-          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-8">
+          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-6 sm:p-8">
             <EmptyState label={error} />
           </div>
         )}
         {images.length === 0 && !isLoading && !error && (
-          <div className="rounded-2xl border border-violet-500/10 bg-gradient-to-br from-background to-violet-500/5 p-12">
+          <div className="rounded-2xl border border-violet-500/10 bg-gradient-to-br from-background to-violet-500/5 p-8 sm:p-12">
             <EmptyState label={t('empty')} />
           </div>
         )}
         {images.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {images.map((src, index) => (
               <Card key={src} className="group relative rounded-2xl overflow-hidden border border-violet-500/10 bg-gradient-to-br from-background to-violet-500/5 hover:border-violet-500/30 transition-all duration-500 hover:scale-[1.02] hover:shadow-2xl hover:shadow-violet-500/20">
                 <div className="relative aspect-square overflow-hidden">
@@ -327,7 +460,7 @@ const ImagePage = () => {
                     />
                   </div>
                 </div>
-                <CardFooter className="p-3 gap-2 bg-background/50 backdrop-blur-sm">
+                <CardFooter className="p-2 sm:p-3 gap-2 bg-background/50 backdrop-blur-sm">
                   <Button
                     onClick={async () => {
                       try {
@@ -347,9 +480,9 @@ const ImagePage = () => {
                       }
                     }}
                     variant="secondary"
-                    className="flex-1 bg-gradient-to-r from-violet-600/10 to-purple-600/10 hover:from-violet-600/20 hover:to-purple-600/20 border-violet-500/20 rounded-xl transition-all duration-300"
+                    className="flex-1 bg-gradient-to-r from-violet-600/10 to-purple-600/10 hover:from-violet-600/20 hover:to-purple-600/20 border-violet-500/20 rounded-xl transition-all duration-300 text-xs sm:text-sm"
                   >
-                    <DownloadIcon className="h-4 w-4 mr-2" />
+                    <DownloadIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                     Download
                   </Button>
                   <ShareIconButton
