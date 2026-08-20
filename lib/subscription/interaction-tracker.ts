@@ -19,7 +19,13 @@ export async function trackFreeInteraction(userId: string): Promise<TrackingResu
   });
 
   if (error || data === null) {
-    console.error("[InteractionTracker] Failed to increment:", error);
+    // RPC may not exist in all environments (migration not yet applied)
+    // This is non-fatal — interaction tracking is for nudge UI only
+    if (error?.code === 'PGRST202') {
+      console.warn("[InteractionTracker] RPC increment_free_interaction_count not found — skipping interaction tracking");
+    } else {
+      console.error("[InteractionTracker] Failed to increment:", error);
+    }
     return { count: 0, shouldNudge: false };
   }
 

@@ -461,6 +461,17 @@ export async function generateConversationReply(
   // Filter out optimistic temp_ IDs that haven't been persisted to DB yet
   const documentIds = rawDocumentIds?.filter((id: string) => id && !id.startsWith('temp_'));
 
+  // Extract PDF text if a PDF was uploaded
+  let pdfText: string | null = null;
+  if (fileData && mimeType === 'application/pdf') {
+    try {
+      const { extractPdfText } = await import('@/lib/fileProcessing/pdfExtractor');
+      pdfText = await extractPdfText(fileData);
+    } catch (err) {
+      console.error('[ConversationEngine] PDF extraction failed:', err);
+    }
+  }
+
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
   let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys, personaSession: options.personaSession });
@@ -585,6 +596,11 @@ export async function generateConversationReply(
   );
 
   let baseSystemInstruction = getSystemInstruction();
+
+  // Append extracted PDF text to the system instruction if available
+  if (pdfText) {
+    baseSystemInstruction += `\n\n[Uploaded Document Content]\n${pdfText}\n[End of Document]`;
+  }
 
   // ── PERSONA DOMAIN GATE ─────────────────────────────────────────────────────
   // Evaluate the domain gate BEFORE spending tokens on inference.

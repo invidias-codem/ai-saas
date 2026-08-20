@@ -357,10 +357,41 @@ export class AgentRouter {
             }
 
             const cleanedRaw = raw.replace(/<thought_signature>[\s\S]*/gi, '').trim();
+            
+            // Try multiple JSON extraction strategies
+            let parsed: any = null;
+            
+            // Strategy 1: Find JSON object with regex
             const match = cleanedRaw.match(/\{[\s\S]*\}/);
-            if (!match) throw new Error('No JSON in classifier response');
-
-            const parsed = JSON.parse(match[0]);
+            if (match) {
+                try {
+                    parsed = JSON.parse(match[0]);
+                } catch {
+                    // Strategy 2: Try to fix common JSON issues
+                    const fixed = match[0]
+                        .replace(/,\s*}/g, '}')  // Remove trailing commas
+                        .replace(/,\s*]/g, ']')
+                        .replace(/'/g, '"');     // Fix single quotes
+                    parsed = JSON.parse(fixed);
+                }
+            }
+            
+            // Strategy 3: If still no valid JSON, try to extract taskType from plain text
+            if (!parsed) {
+                const lower = cleanedRaw.toLowerCase();
+                if (lower.includes('code_generation') || lower.includes('write') || lower.includes('code')) {
+                    parsed = { taskType: 'code_generation', confidence: 0.5, reasoning: 'Extracted from plain text' };
+                } else if (lower.includes('research') || lower.includes('search')) {
+                    parsed = { taskType: 'research', confidence: 0.5, reasoning: 'Extracted from plain text' };
+                } else if (lower.includes('quick') || lower.includes('simple')) {
+                    parsed = { taskType: 'quick_answer', confidence: 0.5, reasoning: 'Extracted from plain text' };
+                }
+            }
+            
+            if (!parsed) {
+                throw new Error('No JSON in classifier response');
+            }
+            
             taskType = (parsed.taskType as TaskType) || 'unknown';
             classifierConfidence = parsed.confidence ?? 0.7;
             classifierReasoning = parsed.reasoning || 'Classified by Gemini Flash router';
