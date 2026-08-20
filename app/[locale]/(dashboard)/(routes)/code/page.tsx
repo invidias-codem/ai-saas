@@ -151,6 +151,8 @@ function CodePageContent() {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [memoryCount, setMemoryCount] = useState<number>(0);
   const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showContextSheet, setShowContextSheet] = useState(false);
 
   // GitHub State
   const [activeRepo, setActiveRepo] = useState<string | null>(null);
@@ -583,34 +585,27 @@ function CodePageContent() {
     <div className="flex flex-col h-[100dvh] bg-background text-foreground relative overflow-hidden">
       <KoFiNudge isOpen={showNudge} onClose={dismissNudge} />
 
-      {/* Header - Compact and pinned top */}
-      <header className="flex-none px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-md z-20 flex items-center justify-between sticky top-0">
-        <div className="flex items-center gap-2">
-          {/* Title and Icon */}
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-green-500/10 flex items-center justify-center">
-              <CodeIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <h1 className="text-sm font-semibold leading-tight">Weaver Code</h1>
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-green-500 font-bold scale-105")}>
-                  <span className={cn("w-1.5 h-1.5 rounded-full bg-green-500", isMemoryPulsing && "animate-ping")} />
-                  {memoryCount} memories
-                </div>
-                {(codeContext.workspaceName || codeContext.operatingProfileName) && (
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground rounded-full bg-muted px-2 py-0.5">
-                    <span>{codeContext.workspaceName ?? "Workspace"}</span>
-                    {codeContext.operatingProfileName && <span>· {codeContext.operatingProfileName}</span>}
-                  </div>
-                )}
-              </div>
-            </div>
+      {/* Header - Compact: structural nav + overflow menu */}
+      <header className="flex-none px-3 py-2 sm:px-4 sm:py-3 border-b border-border/40 bg-background/80 backdrop-blur-md z-20 flex items-center justify-between sticky top-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="h-8 w-8 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+            <CodeIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
           </div>
+          <h1 className="text-sm font-semibold leading-tight truncate">Weaver Code</h1>
         </div>
 
-        {/* Right Actions */}
-        <div className="flex gap-2 items-center">
+        {/* Desktop-only indicators */}
+        <div className="hidden md:flex items-center gap-2">
+          <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-green-500 font-bold scale-105")}>
+            <span className={cn("w-1.5 h-1.5 rounded-full bg-green-500", isMemoryPulsing && "animate-ping")} />
+            {memoryCount} memories
+          </div>
+          {(codeContext.workspaceName || codeContext.operatingProfileName) && (
+            <div className="flex items-center gap-1 text-[10px] text-muted-foreground rounded-full bg-muted px-2 py-0.5">
+              <span>{codeContext.workspaceName ?? "Workspace"}</span>
+              {codeContext.operatingProfileName && <span>· {codeContext.operatingProfileName}</span>}
+            </div>
+          )}
           {activeRepo ? (
             <button
               onClick={() => setIsRepoModalOpen(true)}
@@ -645,15 +640,86 @@ function CodePageContent() {
               Connect GitHub Repo
             </Button>
           )}
-
           {messages.length > 0 && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
               <AlertCircle className="h-3 w-3" />
               {messages.length} msgs
             </div>
           )}
         </div>
+
+        {/* Mobile overflow menu */}
+        <div className="flex md:hidden items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground"
+            onClick={() => setShowMobileMenu(true)}
+            aria-label="More options"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+            </svg>
+          </Button>
+        </div>
       </header>
+
+      {/* Mobile Menu Overlay */}
+      {showMobileMenu && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowMobileMenu(false)} />
+          <div className="absolute right-0 top-0 h-full w-72 bg-background border-l border-border p-4 shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold">Options</h2>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowMobileMenu(false)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="space-y-4">
+              <CodeModelToggle disabled={loading} />
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="w-2 h-2 rounded-full bg-green-500" />
+                {memoryCount} memories
+              </div>
+              {(codeContext.workspaceName || codeContext.operatingProfileName) && (
+                <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-sm">
+                  <span className="font-medium">{codeContext.workspaceName}</span>
+                  {codeContext.operatingProfileName && (
+                    <span className="text-xs text-muted-foreground"> · {codeContext.operatingProfileName}</span>
+                  )}
+                </div>
+              )}
+              {activeRepo ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => {
+                    setIsRepoModalOpen(true);
+                    setShowMobileMenu(false);
+                  }}
+                >
+                  <BrandIcon name="Github" className="h-4 w-4" size={16} />
+                  <span className="truncate">{activeRepo}</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => {
+                    setIsRepoModalOpen(true);
+                    setShowMobileMenu(false);
+                  }}
+                >
+                  <BrandIcon name="Github" className="h-4 w-4" size={16} />
+                  Connect GitHub Repo
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Chat Area */}
       {/* ... (keep existing chat area) ... */}
@@ -831,32 +897,53 @@ function CodePageContent() {
 
           {/* Input Container */}
           <div className="relative flex items-end gap-2 bg-muted/40 hover:bg-muted/60 focus-within:bg-background focus-within:ring-2 focus-within:ring-green-500/20 border border-border/50 rounded-[26px] p-2 transition-all duration-200 shadow-sm">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              style={{ display: 'none' }}
-              accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.yml,.md,.txt,.xml,.sql,.sh,.bash,.env,.config,text/plain,application/json,image/*"
-            />
+            
+            {/* Left: attachment group (hidden on mobile, shown on desktop) */}
+            <div className="hidden sm:block">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
+                accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.yml,.md,.txt,.xml,.sql,.sh,.bash,.env,.config,text/plain,application/json,image/*"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              >
+                <Paperclip className="h-5 w-5" />
+              </Button>
+            </div>
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.click();
-                } else {
-                  console.error("File input ref is null");
-                }
-              }}
-              disabled={loading}
-              className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 shrink-0"
-            >
-              <Paperclip className="h-5 w-5" />
-            </Button>
+            {/* Mobile: grouped + button for attachments */}
+            <div className="sm:hidden relative">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
+                accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.yml,.md,.txt,.xml,.sql,.sh,.bash,.env,.config,text/plain,application/json,image/*"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </Button>
+            </div>
 
-            <div className="pb-1 shrink-0">
+            {/* Model selector — mobile: above input, desktop: inline */}
+            <div className="hidden sm:block pb-1 shrink-0">
               <CodeModelToggle disabled={loading} />
             </div>
 
@@ -870,6 +957,7 @@ function CodePageContent() {
               className="flex-1 min-h-[44px] max-h-32 py-3 bg-transparent border-0 focus-visible:ring-0 resize-none text-base leading-relaxed placeholder:text-muted-foreground/70 font-mono"
             />
 
+            {/* Send button — always visible, never pushed off-screen */}
             <Button
               onClick={handleSendMessage}
               disabled={loading || (!userInput.trim() && !selectedFile)}
@@ -883,6 +971,11 @@ function CodePageContent() {
             >
               <SendHorizontal className="h-5 w-5" />
             </Button>
+          </div>
+
+          {/* Mobile model selector — above input bar */}
+          <div className="sm:hidden flex justify-center mt-2">
+            <CodeModelToggle disabled={loading} />
           </div>
 
           <div className="text-center mt-2">
