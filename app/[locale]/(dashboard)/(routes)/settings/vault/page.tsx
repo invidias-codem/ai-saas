@@ -199,7 +199,7 @@ const VaultPage = () => {
                 bgColor="bg-amber-600/10"
             />
 
-            <div className="px-4 lg:px-8 space-y-4">
+            <div className="px-4 lg:px-8 space-y-3 sm:space-y-4">
                 {/* Back Button */}
                 <Button
                     variant="ghost"
@@ -218,25 +218,25 @@ const VaultPage = () => {
                         placeholder="Search conversations..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full pl-10 pr-4 py-2.5 sm:py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
                     />
                 </div>
 
                 {/* Filter Tabs */}
-                <div className="flex gap-2 border-b pb-2">
+                <div className="flex gap-2 border-b pb-2 overflow-x-auto scrollbar-none">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setFilter(tab.id)}
                             className={cn(
-                                "px-4 py-2 rounded-lg text-sm font-medium transition",
+                                "px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition whitespace-nowrap shrink-0",
                                 filter === tab.id
                                     ? "bg-amber-600 text-white"
                                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                             )}
                         >
                             {tab.label}
-                            <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-white/20">
+                            <span className="ml-1 sm:ml-2 px-1.5 sm:px-2 py-0.5 rounded-full text-xs bg-white/20">
                                 {tab.count}
                             </span>
                         </button>
