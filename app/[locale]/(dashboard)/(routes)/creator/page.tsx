@@ -74,36 +74,36 @@ export default async function CreatorDashboardPage({ params }: { params: Promise
   }
 
   return (
-    <div className="space-y-8 p-8 max-w-6xl mx-auto">
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-8 p-4 sm:p-8 max-w-6xl mx-auto">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Creator Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Creator Dashboard</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">
             Welcome back, {creatorCode.creator_name || creatorCode.creator_handle}. Here&apos;s your performance.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="px-4 py-1 text-sm bg-primary/10 text-primary border-primary/20">
+          <Badge variant="outline" className="px-3 sm:px-4 py-1 text-xs sm:text-sm bg-primary/10 text-primary border-primary/20">
             Active Partner
           </Badge>
         </div>
       </div>
 
       <Card className="border-primary/20 bg-primary/5">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Your Unique Link</CardTitle>
-          <CardDescription>Share this link on your platforms to track signups.</CardDescription>
+        <CardHeader className="pb-2 sm:pb-3">
+          <CardTitle className="text-xs sm:text-sm font-medium">Your Unique Link</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Share this link on your platforms to track signups.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2">
-            <code className="relative rounded bg-muted px-[0.5rem] py-[0.3rem] font-mono text-sm font-semibold flex-1 overflow-x-auto border">
+            <code className="relative rounded bg-muted px-[0.3rem] sm:px-[0.5rem] py-[0.2rem] sm:py-[0.3rem] font-mono text-xs sm:text-sm font-semibold flex-1 overflow-x-auto border truncate">
               https://gen1e.xyz?ref={creatorCode.code}
             </code>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Clicks</CardTitle>
