@@ -5,6 +5,18 @@
 import type { FileAttachmentInput } from '@/lib/types/attachments';
 
 /**
+ * Extraction metrics for telemetry
+ */
+export interface PdfExtractionMetrics {
+  fileName?: string;
+  fileSizeBytes?: number;
+  pageCount: number;
+  charCount: number;
+  truncated: boolean;
+  extractionTimeMs: number;
+}
+
+/**
  * Extract text from a PDF file using pdfjs-dist.
  * Supports both base64-encoded data and GCS file URIs.
  */
@@ -69,21 +81,56 @@ export function isPdf(fileData: FileAttachmentInput): boolean {
 
 /**
  * Extract text from a file if it's a PDF, otherwise return null.
+ * Returns metrics about the extraction for observability.
  */
-export async function extractTextIfPdf(fileData: FileAttachmentInput): Promise<string | null> {
-  if (!isPdf(fileData)) return null;
+export async function extractTextIfPdf(fileData: FileAttachmentInput): Promise<{ text: string | null; metrics: PdfExtractionMetrics | null }> {
+  if (!isPdf(fileData)) return { text: null, metrics: null };
+
+  const startTime = Date.now();
+  const fileSizeBytes = fileData.base64Data 
+    ? Math.round(fileData.base64Data.length * 0.75) 
+    : fileData.sizeBytes;
 
   try {
     const text = await extractPdfText(fileData);
+    const extractionTimeMs = Date.now() - startTime;
+    
     // Limit to 50k tokens worth of text (~200k chars) to avoid context window overflow
     const MAX_CHARS = 200_000;
+    let finalText = text;
+    let truncated = false;
+    
     if (text.length > MAX_CHARS) {
+      finalText = text.slice(0, MAX_CHARS) + '\n\n[Document truncated due to length...]';
+      truncated = true;
       console.warn(`[PdfExtractor] Truncating PDF text from ${text.length} to ${MAX_CHARS} chars`);
-      return text.slice(0, MAX_CHARS) + '\n\n[Document truncated due to length...]';
     }
-    return text;
+
+    const metrics: PdfExtractionMetrics = {
+      fileName: fileData.name,
+      fileSizeBytes,
+      pageCount: 0, // Could be extracted from pdf.numPages if we refactor
+      charCount: finalText.length,
+      truncated,
+      extractionTimeMs,
+    };
+
+    console.log(`[PdfExtractor] Extraction complete: ${finalText.length} chars in ${extractionTimeMs}ms`);
+    
+    return { text: finalText, metrics };
   } catch (err) {
+    const extractionTimeMs = Date.now() - startTime;
     console.error('[PdfExtractor] Failed to extract PDF text:', err);
-    return null;
+    
+    const metrics: PdfExtractionMetrics = {
+      fileName: fileData.name,
+      fileSizeBytes,
+      pageCount: 0,
+      charCount: 0,
+      truncated: false,
+      extractionTimeMs,
+    };
+    
+    return { text: null, metrics };
   }
 }

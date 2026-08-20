@@ -131,6 +131,7 @@ export type ConversationEngineResult = {
       graphEntitiesCount?: number;
       researchResultsCount?: number;
     };
+    pdfExtractionError?: string;
   };
 };
 
@@ -602,8 +603,29 @@ export async function generateConversationReply(
   let baseSystemInstruction = getSystemInstruction();
 
   // Append extracted PDF text to the system instruction if available
-  if (pdfText) {
+  // Empty text indicates a scanned/image-only PDF (no text layer)
+  if (pdfText && pdfText.trim().length > 0) {
     baseSystemInstruction += `\n\n[Uploaded Document Content]\n${pdfText}\n[End of Document]`;
+  } else if (effectiveMimeType === 'application/pdf' && pdfText !== null) {
+    // PDF was extracted but returned empty text — likely a scanned document
+    const textEncoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(textEncoder.encode(
+          "We couldn't detect any readable text in this document. It may be a scanned image or a PDF without a text layer. Please try uploading a text-based PDF or copy and paste the content directly."
+        ));
+        controller.close();
+      },
+    });
+    return {
+      stream,
+      sources: [],
+      debug: {
+        model: "pdf-extraction-empty",
+        userQuery,
+        pdfExtractionError: "scanned_pdf_no_text_layer",
+      },
+    };
   }
 
   // ── PERSONA DOMAIN GATE ─────────────────────────────────────────────────────
