@@ -114,85 +114,90 @@ export default function MemoryCenterPage() {
   const statusColor = networkReady ? 'text-emerald-600' : 'text-red-500';
 
   return (
-    <div className="min-h-screen px-4 md:px-10 lg:px-16 py-8 space-y-6">
-      <div className="space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-sm font-medium">
-          <Activity className="w-4 h-4" />
-          Memory Center
-        </div>
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Inspectable inference memory</h1>
+    <div className="min-h-screen px-3 sm:px-4 md:px-10 lg:px-16 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6">
+      {/* Header — compact on mobile */}
+      <div className="space-y-2 sm:space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="inline-flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-indigo-500/20 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs sm:text-sm font-medium">
+            <Activity className="w-3 h-3 sm:w-4 sm:h-4" />
+            Memory Center
+          </div>
           <button
             type="button"
             onClick={refresh}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium shadow-sm hover:border-indigo-400"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium shadow-sm hover:border-indigo-400"
           >
-            <RefreshCcw className="w-4 h-4" />
-            Refresh
+            <RefreshCcw className="w-3 h-3 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
-        <p className="text-muted-foreground max-w-2xl">
+        <h1 className="text-xl sm:text-2xl md:text-4xl font-bold tracking-tight">Inspectable inference memory</h1>
+        <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl hidden sm:block">
           Visualize what context powered each response, which tools fired, and how the model was routed—locally first, then synced when available.
         </p>
       </div>
 
-      <Card className="p-5 space-y-2">
-        <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-          <span className={`inline-flex items-center gap-2 font-medium ${statusColor}`}>
-            {networkReady ? <Wifi className="w-4 h-4" /> : <WifiOff className="w-4 h-4" />}
-            {networkReady ? 'Online — sync active' : 'Offline — events queued locally'}
+      {/* Status card — compact on mobile */}
+      <Card className="p-3 sm:p-5">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
+          <span className={`inline-flex items-center gap-1.5 font-medium ${statusColor}`}>
+            {networkReady ? <Wifi className="w-3 h-3 sm:w-4 sm:h-4" /> : <WifiOff className="w-3 h-3 sm:w-4 sm:h-4" />}
+            {networkReady ? 'Online' : 'Offline'}
           </span>
-          <span className="inline-flex items-center gap-2">
-            <Server className="w-4 h-4" />
-            Service worker {swReady ? 'registered' : 'skipped'}
+          <span className="inline-flex items-center gap-1.5">
+            <Server className="w-3 h-3 sm:w-4 sm:h-4" />
+            SW {swReady ? 'ready' : 'skip'}
           </span>
         </div>
       </Card>
 
+      {/* Main content grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Card className="p-6 xl:col-span-2">
-          <h2 className="font-semibold mb-4">Entity memory flow</h2>
+        <Card className="p-4 sm:p-6 xl:col-span-2">
+          <h2 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Entity memory flow</h2>
           <MemoryFlowGraph events={events} />
         </Card>
-        <Card className="p-6 space-y-4">
-          <h2 className="font-semibold">Why pane</h2>
-          <WhyPane events={events} />
-        </Card>
+
+        {/* Why pane — desktop sidebar */}
+        <div className="hidden xl:block">
+          <Card className="p-6 space-y-4">
+            <h2 className="font-semibold">Why pane</h2>
+            <WhyPane events={events} />
+          </Card>
+        </div>
       </div>
 
-      <Card className="p-6">
-        <h2 className="font-semibold mb-4">Recent memory events</h2>
+      {/* Mobile: Why pane as bottom sheet trigger */}
+      <div className="xl:hidden">
+        <WhyPaneMobile events={events} />
+      </div>
+
+      <Card className="p-4 sm:p-6">
+        <h2 className="font-semibold mb-3 sm:mb-4 text-sm sm:text-base">Recent memory events</h2>
         {loading ? (
           <p className="text-sm text-muted-foreground">Loading events…</p>
         ) : events.length === 0 ? (
           <p className="text-sm text-muted-foreground">No events captured yet. Run a conversation to generate traces.</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {events.slice(0, 40).map((event) => (
-              <div key={event.id ?? `${event.sessionId}-${event.created_at}`} className="rounded-xl border border-slate-200 p-4 space-y-2">
-                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                  <span className="uppercase tracking-wide">{event.source}</span>
+              <div key={event.id ?? `${event.sessionId}-${event.created_at}`} className="rounded-lg sm:rounded-xl border border-slate-200 p-3 sm:p-4 space-y-1.5 sm:space-y-2">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-muted-foreground">
+                  <span className="uppercase tracking-wide font-medium">{event.source}</span>
                   <span>·</span>
                   <span>{formatTime(event.created_at)}</span>
                   <span>·</span>
                   <span>{event.latencyMs}ms</span>
-                  <span>·</span>
-                  <span>
-                    {event.tokensIn} in / {event.tokensOut} out
-                  </span>
                 </div>
-                {event.modelDecision ? (
-                  <div className="text-sm">
-                    <span className="font-medium">Model: </span>
-                    <span>{event.modelDecision.routedModel}</span>
-                    {event.modelDecision.fallbackUsed && <span className="ml-2 text-red-500">fallback</span>}
-                  </div>
-                ) : null}
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm">
+                  <span>{event.tokensIn} in / {event.tokensOut} out</span>
+                  {event.modelDecision?.fallbackUsed && <span className="text-red-500 font-medium">fallback</span>}
+                </div>
                 {event.toolInvocations?.length ? (
-                  <div className="text-sm">
+                  <div className="text-xs sm:text-sm">
                     <span className="font-medium">Tools: </span>
                     {event.toolInvocations.map((tool) => (
-                      <span key={tool.toolId} className="ml-2 inline-flex items-center gap-1">
+                      <span key={tool.toolId} className="ml-1.5 sm:ml-2 inline-flex items-center gap-1">
                         <span className={tool.status === 'success' ? 'text-emerald-600' : 'text-red-500'}>{tool.toolName}</span>
                         <span className="text-muted-foreground">{tool.latencyMs}ms</span>
                       </span>
@@ -200,7 +205,7 @@ export default function MemoryCenterPage() {
                   </div>
                 ) : null}
                 {event.resultSummary ? (
-                  <p className="text-sm leading-relaxed">{event.resultSummary}</p>
+                  <p className="text-xs sm:text-sm leading-relaxed line-clamp-2">{event.resultSummary}</p>
                 ) : null}
               </div>
             ))}
@@ -208,6 +213,56 @@ export default function MemoryCenterPage() {
         )}
       </Card>
     </div>
+  );
+}
+
+function WhyPaneMobile({ events }: { events: MemoryEvent[] }) {
+  const [open, setOpen] = useState(false);
+  const latest = events[0];
+
+  if (!latest) {
+    return (
+      <Card className="p-4">
+        <p className="text-sm text-muted-foreground">Run a conversation to see the reasoning pane.</p>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium shadow-sm"
+      >
+        <span>Why this response?</span>
+        <svg className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-40 xl:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-0 left-0 right-0 max-h-[70vh] rounded-t-2xl bg-background border-t border-slate-200 shadow-xl flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 shrink-0">
+              <h3 className="text-sm font-semibold">Why this response?</h3>
+              <button
+                onClick={() => setOpen(false)}
+                className="p-2 rounded-lg text-muted-foreground hover:bg-slate-100"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <WhyPane events={events} />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
