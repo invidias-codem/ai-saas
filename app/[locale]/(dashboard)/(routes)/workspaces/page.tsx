@@ -68,19 +68,19 @@ export default function WorkspacesPage() {
   }, []);
 
   return (
-    <div className="min-h-screen px-4 md:px-10 lg:px-16 py-8 space-y-8">
-      <div className="space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300 text-sm font-medium">
-          <Sparkles className="w-4 h-4" />
+    <div className="min-h-screen px-3 sm:px-4 md:px-10 lg:px-16 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8">
+      <div className="space-y-2 sm:space-y:3">
+        <div className="inline-flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300 text-xs sm:text-sm font-medium">
+          <Sparkles className="w-3 h-3 sm:w-4 sm:h-4" />
           Workspace-first preview
         </div>
-        <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Your intelligence workspaces</h1>
-        <p className="text-muted-foreground max-w-2xl">
-          Workspaces are where conversation, memory, context, and outputs stay connected. Each workspace also carries an operating mode that shapes how Tech Genie behaves there.
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight">Your intelligence workspaces</h1>
+        <p className="text-xs sm:text-sm md:text-base text-muted-foreground max-w-2xl">
+          Workspaces are where conversation, memory, context, and outputs stay connected.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
         {loading && <Card className="p-6">Loading workspaces...</Card>}
 
         {!loading && workspaces.length === 0 && (
