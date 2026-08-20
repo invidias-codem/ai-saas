@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Check, Brain, Search, Zap, FileText, Link2, StickyNote, X, Plus, Loader2 } from "lucide-react";
 import { domainIntentSchema, type DomainIntent } from "@/lib/onboarding/schema";
+import { StickyActionBar, FormSection } from "@/components/ui/form-mobile";
 
 type Step = "intent" | "sources" | "building";
 
@@ -182,102 +183,89 @@ export default function OnboardingWizard() {
         : false;
 
   return (
-    <div className="max-w-4xl mx-auto py-10 px-4 space-y-8">
-      <div className="space-y-3 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300 text-sm font-medium">
-          <Check className="w-4 h-4" />
+    <div className="max-w-4xl mx-auto py-6 sm:py-10 px-3 sm:px-4 space-y-4 sm:space-y-8 pb-24 md:pb-6">
+      <div className="space-y-2 sm:space-y-3 text-center">
+        <div className="inline-flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300 text-xs sm:text-sm font-medium">
+          <Check className="w-3 h-3 sm:w-4 sm:h-4" />
           Onboarding wizard
         </div>
-        <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight">
           {step === "intent" && "Give your consultant its expertise"}
           {step === "sources" && "Feed your consultant"}
           {step === "building" && "Building your workspace"}
         </h1>
-        <p className="text-muted-foreground max-w-2xl mx-auto">
-          {step === "intent" && "Tell us what this consultant should master. We’ll shape its retrieval, tone, and tool use around your domain."}
+        <p className="text-xs sm:text-sm md:text-base text-muted-foreground max-w-2xl mx-auto">
+          {step === "intent" && "Tell us what this consultant should master. We'll shape its retrieval, tone, and tool use around your domain."}
           {step === "sources" && "Seed it with the source material it should already know — links first, then notes or reference text."}
-          {step === "building" && "We’re creating your workspace, tuning the operating profile, and seeding its knowledge substrate."}
+          {step === "building" && "We're creating your workspace, tuning the operating profile, and seeding its knowledge substrate."}
         </p>
       </div>
 
       {error && (
-        <Card className="p-4 border-red-500/30 bg-red-500/5">
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <Card className="p-3 sm:p-4 border-red-500/30 bg-red-500/5">
+          <p className="text-xs sm:text-sm text-red-600 dark:text-red-400">{error}</p>
         </Card>
       )}
 
       {step === "intent" && (
-        <Card className="p-6 space-y-6">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Primary objective</label>
+        <Card className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+          <FormSection title="Primary objective">
             <textarea
               value={objective}
               onChange={(e) => setObjective(e.target.value)}
               placeholder="e.g. Monitor competitor pricing for med spas and produce weekly pricing briefs..."
-              className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3 min-h-[100px]"
+              className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3 min-h-[100px] text-sm"
             />
-          </div>
+          </FormSection>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Industry or niche</label>
+          <FormSection title="Industry or niche">
             <input
               value={industry}
               onChange={(e) => setIndustry(e.target.value)}
               placeholder="e.g. Med spa, B2B SaaS sales, headless commerce..."
-              className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3"
+              className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3 text-sm h-11"
             />
-          </div>
+          </FormSection>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Your role <span className="text-muted-foreground">(optional)</span></label>
+          <FormSection title="Your role (optional)">
             <input
               value={role}
               onChange={(e) => setRole(e.target.value)}
               placeholder="e.g. Founder, revenue ops, storefront lead..."
-              className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3"
+              className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-transparent px-4 py-3 text-sm h-11"
             />
-          </div>
+          </FormSection>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Operating style</label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <FormSection title="Operating style">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
               {modes.map((mode) => {
                 const active = operatingMode === mode.key;
                 return (
                   <button
                     key={mode.key}
                     onClick={() => setOperatingMode(mode.key)}
-                    className={`text-left rounded-2xl border p-4 transition ${
+                    className={`text-left rounded-2xl border p-3 sm:p-4 transition ${
                       active ? "border-violet-500 bg-violet-500/10" : "border-slate-200 dark:border-white/10"
                     }`}
                   >
-                    <div className="font-semibold mb-1">{mode.label}</div>
-                    <div className="text-sm text-muted-foreground">{mode.blurb}</div>
+                    <div className="font-semibold mb-1 text-sm">{mode.label}</div>
+                    <div className="text-xs sm:text-sm text-muted-foreground">{mode.blurb}</div>
                   </button>
                 );
               })}
             </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button onClick={() => setStep("sources")} disabled={!canContinue}>
-              Continue
-            </Button>
-          </div>
+          </FormSection>
         </Card>
       )}
 
       {step === "sources" && (
-        <Card className="p-6 space-y-6 border-neutral-800 bg-neutral-900/40">
-          <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <Link2 className="w-4 h-4 text-sky-500" /> Add a source link
-            </label>
+        <Card className="p-4 sm:p-6 space-y-4 sm:space-y-6 border-neutral-800 bg-neutral-900/40">
+          <FormSection title="Add a source link" description="Lead with URLs so the Data Refinery can scrape, structure, and index them automatically.">
             <input
               value={urlDraft}
               onChange={(e) => setUrlDraft(e.target.value)}
               placeholder="https://... (pricing page, competitor docs, directory listings)"
-              className="flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-400 focus:outline-none"
+              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-neutral-400 focus:outline-none h-11"
             />
             <div className="flex flex-wrap gap-2 pt-1">
               {[
@@ -295,13 +283,9 @@ export default function OnboardingWizard() {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-neutral-500">Lead with URLs so the Data Refinery can scrape, structure, and index them automatically.</p>
-          </div>
+          </FormSection>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <StickyNote className="w-4 h-4 text-violet-500" /> Add a note / reference text
-            </label>
+          <FormSection title="Add a note / reference text">
             <textarea
               value={noteDraft}
               onChange={(e) => setNoteDraft(e.target.value)}
@@ -313,7 +297,7 @@ export default function OnboardingWizard() {
                 <Plus className="w-4 h-4 mr-1" /> Add note
               </Button>
             </div>
-          </div>
+          </FormSection>
 
           {sources.length > 0 && (
             <div className="space-y-2">
@@ -337,26 +321,55 @@ export default function OnboardingWizard() {
               </div>
             </div>
           )}
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep('intent')} className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
-              Back
-            </Button>
-            <Button onClick={completeOnboarding} disabled={submitting} className="bg-white text-neutral-900 hover:bg-neutral-200">
-              {submitting ? 'Creating...' : 'Create workspace'}
-            </Button>
-          </div>
         </Card>
       )}
 
       {step === "building" && (
-        <Card className="p-10 flex flex-col items-center text-center space-y-4">
+        <Card className="p-6 sm:p-10 flex flex-col items-center text-center space-y-4">
           <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
-          <h2 className="text-xl font-semibold">Building your consultant</h2>
-          <p className="text-sm text-muted-foreground max-w-md">
+          <h2 className="text-lg sm:text-xl font-semibold">Building your consultant</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground max-w-md">
             Creating your workspace, tuning the operating profile, and seeding the knowledge substrate.
           </p>
         </Card>
+      )}
+
+      {/* Sticky Action Bar for mobile */}
+      <StickyActionBar visible={step !== "building"}>
+        {step === "intent" && (
+          <Button onClick={() => setStep("sources")} disabled={!canContinue} className="flex-1">
+            Continue
+          </Button>
+        )}
+        {step === "sources" && (
+          <div className="flex gap-2 w-full">
+            <Button variant="outline" onClick={() => setStep('intent')} className="flex-1">
+              Back
+            </Button>
+            <Button onClick={completeOnboarding} disabled={submitting} className="flex-1">
+              {submitting ? 'Creating...' : 'Create workspace'}
+            </Button>
+          </div>
+        )}
+      </StickyActionBar>
+
+      {/* Desktop inline buttons (hidden on mobile) */}
+      {step === "intent" && (
+        <div className="hidden md:flex justify-end">
+          <Button onClick={() => setStep("sources")} disabled={!canContinue}>
+            Continue
+          </Button>
+        </div>
+      )}
+      {step === "sources" && (
+        <div className="hidden md:flex justify-between">
+          <Button variant="outline" onClick={() => setStep('intent')} className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+            Back
+          </Button>
+          <Button onClick={completeOnboarding} disabled={submitting} className="bg-white text-neutral-900 hover:bg-neutral-200">
+            {submitting ? 'Creating...' : 'Create workspace'}
+          </Button>
+        </div>
       )}
     </div>
   );

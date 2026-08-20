@@ -35,14 +35,14 @@ export default function OnboardingBuildingPage() {
   }, [step, locale, router]);
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center px-6">
+    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center px-4 sm:px-6">
       <div className="w-full max-w-2xl">
-        <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-6 shadow-lg shadow-black/20">
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-4 sm:p-6 shadow-lg shadow-black/20">
           <div className="flex items-center gap-2 mb-4">
             <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs font-medium text-neutral-400 tracking-wide uppercase">Building consultant</span>
           </div>
-          <div className="font-mono text-sm leading-relaxed text-neutral-300 space-y-1">
+          <div className="font-mono text-xs sm:text-sm leading-relaxed text-neutral-300 space-y-1">
             {lines.map((line, i) => (
               <div key={i} className="animate-in fade-in duration-300">
                 {line}
