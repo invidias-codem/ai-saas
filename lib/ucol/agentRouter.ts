@@ -265,6 +265,8 @@ export class AgentRouter {
     // ─── Classify a task ─────────────────────────────────────────────────
 
     async classify(task: AgentRouterTask): Promise<RoutingDecision> {
+        console.log(`[AgentRouter] classify() called with query: "${task.query.substring(0, 100)}", context: ${task.context ? `"${task.context.substring(0, 100)}"` : 'none'}`);
+        
         // Fast-path overrides (highest priority — never confidence-overridden)
         if (task.requireOrchestration) {
             return {
