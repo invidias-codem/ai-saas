@@ -357,13 +357,15 @@ export class AgentRouter {
             }
 
             const cleanedRaw = raw.replace(/<thought_signature>[\s\S]*/gi, '').trim();
-            
+    
             // Strip markdown blocks if the LLM hallucinates them
             const strippedRaw = cleanedRaw.replace(/```json\n?|\n?```/g, '').trim();
-            
+    
+            console.log(`[AgentRouter] Raw classifier response: ${strippedRaw.substring(0, 200)}`);
+    
             // Try multiple JSON extraction strategies
             let parsed: any = null;
-            
+    
             // Strategy 1: Find JSON object with regex
             const match = strippedRaw.match(/\{[\s\S]*\}/);
             if (match) {
