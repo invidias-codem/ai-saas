@@ -138,6 +138,18 @@ export async function POST(req: Request) {
       }
     }
 
+    // --- PDF text extraction -------------------------------------------
+    let pdfExtractedText: string | null = null;
+    if (fileData && (fileData.mimeType === 'application/pdf' || fileData.name?.toLowerCase().endsWith('.pdf'))) {
+      try {
+        const { extractPdfText } = await import('@/lib/fileProcessing/pdfExtractor');
+        pdfExtractedText = await extractPdfText(fileData);
+        console.log(`[CodeRoute] PDF extracted: ${pdfExtractedText.length} chars`);
+      } catch (err) {
+        console.error('[CodeRoute] PDF extraction failed:', err);
+      }
+    }
+
     if (!messages && (!currentUserPrompt && !fileData)) {
       return new NextResponse("Messages or prompt/file are required", { status: 400 });
     }
@@ -153,12 +165,27 @@ export async function POST(req: Request) {
 
     // --- Phase 2: delegate to bridge ---------------------------------
     try {
+      // If PDF was extracted, inject extractedText into the body's fileData
+      // so the code engine receives readable text instead of raw binary
+      const modifiedBody = pdfExtractedText && body.fileData
+        ? {
+            ...body,
+            fileData: {
+              name: body.fileData.name,
+              type: body.fileData.type,
+              mimeType: body.fileData.mimeType || body.fileData.type,
+              sizeBytes: body.fileData.sizeBytes,
+              extractedText: pdfExtractedText,
+            }
+          }
+        : body;
+
       return await runRuntimeBridge({
         surface: 'code',
         session,
         requestId,
         featureType: 'code',
-        body,
+        body: modifiedBody,
         execute: async ({ resolved: ctx, rawInput, messages: msgs, fileData: attachedFileData }) => {
           try {
             const history = (msgs || []).slice(0, -1).map((msg: {

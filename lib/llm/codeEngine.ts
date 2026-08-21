@@ -76,7 +76,20 @@ export async function runCodeEngine({
   requestId,
   messagesLength
 }: CodeEngineParams) {
-  const resolvedAttachment = fileData ? await resolveAttachmentForAnalysis(fileData) : null;
+  // If fileData has extractedText (pre-extracted PDF), use it directly
+  // instead of trying to resolve binary attachments
+  const resolvedAttachment = fileData
+    ? fileData.extractedText
+      ? {
+          source: 'inline' as const,
+          name: fileData.name,
+          mimeType: fileData.mimeType || fileData.type || 'application/pdf',
+          sizeBytes: fileData.sizeBytes,
+          textContent: fileData.extractedText,
+          isBinary: false,
+        }
+      : await resolveAttachmentForAnalysis(fileData)
+    : null;
 
   const routingDecision = buildInitialRoutingDecision({
     request: {
