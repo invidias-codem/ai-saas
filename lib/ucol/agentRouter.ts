@@ -265,7 +265,8 @@ export class AgentRouter {
     // ─── Classify a task ─────────────────────────────────────────────────
 
     async classify(task: AgentRouterTask): Promise<RoutingDecision> {
-        console.log(`[AgentRouter] classify() called with query: "${task.query.substring(0, 100)}", context: ${task.context ? `"${task.context.substring(0, 100)}"` : 'none'}`);
+        // Use console.error for Vercel log pipeline priority
+        console.error(`=== AgentRouter.classify() INPUT: query="${task.query.substring(0, 80)}" | context=${task.context ? `"${task.context.substring(0, 80)}"` : 'NONE'} | contextLen=${task.context?.length ?? 0} ===`);
         
         // Fast-path overrides (highest priority — never confidence-overridden)
         if (task.requireOrchestration) {
@@ -363,7 +364,7 @@ export class AgentRouter {
             // Strip markdown blocks if the LLM hallucinates them
             const strippedRaw = cleanedRaw.replace(/```json\n?|\n?```/g, '').trim();
     
-            console.log(`[AgentRouter] Raw classifier response: ${strippedRaw.substring(0, 200)}`);
+            console.error(`=== AgentRouter.classify() RAW RESPONSE: ${strippedRaw.substring(0, 200)} ===`);
     
             // Try multiple JSON extraction strategies
             let parsed: any = null;
