@@ -1194,9 +1194,11 @@ export async function generateConversationReply(
         waitUntil((async () => {
           try {
             // Pass factsForRouting — enables the two-axis (task + confidence) routing
+            // Note: Only pass userQuery as context, NOT the full text
+            // The router only needs the user's intent, not the document content
             const decision = await classifyQuery(
               userQuery,
-              cleanedFullText.substring(0, 400),
+              userQuery, // Pass user query only — NOT cleanedFullText (prevents context distraction)
               factsForRouting,
             );
 

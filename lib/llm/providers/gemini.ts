@@ -161,6 +161,7 @@ export class GeminiProvider implements LLMProvider {
                 maxOutputTokens: options.maxTokens,
                 topP: options.topP,
                 topK: options.topK,
+                ...(options.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
             }
         });
 

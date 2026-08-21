@@ -344,7 +344,7 @@ export class AgentRouter {
             const result = await this.gemini.generateStream(
                 [{ role: 'user', text: `Query: ${task.query}${task.context ? `\n\nContext: ${task.context.substring(0, 500)}` : ''}` }],
                 CLASSIFIER_SYSTEM_PROMPT,
-                { model: 'gemini-2.5-flash', temperature: 0.1, maxTokens: 256 }
+                { model: 'gemini-2.5-flash', temperature: 0.1, maxTokens: 256, responseMimeType: 'application/json' }
             );
 
             const reader = result.stream.getReader();
@@ -358,11 +358,14 @@ export class AgentRouter {
 
             const cleanedRaw = raw.replace(/<thought_signature>[\s\S]*/gi, '').trim();
             
+            // Strip markdown blocks if the LLM hallucinates them
+            const strippedRaw = cleanedRaw.replace(/```json\n?|\n?```/g, '').trim();
+            
             // Try multiple JSON extraction strategies
             let parsed: any = null;
             
             // Strategy 1: Find JSON object with regex
-            const match = cleanedRaw.match(/\{[\s\S]*\}/);
+            const match = strippedRaw.match(/\{[\s\S]*\}/);
             if (match) {
                 try {
                     parsed = JSON.parse(match[0]);
@@ -378,7 +381,7 @@ export class AgentRouter {
             
             // Strategy 3: If still no valid JSON, try to extract taskType from plain text
             if (!parsed) {
-                const lower = cleanedRaw.toLowerCase();
+                const lower = strippedRaw.toLowerCase();
                 if (lower.includes('code_generation') || lower.includes('write') || lower.includes('code')) {
                     parsed = { taskType: 'code_generation', confidence: 0.5, reasoning: 'Extracted from plain text' };
                 } else if (lower.includes('research') || lower.includes('search')) {
