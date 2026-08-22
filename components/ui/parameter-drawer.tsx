@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 interface ParameterDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  trigger: React.ReactNode;
+  renderTrigger: (onToggle: () => void) => React.ReactNode;
   children: React.ReactNode;
   title?: string;
 }
@@ -21,10 +21,14 @@ interface ParameterDrawerProps {
 export function ParameterDrawer({
   open,
   onOpenChange,
-  trigger,
+  renderTrigger,
   children,
   title = "Parameters",
 }: ParameterDrawerProps) {
+  const toggle = React.useCallback(() => {
+    onOpenChange(!open);
+  }, [open, onOpenChange]);
+
   // Close on Escape key
   React.useEffect(() => {
     if (!open) return;
@@ -37,7 +41,7 @@ export function ParameterDrawer({
 
   return (
     <div className="relative">
-      {trigger}
+      {renderTrigger(toggle)}
 
       {open && (
         <>

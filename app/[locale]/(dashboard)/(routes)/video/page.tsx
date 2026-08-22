@@ -198,15 +198,16 @@ const VideoPage = () => {
                   open={showParameters}
                   onOpenChange={setShowParameters}
                   title="Video Settings"
-                  trigger={
+                  renderTrigger={(onToggle) => (
                     <button
                       type="button"
+                      onClick={onToggle}
                       className="flex items-center gap-2 px-3 py-2 rounded-xl border border-pink-700/20 bg-background/50 backdrop-blur-sm hover:border-pink-700/40 transition-colors text-sm font-medium"
                     >
                       <Settings2 className="h-4 w-4" />
                       Tune
                     </button>
-                  }
+                  )}
                 >
                   <div className="space-y-6">
                     <ParameterSection title="Aspect Ratio">
