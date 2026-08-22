@@ -287,8 +287,24 @@
     background-image:
       linear-gradient(rgba(139, 92, 246, 0.4) 1px, transparent 1px),
       linear-gradient(90deg, rgba(139, 92, 246, 0.4) 1px, transparent 1px);
-    background-size: 60px 60px;
-    @apply opacity-30 dark:opacity-100;
+  }
+
+  /* Golden ratio button — 1:1.618 proportions */
+  .golden-btn {
+    position: relative;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.04));
+    border-color: rgba(245, 158, 11, 0.25);
+    transition: all 0.2s ease;
+    aspect-ratio: auto;
+  }
+  .golden-btn:hover {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.08));
+    border-color: rgba(245, 158, 11, 0.5);
+    transform: scale(1.03);
+  }
+  .golden-btn:active {
+    transform: scale(0.97);
   }
 
   .landing-headline-gradient {
