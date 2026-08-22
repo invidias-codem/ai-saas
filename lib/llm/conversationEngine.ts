@@ -237,6 +237,9 @@ export async function generateConversationReply(
 
     // 2. Construct Prompt (Multimodal support)
     const userQuery = parsed.messages[parsed.messages.length - 1]?.text || "";
+    // Strip file metadata tags appended by the client (e.g., "[Attached File: ...]")
+    // to prevent the router from being distracted by file metadata
+    const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
     let promptInput: string | any[] = userQuery;
 
     if (parsed.fileData && parsed.mimeType) {
@@ -487,6 +490,9 @@ export async function generateConversationReply(
   const systemProvider = providerResolution.providerId;
 
   const userQuery = messages[messages.length - 1]?.text || "";
+  // Strip file metadata tags appended by the client (e.g., "[Attached File: ...]")
+  // to prevent the router from being distracted by file metadata
+  const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
 
   const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
   const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
@@ -1197,8 +1203,8 @@ export async function generateConversationReply(
             // Note: Only pass userQuery as context, NOT the full text
             // The router only needs the user's intent, not the document content
             const decision = await classifyQuery(
-              userQuery,
-              userQuery, // Pass user query only — NOT cleanedFullText (prevents context distraction)
+              sanitizedQuery,
+              sanitizedQuery, // Pass sanitized query only — NOT cleanedFullText (prevents context distraction)
               factsForRouting,
             );
 
