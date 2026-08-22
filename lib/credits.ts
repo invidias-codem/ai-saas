@@ -71,7 +71,20 @@ export async function hasUnlimitedUsageAccess(userId?: string | null, email?: st
         .map((value) => value.trim())
         .filter(Boolean);
 
-    if (email && masterEmails.includes(email)) {
+    // Resolve email from Clerk if not provided (keeps call sites terse)
+    let resolvedEmail = email;
+    if (!resolvedEmail && userId) {
+        try {
+            const { clerkClient } = await import('@clerk/nextjs/server');
+            const client = await clerkClient();
+            const user = await client.users.getUser(userId);
+            resolvedEmail = user?.emailAddresses?.[0]?.emailAddress || null;
+        } catch {
+            // Clerk lookup failed — continue with whatever we have
+        }
+    }
+
+    if (resolvedEmail && masterEmails.includes(resolvedEmail)) {
         return true;
     }
 
@@ -165,6 +178,12 @@ export async function spendCreditsAtomic(
     if (!supabaseAdmin) {
         console.error("[Credits] Supabase admin client not initialized");
         return { success: false, duplicate: false, remaining: 0, error: "Internal Configuration Error" };
+    }
+
+    // Master users bypass credit spending entirely
+    const isMaster = await hasUnlimitedUsageAccess(userId);
+    if (isMaster) {
+        return { success: true, duplicate: false, remaining: 0, error: undefined };
     }
 
     const { data, error } = await supabaseAdmin.rpc('spend_credits', {
