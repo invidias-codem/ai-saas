@@ -133,6 +133,7 @@ export async function POST(req: Request) {
 
         if (!entitlement.allowed || computeCredits <= 0) {
             // Graceful Degradation
+            console.error(`[ChatRoute] File upload gated: ${entitlement.reason} — user ${clerkUser.emailAddresses?.[0]?.emailAddress} has ${computeCredits} credits, plan: ${clerkUser.privateMetadata?.plan ?? 'free'}`);
             fileData = undefined;
             documentIds = undefined;
             if (effectiveMode === 'agentic' || effectiveMode === 'reasoning') {
@@ -186,7 +187,7 @@ export async function POST(req: Request) {
             try {
                 const { extractPdfText } = await import('@/lib/fileProcessing/pdfExtractor');
                 pdfExtractedText = await extractPdfText(fileData);
-                console.log(`[ChatRoute] PDF extracted: ${pdfExtractedText.length} chars from ${fileData.name || 'document'}`);
+                console.error(`[ChatRoute] PDF extracted: ${pdfExtractedText.length} chars from ${fileData.name || 'document'}`);
             } catch (err) {
                 console.error('[ChatRoute] PDF extraction failed:', err);
             }

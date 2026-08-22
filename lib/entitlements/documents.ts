@@ -13,7 +13,15 @@ export function checkDocumentEntitlement(user: User, computeCredits: number): En
   const isPremium = plan === 'premium' || plan === 'pro';
   const hasCredits = computeCredits > 0;
 
-  if (isPremium || hasCredits) {
+  // Master users bypass entitlement checks
+  const masterEmails = (process.env.MASTER_USER_EMAILS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const userEmail = user.emailAddresses?.[0]?.emailAddress;
+  const isMaster = userEmail && masterEmails.includes(userEmail);
+
+  if (isMaster || isPremium || hasCredits) {
     return { allowed: true };
   }
 
