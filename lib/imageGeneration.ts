@@ -98,7 +98,7 @@ async function generateWithModel(
 
         if (!resolved || !/^https?:\/\//.test(resolved)) {
             const preview = typeof item === 'object' ? JSON.stringify(item).slice(0, 200) : String(item).slice(0, 200);
-            throw new Error(`Replicate returned an unsupported image output and Slack requires an HTTPS image URL. Output: ${preview}`);
+            throw new Error(`Replicate returned an unsupported image output (expected HTTPS URL). Output: ${preview}`);
         }
 
         urls.push(resolved);
