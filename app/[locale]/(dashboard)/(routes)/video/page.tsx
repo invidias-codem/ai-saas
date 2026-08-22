@@ -192,8 +192,8 @@ const VideoPage = () => {
                 )}
               />
 
-              {/* --- PARAMETER DRAWER TRIGGER (mobile) --- */}
-              <div className="sm:hidden">
+              {/* --- PARAMETER DRAWER TRIGGER (all viewports) --- */}
+              <div>
                 <ParameterDrawer
                   open={showParameters}
                   onOpenChange={setShowParameters}

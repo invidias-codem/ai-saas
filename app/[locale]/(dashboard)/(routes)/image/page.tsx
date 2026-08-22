@@ -165,7 +165,7 @@ const ImagePage = () => {
               />
 
               {/* Mobile: parameter drawer trigger */}
-              <div className="sm:hidden">
+              <div>
                 <ParameterDrawer
                   open={showParameters}
                   onOpenChange={setShowParameters}
