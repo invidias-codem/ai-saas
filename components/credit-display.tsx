@@ -15,28 +15,28 @@ export const CreditDisplay = () => {
 
     return (
         <div className="flex items-center gap-x-1.5 sm:gap-x-2">
-            {/* Credit pill — compact on mobile */}
+            {/* Credit pill — hidden on mobile, visible sm+ */}
             <div className={cn(
-                "flex items-center gap-x-1 px-2 sm:px-3 py-1 rounded-full border bg-background",
+                "hidden sm:flex items-center gap-x-1 px-3 py-1 rounded-full border bg-background",
                 isLow ? "border-red-500 text-red-500 bg-red-500/10" : "border-slate-200 dark:border-slate-700"
             )}>
                 <Zap className="w-3 h-3 fill-current" />
-                <span className="font-bold text-xs sm:text-sm">{credits}</span>
-                <span className="text-[10px] sm:text-xs ml-0.5 opacity-70 hidden xs:inline">credits</span>
+                <span className="font-bold text-sm">{credits}</span>
+                <span className="text-xs ml-1 opacity-70">credits</span>
             </div>
             
-            {/* Golden ratio top-up button */}
+            {/* Golden ratio top-up button — always visible */}
             <Button
                 asChild
                 variant="outline"
                 size="sm"
-                className="golden-btn h-8 px-3 sm:px-4"
+                className="golden-btn h-8 w-8 sm:w-auto sm:px-4 p-0 sm:p-2"
             >
                 <a
                     href={paypalUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-1.5"
+                    className="flex items-center justify-center gap-1.5 w-full h-full"
                     aria-label="Top up credits"
                 >
                     <Zap className="w-3.5 h-3.5 text-amber-500" />

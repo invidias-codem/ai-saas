@@ -25,7 +25,7 @@ export interface ImageGenerationResult {
     error?: string;
 }
 
-// Model configurations
+// Model configurations — version-pinned for reproducibility
 const MODEL_CONFIGS = {
     'flux-schnell': {
         name: 'Flux Schnell',
@@ -51,6 +51,53 @@ const MODEL_CONFIGS = {
 } as const;
 
 /**
+ * Attempt to extract an HTTPS URL from a Replicate output item.
+ * Handles: string URLs, objects with .url() method, objects with .url/.href/.uri/.src/.file,
+ * and arrays containing any of the above.
+ */
+function extractUrlFromItem(item: any): string | undefined {
+    if (!item) return undefined;
+
+    // Direct string URL
+    if (typeof item === 'string') {
+        return /^https?:\/\//.test(item) ? item : undefined;
+    }
+
+    // ReadableStream / Blob — not directly usable as URL
+    if (typeof item !== 'object') return undefined;
+
+    // Replicate File object with .url() method
+    if (typeof item.url === 'function') {
+        try {
+            const u = item.url().toString();
+            return /^https?:\/\//.test(u) ? u : undefined;
+        } catch { /* fall through */ }
+    }
+
+    // Object with URL-like properties
+    const candidate = item.url ?? item.href ?? item.uri ?? item.src ?? item.file;
+    if (typeof candidate === 'string' && /^https?:\/\//.test(candidate)) {
+        return candidate;
+    }
+
+    // Nested output property (some models wrap result)
+    if (item.output) {
+        const nested = extractUrlFromItem(item.output);
+        if (nested) return nested;
+    }
+
+    // Array of URLs mixed with metadata
+    if (Array.isArray(item)) {
+        for (const sub of item) {
+            const u = extractUrlFromItem(sub);
+            if (u) return u;
+        }
+    }
+
+    return undefined;
+}
+
+/**
  * Generate image with specified model
  */
 async function generateWithModel(
@@ -73,35 +120,37 @@ async function generateWithModel(
     });
 
     console.log('[IMAGE_GEN] Raw Replicate output type:', typeof output, Array.isArray(output) ? 'array' : typeof output === 'object' ? 'object' : 'other');
-    if (typeof output === 'object' && output !== null) {
+    if (typeof output === 'object' && output !== null && !Array.isArray(output)) {
         console.log('[IMAGE_GEN] Raw Replicate output keys:', Object.keys(output));
         console.log('[IMAGE_GEN] Raw Replicate output preview:', JSON.stringify(output).slice(0, 500));
     }
 
-    const outputArray = Array.isArray(output) ? output : [output];
+    // Normalize output to array
+    let outputArray: any[];
+    if (Array.isArray(output)) {
+        outputArray = output;
+    } else if (output && typeof output === 'object') {
+        // Some models wrap output in an object
+        outputArray = output.output ? (Array.isArray(output.output) ? output.output : [output.output]) : [output];
+    } else {
+        outputArray = [output];
+    }
+
     const urls: string[] = [];
 
     for (const item of outputArray) {
-        let resolved: string | undefined;
+        const resolved = extractUrlFromItem(item);
 
-        if (typeof item === 'string') {
-            resolved = item;
-        } else if (item && typeof item === 'object') {
-            const candidate = item as any;
-
-            if (typeof candidate.url === 'function') {
-                resolved = candidate.url().toString();
-            } else {
-                resolved = candidate.url ?? candidate.href ?? candidate.uri ?? candidate.src ?? candidate.file;
-            }
-        }
-
-        if (!resolved || !/^https?:\/\//.test(resolved)) {
+        if (!resolved) {
             const preview = typeof item === 'object' ? JSON.stringify(item).slice(0, 200) : String(item).slice(0, 200);
-            throw new Error(`Replicate returned an unsupported image output (expected HTTPS URL). Output: ${preview}`);
+            throw new Error(`Replicate returned unsupported image output (expected HTTPS URL). Output: ${preview}`);
         }
 
         urls.push(resolved);
+    }
+
+    if (urls.length === 0) {
+        throw new Error(`Replicate returned no image URLs. Raw output: ${JSON.stringify(output).slice(0, 200)}`);
     }
 
     return urls;
@@ -114,7 +163,7 @@ export async function generateImage(
     options: ImageGenerationOptions
 ): Promise<ImageGenerationResult> {
     const primaryModel = options.model || (process.env.IMAGE_MODEL_PRIMARY as ImageModel) || 'flux-schnell';
-    const allModels: ImageModel[] = ['sdxl', 'playground-v2.5'];
+    const allModels: ImageModel[] = ['flux-schnell', 'sdxl', 'playground-v2.5'];
     const fallbackModels = allModels.filter(m => m !== primaryModel);
 
     // Try primary model
@@ -129,15 +178,7 @@ export async function generateImage(
     } catch (error: any) {
         console.error(`[IMAGE_GEN] ${primaryModel} failed:`, error.message);
 
-        // Check if it's a 502/503 error
-        const is502Error = error.message?.includes('502') || error.message?.includes('503');
-
-        if (!is502Error) {
-            // If not a gateway error, don't try fallback
-            throw error;
-        }
-
-        // Try fallback models
+        // Try fallback models on ANY error (null output, wrong format, rate limit, etc.)
         for (const fallbackModel of fallbackModels) {
             try {
                 console.log(`[IMAGE_GEN] Trying fallback: ${fallbackModel}`);

@@ -27,10 +27,8 @@ const Navbar = () => {
           <MemoryIndicator />
         </div>
 
-        {/* Credit counter: hidden on mobile, visible sm+ */}
-        <div className="hidden sm:flex shrink-0">
-          <CreditDisplay />
-        </div>
+        {/* Credit counter + top-up: always visible, compact on mobile */}
+        <CreditDisplay />
 
         {/* Runtime indicator — always visible, compact on mobile */}
         <RuntimeIndicator state={runtimeState as "idle" | "busy" | "error"} />
