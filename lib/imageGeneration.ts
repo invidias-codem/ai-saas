@@ -130,8 +130,9 @@ async function generateWithModel(
     if (Array.isArray(output)) {
         outputArray = output;
     } else if (output && typeof output === 'object') {
-        // Some models wrap output in an object
-        outputArray = output.output ? (Array.isArray(output.output) ? output.output : [output.output]) : [output];
+        // Some models wrap output in an object — cast to any for property access
+        const out = output as any;
+        outputArray = out.output ? (Array.isArray(out.output) ? out.output : [out.output]) : [output];
     } else {
         outputArray = [output];
     }
