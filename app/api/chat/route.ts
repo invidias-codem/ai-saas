@@ -131,8 +131,8 @@ export async function POST(req: Request) {
 
         const entitlement = checkDocumentEntitlement(clerkUser, computeCredits);
 
-        if (!entitlement.allowed || computeCredits <= 0) {
-            // Graceful Degradation
+        if (!entitlement.allowed || (!entitlement.isMaster && computeCredits <= 0)) {
+            // Graceful Degradation — signal to client that file was gated
             console.error(`[ChatRoute] File upload gated: ${entitlement.reason} — user ${clerkUser.emailAddresses?.[0]?.emailAddress} has ${computeCredits} credits, plan: ${clerkUser.privateMetadata?.plan ?? 'free'}`);
             fileData = undefined;
             documentIds = undefined;
@@ -341,6 +341,11 @@ export async function POST(req: Request) {
         if (tracking.shouldNudge) {
             result.headers.set("x-trigger-nudge", "true");
             logEvent({ eventType: 'plg_nudge_shown', userId: user.userId });
+        }
+
+        // Signal file upload gated to client
+        if (fileData === undefined && body.fileData) {
+            result.headers.set("x-file-gated", "true");
         }
 
         return result;

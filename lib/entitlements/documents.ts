@@ -2,6 +2,7 @@ import { User } from '@clerk/nextjs/server';
 
 export interface EntitlementResult {
   allowed: boolean;
+  isMaster?: boolean;
   reason?: string;
   message?: string;
   ctaHref?: string;
@@ -21,7 +22,11 @@ export function checkDocumentEntitlement(user: User, computeCredits: number): En
   const userEmail = user.emailAddresses?.[0]?.emailAddress;
   const isMaster = userEmail && masterEmails.includes(userEmail);
 
-  if (isMaster || isPremium || hasCredits) {
+  if (isMaster) {
+    return { allowed: true, isMaster: true };
+  }
+
+  if (isPremium || hasCredits) {
     return { allowed: true };
   }
 

@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 import { KoFiNudge } from "@/components/kofi-nudge";
+import { FileGateNudge } from "@/components/file-gate-nudge";
 import { useSupportNudge } from "@/hooks/use-support-nudge";
 import { Heading } from "@/components/heading";
 import { Button } from "@/components/ui/button";
@@ -381,6 +382,7 @@ function ConversationPage({
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [showFilePreview, setShowFilePreview] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const [showFileGateNudge, setShowFileGateNudge] = useState(false);
   const { open: openPricingModal } = usePricingModal();
   const [sessionId, setSessionId] = useState("");
   const [sessionRestored, setSessionRestored] = useState(false);
@@ -753,6 +755,11 @@ function ConversationPage({
         openPricingModal();
       }
 
+      // Check for file upload gated — show mobile-friendly donation nudge
+      if (response.headers.get("x-file-gated") === "true") {
+        setShowFileGateNudge(true);
+      }
+
       const cleanedAccum = accum.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim();
       setMessages(prev => [...prev, { text: cleanedAccum, role: "bot", timestamp: new Date(), sources }]);
       setStreamingContent("");
@@ -886,6 +893,7 @@ function ConversationPage({
     // 1. USE 100dvh (Dynamic Viewport Height) to fix mobile browser bar cutoffs
     <div className="flex flex-col h-full bg-background text-foreground relative overflow-hidden">
       <KoFiNudge isOpen={showNudge} onClose={dismissNudge} />
+      <FileGateNudge isOpen={showFileGateNudge} onClose={() => setShowFileGateNudge(false)} />
 
       {/* Header - Compact: structural nav + overflow menu */}
       <header className="flex-none px-3 py-2 sm:px-4 sm:py-3 border-b border-border/40 bg-background/80 backdrop-blur-md z-20 flex items-center justify-between sticky top-0">

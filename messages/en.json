@@ -8,6 +8,12 @@
     "supportProject": "Support the project and help fund the next layer of work.",
     "supportOnKoFi": "Support on Ko-fi"
   },
+  "FileGateNudge": {
+    "title": "Unlock File Uploads",
+    "description": "Document uploads and deep-dive analysis are premium features. Support Lattice OS on Ko-fi to unlock this feature and more.",
+    "ctaLabel": "Support on Ko-fi",
+    "dismissLabel": "Maybe later"
+  },
   "SupportGenie": {
     "title": "Support Lattice OS",
     "description": "Support the project and help fund future development.",
