@@ -2,6 +2,7 @@
 // Main dispatch endpoint for the Weaver/Chameleon Consultant.
 // Receives a task request, runs the four-stage UCOL pipeline,
 // and returns a frontend-safe envelope.
+// Cache-busting touch: force Vercel to rebuild with clean cache.
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
