@@ -34,8 +34,8 @@ export const LandingNavbar = () => {
     ];
 
     const landingAnchors = [
-        { href: "/docs", label: "Mechanics" },
-        { href: "/expert", label: "Experts" },
+        { href: "#mechanics", label: "Mechanics" },
+        { href: "#roster", label: "Experts" },
     ];
 
     const mounted = useSyncExternalStore(
