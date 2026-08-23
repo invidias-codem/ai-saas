@@ -4,10 +4,21 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { BlogCard } from "@/components/blog/blog-card";
 import { NewsletterCTA } from "@/components/blog/newsletter-cta";
-import { getAllPosts, getFeaturedPosts } from "@/lib/blog/mdx";
+import { getAllPosts, getFeaturedPosts, getAllSeries } from "@/lib/blog/mdx";
 import { BLOG_CATEGORIES, BlogCategory } from "@/lib/blog/types";
 import { cn } from "@/lib/utils";
 import { BookOpen, Sparkles } from "lucide-react";
+
+const SERIES_DISPLAY: Record<string, string> = {
+  "ucol": "UCOL",
+  "integrations": "Integrations",
+  "lattice-os": "Lattice OS",
+};
+
+const SERIES_LINKS = Object.entries(SERIES_DISPLAY).map(([slug, name]) => ({
+  slug,
+  name,
+}));
 
 export const metadata: Metadata = {
   title: "Blog | Lattice OS - Memory-Native AI, Routing & Workflow Insights",
@@ -121,6 +132,20 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                 )}
               >
                 {category.name}
+              </Link>
+            ))}
+          </div>
+
+          {/* Series sub-nav */}
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+            <span className="text-gray-500 text-xs uppercase tracking-wider mr-2">Series:</span>
+            {SERIES_LINKS.map((series) => (
+              <Link
+                key={series.slug}
+                href={`/blog/series/${series.slug}`}
+                className="inline-flex items-center rounded-full border border-white/10 px-3 py-1 text-xs text-gray-300 hover:text-white hover:border-purple-500/30 transition-colors"
+              >
+                {series.name}
               </Link>
             ))}
           </div>

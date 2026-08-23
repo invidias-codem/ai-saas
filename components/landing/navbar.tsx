@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { FileTextIcon, QuestionMarkCircledIcon, EnterIcon, RocketIcon } from "@radix-ui/react-icons";
+import { Rss } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { usePricingModal } from "@/lib/store/pricing-modal-store";
 
@@ -27,6 +28,7 @@ export const LandingNavbar = () => {
 
     const navLinks = [
         { href: "/blog", label: "Blog", icon: FileTextIcon },
+        { href: "/blog/feed", label: "RSS", icon: Rss, external: true },
         { href: "/slack", label: "Slack", icon: () => <BrandIcon name="Slack" /> },
         { href: "/support", label: "Support", icon: QuestionMarkCircledIcon },
     ];

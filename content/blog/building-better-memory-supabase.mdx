@@ -1,28 +1,29 @@
 ---
-title: "Under the Hood: Migrating Genie's Memory to Supabase"
-description: "A deep dive into how we re-architected Genie's memory system using Supabase and pgvector for semantic search and sub-second retrieval latency."
+title: "Under the Hood: Migrating Lattice OS's Memory to Supabase"
+description: "A deep dive into how we re-architected Lattice OS's memory system using Supabase and pgvector for semantic search and sub-second retrieval latency."
 publishedAt: "2026-01-11"
 author: "joshua-jair"
 category: "ai-memory"
 tags: ["supabase", "rag", "engineering", "memory", "postgres"]
-featured: true
-ogImage: "/blog/supabase-memory-og.png"
+featured: false
+updatedAt: "2026-01-11"
+ogImage: "/blog/building-better-memory-supabase-og.png"
 ---
 
-# Under the Hood: Migrating Genie's Memory to Supabase
+# Under the Hood: Migrating Lattice OS's Memory to Supabase
 
-At Genie, our mission is to build an AI that doesn't just chat, but *collaborates*. A true collaborator remembers. They remember the API endpoint you discussed last week, the architectural decision you made yesterday, and the bug you've been fighting all morning.
+At Lattice OS, our mission is to build an AI that doesn't just chat, but *collaborates*. A true collaborator remembers. They remember the API endpoint you discussed last week, the architectural decision you made yesterday, and the bug you've been fighting all morning.
 
-For a long time, Genie's memory was functional but limited. We relied on simple key-value stores and token-heavy context stuffing. It worked for short sessions, but as conversations grew, so did the latency—and the "amnesia."
+For a long time, Lattice OS's memory was functional but limited. We relied on simple key-value stores and token-heavy context stuffing. It worked for short sessions, but as conversations grew, so did the latency—and the "amnesia."
 
-Today, we're sharing how we completely re-architected Genie's memory system using **Supabase** and **pgvector**, achieving semantic understanding and sub-second retrieval times.
+Today, we're sharing how we completely re-architected Lattice OS's memory system using **Supabase** and **pgvector**, achieving semantic understanding and sub-second retrieval times.
 
 ## The Problem with "Simple" Memory
 
 Our initial implementation was based on what we call "Session Context." Every time you sent a message, we'd bundle up the last $N$ messages and send them to the LLM.
 
 This had two major flaws:
-1.  **Context Window Limits**: We had to aggressively prune old messages. If you referenced a decision from 100 messages ago, Genie hallucinated or simply didn't know.
+1.  **Context Window Limits**: We had to aggressively prune old messages. If you referenced a decision from 100 messages ago, Lattice OS hallucinated or simply didn't know.
 2.  **Cost & Latency**: Sending massive context windows is expensive and slow.
 
 We needed a system that could store *infinite* history but only retrieve the *relevant* bits. We needed Retrieval-Augmented Generation (RAG).
@@ -53,7 +54,7 @@ create table memories (
 );
 ```
 
-When you talk to Genie now, a background process (our "Cortex") runs asynchronously:
+When you talk to Lattice OS now, a background process (our "Cortex") runs asynchronously:
 1.  It analyzes your message.
 2.  It generates an embedding using OpenAI's `text-embedding-3-small`.
 3.  It performs a cosine similarity search against your `memories` table in Supabase.
@@ -64,17 +65,17 @@ When you talk to Genie now, a background process (our "Cortex") runs asynchronou
 The shift has been dramatic.
 
 *   **Latency**: Retrieval takes &lt;100ms. Code generation starts almost instantly.
-*   **Accuracy**: Genie can now recall file paths, variable names, and project constraints discussed weeks ago.
+*   **Accuracy**: Lattice OS can now recall file paths, variable names, and project constraints discussed weeks ago.
 *   **Developer Experience**: Dealing with standard SQL to debug memory issues is infinitely better than black-box vector stores.
 
 ## What's Next? 2026 Roadmap
 
 This migration sets the stage for our ambitious 2026 roadmap. We are moving beyond "Chat" and into "Agency."
 
-Later this year, we'll be rolling out **Active Memory**—where Genie proactively updates its own knowledge base based on your code commits, not just your chat messages.
+Later this year, we'll be rolling out **Active Memory**—where Lattice OS proactively updates its own knowledge base based on your code commits, not just your chat messages.
 
 Stay tuned. The memory upgrade is live for all users today.
 
 <Callout type="info" title="Try it out">
-Mention `@Genie` in your next thread and ask, "What was the API key format we decided on last week?" Watch the magic happen.
+Mention `@Lattice OS` in your next thread and ask, "What was the API key format we decided on last week?" Watch the magic happen.
 </Callout>

@@ -1,0 +1,140 @@
+---
+title: "Post-Generation Critic Loops: Catching Hallucinations Before They Ship"
+description: "How Lattice OS uses a two-layer quality gate — the OutputCritic and the Delta Engine — to catch hallucinations, vision drift, and safety violations before the user ever sees them."
+publishedAt: "2026-08-28"
+updatedAt: "2026-08-28"
+author: "joshua-jair"
+category: "ai-architecture"
+series: "lattice-os"
+tags: ["output-critic", "delta-engine", "hallucination-detection", "quality-gate", "fire-and-forget", "udif", "world-model"]
+featured: false
+ogImage: "/blog/post-generation-critic-loops-og.png"
+---
+
+# Post-Generation Critic Loops: Catching Hallucinations Before They Ship
+
+## The Quality Problem
+
+LLM outputs are probabilistic. Even with deterministic routing and clean context, the model can still hallucinate API endpoints, fabricate tool names, or drift from the product vision. Pre-generation gates — the domain gate, the model tier check — catch obvious violations before inference. They cannot catch what the model invents during generation.
+
+Post-generation critics solve this. They run after the response is complete but before it reaches the user. Lattice OS uses two layers: the OutputCritic for immediate quality checks, and the Delta Engine for claim-level verification against the World Model graph.
+
+## Layer 1: The OutputCritic
+
+The OutputCritic is a lightweight, non-blocking quality gate. It runs four checks in a single Gemini call:
+
+```typescript
+// lib/ucol/critics/OutputCritic.ts
+export type CriticSeverity = 'pass' | 'warn' | 'block';
+
+export interface CriticCheck {
+  name: string;
+  passed: boolean;
+  severity: CriticSeverity;
+  reason?: string;
+}
+
+export interface CriticVerdict {
+  passed: boolean;
+  severity: CriticSeverity;
+  checks: CriticCheck[];
+  overallReason?: string;
+  latencyMs: number;
+}
+```
+
+The four checks:
+
+1. **hallucination_check** (`warn`) — does the response reference API endpoints, tool names, or npm packages that do not exist in the codebase?
+2. **vision_alignment** (`warn`) — does the response conflict with the product vision loaded from `vision.md`?
+3. **safety_check** (`block`) — does the response instruct the user to delete production data, expose secrets, or bypass authentication?
+4. **constraint_check** (`warn`) — does the response violate any active user constraints?
+
+The critic is designed to fail open. If Gemini throws, returns malformed JSON, or times out, the critic returns a `pass` verdict with zero checks. The hot path is never affected.
+
+The severities are fixed at the type level. Gemini cannot change a `warn` to a `block` or vice versa. The aggregator computes the overall verdict: `block` wins over `warn`, and any failed check produces a non-passing verdict.
+
+## Layer 2: The Delta Engine
+
+The OutputCritic catches obvious failures. The Delta Engine catches subtle ones — claims that are plausible but wrong.
+
+```typescript
+// lib/world-model/delta/DeltaEngine.ts
+export class DeltaEngine {
+  async scoreClaims(
+    aiOutput: string,
+    sessionId: string,
+    modelName: string,
+    overrideConfig?: Partial<DeltaEngineConfig>
+  ): Promise<ClaimAuditResult[]>
+
+  computeDeltaScore(results: ClaimAuditResult[]): number
+}
+```
+
+The Delta Engine extracts claims from the AI output, looks each one up in the World Model graph, and computes a `deltaScore`:
+
+- `0.0` — CONFIRMED: the claim matches a high-trust graph node
+- `0.2` — SUPPORTED: the claim is consistent with graph edges
+- `0.5` — UNVERIFIED: no graph evidence either way
+- `0.6` — OUTDATED: the graph contains a superseded claim
+- `0.8` — MISATTRIBUTED: the claim is attributed to the wrong source
+- `1.0` — CONTRADICTED: the claim directly contradicts a graph node
+
+The overall `deltaScore` is the mean of all claim scores. A score above the configured threshold triggers an alert in the telemetry pipeline.
+
+## The Fire-and-Forget Pattern
+
+Both critics run asynchronously. They do not block the user's response.
+
+In `conversationEngine.ts`, the critic is invoked after the stream completes:
+
+```typescript
+// Non-blocking: fire-and-forget, errors caught internally
+void critiqueLLMOutput(cleanedFullText, { userId, taskType: agentMode }).then(verdict => {
+  if (verdict.severity === 'block') {
+    console.error('[OutputCritic] BLOCK verdict:', verdict.overallReason);
+  }
+  if (!verdict.passed) {
+    console.warn('[OutputCritic] Warnings:', verdict.checks.filter(c => !c.passed));
+  }
+}).catch(() => { /* never crashes */ });
+```
+
+The Delta Engine runs in parallel:
+
+```typescript
+const deltaResults = await deltaEngine.scoreClaims(
+  cleanedFullText, sessionId, actualModelId
+);
+const overallDeltaScore = deltaEngine.computeDeltaScore(deltaResults);
+```
+
+Both run after the response has already been sent to the user. The critic is a safety net, not a gate. If it catches a `block`-severity violation, the operator is alerted through the `/admin/logs` dashboard. The user has already received the response, but the violation is logged for review.
+
+This is the operational tradeoff: false positives on post-generation checks are acceptable because the user has already seen the response. Blocking a correct response because the critic is uncertain is worse than logging a potential violation for async review.
+
+## The Operator's View
+
+The `/admin/logs` dashboard surfaces critic verdicts alongside UDIF interaction audits. Each record shows:
+
+- **Critic Verdict** — pass, warn, or block
+- **Failed Checks** — which specific checks failed and why
+- **Delta Score** — mean hallucination score across all claims
+- **Latency** — how long the critic took to run
+
+On mobile, the log cards collapse to a compact timeline. Each card expands to reveal the full critic verdict and the per-claim delta breakdown.
+
+This is the proof. The operator can see every hallucination that was caught, every safety violation that was flagged, and every claim that was verified against the World Model graph. The system is not a black box. It is an auditable pipeline.
+
+## The Golden Line
+
+Post-generation critics are not about blocking every bad output. They are about building a feedback loop that gets tighter over time.
+
+The OutputCritic catches the obvious: fake APIs, vision drift, safety violations. The Delta Engine catches the subtle: plausible but unverified claims. Together, they form a quality gate that learns from every interaction.
+
+The goal is not zero hallucinations. The goal is a system that catches them before they poison the knowledge graph, and logs them so the operator can improve the refinery.
+
+---
+
+*Joshua-Jair E. Mohammed is the Founder & Lead Engineer of Lattice OS. He designed the OutputCritic, the Delta Engine, and the World Model causal graph. The critic loop and claim-scoring logic are production code at gen1e.xyz.*

@@ -1,0 +1,155 @@
+---
+title: "The Data Refinery: Precision Fuel for Deterministic AI"
+description: "Why generic RAG pipelines fail the Chameleon Consultant, and how Lattice OS turns raw web fragmentation into structured, citeable agent memory through schema synthesis and causal lineage."
+publishedAt: "2026-08-22"
+updatedAt: "2026-08-22"
+author: "joshua-jair"
+category: "ai-architecture"
+series: "lattice-os"
+tags: ["data-refinery", "rag", "world-model", "chameleon-consultant", "vector-embeddings", "supabase", "causal-lineage", "domain-gate"]
+featured: false
+ogImage: "/blog/data-refinery-og.png"
+---
+
+# The Data Refinery: Precision Fuel for Deterministic AI
+
+## The Ingestion Problem
+
+Generic RAG fails because it treats all data as equal. Dumping raw web scrapes and PDFs into a vector database creates a context field that is structurally ambiguous. The model retrieves whatever is most similar to the query, not whatever is most authoritative for the persona.
+
+For deterministic systems, ambiguity is the enemy. The Chameleon Consultant is designed to produce consistent, persona-specific output. When its context window contains a mix of user-curated notes, public web scrapes, and PDF fragments with no distinction between them, the model cannot maintain that consistency. It retrieves generic internet knowledge that conflicts with the user's curated expertise, and it cannot cite provenance or detect contradictions because the source of each text chunk is unknown.
+
+The result is a Consultant that sounds authoritative but cannot explain where its claims come from.
+
+## The Refinery Pipeline
+
+Lattice OS converts raw web fragmentation into structured agent fuel through three stages: a deterministic crawl, schema synthesis that forces raw text into rigid JSON shapes, and causal lineage that tracks the origin and trust level of every data point.
+
+### The Crawl
+
+Ingestion is deterministic and scoped, not a broad web scrape. The source schema in `lib/ai/sourceIngest.ts` enforces the input contract:
+
+```typescript
+export const SourceDocumentSchema = z.object({
+  source_type: z.enum([
+    'note', 'paste', 'url', 'pdf',
+    'notebooklm', 'github', 'refinery',
+  ]),
+  title: z.string().max(500).optional(),
+  origin_uri: z.string().max(2000).optional(),
+  raw_text: z.string().min(1, 'Source text is required'),
+  metadata: z.record(z.any()).optional(),
+  cleanse: z.boolean().optional(),
+});
+```
+
+The `source_type` enum is not decorative. It determines how the text is chunked, whether a cleanse pass runs, and how the resulting chunks are tagged in the knowledge graph. A `url` and a `pdf` follow different preprocessing paths because their noise profiles are different. The schema rejects malformed input at the type boundary before it ever reaches the embedding layer.
+
+### Schema Synthesis
+
+Raw text is forced into rigid JSON shapes before embedding. This is the structural firewall that prevents persona dilution.
+
+The chunking logic in `prepareSourceChunks()` enforces a hard character budget:
+
+```typescript
+const MAX_CHUNK_CHARS = 2400;
+const CHUNK_OVERLAP_CHARS = 200;
+```
+
+The 2,400-character limit is calibrated to the embedding model's sweet spot: roughly 600 tokens per chunk, well under the 8,191-token cap, small enough for precise retrieval, large enough to preserve semantic continuity. The 200-character overlap seeds the next chunk with the tail of the previous one so boundary context is not lost during hard-splits.
+
+Paragraphs are preserved where possible. Oversized paragraphs are hard-split with overlap. Each chunk carries its provenance: `source_type`, `title`, `origin_uri`, `chunk_index`, `chunk_count`, and a `cleansed` flag.
+
+If `cleanse: true`, a Gemini-Flash pass strips boilerplate, navigation, and ads while preserving factual claims verbatim. The raw text is retained alongside the cleansed content for provenance auditing. If the cleanse pass fails, the system falls back to the raw text. Data is never lost.
+
+The engineering tradeoff is deliberate: Gemini-Flash is fast and cheap, making it suitable for a best-effort cleanup pass, but the system does not depend on it. The raw text is always preserved, so the cleanse is an optimization, not a single point of failure.
+
+This is schema synthesis: raw text becomes a `SourceChunk` with typed metadata, not a blob in a vector column.
+
+### Causal Lineage
+
+Every data point in the knowledge graph carries a `TrustTier` and a `contextVersionId`. The graph event system in `lib/memory/graphStore.ts` defines the lineage contract:
+
+```typescript
+export type WMEventType = 'ASSERTED' | 'CONTRADICTED' | 'OBSOLETED' | 'MERGED';
+export type TrustTier = 'AXIOM' | 'CONFIRMED' | 'SUPPORTED' | 'UNVERIFIED';
+
+export async function emitWorldModelEvent(
+  entityId: string,
+  eventType: WMEventType,
+  payload: any,
+  sourceModel: string = 'system',
+  trustTier: TrustTier = 'UNVERIFIED',
+  contextVersionId?: string
+): Promise<boolean>
+```
+
+When the Consultant retrieves context, it does not just get a similarity-ranked list of text chunks. It gets a graph of `GraphNode` entities connected by `GraphEdge` relations, each carrying a `TrustTier`. The Delta Engine uses this to compute a `deltaScore` (0 = perfect, 1 = fabrication) for every claim the model generates.
+
+This is the foundation of the World Model. The Consultant can cite its sources because every node knows where it came from and how trustworthy it is.
+
+## Fueling the Chameleon Consultant
+
+The Chameleon Consultant does not "know" things. It retrieves structured state from the refinery. The Phase B Domain Gate is the enforcement point that ensures only persona-relevant, high-trust context reaches inference.
+
+The domain gate in `lib/consultant/domainGate.ts` evaluates every query before it reaches inference:
+
+```typescript
+export const DOMAIN_THRESHOLDS = {
+  HARD_BLOCK: 0.30,
+  BORDERLINE: 0.65,
+} as const;
+
+export type DomainGateAction = "hard_block" | "borderline" | "standard";
+
+export function evaluateDomainGate(
+  session: PersonaSession,
+  query: string
+): DomainGateResult {
+  const confidence = calculateDomainConfidence(session, query);
+
+  if (confidence < DOMAIN_THRESHOLDS.HARD_BLOCK) {
+    return { action: "hard_block", confidence, refusalMessage: generateRefusalMessage(session) };
+  }
+
+  if (confidence < DOMAIN_THRESHOLDS.BORDERLINE) {
+    return { action: "borderline", confidence };
+  }
+
+  return { action: "standard", confidence };
+}
+```
+
+Three actions, three thresholds:
+
+- **`hard_block` (< 0.30)** — zero-token templated refusal. The query never reaches the model. This is the zero-burn hard block.
+- **`borderline` (0.30–0.65)** — pass-through with an out-of-domain warning injected into the persona directive. The model addresses the query strictly through the persona lens or generates an in-character refusal.
+- **`standard` (> 0.65)** — normal inference with full persona context.
+
+The domain gate relies on the refinery's clean data because confidence is computed against the persona's curated tags and role tokens. If the refinery returns generic web knowledge, the gate's tag-overlap heuristic becomes meaningless. The refinery is not just a storage layer; it is the quality substrate that makes the gate's thresholds meaningful.
+
+## The Operator's View
+
+The workspaces memory page at `/workspaces/[id]/memory` surfaces the refinery's output as data-dense cards. This is the same system that ingests, chunks, and embeds the data — now rendered as an inspection surface.
+
+- **Memory type badge** — distinguishes facts, observations, claims, and preferences
+- **Content preview** — the actual text the Consultant retrieves
+- **Pin icon** — marks high-trust nodes in the knowledge graph
+
+On mobile, the grid collapses to a single column. Each card is a touch target that reveals the node's metadata: `source_type`, `origin_uri`, `TrustTier`, and the `contextVersionId` that links it to the causal lineage.
+
+This is not a black box. An operator can inspect every node the Consultant retrieved, view its provenance, and manually prune corrupted context before it poisons the agent. The refinery's output is visible, auditable, and deterministic.
+
+## The Golden Line
+
+The Data Refinery's job is not to make the model smarter. It is to make the model's knowledge **precise, citeable, and auditable**.
+
+Generic RAG says: "Here is everything I found that is similar to your question."
+
+The Data Refinery says: "Here is exactly what your persona needs to answer this question, with full provenance and a trust score for every claim."
+
+The difference is the difference between a chatbot that sounds confident and a system that earns trust.
+
+---
+
+*Joshua-Jair E. Mohammed is the Founder & Lead Engineer of Lattice OS. He designed the Data Refinery pipeline, the Chameleon Consultant domain gate, and the World Model causal graph. The schema synthesis and chunking logic are production code at gen1e.xyz.*

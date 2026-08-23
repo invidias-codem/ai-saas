@@ -1,19 +1,22 @@
 ---
 title: "Writing at the Speed of Chat: Building an AI Blogger Concept"
+description: "A technical deep-dive into how we extended the Lattice OS Engineer to support the /blog command, enabling AI-powered blog post creation."
 publishedAt: "2026-02-03"
-description: "A technical deep-dive into how we extended the Genie Engineer to support the /blog command, enabling AI-powered blog post creation."
+updatedAt: "2026-02-03"
 author: "joshua-jair"
 category: "engineering"
-tags: ["AI", "Genie", "Blog", "Automation", "Prompt Engineering"]
+tags: ["AI", "Lattice OS", "Blog", "Automation", "Prompt Engineering"]
+featured: false
+ogImage: "/blog/writing-at-the-speed-of-chat-og.png"
 ---
 
 # Writing at the Speed of Chat: Building an AI Blogger Concept
 
-In this post, we'll explore how we leveraged the Genie Engineer to create an AI-powered blogging tool. This tool, accessible via the `/blog` command, automates the process of generating high-quality blog posts, significantly reducing the time and effort required.
+In this post, we'll explore how we leveraged the Lattice OS Engineer to create an AI-powered blogging tool. This tool, accessible via the `/blog` command, automates the process of generating high-quality blog posts, significantly reducing the time and effort required.
 
 ## Reusing the Autonomous Engineering Architecture
 
-At the heart of our AI Blogger lies the same autonomous engineering architecture that powers Genie Engineer. This architecture consists of several key components:
+At the heart of our AI Blogger lies the same autonomous engineering architecture that powers Lattice OS Engineer. This architecture consists of several key components:
 
 *   **Task Decomposition:** Breaking down the complex task of writing a blog post into smaller, manageable subtasks.
 *   **Plan Generation:** Creating a step-by-step plan to execute these subtasks.
@@ -52,11 +55,11 @@ Refer to the following examples for inspiration:
 
 The AI Blogger workflow is simple and intuitive:
 
-1.  **Telegram Command:** The user initiates the process by sending the `/blog` command to the Genie Engineer Telegram bot, along with a brief description of the desired blog post topic.
-2.  **Plan Generation:** The Genie Engineer autonomously generates a detailed plan for writing the blog post, including the key sections, subtopics, and research tasks.
+1.  **Telegram Command:** The user initiates the process by sending the `/blog` command to the Lattice OS Engineer Telegram bot, along with a brief description of the desired blog post topic.
+2.  **Plan Generation:** The Lattice OS Engineer autonomously generates a detailed plan for writing the blog post, including the key sections, subtopics, and research tasks.
 3.  **Human Approval:** A human reviewer approves the plan, making any necessary adjustments or providing additional guidance.
-4.  **Content Generation & Git Push:** The Genie Engineer executes the plan, generating the blog post content and automatically pushing it to a Git repository. The content is pushed as a pull request for easier content review.
+4.  **Content Generation & Git Push:** The Lattice OS Engineer executes the plan, generating the blog post content and automatically pushing it to a Git repository. The content is pushed as a pull request for easier content review.
 
 ## Conclusion
 
-The AI Blogger demonstrates the potential of AI to automate content creation and improve productivity. By reusing existing architecture, employing effective prompt engineering techniques, and integrating human review loops, we were able to build a powerful tool that significantly reduces the time and effort required to write high-quality blog posts. We believe this approach can be extended to other content creation tasks, further unlocking the power of AI for automation and efficiency.
+The blog agent demonstrates how reusable agent architecture can automate structured content creation. By combining existing engineering primitives with targeted prompt engineering and human review gates, we reduced time-to-publish for technical posts without sacrificing accuracy.

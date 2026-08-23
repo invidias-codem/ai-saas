@@ -1,0 +1,198 @@
+---
+title: "UCOL in Practice: Routing Without Adding Latency"
+description: "How the Code Builder debate loop actually preserves state across Gemini → Claude handoffs, and why the 1.08 average review rounds metric is what you should really care about."
+publishedAt: "2026-08-20"
+updatedAt: "2026-08-20"
+author: "joshua-jair"
+category: "ai-architecture"
+series: "ucol"
+tags: ["ucol", "routing", "code-builder", "debate-loop", "telemetry", "next.js", "supabase", "edge-functions"]
+featured: true
+ogImage: "/blog/ucol-routing-without-latency-og.png"
+---
+
+# UCOL in Practice: Routing Without Adding Latency
+
+## The Loop
+
+The UCOL Code Builder runs a three-node pipeline:
+
+1. **Gemini plans** — receives the user prompt, produces a structured `ProjectPlan`
+2. **Claude codes** — receives the plan plus curated context, produces `GeneratedFile[]`
+3. **Gemini reviews** — receives the original spec, the plan, and Claude's output, scores each file, and either accepts or returns structured feedback
+
+The user never waits for any of this. The planning and review stages are async side-effects dispatched after the initial response. The code generation streams back to the client as it happens via Server-Sent Events.
+
+## The Contract
+
+State continuity across model boundaries is not automatic. Each handoff must carry a typed payload that the receiving model can consume without re-deriving context from scratch.
+
+The input contract for the execution stage is defined in `lib/ucol/agentTaskSchema.ts`:
+
+```typescript
+import { z } from 'zod';
+
+export const AgentTaskTypeSchema = z.enum([
+  'reasoning',
+  'generation',
+  'evaluation',
+  'transformation',
+  'blog_post',
+]);
+
+export const RoutingTierSchema = z.enum(['fast', 'balanced', 'deep']).optional();
+
+export const CreateAgentTaskSchema = z.object({
+  task_type: AgentTaskTypeSchema,
+  input: z.string().min(1).max(50000),
+  context: z.string().max(20000).optional(),
+  routing_tier: RoutingTierSchema,
+  model_preference: z.string().max(100).optional(),
+});
+
+export type CreateAgentTask = z.infer<typeof CreateAgentTaskSchema>;
+```
+
+When the Code Builder dispatches the coding stage, it does not send the raw user prompt. It sends a `CreateAgentTask` with:
+
+- `task_type: "generation"` — tells the router this is a code-generation mission
+- `input` — the structured plan as a JSON string, not freeform prose
+- `context` — the curated context slice: project constraints, existing file tree, and the reviewer's previous feedback if this is an iteration
+- `routing_tier: "deep"` — enforces the minimum model tier for code generation; no fallback to a weaker model
+
+**Why this matters:** The `context` field is bounded at 20,000 characters. That is not a limit imposed by the model — it is a firewall. Unbounded context injection is how you get context bloat, latency spikes, and cost overruns. The Zod schema enforces the budget at the type level before the request ever leaves the server.
+
+### State Preservation Across Handoffs
+
+When Gemini finishes planning, its output becomes the `input` for Claude's generation task. The transition is not a conversation continuation — it is a new task with a deterministic payload. The context window is preserved through the `context` field, which carries:
+
+1. **The plan** — component specs, file paths, dependency graph
+2. **Constraints** — framework versions, style rules, API boundaries extracted from the user's workspace
+3. **Previous review feedback** — if Claude's output was rejected, the reviewer's structured critique is injected here
+
+This is the mechanism that prevents context loss. Claude does not need to remember what Gemini decided three turns ago. The decision is encoded in the payload.
+
+## The Threshold Gate
+
+Review is not a vibe check. It is a scoring function with a hard threshold. The reviewer does not read Claude's output and say "looks good." It reads the output, scores it against three dimensions, and computes a composite. If that composite falls below the threshold, the loop iterates with structured feedback.
+
+```typescript
+// lib/ucol/reviewGate.ts (production shape)
+const REVIEW_THRESHOLD = 7.0; // minimum acceptable score out of 10
+
+interface ReviewResult {
+  fileId: string;
+  correctness: number;       // 1-10
+  originality: number;       // 1-10
+  pragmatism: number;        // 1-10
+  composite: number;         // weighted average
+  verdict: 'accept' | 'revise';
+  feedback?: string;         // structured critique if revise
+}
+
+function computeComposite(scores: ReviewResult): number {
+  return (
+    scores.correctness * 0.5 +
+    scores.originality * 0.25 +
+    scores.pragmatism * 0.25
+  );
+}
+```
+
+The weights are not arbitrary. Correctness carries half the composite because a component that compiles but solves the wrong problem has zero value. Originality and pragmatism split the remainder because novel but unbuildable code is as useless as buildable but generic code.
+
+If the composite score falls below `REVIEW_THRESHOLD`, Gemini does not return a vague "try again." It returns a `ReviewResult` with:
+
+- The specific dimension that failed (correctness, originality, or pragmatism)
+- A structured feedback string describing the required fix
+- The original plan and the failing output, bound together as the next iteration's context
+
+This is the rejection protocol. The debate loop is deterministic because the feedback is typed, not freeform. Claude's next iteration does not guess what went wrong. It receives a precise specification of the failure and the context needed to correct it.
+
+## Observed Behavior
+
+The metric we cite is **1.08 average review rounds per component** across the 12-component e-commerce dashboard test.
+
+This number comes from the `harness_telemetry_events` table. Every Code Builder run inserts one event per review round:
+
+```sql
+SELECT
+  task_id,
+  COUNT(*) AS review_rounds,
+  AVG(composite_score) AS avg_score,
+  MAX(composite_score) AS max_score,
+  MIN(composite_score) AS min_score
+FROM harness_telemetry_events
+WHERE
+  event_type = 'code_builder_review'
+  AND created_at > NOW() - INTERVAL '30 days'
+GROUP BY task_id
+ORDER BY review_rounds DESC
+LIMIT 20;
+```
+
+The `metadata` column on each row carries the per-file breakdown:
+
+```json
+{
+  "event_type": "code_builder_review",
+  "task_id": "uuid",
+  "file_id": "uuid",
+  "round": 1,
+  "scores": {
+    "correctness": 8,
+    "originality": 7,
+    "pragmatism": 9,
+    "composite": 7.75
+  },
+  "verdict": "accept"
+}
+```
+
+**How to verify this yourself:** The `/admin/logs` dashboard surfaces these events in real time. Each Code Builder run produces a `context-flow` event stream that you can inspect before accepting the final output. The trajectory is not a black box.
+
+> **The 1.08 figure is a mean, not a guarantee.** Individual components may require 0, 1, or 2+ review rounds depending on complexity. The distribution matters more than the average.
+
+## What This Proves
+
+Cross-model improvement through shared context is not theoretical. The Code Builder demonstrates it in production.
+
+The mechanism works because each handoff is a typed contract, not a conversation continuation. Gemini's plan constrains Claude's output to the spec. Claude's code is reviewed against the original plan, not against Claude's own memory of what it built. When the review fails, the rejection is typed feedback plus the original plan and the failing output — not a vague instruction to "try again." The next iteration inherits the full context of the failure and the requirements needed to correct it.
+
+This is cross-model learning without fine-tuning. The models improve each other's output through the shared context structure, not through updated weights. The knowledge graph is the medium. The debate loop is the proof.
+
+The practical implication is that routing quality improves as the system observes which models perform best on which task types. The router does not need to be retrained. It needs to observe the outcomes of previous handoffs and adjust dispatch accordingly. That is the signal that feeds the routing layer's long-term improvement.
+
+## The Operator Interface
+
+The Code Builder UI at `/code/builder` exposes the multi-agent state through three panels:
+
+- **Plan Panel** — Gemini's structured output before execution begins. Shows component specs, file tree, and dependency graph.
+- **Code Panel** — Claude's streaming output with syntax highlighting. Files appear as they are generated.
+- **Context Flow** — real-time event stream showing every handoff, score, and verdict. This is the trajectory view.
+
+On mobile (`< md`), the layout collapses to a single-panel tab view. The operator switches between Plan and Code tabs; Context Flow remains accessible as a scrollable timeline below.
+
+The `/admin/logs` view extends this with:
+
+- Filterable log level (info, warn, error)
+- Real-time Supabase subscription on the `logs` table
+- CSV/JSON/MD export for post-mortem analysis
+
+This is not marketing. It is the actual surface your team uses to inspect agent output before it ships. The trajectory is visible before you accept it.
+
+## The Golden Line
+
+We've been building toward one idea since the beginning:
+
+> *AI models don't need to compete. They need a protocol to collaborate.*
+
+UCOL is that protocol.
+
+The race to build the smartest individual model is real and important. But the next frontier isn't smarter models — it's smarter **connections between models**. The team that builds the coordination layer wins the platform.
+
+We're building it.
+
+---
+
+*Joshua-Jair E. Mohammed is the Founder & Lead Engineer of Lattice OS. He designed the UCOL routing layer and the Code Builder debate loop. The telemetry schema and threshold gates are production code at gen1e.xyz.*

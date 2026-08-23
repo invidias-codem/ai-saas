@@ -1,0 +1,152 @@
+---
+title: "Building Sovereign AI Infrastructure on Vercel + Supabase"
+description: "How Lattice OS implements data sovereignty through UDIF 2.0 telemetry, non-blocking interaction audits, and user-controlled content modes — all running on Vercel edge functions with Supabase as the durable substrate."
+publishedAt: "2026-08-26"
+updatedAt: "2026-08-26"
+author: "joshua-jair"
+category: "ai-architecture"
+series: "lattice-os"
+tags: ["sovereign-ai", "udif", "vercel", "supabase", "telemetry", "edge-functions", "data-sovereignty", "privacy"]
+featured: false
+ogImage: "/blog/sovereign-ai-infrastructure-og.png"
+---
+
+# Building Sovereign AI Infrastructure on Vercel + Supabase
+
+## The Sovereignty Problem
+
+AI infrastructure today forces a choice: either you send your data to a third-party API and trust them with it, or you self-host and absorb the operational burden. Neither option satisfies enterprise requirements for data sovereignty, auditability, and cost control.
+
+The first option surrenders control. The second option requires a team to maintain GPU clusters, model caches, and inference infrastructure. For most organizations, neither is acceptable.
+
+Lattice OS solves this with a three-layer architecture: Vercel Edge Functions for low-latency inference routing, Supabase for durable state and real-time subscriptions, and UDIF 2.0 for sovereign telemetry that keeps the operator in control of their data.
+
+## Layer 1: Vercel Edge Functions
+
+The UCOL routing layer runs on Vercel Edge Functions. This is not a deployment convenience — it is an architectural decision.
+
+Edge functions execute at the CDN node closest to the user. For routing decisions that must complete before inference, this minimizes latency. The routing layer in `lib/ucol/routing/decision.ts` computes intent, capability requirements, memory plan, and provider selection in a single pass:
+
+```typescript
+export function buildInitialRoutingDecision(args: {
+  request: UcolRequestPacket;
+  context: UcolResolvedContext;
+  agentMode: AgentMode;
+  signals?: InitialRoutingSignals;
+}): UcolRoutingDecision
+```
+
+The output is a deterministic `UcolRoutingDecision` with no external dependencies beyond the workspace database. This makes the edge function stateless and horizontally scalable.
+
+Vercel's edge runtime also provides `waitUntil()` for fire-and-forget side effects. This is the mechanism that separates sovereign infrastructure from infrastructure that blocks on telemetry.
+
+When a request completes, the edge function returns the response to the client immediately. The `waitUntil()` callback continues executing in the background, emitting the UDIF 2.0 interaction audit to Supabase. If telemetry fails, the user's request is already complete. The audit is non-blocking by design.
+
+This guarantees that the routing decision never blocks the client response. The operator gets full observability without paying for it in latency.
+
+## Layer 2: Supabase Durable Substrate
+
+Supabase serves three roles:
+
+1. **Workspace state** — agent tasks, memory nodes, graph entities
+2. **Real-time subscriptions** — live log streams, context flow events
+3. **Telemetry sink** — UDIF 2.0 interaction audits
+
+The `harness_telemetry_events` table captures every routing decision, model fallback, and review round. The `wm_events` table captures every assertion, contradiction, and merge in the World Model graph.
+
+Supabase's real-time engine powers the `/admin/logs` dashboard and the Code Builder's context flow visualizer. Operators see events as they happen, not after they're batch-inserted. The subscription model means the UI updates the instant a row lands in the database.
+
+## Layer 3: UDIF 2.0 Sovereign Telemetry
+
+UDIF 2.0 is the sovereign telemetry schema. It captures every AI interaction in a format that is platform-agnostic, user-controllable, and auditable.
+
+The canonical contract lives in `lib/telemetry/udif.ts`:
+
+```typescript
+export const UDIF_VERSION = "2.0" as const;
+
+export interface UdifInteractionAudit {
+  udif_version: UdifVersion;
+  record_type: UdifRecordType;
+  timestamp: string;
+
+  trace_context: TraceContext;
+
+  context_baggage?: Record<string, string>;
+
+  ai_ledger: {
+    system_provider: string;
+    "gen_ai.request.model": string;
+    "gen_ai.response.model": string;
+    agent_identity?: AgentIdentity;
+    performance?: { "gen_ai.client.operation.duration": number };
+    usage?: { prompt_tokens: number; completion_tokens: number };
+    actions?: ToolAction[];
+    governance?: GovernanceState;
+  };
+}
+```
+
+Every AI interaction emits one of these records. The emission happens in a `waitUntil()` callback after the response stream completes. If telemetry fails, the user's request is unaffected.
+
+### Sovereignty Modes
+
+The `UDIFMetadata` interface defines three sovereignty modes:
+
+```typescript
+export interface UDIFMetadata {
+  udifVersion?: string;
+  contextId?: string;
+  originModel?: string;
+  routingTier?: 'fast' | 'balanced' | 'deep';
+  sovereigntyMode?: 'user-owned' | 'platform' | 'shared';
+  exportedForPortability?: boolean;
+}
+```
+
+These modes are the core of the sovereignty architecture. They determine where telemetry data lives and who has access to it.
+
+- **`user-owned`** — the operator controls the data. Telemetry is emitted to the user's Supabase instance, not Lattice OS's. The operator owns the database, the schema, and the access controls. Lattice OS never sees the raw telemetry.
+- **`platform`** — Lattice OS manages telemetry on behalf of the operator. Used for managed deployments where the operator wants full observability without managing infrastructure. The operator still controls access through role-based permissions.
+- **`shared`** — hybrid mode. Metadata is stored on Lattice OS; full content stays on the user's instance. This allows Lattice OS to provide aggregate insights across workspaces without accessing raw interaction data.
+
+The system does not assume a default mode. The operator selects it in workspace settings, and the telemetry emission path respects that choice.
+
+### Content Modes
+
+Operators choose how much content is stored in the telemetry record:
+
+```typescript
+export type ContentMode = "metadata" | "hashed" | "local_only";
+```
+
+- **`metadata`** — store request/response metadata (model, provider, tokens, duration) but not the content
+- **`hashed`** — store content hashes for integrity verification without storing the raw text
+- **`local_only`** — do not emit telemetry to any remote sink. Logs stay in the operator's environment
+
+This is the operator's choice, made in the workspace settings. The system does not assume consent.
+
+## The Operator's View
+
+The `/admin/logs` dashboard surfaces UDIF interaction audits alongside system logs. Each record shows:
+
+- **Trace Context** — W3C trace ID and span ID for correlation with APM tools
+- **Model Routing** — requested vs. actual model, with fallback history
+- **Governance State** — active modules, defense triggers, content mode
+- **Performance** — operation duration, token usage, tool actions
+
+On mobile, the log cards collapse to a compact timeline. Each card expands to reveal the full UDIF record in JSON.
+
+This is the ultimate proof of sovereignty. The operator is not told the system is secure. They can observe the exact model routing fallback history, the governance state at the time of each request, and the content mode that was applied. Every interaction is auditable in real time.
+
+## The Golden Line
+
+Sovereign AI infrastructure is not about where the code runs. It is about who controls the data.
+
+Vercel gives us latency. Supabase gives us durability. UDIF 2.0 gives the operator sovereignty over their telemetry.
+
+The stack is deterministic, auditable, and user-controlled. That is the foundation for enterprise AI adoption.
+
+---
+
+*Joshua-Jair E. Mohammed is the Founder & Lead Engineer of Lattice OS. He designed the UDIF 2.0 schema, the sovereign telemetry layer, and the Vercel + Supabase infrastructure. The interaction audit and governance state are production code at gen1e.xyz.*
