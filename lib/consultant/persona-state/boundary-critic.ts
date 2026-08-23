@@ -1,6 +1,6 @@
-import type { PersonaDocument } from "./persona-schema.js";
-import type { BoundaryCriticRequest, BoundaryCriticResponse } from "./persona-schema.js";
-import { evaluateNamespaces } from "./namespace-evaluator.js";
+import type { PersonaDocument } from "./persona-schema";
+import type { BoundaryCriticRequest, BoundaryCriticResponse } from "./persona-schema";
+import { evaluateNamespaces } from "./namespace-evaluator";
 
 export class BoundaryCritic {
   constructor(private activePersona: PersonaDocument) {}

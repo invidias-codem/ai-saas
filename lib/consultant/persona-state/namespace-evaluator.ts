@@ -1,4 +1,4 @@
-import type { PersonaDocument } from "./persona-schema.js";
+import type { PersonaDocument } from "./persona-schema";
 
 export interface NamespaceEvaluationInput {
   retrievedChunks: Array<{ namespace: string }>;

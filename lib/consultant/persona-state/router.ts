@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { PersonaDocument } from "./persona-schema.js";
-import { ProviderHealthChecker } from "./provider-health.js";
+import type { PersonaDocument } from "./persona-schema";
+import { ProviderHealthChecker } from "./provider-health";
+
 
 export const TaskType = z.enum([
   "RAG_SUMMARIZATION",

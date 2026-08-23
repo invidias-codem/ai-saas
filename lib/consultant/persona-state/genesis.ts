@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { v7 as uuidv7 } from "uuid";
-import { PersonaDocumentSchema, type PersonaDocument } from "./persona-schema.js";
-import { canonicalPersonaBytes } from "./canonicalize.js";
-import { verifySignedConfig, type SignedConfig } from "./signed-config.js";
+import { PersonaDocumentSchema, type PersonaDocument } from "./persona-schema";
+import { canonicalPersonaBytes } from "./canonicalize";
+import { verifySignedConfig, type SignedConfig } from "./signed-config";
 
 const GENESIS_IDENTITY = "lattice-os-persona-v1";
 export const GENESIS_PREVIOUS_HASH = crypto

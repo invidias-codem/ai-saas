@@ -1,10 +1,10 @@
 import crypto from "node:crypto";
 import { v7 as uuidv7 } from "uuid";
-import type { PersonaDocument, PersonaState, AuthorizedTrigger } from "./persona-schema.js";
-import { PersonaDocumentSchema, validateTransition, PersonaChainVerifier } from "./persona-schema.js";
-import { canonicalPersonaBytes } from "./canonicalize.js";
-import { type SignedConfig } from "./signed-config.js";
-import { createGenesisDocumentFromSignedConfig, getGenesisPreviousHash } from "./genesis.js";
+import type { PersonaDocument, PersonaState, AuthorizedTrigger } from "./persona-schema";
+import { PersonaDocumentSchema, validateTransition, PersonaChainVerifier } from "./persona-schema";
+import { canonicalPersonaBytes } from "./canonicalize";
+import { type SignedConfig } from "./signed-config";
+import { createGenesisDocumentFromSignedConfig, getGenesisPreviousHash } from "./genesis";
 
 export interface InitializedPersonaMachine {
   genesis: PersonaDocument;

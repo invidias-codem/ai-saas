@@ -10,7 +10,7 @@ export interface ProviderHealthRecord {
   lastFailureAt?: string;
 }
 
-import type { SupabaseKV } from "@/lib/state/kv.js";
+import type { SupabaseKV } from "@/lib/state/kv";
 
 export class ProviderHealthChecker {
   private records: Map<string, ProviderHealthRecord> = new Map();
