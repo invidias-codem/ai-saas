@@ -8,7 +8,9 @@ Most multi-model AI pipelines are just chat chains with extra steps.
 
 We built UCOL because we needed deterministic routing without adding latency. The 3-node loop (Gemini plans → Claude codes → Gemini reviews) doesn't rely on conversational memory. It uses typed payloads with a strict 20K context firewall.
 
-The result: state continuity across model handoffs, no context bloat, no unpredictable latency.
+When that boundary is breached, the Zod schema does not trim the string. It throws a ContextBudgetExceeded exception, halts task creation, and forces the operator to prune the context tree before the pipeline proceeds. The system fails closed.
+
+The result: state continuity across model handoffs, no context bloat, no unpredictable latency, and no silent corruption.
 
 The deep-dive covers the actual Zod schemas, the review threshold gate, and the telemetry query that measures 1.08 average review rounds per component.
 
@@ -74,6 +76,8 @@ Why we moved from Genie to Lattice OS → [link]
 We published a technical deep-dive on how Lattice OS routes multi-model AI workflows without adding latency.
 
 Most teams chain LLM calls conversationally. We use typed payloads with a strict context firewall. The 3-node loop (Gemini plans → Claude codes → Gemini reviews) preserves state across handoffs without relying on conversation memory.
+
+When that 20K boundary is breached, the Zod schema throws ContextBudgetExceeded and halts task creation. The operator must prune the context tree before the pipeline proceeds. No silent truncation. No corrupted state.
 
 The post includes the actual Zod schemas, the review threshold gate, and the SQL query that measures review rounds in production.
 

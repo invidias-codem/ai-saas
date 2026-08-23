@@ -109,6 +109,12 @@ If the composite score falls below `REVIEW_THRESHOLD`, Gemini does not return a 
 
 This is the rejection protocol. The debate loop is deterministic because the feedback is typed, not freeform. Claude's next iteration does not guess what went wrong. It receives a precise specification of the failure and the context needed to correct it.
 
+## The Rejection Path
+
+A strict context firewall is useless if it silently truncates data. Truncation creates a lossy handoff, meaning Claude would execute deterministically on corrupted state.
+
+When the 20,000-character boundary is breached, the Zod schema does not trim the string. It throws a `ContextBudgetExceeded` exception. This immediately halts task creation and triggers a fallback node. The user or operator is presented with a deterministic rejection, requiring them to prune the context tree before the pipeline proceeds. The system fails closed.
+
 ## Observed Behavior
 
 The metric we cite is **1.08 average review rounds per component** across the 12-component e-commerce dashboard test.
