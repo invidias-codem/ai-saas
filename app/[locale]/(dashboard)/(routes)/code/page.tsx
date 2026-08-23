@@ -762,7 +762,7 @@ function CodePageContent() {
                 <div className="flex-shrink-0 mt-1">
                   {msg.role === "bot" ? (
                     <Avatar className="h-8 w-8 ring-1 ring-border/50 bg-background">
-                      <AvatarImage src="/Genie.png" />
+                      <AvatarImage src="/lattice-logo.png" />
                       <AvatarFallback className="text-[10px] bg-gradient-to-br from-green-500 to-emerald-500 text-white">AI</AvatarFallback>
                     </Avatar>
                   ) : (
@@ -1021,7 +1021,7 @@ function TypingIndicator() {
   return (
     <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
       <Avatar className="h-8 w-8 ring-1 ring-border/50">
-        <AvatarImage src="/Genie.png" />
+        <AvatarImage src="/lattice-logo.png" />
         <AvatarFallback className="bg-gradient-to-br from-green-500 to-emerald-500 text-white text-xs">AI</AvatarFallback>
       </Avatar>
       <div className="flex items-center space-x-1.5 h-8">

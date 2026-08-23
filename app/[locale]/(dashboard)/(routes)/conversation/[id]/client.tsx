@@ -864,7 +864,7 @@ function ConversationPage({
       return (
         <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
           <Avatar className="h-8 w-8 ring-1 ring-border/50">
-            <AvatarImage src="/Genie.png" alt="Weaver avatar" />
+            <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
             <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
           </Avatar>
           <div className="flex items-center space-x-2 text-indigo-500 text-sm font-medium animate-pulse">
@@ -1160,7 +1160,7 @@ function ConversationPage({
                 <div className="flex-shrink-0 mt-1">
                   {msg.role === "bot" ? (
                     <Avatar className="h-8 w-8 ring-1 ring-border/50 bg-background">
-                      <AvatarImage src="/Genie.png" alt="Weaver avatar" />
+                      <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
                       <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
                     </Avatar>
                   ) : (
@@ -1295,7 +1295,7 @@ function ConversationPage({
               <div className="flex max-w-[90%] md:max-w-[85%] gap-3 flex-row">
                 <div className="flex-shrink-0 mt-1">
                   <Avatar className="h-8 w-8 ring-1 ring-border/50 bg-background">
-                    <AvatarImage src="/Genie.png" alt="Weaver avatar" />
+                    <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
                     <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
                   </Avatar>
                 </div>

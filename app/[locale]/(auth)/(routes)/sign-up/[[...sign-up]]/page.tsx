@@ -8,7 +8,7 @@ export default async function Page({ params }: { params: Promise<{ locale: strin
       path={`/${locale}/sign-up`}
       appearance={{
         elements: {
-          logoImage: '/Genie.png',
+          logoImage: '/lattice-logo.png',
           headerTitle: 'Join Lattice',
           headerSubtitle: 'Create your sovereign AI workspace',
         },

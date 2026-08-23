@@ -110,7 +110,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       name: "Lattice OS",
       logo: {
         "@type": "ImageObject",
-        url: `${siteUrl}/Genie.png`,
+        url: `${siteUrl}/lattice-logo.png`,
       },
     },
     mainEntityOfPage: {
@@ -176,7 +176,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         <header className="relative z-10 py-4 px-4 sm:py-6 sm:px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
           <Link href="/" className="flex items-center gap-2">
             <div className="relative w-7 h-7 sm:w-8 sm:h-8">
-              <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" />
+              <Image src="/og-image.png" alt="Lattice OS logo" fill className="object-cover" />
             </div>
             <span className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Lattice OS</span>
           </Link>
@@ -238,7 +238,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
               <div className="flex items-center gap-2">
                 <div className="relative w-6 h-6">
-                  <Image src="/Genie.png" alt="Lattice OS logo" fill className="object-cover" />
+                  <Image src="/og-image.png" alt="Lattice OS logo" fill className="object-cover" />
                 </div>
                 <span className="text-lg font-bold text-foreground">Lattice OS</span>
               </div>

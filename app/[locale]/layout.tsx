@@ -60,11 +60,29 @@ export async function generateMetadata({
       type: 'website',
       siteName: 'Lattice OS',
       url: `/${locale}`,
+      images: [
+        {
+          url: '/og-image.png',
+          width: 1200,
+          height: 630,
+          alt: 'Lattice OS — Interconnected Intelligence',
+        },
+      ],
     },
     twitter: {
       card: 'summary_large_image',
       title: t.title,
       description: t.description,
+      images: ['/og-image.png'],
+    },
+    icons: {
+      icon: [
+        { url: '/favicon.png', sizes: '64x64', type: 'image/png' },
+        { url: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' },
+      ],
+      apple: [
+        { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+      ],
     },
   };
 }

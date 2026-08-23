@@ -319,7 +319,7 @@ const SupportPage = () => {
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2">
               <div className="relative w-6 h-6">
-                <Image src="/Genie.png" alt="Genie Logo" fill className="object-cover" />
+                <Image src="/og-image.png" alt="Genie Logo" fill className="object-cover" />
               </div>
               <span className="text-lg font-bold text-foreground">Genie AI</span>
             </div>
