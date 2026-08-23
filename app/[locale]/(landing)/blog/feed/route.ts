@@ -13,16 +13,16 @@ export async function GET() {
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
     <title>Lattice OS Blog</title>
-    <link>${siteUrl}/blog</link>
+    <link>${siteUrl}/en/blog</link>
     <description>Memory-native AI, routing, and workflow insights from the team building Lattice OS.</description>
     <language>en</language>
-    <atom:link href="${siteUrl}/blog/feed" rel="self" type="application/rss+xml" />
+    <atom:link href="${siteUrl}/en/blog/feed" rel="self" type="application/rss+xml" />
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
     ${featuredPost ? `
     <item>
       <title><![CDATA[${featuredPost.title}]]></title>
-      <link>${siteUrl}/blog/${featuredPost.slug}</link>
-      <guid isPermaLink="true">${siteUrl}/blog/${featuredPost.slug}</guid>
+      <link>${siteUrl}/en/blog/${featuredPost.slug}</link>
+      <guid isPermaLink="true">${siteUrl}/en/blog/${featuredPost.slug}</guid>
       <description><![CDATA[${featuredPost.description}]]></description>
       <pubDate>${new Date(featuredPost.publishedAt).toUTCString()}</pubDate>
       <author>${featuredPost.author.name}</author>
@@ -31,8 +31,8 @@ export async function GET() {
     ${posts.map((post) => `
     <item>
       <title><![CDATA[${post.title}]]></title>
-      <link>${siteUrl}/blog/${post.slug}</link>
-      <guid isPermaLink="true">${siteUrl}/blog/${post.slug}</guid>
+      <link>${siteUrl}/en/blog/${post.slug}</link>
+      <guid isPermaLink="true">${siteUrl}/en/blog/${post.slug}</guid>
       <description><![CDATA[${post.description}]]></description>
       <pubDate>${new Date(post.publishedAt).toUTCString()}</pubDate>
       <author>${post.author.name}</author>
