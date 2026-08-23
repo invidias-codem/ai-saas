@@ -30,28 +30,28 @@
     "button": "Support Lattice OS ❤️"
   },
   "Metadata": {
-      "title": "Lattice OS: Sovereign AI Infrastructure for Regulated Industries",
-      "description": "On-premises intelligence that compounds — your data never leaves your network. Lattice OS is a memory-native orchestration layer for regulated industries that need GDPR-ready, HIPAA-aligned, self-hosted AI workflows.",
-      "keywords": "Lattice OS, sovereign AI, on-premises AI, self-hosted AI, GDPR AI, HIPAA AI, regulated AI, memory-native, intelligent orchestration, data sovereignty, edge AI"
+    "title": "Lattice OS: Sovereign AI Infrastructure for Regulated Industries",
+    "description": "On-premises intelligence that compounds — your data never leaves your network. Lattice OS is a memory-native orchestration layer for regulated industries that need GDPR-ready, HIPAA-aligned, self-hosted AI workflows.",
+    "keywords": "Lattice OS, sovereign AI, on-premises AI, self-hosted AI, GDPR AI, HIPAA AI, regulated AI, memory-native, intelligent orchestration, data sovereignty, edge AI"
   },
   "Landing": {
     "hero": {
-        "badge": "Sovereign AI Infrastructure · On-Premises First · Zero Data Exfiltration",
-        "headline1": "Your intelligence layer.",
-        "headline2": "Your network.",
-        "headline3": "Your rules.",
-        "subhead": "Lattice OS runs on your hardware, in your network, under your control. No cloud round-trips, no third-party telemetry, no subscription lock-in. Built for regulated industries that can't afford to send sensitive work to someone else's infrastructure.",
-        "cta": "Deploy on Your Infrastructure",
-        "ctaSecondary": "See how sovereignty works",
-        "graphLabel": "Self-Hosted Memory Layer",
-        "title": "Sovereign AI infrastructure for the real world",
-        "description": "On-premises orchestration, persistent memory, and regulated workflows — built so your intelligence work never leaves your network.",
-        "login": "Access your instance"
+      "badge": "Sovereign AI Infrastructure · On-Premises First · Zero Data Exfiltration",
+      "headline1": "Your intelligence layer.",
+      "headline2": "Your network.",
+      "headline3": "Your rules.",
+      "subhead": "Lattice OS runs on your hardware, in your network, under your control. No cloud round-trips, no third-party telemetry, no subscription lock-in. Built for regulated industries that can't afford to send sensitive work to someone else's infrastructure.",
+      "cta": "Deploy on Your Infrastructure",
+      "ctaSecondary": "See how sovereignty works",
+      "graphLabel": "Self-Hosted Memory Layer",
+      "title": "Sovereign AI infrastructure for the real world",
+      "description": "On-premises orchestration, persistent memory, and regulated workflows — built so your intelligence work never leaves your network.",
+      "login": "Access your instance"
     },
     "ucol": {
-        "eyebrow": "Proportional Intelligence",
-        "title": "Not every task needs a frontier model.",
-        "subtitle": "Lattice routes work through layered execution: reflex for fast local responses, memory for contextual recall, and heavy compute only when the task justifies the cost. Models run when they should — not on every keystroke.",
+      "eyebrow": "Proportional Intelligence",
+      "title": "Not every task needs a frontier model.",
+      "subtitle": "Lattice routes work through layered execution: reflex for fast local responses, memory for contextual recall, and heavy compute only when the task justifies the cost. Models run when they should — not on every keystroke.",
       "flowLabel": "Reflex → Memory → Heavy Compute (event-gated)",
       "card1Title": "Local-First Inference",
       "card1Body": "Simple tasks resolve on-device with sub-10ms latency. No cloud calls, no token costs, no round-trip delays. Only escalate when the task demands it.",
@@ -63,49 +63,49 @@
       "card4Body": "Models don't poll. They respond to events. User queries, memory triggers, system signals — compute activates on demand, not on a timer."
     },
     "memory": {
-        "eyebrow": "Persistent Knowledge Graph",
-        "title": "Your intelligence compounds. It doesn't reset.",
-        "subtitle": "Unlike cloud AI that starts from scratch every session, Lattice builds a temporal knowledge graph with causal edges, delta scoring, and retrieval-aware assembly. Your organization's knowledge persists across every interaction, project, and model.",
-        "stat1Value": "Persistent",
-        "stat1Label": "Knowledge graph survives infrastructure restarts and model changes",
-        "stat2Value": "Signed",
-        "stat2Label": "Every memory write is cryptographically verifiable",
-        "stat3Value": "Compounding",
-        "stat3Label": "Intelligence improves as the system is used — not as you pay more"
+      "eyebrow": "Persistent Knowledge Graph",
+      "title": "Your intelligence compounds. It doesn't reset.",
+      "subtitle": "Unlike cloud AI that starts from scratch every session, Lattice builds a temporal knowledge graph with causal edges, delta scoring, and retrieval-aware assembly. Your organization's knowledge persists across every interaction, project, and model.",
+      "stat1Value": "Persistent",
+      "stat1Label": "Knowledge graph survives infrastructure restarts and model changes",
+      "stat2Value": "Signed",
+      "stat2Label": "Every memory write is cryptographically verifiable",
+      "stat3Value": "Compounding",
+      "stat3Label": "Intelligence improves as the system is used — not as you pay more"
     },
     "features": {
-        "title": "Intelligence infrastructure you actually control",
-        "subtitle": "Lattice OS combines persistent memory, model orchestration, edge-native execution, and regulatory alignment into one self-hosted platform — built so regulated organizations can deploy AI with confidence.",
-        "conversation": "Memory-Aware Execution",
-        "conversationDesc": "Conversations backed by a temporal knowledge graph that persists across sessions, models, and infrastructure restarts. Every interaction adds to your organization's compounding intelligence.",
-        "code": "Code & Repository Understanding",
-        "codeDesc": "Workspace-scoped code intelligence linked to your repositories. Architectural decisions, project context, and code history persist across developer turnover.",
-        "research": "Regulated Research Workflows",
-        "researchDesc": "Persistent context and structured memory for research, analysis, and synthesis in regulated industries where data residency and audit trails are non-negotiable.",
-        "hybrid": "Proportional Inference",
-        "hybridDesc": "Event-gated routing through reflex, memory, and heavy compute layers. Models only activate when the task justifies it — no wasted compute, no unnecessary cloud calls.",
-        "memoryLayer": "Cryptographic Memory Provenance",
-        "memoryLayerDesc": "Signed knowledge graph writes, causal edges, and temporal validity tracking. Every memory mutation is traceable for compliance reviews and forensic analysis.",
-        "infrastructure": "On-Premises Appliance",
-        "infrastructureDesc": "Ship as a Docker container on your hardware. Air-gapped operation, network isolation, and self-signed certificates supported. No vendor dependency on your infrastructure."
+      "title": "Intelligence infrastructure you actually control",
+      "subtitle": "Lattice OS combines persistent memory, model orchestration, edge-native execution, and regulatory alignment into one self-hosted platform — built so regulated organizations can deploy AI with confidence.",
+      "conversation": "Memory-Aware Execution",
+      "conversationDesc": "Conversations backed by a temporal knowledge graph that persists across sessions, models, and infrastructure restarts. Every interaction adds to your organization's compounding intelligence.",
+      "code": "Code & Repository Understanding",
+      "codeDesc": "Workspace-scoped code intelligence linked to your repositories. Architectural decisions, project context, and code history persist across developer turnover.",
+      "research": "Regulated Research Workflows",
+      "researchDesc": "Persistent context and structured memory for research, analysis, and synthesis in regulated industries where data residency and audit trails are non-negotiable.",
+      "hybrid": "Proportional Inference",
+      "hybridDesc": "Event-gated routing through reflex, memory, and heavy compute layers. Models only activate when the task justifies it — no wasted compute, no unnecessary cloud calls.",
+      "memoryLayer": "Cryptographic Memory Provenance",
+      "memoryLayerDesc": "Signed knowledge graph writes, causal edges, and temporal validity tracking. Every memory mutation is traceable for compliance reviews and forensic analysis.",
+      "infrastructure": "On-Premises Appliance",
+      "infrastructureDesc": "Ship as a Docker container on your hardware. Air-gapped operation, network isolation, and self-signed certificates supported. No vendor dependency on your infrastructure."
     },
     "compliance": {
-        "eyebrow": "Built for Regulated Industries",
-        "title": "GDPR-ready. HIPAA-aligned. Your audit, your rules.",
-        "subtitle": "Every intelligence operation is logged, signed, and traceable. Lattice OS ships with the security primitives that regulated organizations need to deploy AI without compliance risk.",
-        "gdprTitle": "GDPR / European Data Residency",
-        "gdprBody": "Data stays in your jurisdiction. No cross-border transfers. Right-to-deletion built into the memory layer. No third-party telemetry.",
-        "hipaaTitle": "HIPAA / Healthcare Safeguards",
-        "hipaaBody": "Encryption at rest and in transit. Append-only audit logs. Role-based access control. Memory writes are cryptographically signed for tamper evidence.",
-        "doraTitle": "DORA / Financial Resilience",
-        "doraBody": "Operational resilience through on-premises operation. No dependency on third-party cloud availability. Self-contained disaster recovery for intelligence workloads.",
-        "soc2Title": "SOC 2 Type II Readiness",
-        "soc2Body": "Immutable audit trail. Access controls on every memory operation. Workspace-level isolation prevents cross-tenant data contamination."
+      "eyebrow": "Built for Regulated Industries",
+      "title": "GDPR-ready. HIPAA-aligned. Your audit, your rules.",
+      "subtitle": "Every intelligence operation is logged, signed, and traceable. Lattice OS ships with the security primitives that regulated organizations need to deploy AI without compliance risk.",
+      "gdprTitle": "GDPR / European Data Residency",
+      "gdprBody": "Data stays in your jurisdiction. No cross-border transfers. Right-to-deletion built into the memory layer. No third-party telemetry.",
+      "hipaaTitle": "HIPAA / Healthcare Safeguards",
+      "hipaaBody": "Encryption at rest and in transit. Append-only audit logs. Role-based access control. Memory writes are cryptographically signed for tamper evidence.",
+      "doraTitle": "DORA / Financial Resilience",
+      "doraBody": "Operational resilience through on-premises operation. No dependency on third-party cloud availability. Self-contained disaster recovery for intelligence workloads.",
+      "soc2Title": "SOC 2 Type II Readiness",
+      "soc2Body": "Immutable audit trail. Access controls on every memory operation. Workspace-level isolation prevents cross-tenant data contamination."
     },
     "cta": {
-        "title": "Deploy sovereign AI on your infrastructure",
-        "subtitle": "Self-hosted orchestration, persistent knowledge graph, and regulated workflows — built so your intelligence layer never leaves your network.",
-        "button": "Deploy Lattice OS"
+      "title": "Deploy sovereign AI on your infrastructure",
+      "subtitle": "Self-hosted orchestration, persistent knowledge graph, and regulated workflows — built so your intelligence layer never leaves your network.",
+      "button": "Deploy Lattice OS"
     },
     "pricing": {
       "eyebrow": "Intelligence as a Service",
@@ -194,7 +194,12 @@
           "subtitle": "Each expert is a curated execution environment with a proprietary knowledge substrate. Choose the operator for your domain.",
           "cta": "View pricing"
         }
-      }
+      },
+      "formEyebrow": "Consultation",
+      "responseTitle": "Consultation Output",
+      "newQuery": "New query",
+      "processing": "Processing...",
+      "workflowDemoPlaceholder": "Submit a consultation above to see grounded reasoning here."
     },
     "expertV2": {
       "badge": "Expert-as-a-Service",
