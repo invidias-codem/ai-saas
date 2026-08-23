@@ -8,9 +8,9 @@ import { z } from "zod";
 import { v7 as uuidv7 } from "uuid";
 import {
   PersonaStateMachine,
-} from "@/lib/consultant/persona-state/state-machine.js";
-import { BoundaryCritic } from "@/lib/consultant/persona-state/boundary-critic.js";
-import type { SupabaseKV } from "@/lib/state/kv.js";
+} from "@/lib/consultant/persona-state/state-machine";
+import { BoundaryCritic } from "@/lib/consultant/persona-state/boundary-critic";
+import type { SupabaseKV } from "@/lib/state/kv";
 import { timingSafeCompare } from "@/lib/auth";
 
 const RetryRequestSchema = z.object({
@@ -53,13 +53,13 @@ async function loadPersonaMachine(): Promise<{
   machine: PersonaStateMachine;
   kv: SupabaseKV;
 }> {
-  const { createStateKV } = await import("@/lib/state/kv.js");
+  const { createStateKV } = await import("@/lib/state/kv");
   const kv = createStateKV();
 
   const stored = await kv.getCurrentPersona();
   if (stored) {
     const { PersonaChainVerifier } = await import(
-      "@/lib/consultant/persona-state/persona-schema.js"
+      "@/lib/consultant/persona-state/persona-schema"
     );
     const verifier = new PersonaChainVerifier(
       stored.previous_version_hash ?? stored.signature_hash,
@@ -81,7 +81,7 @@ async function loadPersonaMachine(): Promise<{
 
   const signedConfig = JSON.parse(signedConfigRaw);
   const { initializePersonaStateMachine } = await import(
-    "@/lib/consultant/persona-state/state-machine.js"
+    "@/lib/consultant/persona-state/state-machine"
   );
   const initialized = await initializePersonaStateMachine(signedConfig);
   return {

@@ -50,11 +50,6 @@ const nextConfig = {
         });
       }
     }
-    config.resolve.extensionAlias = {
-      '.js': ['.ts', '.tsx', '.js', '.jsx'],
-      '.mjs': ['.mts', '.mjs'],
-      '.cjs': ['.cts', '.cjs'],
-    };
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
       'esbuild-wasm': path.resolve('./node_modules/esbuild-wasm'),

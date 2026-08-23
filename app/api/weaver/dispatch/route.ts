@@ -6,20 +6,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { v7 as uuidv7 } from "uuid";
-import {
-  PersonaStateMachine,
-  initializePersonaStateMachine,
-} from "@/lib/consultant/persona-state/state-machine.js";
-import { AUTHORIZED_TRIGGERS } from "@/lib/consultant/persona-state/persona-schema.js";
-import { BoundaryCritic } from "@/lib/consultant/persona-state/boundary-critic.js";
-import {
-  UnifiedContextOrchestrator,
-  TaskType,
-  TierFloor,
-} from "@/lib/consultant/persona-state/router.js";
-import { ProviderHealthChecker } from "@/lib/consultant/persona-state/provider-health.js";
-import { canonicalPersonaBytes } from "@/lib/consultant/persona-state/canonicalize.js";
-import type { SupabaseKV } from "@/lib/state/kv.js";
+import { PersonaStateMachine, initializePersonaStateMachine } from "@/lib/consultant/persona-state/state-machine";
+import { AUTHORIZED_TRIGGERS } from "@/lib/consultant/persona-state/persona-schema";
+import { BoundaryCritic } from "@/lib/consultant/persona-state/boundary-critic";
+import { UnifiedContextOrchestrator, TaskType, TierFloor } from "@/lib/consultant/persona-state/router";
+import { ProviderHealthChecker } from "@/lib/consultant/persona-state/provider-health";
+import { canonicalPersonaBytes } from "@/lib/consultant/persona-state/canonicalize";
+import type { SupabaseKV } from "@/lib/state/kv";
 import { timingSafeCompare } from "@/lib/auth";
 
 const DispatchRequestSchema = z.object({
@@ -69,19 +62,19 @@ async function loadPersonaMachine(): Promise<{
   machine: PersonaStateMachine;
   kv: SupabaseKV;
 }> {
-  const { createStateKV } = await import("@/lib/state/kv.js");
+  const { createStateKV } = await import("@/lib/state/kv");
   const kv = createStateKV();
 
   const stored = await kv.getCurrentPersona();
   if (stored) {
     const { PersonaChainVerifier } = await import(
-      "@/lib/consultant/persona-state/persona-schema.js"
+      "@/lib/consultant/persona-state/persona-schema"
     );
     const verifier = new PersonaChainVerifier(
       stored.previous_version_hash ?? stored.signature_hash,
     );
     const { PersonaStateMachine: PSM } = await import(
-      "@/lib/consultant/persona-state/state-machine.js"
+      "@/lib/consultant/persona-state/state-machine"
     );
     return {
       machine: PersonaStateMachine.create(
@@ -103,7 +96,7 @@ async function loadPersonaMachine(): Promise<{
 
   const signedConfig = JSON.parse(signedConfigRaw);
   const { initializePersonaStateMachine } = await import(
-    "@/lib/consultant/persona-state/state-machine.js"
+    "@/lib/consultant/persona-state/state-machine"
   );
   const initialized = await initializePersonaStateMachine(signedConfig);
   return {
@@ -513,7 +506,7 @@ async function dispatchProviderCall(
   const mapping = PROVIDER_MODEL_MAP[providerKey] ?? { provider: "openrouter" as const, model: "auto" };
 
   if (mapping.provider === "openrouter") {
-    const { OpenRouterProvider } = await import("@/lib/llm/providers/openrouter.js");
+    const { OpenRouterProvider } = await import("@/lib/llm/providers/openrouter");
     const provider = new OpenRouterProvider();
     const result = await provider.generateStream(
       [{ role: "user", text: prompt }],
@@ -524,7 +517,7 @@ async function dispatchProviderCall(
   }
 
   if (mapping.provider === "gemini") {
-    const { GeminiProvider } = await import("@/lib/llm/providers/gemini.js");
+    const { GeminiProvider } = await import("@/lib/llm/providers/gemini");
     const provider = new GeminiProvider();
     const result = await provider.generateStream(
       [{ role: "user", text: prompt }],
@@ -535,7 +528,7 @@ async function dispatchProviderCall(
   }
 
   if (mapping.provider === "claude") {
-    const { ClaudeProvider } = await import("@/lib/llm/providers/claude.js");
+    const { ClaudeProvider } = await import("@/lib/llm/providers/claude");
     const provider = new ClaudeProvider();
     const result = await provider.generateStream(
       [{ role: "user", text: prompt }],
