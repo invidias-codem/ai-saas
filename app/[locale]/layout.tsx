@@ -21,12 +21,12 @@ const inter = Inter({
 });
 
 const metadataMessages: Record<string, { title: string; description: string; keywords: string }> = {
-  en: {
-    title: "Lattice OS - Your AI Workspace",
-    description: "A memory-native AI workspace for conversations, tools, and context-aware execution.",
-    keywords: "AI workspace, memory-native AI, Lattice OS, workspace intelligence, AI productivity",
-  },
-};
+    en: {
+      title: "Lattice OS — Deterministic Multi-Model AI Infrastructure",
+      description: "Build deterministic multi-model AI workflows with UCOL routing, sovereign telemetry, and memory-native infrastructure. Chameleon Consultant, Weaver Code, and enterprise-grade orchestration.",
+      keywords: "deterministic AI, multi-model routing, UCOL, sovereign AI, data refinery, persona architecture, Chameleon Consultant, Weaver Code, Lattice OS, memory-native AI, agentic workflows, LLM orchestration, Vercel edge AI, Supabase AI, telemetry, context firewall, post-generation critic, Delta Engine, World Model"
+    }
+  };
 
 export function generateStaticParams() {
   return locales.map((locale) => ({ locale }));

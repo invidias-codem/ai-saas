@@ -117,10 +117,51 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       "@type": "WebPage",
       "@id": `${siteUrl}/en/blog/${post.slug}`,
     },
+    keywords: post.tags.join(", "),
+    inLanguage: "en",
+    isPartOf: {
+      "@type": "Blog",
+      name: "Lattice OS Blog",
+      url: `${siteUrl}/en/blog`,
+    },
+    about: {
+      "@type": "Thing",
+      name: "Deterministic AI Infrastructure",
+    },
+  };
+
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: `${siteUrl}/en`,
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Blog",
+        item: `${siteUrl}/en/blog`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: post.title,
+        item: `${siteUrl}/en/blog/${post.slug}`,
+      },
+    ],
   };
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
+
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

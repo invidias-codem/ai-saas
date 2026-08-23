@@ -21,11 +21,30 @@ const SERIES_LINKS = Object.entries(SERIES_DISPLAY).map(([slug, name]) => ({
 }));
 
 export const metadata: Metadata = {
-  title: "Blog | Lattice OS - Memory-Native AI, Routing & Workflow Insights",
-  description: "Explore memory-native AI, hybrid inference, model routing, and workflow design from the team building Lattice OS.",
+  title: "Blog | Lattice OS — Deterministic AI Infrastructure, Multi-Model Routing & Sovereign Telemetry",
+  description: "Technical deep dives on deterministic multi-model AI orchestration, UCOL routing, sovereign telemetry, Chameleon Consultant architecture, and memory-native infrastructure.",
+  keywords: [
+    "deterministic AI",
+    "UCOL",
+    "multi-model routing",
+    "sovereign AI",
+    "telemetry",
+    "data refinery",
+    "persona architecture",
+    "Chameleon Consultant",
+    "Weaver Code",
+    "memory-native AI",
+    "agentic workflows",
+    "LLM orchestration",
+    "context firewall",
+    "post-generation critic",
+    "Delta Engine",
+    "World Model",
+    "Lattice OS"
+  ],
   openGraph: {
-    title: "Lattice OS Blog - Memory-Native AI, Routing & Workflow Insights",
-    description: "Explore memory-native AI, hybrid inference, model routing, and workflow design from the team building Lattice OS.",
+    title: "Lattice OS Blog — Deterministic AI Infrastructure, Multi-Model Routing & Sovereign Telemetry",
+    description: "Technical deep dives on deterministic multi-model AI orchestration, UCOL routing, sovereign telemetry, Chameleon Consultant architecture, and memory-native infrastructure.",
     type: "website",
     images: [
       {
@@ -38,8 +57,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Lattice OS Blog - Memory-Native AI, Routing & Workflow Insights",
-    description: "Explore memory-native AI, hybrid inference, model routing, and workflow design.",
+    title: "Lattice OS Blog — Deterministic AI Infrastructure, Multi-Model Routing & Sovereign Telemetry",
+    description: "Technical deep dives on deterministic multi-model AI orchestration, UCOL routing, sovereign telemetry, Chameleon Consultant architecture, and memory-native infrastructure.",
     images: ["/blog/og-image.png"],
   },
 };
