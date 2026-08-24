@@ -33,11 +33,6 @@ export const LandingNavbar = () => {
         { href: "/support", label: "Support", icon: QuestionMarkCircledIcon },
     ];
 
-    const landingAnchors = [
-        { href: "#mechanics", label: "Mechanics" },
-        { href: "#roster", label: "Experts" },
-    ];
-
     const mounted = useSyncExternalStore(
         () => () => {},
         () => true,
@@ -220,31 +215,6 @@ export const LandingNavbar = () => {
                                         );
                                     })}
 
-                                    {isLandingPage && landingAnchors.map((anchor) => (
-                                        <motion.div key={anchor.href} variants={itemVariants} className="w-full">
-                                            <Link
-                                                href={anchor.href}
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    setIsOpen(false);
-                                                    document.querySelector(anchor.href)?.scrollIntoView({ behavior: "smooth" });
-                                                }}
-                                                className="group relative block w-full"
-                                            >
-                                                <div className="relative overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-xl p-4 transition-all duration-300 hover:border-purple-500/50 hover:bg-accent/50 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.3)] hover:scale-[1.02] active:scale-[0.98]">
-                                                    <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/5 to-pink-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-                                                    <div className="relative flex items-center justify-center gap-3">
-                                                        <span className="text-2xl font-semibold text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-500 group-hover:to-pink-500 transition-all duration-300">
-                                                            {anchor.label}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-foreground/5 to-transparent" />
-                                                </div>
-                                            </Link>
-                                        </motion.div>
-                                    ))}
 
                                     <motion.div variants={itemVariants} className="w-full flex items-center justify-center my-2">
                                         <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent w-full" />
