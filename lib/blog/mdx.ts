@@ -98,7 +98,14 @@ const parsePostFile = cache((slug: string): BlogPost | null => {
       readingTime: Math.ceil(stats.minutes),
       featured: meta.featured || false,
       draft: meta.draft === true || String(meta.draft).toLowerCase() === 'true',
-      ogImage: meta.ogImage || `/og-image.jpg`,
+      // Use the post's own OG image only if it actually exists in /public;
+      // otherwise fall back to the Lattice OS brand banner. Posts whose
+      // frontmatter points at a missing /blog/{slug}-og.png would otherwise
+      // 404 and render the gradient placeholder on every card.
+      ogImage:
+        meta.ogImage && fs.existsSync(path.join(process.cwd(), 'public', meta.ogImage))
+          ? meta.ogImage
+          : `/og-image.jpg`,
       content,
     };
   } catch (error) {
