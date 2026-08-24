@@ -94,6 +94,7 @@ export default withMDX(
         { source: '/slack', destination: '/en/slack', permanent: false },
         { source: '/privacy', destination: '/en/privacy', permanent: false },
         { source: '/docs', destination: '/en/docs', permanent: false },
+        { source: '/explore', destination: '/en/explore', permanent: false },
       ];
     },
     async headers() {
@@ -154,4 +155,3 @@ export default withMDX(
     },
   })
 );
-# Sun Aug 23 21:54:04 PDT 2026
