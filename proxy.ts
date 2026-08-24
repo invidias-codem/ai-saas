@@ -43,6 +43,12 @@ const isPublicRoute = createRouteMatcher([
     '/:locale/explore',
     '/explore/(.*)',
     '/:locale/explore/(.*)',
+    '/conversation(.*)',
+    '/:locale/conversation(.*)',
+    '/memory-center(.*)',
+    '/:locale/memory-center(.*)',
+    '/code(.*)',
+    '/:locale/code(.*)',
     '/api/guest-chat',
     '/api/feedback',
     '/api/integrations/slack/callback',
@@ -64,12 +70,59 @@ const isPublicRoute = createRouteMatcher([
     '/api/memory/cli',
     '/api/code',
     '/api/v1/(.*)',  // partner gateway — uses its own bearer auth, not Clerk
+    '/api/guest/conversation(.*)',
+    '/api/guest/code(.*)',
+    '/api/guest/memory(.*)',
 ]);
 
+const GUEST_COOKIE = 'guest_id';
+const GUEST_COOKIE_MAX_AGE = 60 * 60 * 24; // 24 hours
+
+// Generate or read a guest UUID from a secure, httpOnly cookie.
+// This runs BEFORE auth() so server components can render guest state
+// without layout shifts or hydration mismatches.
+async function getOrCreateGuestId(req: Request): Promise<string> {
+    const url = new URL(req.url);
+    let guestId = url.searchParams.get('guest_id');
+
+    // Prefer existing cookie
+    const cookieGuest = req.headers.get('cookie')?.match(/[;\s]guest_id=([^;]+)/)?.[1];
+    if (cookieGuest) {
+        guestId = decodeURIComponent(cookieGuest);
+    }
+
+    // If still missing, generate a new UUID and set the cookie
+    if (!guestId) {
+        guestId = crypto.randomUUID();
+    }
+
+    return guestId;
+}
+
 export default clerkMiddleware(async (auth, req) => {
+    // ─── GUEST SESSION COOKIE ─────────────────────
+    // Generate/refresh guest_id before any routing so downstream
+    // server components and API handlers can read it instantly.
+    const guestId = await getOrCreateGuestId(req);
+    const url = new URL(req.url);
+
+    // Only set/refresh the cookie on page requests (not API)
+    // so Clerk's auth header injection isn't interfered with.
+    const isApi = req.nextUrl.pathname.startsWith('/api') || req.nextUrl.pathname.startsWith('/trpc');
+
     // ─── DESKTOP STATIC EXPORT BYPASS ──────────
     if (process.env.NEXT_PUBLIC_IS_DESKTOP === 'true') {
-        return NextResponse.next();
+        const res = NextResponse.next();
+        if (!isApi) {
+            res.cookies.set(GUEST_COOKIE, guestId, {
+                maxAge: GUEST_COOKIE_MAX_AGE,
+                path: '/',
+                sameSite: 'lax',
+                secure: process.env.NODE_ENV === 'production',
+                httpOnly: true,
+            });
+        }
+        return res;
     }
     // ───────────────────────────────────────────
 
@@ -137,7 +190,19 @@ export default clerkMiddleware(async (auth, req) => {
         // IMPORTANT: Must return NextResponse.next() (not bare `return`) so Clerk
         // injects its internal auth headers. Without this, auth() calls inside
         // route handlers throw "Clerk can't detect usage of clerkMiddleware()".
-        if (isPublicRoute(req)) return NextResponse.next();
+        if (isPublicRoute(req)) {
+            const res = NextResponse.next();
+            // Attach guest_id as a cookie AND request header for downstream handlers
+            res.cookies.set(GUEST_COOKIE, guestId, {
+                maxAge: GUEST_COOKIE_MAX_AGE,
+                path: '/',
+                sameSite: 'lax',
+                secure: process.env.NODE_ENV === 'production',
+                httpOnly: true,
+            });
+            res.headers.set('x-guest-id', guestId);
+            return res;
+        }
 
         // DEV BYPASS (never in production): route handlers implement their own
         // ?dev_token= check, but Clerk middleware ran first and 401'd the request
@@ -163,6 +228,17 @@ export default clerkMiddleware(async (auth, req) => {
 
     if (isPublicRoute(req)) {
         res = intlMiddleware(req) as NextResponse;
+        // Set guest cookie on public pages so server components
+        // can render guest state instantly (no layout shift).
+        if (!isApi) {
+            res.cookies.set(GUEST_COOKIE, guestId, {
+                maxAge: GUEST_COOKIE_MAX_AGE,
+                path: '/',
+                sameSite: 'lax',
+                secure: process.env.NODE_ENV === 'production',
+                httpOnly: true,
+            });
+        }
     } else {
         const { userId, redirectToSignIn } = await auth();
         if (!userId) return redirectToSignIn();

@@ -6,10 +6,12 @@ export interface ProtectedRouteContext {
   ip: string;
   requestId: string;
   idempotencyKey: string;
+  guestId?: string;
 }
 
 export interface ProtectedRouteOptions {
   idempotencyPrefix?: string;
+  allowGuest?: boolean;
 }
 
 function buildRequestId(req: Request): string {
