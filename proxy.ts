@@ -39,7 +39,7 @@ const isPublicRoute = createRouteMatcher([
     '/blog(.*)',
     '/:locale/blog(.*)',
     '/videos(.*)',
-    '/:locale/explore',
+    '/:locale/explore', // EXPLORE_MARKER_TEST
     '/:locale/explore/(.*)',
     '/(.*)/explore(.*)',
     '/explore(.*)',
