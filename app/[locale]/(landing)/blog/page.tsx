@@ -48,10 +48,11 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/blog/og-image.png",
+        url: '/og-image.jpg',
         width: 1200,
         height: 630,
-        alt: "Lattice OS Blog",
+        type: 'image/jpeg',
+        alt: 'Lattice OS Blog',
       },
     ],
   },
@@ -59,7 +60,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Lattice OS Blog — Deterministic AI Infrastructure, Multi-Model Routing & Sovereign Telemetry",
     description: "Technical deep dives on deterministic multi-model AI orchestration, UCOL routing, sovereign telemetry, Chameleon Consultant architecture, and memory-native infrastructure.",
-    images: ["/blog/og-image.png"],
+    images: ['/og-image.jpg'],
   },
 };
 

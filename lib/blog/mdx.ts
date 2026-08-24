@@ -98,7 +98,7 @@ const parsePostFile = cache((slug: string): BlogPost | null => {
       readingTime: Math.ceil(stats.minutes),
       featured: meta.featured || false,
       draft: meta.draft === true || String(meta.draft).toLowerCase() === 'true',
-      ogImage: meta.ogImage || `/blog/images/${slug}/og-image.png`,
+      ogImage: meta.ogImage || `/og-image.jpg`,
       content,
     };
   } catch (error) {
