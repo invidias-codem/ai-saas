@@ -69,6 +69,9 @@ const isPublicRoute = createRouteMatcher([
     '/api/cli/stream',
     '/api/memory/cli',
     '/api/code',
+    '/api/conversation(.*)',
+    '/api/conversations(.*)',
+    '/api/workspaces(.*)',
     '/api/v1/(.*)',  // partner gateway — uses its own bearer auth, not Clerk
     '/api/guest/conversation(.*)',
     '/api/guest/code(.*)',
