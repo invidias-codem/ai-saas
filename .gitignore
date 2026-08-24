@@ -98,3 +98,6 @@ packages/ucol-node/node_modules/
 
 # Go harness build artifacts
 go-harness/bin/
+
+# OG-image optimizer venv
+.venv_ogfix/

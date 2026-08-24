@@ -877,7 +877,7 @@ function ConversationPage({
     return (
       <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
         <Avatar className="h-8 w-8 ring-1 ring-border/50">
-          <AvatarImage src="/Genie.png" alt="Weaver avatar" />
+          <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
           <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
         </Avatar>
         <div className="flex items-center space-x-1.5 h-8">

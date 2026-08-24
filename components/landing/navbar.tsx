@@ -86,7 +86,7 @@ export const LandingNavbar = () => {
                     <Link href="/" className="flex items-center gap-3 z-50 relative group">
                         <div className="relative w-9 h-9 flex-shrink-0 transition-transform group-hover:scale-110 duration-300">
                             <Image
-                                src="/Genie.png"
+                                src="/lattice-logo.png"
                                 alt="Lattice OS logo"
                                 fill
                                 className="object-cover"

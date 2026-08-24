@@ -91,7 +91,7 @@ const Sidebar = ({ onNavigate }: SidebarProps) => {
           onClick={() => handleClick("/dashboard")}
         >
           <div className="relative w-6 h-6 mr-3">
-            <Image fill alt="Logo" src="/Genie.png" sizes="24px" />
+            <Image fill alt="Logo" src="/lattice-logo.png" sizes="24px" />
           </div>
           <h1 className={cn("text-lg font-medium tracking-wide text-white", montserrat.className)}>
             Lattice
