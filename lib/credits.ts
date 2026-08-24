@@ -123,11 +123,22 @@ export async function hasUnlimitedUsageAccess(userId?: string | null, email?: st
 
         const { data: subscriptionData } = await supabaseAdmin
             .from('subscriptions')
-            .select('tier, stripe_status')
+            .select('tier, premium_until')
             .eq('clerk_user_id', userId)
             .maybeSingle();
 
-        return subscriptionData?.tier === 'pro' && subscriptionData?.stripe_status === 'active';
+        if (!subscriptionData?.tier) return false;
+
+        // Enterprise tier = unlimited (retained for master/operator accounts)
+        if (subscriptionData.tier === 'enterprise') return true;
+
+        // Pro tier requires a non-expired premium_until timestamp
+        if (subscriptionData.tier === 'pro') {
+            const until = subscriptionData.premium_until ? new Date(subscriptionData.premium_until) : null;
+            return !!until && until > new Date();
+        }
+
+        return false;
     } catch (error) {
         console.error('[Credits] Exception resolving subscription access:', error);
         return false;

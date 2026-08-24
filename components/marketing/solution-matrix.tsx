@@ -68,7 +68,7 @@ export const SolutionMatrix = () => {
           className="mt-10"
         >
           <Link
-            href="/docs"
+            href="/explore"
             className="text-sm font-semibold text-white/80 hover:text-white transition-colors underline underline-offset-4"
           >
             Explore the platform

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { clerkClient } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Helper to lazily initialize Supabase Admin Client
 const getSupabaseAdmin = () => {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,13 +9,14 @@ const getSupabaseAdmin = () => {
   );
 };
 
-import { CREDITS_PER_DOLLAR, matchPack } from '@/lib/subscription/packs';
+import { CREDITS_PER_DOLLAR, matchPack } from "@/lib/subscription/packs";
 const KOFI_WEBHOOK_SECRET = process.env.KOFI_WEBHOOK_SECRET!;
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Parse Ko-Fi's unique payload structure
-    // Ko-Fi sends application/x-www-form-urlencoded with a stringified 'data' field
+    const supabaseAdmin = getSupabaseAdmin();
+
+    // ── 1. Parse payload ──────────────────────────────────────────
     const formData = await req.formData();
     const rawData = formData.get("data");
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const payload = JSON.parse(rawData);
 
-    // 2. Token Verification
+    // ── 2. Verify token (HMAC-style check against shared secret) ──
     if (payload.verification_token !== KOFI_WEBHOOK_SECRET) {
       console.error("Ko-Fi Webhook Error: Invalid verification token");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -36,71 +36,95 @@ export async function POST(req: NextRequest) {
     const buyerEmail = payload.email;
     const amount = parseFloat(payload.amount);
 
-    // 3. Idempotency Check
-    // Attempt to insert the transaction. If it fails due to the UNIQUE constraint, 
-    // it means we've already processed it.
-    const supabaseAdmin = getSupabaseAdmin();
-    const { error: insertError } = await supabaseAdmin
-      .from("payment_events")
-      .insert({
-        transaction_id: transactionId,
-        email: buyerEmail,
-        amount: payload.amount,
-      });
-
-    if (insertError) {
-      if (insertError.code === "23505") { // Postgres unique violation code
-        console.log(`Webhook ignored: Transaction ${transactionId} already processed.`);
-        return NextResponse.json({ status: "Already processed" }, { status: 200 });
-      }
-      throw insertError;
+    if (!transactionId || !buyerEmail || !amount) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // 4. Find the Clerk User by Email
+    // ── 3. Idempotency: short-circuit if already processed ────────
+    const { data: existing } = await supabaseAdmin
+        .from("payment_events")
+        .select("transaction_id")
+        .eq("transaction_id", transactionId)
+        .maybeSingle();
+
+    if (existing) {
+        console.log(`Webhook ignored: Transaction ${transactionId} already processed.`);
+        return NextResponse.json({ status: "Already processed" }, { status: 200 });
+    }
+
+    // ── 4. Find the Clerk User by Email ──────────────────────────
     const client = await clerkClient();
     const users = await client.users.getUserList({
       emailAddress: [buyerEmail],
     });
 
     if (users.data.length === 0) {
-      // CRITICAL: The payment succeeded, but the user used a different email on Ko-Fi.
-      // We return 200 so Ko-Fi stops retrying, but you should log this to an 
-      // "unmatched_payments" table to manually credit the user later.
+      // Payment succeeded but Ko-fi email doesn't match any Clerk user.
+      // Record as unmatched so the manual-claim fallback can pick it up.
+      await supabaseAdmin.from("payment_events").insert({
+        transaction_id: transactionId,
+        email: buyerEmail,
+        amount: payload.amount,
+        processed: true,
+        matched: false,
+      });
       console.error(`Paid but unmatched email: ${buyerEmail} for TX: ${transactionId}`);
       return NextResponse.json({ status: "Unmatched user email" }, { status: 200 });
     }
 
-    const user = users.data[0];
+    const clerkUser = users.data[0];
 
-    // 5. Credit the unified ledger (supporter_credits) — the same ledger all
-    // spend paths (chat, image, video, music, code) deduct from.
+    // ── 5a. Credit the unified ledger (existing behavior) ─────────
     const creditsToAdd = Math.floor(amount * CREDITS_PER_DOLLAR);
     const pack = matchPack(amount);
 
-    const { error: creditError } = await supabaseAdmin.rpc('increment_credits', {
-      p_user_id: user.id,
+    const { error: creditError } = await supabaseAdmin.rpc("increment_credits", {
+      p_user_id: clerkUser.id,
       p_amount: creditsToAdd,
-      p_type: 'TOP_UP',
-      p_description: `Ko-Fi top-up: $${amount}${pack ? ` (${pack.name})` : ''} (TX ${transactionId})`,
-      p_metadata: { source: 'kofi', transaction_id: transactionId, amount_usd: amount, pack: pack?.id ?? null },
+      p_type: "TOP_UP",
+      p_description: `Ko-Fi top-up: $${amount}${pack ? ` (${pack.name})` : ""} (TX ${transactionId})`,
+      p_metadata: { source: "kofi", transaction_id: transactionId, amount_usd: amount, pack: pack?.id ?? null },
     });
 
     if (creditError) {
       console.error(`Ko-Fi Webhook: failed to credit ledger for ${buyerEmail}:`, creditError);
-      // Return 500 so Ko-Fi retries; payment_events row insert will hit the
-      // idempotency path next attempt only if we also roll it back — safer to
-      // let the unique constraint short-circuit and surface for manual review.
       return NextResponse.json({ error: "Credit update failed" }, { status: 500 });
     }
 
-    console.log(`Successfully added ${creditsToAdd} credits to ${buyerEmail}`);
+    // ── 5b. Extend subscription (30-day premium access) ──────────
+    const premiumUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    // 6. Acknowledge Receipt
-    return NextResponse.json({ status: "Success" }, { status: 200 });
+    const { error: subError } = await supabaseAdmin
+      .from("subscriptions")
+      .upsert(
+        {
+          clerk_user_id: clerkUser.id,
+          tier: "pro",
+          premium_until: premiumUntil,
+        },
+        { onConflict: "clerk_user_id" }
+      );
+
+    if (subError) {
+      console.error(`Ko-Fi Webhook: failed to extend subscription for ${buyerEmail}:`, subError);
+      return NextResponse.json({ error: "Subscription update failed" }, { status: 500 });
+    }
+
+    // ── 6. Record idempotency ONLY after both operations succeed ──
+    await supabaseAdmin.from("payment_events").insert({
+      transaction_id: transactionId,
+      email: buyerEmail,
+      amount: payload.amount,
+      processed: true,
+      matched: true,
+    });
+
+    console.log(`Ko-Fi: ${creditsToAdd} credits + premium (30d) granted to ${buyerEmail}`);
+    return NextResponse.json({ status: "Success", credits: creditsToAdd, premium_until: premiumUntil });
 
   } catch (error) {
     console.error("Ko-Fi Webhook Processing Error:", error);
-    // Return 500 so Ko-Fi knows to retry the webhook later
+    // Return 500 so Ko-Fi retries; nothing is recorded yet so idempotency is safe.
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
