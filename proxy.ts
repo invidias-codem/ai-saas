@@ -126,7 +126,6 @@ export default clerkMiddleware(async (auth, req) => {
     }
     // ───────────────────────────────────────────
 
-    const isApi = req.nextUrl.pathname.startsWith('/api') || req.nextUrl.pathname.startsWith('/trpc');
 
     // ─── LANDING VARIANT ROUTING ────────────────
     // Root locale routes (/, /en, /th, etc.) are rewritten to /[locale]/expert/[variant]
