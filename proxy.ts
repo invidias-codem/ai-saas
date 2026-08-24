@@ -39,6 +39,8 @@ const isPublicRoute = createRouteMatcher([
     '/blog(.*)',
     '/:locale/blog(.*)',
     '/videos(.*)',
+    '/:locale/explore',
+    '/:locale/explore/(.*)',
     '/(.*)/explore(.*)',
     '/explore(.*)',
     '/api/guest-chat',
