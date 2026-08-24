@@ -2,6 +2,7 @@
 // Reusable server component: enforces auth + plan, or renders the paywall.
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { ArrowRight, Lock, Sparkles } from "lucide-react";
 
