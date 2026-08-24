@@ -7,7 +7,7 @@ export const authors: Record<string, Author> = {
     id: 'joshua-jair',
     name: 'Joshua-Jair E. Mohammed',
     role: 'Founder & Lead Engineer',
-    avatar: '/blog/authors/joshua-jair.png',
+    avatar: '/authors/joshua-jair.png',
     bio: 'Founder of Lattice OS, focused on memory-native AI, hybrid inference, agent routing, and durable workspace infrastructure.',
     linkedin: 'joshua-jair-e-mohammed',
     github: 'joshua-jair',
