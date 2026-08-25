@@ -33,7 +33,7 @@ export async function GET() {
     // Dynamic import so the module is excluded from the main bundle when
     // the feature flag is false.
     const [ort] = await Promise.all([
-      import('onnxruntime-web'),
+      import('onnxruntime-web/wasm'),
     ]);
 
     // Force single-threaded WASM. In Vercel serverless Node.js, the default
