@@ -10,23 +10,34 @@ const JEPA_FALLBACK_ENABLED = process.env.JEPA_FALLBACK === 'true';
 let cachedSession: ort.InferenceSession | null = null;
 let initializationPromise: Promise<ort.InferenceSession> | null = null;
 
+function astTokenToIds(astTokens: string, maxLen = 128): number[] {
+  // Deterministic, model-free encoding: split tokens and hash each into [0, 65535].
+  const ids = astTokens.split(/[()\s]+/).filter(Boolean).map((tok) => {
+    let h = 0;
+    for (let i = 0; i < tok.length; i++) {
+      h = ((h << 5) - h + tok.charCodeAt(i)) | 0;
+    }
+    return ((Math.abs(h) % 65535) + 65535) % 65535;
+  });
+
+  // Truncate or pad to the model's expected input length.
+  if (ids.length > maxLen) return ids.slice(0, maxLen);
+  while (ids.length < maxLen) ids.push(0);
+  return ids;
+}
+
 async function getJepaSession(): Promise<ort.InferenceSession> {
-  // 1. Fast path: warm container, session already initialized.
   if (cachedSession) {
     return cachedSession;
   }
 
-  // 2. Concurrency lock: prevent thundering-herd WASM init on cold start.
   if (initializationPromise) {
     return initializationPromise;
   }
 
-  // 3. Cold-start initialization.
   initializationPromise = (async () => {
-    // Force single-threaded execution to prevent Worker crashes in Vercel serverless.
     ort.env.wasm.numThreads = 1;
 
-    // Bypass Next.js Webpack importMeta interception and chunked ESM resolution.
     const wasmDir = `${process.cwd()}/public/wasm`;
     ort.env.wasm.wasmPaths = {
       wasm: `file://${wasmDir}/ort-wasm-simd-threaded.wasm`,
@@ -59,25 +70,28 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
+    const astTokens = typeof body.astTokens === 'string' ? body.astTokens : '';
+    const language = typeof body.language === 'string' ? body.language : 'unknown';
+
     const session = await getJepaSession();
-
-    // Placeholder input shape; wire to actual AST/state encoder output later.
-    const inputTensor = new ort.Tensor(
-      'float32',
-      new Float32Array(body.latentVector || new Array(128).fill(0)),
-      [1, 128]
-    );
-
+    const inputIds = astTokenToIds(astTokens, 128);
+    const inputTensor = new ort.Tensor('int64', BigInt64Array.from(inputIds.map((v) => BigInt(v))), [1, 128]);
     const results = await session.run({ input: inputTensor });
+
+    const output = results.output;
+    const embedding = Array.isArray(output?.data)
+      ? (output.data as unknown as number[]).slice(0, 128)
+      : null;
 
     return NextResponse.json({
       status: 'success',
+      embedding,
+      astTokens,
+      language,
       totalMs: Date.now() - started,
       warmStart: !!cachedSession,
-      output: results.output?.data || null,
     });
   } catch (error: any) {
-    // Standard fail-closed fallback hook for the MCTS loop.
     return NextResponse.json(
       {
         status: 'error',
