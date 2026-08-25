@@ -17,7 +17,7 @@ const PROBE_FEATURE_FLAG = process.env.ENABLE_JEPA === 'true';
  * Minimal valid ONNX model: Identity(x) with float32 inputs/outputs, shape [1,3].
  * Generated as base64 to avoid committing binary artifacts.
  */
-const MINIMAL_ONNX_B64 = 'CAgSBAoCCBIaMAoEbWFpbiIWCghJZGVudGl0eRIBeBoBeSoMCgF4EgYIARICCAEyDAoBeRIGCAESAggB';
+const MINIMAL_ONNX_B64 = 'OkgIAQgSBQoAEAESOjwKBG1haW4iEAoISWRlbnRpdHkSAXgaAXkSEAoBeBILCAEBEgYIAQEIAQMSEAoBeRILCAEBEgYIAQEIAQM=';
 
 function decodeMinimalModel(): ArrayBuffer {
   const binary = Buffer.from(MINIMAL_ONNX_B64, 'base64');
