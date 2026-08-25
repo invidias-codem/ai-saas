@@ -54,6 +54,15 @@ const nextConfig = {
       ...(config.resolve.alias || {}),
       'esbuild-wasm': path.resolve('./node_modules/esbuild-wasm'),
     };
+
+    // Prevent Webpack from intercepting import.meta.url resolution so
+    // runtime artifacts like onnxruntime-web can use native paths.
+    config.module.rules = config.module.rules || [];
+    config.module.rules.push({
+      test: /\.m?js$/,
+      parser: { javascript: { importMeta: false } },
+    });
+
     return config;
   },
 };
