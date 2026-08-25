@@ -34,7 +34,8 @@ async function getJepaSession(): Promise<ort.InferenceSession> {
     };
 
     const modelPath = `${wasmDir}/dummy_fp32.onnx`;
-    const session = await ort.InferenceSession.create(`file://${modelPath}`, {
+    const modelBuffer = require('fs').readFileSync(modelPath);
+    const session = await ort.InferenceSession.create(modelBuffer, {
       executionProviders: ['wasm'],
       graphOptimizationLevel: 'all',
       wasmPaths: '/wasm/',
