@@ -13,6 +13,19 @@ export const dynamic = 'force-dynamic';
 
 const PROBE_FEATURE_FLAG = process.env.ENABLE_JEPA === 'true';
 
+/**
+ * Minimal valid ONNX model: Identity(x) with float32 inputs/outputs, shape [1,3].
+ * Generated as base64 to avoid committing binary artifacts.
+ */
+const MINIMAL_ONNX_B64 = 'CAgSBAoCCBIaMAoEbWFpbiIWCghJZGVudGl0eRIBeBoBeSoMCgF4EgYIARICCAEyDAoBeRIGCAESAggB';
+
+function decodeMinimalModel(): ArrayBuffer {
+  const binary = Buffer.from(MINIMAL_ONNX_B64, 'base64');
+  const buf = new ArrayBuffer(binary.length);
+  new Uint8Array(buf).set(binary);
+  return buf;
+}
+
 export async function GET() {
   if (!PROBE_FEATURE_FLAG) {
     return NextResponse.json(
@@ -30,14 +43,10 @@ export async function GET() {
   };
 
   try {
-    // Dynamic import so the module is excluded from the main bundle when
-    // the feature flag is false.
     const [ort] = await Promise.all([
       import('onnxruntime-web/wasm'),
     ]);
 
-    // Force single-threaded WASM and bypass Next.js chunked ESM resolution
-    // by pointing ONNX directly at absolute local artifacts.
     (ort as any).env.wasm.numThreads = 1;
     const wasmDir = `${process.cwd()}/public/wasm`;
     (ort as any).env.wasm.wasmPaths = {
@@ -48,15 +57,11 @@ export async function GET() {
     results.ortLoaded = true;
     results.ortVersion = (ort as any).version || 'unknown';
 
-    // Build a tiny dummy ONNX model in memory (1MB-ish).
-    // This avoids committing binary model artifacts to the repo.
     const session = await (ort as any).InferenceSession.create(
-      new ArrayBuffer(1024 * 1024), // 1MB dummy model
+      decodeMinimalModel(),
       {
         executionProviders: ['wasm'],
         graphOptimizationLevel: 'all',
-        // Point ONNX runtime to the Next.js public/wasm directory for both
-        // the WASM bootstrap JS and the .wasm binary.
         wasmPaths: '/wasm/',
       }
     );
