@@ -1,53 +1,90 @@
+import * as ort from 'onnxruntime-web';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const JEPA_WORKER_URL = process.env.JEPA_WORKER_URL;
 const JEPA_FALLBACK_ENABLED = process.env.JEPA_FALLBACK === 'true';
 
+// Module-level session cache and initialization lock for warm-start amortization.
+let cachedSession: ort.InferenceSession | null = null;
+let initializationPromise: Promise<ort.InferenceSession> | null = null;
+
+async function getJepaSession(): Promise<ort.InferenceSession> {
+  // 1. Fast path: warm container, session already initialized.
+  if (cachedSession) {
+    return cachedSession;
+  }
+
+  // 2. Concurrency lock: prevent thundering-herd WASM init on cold start.
+  if (initializationPromise) {
+    return initializationPromise;
+  }
+
+  // 3. Cold-start initialization.
+  initializationPromise = (async () => {
+    // Force single-threaded execution to prevent Worker crashes in Vercel serverless.
+    ort.env.wasm.numThreads = 1;
+
+    // Bypass Next.js Webpack importMeta interception and chunked ESM resolution.
+    const wasmDir = `${process.cwd()}/public/wasm`;
+    ort.env.wasm.wasmPaths = {
+      wasm: `file://${wasmDir}/ort-wasm-simd-threaded.wasm`,
+      mjs: `file://${wasmDir}/ort-wasm-simd-threaded.mjs`,
+    };
+
+    const modelPath = `${wasmDir}/dummy_fp32.onnx`;
+    const session = await ort.InferenceSession.create(`file://${modelPath}`, {
+      executionProviders: ['wasm'],
+      graphOptimizationLevel: 'all',
+      wasmPaths: '/wasm/',
+    });
+
+    cachedSession = session;
+    return session;
+  })();
+
+  return initializationPromise;
+}
+
 export async function POST(request: Request) {
-  if (!JEPA_FALLBACK_ENABLED || !JEPA_WORKER_URL) {
+  if (!JEPA_FALLBACK_ENABLED) {
     return NextResponse.json(
-      { error: 'JEPA fallback not configured' },
+      { error: 'JEPA inference disabled' },
       { status: 501 }
     );
   }
 
-  const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.JEPA_API_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const body = await request.json();
   const started = Date.now();
 
   try {
-    const resp = await fetch(JEPA_WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(25_000),
-    });
+    const body = await request.json();
+    const session = await getJepaSession();
 
-    if (!resp.ok) {
-      throw new Error(`Worker responded ${resp.status}: ${resp.statusText}`);
-    }
+    // Placeholder input shape; wire to actual AST/state encoder output later.
+    const inputTensor = new ort.Tensor(
+      'float32',
+      new Float32Array(body.latentVector || new Array(128).fill(0)),
+      [1, 128]
+    );
 
-    const result = await resp.json();
+    const results = await session.run({ input: inputTensor });
+
     return NextResponse.json({
-      ...result,
-      fallback: true,
-      workerLatencyMs: Date.now() - started,
+      status: 'success',
+      totalMs: Date.now() - started,
+      warmStart: !!cachedSession,
+      output: results.output?.data || null,
     });
   } catch (error: any) {
+    // Standard fail-closed fallback hook for the MCTS loop.
     return NextResponse.json(
       {
-        error: 'JEPA worker unavailable',
-        message: error.message,
-        fallback: true,
+        status: 'error',
+        fallbackToSyntactic: true,
+        error: error.message,
       },
-      { status: 502 }
+      { status: 500 }
     );
   }
 }
