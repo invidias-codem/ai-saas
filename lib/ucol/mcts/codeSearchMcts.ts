@@ -236,7 +236,7 @@ export class JepaDivergenceScorer {
         throw new Error(`JEPA encoder responded ${res.status}`);
       }
 
-      const data = await res.json() as { status: string; embedding?: number[]; totalMs?: number; fallbackToSyntactic?: boolean };
+      const data = await res.json() as { status: string; embedding?: number[]; totalMs?: number; fallbackToSyntactic?: boolean; error?: string };
       if (data.status === 'error' || !data.embedding) {
         throw new Error(data.error || 'JEPA encoder returned no embedding');
       }
