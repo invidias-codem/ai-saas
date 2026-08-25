@@ -76,6 +76,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/guest/conversation(.*)',
     '/api/guest/code(.*)',
     '/api/guest/memory(.*)',
+    '/api/wasm-probe',
 ]);
 
 const GUEST_COOKIE = 'guest_id';
