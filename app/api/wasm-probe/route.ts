@@ -76,8 +76,8 @@ export async function GET() {
     const feeds: Record<string, any> = {
       input: new (ort as any).Tensor(
         'float32',
-        new Float32Array([1, 2, 3]),
-        [1, 3]
+        new Float32Array(128), // matches dummy_fp32.onnx [1,128]
+        [1, 128]
       ),
     };
 
