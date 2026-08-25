@@ -34,20 +34,12 @@ export async function GET() {
     // the feature flag is false.
     const [ort] = await Promise.all([
       import('onnxruntime-web'),
-      // Warm the WASM locateFile path. If this fails, the entire JEPA
-      // WASM strategy is invalid.
-      (async () => {
-        const worker = new Worker(
-          new URL('data:application/javascript,', import.meta.url),
-          { type: 'classic' }
-        );
-        await new Promise<void>((resolve) => {
-          worker.onmessage = () => resolve();
-          worker.postMessage({ type: 'warmup' });
-        });
-        worker.terminate();
-      })(),
     ]);
+
+    // Force single-threaded WASM. In Vercel serverless Node.js, the default
+    // thread-count auto-detection path can still attempt Worker-based
+    // initialization; setting this explicitly avoids that structural failure.
+    (ort as any).env.wasm.numThreads = 1;
 
     results.ortLoaded = true;
     results.ortVersion = (ort as any).version || 'unknown';
