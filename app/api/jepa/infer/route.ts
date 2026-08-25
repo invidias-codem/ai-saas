@@ -10,7 +10,7 @@ const JEPA_FALLBACK_ENABLED = process.env.JEPA_FALLBACK === 'true';
 let cachedSession: ort.InferenceSession | null = null;
 let initializationPromise: Promise<ort.InferenceSession> | null = null;
 
-function astTokenToIds(astTokens: string, maxLen = 128): number[] {
+function astTokenToIds(astTokens: string, maxLen = 128): Float32Array {
   // Deterministic, model-free encoding: split tokens and hash each into [0, 65535].
   const ids = astTokens.split(/[()\s]+/).filter(Boolean).map((tok) => {
     let h = 0;
@@ -20,10 +20,12 @@ function astTokenToIds(astTokens: string, maxLen = 128): number[] {
     return ((Math.abs(h) % 65535) + 65535) % 65535;
   });
 
-  // Truncate or pad to the model's expected input length.
-  if (ids.length > maxLen) return ids.slice(0, maxLen);
+  if (ids.length > maxLen) ids.length = maxLen;
   while (ids.length < maxLen) ids.push(0);
-  return ids;
+
+  // Normalize to float32 in [0, 1] so dummy_fp32.onnx accepts the tensor.
+  const scale = 1 / 65535;
+  return new Float32Array(ids.map((v) => v * scale));
 }
 
 async function getJepaSession(): Promise<ort.InferenceSession> {
@@ -74,8 +76,7 @@ export async function POST(request: Request) {
     const language = typeof body.language === 'string' ? body.language : 'unknown';
 
     const session = await getJepaSession();
-    const inputIds = astTokenToIds(astTokens, 128);
-    const inputTensor = new ort.Tensor('int64', BigInt64Array.from(inputIds.map((v) => BigInt(v))), [1, 128]);
+    const inputTensor = new ort.Tensor('float32', astTokenToIds(astTokens, 128), [1, 128]);
     const results = await session.run({ input: inputTensor });
 
     const output = results.output;
