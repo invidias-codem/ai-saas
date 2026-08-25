@@ -38,7 +38,6 @@ async function getJepaSession(): Promise<ort.InferenceSession> {
     const session = await ort.InferenceSession.create(modelBuffer, {
       executionProviders: ['wasm'],
       graphOptimizationLevel: 'all',
-      wasmPaths: '/wasm/',
     });
 
     cachedSession = session;
