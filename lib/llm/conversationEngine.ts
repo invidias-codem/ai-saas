@@ -41,7 +41,7 @@ import type { AIOutputAudit } from '@/lib/world-model/types';
 import { deltaEngine } from '@/lib/world-model/delta';
 import { critiqueLLMOutput } from '@/lib/ucol/critics/OutputCritic';
 import type { UcolMemoryPlan, UcolMemoryScope } from '@/lib/ucol/routing/types';
-import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
+import { getEffectiveProviderKeys } from '@/lib/userProviderKeys';
 import { createTrace } from '@/lib/observability/langfuse';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { createQuarantinePromotionManager } from '@/lib/execution/quarantinePromotionManager';
@@ -181,6 +181,8 @@ const GREETING = "Hi there! How can I assist you today? Feel free to ask me anyt
  * - API route (prod)
  * - Eval harness (Mode B replay)
  */
+import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
+
 export async function generateConversationReply(
   args: {
     userId: string;
