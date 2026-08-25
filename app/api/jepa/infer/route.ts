@@ -78,11 +78,9 @@ export async function POST(request: Request) {
     const session = await getJepaSession();
     const inputTensor = new ort.Tensor('float32', astTokenToIds(astTokens, 128), [1, 128]);
     const results = await session.run({ input: inputTensor });
-
-    const output = results.output;
-    const embedding = Array.isArray(output?.data)
-      ? (output.data as unknown as number[]).slice(0, 128)
-      : null;
+    const outputName = Object.keys(results)[0];
+    const output = (results as any)[outputName];
+    const embedding = output?.data ? Array.from(output.data).slice(0, 128) : null;
 
     return NextResponse.json({
       status: 'success',
