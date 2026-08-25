@@ -36,10 +36,14 @@ export async function GET() {
       import('onnxruntime-web/wasm'),
     ]);
 
-    // Force single-threaded WASM. In Vercel serverless Node.js, the default
-    // thread-count auto-detection path can still attempt Worker-based
-    // initialization; setting this explicitly avoids that structural failure.
+    // Force single-threaded WASM and bypass Next.js chunked ESM resolution
+    // by pointing ONNX directly at absolute local artifacts.
     (ort as any).env.wasm.numThreads = 1;
+    const wasmDir = `${process.cwd()}/public/wasm`;
+    (ort as any).env.wasm.wasmPaths = {
+      wasm: `file://${wasmDir}/ort-wasm-simd-threaded.wasm`,
+      mjs: `file://${wasmDir}/ort-wasm-simd-threaded.mjs`,
+    };
 
     results.ortLoaded = true;
     results.ortVersion = (ort as any).version || 'unknown';
@@ -51,12 +55,9 @@ export async function GET() {
       {
         executionProviders: ['wasm'],
         graphOptimizationLevel: 'all',
-        // The critical locateFile override: tell ONNX runtime to fetch
-        // WASM artifacts from the Next.js public/ directory instead of
-        // node_modules/.bin or native filesystem paths.
-        locateFile: (file: string) => {
-          return `/wasm/${file}`;
-        },
+        // Point ONNX runtime to the Next.js public/wasm directory for both
+        // the WASM bootstrap JS and the .wasm binary.
+        wasmPaths: '/wasm/',
       }
     );
 
