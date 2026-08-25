@@ -19,10 +19,13 @@ const PROBE_FEATURE_FLAG = process.env.ENABLE_JEPA === 'true';
  */
 const MINIMAL_ONNX_B64 = 'OkwIAQgSBQoAEAESOkAKBG1haW4iFAoISWRlbnRpdHkSAxIBeBoDGgF5EhAKAXgSCwgBARIGCAEBCAEDEhAKAXkSCwgBARIGCAEBCAED';
 
-function decodeMinimalModel(): ArrayBuffer {
-  const binary = Buffer.from(MINIMAL_ONNX_B64, 'base64');
-  const buf = new ArrayBuffer(binary.length);
-  new Uint8Array(buf).set(binary);
+function loadDummyModel(): ArrayBuffer {
+  const fs = require('fs');
+  const path = require('path');
+  const modelPath = path.join(process.cwd(), 'public', 'wasm', 'dummy_fp32.onnx');
+  const data = fs.readFileSync(modelPath);
+  const buf = new ArrayBuffer(data.length);
+  new Uint8Array(buf).set(data);
   return buf;
 }
 
@@ -58,7 +61,7 @@ export async function GET() {
     results.ortVersion = (ort as any).version || 'unknown';
 
     const session = await (ort as any).InferenceSession.create(
-      decodeMinimalModel(),
+      loadDummyModel(),
       {
         executionProviders: ['wasm'],
         graphOptimizationLevel: 'all',
