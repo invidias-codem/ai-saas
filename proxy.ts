@@ -77,6 +77,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/guest/code(.*)',
     '/api/guest/memory(.*)',
     '/api/wasm-probe',
+    '/api/jepa/infer',
 ]);
 
 const GUEST_COOKIE = 'guest_id';
