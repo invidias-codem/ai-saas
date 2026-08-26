@@ -31,7 +31,7 @@ importers:
         version: 6.27.0(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(@types/react@18.3.31)(bs58@6.0.0)(bufferutil@4.1.0)(immer@11.1.8)(react-dom@18.3.1(react@18.3.1))(react-native@0.86.0(@babel/core@7.29.7)(@types/react@18.3.31)(bufferutil@4.1.0)(react@18.3.1)(utf-8-validate@6.0.6))(react@18.3.1)(typescript@5.9.3)(use-sync-external-store@1.6.0(react@18.3.1))(utf-8-validate@6.0.6)(zod@3.25.76)
       '@clerk/nextjs':
         specifier: ^6.39.3
-        version: 6.39.5(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        version: 6.39.5(next@16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@google-cloud/aiplatform':
         specifier: ^6.4.0
         version: 6.8.1
@@ -178,7 +178,7 @@ importers:
         version: 1.38.0
       '@vercel/analytics':
         specifier: ^1.6.1
-        version: 1.6.1(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
+        version: 1.6.1(next@16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
       '@vercel/blob':
         specifier: ^2.8.0
         version: 2.8.0
@@ -247,7 +247,7 @@ importers:
         version: 8.0.3
       inngest:
         specifier: ^4.5.1
-        version: 4.11.0(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))(express@5.2.1)(hono@4.12.27)(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(zod@3.25.76)
+        version: 4.11.0(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))(express@5.2.1)(hono@4.12.27)(next@16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(zod@3.25.76)
       js-yaml:
         specifier: ^4.2.0
         version: 4.3.1
@@ -273,11 +273,11 @@ importers:
         specifier: ^1.12.0
         version: 1.12.0
       next:
-        specifier: ^16.2.4
-        version: 16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^16.2.11
+        version: 16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       next-intl:
         specifier: ^4.9.2
-        version: 4.13.0(@swc/helpers@0.5.23)(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+        version: 4.13.0(@swc/helpers@0.5.23)(next@16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -990,8 +990,8 @@ packages:
   '@emnapi/runtime@1.10.0':
     resolution: {integrity: sha512-ewvYlk86xUoGI0zQRNq/mC+16R1QeDlKQy21Ki3oSYXNgLb45GV1P6A0M+/s6nyCuNDqe5VpaY84BzXGwVbwFA==}
 
-  '@emnapi/runtime@1.11.1':
-    resolution: {integrity: sha512-vgj7R3y3Wgx24IQaGPA/R6YFXLHVMOZ0uVEyIQPaWs+rd1AzfEMXlAC22FYwO1XkKR6NPsq7mUandH8oIRdZFw==}
+  '@emnapi/runtime@1.11.3':
+    resolution: {integrity: sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA==}
 
   '@emnapi/wasi-threads@1.2.1':
     resolution: {integrity: sha512-uTII7OYF+/Mes/MrcIOYp5yOtSMLBWSIoLPpcgwipoiKbli6k322tcoFsxoIIxPDqW01SQGAgko4EzZi2BNv2w==}
@@ -2384,8 +2384,8 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@next/env@16.2.9':
-    resolution: {integrity: sha512-ki5VxxXfzD/9TDe13wyeTKIjQTAwBVpnr8KhRDUr8ltMUq1/NBpWNT5tiPoxiGl+PHM4X2ahSOiPk6iAimIzPg==}
+  '@next/env@16.2.11':
+    resolution: {integrity: sha512-0do5A3BJ2gxWr0ZCMcD6BhW+e595jyxdTl3rXTS6lOtD8ektMiW6CO+EPwt1Eca1DBnm90r/7GdiKWBKxH++DA==}
 
   '@next/eslint-plugin-next@16.2.9':
     resolution: {integrity: sha512-UZi8+YT/MLgTC9nrrn2Xd4lBYv1B7lVmtWHfPcthAI5Tt/C1LuDe6DfmtCtJ+WQod3ksY4VrKSvk3oMVAnL7qw==}
@@ -2401,54 +2401,54 @@ packages:
       '@mdx-js/react':
         optional: true
 
-  '@next/swc-darwin-arm64@16.2.9':
-    resolution: {integrity: sha512-HkfxNYUCmcct0Xsqib5KxqMSHV4AHJq857BNRchyBDs4YS19aHzVfn1kDuBYKqLLQBjXgnkIsjV2Kd4d2wzYhw==}
+  '@next/swc-darwin-arm64@16.2.11':
+    resolution: {integrity: sha512-wryL4pjKmDwGv2ox6+GZDFxvmtSRLqApBR8kL1j4+vhB7Z5vJC/zAnXpiR9Xkfzl0AS8WLMnsuGV/UKI67/rrw==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [darwin]
 
-  '@next/swc-darwin-x64@16.2.9':
-    resolution: {integrity: sha512-7IAtK4MeybpqRV9GRABWEhJ62mOS+rzWOzOTFie4cSEtm12xsoOMJRcECoZx3FHPzFAqN/IJtHqWAFOLfl152w==}
+  '@next/swc-darwin-x64@16.2.11':
+    resolution: {integrity: sha512-aZl2j4f/fLyjQvOhv0Oe9UaMAQHolYpKhctsoYzplSumKJKPUmgjcf6545aBtysLTcu994TREd0+pSgNE4ohmg==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [darwin]
 
-  '@next/swc-linux-arm64-gnu@16.2.9':
-    resolution: {integrity: sha512-hBD75iWpUtkL9SmQmcRhmLomn9jgkPzCEkbOcLgHymPEKzv+6ONy13RRiIEz/iEObjkS2Jlb5gYS2XGoS3X4rw==}
+  '@next/swc-linux-arm64-gnu@16.2.11':
+    resolution: {integrity: sha512-5jEriyEnH/LWFy27L2ZG0XaLlyEJIjhsImEsiS9P563PKEVp2BVups/xfOucIrsvVntp11oNcZwjHvaDPYVB5g==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@next/swc-linux-arm64-musl@16.2.9':
-    resolution: {integrity: sha512-qZTI3pf9SGc/obr8NkQAekBxmp1QK+kVm+VAf3BALLfFAj+1kUhkTxmrWpVos9R/UYIA8AWX2p6cGI5WdwzVUA==}
+  '@next/swc-linux-arm64-musl@16.2.11':
+    resolution: {integrity: sha512-eIjcpx2fnnFSSkZDbTxy74KnokUXDjfoLClpWelfgHLf621aTqswhwXQ7GkD5K5rplrS6LZ/Bj+mVuvzluBOEg==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@next/swc-linux-x64-gnu@16.2.9':
-    resolution: {integrity: sha512-xm0HfRNX+UkH4R3c18ynswjj5o5uEj/7iI9p9omdtTSIsRCzQqkGMA+10nzJ4EHnYC3as65IMhbbl5fWRUWHYg==}
+  '@next/swc-linux-x64-gnu@16.2.11':
+    resolution: {integrity: sha512-8WgzpaWMs46qJT9kiV47cje86L0x/Mu9t8/Gwj+pnbgW3rETVfCnaScPjlYUwNScpOozdcIMHWmAvuZJUonR2w==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@next/swc-linux-x64-musl@16.2.9':
-    resolution: {integrity: sha512-QumimHkGEG6vM3PfEDWKyKen03NcqLOkeKB1EfcPe7VxzmEiCa4jNnMyBn/US5zcd/VE1CI+O8Ovb3lfjVHfGw==}
+  '@next/swc-linux-x64-musl@16.2.11':
+    resolution: {integrity: sha512-I3UgPds7G4ZYnTb/H+5GBGuUT2DhAk6j0mL6A4s63RjFs74wB2hOWP0vaxsK+3NJraExt3eYEPQ/UtT0x/64Nw==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@next/swc-win32-arm64-msvc@16.2.9':
-    resolution: {integrity: sha512-hzQpKZvw8rAwI6A2uQh6SacCSvNAXaIkPNsWwzqqfRiIMiXMfH936skDhz1OO6KpvdKkJrgHHtqQOq5PIXOvdQ==}
+  '@next/swc-win32-arm64-msvc@16.2.11':
+    resolution: {integrity: sha512-n89CjtcThnjrwgJMAiI5xbqwLY51zvwC9tSlArmVndAJLYVl9T9UAdlkXTmZvE++idoXe8KdglQlhNRdUp1c6g==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [win32]
 
-  '@next/swc-win32-x64-msvc@16.2.9':
-    resolution: {integrity: sha512-qr2VL3Ce5QrwgO2yh1ujSBawrimjVKX8FGF/cOynmdYKJY0BdHpGVNIRK1tqONB10Vkm25Ub1BD2bkjWs4+96w==}
+  '@next/swc-win32-x64-msvc@16.2.11':
+    resolution: {integrity: sha512-md8CLNggS1Dx9pUgApzps5uAf+N8GN9xywzmNx9vHAWo94HtBwCCqkSnhIrdfQe83Dhz8Lfo/20Nb1Zxal092w==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
@@ -5732,6 +5732,11 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
+  baseline-browser-mapping@2.11.19:
+    resolution: {integrity: sha512-Grytf1xOxOEMTGRwx6rLGKkTabd4vMg3VrKdj/7joCmV0qgh4QwMMO6xh34YEXQqirAuUdgQGa5orJQQ+69RBw==}
+    engines: {node: '>=6.0.0'}
+    hasBin: true
+
   before-after-hook@4.0.0:
     resolution: {integrity: sha512-q6tR3RPqIB1pMiTRMFcZwuG5T8vwp+vUvEG0vuI6B+Rikh5BfPp2fQ82c925FOs+b0lcFQ8CFrL+KbilfZFhOQ==}
 
@@ -5873,6 +5878,9 @@ packages:
 
   caniuse-lite@1.0.30001799:
     resolution: {integrity: sha512-hG1bReV+OUU+MOqK4t/ZWI0tZOyz3rqS9XuhOUz1cIcbwBKjOyJEJuw9ER5JuNyqxNk8u/JUVbGibBOL1yrjFw==}
+
+  caniuse-lite@1.0.30001810:
+    resolution: {integrity: sha512-TITQPUkaz+aVk5GL6NhOdwk1aEaNTSDPsGFWrTuhKGtjTF70jL/Oht2W4c6rXUe5fu7Ie19VIahAXHIIiWWNeg==}
 
   canonicalize@1.0.8:
     resolution: {integrity: sha512-0CNTVCLZggSh7bc5VkX5WWPWO+cyZbNd07IHIsSXLia/eAq+r836hgk+8BKoEh7949Mda87VUOitx5OddVj64A==}
@@ -8725,61 +8733,61 @@ packages:
     resolution: {integrity: sha512-iclAHeNqNm68zFtnZ0e+1L2yUIdvzNoauKU4WBA3VvH/vPFieF7qfRlwUZU+DA9P9bPXIS90ulxoUoCH23sV2w==}
     engines: {node: '>= 0.6'}
 
-  metro-babel-transformer@0.84.4:
-    resolution: {integrity: sha512-rvCfz8snl9h20VcvpOHxZuHP1SlAkv4HXbzw7nyyVwu6Eqo5PRerbakQ9XmUCOsRy70spJ37O+G1TK8oMzo48g==}
+  metro-babel-transformer@0.84.5:
+    resolution: {integrity: sha512-2WbHILKMiJUzfdjmGOQOqU1bWi9//gqiclc/tkk/AIsrrVw3efhZ1uhkOwMTxUEPOzqoo091H0olLmVZH5FHGQ==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-cache-key@0.84.4:
-    resolution: {integrity: sha512-wVO79aGrkYImpnaVS4+d5RrRBRPX31QtvKB3wKGBuiNSznduZTQHzsrJZRroFJSwnygrzdsGUtDQPuqqFjFdvw==}
+  metro-cache-key@0.84.5:
+    resolution: {integrity: sha512-3dPB2TnvGjjf0/9O7AXVQURKXuQNauTZE7WpTGTlR017Gh/B5y0m/2wcqxfveUguHSpu89KhVxCAlr2k/H7uhQ==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-cache@0.84.4:
-    resolution: {integrity: sha512-gpcFQdSLUwUCk71saKoE64jLFbx2nwTfVCcPSULMNT8QYq0p1eZZE29Jvd0HtT/UlhC3ZOutLxJME5xqD2JUZg==}
+  metro-cache@0.84.5:
+    resolution: {integrity: sha512-WHS0n2OxQqtwEjSeQFPePNrMvEFhmQcUQM9cRJMHByWoi/GMWFBEWOf7hVkAM/0KRutAXNbDlSu/cZB6CyxgQQ==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-config@0.84.4:
-    resolution: {integrity: sha512-PMotGDjXcXLWo2TMRH+VR99phFNgYTwqh4OoieIKK3yTJa1Jmkl+fZJxDO0jfBvNF+WESHciHvpNuBtXaF3B0Q==}
+  metro-config@0.84.5:
+    resolution: {integrity: sha512-zie+uN6oohscowi2S7ByU+wUw6CrT4ZxW9uAbONOObSxx86RGmnIAmjXHLkfmcdYoY7jzOPEbqcI6oeVmqyBQA==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-core@0.84.4:
-    resolution: {integrity: sha512-HONpWC5LGXZn3ffkd4Hu6AIrfE7j4Z0g0wMo/goV24WOB3lhuFZ40KgvaDiSw8iyQHloMYay5N/wPX+z8oN/PQ==}
+  metro-core@0.84.5:
+    resolution: {integrity: sha512-xwm605hCi5Y6eJTTb8ZWo6pkUcoBEIyiQOfkZh5GwtDwUrP9SNhTQZhzJHrBCwwxlf3Ptl/pxWJgQ1rsNYMnrA==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-file-map@0.84.4:
-    resolution: {integrity: sha512-KSVDi/u60hKPx++NLu3MTIvyjzNoJnFAF8PQFxaj1jiSka/wjw+Ua6sNuJ0TDHQv+7AAoFQxeMgaRAe8Yic5wQ==}
+  metro-file-map@0.84.5:
+    resolution: {integrity: sha512-mlm/JL8toSbSc2akpKIGmzvrVRSCgZ5vkbycI34oMLoOnLGuLyC8WTyVJ6P0hZG/usDaGwZSl/s9BCRriqjGJA==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-minify-terser@0.84.4:
-    resolution: {integrity: sha512-5qpbaVOMC7CPitIpuewzVeGw7E+C3ykbv2mqTjQLl85Z3annSVGlSCTcsZjqXZzjupfK4Ztj3dDc4kc44NZwtQ==}
+  metro-minify-terser@0.84.5:
+    resolution: {integrity: sha512-BJoFwCEDsYnagPqarayInv2+diCDNDdLlaof/p6s9w4gh+gc9HXYM+pDvsKGKKUumpZswNF3Z/ftTMqKl/5IBg==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-resolver@0.84.4:
-    resolution: {integrity: sha512-1qLgbxQ5ZGhhutuPot1Yp348ofDsATL2WkrHF65TobqTT9K3P9qJXw38bomk7ncp5B7OYMfWwtyBZo1lCV792A==}
+  metro-resolver@0.84.5:
+    resolution: {integrity: sha512-VSSnepg1k6LyCwtb6eirWdAWlpKwBG8Rdtsr1mU38rMelFyWgh3/QuMSiZIZAIjwg/fsa8GhW5/FO54CAUPCEA==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-runtime@0.84.4:
-    resolution: {integrity: sha512-Jibypds4g7AhzdRKY+kDoj51s5EXMwgyp5ddtlreDAsWefMdOx+agWqgm0H2XSZ/ueanHHVM89fnf5OJnlxa8Q==}
+  metro-runtime@0.84.5:
+    resolution: {integrity: sha512-U1m2+d1Pr+JO2/iVXBB2OfXXityz7tqwIorxfrT15IEgaHvpJBq/OHiqnOWPKJbUl3JcxjcdviZZOKk85oK4Qg==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-source-map@0.84.4:
-    resolution: {integrity: sha512-jbWkPxIesVuo1IWkvezmMJld6iu8nD62GsrZiV6jP37AOdbo4OBq1FJ+qkOg8sV05wAHB//jAbziuW0SlJfW4g==}
+  metro-source-map@0.84.5:
+    resolution: {integrity: sha512-2BtV5L9uPc49F13Gn5wiP6bX/EncqzqTIk2VL/0F/96Vo0YEOjluT/qktQjFODfqGFsucwnh5mPEAl/2jVEfeg==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-symbolicate@0.84.4:
-    resolution: {integrity: sha512-OnfpacxUqGPZQ27t8qK9mFa7uqHIlVWeqRqkCbvMvreEBiamEeOn8krKtcwgP5M4cYDPwuSmCTopHMVthqG4zA==}
+  metro-symbolicate@0.84.5:
+    resolution: {integrity: sha512-rQ40zYDAkaWBN9yvjUuAD0ZpzBMZSoKyGYXnb5JrfbKjun7fTvfoLHL3KXFYenBTYZkQtlp4cKSCv/1utxFyOw==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
     hasBin: true
 
-  metro-transform-plugins@0.84.4:
-    resolution: {integrity: sha512-kehr6HbAecqD0/a3xLXobELdPaAmRAl8bel0qagPF4vhZtux93nS8S4eq2kgKt6J2GnQpVjSoW1PXdst04mwow==}
+  metro-transform-plugins@0.84.5:
+    resolution: {integrity: sha512-+InaSVGaOyt0DyRo4Y/zIdPI6CZwnbNho5LAL23tgmuGwv7fyfkF7kKfPjZcfxXBcoYdTLLFnCfCH/dHSiCqNg==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro-transform-worker@0.84.4:
-    resolution: {integrity: sha512-W1IYMvvXTu4MxYr7d9h7CeG2vpIr3bmLLIavkPY4O1ilzDrvS8z/NEe6y+pC44Ff7raMXQgYSfdqDUwN/i39gg==}
+  metro-transform-worker@0.84.5:
+    resolution: {integrity: sha512-ui1Z8x4s5RL36gMmKLaMMO7O9NNDHNdthEZSCDQHAau3JcAsTaFOK6I+2q4I/kW5u8hSEjJk9L45TXSVJw6g1A==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
-  metro@0.84.4:
-    resolution: {integrity: sha512-8ETTubqfD6ornDy2zYDvRcKnVDOXdFJsjetYDBsY4oAsb6NJkiwFR+FaMESyGppFmQUyBQA4H4sFGxzcQSGtFA==}
+  metro@0.84.5:
+    resolution: {integrity: sha512-r1liLkyFZMVSEMNjU1CJU5pRzs3NdkxHqXS60O25c0rCIqAR+cGk7rPydw/g0WAIKVXojIBIF45yYBPagJGcgw==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
     hasBin: true
 
@@ -9075,8 +9083,8 @@ packages:
       react: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
       react-dom: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
 
-  next@16.2.9:
-    resolution: {integrity: sha512-MEOJiq/UvuezAdqVSceHbqDgZt1kDw2tpGVOlsdIoJsQdbN2JY2hpVG4xnXGkbdJUOEWhnRfiu/O4Hpc9Juwww==}
+  next@16.2.11:
+    resolution: {integrity: sha512-B339zaqbyK8cmxhoAvLrcwoabwCP1wz21zSzfqxqXAemTu2BXnH7tQnfcglKv1vnMUIDBc+Hth7XODQriTZiRQ==}
     engines: {node: '>=20.9.0'}
     hasBin: true
     peerDependencies:
@@ -9171,8 +9179,8 @@ packages:
   nullthrows@1.1.1:
     resolution: {integrity: sha512-2vPPEi+Z7WqML2jZYddDIfy5Dqb0r2fze2zTxNNknZaFpVHU3mFB3R+DWeJWGVx0ecvttSGlJTI+WG+8Z4cDWw==}
 
-  ob1@0.84.4:
-    resolution: {integrity: sha512-eJXMpz4aQHXF/YBB9ddqZDIS+ooO91hObo9FoW/xBkr54/zCwYYCDqT/O54vNo8kOkWs5Ou/y28NgdrV0edQNA==}
+  ob1@0.84.5:
+    resolution: {integrity: sha512-aH9RkoZc7w/90HBamFxTw8ZLFr05wXS+iOnvmrgo53Ep8Pyrm5FieQSaPIVROkfFVQISeD/zo92fes26TOwe+A==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
 
   object-assign@4.1.1:
@@ -10528,8 +10536,8 @@ packages:
   temporal-spec@0.2.4:
     resolution: {integrity: sha512-lDMFv4nKQrSjlkHKAlHVqKrBG4DyFfa9F74cmBZ3Iy3ed8yvWnlWSIdi4IKfSqwmazAohBNwiN64qGx4y5Q3IQ==}
 
-  terser@5.49.2:
-    resolution: {integrity: sha512-rGbJiKeQ4WDe3EXlDAIaQcwftVfv2Q8o1awFNfvXolJYKkb1AuZY1RTOmqx4LJXZENbWZA7eIsYGHuEzHsi1nQ==}
+  terser@5.51.0:
+    resolution: {integrity: sha512-myiQ6aFnxDOjdiXdTlC8ngVccQD88uHXTx5RUQOSEnarDYgJMjDagwAQszcOusjvmf4YqWsxoD1+MY+oAJRmpw==}
     engines: {node: '>=10'}
     hasBin: true
 
@@ -10936,6 +10944,10 @@ packages:
 
   uuid@14.0.1:
     resolution: {integrity: sha512-6ZxzVpzDXDa3bJWaHilVayA+BH/1zmxCJoVgvmqJnid/gPoKHxUrS/aC/T6LGQtNHT+XHG9fXPJB4d+IrU30Ew==}
+    hasBin: true
+
+  uuid@14.0.2:
+    resolution: {integrity: sha512-xZe/16rV4aa+HGSOCiY2YeLT1OybRLrrkL/Rqaq7p7GMVXjFh+6wN4oMYgjFmnSnhY8t6Xpdl2l9qmnHYuMHwQ==}
     hasBin: true
 
   v8-compile-cache-lib@3.0.1:
@@ -11707,13 +11719,13 @@ snapshots:
       react-dom: 18.3.1(react@18.3.1)
       tslib: 2.8.1
 
-  '@clerk/nextjs@6.39.5(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@clerk/nextjs@6.39.5(next@16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@clerk/backend': 2.33.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@clerk/clerk-react': 5.61.8(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@clerk/shared': 3.47.7(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@clerk/types': 4.101.25(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      next: 16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      next: 16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       server-only: 0.0.1
@@ -11879,7 +11891,7 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
-  '@emnapi/runtime@1.11.1':
+  '@emnapi/runtime@1.11.3':
     dependencies:
       tslib: 2.8.1
     optional: true
@@ -12393,7 +12405,7 @@ snapshots:
 
   '@img/sharp-wasm32@0.34.5':
     dependencies:
-      '@emnapi/runtime': 1.11.1
+      '@emnapi/runtime': 1.11.3
     optional: true
 
   '@img/sharp-win32-arm64@0.34.5':
@@ -13596,7 +13608,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
-  '@next/env@16.2.9': {}
+  '@next/env@16.2.11': {}
 
   '@next/eslint-plugin-next@16.2.9':
     dependencies:
@@ -13609,28 +13621,28 @@ snapshots:
       '@mdx-js/loader': 3.1.1
       '@mdx-js/react': 3.1.1(@types/react@18.3.31)(react@18.3.1)
 
-  '@next/swc-darwin-arm64@16.2.9':
+  '@next/swc-darwin-arm64@16.2.11':
     optional: true
 
-  '@next/swc-darwin-x64@16.2.9':
+  '@next/swc-darwin-x64@16.2.11':
     optional: true
 
-  '@next/swc-linux-arm64-gnu@16.2.9':
+  '@next/swc-linux-arm64-gnu@16.2.11':
     optional: true
 
-  '@next/swc-linux-arm64-musl@16.2.9':
+  '@next/swc-linux-arm64-musl@16.2.11':
     optional: true
 
-  '@next/swc-linux-x64-gnu@16.2.9':
+  '@next/swc-linux-x64-gnu@16.2.11':
     optional: true
 
-  '@next/swc-linux-x64-musl@16.2.9':
+  '@next/swc-linux-x64-musl@16.2.11':
     optional: true
 
-  '@next/swc-win32-arm64-msvc@16.2.9':
+  '@next/swc-win32-arm64-msvc@16.2.11':
     optional: true
 
-  '@next/swc-win32-x64-msvc@16.2.9':
+  '@next/swc-win32-x64-msvc@16.2.11':
     optional: true
 
   '@noble/ciphers@1.3.0': {}
@@ -15281,9 +15293,9 @@ snapshots:
       '@react-native/dev-middleware': 0.86.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       debug: 4.4.3
       invariant: 2.2.4
-      metro: 0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      metro-config: 0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      metro-core: 0.84.4
+      metro: 0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      metro-config: 0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      metro-core: 0.84.5
       semver: 7.8.5
     transitivePeerDependencies:
       - bufferutil
@@ -16810,9 +16822,9 @@ snapshots:
     dependencies:
       uncrypto: 0.1.3
 
-  '@vercel/analytics@1.6.1(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
+  '@vercel/analytics@1.6.1(next@16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)':
     optionalDependencies:
-      next: 16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      next: 16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
 
   '@vercel/blob@2.8.0':
@@ -17385,6 +17397,8 @@ snapshots:
 
   baseline-browser-mapping@2.10.38: {}
 
+  baseline-browser-mapping@2.11.19: {}
+
   before-after-hook@4.0.0: {}
 
   bignumber.js@9.3.1: {}
@@ -17570,6 +17584,8 @@ snapshots:
   camelize@1.0.1: {}
 
   caniuse-lite@1.0.30001799: {}
+
+  caniuse-lite@1.0.30001810: {}
 
   canonicalize@1.0.8: {}
 
@@ -19762,7 +19778,7 @@ snapshots:
 
   inline-style-parser@0.2.7: {}
 
-  inngest@4.11.0(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))(express@5.2.1)(hono@4.12.27)(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(zod@3.25.76):
+  inngest@4.11.0(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))(express@5.2.1)(hono@4.12.27)(next@16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(zod@3.25.76):
     dependencies:
       '@bufbuild/protobuf': 2.12.1
       '@inngest/ai': 0.1.7
@@ -19791,7 +19807,7 @@ snapshots:
     optionalDependencies:
       express: 5.2.1
       hono: 4.12.27
-      next: 16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      next: 16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -21440,51 +21456,51 @@ snapshots:
 
   methods@1.1.2: {}
 
-  metro-babel-transformer@0.84.4:
+  metro-babel-transformer@0.84.5:
     dependencies:
       '@babel/core': 7.29.7
       flow-enums-runtime: 0.0.6
       hermes-parser: 0.35.0
-      metro-cache-key: 0.84.4
+      metro-cache-key: 0.84.5
       nullthrows: 1.1.1
     transitivePeerDependencies:
       - supports-color
 
-  metro-cache-key@0.84.4:
+  metro-cache-key@0.84.5:
     dependencies:
       flow-enums-runtime: 0.0.6
 
-  metro-cache@0.84.4:
+  metro-cache@0.84.5:
     dependencies:
       exponential-backoff: 3.1.3
       flow-enums-runtime: 0.0.6
       https-proxy-agent: 7.0.6
-      metro-core: 0.84.4
+      metro-core: 0.84.5
     transitivePeerDependencies:
       - supports-color
 
-  metro-config@0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+  metro-config@0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       connect: 3.7.0
       flow-enums-runtime: 0.0.6
       jest-validate: 29.7.0
-      metro: 0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      metro-cache: 0.84.4
-      metro-core: 0.84.4
-      metro-runtime: 0.84.4
+      metro: 0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      metro-cache: 0.84.5
+      metro-core: 0.84.5
+      metro-runtime: 0.84.5
       yaml: 2.9.0
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - utf-8-validate
 
-  metro-core@0.84.4:
+  metro-core@0.84.5:
     dependencies:
       flow-enums-runtime: 0.0.6
       lodash.throttle: 4.1.1
-      metro-resolver: 0.84.4
+      metro-resolver: 0.84.5
 
-  metro-file-map@0.84.4:
+  metro-file-map@0.84.5:
     dependencies:
       debug: 4.4.3
       fb-watchman: 2.0.2
@@ -21498,46 +21514,46 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  metro-minify-terser@0.84.4:
+  metro-minify-terser@0.84.5:
     dependencies:
       flow-enums-runtime: 0.0.6
-      terser: 5.49.2
+      terser: 5.51.0
 
-  metro-resolver@0.84.4:
+  metro-resolver@0.84.5:
     dependencies:
       flow-enums-runtime: 0.0.6
 
-  metro-runtime@0.84.4:
+  metro-runtime@0.84.5:
     dependencies:
       '@babel/runtime': 7.29.7
       flow-enums-runtime: 0.0.6
 
-  metro-source-map@0.84.4:
+  metro-source-map@0.84.5:
     dependencies:
       '@babel/traverse': 7.29.8
       '@babel/types': 7.29.8
       flow-enums-runtime: 0.0.6
       invariant: 2.2.4
-      metro-symbolicate: 0.84.4
+      metro-symbolicate: 0.84.5
       nullthrows: 1.1.1
-      ob1: 0.84.4
+      ob1: 0.84.5
       source-map: 0.5.7
       vlq: 1.0.1
     transitivePeerDependencies:
       - supports-color
 
-  metro-symbolicate@0.84.4:
+  metro-symbolicate@0.84.5:
     dependencies:
       flow-enums-runtime: 0.0.6
       invariant: 2.2.4
-      metro-source-map: 0.84.4
+      metro-source-map: 0.84.5
       nullthrows: 1.1.1
       source-map: 0.5.7
       vlq: 1.0.1
     transitivePeerDependencies:
       - supports-color
 
-  metro-transform-plugins@0.84.4:
+  metro-transform-plugins@0.84.5:
     dependencies:
       '@babel/core': 7.29.7
       '@babel/generator': 7.29.8
@@ -21548,27 +21564,27 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  metro-transform-worker@0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+  metro-transform-worker@0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       '@babel/core': 7.29.7
       '@babel/generator': 7.29.8
       '@babel/parser': 7.29.8
       '@babel/types': 7.29.8
       flow-enums-runtime: 0.0.6
-      metro: 0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      metro-babel-transformer: 0.84.4
-      metro-cache: 0.84.4
-      metro-cache-key: 0.84.4
-      metro-minify-terser: 0.84.4
-      metro-source-map: 0.84.4
-      metro-transform-plugins: 0.84.4
+      metro: 0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      metro-babel-transformer: 0.84.5
+      metro-cache: 0.84.5
+      metro-cache-key: 0.84.5
+      metro-minify-terser: 0.84.5
+      metro-source-map: 0.84.5
+      metro-transform-plugins: 0.84.5
       nullthrows: 1.1.1
     transitivePeerDependencies:
       - bufferutil
       - supports-color
       - utf-8-validate
 
-  metro@0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+  metro@0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       '@babel/code-frame': 7.29.7
       '@babel/core': 7.29.7
@@ -21585,23 +21601,22 @@ snapshots:
       flow-enums-runtime: 0.0.6
       graceful-fs: 4.2.11
       hermes-parser: 0.35.0
-      image-size: 1.2.1
       invariant: 2.2.4
       jest-worker: 29.7.0
       jsc-safe-url: 0.2.4
       lodash.throttle: 4.1.1
-      metro-babel-transformer: 0.84.4
-      metro-cache: 0.84.4
-      metro-cache-key: 0.84.4
-      metro-config: 0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      metro-core: 0.84.4
-      metro-file-map: 0.84.4
-      metro-resolver: 0.84.4
-      metro-runtime: 0.84.4
-      metro-source-map: 0.84.4
-      metro-symbolicate: 0.84.4
-      metro-transform-plugins: 0.84.4
-      metro-transform-worker: 0.84.4(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      metro-babel-transformer: 0.84.5
+      metro-cache: 0.84.5
+      metro-cache-key: 0.84.5
+      metro-config: 0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      metro-core: 0.84.5
+      metro-file-map: 0.84.5
+      metro-resolver: 0.84.5
+      metro-runtime: 0.84.5
+      metro-source-map: 0.84.5
+      metro-symbolicate: 0.84.5
+      metro-transform-plugins: 0.84.5
+      metro-transform-worker: 0.84.5(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       mime-types: 3.0.2
       nullthrows: 1.1.1
       serialize-error: 2.1.0
@@ -21993,14 +22008,14 @@ snapshots:
 
   next-intl-swc-plugin-extractor@4.13.0: {}
 
-  next-intl@4.13.0(@swc/helpers@0.5.23)(next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3):
+  next-intl@4.13.0(@swc/helpers@0.5.23)(next@16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3):
     dependencies:
       '@formatjs/intl-localematcher': 0.8.10
       '@parcel/watcher': 2.5.6
       '@swc/core': 1.15.43(@swc/helpers@0.5.23)
       icu-minify: 4.13.0
       negotiator: 1.0.0
-      next: 16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      next: 16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       next-intl-swc-plugin-extractor: 4.13.0
       po-parser: 2.1.1
       react: 18.3.1
@@ -22015,25 +22030,25 @@ snapshots:
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  next@16.2.9(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
+  next@16.2.11(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(babel-plugin-macros@3.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
-      '@next/env': 16.2.9
+      '@next/env': 16.2.11
       '@swc/helpers': 0.5.15
-      baseline-browser-mapping: 2.10.38
-      caniuse-lite: 1.0.30001799
+      baseline-browser-mapping: 2.11.19
+      caniuse-lite: 1.0.30001810
       postcss: 8.5.25
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       styled-jsx: 5.1.6(@babel/core@7.29.7)(babel-plugin-macros@3.1.0)(react@18.3.1)
     optionalDependencies:
-      '@next/swc-darwin-arm64': 16.2.9
-      '@next/swc-darwin-x64': 16.2.9
-      '@next/swc-linux-arm64-gnu': 16.2.9
-      '@next/swc-linux-arm64-musl': 16.2.9
-      '@next/swc-linux-x64-gnu': 16.2.9
-      '@next/swc-linux-x64-musl': 16.2.9
-      '@next/swc-win32-arm64-msvc': 16.2.9
-      '@next/swc-win32-x64-msvc': 16.2.9
+      '@next/swc-darwin-arm64': 16.2.11
+      '@next/swc-darwin-x64': 16.2.11
+      '@next/swc-linux-arm64-gnu': 16.2.11
+      '@next/swc-linux-arm64-musl': 16.2.11
+      '@next/swc-linux-x64-gnu': 16.2.11
+      '@next/swc-linux-x64-musl': 16.2.11
+      '@next/swc-win32-arm64-msvc': 16.2.11
+      '@next/swc-win32-x64-msvc': 16.2.11
       '@opentelemetry/api': 1.9.1
       sharp: 0.34.5
     transitivePeerDependencies:
@@ -22120,7 +22135,7 @@ snapshots:
 
   nullthrows@1.1.1: {}
 
-  ob1@0.84.4:
+  ob1@0.84.5:
     dependencies:
       flow-enums-runtime: 0.0.6
 
@@ -22764,8 +22779,8 @@ snapshots:
       hermes-compiler: 250829098.0.14
       invariant: 2.2.4
       memoize-one: 5.2.1
-      metro-runtime: 0.84.4
-      metro-source-map: 0.84.4
+      metro-runtime: 0.84.5
+      metro-source-map: 0.84.5
       nullthrows: 1.1.1
       pretty-format: 29.7.0
       promise: 8.3.0
@@ -23187,7 +23202,7 @@ snapshots:
       '@types/ws': 8.18.1
       buffer: 6.0.3
       eventemitter3: 5.0.4
-      uuid: 14.0.1
+      uuid: 14.0.2
       ws: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
       bufferutil: 4.1.0
@@ -23755,7 +23770,7 @@ snapshots:
 
   temporal-spec@0.2.4: {}
 
-  terser@5.49.2:
+  terser@5.51.0:
     dependencies:
       '@jridgewell/source-map': 0.3.11
       acorn: 8.18.0
@@ -24206,6 +24221,8 @@ snapshots:
   uuid@11.1.1: {}
 
   uuid@14.0.1: {}
+
+  uuid@14.0.2: {}
 
   v8-compile-cache-lib@3.0.1: {}
 
