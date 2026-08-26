@@ -39,6 +39,13 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+next-env.d.ts
+
+# build artifacts / local plans
+public/governance/asset-manifest.json
+.hermes/plans/
+research/world-model/public/wasm/dummy_fp32.onnx
+*.tsbuildinfo
 
 
 keys/genie-ai-1ca85-a79dca93b5cd.json
