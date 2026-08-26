@@ -7,7 +7,8 @@
  */
 
 export { JepaDivergenceScorer } from '@/lib/ucol/mcts/codeSearchMcts';
-export { CodeSearchMcts, CodeSearchState, AstLanguage, AstNode, AstAction, buildAstFromSource, applyAstAction, generateAstActions, ucb1Score, createMctsNode, type CodeSearchResult, type CodeSearchMctsOptions } from '@/lib/ucol/mcts/codeSearchMcts';
+export { CodeSearchMcts, CodeSearchState, AstLanguage, AstNode, AstAction, buildAstFromSource, applyAstAction, generateAstActions, ucb1Score, createMctsNode } from '@/lib/ucol/mcts/codeSearchMcts';
+export type { CodeSearchResult, CodeSearchMctsOptions } from '@/lib/ucol/mcts/codeSearchMcts';
 
 export { recordDivergenceEvent, recordDivergenceEventSync, type DivergenceEvent, type DivergenceEventType } from '@/lib/jepa/divergenceTelemetry';
 export { jepaCircuitBreaker, type CircuitState } from '@/lib/jepa/circuitBreaker';
