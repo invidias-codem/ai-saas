@@ -24,25 +24,20 @@ export type { CodeSearchResult, CodeSearchMctsOptions } from '@/lib/ucol/mcts/co
 export {
   recordDivergenceEvent,
   recordDivergenceEventSync,
-  type DivergenceEvent,
-  type DivergenceEventType,
 } from '@/lib/jepa/divergenceTelemetry';
-export { jepaCircuitBreaker, type CircuitState } from '@/lib/jepa/circuitBreaker';
+export type { DivergenceEvent, DivergenceEventType } from '@/lib/jepa/divergenceTelemetry';
+export { jepaCircuitBreaker } from '@/lib/jepa/circuitBreaker';
+export type { CircuitState } from '@/lib/jepa/circuitBreaker';
 export {
   serializeAstForJepa,
   detectLanguage,
-  type SupportedLanguage,
-  type SerializeAstOptions,
-  type JepaAstToken,
 } from '@/lib/jepa/astEncoderInput';
+export type { SupportedLanguage, SerializeAstOptions, JepaAstToken } from '@/lib/jepa/astEncoderInput';
 export {
   ExecutionTraceEmitter,
   NoopTraceEmitter,
-  type ExecutionTrace,
-  type ExecutionTraceAction,
-  type ExecutionTraceArtifact,
-  type ITraceEmitter,
 } from '@/lib/jepa/executionTrace';
+export type { ExecutionTrace, ExecutionTraceAction, ExecutionTraceArtifact, ITraceEmitter } from '@/lib/jepa/executionTrace';
 
 export {
   LatentState,
