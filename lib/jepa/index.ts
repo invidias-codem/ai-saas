@@ -4,6 +4,9 @@
  * Barrel export for the JEPA/MBRL extension layer.
  *
  * Import from here to avoid coupling to individual module paths.
+ *
+ * NOTE: isolatedModules-safe — each re-export is split into value and type
+ * lines to satisfy Next.js/Turbopack type checking.
  */
 
 export { JepaDivergenceScorer } from '@/lib/ucol/mcts/codeSearchMcts';
