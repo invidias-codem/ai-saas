@@ -1,39 +1,28 @@
 {
   "apps": [
     {
-      "name": "jepa-p2p",
-      "script": "workers/jepa-p2p-worker.ts",
-      "interpreter": "tsx",
-      "cwd": "/Users/jjem/Projects/ai-saas",
-      "watch": ["lib/jepa/p2p/**/*.ts", "workers/jepa-p2p-worker.ts"],
-      "watch_delay": 1000,
-      "min_uptime": "30s",
-      "max_restarts": 20,
-      "restart_delay": 4000,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss.SSS",
-      "error_file": "logs/jepa-p2p-error.log",
-      "out_file": "logs/jepa-p2p-out.log",
-      "merge_logs": true,
-      "env": {
-        "JEPA_P2P_TOPIC": "lattice/jepa/v1",
-        "JEPA_QUEUE_PATH": "research/world-model/jepa-local/p2p/gossip_queue.jsonl",
-        "JEPA_AGG_INTERVAL_SECONDS": "60"
-      }
-    },
-    {
-      "name": "jepa-aea",
-      "script": "research/world-model/jepa-local/p2p/aea_trigger.py",
-      "interpreter": "/Users/jjem/Projects/ai-saas/research/world-model/jepa-local/.venv/bin/python",
+      "name": "jepa-main",
+      "script": "research/world-model/jepa-local/p2p/main_worker.py",
+      "interpreter": "/Users/jjem/.hermes/hermes-agent/venv/bin/python",
       "cwd": "/Users/jjem/Projects/ai-saas",
       "watch": ["research/world-model/jepa-local/**/*.py"],
-      "watch_delay": 1000,
-      "min_uptime": "30s",
-      "max_restarts": 20,
-      "restart_delay": 4000,
-      "log_date_format": "YYYY-MM-DD HH:mm:ss.SSS",
-      "error_file": "logs/jepa-aea-error.log",
-      "out_file": "logs/jepa-aea-out.log",
-      "merge_logs": true
+      "watch_options": {
+        "followSymlinks": false,
+        "usePolling": true,
+        "interval": 1000
+      },
+      "max_restarts": 10,
+      "restart_delay": 3000,
+      "env": {
+        "PYTHONPATH": "research/world-model/jepa-local",
+        "SUPABASE_TELEMETRY_URL": "",
+        "SUPABASE_SERVICE_ROLE_KEY": "",
+        "GOSSIP_DRAIN_INTERVAL_SECONDS": "30",
+        "AEA_INTERVAL_SECONDS": "60",
+        "TELEMETRY_INTERVAL_SECONDS": "60",
+        "ONNX_SYNC_INTERVAL_SECONDS": "300",
+        "JEPA_ONNX_PATH": "/Users/jjem/Projects/ai-saas/public/wasm/predictor.onnx"
+      }
     }
   ]
 }

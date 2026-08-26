@@ -21,6 +21,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
+
 import torch
 
 from config import JEPAConfig
@@ -37,7 +39,7 @@ class MainWorker:
         queue_path = root / "p2p" / "gossip_queue.jsonl"
         queue_path.parent.mkdir(parents=True, exist_ok=True)
 
-        supabase_url = os.environ.get("SUPABASE_TELEMETRY_URL", "")
+        supabase_url = os.environ.get("SUPABASE_TELEMETRY_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
         supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
         self.local_model = LocalJEPANode(self.config)
@@ -164,6 +166,18 @@ class MainWorker:
             print(f"[MainWorker] ONNX export failed: {exc}")
             return False
 
+    def _start_onnx_sync_loop(self) -> None:
+        interval = float(os.environ.get("ONNX_SYNC_INTERVAL_SECONDS", "300"))
+        print(f"[MainWorker] ONNX sync loop started; interval={interval}s")
+        while not self._stop.is_set():
+            time.sleep(interval)
+            if self._stop.is_set():
+                break
+            try:
+                self.export_predictor_onnx()
+            except Exception as exc:
+                print(f"[MainWorker] ONNX sync loop error: {exc}")
+
     def run_forever(self) -> int:
         self.start_background_loops()
         print("[MainWorker] started")
@@ -179,6 +193,7 @@ class MainWorker:
 
 
 def main() -> int:
+    load_dotenv(dotenv_path=".env.local", override=True)
     worker = MainWorker()
 
     def handle_signal(signum: int, _frame: object) -> None:
