@@ -78,6 +78,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/guest/memory(.*)',
     '/api/wasm-probe',
     '/api/jepa/infer',
+    '/api/jepa/predict',
     '/api/test/mcts-e2e',
 ]);
 
