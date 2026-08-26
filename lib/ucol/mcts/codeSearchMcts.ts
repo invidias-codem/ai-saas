@@ -28,7 +28,7 @@ import { serializeAstForJepa } from "@/lib/jepa/astEncoderInput";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** Canonical language identifiers. */
-export type AstLanguage = 'typescript' | 'javascript' | 'tsx' | 'jsx' | 'go' | 'python' | 'sql' | 'unknown';
+export type AstLanguage = 'typescript' | 'javascript' | 'tsx' | 'jsx' | 'go' | 'python' | 'sql' | 'markdown' | 'unknown';
 
 /**
  * Lightweight AST node representation used by the MCTS action space.
