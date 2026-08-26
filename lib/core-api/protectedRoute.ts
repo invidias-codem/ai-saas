@@ -29,7 +29,7 @@ function buildIdempotencyKey(req: Request, userId: string, prefix: string): stri
 export async function withProtectedRoute(
   req: Request,
   handler: (ctx: ProtectedRouteContext) => Promise<Response>,
-  options: ProtectedRouteOptions = {}
+  options: ProtectedRouteOptions = {},
 ): Promise<Response> {
   try {
     const user = await requireAuth();
@@ -39,6 +39,29 @@ export async function withProtectedRoute(
 
     return await handler({ user, ip, requestId, idempotencyKey });
   } catch (error) {
+    // ── Guest fallback ──────────────────────────────────────────
+    // If allowGuest is set and the error is an auth failure, derive a
+    // guest session from the x-guest-id header set by proxy.ts middleware.
+    if (options.allowGuest && req.headers.get('x-guest-id')) {
+      const ip = getClientIP(req);
+      const requestId = buildRequestId(req);
+      const guestId = req.headers.get('x-guest-id')!;
+      const idempotencyKey = buildIdempotencyKey(req, guestId, options.idempotencyPrefix || 'guest-request');
+
+      return await handler({
+        user: {
+          userId: `guest:${guestId}`,
+          email: null,
+          tier: 'free',
+          isGuest: true,
+        } as any,
+        ip,
+        requestId,
+        idempotencyKey,
+        guestId,
+      });
+    }
+    // ────────────────────────────────────────────────────────────
     return handleAuthError(error);
   }
 }

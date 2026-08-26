@@ -11,6 +11,8 @@
  *  - half-open: allowing one probe request after cooldown
  */
 
+import { recordDivergenceEventSync } from '@/lib/jepa/divergenceTelemetry';
+
 export type CircuitState = 'closed' | 'open' | 'half-open';
 
 const DEFAULT_FAILURE_THRESHOLD = 5;
@@ -106,9 +108,26 @@ export class CircuitBreaker {
     if (next === 'open') {
       this.openedAt = Date.now();
       this.probesInHalfOpen = 0;
+      recordDivergenceEventSync({
+        eventType: 'circuit-breaker-open',
+        circuitState: next,
+        fallbackUsed: true,
+        detail: `failureCount=${this.failures}`,
+      });
     }
     if (next === 'half-open') {
       this.probesInHalfOpen = 0;
+      recordDivergenceEventSync({
+        eventType: 'circuit-breaker-halfopen',
+        circuitState: next,
+      });
+    }
+    if (next === 'closed') {
+      this.probesInHalfOpen = 0;
+      recordDivergenceEventSync({
+        eventType: 'circuit-breaker-close',
+        circuitState: next,
+      });
     }
   }
 }

@@ -34,8 +34,6 @@ function inferLanguageFromPath(filePath: string): AstLanguage {
   if (normalized.endsWith('.jsx')) return 'jsx';
   if (normalized.endsWith('.go')) return 'go';
   if (normalized.endsWith('.py')) return 'python';
-  if (normalized.endsWith('.sql')) return 'sql';
-  if (normalized.endsWith('.md')) return 'markdown';
   if (/test|spec/.test(normalized)) return 'javascript';
   return 'unknown';
 }
