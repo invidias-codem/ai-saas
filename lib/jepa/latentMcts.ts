@@ -1,16 +1,29 @@
 /**
  * lib/jepa/latentMcts.ts
  *
- * Latent-space Monte Carlo Tree Search extension.
+ * Latent-space Monte Carlo Tree Search with simulative reasoning.
  *
  * Instead of expanding raw syntax, this module operates on continuous
  * JEPA embeddings. Selection uses energy-based pruning (distance to
- * target latent state), and expansion generates candidate perturbation
- * vectors rather than AST actions.
+ * target latent state), expansion generates candidate action embeddings,
+ * and rollout uses a predictor to simulate the next latent state entirely
+ * in continuous space before invoking the LLM for concrete syntax.
  *
- * Serverless constraint: all operations are pure-functions over arrays;
- * no external state, no module-level singletons.
+ * Serverless constraint: pure-functions over arrays; no external state,
+ * no module-level singletons.
+ *
+ * Mechanics
+ * --------
+ * 1. Action formulation: encode a proposed code change into a dense action
+ *    embedding, or accept an explicit delta vector.
+ * 2. Latent rollout: apply the action embedding to the current state
+ *    embedding to obtain a predicted future state embedding.
+ * 3. Energy/distance scoring: compute cosine distance between the rollout
+ *    embedding and the target embedding. MCTS uses this score to prune
+ *    branches before syntactic generation.
  */
+
+// ─── Public types ────────────────────────────────────────────────────────────
 
 export interface LatentState {
   embedding: number[];
@@ -31,6 +44,10 @@ export interface LatentMctsOptions {
   energyWeight?: number;
   /** Optional target latent state; when omitted, energy is disabled. */
   targetEmbedding?: number[];
+  /** Optional predictor; when omitted, rollout falls back to additive model. */
+  predictor?: {
+    predict(state: number[], action: number[]): number[];
+  };
 }
 
 export interface LatentMctsResult {
@@ -41,13 +58,15 @@ export interface LatentMctsResult {
   summary: string;
 }
 
+// ─── Pure math helpers ───────────────────────────────────────────────────────
+
 function l2norm(v: number[]): number {
   let sum = 0;
   for (let i = 0; i < v.length; i++) sum += v[i] * v[i];
   return Math.sqrt(sum);
 }
 
-function cosineDistance(a: number[], b: number[]): number {
+export function cosineDistance(a: number[], b: number[]): number {
   if (a.length !== b.length || a.length === 0) return 1;
   let dot = 0;
   let normA = 0;
@@ -75,4 +94,161 @@ export function perturbEmbedding(base: number[], delta: number[]): number[] {
     out[i] = base[i] + (delta[i] ?? 0);
   }
   return out;
+}
+
+// ─── Action formulation ──────────────────────────────────────────────────────
+
+export function formulateAction(
+  description: string,
+  delta: number[],
+): LatentAction {
+  return { description, delta };
+}
+
+// ─── Latent rollout ─────────────────────────────────────────────────────────
+
+export function latentRollout(
+  stateEmbedding: number[],
+  action: LatentAction,
+  predictor?: LatentMctsOptions['predictor'],
+): number[] {
+  if (predictor) {
+    return predictor.predict(stateEmbedding, action.delta);
+  }
+  return perturbEmbedding(stateEmbedding, action.delta);
+}
+
+// ─── Energy / distance scoring ───────────────────────────────────────────────
+
+export function scoreEnergy(
+  rolloutEmbedding: number[],
+  targetEmbedding: number[] | undefined,
+  energyWeight = 1.0,
+): number {
+  if (!targetEmbedding || targetEmbedding.length === 0) {
+    return 0;
+  }
+  return energyWeight * cosineDistance(rolloutEmbedding, targetEmbedding);
+}
+
+// ─── MCTS core ───────────────────────────────────────────────────────────────
+
+interface MctsNode {
+  state: LatentState;
+  action: LatentAction | null;
+  energy: number;
+  visits: number;
+  value: number;
+  children: MctsNode[];
+  parent: MctsNode | null;
+}
+
+function ucb1Score(node: MctsNode, parentVisits: number, explorationConstant: number): number {
+  if (node.visits === 0) return Infinity;
+  return node.value / node.visits + explorationConstant * Math.sqrt((2 * Math.log(parentVisits + 1)) / node.visits);
+}
+
+function selectBestChild(node: MctsNode, explorationConstant: number): MctsNode | null {
+  let best: MctsNode | null = null;
+  let bestScore = -Infinity;
+  for (const child of node.children) {
+    const score = ucb1Score(child, node.visits, explorationConstant);
+    if (score > bestScore) {
+      bestScore = score;
+      best = child;
+    }
+  }
+  return best;
+}
+
+function isTerminal(node: MctsNode, maxDepth: number, depth: number): boolean {
+  return depth >= maxDepth || node.energy <= 0;
+}
+
+export function runLatentMcts(
+  initialState: LatentState,
+  actions: LatentAction[],
+  options: LatentMctsOptions = {},
+): LatentMctsResult {
+  const maxIterations = options.maxIterations ?? 50;
+  const maxDepth = options.maxDepth ?? 6;
+  const explorationConstant = options.explorationConstant ?? 1.2;
+  const energyWeight = options.energyWeight ?? 1.0;
+
+  const root: MctsNode = {
+    state: initialState,
+    action: null,
+    energy: computeEnergy(initialState, options.targetEmbedding),
+    visits: 0,
+    value: 0,
+    children: [],
+    parent: null,
+  };
+
+  let iterations = 0;
+
+  for (let iter = 0; iter < maxIterations; iter++) {
+    iterations = iter + 1;
+    let node: MctsNode = root;
+    let depth = 0;
+
+    // Selection
+    while (node.children.length > 0 && !isTerminal(node, maxDepth, depth)) {
+      const best = selectBestChild(node, explorationConstant);
+      if (!best) break;
+      node = best;
+      depth++;
+    }
+
+    // Expansion
+    if (!isTerminal(node, maxDepth, depth) && actions.length > 0) {
+      const action = actions[Math.floor(Math.random() * actions.length)];
+      const nextEmbedding = latentRollout(node.state.embedding, action, options.predictor);
+      const energy = scoreEnergy(nextEmbedding, options.targetEmbedding, energyWeight);
+      const child: MctsNode = {
+        state: { embedding: nextEmbedding, actionDescription: action.description },
+        action,
+        energy,
+        visits: 0,
+        value: 0,
+        children: [],
+        parent: node,
+      };
+      node.children.push(child);
+      node = child;
+      depth++;
+    }
+
+    // Evaluation
+    const value = 1.0 / (1.0 + node.energy);
+    // Backpropagation
+    let current: MctsNode | null = node;
+    while (current) {
+      current.visits += 1;
+      current.value += value;
+      current = current.parent;
+    }
+  }
+
+  // Choose best child of root
+  let bestChild: MctsNode | null = null;
+  let bestAvg = -Infinity;
+  for (const child of root.children) {
+    const avg = child.visits > 0 ? child.value / child.visits : 0;
+    if (avg > bestAvg) {
+      bestAvg = avg;
+      bestChild = child;
+    }
+  }
+
+  const bestAction = bestChild?.action ?? null;
+  const bestState = bestChild?.state ?? root.state;
+
+  return {
+    bestState,
+    bestAction,
+    energy: bestState.embedding.length > 0 ? computeEnergy(bestState, options.targetEmbedding) : root.energy,
+    iterations,
+    summary: `MCTS iterations=${iterations} branches=${root.children.length} bestEnergy=${bestState.embedding.length > 0 ? computeEnergy(bestState, options.targetEmbedding).toFixed(4) : 'n/a'}`,
+  };
 }
