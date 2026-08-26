@@ -8,7 +8,7 @@ class JEPAConfig:
     """Hyperparameters for the local JEPA objective."""
 
     # ── Core architecture ──────────────────────────────────────────────────────
-    embedding_dim: int = 256
+    embedding_dim: int = 128
     hidden_dim: int = 512
     predictor_depth: int = 4
     ema_tau: float = 0.996
