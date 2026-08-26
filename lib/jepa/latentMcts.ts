@@ -161,8 +161,8 @@ function selectBestChild(node: MctsNode, explorationConstant: number): MctsNode 
   return best;
 }
 
-function isTerminal(node: MctsNode, maxDepth: number, depth: number): boolean {
-  return depth >= maxDepth || node.energy <= 0;
+function isTerminal(node: MctsNode, maxDepth: number, depth: number, hasTarget: boolean): boolean {
+  return depth >= maxDepth || (hasTarget && node.energy <= 0);
 }
 
 export function runLatentMcts(
@@ -187,13 +187,15 @@ export function runLatentMcts(
 
   let iterations = 0;
 
+  const hasTarget = (options.targetEmbedding?.length ?? 0) > 0;
+
   for (let iter = 0; iter < maxIterations; iter++) {
     iterations = iter + 1;
     let node: MctsNode = root;
     let depth = 0;
 
     // Selection
-    while (node.children.length > 0 && !isTerminal(node, maxDepth, depth)) {
+    while (node.children.length > 0 && !isTerminal(node, maxDepth, depth, hasTarget)) {
       const best = selectBestChild(node, explorationConstant);
       if (!best) break;
       node = best;
@@ -201,7 +203,7 @@ export function runLatentMcts(
     }
 
     // Expansion
-    if (!isTerminal(node, maxDepth, depth) && actions.length > 0) {
+    if (!isTerminal(node, maxDepth, depth, hasTarget) && actions.length > 0) {
       const action = actions[Math.floor(Math.random() * actions.length)];
       const nextEmbedding = latentRollout(node.state.embedding, action, options.predictor);
       const energy = scoreEnergy(nextEmbedding, options.targetEmbedding, energyWeight);
