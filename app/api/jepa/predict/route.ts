@@ -20,8 +20,10 @@ const CIRCUIT_BREAKER_MAX_VARIANCE = 0.95;
 // Variance sparse threshold: only emit indices where exp(log_var) > this.
 const VARIANCE_SPARSE_THRESHOLD = 0.01;
 
-// Latency budget (ms). Exceeding this trips the circuit breaker.
-const LATENCY_BUDGET_MS = 600;
+// Latency budget (ms). Cold-start allows WASM/ONNX load; warm-start must
+// stay within this envelope.
+const WARM_START_LATENCY_BUDGET_MS = 250;
+const COLD_START_LATENCY_BUDGET_MS = 3000;
 
 async function getPredictorSession(): Promise<ort.InferenceSession> {
   if (cachedPredictorSession) {
@@ -100,6 +102,11 @@ export async function POST(request: Request) {
     const muData = Array.from(mu.data as Float32Array);
     const logVarData = Array.from(logVar.data as Float32Array);
 
+    // Optional variance calibration multiplier. In production this is 1.0;
+    // during staging validation you can raise it to verify circuit-breaker
+    // behavior without retraining the ONNX graph.
+    const varianceScale = Number(process.env.JEPA_VARIANCE_SCALE || '1.0');
+
     // Build sparse variance response.
     const varIndices: number[] = [];
     const varValues: number[] = [];
@@ -107,7 +114,7 @@ export async function POST(request: Request) {
     let maxVar = -Infinity;
 
     for (let i = 0; i < logVarData.length; i++) {
-      const v = Math.exp(logVarData[i]);
+      const v = Math.exp(logVarData[i] * varianceScale);
       sumVar += v;
       if (v > maxVar) maxVar = v;
       if (v > VARIANCE_SPARSE_THRESHOLD) {
@@ -117,16 +124,16 @@ export async function POST(request: Request) {
     }
 
     const meanVariance = sumVar / LATENT_DIM;
-    const fallbackToSyntactic = maxVar > CIRCUIT_BREAKER_MAX_VARIANCE;
     const totalMs = Date.now() - started;
+    const isWarmStart = !!cachedPredictorSession;
+    const latencyBudget = isWarmStart
+      ? WARM_START_LATENCY_BUDGET_MS
+      : COLD_START_LATENCY_BUDGET_MS;
 
-    if (totalMs > LATENCY_BUDGET_MS) {
-      return NextResponse.json({
-        status: 'error',
-        fallbackToSyntactic: true,
-        error: `latency-budget-exceeded: ${totalMs}ms`,
-      });
-    }
+    // Only trip the circuit breaker for latency on warm paths. Cold-start
+    // is expected to be slow and serves to initialize the WASM cache.
+    const latencyExceeded = isWarmStart && totalMs > latencyBudget;
+    const fallbackToSyntactic = latencyExceeded || maxVar > CIRCUIT_BREAKER_MAX_VARIANCE;
 
     return NextResponse.json({
       status: 'success',
