@@ -80,13 +80,36 @@ class MainWorker:
 
     def setVarianceSpike(self, spike: bool) -> None:
         """Called by the DP variance watchdog; consumed by transport layer."""
+        prev = self.hasVarianceSpike()
         if spike:
             self._variance_spike.set()
         else:
             self._variance_spike.clear()
+        if spike != prev:
+            self._notify_variance_state(spike)
 
     def hasVarianceSpike(self) -> bool:
         return self._variance_spike.is_set()
+
+    def _notify_variance_state(self, spike: bool) -> None:
+        """Best-effort POST to the Next.js P2P state bridge."""
+        try:
+            url = os.environ.get("NEXT_PUBLIC_APP_URL", "").rstrip("/")
+            if not url:
+                return
+            path = os.environ.get("JEPA_P2P_STATE_PATH", "/api/jepa/p2p/state")
+            payload = json.dumps({"hasVarianceSpike": spike}).encode("utf-8")
+            req = __import__("urllib.request").request.Request(
+                f"{url}{path}",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with __import__("urllib.request").urlopen(req, timeout=2) as resp:
+                if resp.status != 200:
+                    print(f"[MainWorker] variance bridge HTTP {resp.status}")
+        except Exception as exc:
+            print(f"[MainWorker] variance bridge notify failed: {exc}")
 
     def drain_gossip_queue(self) -> int:
         entries: list[dict] = []

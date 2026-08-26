@@ -199,6 +199,9 @@ export class JepaP2PNode {
     });
 
     console.log(`JEPA P2P node started. PeerId=${this.libp2p.peerId.toString()}`);
+
+    // Poll the variance-state bridge so heartbeat reacts to DP-SGD spikes.
+    this.startVariancePolling(5000);
   }
 
   private checkRateLimit(peerId: string, kind: 'ihave' | 'iwant'): boolean {
@@ -235,6 +238,24 @@ export class JepaP2PNode {
     }
 
     this.config.onVarianceSpike?.(spike);
+  }
+
+  /**
+   * Poll the DP variance state endpoint and apply dynamic heartbeat changes.
+   * Safe to call multiple times; duplicate intervals are ignored.
+   */
+  public startVariancePolling(intervalMs = 5000): void {
+    if ((this as any)._variancePolling) return;
+    (this as any)._variancePolling = setInterval(async () => {
+      try {
+        const res = await fetch('/api/jepa/p2p/state');
+        if (!res.ok) return;
+        const state = await res.json();
+        this.setVarianceSpike(!!state.hasVarianceSpike);
+      } catch {
+        // Swallow network/parse errors; next tick will retry.
+      }
+    }, intervalMs);
   }
 
   private handleMessage = (event: { detail: { from: string; msg: { data: Uint8Array; topic: string } } }) => {
