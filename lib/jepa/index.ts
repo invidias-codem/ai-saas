@@ -65,3 +65,8 @@ export type {
   VjepaDistribution,
   VjepaPredictor,
 } from '@/lib/jepa/vjepa';
+
+export type { GossipPayload, GossipMetadata } from '@/lib/jepa/p2p/serialization';
+export type { PeerModel, PeerIngestCallback } from '@/lib/jepa/p2p/transport';
+export { JepaP2PNode } from '@/lib/jepa/p2p/transport';
+export type { P2PNodeConfig } from '@/lib/jepa/p2p/transport';
