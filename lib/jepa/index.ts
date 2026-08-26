@@ -43,18 +43,22 @@ export {
 export type { ExecutionTrace, ExecutionTraceAction, ExecutionTraceArtifact, ITraceEmitter } from '@/lib/jepa/executionTrace';
 
 export {
+  computeEnergy,
+  perturbEmbedding,
+} from '@/lib/jepa/latentMcts';
+export type {
   LatentState,
   LatentAction,
   LatentMctsOptions,
   LatentMctsResult,
-  computeEnergy,
-  perturbEmbedding,
 } from '@/lib/jepa/latentMcts';
 
 export {
-  VjepaDistribution,
-  VjepaPredictor,
   degenerateVjepaDistribution,
   sampleFromVjepa,
   vjepaLogLikelihood,
+} from '@/lib/jepa/vjepa';
+export type {
+  VjepaDistribution,
+  VjepaPredictor,
 } from '@/lib/jepa/vjepa';
