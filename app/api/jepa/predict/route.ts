@@ -102,10 +102,8 @@ export async function POST(request: Request) {
     const muData = Array.from(mu.data as Float32Array);
     const logVarData = Array.from(logVar.data as Float32Array);
 
-    // Optional variance calibration multiplier. In production this is 1.0;
-    // during staging validation you can raise it to verify circuit-breaker
-    // behavior without retraining the ONNX graph.
-    const varianceScale = Number(process.env.JEPA_VARIANCE_SCALE || '1.0');
+    // Per-request variance calibration. Defaults to 1.0.
+    const varianceScale = Number(request.headers.get('x-jepa-variance-scale') || '1.0');
 
     // Build sparse variance response.
     const varIndices: number[] = [];
