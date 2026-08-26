@@ -16,6 +16,85 @@ import {
   perturbEmbedding,
 } from "@/lib/jepa/latentMcts";
 
+const JEPA_PREDICT_ROUTE = "/api/jepa/predict";
+
+async function fetchPredictedState(
+  embedding: number[],
+  actions: LatentAction[],
+): Promise<Map<string, number[]>> {
+  "use server";
+  const results = new Map<string, number[]>();
+  for (const action of actions) {
+    try {
+      const res = await fetch(JEPA_PREDICT_ROUTE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          latentState: embedding,
+          latentAction: action.delta,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`predict route failed: ${res.status}`);
+      }
+
+      const payload = (await res.json()) as {
+        status: string;
+        predictedState?: number[];
+      };
+
+      if (payload.status === "success" && Array.isArray(payload.predictedState)) {
+        results.set(action.description, payload.predictedState);
+      } else {
+        throw new Error("predict route returned unsuccessful payload");
+      }
+    } catch {
+      // Leave this action unmapped; caller will fall back to additive rollout.
+    }
+  }
+  return results;
+}
+
+async function resolveActionsWithPredictor(
+  initialState: LatentState,
+  actions: LatentAction[],
+): Promise<LatentAction[]> {
+  const predicted = await fetchPredictedState(initialState.embedding, actions);
+  if (predicted.size === 0) {
+    return actions;
+  }
+  return actions.filter((action) => predicted.has(action.description));
+}
+
+async function predictorAwareRunLatentMcts(
+  initialState: LatentState,
+  actions: LatentAction[],
+  options: {
+    maxIterations?: number;
+    maxDepth?: number;
+    explorationConstant?: number;
+    energyWeight?: number;
+    targetEmbedding?: number[];
+  } = {},
+): Promise<{
+  result: ReturnType<typeof runLatentMcts>;
+  usedPredictor: boolean;
+}> {
+  const resolvedActions = await resolveActionsWithPredictor(initialState, actions);
+  const usedPredictor = resolvedActions.length > 0;
+  const finalActions = usedPredictor ? resolvedActions : actions;
+
+  const result = runLatentMcts(initialState, finalActions, {
+    maxIterations: options.maxIterations ?? 12,
+    maxDepth: options.maxDepth ?? 4,
+    explorationConstant: options.explorationConstant ?? 1.1,
+    energyWeight: options.energyWeight ?? 1.0,
+  });
+
+  return { result, usedPredictor };
+}
+
 const SearchCodebaseInputSchema = z.object({
   query: z.string().describe("The semantic search query to look up in the codebase (e.g., 'IPC bridging stderr log parsing logic' or 'how do we track active subagents')"),
   limit: z
@@ -163,12 +242,30 @@ export const searchCodebaseTool: Tool = {
         const actions = DEFAULT_ACTION_CANDIDATES.slice(0, 6);
 
         let mctsError: unknown = null;
+        let usedPredictor = false;
         let latentResult = runLatentMcts(initialState, actions, {
           maxIterations: 12,
           maxDepth: 4,
           explorationConstant: 1.1,
           energyWeight: 1.0,
         });
+
+        try {
+          const predictorAware = await predictorAwareRunLatentMcts(
+            initialState,
+            actions,
+            {
+              maxIterations: 12,
+              maxDepth: 4,
+              explorationConstant: 1.1,
+              energyWeight: 1.0,
+            }
+          );
+          usedPredictor = predictorAware.usedPredictor;
+          latentResult = predictorAware.result;
+        } catch (err) {
+          mctsError = err;
+        }
 
         // If the first rollout diverges badly, prune weaker action deltas and rerun.
         const firstEnergy = latentResult.energy;
@@ -186,12 +283,18 @@ export const searchCodebaseTool: Tool = {
 
           if (conservativeActions.length > 0) {
             try {
-              latentResult = runLatentMcts(initialState, conservativeActions, {
-                maxIterations: 8,
-                maxDepth: 3,
-                explorationConstant: 0.9,
-                energyWeight: 1.0,
-              });
+              const predictorAware = await predictorAwareRunLatentMcts(
+                initialState,
+                conservativeActions,
+                {
+                  maxIterations: 8,
+                  maxDepth: 3,
+                  explorationConstant: 0.9,
+                  energyWeight: 1.0,
+                }
+              );
+              usedPredictor = predictorAware.usedPredictor;
+              latentResult = predictorAware.result;
             } catch (err) {
               mctsError = err;
             }
@@ -211,6 +314,7 @@ export const searchCodebaseTool: Tool = {
             query: input.query,
             mode: 'latent-mcts',
             usedMcts: true,
+            usedPredictor,
             bestState: {
               source: latentResult.bestState.source,
               actionDescription: latentResult.bestAction?.description ?? latentResult.bestState.actionDescription ?? null,
