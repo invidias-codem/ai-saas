@@ -28,7 +28,7 @@ import { serializeAstForJepa } from "@/lib/jepa/astEncoderInput";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** Canonical language identifiers. */
-export type AstLanguage = 'typescript' | 'javascript' | 'tsx' | 'jsx' | 'go' | 'python' | 'unknown';
+export type AstLanguage = 'typescript' | 'javascript' | 'tsx' | 'jsx' | 'go' | 'python' | 'sql' | 'unknown';
 
 /**
  * Lightweight AST node representation used by the MCTS action space.
@@ -188,7 +188,12 @@ export class JepaDivergenceScorer {
     latencyBudgetMs?: number;
     fallbackEnabled?: boolean;
   }) {
-    this.jepaEndpoint = opts?.jepaEndpoint ?? '/api/jepa/infer';
+    let endpoint = opts?.jepaEndpoint ?? '/api/jepa/infer';
+    if (!/^https?:\/\//i.test(endpoint)) {
+      const base = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
+      if (base) endpoint = `${base.replace(/\/$/, '')}${endpoint}`;
+    }
+    this.jepaEndpoint = endpoint;
     this.latencyBudgetMs = opts?.latencyBudgetMs ?? 600;
     this.fallbackEnabled = opts?.fallbackEnabled ?? true;
   }
@@ -225,9 +230,15 @@ export class JepaDivergenceScorer {
     const started = Date.now();
     try {
       const astTokens = state.astTokens ?? serializeAstForJepa(state.source, state.language);
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const bypassHeader = process.env.VERCEL_PROTECTION_BYPASS_HEADER || process.env.VERCEL_JEPA_BYPASS_HEADER;
+      if (bypassHeader) {
+        headers['x-vercel-protection-bypass'] = bypassHeader;
+      }
+
       const res = await fetch(this.jepaEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ astTokens, language: state.language }),
       });
 
