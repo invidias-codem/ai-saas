@@ -30,6 +30,7 @@ import { createLibp2p } from 'libp2p';
 import type { Libp2p } from 'libp2p';
 import type { GossipPayload, GossipMetadata } from './serialization';
 import { JepaP2PBridge, type AggregationJob } from './bridge';
+import { Redis } from '@upstash/redis';
 
 const STRICT_SIGN = 'StrictSign' as const;
 
@@ -137,6 +138,9 @@ export class JepaP2PNode {
   private readonly MAX_IHAVE_PER_WINDOW = 10;
   private readonly MAX_IWANT_PER_WINDOW = 10;
   private readonly PAYLOAD_DROP_THRESHOLD_BYTES = 1_000_000;
+  private readonly VARIANCE_SPIKE_KEY = 'jepa:mesh:variance_spike';
+  private redis: Redis | null = null;
+  private variancePollHandle: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: P2PNodeConfig) {
     this.topicName = config.topicName;
@@ -200,7 +204,11 @@ export class JepaP2PNode {
 
     console.log(`JEPA P2P node started. PeerId=${this.libp2p.peerId.toString()}`);
 
-    // Poll the variance-state bridge so heartbeat reacts to DP-SGD spikes.
+    this.redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL || '',
+      token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+    });
+
     this.startVariancePolling(5000);
   }
 
@@ -241,17 +249,17 @@ export class JepaP2PNode {
   }
 
   /**
-   * Poll the DP variance state endpoint and apply dynamic heartbeat changes.
-   * Safe to call multiple times; duplicate intervals are ignored.
+   * Poll Upstash Redis for the DP-SGD variance spike flag and apply dynamic
+   * heartbeat changes. Safe to call multiple times; duplicate intervals are ignored.
    */
   public startVariancePolling(intervalMs = 5000): void {
-    if ((this as any)._variancePolling) return;
-    (this as any)._variancePolling = setInterval(async () => {
+    if (this.variancePollHandle) return;
+    this.variancePollHandle = setInterval(async () => {
       try {
-        const res = await fetch('/api/jepa/p2p/state');
-        if (!res.ok) return;
-        const state = await res.json();
-        this.setVarianceSpike(!!state.hasVarianceSpike);
+        if (!this.redis) return;
+        const raw = await this.redis.get<string>(this.VARIANCE_SPIKE_KEY);
+        const spike = raw === 'true';
+        this.setVarianceSpike(spike);
       } catch {
         // Swallow network/parse errors; next tick will retry.
       }

@@ -92,24 +92,28 @@ class MainWorker:
         return self._variance_spike.is_set()
 
     def _notify_variance_state(self, spike: bool) -> None:
-        """Best-effort POST to the Next.js P2P state bridge."""
+        """Write the variance spike flag to Upstash Redis with a 60s TTL."""
         try:
-            url = os.environ.get("NEXT_PUBLIC_APP_URL", "").rstrip("/")
-            if not url:
+            url = os.environ.get("UPSTASH_REDIS_REST_URL", "")
+            token = os.environ.get("UPSTASH_REDIS_REST_TOKEN", "")
+            if not url or not token:
                 return
-            path = os.environ.get("JEPA_P2P_STATE_PATH", "/api/jepa/p2p/state")
-            payload = json.dumps({"hasVarianceSpike": spike}).encode("utf-8")
+            value = "true" if spike else "false"
+            payload = json.dumps({"value": value, "ex": 60}).encode("utf-8")
             req = __import__("urllib.request").request.Request(
-                f"{url}{path}",
+                f"{url}/set/jepa:mesh:variance_spike",
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}",
+                },
                 method="POST",
             )
             with __import__("urllib.request").urlopen(req, timeout=2) as resp:
                 if resp.status != 200:
-                    print(f"[MainWorker] variance bridge HTTP {resp.status}")
+                    print(f"[MainWorker] Upstash variance bridge HTTP {resp.status}")
         except Exception as exc:
-            print(f"[MainWorker] variance bridge notify failed: {exc}")
+            print(f"[MainWorker] Upstash variance bridge notify failed: {exc}")
 
     def drain_gossip_queue(self) -> int:
         entries: list[dict] = []
