@@ -108,3 +108,4 @@ go-harness/bin/
 
 # OG-image optimizer venv
 .venv_ogfix/
+.env*

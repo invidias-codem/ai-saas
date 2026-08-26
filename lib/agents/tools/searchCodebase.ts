@@ -16,55 +16,65 @@ import {
   perturbEmbedding,
 } from "@/lib/jepa/latentMcts";
 
-const JEPA_PREDICT_ROUTE = "/api/jepa/predict";
+const JEPA_PREDICT_ROUTE = '/api/jepa/predict';
 
-async function fetchPredictedState(
+interface VjepaPredictResponse {
+  status: string;
+  mu?: number[];
+  varIndices?: number[];
+  varValues?: number[];
+  meanVariance?: number;
+  maxVarianceDim?: number;
+  fallbackToSyntactic?: boolean;
+  totalMs?: number;
+  warmStart?: boolean;
+  error?: string;
+}
+
+async function fetchVjepaDistribution(
   embedding: number[],
-  actions: LatentAction[],
-): Promise<Map<string, number[]>> {
-  "use server";
-  const results = new Map<string, number[]>();
-  for (const action of actions) {
-    try {
-      const res = await fetch(JEPA_PREDICT_ROUTE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          latentState: embedding,
-          latentAction: action.delta,
-        }),
-      });
+): Promise<VjepaPredictResponse | null> {
+  'use server';
+  try {
+    const res = await fetch(JEPA_PREDICT_ROUTE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ latentState: embedding }),
+    });
 
-      if (!res.ok) {
-        throw new Error(`predict route failed: ${res.status}`);
-      }
-
-      const payload = (await res.json()) as {
-        status: string;
-        predictedState?: number[];
-      };
-
-      if (payload.status === "success" && Array.isArray(payload.predictedState)) {
-        results.set(action.description, payload.predictedState);
-      } else {
-        throw new Error("predict route returned unsuccessful payload");
-      }
-    } catch {
-      // Leave this action unmapped; caller will fall back to additive rollout.
+    if (!res.ok) {
+      return null;
     }
+
+    const payload = (await res.json()) as VjepaPredictResponse;
+    if (payload.status !== 'success' || !payload.mu || payload.fallbackToSyntactic) {
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
   }
-  return results;
 }
 
 async function resolveActionsWithPredictor(
   initialState: LatentState,
   actions: LatentAction[],
 ): Promise<LatentAction[]> {
-  const predicted = await fetchPredictedState(initialState.embedding, actions);
-  if (predicted.size === 0) {
-    return actions;
+  // VJEPA predictor: query once for the initial state distribution.
+  // Action-level resolution requires a separate action-conditioned predictor;
+  // for now, all actions are considered valid if the distribution is stable.
+  const distribution = await fetchVjepaDistribution(initialState.embedding);
+  if (!distribution) {
+    return [];
   }
-  return actions.filter((action) => predicted.has(action.description));
+
+  // Circuit-breaker: high max variance → fail closed, no predictor.
+  if (distribution.maxVarianceDim !== undefined && distribution.maxVarianceDim > 0.95) {
+    return [];
+  }
+
+  return actions;
 }
 
 async function predictorAwareRunLatentMcts(
@@ -76,23 +86,29 @@ async function predictorAwareRunLatentMcts(
     explorationConstant?: number;
     energyWeight?: number;
     targetEmbedding?: number[];
+    variancePenaltyLambda?: number;
   } = {},
 ): Promise<{
   result: ReturnType<typeof runLatentMcts>;
   usedPredictor: boolean;
+  meanVariance: number | null;
 }> {
-  const resolvedActions = await resolveActionsWithPredictor(initialState, actions);
-  const usedPredictor = resolvedActions.length > 0;
-  const finalActions = usedPredictor ? resolvedActions : actions;
+  const distribution = await fetchVjepaDistribution(initialState.embedding);
+  const usedPredictor = !!distribution && !distribution.fallbackToSyntactic;
+  const resolvedActions = usedPredictor ? actions : [];
 
-  const result = runLatentMcts(initialState, finalActions, {
+  const meanVariance = distribution?.meanVariance ?? null;
+
+  const result = runLatentMcts(initialState, resolvedActions, {
     maxIterations: options.maxIterations ?? 12,
     maxDepth: options.maxDepth ?? 4,
     explorationConstant: options.explorationConstant ?? 1.1,
     energyWeight: options.energyWeight ?? 1.0,
+    targetEmbedding: options.targetEmbedding,
+    variancePenaltyLambda: usedPredictor ? (options.variancePenaltyLambda ?? 0.5) : 0,
   });
 
-  return { result, usedPredictor };
+  return { result, usedPredictor, meanVariance };
 }
 
 const SearchCodebaseInputSchema = z.object({
@@ -243,6 +259,7 @@ export const searchCodebaseTool: Tool = {
 
         let mctsError: unknown = null;
         let usedPredictor = false;
+        let meanVariance: number | null = null;
         let latentResult = runLatentMcts(initialState, actions, {
           maxIterations: 12,
           maxDepth: 4,
@@ -259,9 +276,11 @@ export const searchCodebaseTool: Tool = {
               maxDepth: 4,
               explorationConstant: 1.1,
               energyWeight: 1.0,
+              variancePenaltyLambda: 0.5,
             }
           );
           usedPredictor = predictorAware.usedPredictor;
+          meanVariance = predictorAware.meanVariance;
           latentResult = predictorAware.result;
         } catch (err) {
           mctsError = err;
@@ -315,6 +334,7 @@ export const searchCodebaseTool: Tool = {
             mode: 'latent-mcts',
             usedMcts: true,
             usedPredictor,
+            meanVariance,
             bestState: {
               source: latentResult.bestState.source,
               actionDescription: latentResult.bestAction?.description ?? latentResult.bestState.actionDescription ?? null,

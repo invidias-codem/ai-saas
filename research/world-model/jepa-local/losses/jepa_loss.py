@@ -229,6 +229,11 @@ class LocalJEPANode(nn.Module):
     The target encoder is updated via exponential moving average of the
     source encoder, preventing representation collapse in centralized settings
     and providing a stable training target in decentralized settings.
+
+    VJEPA mode:
+      When config.use_vjepa=True, the predictor is replaced with a
+      VJEPAPredictorHead and the loss becomes VJEPALocalLoss (ELBO + FUR).
+      The ONNX export path then emits both `mu` and `log_var` outputs.
     """
 
     def __init__(self, config: JEPAConfig):
@@ -236,15 +241,32 @@ class LocalJEPANode(nn.Module):
         self.config = config
         self.encoder = JEPAEncoder(config.embedding_dim, config.hidden_dim)
         self.target_encoder = JEPAEncoder(config.embedding_dim, config.hidden_dim)
-        self.predictor = JEPAPredictor(
-            config.embedding_dim,
-            config.hidden_dim,
-            config.predictor_depth,
-        )
-        self.loss_fn = JEPALocalLoss(config)
+
+        # VJEPA or deterministic predictor based on config.
+        if config.use_vjepa:
+            from losses.vjepa_loss import VJEPAPredictorHead, VJEPALocalLoss
+            self.predictor = VJEPAPredictorHead(
+                config.embedding_dim,
+                config.hidden_dim,
+                config.predictor_depth,
+            )
+            self.loss_fn = VJEPALocalLoss(config)
+            self._vjepa_mode = True
+        else:
+            self.predictor = JEPAPredictor(
+                config.embedding_dim,
+                config.hidden_dim,
+                config.predictor_depth,
+            )
+            self.loss_fn = JEPALocalLoss(config)
+            self._vjepa_mode = False
 
         # Initialize target encoder as copy of source encoder
         self._sync_target_encoder()
+
+    @property
+    def vjepa_mode(self) -> bool:
+        return self._vjepa_mode
 
     def _sync_target_encoder(self) -> None:
         """Copy source encoder weights to target encoder."""

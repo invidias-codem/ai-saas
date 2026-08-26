@@ -29,6 +29,8 @@ export interface LatentState {
   embedding: number[];
   source?: string;
   actionDescription?: string;
+  /** VJEPA mean variance for this state, if available. */
+  meanVariance?: number;
 }
 
 export interface LatentAction {
@@ -48,6 +50,11 @@ export interface LatentMctsOptions {
   predictor?: {
     predict(state: number[], action: number[]): number[];
   };
+  /**
+   * VJEPA variance penalty: penalize high-variance rollouts in UCB1 selection.
+   * λ = 0.5 is a reasonable default. Set to 0 to disable variance-aware pruning.
+   */
+  variancePenaltyLambda?: number;
 }
 
 export interface LatentMctsResult {
@@ -137,22 +144,26 @@ interface MctsNode {
   state: LatentState;
   action: LatentAction | null;
   energy: number;
+  meanVariance: number;
   visits: number;
   value: number;
   children: MctsNode[];
   parent: MctsNode | null;
 }
 
-function ucb1Score(node: MctsNode, parentVisits: number, explorationConstant: number): number {
+function ucb1Score(node: MctsNode, parentVisits: number, explorationConstant: number, variancePenaltyLambda: number): number {
   if (node.visits === 0) return Infinity;
-  return node.value / node.visits + explorationConstant * Math.sqrt((2 * Math.log(parentVisits + 1)) / node.visits);
+  const exploit = node.value / node.visits;
+  const explore = explorationConstant * Math.sqrt((2 * Math.log(parentVisits + 1)) / node.visits);
+  const penalty = variancePenaltyLambda * (node.meanVariance ?? 0);
+  return exploit + explore - penalty;
 }
 
-function selectBestChild(node: MctsNode, explorationConstant: number): MctsNode | null {
+function selectBestChild(node: MctsNode, explorationConstant: number, variancePenaltyLambda: number): MctsNode | null {
   let best: MctsNode | null = null;
   let bestScore = -Infinity;
   for (const child of node.children) {
-    const score = ucb1Score(child, node.visits, explorationConstant);
+    const score = ucb1Score(child, node.visits, explorationConstant, variancePenaltyLambda);
     if (score > bestScore) {
       bestScore = score;
       best = child;
@@ -174,11 +185,13 @@ export function runLatentMcts(
   const maxDepth = options.maxDepth ?? 6;
   const explorationConstant = options.explorationConstant ?? 1.2;
   const energyWeight = options.energyWeight ?? 1.0;
+  const variancePenaltyLambda = options.variancePenaltyLambda ?? 0;
 
   const root: MctsNode = {
     state: initialState,
     action: null,
     energy: computeEnergy(initialState, options.targetEmbedding),
+    meanVariance: initialState.meanVariance ?? 0,
     visits: 0,
     value: 0,
     children: [],
@@ -196,7 +209,7 @@ export function runLatentMcts(
 
     // Selection
     while (node.children.length > 0 && !isTerminal(node, maxDepth, depth, hasTarget)) {
-      const best = selectBestChild(node, explorationConstant);
+      const best = selectBestChild(node, explorationConstant, variancePenaltyLambda);
       if (!best) break;
       node = best;
       depth++;
@@ -208,9 +221,10 @@ export function runLatentMcts(
       const nextEmbedding = latentRollout(node.state.embedding, action, options.predictor);
       const energy = scoreEnergy(nextEmbedding, options.targetEmbedding, energyWeight);
       const child: MctsNode = {
-        state: { embedding: nextEmbedding, actionDescription: action.description },
+        state: { embedding: nextEmbedding, actionDescription: action.description, meanVariance: 0 },
         action,
         energy,
+        meanVariance: 0,
         visits: 0,
         value: 0,
         children: [],

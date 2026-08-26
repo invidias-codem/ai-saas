@@ -1,0 +1,37 @@
+{
+  "model": "vjepa_predictor",
+  "embedding_dim": 128,
+  "hidden_dim": 512,
+  "predictor_depth": 4,
+  "inputs": [
+    {
+      "name": "z",
+      "shape": [
+        "batch",
+        128
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "mu",
+      "shape": [
+        "batch",
+        128
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "log_var",
+      "shape": [
+        "batch",
+        128
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "precision": "int8",
+  "size_bytes": 737547,
+  "size_human": "720.3 KB"
+}

@@ -8,6 +8,21 @@ export const runtime = 'nodejs';
 let cachedPredictorSession: ort.InferenceSession | null = null;
 let initializationPromise: Promise<ort.InferenceSession> | null = null;
 
+// Fixed VJEPA latent dimension. The Python export uses embedding_dim=128;
+// changing this requires retraining + re-export.
+const LATENT_DIM = 128;
+
+// Circuit-breaker threshold: if max diagonal variance exceeds this, the
+// prediction is treated as too uncertain and the caller falls back to
+// deterministic syntactic planning.
+const CIRCUIT_BREAKER_MAX_VARIANCE = 0.95;
+
+// Variance sparse threshold: only emit indices where exp(log_var) > this.
+const VARIANCE_SPARSE_THRESHOLD = 0.01;
+
+// Latency budget (ms). Exceeding this trips the circuit breaker.
+const LATENCY_BUDGET_MS = 600;
+
 async function getPredictorSession(): Promise<ort.InferenceSession> {
   if (cachedPredictorSession) {
     return cachedPredictorSession;
@@ -18,7 +33,7 @@ async function getPredictorSession(): Promise<ort.InferenceSession> {
   }
 
   initializationPromise = (async () => {
-    // Force single-threaded to prevent Vercel Web Worker crashes
+    // Force single-threaded to prevent Vercel Web Worker crashes.
     ort.env.wasm.numThreads = 1;
 
     const wasmDir = `${process.cwd()}/public/wasm`;
@@ -41,6 +56,15 @@ async function getPredictorSession(): Promise<ort.InferenceSession> {
   return initializationPromise;
 }
 
+function toFloat32Array(input: number[] | null | undefined): Float32Array {
+  const arr = new Float32Array(LATENT_DIM);
+  if (!input) return arr;
+  for (let i = 0; i < Math.min(input.length, LATENT_DIM); i++) {
+    arr[i] = Number(input[i]);
+  }
+  return arr;
+}
+
 export async function POST(request: Request) {
   const started = Date.now();
 
@@ -56,24 +80,63 @@ export async function POST(request: Request) {
     }
 
     const session = await getPredictorSession();
+    const input = toFloat32Array(latentState);
+    const inputTensor = new ort.Tensor('float32', input, [1, LATENT_DIM]);
+    const results = await session.run({ z: inputTensor });
 
-    // Pad or truncate to predictor input dim from JEPAConfig.embedding_dim.
-    // The Python export uses embedding_dim as the fixed input width.
-    const inputDim = 256;
-    const input = new Float32Array(inputDim);
-    for (let i = 0; i < Math.min(latentState.length, inputDim); i++) {
-      input[i] = Number(latentState[i]);
+    const mu = results.mu;
+    const logVar = results.log_var;
+    if (!mu || !logVar) {
+      return NextResponse.json(
+        {
+          status: 'error',
+          fallbackToSyntactic: true,
+          error: 'predictor.onnx missing mu/log_var outputs; expected VJEPA dual-output model',
+        },
+        { status: 500 }
+      );
     }
 
-    const inputTensor = new ort.Tensor('float32', input, [1, inputDim]);
-    const results = await session.run({ z: inputTensor });
-    const output = results['z_pred'];
-    const predictedState = output?.data ? Array.from(output.data as Float32Array) : null;
+    const muData = Array.from(mu.data as Float32Array);
+    const logVarData = Array.from(logVar.data as Float32Array);
+
+    // Build sparse variance response.
+    const varIndices: number[] = [];
+    const varValues: number[] = [];
+    let sumVar = 0;
+    let maxVar = -Infinity;
+
+    for (let i = 0; i < logVarData.length; i++) {
+      const v = Math.exp(logVarData[i]);
+      sumVar += v;
+      if (v > maxVar) maxVar = v;
+      if (v > VARIANCE_SPARSE_THRESHOLD) {
+        varIndices.push(i);
+        varValues.push(v);
+      }
+    }
+
+    const meanVariance = sumVar / LATENT_DIM;
+    const fallbackToSyntactic = maxVar > CIRCUIT_BREAKER_MAX_VARIANCE;
+    const totalMs = Date.now() - started;
+
+    if (totalMs > LATENCY_BUDGET_MS) {
+      return NextResponse.json({
+        status: 'error',
+        fallbackToSyntactic: true,
+        error: `latency-budget-exceeded: ${totalMs}ms`,
+      });
+    }
 
     return NextResponse.json({
       status: 'success',
-      predictedState,
-      totalMs: Date.now() - started,
+      mu: muData,
+      varIndices,
+      varValues,
+      meanVariance,
+      maxVarianceDim: maxVar,
+      fallbackToSyntactic,
+      totalMs,
       warmStart: !!cachedPredictorSession,
     });
   } catch (error: unknown) {
