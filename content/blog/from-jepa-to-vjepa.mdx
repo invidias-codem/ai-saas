@@ -1,3 +1,14 @@
+---
+title: "From JEPA to VJEPA: What We Actually Built"
+description: "Engineering notes from shipping an uncertainty-aware world model on Vercel: diagonal variance, fail-closed circuit breakers, DP-SGD, and GossipSub heartbeat adaptation — with real staging validation."
+publishedAt: "2026-08-27"
+updatedAt: "2026-08-27"
+author: "joshua-jair"
+category: "ai-architecture"
+tags: ["jepa", "vjepa", "dp-sgd", "gossipsub", "vercel", "onnx", "mcts", "world-model", "p2p", "libp2p", "edge-functions", "upstash", "wasi"]
+ogImage: "/blog/from-jepa-to-vjepa-og.png"
+---
+
 # From JEPA to VJEPA: What We Actually Built
 
 **Subtitle:** Uncertainty-aware prediction on the Vercel edge, with fail-closed guarantees and live staging validation.
@@ -17,7 +28,7 @@
 
 We wanted the runtime to look ahead before emitting code. Joint Embedding Predictive Architectures (JEPA) give you a learned latent predictor, but the naive version makes two bad assumptions for production:
 
-1. Full covariance is fine.  
+1. Full covariance is fine.
 2. Uncertainty can be smoothed over.
 
 Both break under serverless constraints.
@@ -95,8 +106,8 @@ The 167–264 ms warm-start is the realistic WASM floor on Vercel; the 1.7 s col
 
 ## 7. Takeaways
 
-1. Diagonal variance is enough for uncertainty-aware planning. Full covariance is premature optimization on the edge.  
-2. Fail-closed beats probabilistic fallback when determinism is a requirement.  
+1. Diagonal variance is enough for uncertainty-aware planning. Full covariance is premature optimization on the edge.
+2. Fail-closed beats probabilistic fallback when determinism is a requirement.
 3. Staging validation under real Vercel constraints catches heap/latency issues that local tests miss.
 
 ---
