@@ -124,8 +124,8 @@ async function predictorAwareRunLatentMcts(
       options.priorMu,
       options.priorVar,
     );
-    finalMu = poe.poeMu;
-    finalVar = poe.poeVar;
+    finalMu = new Float32Array(poe.poeMu);
+    finalVar = new Float32Array(poe.poeVar);
   }
 
   const maxPosteriorVariance = Math.max(...finalVar);
