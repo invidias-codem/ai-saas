@@ -14,7 +14,12 @@ import {
   latentRollout,
   cosineDistance,
   perturbEmbedding,
-} from "@/lib/jepa/latentMcts";
+} from '@/lib/jepa/latentMcts';
+import {
+  computeProductOfExperts,
+  expandSparseVariance,
+  isCircuitBreakerTripped,
+} from '@/lib/jepa/vjepa';
 
 const JEPA_PREDICT_ROUTE = '/api/jepa/predict';
 
