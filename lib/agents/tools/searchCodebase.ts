@@ -87,6 +87,8 @@ async function predictorAwareRunLatentMcts(
     energyWeight?: number;
     targetEmbedding?: number[];
     variancePenaltyLambda?: number;
+    priorMu?: number[];
+    priorVar?: number[];
   } = {},
 ): Promise<{
   result: ReturnType<typeof runLatentMcts>;
@@ -95,11 +97,57 @@ async function predictorAwareRunLatentMcts(
 }> {
   const distribution = await fetchVjepaDistribution(initialState.embedding);
   const usedPredictor = !!distribution && !distribution.fallbackToSyntactic;
-  const resolvedActions = usedPredictor ? actions : [];
 
-  const meanVariance = distribution?.meanVariance ?? null;
+  let finalMu = new Float32Array(distribution?.mu ?? initialState.embedding);
+  let finalVar: Float32Array;
 
-  const result = runLatentMcts(initialState, resolvedActions, {
+  if (distribution) {
+    finalVar = expandSparseVariance(
+      distribution.varIndices ?? [],
+      distribution.varValues ?? [],
+      128,
+      0.01,
+    );
+  } else {
+    finalVar = new Float32Array(128).fill(0.01);
+  }
+
+  if (options.priorMu && options.priorVar) {
+    const poe = computeProductOfExperts(
+      finalMu,
+      finalVar,
+      options.priorMu,
+      options.priorVar,
+    );
+    finalMu = poe.poeMu;
+    finalVar = poe.poeVar;
+  }
+
+  const maxPosteriorVariance = Math.max(...finalVar);
+  if (isCircuitBreakerTripped(maxPosteriorVariance)) {
+    return {
+      result: runLatentMcts(initialState, [], {
+        maxIterations: options.maxIterations ?? 12,
+        maxDepth: options.maxDepth ?? 4,
+        explorationConstant: options.explorationConstant ?? 1.1,
+        energyWeight: options.energyWeight ?? 1.0,
+        targetEmbedding: options.targetEmbedding,
+        variancePenaltyLambda: 0,
+      }),
+      usedPredictor: false,
+      meanVariance: null,
+    };
+  }
+
+  const meanVariance = finalVar.reduce((s, v) => s + v, 0) / finalVar.length;
+
+  const poeInitialState: LatentState = {
+    ...initialState,
+    embedding: Array.from(finalMu),
+    meanVariance,
+  };
+
+  const result = runLatentMcts(poeInitialState, actions, {
     maxIterations: options.maxIterations ?? 12,
     maxDepth: options.maxDepth ?? 4,
     explorationConstant: options.explorationConstant ?? 1.1,

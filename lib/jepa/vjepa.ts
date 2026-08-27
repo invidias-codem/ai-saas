@@ -98,7 +98,55 @@ export function meanVariance(variances: number[]): number {
 }
 
 /**
- * Circuit-breaker check: returns true when the prediction is too uncertain.
+ * Computes the Product of Experts (PoE) for two diagonal Gaussians.
+ * Used in BJEPA to fuse the dynamics model with a structural prior.
+ */
+export function computeProductOfExperts(
+  dynMu: Float32Array | number[],
+  dynVar: Float32Array | number[],
+  priorMu: Float32Array | number[],
+  priorVar: Float32Array | number[],
+  epsilon = 1e-6,
+): { poeMu: Float32Array; poeVar: Float32Array } {
+  const dim = dynMu.length;
+  const poeMu = new Float32Array(dim);
+  const poeVar = new Float32Array(dim);
+
+  for (let i = 0; i < dim; i++) {
+    const varDyn = dynVar[i] + epsilon;
+    const varPrior = priorVar[i] + epsilon;
+
+    const lambdaDyn = 1.0 / varDyn;
+    const lambdaPrior = 1.0 / varPrior;
+    const lambdaPost = lambdaDyn + lambdaPrior;
+
+    poeMu[i] = (lambdaDyn * dynMu[i] + lambdaPrior * priorMu[i]) / lambdaPost;
+    poeVar[i] = 1.0 / lambdaPost;
+  }
+
+  return { poeMu, poeVar };
+}
+
+/**
+ * Expands the sparse VJEPA variance payload into a dense 128-d array.
+ * Unlisted indices are assigned the baseline variance to prevent
+ * precision from approaching infinity and causing division-by-zero.
+ */
+export function expandSparseVariance(
+  varIndices: number[],
+  varValues: number[],
+  dim = 128,
+  baselineVariance = 0.01,
+): Float32Array {
+  const denseVar = new Float32Array(dim).fill(baselineVariance);
+  for (let i = 0; i < varIndices.length; i++) {
+    denseVar[varIndices[i]] = varValues[i];
+  }
+  return denseVar;
+}
+
+/**
+ * Circuit-breaker check on posterior variance after PoE combination.
  */
 export function isCircuitBreakerTripped(maxVarianceDim: number): boolean {
   return maxVarianceDim > 0.95;
