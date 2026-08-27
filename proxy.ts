@@ -79,6 +79,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/wasm-probe',
     '/api/jepa/infer',
     '/api/jepa/predict',
+    '/api/jepa/reflect',
     '/api/test/mcts-e2e',
 ]);
 

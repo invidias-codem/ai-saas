@@ -66,6 +66,21 @@ export type {
   VjepaPredictor,
 } from '@/lib/jepa/vjepa';
 
+export {
+  poincareDistance,
+  poincareNorm,
+  projectToPoincare,
+  executeReflectionLoop,
+  applyReflectionPrior,
+  TAU_REFLECT,
+  TAU_BREAKER,
+} from '@/lib/jepa/reflection';
+export type {
+  ReflectionResult,
+  MemoryMatch,
+  ReflectionContext,
+} from '@/lib/jepa/reflection';
+
 export type { GossipPayload, GossipMetadata } from '@/lib/jepa/p2p/serialization';
 export type { PeerModel, PeerIngestCallback } from '@/lib/jepa/p2p/transport';
 export { JepaP2PNode } from '@/lib/jepa/p2p/transport';
