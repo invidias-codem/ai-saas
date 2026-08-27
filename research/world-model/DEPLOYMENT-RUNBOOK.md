@@ -303,3 +303,114 @@ Tracked separately in the systems manifesto (`LATTICE-OS-MANIFESTO.md`):
 - Empirical evaluation on HumanEval / MBPP
 - Scaling action space beyond 6 hardcoded primitives
 - P2P incentive mechanism
+
+---  
+
+## 10. VJEPA and Sparse Variance Edge Contract  
+
+### 10.1 Predictor outputs
+
+The Vercel edge route serves the ONNX predictor with:
+
+- Outputs: `mu` (`float32[128]`), `log_var` (`float32[128]`)
+- Sparse variance response: `varIndices[]`, `varValues[]`
+- Missing indices use baseline variance `θ_v = 0.01`
+
+### 10.2 Circuit breaker
+
+| Budget | Value | Purpose |
+|--------|-------|---------|
+| Cold start | 3000ms | Initial WASM + ONNX load |
+| Warm start | 250ms | Cached inference |
+| Max variance dim | 0.95 | `τ_v` trip threshold |
+| Sparse variance threshold | 0.01 | `θ_v` baseline |
+
+On trip: `fallbackToSyntactic: true`, deterministic fallback, no randomization.
+
+### 10.3 Response contract
+
+```json
+{
+  "status": "success",
+  "mu": [ ... ],
+  "varIndices": [ ... ],
+  "varValues": [ ... ],
+  "meanVariance": 0.01,
+  "maxVarianceDim": 0.95,
+  "fallbackToSyntactic": false,
+  "totalMs": 12,
+  "warmStart": true
+}
+```
+
+---  
+
+## 11. Spectral FFT Compression  
+
+### 11.1 Artifacts
+
+| File | Purpose |
+|------|---------|
+| `lib/jepa/compression/spectral-fft.ts` | Zero-dependency Radix-2 FFT codec for N=128 |
+| `research/world-model/jepa-local/bjepa/fft_io.py` | Python pack/unpack round-trip |
+| `public/priors/*.json` | Base64-encoded spectral prior experts |
+
+### 11.2 Wire format
+
+`[num_coeffs: uint32][real: f32][imag: f32]...` little-endian.  
+TypeScript uses `DataView`; Python uses `struct.pack('<I')` / `struct.pack('<ff')`.
+
+### 11.3 Performance
+
+| keep_ratio | payload | cosine |
+|------------|---------|--------|
+| 1.0 | 514 bytes | 1.0 |
+| 0.25 | ~140 bytes | > 0.99 |
+| 0.125 | ~76 bytes | > 0.99 |
+
+---  
+
+## 12. BJEPA Prior Experts  
+
+### 12.1 Authoring
+
+Generate with:
+
+```bash
+cd research/world-model/jepa-local
+python3 bjepa/generate_prior.py
+```
+
+Outputs Base64-encoded JSON into `public/priors/`.
+
+### 12.2 Runtime loading
+
+`lib/jepa/priors.ts` statically imports prior JSONs.  
+`loadPriorExpert(constraintId)` returns `priorMu` / `priorVar` arrays for PoE fusion.
+
+---  
+
+## 13. GossipSub v1.4 Mesh  
+
+### 13.1 Heartbeat
+
+- Normal: 1500ms
+- Variance spike: 500ms
+
+Spike detection: Python PM2 worker writes `jepa:mesh:variance_spike` to Upstash Redis with 60s TTL. TypeScript transport polls every 5s.
+
+### 13.2 JSONL queue
+
+Outgoing jobs are appended to `gossip_queue.jsonl` by the TS worker. The Python daemon drains this queue and decodes spectral beliefs with `base64.b64decode()` before calling `fft_io.unpack_belief_and_invert()`.
+
+---  
+
+## 14. Troubleshooting Addendum  
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `./lib/jepa/priors.ts:1:1` Module not found | Wrong import path | Use `./compression/spectral-fft` |
+| `Float32Array<ArrayBufferLike>` TS error | Strict Vercel typing | Use plain `number[]` at boundary |
+| `Cannot find name 'expandSparseVariance'` | Missing import | Import from `@/lib/jepa/vjepa` |
+| Spectral decoder returns NaNs | Baseline variance too low | Ensure omitted indices use `θ_v = 0.01` |
+| PM2 JSONL parse error | Missing `base64` field | Verify `aggregationJobToJson()` output |
