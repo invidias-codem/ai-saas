@@ -20,6 +20,7 @@ import {
   expandSparseVariance,
   isCircuitBreakerTripped,
 } from '@/lib/jepa/vjepa';
+import { loadPriorExpert } from '@/lib/jepa/priors';
 
 const JEPA_PREDICT_ROUTE = '/api/jepa/predict';
 
@@ -179,6 +180,10 @@ const SearchCodebaseInputSchema = z.object({
     .optional()
     .default(false)
     .describe("When true, run a JEPA-backed latent-space MCTS over the first retrieved chunk to propose a refined candidate instead of returning raw semantic matches."),
+  constraintId: z
+    .string()
+    .optional()
+    .describe("Optional BJEPA prior expert constraint ID, e.g. 'memory_safety', to inject into latent-space rollouts via Product of Experts."),
 });
 
 type SearchCodebaseInput = z.infer<typeof SearchCodebaseInputSchema>;
@@ -321,16 +326,36 @@ export const searchCodebaseTool: Tool = {
         });
 
         try {
+          const mctsOptions: {
+            maxIterations: number;
+            maxDepth: number;
+            explorationConstant: number;
+            energyWeight: number;
+            variancePenaltyLambda: number;
+            priorMu?: number[];
+            priorVar?: number[];
+          } = {
+            maxIterations: 12,
+            maxDepth: 4,
+            explorationConstant: 1.1,
+            energyWeight: 1.0,
+            variancePenaltyLambda: 0.5,
+          };
+
+          if (input.constraintId) {
+            try {
+              const prior = loadPriorExpert(input.constraintId);
+              mctsOptions.priorMu = prior.priorMu;
+              mctsOptions.priorVar = prior.priorVar;
+            } catch (priorError) {
+              logger.warn(`[searchCodebaseTool] Failed to load prior expert: ${priorError}`);
+            }
+          }
+
           const predictorAware = await predictorAwareRunLatentMcts(
             initialState,
             actions,
-            {
-              maxIterations: 12,
-              maxDepth: 4,
-              explorationConstant: 1.1,
-              energyWeight: 1.0,
-              variancePenaltyLambda: 0.5,
-            }
+            mctsOptions,
           );
           usedPredictor = predictorAware.usedPredictor;
           meanVariance = predictorAware.meanVariance;
