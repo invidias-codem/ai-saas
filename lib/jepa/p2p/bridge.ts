@@ -17,12 +17,29 @@
  *   and keep all torch operations in-process.
  */
 
-import type { GossipPayload, GossipMetadata } from './serialization';
+import type { GossipPayload, GossipMetadata, TensorPayload } from './serialization';
+import { packBelief } from '@/lib/jepa/compression/spectral-fft';
 
 export interface AggregationJob {
   weights: Array<{ key: string; data: number[]; shape: number[]; dtype: string }>;
   metadata: GossipMetadata;
   queuedAt: number;
+  spectralMu?: Uint8Array;
+  spectralVar?: Uint8Array;
+}
+
+/**
+ * Outgoing broadcast helper: pack raw belief tensors into base64 strings
+ * suitable for attaching to a GossipPayload.
+ */
+export function encodeSpectralBeliefPayload(
+  mu: Float32Array | number[],
+  sigma: Float32Array | number[],
+): Pick<GossipPayload, 'spectralMu' | 'spectralVar'> {
+  return {
+    spectralMu: Buffer.from(packBelief(mu, 0.25)).toString('base64'),
+    spectralVar: Buffer.from(packBelief(sigma, 0.25)).toString('base64'),
+  };
 }
 
 export interface JepaP2PBridgeOptions {
@@ -52,14 +69,23 @@ export class JepaP2PBridge {
       dtype: tensor.dtype,
     }));
 
-    this.buffer.push({
+    const job: AggregationJob = {
       weights,
       metadata: payload.metadata,
       queuedAt: Date.now(),
-    });
+    };
 
-    const job = this.buffer.shift()!;
-    this.onJob(job);
+    if (payload.spectralMu !== undefined) {
+      job.spectralMu = new Uint8Array(Buffer.from(payload.spectralMu, 'base64'));
+    }
+    if (payload.spectralVar !== undefined) {
+      job.spectralVar = new Uint8Array(Buffer.from(payload.spectralVar, 'base64'));
+    }
+
+    this.buffer.push(job);
+
+    const shifted = this.buffer.shift()!;
+    this.onJob(shifted);
   }
 
   pendingCount(): number {
