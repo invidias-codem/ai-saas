@@ -29,7 +29,7 @@ import { gossipsub, type GossipsubEvents } from '@chainsafe/libp2p-gossipsub';
 import { createLibp2p } from 'libp2p';
 import type { Libp2p } from 'libp2p';
 import type { GossipPayload, GossipMetadata } from './serialization';
-import { JepaP2PBridge, type AggregationJob } from './bridge';
+import { JepaP2PBridge, type AggregationJob, encodeSpectralBeliefPayload } from './bridge';
 import { Redis } from '@upstash/redis';
 
 const STRICT_SIGN = 'StrictSign' as const;
@@ -116,6 +116,8 @@ export interface P2PNodeConfig {
 export interface PeerModel {
   weights: Record<string, unknown>;
   metadata: GossipMetadata;
+  mu?: number[];
+  sigma?: number[];
 }
 
 export type PeerIngestCallback = (model: PeerModel) => void;
@@ -296,6 +298,23 @@ export class JepaP2PNode {
     const encoded = new TextEncoder().encode(payload);
     await pubsub.publish(this.topicName, encoded);
     console.log(`Broadcasted model. Payload size: ${(encoded.length / 1024).toFixed(2)} KB`);
+  }
+
+  /**
+   * Broadcast a spectral belief state together with the model metadata.
+   * This attaches compressed base64 mu/sigma strings to the gossip payload.
+   */
+  async broadcastSpectralBelief(
+    metadata: GossipMetadata,
+    mu: Float32Array | number[],
+    sigma: Float32Array | number[],
+  ): Promise<void> {
+    const spectral = encodeSpectralBeliefPayload(mu, sigma);
+    await this.broadcastModel({
+      weights: {},
+      metadata,
+      ...spectral,
+    });
   }
 
   async startAggregationLoop(

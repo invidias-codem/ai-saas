@@ -26,6 +26,13 @@ from typing import Tuple
 import numpy as np
 
 
+class BeliefDict(dict):
+    mu: np.ndarray
+    sigma: np.ndarray
+    prior_mu: np.ndarray
+    prior_sigma: np.ndarray
+
+
 # ---------------------------------------------------------------------------
 # Core spectral transforms
 # ---------------------------------------------------------------------------

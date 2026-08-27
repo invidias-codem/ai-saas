@@ -12,6 +12,7 @@ process that mutates one in-memory LocalJEPANode instance.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import signal
@@ -21,6 +22,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 from dotenv import load_dotenv
 
 import torch
@@ -29,6 +31,11 @@ from config import JEPAConfig
 from losses.jepa_loss import LocalJEPANode
 from aggregation.aea_engine import AsynchronousEnsembleAggregator
 from training.telemetry_consumer import TelemetryConsumer
+
+try:
+    from bjepa.fft_io import unpack_belief_and_invert
+except ImportError:
+    unpack_belief_and_invert = None
 
 
 class MainWorker:
@@ -137,6 +144,23 @@ class MainWorker:
                 )
             except Exception as exc:
                 print(f"[MainWorker] bad gossip payload: {exc}")
+
+            spectral_mu = payload.get("spectralMu")
+            spectral_var = payload.get("spectralVar")
+            if spectral_mu and spectral_var and unpack_belief_and_invert is not None:
+                try:
+                    mu_bytes = base64.b64decode(spectral_mu)
+                    var_bytes = base64.b64decode(spectral_var)
+                    decoded_mu: dict[str, np.ndarray] = unpack_belief_and_invert(mu_bytes, original_dim=self.config.embedding_dim)
+                    decoded_sigma: dict[str, np.ndarray] = unpack_belief_and_invert(var_bytes, original_dim=self.config.embedding_dim)
+                    mu = decoded_mu["mu"]
+                    sigma = decoded_sigma["sigma"]
+                    print(
+                        "[MainWorker] decoded spectral belief "
+                        f"mu_norm={float(mu.norm()):.4f} sigma_norm={float(sigma.norm()):.4f}"
+                    )
+                except Exception as exc:
+                    print(f"[MainWorker] spectral decode failed: {exc}")
 
         return len(entries)
 

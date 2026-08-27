@@ -18,7 +18,7 @@
  */
 
 import type { GossipPayload, GossipMetadata, TensorPayload } from './serialization';
-import { packBelief } from '@/lib/jepa/compression/spectral-fft';
+import { packBelief, decodeSpectralBase64 } from './serialization';
 
 export interface AggregationJob {
   weights: Array<{ key: string; data: number[]; shape: number[]; dtype: string }>;
@@ -40,6 +40,25 @@ export function encodeSpectralBeliefPayload(
     spectralMu: Buffer.from(packBelief(mu, 0.25)).toString('base64'),
     spectralVar: Buffer.from(packBelief(sigma, 0.25)).toString('base64'),
   };
+}
+
+/**
+ * Convert an AggregationJob to a JSON-serializable dict.
+ * Spectral byte arrays are emitted as base64 strings for JSONL transport.
+ */
+export function aggregationJobToJson(job: AggregationJob): string {
+  const serializable: Record<string, unknown> = {
+    weights: job.weights,
+    metadata: job.metadata,
+    queuedAt: job.queuedAt,
+  };
+  if (job.spectralMu) {
+    serializable.spectralMu = Buffer.from(job.spectralMu).toString('base64');
+  }
+  if (job.spectralVar) {
+    serializable.spectralVar = Buffer.from(job.spectralVar).toString('base64');
+  }
+  return JSON.stringify(serializable);
 }
 
 export interface JepaP2PBridgeOptions {

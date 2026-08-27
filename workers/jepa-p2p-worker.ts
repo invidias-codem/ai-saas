@@ -28,7 +28,7 @@
  */
 
 import { JepaP2PNode } from '../lib/jepa/p2p/transport';
-import { JepaP2PBridge, type AggregationJob } from '../lib/jepa/p2p/bridge';
+import { JepaP2PBridge, type AggregationJob, aggregationJobToJson } from '../lib/jepa/p2p/bridge';
 import { appendFileSync } from 'node:fs';
 
 function toArray(input?: string): string[] {
@@ -49,8 +49,8 @@ async function main(): Promise<void> {
     topicName: topic,
     onAggregationJob: (job: AggregationJob) => {
       try {
-        const payload = JSON.stringify(job, undefined, 0);
-        appendFileSync(queuePath, payload + '\n', { encoding: 'utf8' });
+        const line = aggregationJobToJson(job);
+        appendFileSync(queuePath, line + '\n', { encoding: 'utf8' });
       } catch (err) {
         console.error('[Worker] queue write failed', err);
       }
