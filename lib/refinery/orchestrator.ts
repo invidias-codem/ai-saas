@@ -90,7 +90,7 @@ export async function processRefineryBatch(
       }
 
       // 3. Chunk using existing paragraph-aware chunker
-      const chunks = prepareSourceChunks({
+      const chunks = await prepareSourceChunks({
         source_type: 'refinery',
         raw_text: workingText,
         metadata: { via: 'refinery' },
