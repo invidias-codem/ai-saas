@@ -1,4 +1,4 @@
-import memorySafetyPrior from '../memory_safety.json';
+import memorySafetyPrior from './memory_safety.json';
 
 export const MEMORY_SAFETY_PRIOR = memorySafetyPrior as {
   id: string;
