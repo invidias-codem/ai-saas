@@ -14,6 +14,7 @@
 //     inside the embedding model's comfort zone and retrieval stays precise.
 
 import { z } from 'zod';
+import { ExtractedEntities } from '@/lib/refinery/nlp';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,26 +107,32 @@ Rules:
 - Do NOT summarize away specifics. Do NOT invent facts.
 - If the text is already clean notes, return it essentially unchanged.`;
 
-export async function cleanseSourceText(raw: string, googleApiKey: string): Promise<string> {
+export async function cleanseSourceText(
+  raw: string,
+  googleApiKey: string,
+  anchors?: ExtractedEntities,
+): Promise<string> {
+    const systemPrompt = anchors
+      ? `You are a strict data refinery assistant. Clean and format the following scraped HTML/text into clean Markdown. Strip navigation, footers, and ads.\n\nCRITICAL CONSTRAINTS:\nYou must strictly preserve the following deterministic entities extracted from the source. Do not alter, omit, or hallucinate these values:\n${JSON.stringify(anchors, null, 2)}`
+      : CLEANSE_PROMPT;
+
     // Lazy-import so this module stays loadable in environments without the SDK.
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(googleApiKey);
     const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
-        systemInstruction: { role: 'user', parts: [{ text: CLEANSE_PROMPT }] },
+        systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
     });
 
     const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: raw.slice(0, 30000) }] }],
         generationConfig: {
             temperature: 0.2,
-            // Thinking tokens count against this budget — give it room.
             maxOutputTokens: 8192,
         },
     });
 
     const text = result.response?.text()?.trim();
-    // On any failure, fall back to the raw text — never lose the source.
     return text && text.length > 0 ? text : raw;
 }
 
