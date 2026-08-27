@@ -244,22 +244,22 @@ export async function generateConversationReply(
     const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
     let promptInput: string | any[] = userQuery;
 
-    if (parsed.fileData && parsed.mimeType) {
+    if (parsed.fileData && parsed.fileData.mimeType) {
       promptInput = [
         { text: userQuery },
         {
           inlineData: {
-            mimeType: parsed.mimeType,
-            data: parsed.fileData // Base64
+            mimeType: parsed.fileData.mimeType,
+            data: parsed.fileData.base64Data // Base64
           }
         }
       ];
-    } else if (parsed.fileUri && parsed.mimeType) {
+    } else if (parsed.fileUri && parsed.fileData.mimeType) {
       promptInput = [
         { text: userQuery },
         {
           fileData: {
-            mimeType: parsed.mimeType,
+            mimeType: parsed.fileData.mimeType,
             fileUri: parsed.fileUri
           }
         }

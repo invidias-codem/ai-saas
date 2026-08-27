@@ -68,7 +68,7 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json();
-        validateRequestSize(body, 5 * 1024 * 1024);
+        validateRequestSize(body, 10 * 1024 * 1024); // 10MB max
 
         const { prompt, conversationId, documentIds: rawDocumentIds, messages } = body as {
             prompt: string;
