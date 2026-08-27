@@ -18,7 +18,8 @@
  */
 
 import type { GossipPayload, GossipMetadata, TensorPayload } from './serialization';
-import { packBelief, decodeSpectralBase64 } from './serialization';
+import { packBelief } from '../compression/spectral-fft';
+import { decodeSpectralBase64 } from './serialization';
 
 export interface AggregationJob {
   weights: Array<{ key: string; data: number[]; shape: number[]; dtype: string }>;
