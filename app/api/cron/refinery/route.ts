@@ -40,12 +40,15 @@ async function updateJobStatuses(
     const status = result?.status === 'success' ? 'completed' : 'failed';
     const lastError = result?.error ?? null;
 
+    if (supabaseAdmin) {
+      await supabaseAdmin.rpc('increment_refinery_job_attempts', { p_ids: [job.id] });
+    }
+
     await supabaseAdmin
       .from('workspace_refinery_jobs')
       .update({
         status,
         last_error: lastError,
-        attempts: supabaseAdmin.raw(`coalesce(attempts, 0) + 1`),
         updated_at: new Date().toISOString(),
       })
       .eq('id', job.id as any);
