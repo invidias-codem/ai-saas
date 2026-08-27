@@ -24,7 +24,7 @@ function lockJobsInDatabase(ids: bigint[] | number[]): Promise<void> {
     .from('workspace_refinery_jobs')
     .update({ status: 'processing', updated_at: new Date().toISOString() })
     .in('id', ids as any)
-    .then(() => {});
+    .then(() => undefined) as Promise<void>;
 }
 
 async function updateJobStatuses(
