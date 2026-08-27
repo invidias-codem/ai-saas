@@ -143,7 +143,7 @@ export async function processRefineryBatch(
       const { data: insertedRows, error: insertError } = await supabaseAdmin
         .from('workspace_sources')
         .insert(rows)
-        .select('id');
+        .select('id, content, origin_uri');
 
       if (insertError || !insertedRows || insertedRows.length === 0) {
         throw new Error(`workspace_sources insert failed: ${insertError?.message || 'no rows returned'}`);
@@ -157,14 +157,14 @@ export async function processRefineryBatch(
       }
 
       // 9. Knowledge-graph entity extraction for inserted rows
-      for (const row of insertedRows) {
+      for (let i = 0; i < insertedRows.length; i++) {
         try {
           await processChunkForKnowledgeGraph({
             workspaceId,
             userId,
-            sourceChunkId: row.id,
-            content: row.content,
-            originUri: row.origin_uri,
+            sourceChunkId: newIds[i],
+            content: insertedRows[i].content,
+            originUri: insertedRows[i].origin_uri,
           });
         } catch {
           // Non-fatal: knowledge graph extraction is best-effort
