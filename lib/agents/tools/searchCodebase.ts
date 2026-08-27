@@ -103,7 +103,7 @@ async function predictorAwareRunLatentMcts(
   const distribution = await fetchVjepaDistribution(initialState.embedding);
   const usedPredictor = !!distribution && !distribution.fallbackToSyntactic;
 
-  let finalMu: number[] = distribution ? Array.from(distribution.mu) : initialState.embedding;
+  let finalMu: number[] = Array.from(distribution?.mu ?? initialState.embedding);
   let finalVar: number[];
 
   if (distribution) {
