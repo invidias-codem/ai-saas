@@ -82,15 +82,14 @@ Endpoint: `https://ai-saas-mt3ucolxk-invidias-codems-projects.vercel.app/api/jep
 | Circuit breaker | trip on `maxVar > 0.95` | ✅ Pass |
 | Variance calibration | `maxVarianceDim = 0.964` at scale 0.1 | ✅ Pass |
 
-The 167–264 ms warm-start is the realistic WASM floor on Vercel; the 1.7 s cold-start is amortized across requests. The payload is larger than ideal because `mu` is still dense; top-k sparsification of `mu` is the next optimization.
+The 167–264 ms warm-start is the realistic WASM floor on Vercel; the 1.7 s cold-start is amortized across requests. The payload sits at 5.6 KB because `mu` must remain mathematically dense. While the variance tensor can be safely sparsified to save space, pruning the `mu` tensor would destroy the isotropic geometry required for accurate cosine distance calculations in the MCTS loop. A 5.6 KB payload is an acceptable fixed cost to preserve mathematical correctness.
 
 ---
 
 ## 6. What We Would Do Differently
 
-- Export sparse `mu` from ONNX directly, not reconstruct it in TypeScript.
 - Move the predictor to a long-lived edge runtime to eliminate cold-start entirely.
-- Use a shared Redis/state bridge for variance spikes instead of HTTP polling.
+- Migrate the variance-spike trigger to a shared Upstash Redis bridge instead of relying on HTTP polling, dropping transport latency.
 
 ---
 
