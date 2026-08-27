@@ -107,10 +107,10 @@ export function computeProductOfExperts(
   priorMu: Float32Array | number[],
   priorVar: Float32Array | number[],
   epsilon = 1e-6,
-): { poeMu: Float32Array; poeVar: Float32Array } {
+): { poeMu: number[]; poeVar: number[] } {
   const dim = dynMu.length;
-  const poeMu = new Float32Array(dim);
-  const poeVar = new Float32Array(dim);
+  const poeMu = new Array<number>(dim);
+  const poeVar = new Array<number>(dim);
 
   for (let i = 0; i < dim; i++) {
     const varDyn = dynVar[i] + epsilon;
@@ -137,8 +137,8 @@ export function expandSparseVariance(
   varValues: number[],
   dim = 128,
   baselineVariance = 0.01,
-): Float32Array {
-  const denseVar = new Float32Array(dim).fill(baselineVariance);
+): number[] {
+  const denseVar = new Array<number>(dim).fill(baselineVariance);
   for (let i = 0; i < varIndices.length; i++) {
     denseVar[varIndices[i]] = varValues[i];
   }

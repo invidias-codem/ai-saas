@@ -103,8 +103,8 @@ async function predictorAwareRunLatentMcts(
   const distribution = await fetchVjepaDistribution(initialState.embedding);
   const usedPredictor = !!distribution && !distribution.fallbackToSyntactic;
 
-  let finalMu = new Float32Array(distribution?.mu ?? initialState.embedding);
-  let finalVar: Float32Array;
+  let finalMu: number[] = distribution ? Array.from(distribution.mu) : initialState.embedding;
+  let finalVar: number[];
 
   if (distribution) {
     finalVar = expandSparseVariance(
@@ -114,7 +114,7 @@ async function predictorAwareRunLatentMcts(
       0.01,
     );
   } else {
-    finalVar = new Float32Array(128).fill(0.01);
+    finalVar = new Array(128).fill(0.01);
   }
 
   if (options.priorMu && options.priorVar) {
