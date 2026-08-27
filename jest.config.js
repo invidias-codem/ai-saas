@@ -4,6 +4,6 @@ module.exports = {
   roots: ['<rootDir>/__tests__', '<rootDir>/lib'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
-    '^../../public/(.*)$': '<rootDir>/public/$1',
+    '^../../public/(.*)\\.json$': '<rootDir>/public/$1.json',
   },
 };

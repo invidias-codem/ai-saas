@@ -1,4 +1,4 @@
-import { unpackBeliefAndInvert } from './spectral-fft';
+import { unpackBeliefAndInvert } from './compression/spectral-fft';
 import memorySafetyPrior from '../../public/priors/memory_safety.json';
 
 export interface BJEPAConstraint {
@@ -7,12 +7,13 @@ export interface BJEPAConstraint {
   priorVar: number[];
 }
 
-export function loadPriorExpert(constraintId: string): BJEPAConstraint {
-  let priorData: { id: string; spectralMu: string; spectralVar: string };
+const PRIOR_REGISTRY: Record<string, { id: string; spectralMu: string; spectralVar: string }> = {
+  memory_safety: memorySafetyPrior as { id: string; spectralMu: string; spectralVar: string },
+};
 
-  if (constraintId === 'memory_safety') {
-    priorData = memorySafetyPrior as typeof memorySafetyPrior;
-  } else {
+export function loadPriorExpert(constraintId: string): BJEPAConstraint {
+  const priorData = PRIOR_REGISTRY[constraintId];
+  if (!priorData) {
     throw new Error(`Unknown constraint ID: ${constraintId}`);
   }
 
