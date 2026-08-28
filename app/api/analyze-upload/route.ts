@@ -115,7 +115,7 @@ export async function POST(req: Request) {
         'Content-Type': 'text/plain; charset=utf-8',
         'X-Debug-Model': reply.debug?.model || 'unknown',
         'X-UCOL-Task': 'file_upload_analyzer',
-        'X-UCOL-Target': routingDecision.targetNode || '',
+        'X-UCOL-Target': routingDecision.providerPlan?.preferredModelRefs?.join(',') || '',
       },
     });
   } catch (error: any) {
