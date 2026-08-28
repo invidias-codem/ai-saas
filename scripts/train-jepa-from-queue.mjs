@@ -83,7 +83,7 @@ async function main() {
           startLine: 1,
           endLine: 1,
           workspaceId: 'offline-train',
-        } as any);
+        });
 
         predictedEmbedding = embedding;
 
