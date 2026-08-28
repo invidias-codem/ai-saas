@@ -873,6 +873,10 @@ export async function generateConversationReply(
     tags: [agentMode, actualModelId, wmDomain],
     metadata: { hasAttachments: Boolean(fileData && mimeType), contextFactsCount: intelligentFacts.length },
   });
+
+  const updateTrace = (patch: Record<string, unknown>) => {
+    try { trace?.update(patch); } catch {}
+  };
   try {
     streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
       model: actualModelId,
@@ -881,7 +885,7 @@ export async function generateConversationReply(
       ...(isHermesMode ? { agentic: true } : {}),
     });
     try {
-      trace.update({
+      updateTrace({
         metadata: {
           completionStatus: 'streaming',
           model: actualModelId,
@@ -890,7 +894,7 @@ export async function generateConversationReply(
     } catch {}
   } catch (err: any) {
     try {
-      trace.update({ metadata: { error: err?.message || String(err) } });
+      updateTrace({ metadata: { error: err?.message || String(err) } });
     } catch {}
     const isRateLimit = err?.status === 429 || String(err).includes('429');
     const isProviderDown = String(err).includes('1033') || String(err).includes('Tunnel') || String(err).includes('530') || (err?.status && err.status >= 500);
@@ -973,7 +977,7 @@ export async function generateConversationReply(
       // Clean fullText once before any side effects
       const cleanedFullText = fullText ? fullText.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim() : '';
 
-      try { trace.update({ metadata: { completionStatus: 'completed', responseLength: cleanedFullText.length } }); } catch {}
+      try { updateTrace({ metadata: { completionStatus: 'completed', responseLength: cleanedFullText.length } }); } catch {}
 
       // Side effects after stream completes
       if (!options.disableSideEffects && fullText) {
@@ -1291,7 +1295,7 @@ export async function generateConversationReply(
 
   const stream = originalStream.pipeThrough(transformedStream);
 
-  try { trace.update({ metadata: { completionStatus: 'streaming', model: actualModelId } }); } catch {}
+  try { updateTrace({ metadata: { completionStatus: 'streaming', model: actualModelId } }); } catch {}
 
   return {
     stream,

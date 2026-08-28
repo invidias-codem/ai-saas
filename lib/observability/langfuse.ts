@@ -3,7 +3,10 @@ import { env } from "@/lib/env";
 
 let _langfuse: Langfuse | null = null;
 
-export function getLangfuseClient(): Langfuse {
+export function getLangfuseClient(): Langfuse | null {
+  if (!env.LANGFUSE_PUBLIC_KEY || !env.LANGFUSE_SECRET_KEY) {
+    return null;
+  }
   if (!_langfuse) {
     _langfuse = new Langfuse({
       publicKey: env.LANGFUSE_PUBLIC_KEY,
@@ -24,5 +27,6 @@ export type TraceOptions = {
 
 export function createTrace(opts: TraceOptions) {
   const client = getLangfuseClient();
+  if (!client) return null;
   return client.trace(opts);
 }
