@@ -14,7 +14,6 @@
     "stronghold:allow-save-store-record",
     "stronghold:allow-get-store-record",
     "stronghold:allow-remove-store-record",
-    "window:allow-get-current-window",
     "window:default"
   ]
 }
