@@ -3,7 +3,7 @@
 // Bottom sheet pattern (consistent with mobile design system).
 
 import { X } from "lucide-react";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 
