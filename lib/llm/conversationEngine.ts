@@ -132,6 +132,7 @@ export type ConversationEngineResult = {
       researchResultsCount?: number;
     };
     pdfExtractionError?: string;
+    error?: string;
   };
 };
 
