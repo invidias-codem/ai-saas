@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       const pdfCheck = validatePdfFileData(normalized.fileData);
       if (!pdfCheck.valid) {
         return NextResponse.json(
-          { error: pdfCheck.reason || 'Invalid PDF structure' },
+          { error: pdfCheck.reason || 'Invalid PDF structure', source: 'pdf-validation' },
           { status: 400 }
         );
       }
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
     const validationResult = ConversationRequestSchema.safeParse(normalized);
     if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Validation Error', details: validationResult.error.flatten() },
+        { error: 'Validation Error', details: validationResult.error.flatten(), source: 'schema-validation' },
         { status: 400 }
       );
     }
