@@ -37,6 +37,7 @@ class LangfuseAdapter {
   public createSpan(params: CreateSpanParams): LangfuseTraceContext | null {
     try {
       const client = getLangfuseClient();
+      if (!client) return null;
       const trace = client.trace({
         id: params.traceId,
         name: params.name,
