@@ -9,6 +9,8 @@ export type FileUploadPayload = {
   fileUri?: string;
   storageProvider?: string;
   extractedText?: string;
+  __compressed?: boolean;
+  __encoding?: 'gzip' | 'lz-string';
 };
 
 const COMPRESSION_THRESHOLD = 64 * 1024; // compress base64 uploads >64KB
