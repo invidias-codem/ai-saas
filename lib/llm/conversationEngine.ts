@@ -425,7 +425,12 @@ export async function generateConversationReply(
           controller.enqueue(textEncoder.encode(JSON.stringify(donePayload)));
           controller.close();
         } catch (err: any) {
-          controller.enqueue(textEncoder.encode(`Agent execution failed: ${err.message}`));
+          const isProviderDown = String(err).includes('1033') || String(err).includes('Tunnel') || String(err).includes('530') || (err?.status && err.status >= 500);
+          if (isProviderDown) {
+            controller.enqueue(textEncoder.encode('The AI provider is temporarily unavailable. Please try again in a few minutes.'));
+          } else {
+            controller.enqueue(textEncoder.encode(`Agent execution failed: ${err.message}`));
+          }
           controller.close();
         }
       }
