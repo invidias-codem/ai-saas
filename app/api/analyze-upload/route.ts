@@ -8,6 +8,47 @@ import { decompressLzStringPayload } from '@/lib/uploadCompression';
 
 export const dynamic = 'force-dynamic';
 
+function validatePdfFileData(fileData: {
+  base64Data?: string;
+  fileUri?: string;
+  mimeType?: string;
+  name?: string;
+}): { valid: boolean; reason?: string } {
+  const isPdf =
+    (fileData.mimeType || '').toLowerCase() === 'application/pdf' ||
+    (fileData.name || '').toLowerCase().endsWith('.pdf');
+
+  if (!isPdf) {
+    return { valid: true };
+  }
+
+  const raw = fileData.base64Data;
+  if (!raw) {
+    return { valid: true };
+  }
+
+  try {
+    const buffer = Buffer.from(raw, 'base64');
+    if (buffer.byteLength === 0) {
+      return { valid: false, reason: 'Empty file' };
+    }
+
+    const header = buffer.slice(0, 5).toString('utf-8');
+    if (!header.startsWith('%PDF-')) {
+      return { valid: false, reason: 'Invalid PDF structure' };
+    }
+
+    const tail = buffer.slice(-10).toString('utf-8');
+    if (!tail.includes('%%EOF')) {
+      return { valid: false, reason: 'Invalid PDF structure' };
+    }
+
+    return { valid: true };
+  } catch (err) {
+    return { valid: false, reason: 'Invalid PDF structure' };
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const user = await requireAuth();
@@ -23,6 +64,16 @@ export async function POST(req: Request) {
       mode: body.mode || 'quality',
       fileData: body.fileData ? decompressLzStringPayload(body.fileData) : undefined,
     };
+
+    if (normalized.fileData) {
+      const pdfCheck = validatePdfFileData(normalized.fileData);
+      if (!pdfCheck.valid) {
+        return NextResponse.json(
+          { error: pdfCheck.reason || 'Invalid PDF structure' },
+          { status: 400 }
+        );
+      }
+    }
 
     const validationResult = ConversationRequestSchema.safeParse(normalized);
     if (!validationResult.success) {
