@@ -19,6 +19,7 @@ const OLLAMA_TIMEOUT_MS = 10_000;
 const EMBED_RETRY_MAX_ATTEMPTS = 4;
 const EMBED_RETRY_BASE_MS = 500;
 const EMBED_RETRY_MAX_MS = 4000;
+const FALLBACK_QUEUE_MIN_DELAY_MS = 300;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -56,7 +57,6 @@ async function withExponentialBackoff<T>(fn: () => Promise<T>): Promise<T> {
 }
 const REDIS_KEY_PREFIX = 'embed:v2:';
 const CIRCUIT_STATE_PREFIX = 'embed:circuit:';
-const FALLBACK_QUEUE_MIN_DELAY_MS = 300;
 
 type CircuitState = 'closed' | 'open' | 'half-open';
 
@@ -114,11 +114,12 @@ function recordCircuitSuccess(key: string): void {
   inMemoryCircuit.set(key, entry);
 }
 
-const fallbackQueues = new Map<string, Promise<EmbeddingResult | null>>();
+const fallbackQueues = new Map<string, Promise<{ vector: number[]; dimension: 768 | 3072; provider: string; model: string }>>();
 
-async function runFallbackLimited<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  const prev = fallbackQueues.get(key) || Promise.resolve(null as any);
-  const next = prev.then(() => sleep(FALLBACK_QUEUE_MIN_DELAY_MS)).then(fn).catch(err => { throw err; });
+async function runFallbackLimited(fn: () => Promise<{ vector: number[]; dimension: 768 | 3072; provider: string; model: string }>): Promise<{ vector: number[]; dimension: 768 | 3072; provider: string; model: string }> {
+  const key = 'fallback:gemini';
+  const prev = fallbackQueues.get(key) || Promise.resolve({} as { vector: number[]; dimension: 768 | 3072; provider: string; model: string });
+  const next = prev.then(() => sleep(FALLBACK_QUEUE_MIN_DELAY_MS)).then(fn);
   fallbackQueues.set(key, next);
   return next;
 }
@@ -337,13 +338,11 @@ export async function generateEmbeddingWithMetadata(text: string): Promise<Embed
 
   const l1Hit = getL1Cached(cacheKey);
   if (l1Hit) {
-
     return l1Hit;
   }
 
   const l2Hit = await getL2Cached(cacheKey);
   if (l2Hit) {
-
     setL1Cache(cacheKey, l2Hit);
     return l2Hit;
   }
@@ -360,7 +359,7 @@ export async function generateEmbeddingWithMetadata(text: string): Promise<Embed
 
   if (!result && process.env.GOOGLE_API_KEY) {
     try {
-      result = await runFallbackLimited('gemini', () => embedWithGemini(text));
+      result = await runFallbackLimited(() => embedWithGemini(text));
     } catch (err: any) {
       const message = String(err?.message || err);
       if (message.includes('429') || /rate ?limit/i.test(message)) {
