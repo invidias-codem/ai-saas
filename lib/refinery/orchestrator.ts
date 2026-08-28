@@ -20,6 +20,7 @@ import { cleanseSourceText, prepareSourceChunks } from '@/lib/ai/sourceIngest';
 import { detectDelta, supersedeAndCreateCausalLinks } from '@/lib/workspace/delta-detection';
 import { processChunkForKnowledgeGraph } from '@/lib/workspace/entity-extraction';
 import { generateEmbedding } from '@/lib/memory/embedding';
+import { extractDeterministicEntities } from './nlp';
 
 export interface RefineryJobResult {
   url: string;
@@ -77,26 +78,29 @@ export async function processRefineryBatch(
         throw new Error(`Extraction returned empty text for ${url}`);
       }
 
-      // 2. Forced cleanse pass for web-scraped content
+      // 2. Deterministic NLP extraction before LLM cleanse
+      const entities = extractDeterministicEntities(rawText);
+
+      // 3. Anchored cleanse pass for web-scraped content
       let workingText = rawText;
       let cleansed = false;
       if (googleApiKey) {
         try {
-          workingText = await cleanseSourceText(rawText, googleApiKey);
+          workingText = await cleanseSourceText(rawText, googleApiKey, entities);
           cleansed = true;
         } catch {
           workingText = rawText;
         }
       }
 
-      // 3. Chunk using existing paragraph-aware chunker
+      // 4. Chunk using existing paragraph-aware chunker
       const chunks = await prepareSourceChunks({
         source_type: 'refinery',
         raw_text: workingText,
         metadata: { via: 'refinery' },
       });
 
-      // 4. Generate embeddings for delta detection
+      // 5. Generate embeddings for delta detection
       const chunksWithEmbeddings = await Promise.all(
         chunks.map(async (chunk) => ({
           content: chunk.content,
@@ -131,6 +135,7 @@ export async function processRefineryBatch(
             cleansed,
             kind: 'scraped_web',
             origin_uri: url,
+            extracted_entities: entities,
           },
         }));
 

@@ -244,26 +244,29 @@ export async function generateConversationReply(
     const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
     let promptInput: string | any[] = userQuery;
 
-    if (parsed.fileData && parsed.mimeType) {
+    if (parsed.fileData && parsed.fileData.mimeType && parsed.fileData.base64Data) {
       promptInput = [
         { text: userQuery },
         {
           inlineData: {
-            mimeType: parsed.mimeType,
-            data: parsed.fileData // Base64
+            mimeType: parsed.fileData.mimeType,
+            data: parsed.fileData.base64Data
           }
         }
       ];
-    } else if (parsed.fileUri && parsed.mimeType) {
-      promptInput = [
-        { text: userQuery },
-        {
-          fileData: {
-            mimeType: parsed.mimeType,
-            fileUri: parsed.fileUri
+    } else if (parsed.fileUri) {
+      const uriMimeType = parsed.mimeType || parsed.fileData?.mimeType;
+      if (uriMimeType) {
+        promptInput = [
+          { text: userQuery },
+          {
+            fileData: {
+              mimeType: uriMimeType,
+              fileUri: parsed.fileUri
+            }
           }
-        }
-      ];
+        ];
+      }
     }
 
     // 3. Execute ReAct Loop (Non-streaming for now, wrapped in stream)

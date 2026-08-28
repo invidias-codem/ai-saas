@@ -115,7 +115,7 @@ async function main(): Promise<void> {
     for (let i = 0; i < chunks.length; i++) {
       const content = chunks[i].content;
       const embeddingResult = await generateEmbeddingWithMetadata(content);
-      const embedding = embeddingResult.embedding;
+      const embedding = embeddingResult.vector;
 
       const row = {
         workspace_id: TEST_WORKSPACE_ID,
