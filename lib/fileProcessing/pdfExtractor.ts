@@ -34,10 +34,28 @@ async function extractWithUnpdf(fileData: FileAttachmentInput): Promise<string> 
     throw new Error('PDF extraction requires base64Data or gs:// fileUri');
   }
 
+  validatePdfBytes(uint8Array);
+
   const pdf = await getDocumentProxy(uint8Array);
   const { text } = await extractText(pdf);
   // extractText returns { totalPages, text: string[] } where each element is a page
   return Array.isArray(text) ? text.join('\n\n') : text;
+}
+
+function validatePdfBytes(uint8Array: Uint8Array): void {
+  if (uint8Array.byteLength === 0) {
+    throw new Error('Invalid PDF structure');
+  }
+
+  const header = Buffer.from(uint8Array.slice(0, 5)).toString('utf-8');
+  if (!header.startsWith('%PDF-')) {
+    throw new Error('Invalid PDF structure');
+  }
+
+  const tail = Buffer.from(uint8Array.slice(-10)).toString('utf-8');
+  if (!tail.includes('%%EOF')) {
+    throw new Error('Invalid PDF structure');
+  }
 }
 
 export async function extractPdfText(fileData: FileAttachmentInput): Promise<string> {
@@ -54,8 +72,8 @@ export async function extractTextIfPdf(fileData: FileAttachmentInput): Promise<{
   if (!isPdf(fileData)) return { text: null, metrics: null };
 
   const startTime = Date.now();
-  const fileSizeBytes = fileData.base64Data 
-    ? Math.round(fileData.base64Data.length * 0.75) 
+  const fileSizeBytes = fileData.base64Data
+    ? Math.round(fileData.base64Data.length * 0.75)
     : fileData.sizeBytes;
 
   try {
