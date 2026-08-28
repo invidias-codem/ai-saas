@@ -27,6 +27,8 @@ export function ParameterDrawer({
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
+    // Intentionally set mounted state to avoid SSR hydration mismatch
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 

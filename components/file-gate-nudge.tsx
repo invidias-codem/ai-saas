@@ -16,13 +16,15 @@ export const FileGateNudge = ({ isOpen, onClose }: FileGateNudgeProps) => {
   const [isVisible, setIsVisible] = useState(false);
   const t = useTranslations("FileGateNudge");
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (isOpen) {
       setIsVisible(true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
     } else {
       const timer = setTimeout(() => setIsVisible(false), 300);
       return () => clearTimeout(timer);
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [isOpen]);
 
   if (!isVisible && !isOpen) return null;
