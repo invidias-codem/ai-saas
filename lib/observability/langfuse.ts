@@ -11,7 +11,7 @@ export function getLangfuseClient(): Langfuse | null {
     _langfuse = new Langfuse({
       publicKey: env.LANGFUSE_PUBLIC_KEY,
       secretKey: env.LANGFUSE_SECRET_KEY,
-      baseUrl: env.LANGFUSE_HOST,
+      baseUrl: env.LANGFUSE_HOST || 'https://cloud.langfuse.com',
     });
   }
   return _langfuse;
