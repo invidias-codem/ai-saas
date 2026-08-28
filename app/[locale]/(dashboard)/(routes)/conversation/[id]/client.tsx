@@ -58,6 +58,7 @@ import {
 import { useSupabaseChat, Message as SupabaseMessage } from "@/app/hooks/useSupabaseChat";
 import { useRuntimeStore } from "@/lib/store/runtimeStore";
 import { usePricingModal } from "@/lib/store/pricing-modal-store";
+import { compressBase64Payload } from "@/lib/uploadCompression";
 
 // New Agentic Integration
 import { ModelProvider, useModel } from "@/contexts/ModelContext";
@@ -66,7 +67,8 @@ import { SourceDisplay, Source } from "@/components/chat/SourceDisplay";
 import { ArtifactCard } from "@/components/chat/ArtifactCard";
 import { parseArtifacts } from "@/lib/llm/artifacts";
 
-// Removed manual compression - relying on native HTTP compression (Brotli/Gzip)
+// Upload compression: client-side lz-string for large base64 payloads, transparent to the API schema.
+// Decompression happens on the server for /api/analyze-upload; chat remains uncompressed to preserve streaming behavior.
 
 // Message structure
 interface Message {
@@ -682,7 +684,7 @@ function ConversationPage({
               type: selectedFile.type,
               mimeType: selectedFile.mimeType || selectedFile.type,
               sizeBytes: selectedFile.sizeBytes,
-              base64Data: selectedFile.base64Data,
+              base64Data: compressBase64Payload({ base64Data: selectedFile.base64Data }).base64Data,
             }
           : undefined
       : undefined;
@@ -690,9 +692,11 @@ function ConversationPage({
     setSelectedFile(null);
     setShowFilePreview(false);
 
+    const analyzeUploadEndpoint = selectedFile ? "/api/analyze-upload" : "/api/chat";
+
     try {
       // Dispatcher Call (Fetch with Streaming)
-      const response = await fetch("/api/chat", {
+      const response = await fetch(analyzeUploadEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
