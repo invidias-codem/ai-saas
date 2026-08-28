@@ -114,11 +114,11 @@ function recordCircuitSuccess(key: string): void {
   inMemoryCircuit.set(key, entry);
 }
 
-const fallbackQueues = new Map<string, Promise<{ vector: number[]; dimension: 768 | 3072; provider: string; model: string }>>();
+const fallbackQueues = new Map<string, Promise<EmbeddingResult>>();
 
-async function runFallbackLimited(fn: () => Promise<{ vector: number[]; dimension: 768 | 3072; provider: string; model: string }>): Promise<{ vector: number[]; dimension: 768 | 3072; provider: string; model: string }> {
+async function runFallbackLimited(fn: () => Promise<EmbeddingResult>): Promise<EmbeddingResult> {
   const key = 'fallback:gemini';
-  const prev = fallbackQueues.get(key) || Promise.resolve({} as { vector: number[]; dimension: 768 | 3072; provider: string; model: string });
+  const prev = fallbackQueues.get(key) || Promise.resolve({} as EmbeddingResult);
   const next = prev.then(() => sleep(FALLBACK_QUEUE_MIN_DELAY_MS)).then(fn);
   fallbackQueues.set(key, next);
   return next;
