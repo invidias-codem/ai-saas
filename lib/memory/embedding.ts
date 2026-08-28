@@ -55,6 +55,63 @@ async function withExponentialBackoff<T>(fn: () => Promise<T>): Promise<T> {
   throw lastError;
 }
 const REDIS_KEY_PREFIX = 'embed:v2:';
+const CIRCUIT_STATE_PREFIX = 'embed:circuit:';
+
+type CircuitState = 'closed' | 'open' | 'half-open';
+
+interface CircuitWindow {
+  state: CircuitState;
+  failures: number[];
+  openedAt?: number;
+}
+
+const inMemoryCircuit = new Map<string, CircuitWindow>();
+
+function getCircuitKey(provider: 'self_hosted' | 'gemini'): string {
+  return `${CIRCUIT_STATE_PREFIX}${provider}`;
+}
+
+function isCircuitOpen(key: string): boolean {
+  const window = inMemoryCircuit.get(key);
+  if (!window) return false;
+
+  const now = Date.now();
+  if (window.state === 'open') {
+    if (window.openedAt && now - window.openedAt > 5 * 60_000) {
+      window.state = 'half-open';
+      window.failures = [];
+      window.openedAt = undefined;
+      return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function recordCircuitFailure(key: string, now: number): boolean {
+  const entry = inMemoryCircuit.get(key) || { state: 'closed' as CircuitState, failures: [] as number[] };
+  entry.failures = entry.failures.filter(ts => now - ts < 60_000);
+  entry.failures.push(now);
+
+  if (entry.failures.length >= 3 && entry.state !== 'open') {
+    entry.state = 'open';
+    entry.openedAt = now;
+    console.warn(`[Embedding] Circuit opened for ${key}`);
+  }
+
+  inMemoryCircuit.set(key, entry);
+  return entry.state === 'open';
+}
+
+function recordCircuitSuccess(key: string): void {
+  const entry = inMemoryCircuit.get(key);
+  if (!entry) return;
+  entry.state = 'closed';
+  entry.failures = [];
+  entry.openedAt = undefined;
+  inMemoryCircuit.set(key, entry);
+}
 
 export type EmbeddingDimension = 768 | 3072;
 export type EmbeddingProvider = 'self_hosted' | 'gemini' | 'zero_vector';
@@ -158,6 +215,10 @@ function buildEmbeddingResult(
 }
 
 async function embedWithLambda(text: string): Promise<EmbeddingResult> {
+  if (isCircuitOpen(getCircuitKey('self_hosted'))) {
+    throw new Error('[Embedding] Self-hosted circuit open');
+  }
+
   const embedUrl = process.env.LAMBDA_EMBED_URL ? ensureHttps(process.env.LAMBDA_EMBED_URL) : undefined;
   const ollamaUrl = process.env.LAMBDA_OLLAMA_URL ? ensureHttps(process.env.LAMBDA_OLLAMA_URL) : undefined;
 
@@ -182,6 +243,7 @@ async function embedWithLambda(text: string): Promise<EmbeddingResult> {
       if (!Array.isArray(embedding) || embedding.length === 0) {
         throw new Error('[Embedding] Lambda embed server returned empty embedding');
       }
+      recordCircuitSuccess(getCircuitKey('self_hosted'));
       return buildEmbeddingResult(embedding as number[], 'self_hosted', model);
     } finally {
       clearTimeout(timeout);
@@ -202,12 +264,18 @@ async function embedWithLambda(text: string): Promise<EmbeddingResult> {
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
-        throw new Error(`[Embedding] Ollama HTTP ${res.status}: ${body}`);
+        const now = Date.now();
+        const opened = recordCircuitFailure(getCircuitKey('self_hosted'), now);
+        if (opened || res.status === 404) {
+          console.warn(`[Embedding] Ollama HTTP ${res.status}: ${body}`);
+          throw new Error(`[Embedding] Ollama HTTP ${res.status}: ${body}`);
+        }
       }
       const json = await res.json();
       if (!Array.isArray(json.embedding) || json.embedding.length === 0) {
         throw new Error('[Embedding] Ollama returned empty embedding');
       }
+      recordCircuitSuccess(getCircuitKey('self_hosted'));
       return buildEmbeddingResult(json.embedding as number[], 'self_hosted', model);
     } finally {
       clearTimeout(timeout);
@@ -222,17 +290,36 @@ async function embedWithGemini(text: string): Promise<EmbeddingResult> {
     throw new Error('[Embedding] GOOGLE_API_KEY not set');
   }
 
+  if (isCircuitOpen(getCircuitKey('gemini'))) {
+    throw new Error('[Embedding] Gemini circuit open');
+  }
+
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
   const modelName = 'gemini-embedding-2-preview';
   const model = genAI.getGenerativeModel({ model: modelName });
 
-  return withExponentialBackoff(async () => {
-    const result = await model.embedContent(text);
-    const values = result.embedding?.values ?? [];
-    if (values.length === 0) throw new Error('[Embedding] Gemini returned empty embedding');
-    return buildEmbeddingResult(values, 'gemini', modelName);
-  });
+  try {
+    const result = await withExponentialBackoff(async () => {
+      const result = await model.embedContent(text);
+      const values = result.embedding?.values ?? [];
+      if (values.length === 0) throw new Error('[Embedding] Gemini returned empty embedding');
+      return buildEmbeddingResult(values, 'gemini', modelName);
+    });
+    recordCircuitSuccess(getCircuitKey('gemini'));
+    return result;
+  } catch (err: any) {
+    const status = err?.status;
+    const message = String(err?.message || err);
+    if (status === 429 || message.includes('429') || /rate ?limit/i.test(message)) {
+      const now = Date.now();
+      const opened = recordCircuitFailure(getCircuitKey('gemini'), now);
+      if (opened) {
+        console.warn('[Embedding] Gemini rate limited — circuit opened');
+      }
+    }
+    throw err;
+  }
 }
 
 export async function generateEmbeddingWithMetadata(text: string): Promise<EmbeddingResult> {
