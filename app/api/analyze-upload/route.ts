@@ -68,6 +68,7 @@ export async function POST(req: Request) {
     if (normalized.fileData) {
       const pdfCheck = validatePdfFileData(normalized.fileData);
       if (!pdfCheck.valid) {
+        console.warn('[analyze-upload] pdf-validation failed:', pdfCheck.reason);
         return NextResponse.json(
           { error: pdfCheck.reason || 'Invalid PDF structure', source: 'pdf-validation' },
           { status: 400 }
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
 
     const validationResult = ConversationRequestSchema.safeParse(normalized);
     if (!validationResult.success) {
+      console.warn('[analyze-upload] schema-validation failed:', validationResult.error.flatten());
       return NextResponse.json(
         { error: 'Validation Error', details: validationResult.error.flatten(), source: 'schema-validation' },
         { status: 400 }
