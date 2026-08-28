@@ -887,7 +887,10 @@ export async function generateConversationReply(
     try {
       trace.update({ metadata: { error: err?.message || String(err) } });
     } catch {}
-    if (err?.status === 429 || String(err).includes('429')) {
+    const isRateLimit = err?.status === 429 || String(err).includes('429');
+    const isProviderDown = String(err).includes('1033') || String(err).includes('Tunnel') || String(err).includes('530') || (err?.status && err.status >= 500);
+
+    if (isRateLimit) {
       console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to fast mode`);
       const fallback = resolveProviderForMode({ mode: 'fast', hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys });
       actualModelId = fallback.execution.modelId;
@@ -896,6 +899,24 @@ export async function generateConversationReply(
         temperature: 0.9,
         maxTokens: 2048,
       });
+    } else if (isProviderDown) {
+      console.error(`[ConversationEngine] Provider ${actualModelId} unavailable: ${err?.message || String(err)}`);
+      const textEncoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(textEncoder.encode('The AI provider is temporarily unavailable. Please try again in a few minutes.'));
+          controller.close();
+        },
+      });
+      return {
+        stream,
+        sources: [],
+        debug: {
+          model: actualModelId,
+          userQuery,
+          error: 'provider_unavailable',
+        },
+      };
     } else {
       throw err;
     }
