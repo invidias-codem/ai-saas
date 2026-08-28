@@ -56,6 +56,7 @@ async function withExponentialBackoff<T>(fn: () => Promise<T>): Promise<T> {
 }
 const REDIS_KEY_PREFIX = 'embed:v2:';
 const CIRCUIT_STATE_PREFIX = 'embed:circuit:';
+const FALLBACK_QUEUE_MIN_DELAY_MS = 300;
 
 type CircuitState = 'closed' | 'open' | 'half-open';
 
@@ -111,6 +112,15 @@ function recordCircuitSuccess(key: string): void {
   entry.failures = [];
   entry.openedAt = undefined;
   inMemoryCircuit.set(key, entry);
+}
+
+const fallbackQueues = new Map<string, Promise<EmbeddingResult | null>>();
+
+async function runFallbackLimited<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = fallbackQueues.get(key) || Promise.resolve(null as any);
+  const next = prev.then(() => sleep(FALLBACK_QUEUE_MIN_DELAY_MS)).then(fn).catch(err => { throw err; });
+  fallbackQueues.set(key, next);
+  return next;
 }
 
 export type EmbeddingDimension = 768 | 3072;
@@ -350,11 +360,12 @@ export async function generateEmbeddingWithMetadata(text: string): Promise<Embed
 
   if (!result && process.env.GOOGLE_API_KEY) {
     try {
-      result = await embedWithGemini(text);
+      result = await runFallbackLimited('gemini', () => embedWithGemini(text));
     } catch (err: any) {
-      if (err?.status === 429 || String(err).includes('429')) {
+      const message = String(err?.message || err);
+      if (message.includes('429') || /rate ?limit/i.test(message)) {
         console.warn('[Embedding] Gemini rate limited');
-      } else {
+      } else if (!message.includes('Gemini circuit open')) {
         console.warn('[Embedding] Gemini failed:', err);
       }
     }
