@@ -6,7 +6,7 @@
  */
 import { z } from 'zod';
 
-export const supportedProvidersSchema = z.enum(['google', 'openai', 'anthropic', 'deepseek']);
+export const supportedProvidersSchema = z.enum(['google', 'openai', 'anthropic', 'deepseek', 'nvidia-nim']);
 export type SupportedProvider = z.infer<typeof supportedProvidersSchema>;
 
 export const envSchema = z.object({
@@ -37,6 +37,10 @@ export const envSchema = z.object({
   REPLICATE_API_TOKEN: z.string().min(1).optional(),
   REPLICATE_API_TOKEN_MUSIC: z.string().min(1).optional(),
   REPLICATE_API_TOKEN_VIDEO: z.string().min(1).optional(),
+
+  // NVIDIA NIM (OpenAI-compatible inference)
+  NVIDIA_API_KEY: z.string().min(1).optional(),
+  NVIDIA_NIM_BASE_URL: z.string().url().optional().default('https://integrate.api.nvidia.com/v1'),
 
   // ADD THESE FOR VERTEX AI (IMAGEN)
   GOOGLE_PROJECT_ID: z
