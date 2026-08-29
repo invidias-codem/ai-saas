@@ -679,13 +679,13 @@ function ConversationPage({
             storageProvider: selectedFile.storageProvider || 'gcs',
           }
         : selectedFile.base64Data
-          ? {
+          ? compressBase64Payload({
               name: selectedFile.name,
               type: selectedFile.type,
               mimeType: selectedFile.mimeType || selectedFile.type,
               sizeBytes: selectedFile.sizeBytes,
-              base64Data: compressBase64Payload({ base64Data: selectedFile.base64Data }).base64Data,
-            }
+              base64Data: selectedFile.base64Data,
+            })
           : undefined
       : undefined;
 
