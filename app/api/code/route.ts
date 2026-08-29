@@ -225,6 +225,7 @@ export async function POST(req: Request) {
               resolvedContext: ctx,
               requestId,
               messagesLength: msgs?.length || 0,
+              surface: 'web',
             });
 
             return {

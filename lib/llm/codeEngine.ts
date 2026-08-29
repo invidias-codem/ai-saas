@@ -18,23 +18,36 @@ You are an autonomous AI coding agent operating within Lattice OS.
 You have access to a secure I/O harness that allows you to interact with the file system and execute terminal commands.
 
 You can use the following tools:
-1. read_file: Read the contents of a file. Args: { "filePath": "path/to/file" }
-2. write_file: Write contents to a file. Args: { "filePath": "path/to/file", "content": "file contents" }
-3. run_command: Run a shell command. Args: { "command": "npm run test", "timeoutMs": 30000 }
-4. mark_task_complete: Mark the current task as complete. Args: { "reason": "summary of what was done" }
+1. search_codebase: Search the repository semantically for relevant code. Args: { "query": "what to search for", "limit": 5 }
+2. read_file: Read the contents of a file. Args: { "filePath": "path/to/file" }
+3. write_file: Write contents to a file. Args: { "filePath": "path/to/file", "content": "file contents" }
+4. patch_file: Patch a file by searching and replacing a block. Args: { "filePath": "path/to/file", "search_block": "existing code", "replace_block": "new code" }
+5. run_command: Run a shell command. Args: { "command": "npm run test", "timeoutMs": 30000 }
+6. mark_task_complete: Mark the current task as complete. Args: { "reason": "summary of what was done" }
+
+REPOSITORY NAVIGATION RULES:
+- ALWAYS use search_codebase first to find relevant files, functions, or patterns before reading or editing.
+- Do NOT run git commands to inspect repo structure; use search_codebase instead.
+- When in doubt, search_codebase is your primary traversal tool.
 
 To invoke a tool, output a JSON block inside <tool_call> tags. Do NOT output anything after the tool call.
 Example:
 <tool_call>
 {
-  "tool": "read_file",
+  "tool": "search_codebase",
   "args": {
-    "filePath": "src/index.ts"
+    "query": "authentication middleware",
+    "limit": 5
   }
 }
-</tool_call>
 
 You must wait for the tool result before taking further actions. The result will be provided in a <tool_result> tag.
+`;
+
+const WEB_HARNESS_INSTRUCTIONS = `
+You are 'Genie Code', an expert coding assistant for the Lattice OS web app.
+Answer the user's coding question directly using the provided repository context and file attachments.
+Use clear explanations and markdown code blocks. Do not use tool calls in this surface.
 `;
 
 export interface CodeEngineParams {
@@ -48,6 +61,7 @@ export interface CodeEngineParams {
   resolvedContext: any;
   requestId: string;
   messagesLength: number;
+  surface?: 'web' | 'cli' | 'agent-task';
 }
 
 function buildAttachmentPromptBlock(resolvedAttachment: ResolvedAttachment | null): string {
@@ -74,7 +88,8 @@ export async function runCodeEngine({
   initialModelConfig,
   resolvedContext,
   requestId,
-  messagesLength
+  messagesLength,
+  surface = 'web',
 }: CodeEngineParams) {
   // If fileData has extractedText (pre-extracted PDF), use it directly
   // instead of trying to resolve binary attachments
@@ -142,7 +157,8 @@ export async function runCodeEngine({
   const repoGroundingBlock = activeRepo
     ? `\n\nThe user is working in the GitHub repository: ${activeRepo}. Relevant code context from this repo is included below in the conversation context as <code_context>. Base architectural and syntax decisions on that retrieved repo context when answering. If the retrieved snippets do not cover the request, state your assumptions explicitly instead of inventing missing files, imports, or identifiers.\n`
     : '';
-  const systemInstruction = CODE_SYSTEM_INSTRUCTION_TEXT + "\n\n" + HARNESS_INSTRUCTIONS + repoGroundingBlock;
+  const harnessInstructions = surface === 'cli' || surface === 'agent-task' ? HARNESS_INSTRUCTIONS : WEB_HARNESS_INSTRUCTIONS;
+  const systemInstruction = CODE_SYSTEM_INSTRUCTION_TEXT + "\n\n" + harnessInstructions + repoGroundingBlock;
   const providerKeys = await getUserProviderApiKeys(userId);
   const nativeProviderKeys = await (await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys);
 

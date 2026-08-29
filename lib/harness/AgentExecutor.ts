@@ -6,6 +6,7 @@ import { HermesProvider } from '@/lib/llm/providers/hermes';
 import { ChatMessage } from '@/lib/llm/types';
 import { HarnessFactory } from '@/lib/harness/IOHarness';
 import { ToolRouter } from '@/lib/harness/ToolRouter';
+import { searchCodebaseTool } from '@/lib/agents/tools/searchCodebase';
 import { CODE_MODELS } from '@/lib/llm/codeModels';
 import { pruneHistory } from '@/lib/context/HistoryPruner';
 import type { ProviderApiKeys } from '@/lib/userProviderKeys';
