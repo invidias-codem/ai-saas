@@ -1,10 +1,11 @@
-# UCOL Code Builder Debate Loop v1.0
-# Role: Orchestrates a Gemini → Claude → Gemini review cycle for component generation
-# Pipeline: Planner (Gemini) plans → Coder (Claude) codes → Reviewer (Gemini) scores → accept/revise/reject
+# UCOL Code Builder Debate Loop v2.0
+# Role: Orchestrates a Kimi K3 (plan) → Kimi K3 (code) → Kimi K3 (review) cycle for component generation
+# Pipeline: Planner (Kimi K3) plans → Coder (Kimi K3) codes → Reviewer (Kimi K3) scores → accept/revise/reject
+# All three stages run the same model (moonshotai/kimi-k3 on NVIDIA NIM) with distinct prompt personas.
 
 CodeBuilderAgent {
-  identity: "UCOL Code Builder — Gemini plans, Claude codes, Gemini reviews"
-  version: "1.0"
+  identity: "UCOL Code Builder — Kimi K3 plans, codes, and reviews (NVIDIA NIM)"
+  version: "2.0"
 
   state {
     attempt: 0
@@ -17,7 +18,7 @@ CodeBuilderAgent {
   }
 
   interface Planner {
-    model: gemini-2.5-flash
+    model: moonshotai/kimi-k3 (NVIDIA NIM)
     role: software architect
     inputs: prompt + availableDependencies
     output: ProjectPlan { appName, components[], pages[], techStack[], dataModel[], apiRoutes[] }
@@ -29,9 +30,9 @@ CodeBuilderAgent {
   }
 
   interface Coder {
-    model: claude-sonnet-4 (primary) | gemini-2.5-flash (fallback)
+    model: moonshotai/kimi-k3 (NVIDIA NIM)
     role: expert React/Next.js developer
-    timeout: 25_000ms per component
+    timeout: 90_000ms per component
     inputs: component spec + fullPlan + existingFiles + techStack + discoveredPatterns
     output: GeneratedFile[] as JSON array { path, content, language }
     constraints {
@@ -45,7 +46,7 @@ CodeBuilderAgent {
   }
 
   interface Reviewer {
-    model: gemini-2.5-flash
+    model: moonshotai/kimi-k3 (NVIDIA NIM)
     role: Lead QA Engineer + Chief Architect
     inputs: generatedFiles + componentSpec + projectPlan
     output: ReviewFeedback {
@@ -79,14 +80,14 @@ CodeBuilderAgent {
 
     while attempt < MAX_ATTEMPTS:
       attempt++
-      emit: gemini → claude "Generating ${component.name} (attempt ${attempt})"
+      emit: kimi → kimi "Generating ${component.name} (attempt ${attempt})"
 
       try:
         files = Coder.generate(component, plan, deps, feedbackHistory, activeConstraint, discoveredPatterns)
-          |> withTimeout(25_000ms)
+          |> withTimeout(90_000ms)
       catch timeout | error:
-        emit: system → gemini "⚡ Claude timeout — falling back to Gemini coder"
-        files = GeminiCoder.generate(component, plan, deps, feedbackHistory, activeConstraint, discoveredPatterns)
+        emit: system → kimi "⚡ Kimi coder failure — propagating error to review gate"
+        throw error  # no silent fallback; the review gate must not ship unverified code
 
       currentCode = files.map(f => f.content).join("---")
 
@@ -98,7 +99,7 @@ CodeBuilderAgent {
         return files
 
       previousCode = currentCode
-      emit: claude → gemini "Reviewing ${component.name}..."
+      emit: kimi → kimi "Reviewing ${component.name}..."
 
       review = Reviewer.review(files, component, plan)
 
@@ -131,7 +132,7 @@ CodeBuilderAgent {
 
   constraints {
     build order MUST follow dependency DAG (never build a component before its deps)
-    Claude timeout (25s) ALWAYS falls back to Gemini coder — never fails silently
+    Kimi coder failure (90s timeout) throws to the review gate — never ships unverified code
     similarity check uses Jaccard coefficient on trimmed non-empty lines
     score thresholds are CORRECTNESS only: approved iff score >= 8 AND pragmatism >= 5
     originality and pragmatism axes are INDEPENDENT of the correctness approval gate
@@ -141,7 +142,7 @@ CodeBuilderAgent {
   }
 
   semantic pattern matching {
-    (Claude timeout OR API error) => fallback to GeminiCoder immediately
+    (Kimi coder timeout OR API error) => throw to review gate (no silent fallback)
     (similarity >= 0.95 on second attempt) => auto-accept — coder stands by it
     (correctness >= 8 AND pragmatism >= 5) => accept
     (correctness >= 7 AND pragmatism < 5) => reject + simplicity constraint

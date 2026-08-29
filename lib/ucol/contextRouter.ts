@@ -11,12 +11,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { generatePlan } from './prompts/geminiPlanner';
-import { generateComponent } from './prompts/claudeCoder';
-import { generateComponentGemini } from './prompts/geminiCoder';
-import { generateComponentOpenRouter } from './prompts/openRouterCoder';
-import { generateComponentHuggingFace } from './prompts/huggingFaceCoder';
-import { reviewCode } from './prompts/geminiReviewer';
+import { generatePlan } from './prompts/kimiPlanner';
+import { kimiCoderProvider } from './prompts/kimiCoder';
+import { reviewCode } from './prompts/kimiReviewer';
 import { logEvent } from '@/lib/telemetry';
 import { ModelRouter } from './modelRouter';
 import type {
@@ -44,35 +41,8 @@ const SIMILARITY_THRESHOLD = 0.95;
 const ORIGINALITY_THRESHOLD = 4;
 const PRAGMATISM_THRESHOLD = 5;
 const COMPONENT_TIMEOUT_MS = 25_000;
-// 480B-class open coders routinely take 30-60s for a full component.
-// 15s was killing legitimately-working generations mid-flight.
+// Kimi K3 on NVIDIA NIM routinely takes 30-60s for a full component.
 const PROVIDER_TIMEOUT_MS = 90_000;
-
-// Canonical OpenRouter slugs for IDs that arrive in HF/other-provider form.
-// resolveModelIdForProvider previously accepted ANY id containing '/' as
-// "openrouter-correct", which sent HF-style ids (Qwen/Qwen3-Coder-480B-…)
-// straight to OpenRouter → 404. Normalize explicitly instead.
-const OPENROUTER_ID_ALIASES: Record<string, string> = {
-    'qwen/qwen3-coder-480b-a35b': 'qwen/qwen3-coder',        // old invalid slug
-    'qwen/qwen3-coder-480b-a35b-instruct': 'qwen/qwen3-coder',
-    'nousresearch/gpt-oss-120b': 'openai/gpt-oss-120b',       // old invalid slug
-    'moonshotai/kimi-k2.6': 'moonshotai/kimi-k2.6',
-    'moonshotai/kimi-k3': 'moonshotai/kimi-k3',
-    'deepseek-ai/deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
-    'deepseek-ai/deepseek-r1': 'deepseek/deepseek-r1',
-    'thudm/glm-5.2': 'z-ai/glm-5.2',
-};
-
-// OpenRouter slugs we know are valid (kept in sync with modelRouter catalog).
-const OPENROUTER_KNOWN_SLUGS = new Set([
-    'qwen/qwen3-coder',
-    'openai/gpt-oss-120b',
-    'moonshotai/kimi-k2.6',
-    'moonshotai/kimi-k3',
-    'deepseek/deepseek-v4-pro',
-    'deepseek/deepseek-r1',
-    'z-ai/glm-5.2',
-]);
 
 // ── Constraint Tracking ──────────────────────────────────────────────────────
 // Prevents ping-ponging between opposing constraints by tracking which
@@ -154,50 +124,6 @@ export class ContextRouter {
             console.warn('[UCOL] Could not read package.json — dependency constraints disabled');
             return [];
         }
-    }
-
-    private resolveModelIdForProvider(model: { provider: string; modelId: string; tier?: string; strengths?: string[]; contextLimit?: number; maxTokens?: number }): string {
-        const candidate = (model.modelId || '').toLowerCase();
-
-        const map: Record<string, string> = {
-            huggingface: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
-            openrouter: 'qwen/qwen3-coder',
-            anthropic: 'claude-sonnet-4-20250514',
-            google: 'gemini-2.5-pro',
-            together: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
-            replicate: 'Qwen/Qwen3-Coder-480B-A35B-Instruct',
-            openai: 'gpt-4o',
-            nous: 'openai/gpt-oss-120b',
-        };
-
-        // OpenRouter: normalize via alias table, accept known slugs,
-        // otherwise fall back to the default coder. Never pass through
-        // an unverified id just because it contains '/'.
-        if (model.provider === 'openrouter') {
-            if (OPENROUTER_ID_ALIASES[candidate]) return OPENROUTER_ID_ALIASES[candidate];
-            if (OPENROUTER_KNOWN_SLUGS.has(candidate)) return candidate;
-            return map.openrouter;
-        }
-
-        const isAlreadyProviderCorrect =
-            (model.provider === 'huggingface' && candidate.includes('/')) ||
-            (model.provider === 'anthropic' && candidate.startsWith('claude-')) ||
-            (model.provider === 'google' && candidate.startsWith('gemini-'));
-
-        if (isAlreadyProviderCorrect) {
-            return model.modelId;
-        }
-
-        const fallback = map[model.provider];
-        if (!fallback) {
-            return model.modelId;
-        }
-
-        if (model.provider === 'anthropic') {
-            return 'claude-sonnet-4-20250514';
-        }
-
-        return fallback;
     }
 
     async planProject(prompt: string, session: BuildSession): Promise<ProjectPlan> {
@@ -315,7 +241,7 @@ export class ContextRouter {
 
         const routerDecision = this.modelRouter.decide(component, plan, session, promptText);
         const selectedModel = routerDecision.primaryModel;
-        const modelIdForProvider = this.resolveModelIdForProvider(selectedModel);
+        const modelIdForProvider = selectedModel.modelId;
 
         while (attempt < MAX_REVIEW_ATTEMPTS) {
             attempt++;
@@ -363,79 +289,28 @@ export class ContextRouter {
                 }
                 : undefined;
 
-            // ── Step 1: Generate code with cascading multi-provider fallback ──
+            // ── Step 1: Generate code via Kimi K3 (single provider) ──
             const primaryProvider = selectedModel.provider;
             const attemptedProviders: string[] = [];
             const providerErrors: string[] = [];
-            let generationError: string | undefined;
 
-            const providerSequence = [
-                primaryProvider,
-                // OpenRouter first: HF inference quota is depleted, so open-model
-                // traffic should land on OpenRouter before anything else.
-                ...(primaryProvider !== 'openrouter' && (this.providerKeys.openrouter || process.env.OPENROUTER_API_KEY) ? ['openrouter'] : []),
-                ...(primaryProvider !== 'anthropic' && (this.providerKeys.anthropic || process.env.ANTHROPIC_API_KEY) ? ['anthropic'] : []),
-                ...(primaryProvider !== 'google' && (this.providerKeys.google || process.env.GOOGLE_API_KEY) ? ['google'] : []),
-                // HF last: kept as emergency fallback only (quota exhausted).
-                ...(primaryProvider !== 'huggingface' && (this.providerKeys.huggingface || process.env.HUGGINGFACE_API_KEY) ? ['huggingface'] : []),
-            ].filter((v, i, arr) => arr.indexOf(v) === i);
+            const providerSequence = [primaryProvider];
 
             for (const provider of providerSequence) {
                 attemptedProviders.push(provider);
                 try {
-                    let files: GeneratedFile[] | undefined;
-                    const providerModelId = this.resolveModelIdForProvider({
-                      provider,
-                      modelId: modelIdForProvider,
-                      tier: selectedModel.tier,
-                      strengths: selectedModel.strengths,
-                      contextLimit: selectedModel.contextLimit,
-                      maxTokens: selectedModel.maxTokens,
-                    } as any);
-                    if (provider === 'huggingface') {
-                        files = await this.withTimeout(
-                            generateComponentHuggingFace(providerModelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                            PROVIDER_TIMEOUT_MS,
-                            component.name
-                        );
-                    } else if (provider === 'openrouter') {
-                        files = await this.withTimeout(
-                            generateComponentOpenRouter(providerModelId, contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                            PROVIDER_TIMEOUT_MS,
-                            component.name
-                        );
-                    } else if (provider === 'anthropic') {
-                        files = await this.withTimeout(
-                            generateComponent(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                            PROVIDER_TIMEOUT_MS,
-                            component.name
-                        );
-                    } else if (provider === 'google') {
-                        files = await this.withTimeout(
-                            generateComponentGemini(contextPackage, refinement, session.discoveredPatterns, this.providerKeys),
-                            PROVIDER_TIMEOUT_MS,
-                            component.name
-                        );
-                    }
+                    const files = await this.withTimeout(
+                        kimiCoderProvider.generateCode(contextPackage, refinement, session.discoveredPatterns),
+                        PROVIDER_TIMEOUT_MS,
+                        component.name
+                    );
 
                     if (files && files.length > 0) {
                         latestFiles = files;
-                        if (provider !== primaryProvider) {
-                            this.emitContextFlow({
-                                id: crypto.randomUUID(),
-                                timestamp: Date.now(),
-                                source: provider,
-                                target: 'ucol',
-                                action: `↪ ${provider} fallback succeeded for ${component.name}`,
-                                reasoning: `Primary provider ${primaryProvider} failed`,
-                                status: 'complete',
-                            });
-                        }
                         break;
                     }
                 } catch (err: any) {
                     const reason = err.message?.substring(0, 120) || 'Unknown error';
-                    generationError = reason;
                     providerErrors.push(`[${provider}]: ${reason}`);
                     this.modelRouter.recordThrash(component.name);
                     this.emitContextFlow({
@@ -447,7 +322,6 @@ export class ContextRouter {
                         reasoning: reason,
                         status: 'error',
                     });
-                    continue;
                 }
             }
 
@@ -460,7 +334,6 @@ export class ContextRouter {
                     `Errors encountered:\n${errors}`
                 );
             }
-
             const currentCode = latestFiles.map(f => f.content).join('\n---\n');
 
             if (fast) {
