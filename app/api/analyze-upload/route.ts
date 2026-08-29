@@ -61,9 +61,17 @@ export async function POST(req: Request) {
 
     const normalized = {
       ...body,
-      mode: body.mode || 'quality',
+      mode: body.fileData ? 'quality' : (body.mode || 'quality'),
       fileData: body.fileData ? decompressLzStringPayload(body.fileData) : undefined,
     };
+
+    // Optional Hardening: warn if payload looks like compressed data but
+    // decompression was skipped or never flagged.
+    if (normalized.fileData?.base64Data && !normalized.fileData.__compressed) {
+      if (!normalized.fileData.base64Data.startsWith('data:')) {
+        console.warn('[Analyze] Payload missing data URI prefix; potential compression mismatch.');
+      }
+    }
 
     if (normalized.fileData) {
       const pdfCheck = validatePdfFileData(normalized.fileData);

@@ -8,6 +8,9 @@ export interface FileAttachmentInput {
   storageProvider?: 'gcs';
   /** Pre-extracted text content (e.g., from PDF parsing) */
   extractedText?: string;
+  /** Compression metadata for upload pipeline */
+  __compressed?: boolean;
+  __encoding?: 'gzip' | 'lz-string';
 }
 
 export interface ResolvedAttachment {
