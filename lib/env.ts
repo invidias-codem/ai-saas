@@ -18,3 +18,16 @@ export function requireEnv<K extends keyof Env>(key: K): NonNullable<Env[K]> {
   }
   return value as NonNullable<Env[K]>;
 }
+
+/**
+ * Resolve the NVIDIA NIM base URL and API key at runtime.
+ * The key is lazy-validated so modules that import this file do not throw
+ * when NVIDIA NIM is not yet configured (e.g. offline scripts / eval harness).
+ */
+export function nvidiaNimConfig(): { apiKey: string; baseUrl: string } | null {
+  if (!env.NVIDIA_API_KEY) return null;
+  return {
+    apiKey: env.NVIDIA_API_KEY,
+    baseUrl: env.NVIDIA_NIM_BASE_URL ?? 'https://integrate.api.nvidia.com/v1',
+  };
+}

@@ -132,6 +132,10 @@ export type EmbeddingResult = {
   dimension: EmbeddingDimension;
   provider: EmbeddingProvider;
   model: string;
+  /** True when all providers failed and this is a lexical-fallback placeholder.
+   *  Callers should degrade to keyword/BM25 search rather than treating the
+   *  zero vector as a real embedding. */
+  degraded?: boolean;
 };
 
 interface CacheEntry {
@@ -371,12 +375,13 @@ export async function generateEmbeddingWithMetadata(text: string): Promise<Embed
   }
 
   if (!result) {
-    console.warn('[Embedding] All providers failed — returning zero vector');
+    console.warn('[Embedding] All providers failed — returning degraded zero vector (keyword fallback)');
     result = {
       vector: new Array(PRIMARY_EMBEDDING_DIM).fill(0),
       dimension: PRIMARY_EMBEDDING_DIM,
       provider: 'zero_vector',
       model: 'zero-vector-fallback',
+      degraded: true,
     };
   }
 

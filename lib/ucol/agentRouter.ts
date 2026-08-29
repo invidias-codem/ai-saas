@@ -79,7 +79,7 @@ const CONFIDENCE_OVERRIDABLE = new Set<TaskType>([
 const CONFIDENCE_TIER_TO_NODE: Record<ConfidenceModelTier, RoutingDecision['targetNode']> = {
   'gemini-flash':  'gemini-flash',
   'deepseek':      'deepseek',
-  'claude-sonnet': 'claude',
+  'claude-sonnet': 'deepseek',
 } as Record<ConfidenceModelTier, RoutingDecision['targetNode']>;
 
 /**
@@ -87,19 +87,14 @@ const CONFIDENCE_TIER_TO_NODE: Record<ConfidenceModelTier, RoutingDecision['targ
  * Used to determine whether a confidence override is an upgrade or downgrade
  * based on actual node comparison, not raw confidence score.
  */
-// NODE_COST_RANK only applies to LLM nodes — tools are bypassed by the
+// LLM_NODE_COST_RANK only applies to LLM nodes — tools are bypassed by the
 // isToolNode() guard below and never go through confidence override logic.
 const LLM_NODE_COST_RANK: Partial<Record<string, number>> = {
-  'hermes-local':   0,  // self-hosted, zero API cost — cheapest tier
-  'gemini-flash':   1,
   'deepseek':       2,
   'context-router': 2,
-  'claude':         3,
+  'gemini-flash':   1,
   'jklaw':          3,
 };
-
-/** True when the self-hosted Vast.ai Docker Model Runner node is configured and should be used */
-const LAMBDA_OLLAMA_ENABLED = !!process.env.LAMBDA_OLLAMA_URL;
 
 /** Returns true when a routing decision targets a CLI tool harness */
 export function isToolNode(targetNode: RoutingDecision['targetNode']): boolean {
@@ -213,12 +208,12 @@ Respond with ONLY a JSON object:
 const ROUTING_TABLE: Record<TaskType, RoutingDecision['targetNode']> = {
     // ── LLM nodes ───────────────────────────────────────────────────────
     code_generation:   'context-router',
-    quick_answer:      LAMBDA_OLLAMA_ENABLED ? 'hermes-local' : 'gemini-flash',
-    quality_analysis:  'claude',
+    quick_answer:      'deepseek',
+    quality_analysis:  'deepseek',
     deep_reasoning:    'deepseek',
-    memory_extract:    'gemini-flash',
+    memory_extract:    'deepseek',
     memory_synthesize: 'deepseek',
-    user_profile:      'claude',
+    user_profile:      'deepseek',
     research:          'jklaw',
     strategy:          'jklaw',
     orchestration:     'jklaw',
