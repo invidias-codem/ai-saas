@@ -44,6 +44,12 @@ Example:
 You must wait for the tool result before taking further actions. The result will be provided in a <tool_result> tag.
 `;
 
+const WEB_HARNESS_INSTRUCTIONS = `
+You are 'Genie Code', an expert coding assistant for the Lattice OS web app.
+Answer the user's coding question directly using the provided repository context and file attachments.
+Use clear explanations and markdown code blocks. Do not use tool calls in this surface.
+`;
+
 export interface CodeEngineParams {
   userId: string;
   clerkUser: any;
@@ -55,6 +61,7 @@ export interface CodeEngineParams {
   resolvedContext: any;
   requestId: string;
   messagesLength: number;
+  surface?: 'web' | 'cli' | 'agent-task';
 }
 
 function buildAttachmentPromptBlock(resolvedAttachment: ResolvedAttachment | null): string {
@@ -81,7 +88,8 @@ export async function runCodeEngine({
   initialModelConfig,
   resolvedContext,
   requestId,
-  messagesLength
+  messagesLength,
+  surface = 'web',
 }: CodeEngineParams) {
   // If fileData has extractedText (pre-extracted PDF), use it directly
   // instead of trying to resolve binary attachments
@@ -149,7 +157,8 @@ export async function runCodeEngine({
   const repoGroundingBlock = activeRepo
     ? `\n\nThe user is working in the GitHub repository: ${activeRepo}. Relevant code context from this repo is included below in the conversation context as <code_context>. Base architectural and syntax decisions on that retrieved repo context when answering. If the retrieved snippets do not cover the request, state your assumptions explicitly instead of inventing missing files, imports, or identifiers.\n`
     : '';
-  const systemInstruction = CODE_SYSTEM_INSTRUCTION_TEXT + "\n\n" + HARNESS_INSTRUCTIONS + repoGroundingBlock;
+  const harnessInstructions = surface === 'cli' || surface === 'agent-task' ? HARNESS_INSTRUCTIONS : WEB_HARNESS_INSTRUCTIONS;
+  const systemInstruction = CODE_SYSTEM_INSTRUCTION_TEXT + "\n\n" + harnessInstructions + repoGroundingBlock;
   const providerKeys = await getUserProviderApiKeys(userId);
   const nativeProviderKeys = await (await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys);
 
