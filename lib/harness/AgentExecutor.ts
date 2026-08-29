@@ -1,8 +1,8 @@
 import { estimateTokenCount } from '@/lib/ragMemory';
-import { ClaudeProvider } from '@/lib/llm/providers/claude';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
 import { HermesProvider } from '@/lib/llm/providers/hermes';
+import { NvidiaNimProvider } from '@/lib/llm/providers/nvidiaNim';
 import { ChatMessage } from '@/lib/llm/types';
 import { HarnessFactory } from '@/lib/harness/IOHarness';
 import { ToolRouter } from '@/lib/harness/ToolRouter';
@@ -49,17 +49,15 @@ export async function executeAgentLoop(params: AgentExecutorParams) {
       let stepResponse = "";
 
       let ProviderClass;
-      if (modelConfig.provider === 'claude') ProviderClass = ClaudeProvider;
-      else if (modelConfig.provider === 'deepseek') ProviderClass = DeepSeekProvider;
+      if (modelConfig.provider === 'deepseek') ProviderClass = DeepSeekProvider;
+      else if (modelConfig.provider === 'nvidia-nim') ProviderClass = NvidiaNimProvider;
       else ProviderClass = GeminiProvider;
 
-      const provider = modelConfig.provider === 'claude'
-        ? new ClaudeProvider(providerKeys.anthropic)
-        : modelConfig.provider === 'gemini'
-          ? new GeminiProvider(providerKeys.google)
-          : modelConfig.provider === 'hermes'
-            ? new HermesProvider({})
-            : new ProviderClass();
+      const provider = modelConfig.provider === 'gemini'
+        ? new GeminiProvider(providerKeys.google)
+        : modelConfig.provider === 'hermes'
+          ? new HermesProvider({})
+          : new ProviderClass();
 
       const chatHistory: ChatMessage[] = dynamicHistory.map((msg: any) => {
         let attachments;

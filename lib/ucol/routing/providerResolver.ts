@@ -1,18 +1,18 @@
 import type { AgentMode, LLMProvider } from '@/lib/llm/types';
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
-import { ClaudeProvider } from '@/lib/llm/providers/claude';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
-import { HermesProvider } from '@/lib/llm/providers/hermes';
-import { OpenRouterProvider } from '@/lib/llm/providers/openrouter';
+import { NvidiaNimProvider, NIM_MODEL_DEEPSEEK_V4_PRO, NIM_MODEL_KIMI_K3 } from '@/lib/llm/providers/nvidiaNim';
 import type { UcolProviderPlan } from './types';
 import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 import type { PersonaSession } from '@/lib/consultant/personaSession';
 
-const FAST_MODEL = process.env.HERMES_MODEL_ID || 'hermes3';
-const QUALITY_MODEL = 'gemini-3.1-pro-preview';
-const AGENTIC_MODEL = process.env.LATTICE_AGENTIC_MODEL || 'Hermes-4-70B';
-const REASONING_MODEL = 'deepseek-r1';
-const OPENROUTER_FAST_MODEL = process.env.OPENROUTER_FAST_MODEL || 'openrouter/auto';
+const QUALITY_MODEL = NIM_MODEL_DEEPSEEK_V4_PRO;
+const AGENTIC_MODEL = NIM_MODEL_KIMI_K3;
+const REASONING_MODEL = NIM_MODEL_DEEPSEEK_V4_PRO;
+const FAST_MODEL = NIM_MODEL_DEEPSEEK_V4_PRO;
+
+/** Gemini is retained as the multimodal fallback (attachments) and as the embedding engine. */
+const GEMINI_ATTACHMENT_MODEL = 'gemini-3.1-pro-preview';
 
 /** Rank order for model tiers — higher = more capable */
 const TIER_RANK: Record<PersonaSession['minimumModelTier'], number> = {
@@ -30,7 +30,7 @@ export type ProviderResolutionInput = {
 };
 
 export type ProviderResolution = {
-  providerId: 'gemini' | 'claude' | 'deepseek' | 'hermes' | 'openrouter';
+  providerId: 'gemini' | 'deepseek' | 'nvidia-nim';
   execution: {
     provider: LLMProvider;
     modelId: string;
@@ -44,6 +44,11 @@ export type ProviderResolution = {
 /**
  * Resolve the best provider/model for the given mode.
  *
+ * NVIDIA NIM is the primary inference layer:
+ *   - DeepSeek V4 Pro  → chat / deep-thought / quality / reasoning
+ *   - Kimi K3          → agentic (tool use)
+ *   - Gemini           → multimodal attachments ONLY + embeddings
+ *
  * When a persona session is active, the persona's minimumModelTier acts as
  * a cognitive floor — if the user selects 'fast' but the persona requires
  * 'reasoning', the resolver silently upgrades to the persona's minimum.
@@ -51,17 +56,14 @@ export type ProviderResolution = {
 export function resolveProviderForMode(input: ProviderResolutionInput): ProviderResolution {
   const { mode, hasAttachments = false, providerKeys = {}, personaSession } = input;
 
-  // Resolve the base provider for the requested mode
   let resolution = resolveBaseProvider(mode, hasAttachments, providerKeys);
 
-  // Enforce persona minimum tier
   if (personaSession) {
     const personaTier = personaSession.minimumModelTier;
     const personaTierRank = TIER_RANK[personaTier];
     const requestedTierRank = getModeTierRank(mode);
 
     if (personaTierRank > requestedTierRank) {
-      // Persona requires a more capable model — upgrade silently
       const upgraded = resolveBaseProvider(
         personaTier === 'reasoning' ? 'reasoning' : 'quality',
         hasAttachments,
@@ -78,9 +80,6 @@ export function resolveProviderForMode(input: ProviderResolutionInput): Provider
   return resolution;
 }
 
-/**
- * Map an agent mode to its tier rank for persona comparison.
- */
 function getModeTierRank(mode: AgentMode): number {
   switch (mode) {
     case 'fast':
@@ -95,51 +94,44 @@ function getModeTierRank(mode: AgentMode): number {
   }
 }
 
-/**
- * Base provider resolution without persona enforcement.
- */
 function resolveBaseProvider(
   mode: AgentMode,
   hasAttachments: boolean,
-  providerKeys: ProviderApiKeys
+  _providerKeys: ProviderApiKeys
 ): ProviderResolution {
 
-  if (mode === 'agentic') {
-    const nousConfigured = Boolean(providerKeys.nous || (process.env.NOUSE_API_KEY && process.env.NOUSE_API_KEY.trim()));
-    const anthropicConfigured = Boolean(providerKeys.anthropic);
-
-    if (nousConfigured || !anthropicConfigured) {
-      return {
-        providerId: 'hermes',
-        execution: {
-          provider: new HermesProvider(providerKeys),
-          modelId: AGENTIC_MODEL,
-        },
-        routing: {
-          selectionStrategy: 'primary_plus_fallback',
-          preferredModelRefs: ['hermes.agentic'],
-          fallbackModelRefs: ['gemini.quality', 'claude.agentic'],
-          embeddingLanePreference: ['primary_768', 'secondary_3072'],
-        },
-        reason: nousConfigured
-          ? 'agentic mode routes to Nous/Step via HermesProvider'
-          : 'agentic mode defaults to Hermes/Nous; no Anthropic key configured',
-      };
-    }
-
+  // Attachments always route to Gemini — DeepSeek/Kimi on NIM are text-only.
+  if (hasAttachments) {
     return {
-      providerId: 'claude',
+      providerId: 'gemini',
       execution: {
-        provider: new ClaudeProvider(providerKeys.anthropic),
-        modelId: 'claude-sonnet-4-6',
+        provider: new GeminiProvider(),
+        modelId: GEMINI_ATTACHMENT_MODEL,
       },
       routing: {
         selectionStrategy: 'single_model',
-        preferredModelRefs: ['claude.agentic'],
-        fallbackModelRefs: ['gemini.quality'],
+        preferredModelRefs: ['gemini.quality'],
+        fallbackModelRefs: [],
         embeddingLanePreference: ['primary_768', 'secondary_3072'],
       },
-      reason: 'agentic mode routes to Claude orchestrator because Anthropic key is configured',
+      reason: 'attachment-bearing request routes to Gemini (NIM DeepSeek/Kimi are text-only)',
+    };
+  }
+
+  if (mode === 'agentic') {
+    return {
+      providerId: 'nvidia-nim',
+      execution: {
+        provider: new NvidiaNimProvider(),
+        modelId: AGENTIC_MODEL,
+      },
+      routing: {
+        selectionStrategy: 'single_model',
+        preferredModelRefs: ['nvidia-nim.agentic'],
+        fallbackModelRefs: ['deepseek.quality'],
+        embeddingLanePreference: ['primary_768', 'secondary_3072'],
+      },
+      reason: 'agentic mode routes to Kimi K3 on NVIDIA NIM',
     };
   }
 
@@ -153,62 +145,43 @@ function resolveBaseProvider(
       routing: {
         selectionStrategy: 'single_model',
         preferredModelRefs: ['deepseek.reasoning'],
-        fallbackModelRefs: ['gemini.quality'],
+        fallbackModelRefs: [],
         embeddingLanePreference: ['primary_768', 'secondary_3072'],
       },
-      reason: 'reasoning mode routes to DeepSeek reasoning model',
+      reason: 'reasoning mode routes to DeepSeek V4 Pro on NVIDIA NIM',
     };
   }
 
   if (mode === 'fast') {
-    const hasOpenRouterKey = Boolean(providerKeys.openrouter);
-    if (hasOpenRouterKey) {
-      return {
-        providerId: 'openrouter',
-        execution: {
-          provider: new OpenRouterProvider(providerKeys),
-          modelId: OPENROUTER_FAST_MODEL,
-        },
-        routing: {
-          selectionStrategy: 'primary_plus_fallback',
-          preferredModelRefs: ['openrouter.fast'],
-          fallbackModelRefs: hasAttachments ? ['hermes.fast', 'gemini.quality'] : ['hermes.fast', 'gemini.fast_fallback'],
-          embeddingLanePreference: ['primary_768', 'secondary_3072'],
-        },
-        reason: 'fast mode routes to OpenRouter when a user API key is configured',
-      };
-    }
-
     return {
-      providerId: 'hermes',
+      providerId: 'deepseek',
       execution: {
-        provider: new HermesProvider(providerKeys),
+        provider: new DeepSeekProvider(),
         modelId: FAST_MODEL,
       },
       routing: {
-        selectionStrategy: 'primary_plus_fallback',
-        preferredModelRefs: ['hermes.fast'],
-        fallbackModelRefs: hasAttachments ? ['gemini.quality'] : ['gemini.fast_fallback'],
+        selectionStrategy: 'single_model',
+        preferredModelRefs: ['deepseek.fast'],
+        fallbackModelRefs: [],
         embeddingLanePreference: ['primary_768', 'secondary_3072'],
       },
-      reason: hasAttachments
-        ? 'fast mode routes to Hermes with stronger Gemini fallback for attachment-bearing requests'
-        : 'fast mode routes to Hermes with Gemini fast fallback',
+      reason: 'fast mode routes to DeepSeek V4 Pro on NVIDIA NIM',
     };
   }
 
+  // quality (default)
   return {
-    providerId: 'gemini',
+    providerId: 'deepseek',
     execution: {
-      provider: new GeminiProvider(providerKeys.google),
+      provider: new DeepSeekProvider(),
       modelId: QUALITY_MODEL,
     },
     routing: {
       selectionStrategy: 'single_model',
-      preferredModelRefs: ['gemini.quality'],
-      fallbackModelRefs: ['claude.agentic'],
+      preferredModelRefs: ['deepseek.quality'],
+      fallbackModelRefs: [],
       embeddingLanePreference: ['primary_768', 'secondary_3072'],
     },
-    reason: 'quality mode routes to Gemini quality model',
+    reason: 'quality mode routes to DeepSeek V4 Pro on NVIDIA NIM',
   };
 }
