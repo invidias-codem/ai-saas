@@ -110,7 +110,7 @@ export class ToolRouter {
     }
     try {
       const result = await searchCodebaseTool.execute(parsed.data, {} as any);
-      return { ok: true, data: result };
+      return { ok: true, output: JSON.stringify(result) };
     } catch (err: any) {
       return { ok: false, error: err?.message || 'search_codebase failed', code: 'INTERNAL_ERROR' };
     }
