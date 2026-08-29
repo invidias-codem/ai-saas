@@ -42,7 +42,7 @@ export type CodeAgentMode = 'fast' | 'quality' | 'agentic';
 export interface CodeModelConfig {
     id: string;
     name: string;
-    provider: 'gemini' | 'claude' | 'deepseek' | 'hermes' | 'openrouter';
+    provider: 'gemini' | 'deepseek' | 'hermes' | 'nvidia-nim';
     modelId: string;
     description: string;
     maxTokens: number;
