@@ -2,6 +2,7 @@ import type { IOHarness } from './IOHarness';
 import type { ToolExecutionResult } from './types';
 import { ReadFileArgsSchema, WriteFileArgsSchema, PatchFileArgsSchema, RunCommandArgsSchema } from './types';
 import { z } from 'zod';
+import { searchCodebaseTool } from '@/lib/agents/tools/searchCodebase';
 
 /**
  * The ToolRouter bridges the LLM's unstructured intent and the structured IOHarness.
@@ -35,6 +36,8 @@ export class ToolRouter {
           return await this.handlePatchFile(rawArgs);
         case 'run_command':
           return await this.handleRunCommand(rawArgs);
+        case 'search_codebase':
+          return await this.handleSearchCodebase(rawArgs);
         default:
           return { ok: false, error: `Unknown tool: ${toolName}`, code: 'UNKNOWN_TOOL' };
       }
@@ -97,5 +100,19 @@ export class ToolRouter {
     }
 
     return this.harness.executeCommandSecure(args.command, Math.ceil(args.timeoutMs / 1000), '', '');
+  }
+
+  private async handleSearchCodebase(rawArgs: unknown): Promise<ToolExecutionResult> {
+    const inputSchema = searchCodebaseTool.schema as z.ZodSchema<any>;
+    const parsed = inputSchema.safeParse(rawArgs);
+    if (!parsed.success) {
+      return { ok: false, error: `Schema validation failed: ${parsed.error.message}`, code: 'VALIDATION_ERROR', meta: { issues: parsed.error.issues } };
+    }
+    try {
+      const result = await searchCodebaseTool.execute(parsed.data, {} as any);
+      return { ok: true, data: result };
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'search_codebase failed', code: 'INTERNAL_ERROR' };
+    }
   }
 }
