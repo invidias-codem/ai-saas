@@ -226,12 +226,9 @@ export async function POST(request: Request) {
   const critic = new BoundaryCritic(activePersona);
 
   const allProviders = [
-    "anthropic-opus",
-    "anthropic-sonnet",
-    "anthropic-haiku",
-    "openrouter-heavy",
-    "openrouter-mid",
-    "openrouter-auto",
+    "deepseek-pro",
+    "deepseek-reasoning",
+    "kimi-k3",
     "gemini-ultra",
     "gemini-pro",
     "gemini-flash",
@@ -465,23 +462,17 @@ export async function POST(request: Request) {
 // ── Provider Dispatch ────────────────────────────────────────────────
 
 type ProviderKey =
-  | "anthropic-opus"
-  | "anthropic-sonnet"
-  | "anthropic-haiku"
-  | "openrouter-heavy"
-  | "openrouter-mid"
-  | "openrouter-auto"
+  | "deepseek-pro"
+  | "deepseek-reasoning"
+  | "kimi-k3"
   | "gemini-ultra"
   | "gemini-pro"
   | "gemini-flash";
 
-const PROVIDER_MODEL_MAP: Record<ProviderKey, { provider: "claude" | "openrouter" | "gemini"; model: string }> = {
-  "anthropic-opus": { provider: "claude", model: "claude-opus-4-20250514" },
-  "anthropic-sonnet": { provider: "claude", model: "claude-sonnet-4-20250514" },
-  "anthropic-haiku": { provider: "claude", model: "claude-3-5-haiku-20241022" },
-  "openrouter-heavy": { provider: "openrouter", model: "anthropic/opus" },
-  "openrouter-mid": { provider: "openrouter", model: "anthropic/sonnet" },
-  "openrouter-auto": { provider: "openrouter", model: "auto" },
+const PROVIDER_MODEL_MAP: Record<ProviderKey, { provider: "deepseek" | "nvidia-nim" | "gemini"; model: string }> = {
+  "deepseek-pro": { provider: "deepseek", model: "deepseek-ai/deepseek-v4-pro-0813" },
+  "deepseek-reasoning": { provider: "deepseek", model: "deepseek-ai/deepseek-v4-pro-0813" },
+  "kimi-k3": { provider: "nvidia-nim", model: "moonshotai/kimi-k3" },
   "gemini-ultra": { provider: "gemini", model: "gemini-2.5-ultra" },
   "gemini-pro": { provider: "gemini", model: "gemini-2.5-pro" },
   "gemini-flash": { provider: "gemini", model: "gemini-2.5-flash" },
@@ -504,11 +495,22 @@ async function dispatchProviderCall(
   prompt: string,
 ): Promise<string> {
   const providerKey = routerResult.provider as ProviderKey;
-  const mapping = PROVIDER_MODEL_MAP[providerKey] ?? { provider: "openrouter" as const, model: "auto" };
+  const mapping = PROVIDER_MODEL_MAP[providerKey] ?? { provider: "deepseek" as const, model: "deepseek-ai/deepseek-v4-pro-0813" };
 
-  if (mapping.provider === "openrouter") {
-    const { OpenRouterProvider } = await import("@/lib/llm/providers/openrouter");
-    const provider = new OpenRouterProvider();
+  if (mapping.provider === "deepseek") {
+    const { DeepSeekProvider } = await import("@/lib/llm/providers/deepseek");
+    const provider = new DeepSeekProvider();
+    const result = await provider.generateStream(
+      [{ role: "user", text: prompt }],
+      undefined,
+      { model: mapping.model, maxTokens: 2048 },
+    );
+    return collectStream(result.stream);
+  }
+
+  if (mapping.provider === "nvidia-nim") {
+    const { NvidiaNimProvider } = await import("@/lib/llm/providers/nvidiaNim");
+    const provider = new NvidiaNimProvider();
     const result = await provider.generateStream(
       [{ role: "user", text: prompt }],
       undefined,
@@ -520,17 +522,6 @@ async function dispatchProviderCall(
   if (mapping.provider === "gemini") {
     const { GeminiProvider } = await import("@/lib/llm/providers/gemini");
     const provider = new GeminiProvider();
-    const result = await provider.generateStream(
-      [{ role: "user", text: prompt }],
-      undefined,
-      { model: mapping.model, maxTokens: 2048 },
-    );
-    return collectStream(result.stream);
-  }
-
-  if (mapping.provider === "claude") {
-    const { ClaudeProvider } = await import("@/lib/llm/providers/claude");
-    const provider = new ClaudeProvider();
     const result = await provider.generateStream(
       [{ role: "user", text: prompt }],
       undefined,

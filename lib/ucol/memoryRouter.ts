@@ -1,5 +1,4 @@
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
-import { ClaudeProvider } from '@/lib/llm/providers/claude';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { UserProfile } from '@/lib/agents/profileBuilder';
 import { ExtractedFact } from '@/lib/agents/factExtractor';
@@ -41,12 +40,10 @@ export interface MemoryRouterResult {
  */
 export class MemoryRouter {
   private geminiProvider: GeminiProvider;
-  private claudeProvider: ClaudeProvider;
   private deepSeekProvider: DeepSeekProvider;
 
   constructor() {
     this.geminiProvider = new GeminiProvider();
-    this.claudeProvider = new ClaudeProvider();
     this.deepSeekProvider = new DeepSeekProvider();
   }
 
@@ -249,11 +246,11 @@ Then create a brief narrative profile (2-3 sentences) that captures their essenc
 
 Return as JSON with both "structured" and "narrative" fields.`;
 
-      const result = await this.claudeProvider.generateStream(
+      const result = await this.deepSeekProvider.generateStream(
         [{ role: 'user', text: `Analyze these conversations to build a nuanced user profile:\n\n${conversationContext}` }],
         systemPrompt,
         {
-          model: "claude-sonnet-4-5-20250929", 
+          model: "deepseek-ai/deepseek-v4-pro-0813",
           temperature: 0.6,
           maxTokens: 2048
         }
@@ -262,10 +259,10 @@ Return as JSON with both "structured" and "narrative" fields.`;
       const response = await this.streamToString(result.stream);
 
       return {
-        provider: 'claude',
-        model: 'claude-sonnet-4-5-20250929',
+        provider: 'deepseek',
+        model: 'deepseek-ai/deepseek-v4-pro-0813',
         result: response,
-        reasoning: 'Selected Claude Sonnet for nuanced, personality-rich profile generation'
+        reasoning: 'Selected DeepSeek V4 Pro for nuanced, personality-rich profile generation'
       };
 
     } else {

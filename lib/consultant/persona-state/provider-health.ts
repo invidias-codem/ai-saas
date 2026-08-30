@@ -99,15 +99,12 @@ export class ProviderHealthChecker {
 
   getModel(providerKey: string): string {
     const MODEL_MAP: Record<string, string> = {
-      "anthropic-opus": "claude-3-5-sonnet-20241022",
-      "anthropic-sonnet": "claude-3-5-sonnet-20241022",
-      "anthropic-haiku": "claude-3-5-haiku-20241022",
-      "openrouter-heavy": "openai/gpt-4o",
-      "openrouter-mid": "openai/gpt-4o-mini",
-      "openrouter-auto": "openai/gpt-4o-mini",
-      "gemini-ultra": "gemini-2.0-flash-exp",
-      "gemini-pro": "gemini-2.0-flash-exp",
-      "gemini-flash": "gemini-2.0-flash-exp",
+      "deepseek-pro": "deepseek-ai/deepseek-v4-pro-0813",
+      "deepseek-reasoning": "deepseek-ai/deepseek-v4-pro-0813",
+      "kimi-k3": "moonshotai/kimi-k3",
+      "gemini-ultra": "gemini-2.5-ultra",
+      "gemini-pro": "gemini-2.5-pro",
+      "gemini-flash": "gemini-2.5-flash",
     };
     return MODEL_MAP[providerKey] ?? providerKey;
   }
