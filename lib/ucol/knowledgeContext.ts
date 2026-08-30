@@ -1,15 +1,15 @@
 /**
- * lib/ucol/ollamaKnowledgeContext.ts
+ * lib/ucol/knowledgeContext.ts
  *
- * UCOL Knowledge Graph Bridge for Ollama/Hermes node.
+ * UCOL Knowledge Context Bridge — event-sourced memory grounding.
  *
- * Fetches relevant context from Tech Genie's Supabase knowledge graph
- * and vector store, then injects it into Ollama prompts — grounding
- * the local model in the same memory that Gemini and Claude use.
+ * Fetches relevant context from the Lattice knowledge substrate and injects
+ * it into the generation prompt. Reads the event-sourced projections
+ * (wm_nodes_view / match_memory_embeddings), NOT the legacy graph tables.
  *
  * Usage:
- *   const ctx = await buildOllamaKnowledgeContext(userId, query);
- *   // Prepend ctx to system instruction for Hermes
+ *   const ctx = await buildKnowledgeContext(userId, query);
+ *   // Prepend ctx.systemFragment to the system instruction.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -30,20 +30,20 @@ const MAX_FACTS = 8;
 const MAX_GRAPH_NODES = 5;
 const SIMILARITY_THRESHOLD = 0.72;
 
-export interface OllamaKnowledgeContext {
+export interface KnowledgeContext {
   systemFragment: string;  // ready to prepend to system instruction
   factsUsed: number;
   graphNodesUsed: number;
 }
 
 /**
- * Build a knowledge context string for the Ollama/Hermes node.
- * Pulls top-k facts from vector store + relevant graph nodes for the query.
+ * Build a memory-grounding context string.
+ * Pulls top-k facts from the vector store + relevant active graph nodes for the query.
  */
-export async function buildOllamaKnowledgeContext(
+export async function buildKnowledgeContext(
   userId: string,
   query: string
-): Promise<OllamaKnowledgeContext> {
+): Promise<KnowledgeContext> {
   const fragments: string[] = [];
   let factsUsed = 0;
   let graphNodesUsed = 0;
@@ -74,29 +74,29 @@ export async function buildOllamaKnowledgeContext(
       factsUsed = vectorFacts.length;
     }
   } catch (err) {
-    logger.warn('[OllamaKnowledgeCtx] Vector retrieval failed', err);
+    logger.warn('[KnowledgeContext] Vector retrieval failed', err);
   }
 
   try {
-    // 2. Knowledge graph: fetch high-confidence nodes related to query keywords
+    // 2. Event-sourced graph: fetch active nodes related to query keywords.
+    //    wm_nodes_view projects only non-OBSOLETED entities; filter active
+    //    (no expiry) entities matching the query keywords.
     const keywords = extractKeywords(query);
     if (keywords.length > 0) {
       const supabase = getSupabase();
       if (!supabase) return { systemFragment: '', factsUsed: 0, graphNodesUsed: 0 };
       const { data: graphNodes, error: graphErr } = await supabase
-        .from('graph_nodes')
-        .select('label, description, confidence, node_type')
+        .from('wm_nodes_view')
+        .select('name, type, description, trust_tier')
         .eq('user_id', userId)
-        .gte('confidence', 0.7)
-        .or(keywords.map((k) => `label.ilike.%${k}%`).join(','))
-        .order('confidence', { ascending: false })
+        .or(keywords.map((k) => `name.ilike.%${k}%`).join(','))
         .limit(MAX_GRAPH_NODES);
 
       if (!graphErr && graphNodes?.length) {
         const nodeLines = graphNodes
           .map(
-            (n: { label: string; description: string; confidence: number; node_type: string }) =>
-              `- [${n.node_type}] ${n.label}: ${n.description ?? 'no description'}`
+            (n: { name: string; type: string; description: string | null; trust_tier: string }) =>
+              `- [${n.type ?? 'entity'}] ${n.name}: ${n.description ?? 'no description'} (${n.trust_tier ?? 'UNVERIFIED'})`
           )
           .join('\n');
         fragments.push(`## Knowledge Graph Context\n${nodeLines}`);
@@ -104,7 +104,7 @@ export async function buildOllamaKnowledgeContext(
       }
     }
   } catch (err) {
-    logger.warn('[OllamaKnowledgeCtx] Graph retrieval failed', err);
+    logger.warn('[KnowledgeContext] Graph retrieval failed', err);
   }
 
   if (fragments.length === 0) {

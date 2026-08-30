@@ -1247,8 +1247,8 @@ export async function generateConversationReply(
             // hermes-local: self-hosted Docker Model Runner on Vast.ai — inject knowledge context
             if (decision.targetNode === 'hermes-local') {
               try {
-                const { buildOllamaKnowledgeContext } = await import('@/lib/ucol/ollamaKnowledgeContext');
-                const knowledgeCtx = await buildOllamaKnowledgeContext(userId, userQuery);
+                const { buildKnowledgeContext } = await import('@/lib/ucol/knowledgeContext');
+                const knowledgeCtx = await buildKnowledgeContext(userId, userQuery);
                 if (knowledgeCtx.factsUsed > 0 || knowledgeCtx.graphNodesUsed > 0) {
                   console.log(
                     `[UCOL/Ollama] Knowledge context injected — facts=${knowledgeCtx.factsUsed} nodes=${knowledgeCtx.graphNodesUsed}`

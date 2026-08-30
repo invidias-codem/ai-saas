@@ -16,7 +16,8 @@ import { BskyAgent, RichText } from '@atproto/api';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { classifyQuery } from '@/lib/ucol/agentRouter';
-import { buildOllamaKnowledgeContext } from '@/lib/ucol/ollamaKnowledgeContext';
+import { buildKnowledgeContext } from '@/lib/ucol/knowledgeContext';
+import { NvidiaNimProvider, NIM_MODEL_DEEPSEEK_V4_PRO } from '@/lib/llm/providers/nvidiaNim';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor';
 import { addNode, formatGraphContext, strengthenEdge, findRelatedEntities } from '@/lib/memory/graphStore';
@@ -28,13 +29,6 @@ import type {
   EngagementResult,
 } from './types';
 import { BlueskySafetyPolicy } from './BlueskySafetyPolicy';
-
-const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || '';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'hf.co/Qwen/Qwen3.5-35B-A3B';
-
-const NOUS_API_KEY = process.env.NOUSE_API_KEY;
-const NOUS_BASE_URL = process.env.HERMES_BASE_URL || 'https://inference-api.nousresearch.com/v1';
-const NOUS_MODEL = process.env.HERMES_MODEL_ID || 'Hermes-4.3-36B';
 
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RESPONSE_MAX_CHARS = 290;
@@ -464,7 +458,7 @@ export class BlueskyResponder {
     let enrichedSystem = systemPrompt;
     if (userId) {
       try {
-        const knowledgeCtx = await buildOllamaKnowledgeContext(userId, context);
+        const knowledgeCtx = await buildKnowledgeContext(userId, context);
         if (knowledgeCtx.systemFragment) {
           enrichedSystem = `${systemPrompt}\n\n${knowledgeCtx.systemFragment}`;
           console.log(JSON.stringify({
@@ -479,68 +473,44 @@ export class BlueskyResponder {
       }
     }
 
-    if (LAMBDA_OLLAMA_URL) {
-      try {
-        const raw = await this.generateWithOllamaEndpoint(LAMBDA_OLLAMA_URL, context, enrichedSystem);
-        console.log(JSON.stringify({ runId, event: 'responder_generate_ollama_success', source: 'lambda' }));
-        return this.enforceCharLimit(raw, context);
-      } catch (err: any) {
-        console.warn(JSON.stringify({ runId, event: 'responder_generate_ollama_error', source: 'lambda', error: formatError(err) }));
-      }
-    }
-
-    if (NOUS_API_KEY) {
-      try {
-        const raw = await this.generateWithOllamaEndpoint(NOUS_BASE_URL, context, enrichedSystem, {
-          apiKey: NOUS_API_KEY,
-          model: NOUS_MODEL,
-        });
-        return this.enforceCharLimit(raw, context);
-      } catch (err: any) {
-        console.warn(JSON.stringify({ runId, event: 'responder_generate_nous_error', error: formatError(err) }));
-      }
+    // Primary: NVIDIA NIM (DeepSeek-V4-Pro) — single-call pass with internal
+    // chain-of-thought. Falls back to Gemini on outage/rate-limit.
+    try {
+      const raw = await this.generateWithNIM(context, enrichedSystem);
+      console.log(JSON.stringify({ runId, event: 'responder_generate_nim_success' }));
+      return this.enforceCharLimit(raw, context);
+    } catch (err: any) {
+      console.warn(JSON.stringify({ runId, event: 'responder_generate_nim_error', error: formatError(err) }));
     }
 
     const geminiResponse = await this.generateWithGemini(context, enrichedSystem);
     return this.enforceCharLimit(geminiResponse, context);
   }
 
-  private async generateWithOllamaEndpoint(
-    baseUrl: string,
-    context: string,
-    systemPrompt: string,
-    opts?: { apiKey?: string; model?: string }
-  ): Promise<string> {
-    const model = opts?.model ?? OLLAMA_MODEL;
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (opts?.apiKey) headers['Authorization'] = `Bearer ${opts.apiKey}`;
+  private async generateWithNIM(context: string, systemPrompt: string): Promise<string> {
+    const provider = new NvidiaNimProvider();
+    const result = await provider.generateStream(
+      [{ role: 'user', text: context }],
+      systemPrompt,
+      {
+        model: NIM_MODEL_DEEPSEEK_V4_PRO,
+        maxTokens: 250,      // room for internal reasoning before the concise reply
+        temperature: 0.7,
+      }
+    );
 
-    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: context },
-        ],
-        max_tokens: 150,
-        temperature: 0.75,
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => response.statusText);
-      throw new Error(`Ollama endpoint ${response.status}: ${errText}`);
+    const reader = result.stream.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value, { stream: true });
     }
-
-    const data = await response.json();
-    const text = data?.choices?.[0]?.message?.content;
-    if (typeof text !== 'string' || !text.trim()) {
-      throw new Error('Endpoint returned empty content');
-    }
-    return text.trim();
+    // Strip any residual reasoning wrapper before enforcing the char limit.
+    const cleaned = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+    if (!cleaned) throw new Error('NIM returned empty content');
+    return cleaned;
   }
 
   private async generateWithGemini(context: string, systemPrompt: string): Promise<string> {
