@@ -59,19 +59,24 @@ export async function POST(req: Request) {
 
     const body = await req.json();
 
+    // Diagnostic hardening: check the RAW incoming payload (pre-decompression)
+    // for a compression-metadata mismatch, so we can catch a client that
+    // flagged compression but dropped the flag, or vice versa. Raw base64 is
+    // the client's normal post-strip form (the data: URI prefix is removed
+    // client-side), so absence of a "data:" prefix is EXPECTED and NOT a warning.
+    const rawFileData = body.fileData as
+      | { base64Data?: string; __compressed?: boolean; __encoding?: string }
+      | undefined;
+
+    if (rawFileData?.__compressed && !rawFileData.base64Data) {
+      console.warn('[Analyze] Payload flagged as compressed but no base64Data present.');
+    }
+
     const normalized = {
       ...body,
       mode: body.fileData ? 'quality' : (body.mode || 'quality'),
       fileData: body.fileData ? decompressLzStringPayload(body.fileData) : undefined,
     };
-
-    // Optional Hardening: warn if payload looks like compressed data but
-    // decompression was skipped or never flagged.
-    if (normalized.fileData?.base64Data && !normalized.fileData.__compressed) {
-      if (!normalized.fileData.base64Data.startsWith('data:')) {
-        console.warn('[Analyze] Payload missing data URI prefix; potential compression mismatch.');
-      }
-    }
 
     if (normalized.fileData) {
       const pdfCheck = validatePdfFileData(normalized.fileData);
