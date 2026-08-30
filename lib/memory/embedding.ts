@@ -1,25 +1,21 @@
 /**
- * embedding.ts — Unified Embedding Provider
+ * embedding.ts — Gemini Embedding Provider
  *
- * Primary:  Vast.ai / self-hosted embeddings (768-dim)
- * Secondary: Gemini embeddings (3072-dim)
+ * Single provider: Gemini (gemini-embedding-2-preview, 3072-dim).
  *
- * Important architectural shift:
- * Embeddings are no longer treated as anonymous vectors.
- * They are provider-specific retrieval artifacts with an explicit
- * dimension and retrieval lane.
+ * The self-hosted Vast.ai / Ollama path (LAMBDA_OLLAMA_URL / LAMBDA_EMBED_URL)
+ * has been removed. Embeddings route directly and exclusively to Gemini; the
+ * only defensive layer left is exponential backoff for 429s and a degraded
+ * zero-vector fallback (keyword/BM25) when Gemini itself is unresolvable.
  */
 
-const PRIMARY_EMBEDDING_DIM = 768;
-const SECONDARY_EMBEDDING_DIM = 3072;
+const EMBEDDING_DIM = 3072;
 const L1_CACHE_TTL_MS = 1000 * 60 * 60;
 const L2_CACHE_TTL_SEC = 60 * 60 * 24;
 const MAX_L1_CACHE_SIZE = 100;
-const OLLAMA_TIMEOUT_MS = 10_000;
 const EMBED_RETRY_MAX_ATTEMPTS = 4;
 const EMBED_RETRY_BASE_MS = 500;
 const EMBED_RETRY_MAX_MS = 4000;
-const FALLBACK_QUEUE_MIN_DELAY_MS = 300;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,84 +51,18 @@ async function withExponentialBackoff<T>(fn: () => Promise<T>): Promise<T> {
   }
   throw lastError;
 }
+
 const REDIS_KEY_PREFIX = 'embed:v2:';
-const CIRCUIT_STATE_PREFIX = 'embed:circuit:';
-
-type CircuitState = 'closed' | 'open' | 'half-open';
-
-interface CircuitWindow {
-  state: CircuitState;
-  failures: number[];
-  openedAt?: number;
-}
-
-const inMemoryCircuit = new Map<string, CircuitWindow>();
-
-function getCircuitKey(provider: 'self_hosted' | 'gemini'): string {
-  return `${CIRCUIT_STATE_PREFIX}${provider}`;
-}
-
-function isCircuitOpen(key: string): boolean {
-  const window = inMemoryCircuit.get(key);
-  if (!window) return false;
-
-  const now = Date.now();
-  if (window.state === 'open') {
-    if (window.openedAt && now - window.openedAt > 5 * 60_000) {
-      window.state = 'half-open';
-      window.failures = [];
-      window.openedAt = undefined;
-      return false;
-    }
-    return true;
-  }
-
-  return false;
-}
-
-function recordCircuitFailure(key: string, now: number): boolean {
-  const entry = inMemoryCircuit.get(key) || { state: 'closed' as CircuitState, failures: [] as number[] };
-  entry.failures = entry.failures.filter(ts => now - ts < 60_000);
-  entry.failures.push(now);
-
-  if (entry.failures.length >= 3 && entry.state !== 'open') {
-    entry.state = 'open';
-    entry.openedAt = now;
-    console.warn(`[Embedding] Circuit opened for ${key}`);
-  }
-
-  inMemoryCircuit.set(key, entry);
-  return entry.state === 'open';
-}
-
-function recordCircuitSuccess(key: string): void {
-  const entry = inMemoryCircuit.get(key);
-  if (!entry) return;
-  entry.state = 'closed';
-  entry.failures = [];
-  entry.openedAt = undefined;
-  inMemoryCircuit.set(key, entry);
-}
-
-const fallbackQueues = new Map<string, Promise<EmbeddingResult>>();
-
-async function runFallbackLimited(fn: () => Promise<EmbeddingResult>): Promise<EmbeddingResult> {
-  const key = 'fallback:gemini';
-  const prev = fallbackQueues.get(key) || Promise.resolve({} as EmbeddingResult);
-  const next = prev.then(() => sleep(FALLBACK_QUEUE_MIN_DELAY_MS)).then(fn);
-  fallbackQueues.set(key, next);
-  return next;
-}
 
 export type EmbeddingDimension = 768 | 3072;
-export type EmbeddingProvider = 'self_hosted' | 'gemini' | 'zero_vector';
+export type EmbeddingProvider = 'gemini' | 'zero_vector';
 
 export type EmbeddingResult = {
   vector: number[];
   dimension: EmbeddingDimension;
   provider: EmbeddingProvider;
   model: string;
-  /** True when all providers failed and this is a lexical-fallback placeholder.
+  /** True when Gemini failed and this is a lexical-fallback placeholder.
    *  Callers should degrade to keyword/BM25 search rather than treating the
    *  zero vector as a real embedding. */
   degraded?: boolean;
@@ -185,8 +115,8 @@ async function getL2Cached(key: string): Promise<EmbeddingResult | null> {
     if (
       parsed &&
       Array.isArray(parsed.vector) &&
-      (parsed.dimension === PRIMARY_EMBEDDING_DIM || parsed.dimension === SECONDARY_EMBEDDING_DIM) &&
-      parsed.vector.length === parsed.dimension
+      parsed.dimension === EMBEDDING_DIM &&
+      parsed.vector.length === EMBEDDING_DIM
     ) {
       return parsed as EmbeddingResult;
     }
@@ -207,97 +137,12 @@ async function setL2Cache(key: string, result: EmbeddingResult): Promise<void> {
   }
 }
 
-function ensureHttps(rawUrl: string): string {
-  if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
-  return `https://${rawUrl}`;
-}
-
-function buildEmbeddingResult(
-  vector: number[],
-  provider: EmbeddingProvider,
-  model: string
-): EmbeddingResult {
+function buildEmbeddingResult(vector: number[], provider: EmbeddingProvider, model: string): EmbeddingResult {
   const dimension = vector.length;
-  if (dimension !== PRIMARY_EMBEDDING_DIM && dimension !== SECONDARY_EMBEDDING_DIM) {
-    throw new Error(`[Embedding] Unsupported embedding dimension: ${dimension}`);
+  if (dimension !== EMBEDDING_DIM) {
+    throw new Error(`[Embedding] Unsupported embedding dimension: ${dimension} (expected ${EMBEDDING_DIM})`);
   }
-  return {
-    vector,
-    dimension: dimension as EmbeddingDimension,
-    provider,
-    model,
-  };
-}
-
-async function embedWithLambda(text: string): Promise<EmbeddingResult> {
-  if (isCircuitOpen(getCircuitKey('self_hosted'))) {
-    throw new Error('[Embedding] Self-hosted circuit open');
-  }
-
-  const embedUrl = process.env.LAMBDA_EMBED_URL ? ensureHttps(process.env.LAMBDA_EMBED_URL) : undefined;
-  const ollamaUrl = process.env.LAMBDA_OLLAMA_URL ? ensureHttps(process.env.LAMBDA_OLLAMA_URL) : undefined;
-
-  if (embedUrl) {
-    const url = `${embedUrl.replace(/\/$/, '')}/v1/embeddings`;
-    const model = process.env.EMBED_MODEL || 'BAAI/bge-base-en-v1.5';
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: text, model }),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(`[Embedding] Lambda embed server HTTP ${res.status}: ${body}`);
-      }
-      const json = await res.json();
-      const embedding = json?.data?.[0]?.embedding;
-      if (!Array.isArray(embedding) || embedding.length === 0) {
-        throw new Error('[Embedding] Lambda embed server returned empty embedding');
-      }
-      recordCircuitSuccess(getCircuitKey('self_hosted'));
-      return buildEmbeddingResult(embedding as number[], 'self_hosted', model);
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  if (ollamaUrl) {
-    const model = process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text';
-    const url = `${ollamaUrl.replace(/\/$/, '')}/api/embeddings`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt: text }),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        const now = Date.now();
-        const opened = recordCircuitFailure(getCircuitKey('self_hosted'), now);
-        if (opened || res.status === 404) {
-          console.warn(`[Embedding] Ollama HTTP ${res.status}: ${body}`);
-          throw new Error(`[Embedding] Ollama HTTP ${res.status}: ${body}`);
-        }
-      }
-      const json = await res.json();
-      if (!Array.isArray(json.embedding) || json.embedding.length === 0) {
-        throw new Error('[Embedding] Ollama returned empty embedding');
-      }
-      recordCircuitSuccess(getCircuitKey('self_hosted'));
-      return buildEmbeddingResult(json.embedding as number[], 'self_hosted', model);
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  throw new Error('[Embedding] Neither LAMBDA_EMBED_URL nor LAMBDA_OLLAMA_URL is set');
+  return { vector, dimension, provider, model };
 }
 
 async function embedWithGemini(text: string): Promise<EmbeddingResult> {
@@ -305,45 +150,26 @@ async function embedWithGemini(text: string): Promise<EmbeddingResult> {
     throw new Error('[Embedding] GOOGLE_API_KEY not set');
   }
 
-  if (isCircuitOpen(getCircuitKey('gemini'))) {
-    throw new Error('[Embedding] Gemini circuit open');
-  }
-
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
   const modelName = 'gemini-embedding-2-preview';
   const model = genAI.getGenerativeModel({ model: modelName });
 
-  try {
-    const result = await withExponentialBackoff(async () => {
-      const result = await model.embedContent(text);
-      const values = result.embedding?.values ?? [];
-      if (values.length === 0) throw new Error('[Embedding] Gemini returned empty embedding');
-      return buildEmbeddingResult(values, 'gemini', modelName);
-    });
-    recordCircuitSuccess(getCircuitKey('gemini'));
-    return result;
-  } catch (err: any) {
-    const status = err?.status;
-    const message = String(err?.message || err);
-    if (status === 429 || message.includes('429') || /rate ?limit/i.test(message)) {
-      const now = Date.now();
-      const opened = recordCircuitFailure(getCircuitKey('gemini'), now);
-      if (opened) {
-        console.warn('[Embedding] Gemini rate limited — circuit opened');
-      }
-    }
-    throw err;
-  }
+  const result = await withExponentialBackoff(async () => {
+    const result = await model.embedContent(text);
+    const values = result.embedding?.values ?? [];
+    if (values.length === 0) throw new Error('[Embedding] Gemini returned empty embedding');
+    return buildEmbeddingResult(values, 'gemini', modelName);
+  });
+
+  return result;
 }
 
 export async function generateEmbeddingWithMetadata(text: string): Promise<EmbeddingResult> {
   const cacheKey = text.substring(0, 500);
 
   const l1Hit = getL1Cached(cacheKey);
-  if (l1Hit) {
-    return l1Hit;
-  }
+  if (l1Hit) return l1Hit;
 
   const l2Hit = await getL2Cached(cacheKey);
   if (l2Hit) {
@@ -353,32 +179,22 @@ export async function generateEmbeddingWithMetadata(text: string): Promise<Embed
 
   let result: EmbeddingResult | null = null;
 
-  if (process.env.LAMBDA_EMBED_URL || process.env.LAMBDA_OLLAMA_URL) {
-    try {
-      result = await embedWithLambda(text);
-    } catch (err) {
-      console.warn('[Embedding] Vast.ai / self-hosted failed, trying fallback:', err);
-    }
-  }
-
-  if (!result && process.env.GOOGLE_API_KEY) {
-    try {
-      result = await runFallbackLimited(() => embedWithGemini(text));
-    } catch (err: any) {
-      const message = String(err?.message || err);
-      if (message.includes('429') || /rate ?limit/i.test(message)) {
-        console.warn('[Embedding] Gemini rate limited');
-      } else if (!message.includes('Gemini circuit open')) {
-        console.warn('[Embedding] Gemini failed:', err);
-      }
+  try {
+    result = await embedWithGemini(text);
+  } catch (err: any) {
+    const message = String(err?.message || err);
+    if (isRateLimitError(err)) {
+      console.warn('[Embedding] Gemini rate limited');
+    } else {
+      console.warn('[Embedding] Gemini embedding failed:', message);
     }
   }
 
   if (!result) {
-    console.warn('[Embedding] All providers failed — returning degraded zero vector (keyword fallback)');
+    console.warn('[Embedding] Gemini failed — returning degraded zero vector (keyword fallback)');
     result = {
-      vector: new Array(PRIMARY_EMBEDDING_DIM).fill(0),
-      dimension: PRIMARY_EMBEDDING_DIM,
+      vector: new Array(EMBEDDING_DIM).fill(0),
+      dimension: EMBEDDING_DIM,
       provider: 'zero_vector',
       model: 'zero-vector-fallback',
       degraded: true,
@@ -396,7 +212,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 export function getEmbeddingDimension(): number {
-  return PRIMARY_EMBEDDING_DIM;
+  return EMBEDDING_DIM;
 }
 
 export function clearEmbeddingCache(): void {
