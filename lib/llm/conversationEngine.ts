@@ -145,7 +145,10 @@ function getGoogleApiKey(): string {
 }
 
 const FAST_MODEL = process.env.HERMES_MODEL_ID || "hermes3";
-const AGENTIC_MODEL = process.env.LATTICE_AGENTIC_MODEL || "Hermes-4-70B";
+// Agentic execution runs through the Vertex AI ReAct loop, which requires a
+// Gemini model (native functionCall/tools protocol). Never pass a non-Gemini
+// id here — vertexAI.getGenerativeModel throws on unknown model IDs.
+const AGENTIC_MODEL = process.env.LATTICE_AGENTIC_MODEL || "gemini-2.5-pro";
 
 function getSystemInstruction() {
   return `You are 'Genie', a highly capable AI assistant equipped with dynamic tool integrations.

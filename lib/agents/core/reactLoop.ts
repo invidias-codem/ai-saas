@@ -73,7 +73,19 @@ export async function runReActLoop(
   }
 
   const vertexAI = new VertexAI({ project, location, googleAuthOptions });
-  const model = vertexAI.getGenerativeModel({ model: modelName });
+
+  // Guard: the ReAct loop's functionCall/tools protocol requires a Gemini
+  // model on Vertex. If a non-Gemini id arrives (e.g. a stray Hermes/DeepSeek
+  // id from a stale env default), fall back to a valid Gemini model rather
+  // than letting vertexAI.getGenerativeModel throw an invalid-model error.
+  const KNOWN_GEMINI_PREFIX = /^(gemini|models\/gemini)/i;
+  let resolvedModelName = modelName;
+  if (!KNOWN_GEMINI_PREFIX.test(modelName)) {
+    logger.warn(`[ReActLoop] Received non-Gemini model id "${modelName}" — falling back to gemini-2.5-flash`);
+    resolvedModelName = 'gemini-2.5-flash';
+  }
+
+  const model = vertexAI.getGenerativeModel({ model: resolvedModelName });
 
   const trajectory: TrajectoryStep[] = [];
   let loopCount = 0;
