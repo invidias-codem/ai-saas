@@ -145,7 +145,12 @@ EXECUTE FUNCTION enforce_wm_delta_on_mutation();
 
 -- ============================================================
 -- 3. WM_EDGES_VIEW — expose causal/temporal fields
+--    NOTE: DROP before CREATE OR REPLACE because the live view has a
+--    divergent column set (a hand-edited `weight` column at position 6),
+--    and CREATE OR REPLACE VIEW cannot rename columns (Postgres 42P16).
 -- ============================================================
+
+DROP VIEW IF EXISTS wm_edges_view;
 
 CREATE OR REPLACE VIEW wm_edges_view AS
 SELECT
@@ -251,8 +256,8 @@ SELECT
   'ASSERTED'::wm_event_type,
   jsonb_build_object(
     'entity_type', 'edge',
-    'source_node_id', ke.source_node_id::text,
-    'target_node_id', ke.target_node_id::text,
+    'source_node_id', ke.source_id::text,
+    'target_node_id', ke.target_id::text,
     'relation', ke.relationship_type,
     'relationship_type', ke.relationship_type,
     'causal_strength', COALESCE(ke.causal_strength, 0.5),
