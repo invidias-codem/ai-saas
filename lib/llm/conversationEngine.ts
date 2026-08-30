@@ -15,9 +15,7 @@ import { Source } from '../ragMemory';
 import { env } from "@/lib/env";
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
 import { GeminiProvider } from "./providers/gemini";
-import { ClaudeProvider } from "./providers/claude";
 import { DeepSeekProvider } from "./providers/deepseek";
-import { HermesProvider } from "./providers/hermes";
 import {
   captureMemory,
   extractTags,
@@ -360,10 +358,7 @@ export async function generateConversationReply(
     }
     // ------------------------------------
 
-    // Phase 1: use HermesProvider for agentic execution.
-    // On-reasoning is wired to console logging only; SSE emission will come in Phase 2.
-    const { HermesProvider } = await import('@/lib/llm/providers/hermes');
-    const agentProvider = new HermesProvider({});
+    // Phase 1: agentic execution runs through the ReAct loop (Vertex AI model resolution).
     const onReasoning = (text: string) => {
       console.log(`[AgenticReasoning] ${String(text).slice(0, 400)}`);
     };
@@ -441,7 +436,7 @@ export async function generateConversationReply(
       stream,
       sources: [],
       debug: {
-        model: `hermes/${AGENTIC_MODEL}`,
+        model: `deepseek/${AGENTIC_MODEL}`,
         userQuery,
       }
     };
@@ -1243,23 +1238,6 @@ export async function generateConversationReply(
               sanitizedQuery, // Pass sanitized query only — NOT cleanedFullText (prevents context distraction)
               factsForRouting,
             );
-
-            // hermes-local: self-hosted Docker Model Runner on Vast.ai — inject knowledge context
-            if (decision.targetNode === 'hermes-local') {
-              try {
-                const { buildOllamaKnowledgeContext } = await import('@/lib/ucol/ollamaKnowledgeContext');
-                const knowledgeCtx = await buildOllamaKnowledgeContext(userId, userQuery);
-                if (knowledgeCtx.factsUsed > 0 || knowledgeCtx.graphNodesUsed > 0) {
-                  console.log(
-                    `[UCOL/Ollama] Knowledge context injected — facts=${knowledgeCtx.factsUsed} nodes=${knowledgeCtx.graphNodesUsed}`
-                  );
-                }
-                // HermesProvider picks up Vast.ai Docker Model Runner automatically via LAMBDA_OLLAMA_URL env
-                // Knowledge context is surfaced in the next turn via the existing context pipeline
-              } catch (e) {
-                console.warn('[UCOL/Ollama] Knowledge context injection failed (non-blocking):', e);
-              }
-            }
 
             if (decision.targetNode === 'jklaw') {
               const { getAgentRouter } = await import('@/lib/ucol/agentRouter');
