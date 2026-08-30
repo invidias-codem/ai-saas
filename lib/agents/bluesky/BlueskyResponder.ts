@@ -14,10 +14,9 @@
 
 import { BskyAgent, RichText } from '@atproto/api';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { classifyQuery } from '@/lib/ucol/agentRouter';
 import { buildKnowledgeContext } from '@/lib/ucol/knowledgeContext';
-import { NvidiaNimProvider, NIM_MODEL_DEEPSEEK_V4_PRO } from '@/lib/llm/providers/nvidiaNim';
+import { nimGenerate } from './nimGenerate';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor';
 import { addNode, formatGraphContext, strengthenEdge, findRelatedEntities } from '@/lib/memory/graphStore';
@@ -473,58 +472,10 @@ export class BlueskyResponder {
       }
     }
 
-    // Primary: NVIDIA NIM (DeepSeek-V4-Pro) — single-call pass with internal
-    // chain-of-thought. Falls back to Gemini on outage/rate-limit.
-    try {
-      const raw = await this.generateWithNIM(context, enrichedSystem);
-      console.log(JSON.stringify({ runId, event: 'responder_generate_nim_success' }));
-      return this.enforceCharLimit(raw, context);
-    } catch (err: any) {
-      console.warn(JSON.stringify({ runId, event: 'responder_generate_nim_error', error: formatError(err) }));
-    }
-
-    const geminiResponse = await this.generateWithGemini(context, enrichedSystem);
-    return this.enforceCharLimit(geminiResponse, context);
-  }
-
-  private async generateWithNIM(context: string, systemPrompt: string): Promise<string> {
-    const provider = new NvidiaNimProvider();
-    const result = await provider.generateStream(
-      [{ role: 'user', text: context }],
-      systemPrompt,
-      {
-        model: NIM_MODEL_DEEPSEEK_V4_PRO,
-        maxTokens: 250,      // room for internal reasoning before the concise reply
-        temperature: 0.7,
-      }
-    );
-
-    const reader = result.stream.getReader();
-    const decoder = new TextDecoder();
-    let text = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      text += decoder.decode(value, { stream: true });
-    }
-    // Strip any residual reasoning wrapper before enforcing the char limit.
-    const cleaned = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
-    if (!cleaned) throw new Error('NIM returned empty content');
-    return cleaned;
-  }
-
-  private async generateWithGemini(context: string, systemPrompt: string): Promise<string> {
-    const effectiveApiKey = process.env.BLUESKY_GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
-    const gemini = new GoogleGenerativeAI(effectiveApiKey);
-    const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: context }] }],
-      systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
-      generationConfig: { maxOutputTokens: 150, temperature: 0.7 },
-    });
-
-    return result.response.text().trim();
+    // Unified inference: NIM (DeepSeek-V4-Pro) primary, Gemini fallback.
+    // Single source of truth in nimGenerate.ts.
+    const raw = await nimGenerate(context, enrichedSystem);
+    return this.enforceCharLimit(raw, context);
   }
 
   private enforceCharLimit(raw: string, sourceText: string): string {
