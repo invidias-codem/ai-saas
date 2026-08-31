@@ -43,18 +43,15 @@ export const TASK_TIER_REQUIREMENTS: Record<TaskType, TierFloor> = {
 
 export const PROVIDER_FALLBACK_CHAINS: Record<TierFloor, string[]> = {
   BASE: [
-    "openrouter-auto",
-    "anthropic-haiku",
     "gemini-flash",
+    "deepseek",
   ],
   STANDARD: [
-    "anthropic-sonnet",
-    "openrouter-mid",
+    "deepseek",
     "gemini-pro",
   ],
   HIGH_COMPUTE: [
-    "anthropic-opus",
-    "openrouter-heavy",
+    "deepseek",
     "gemini-ultra",
   ],
 };

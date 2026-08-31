@@ -200,20 +200,8 @@ jest.mock('@/lib/llm/providers/gemini', () => ({
   })),
 }));
 
-jest.mock('@/lib/llm/providers/claude', () => ({
-  ClaudeProvider: jest.fn().mockImplementation(() => ({
-    generateStream: jest.fn(async () => ({ stream: mockStream })),
-  })),
-}));
-
 jest.mock('@/lib/llm/providers/deepseek', () => ({
   DeepSeekProvider: jest.fn().mockImplementation(() => ({
-    generateStream: jest.fn(async () => ({ stream: mockStream })),
-  })),
-}));
-
-jest.mock('@/lib/llm/providers/hermes', () => ({
-  HermesProvider: jest.fn().mockImplementation(() => ({
     generateStream: jest.fn(async () => ({ stream: mockStream })),
   })),
 }));

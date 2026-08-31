@@ -1,5 +1,4 @@
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
-import { ClaudeProvider } from '@/lib/llm/providers/claude';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { UserProfile } from '@/lib/agents/profileBuilder';
 import { ExtractedFact } from '@/lib/agents/factExtractor';
@@ -36,17 +35,14 @@ export interface MemoryRouterResult {
  * 
  * Routes memory processing tasks to the most appropriate model:
  * - Gemini Flash: Fast fact retrieval and embedding generation
- * - DeepSeek: Context synthesis when in reasoning mode
- * - Claude: Nuanced user profile generation
+ * - DeepSeek V4 Pro (NVIDIA NIM): Context synthesis and profile generation
  */
 export class MemoryRouter {
   private geminiProvider: GeminiProvider;
-  private claudeProvider: ClaudeProvider;
   private deepSeekProvider: DeepSeekProvider;
 
   constructor() {
     this.geminiProvider = new GeminiProvider();
-    this.claudeProvider = new ClaudeProvider();
     this.deepSeekProvider = new DeepSeekProvider();
   }
 
@@ -213,7 +209,7 @@ Provide a concise, well-reasoned summary of the relevant context.`;
   }
 
   /**
-   * Routes profile generation tasks - uses Claude for nuanced profiles, Gemini for speed
+   * Routes profile generation tasks - uses DeepSeek for nuanced profiles, Gemini for speed
    */
   private async routeProfileTask(
     payload: MemoryTaskPayload,
@@ -228,7 +224,7 @@ Provide a concise, well-reasoned summary of the relevant context.`;
       `Conversation (${conv.created_at}): ${conv.title}\nSummary: ${conv.summary}`
     ).join('\n\n');
 
-    // Use Claude for nuanced profile generation when requested
+    // Use DeepSeek (NVIDIA NIM) for nuanced profile generation when requested
     if (options.requireNuance) {
       const systemPrompt = `You are analyzing user conversations to build a comprehensive, nuanced user profile. Your goal is to create a rich, personalized understanding of this user that goes beyond just facts.
 
@@ -249,11 +245,11 @@ Then create a brief narrative profile (2-3 sentences) that captures their essenc
 
 Return as JSON with both "structured" and "narrative" fields.`;
 
-      const result = await this.claudeProvider.generateStream(
+      const result = await this.deepSeekProvider.generateStream(
         [{ role: 'user', text: `Analyze these conversations to build a nuanced user profile:\n\n${conversationContext}` }],
         systemPrompt,
         {
-          model: "claude-sonnet-4-5-20250929", 
+          model: "deepseek-v4-pro",
           temperature: 0.6,
           maxTokens: 2048
         }
@@ -262,10 +258,10 @@ Return as JSON with both "structured" and "narrative" fields.`;
       const response = await this.streamToString(result.stream);
 
       return {
-        provider: 'claude',
-        model: 'claude-sonnet-4-5-20250929',
+        provider: 'deepseek',
+        model: 'deepseek-v4-pro',
         result: response,
-        reasoning: 'Selected Claude Sonnet for nuanced, personality-rich profile generation'
+        reasoning: 'Selected DeepSeek V4 Pro for nuanced, personality-rich profile generation'
       };
 
     } else {

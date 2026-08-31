@@ -15,9 +15,8 @@ import { Source } from '../ragMemory';
 import { env } from "@/lib/env";
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
 import { GeminiProvider } from "./providers/gemini";
-import { ClaudeProvider } from "./providers/claude";
 import { DeepSeekProvider } from "./providers/deepseek";
-import { HermesProvider } from "./providers/hermes";
+import { NIM_MODEL_KIMI_K3 } from "./providers/nvidiaNim";
 import {
   captureMemory,
   extractTags,
@@ -146,9 +145,6 @@ function getGoogleApiKey(): string {
   return key;
 }
 
-const FAST_MODEL = process.env.HERMES_MODEL_ID || "hermes3";
-const AGENTIC_MODEL = process.env.LATTICE_AGENTIC_MODEL || "Hermes-4-70B";
-
 function getSystemInstruction() {
   return `You are 'Genie', a highly capable AI assistant equipped with dynamic tool integrations.
 Current Date: ${new Date().toLocaleDateString("en-US", {
@@ -200,7 +196,7 @@ export async function generateConversationReply(
   const nativeProviderKeys = await (await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys);
 
   // ---------------------------------------------------------
-  // UCOL AGENTIC MODE — Claude + ReAct Loop
+  // UCOL AGENTIC MODE — Kimi K3 (NVIDIA NIM) + ReAct Loop
   // Tools: web_search, write_research_paper, write_creative_content
   // ---------------------------------------------------------
   if (agentMode === 'agentic') {
@@ -360,10 +356,7 @@ export async function generateConversationReply(
     }
     // ------------------------------------
 
-    // Phase 1: use HermesProvider for agentic execution.
-    // On-reasoning is wired to console logging only; SSE emission will come in Phase 2.
-    const { HermesProvider } = await import('@/lib/llm/providers/hermes');
-    const agentProvider = new HermesProvider({});
+    // Agentic execution uses the NVIDIA NIM Kimi K3 model (see providerResolver.ts).
     const onReasoning = (text: string) => {
       console.log(`[AgenticReasoning] ${String(text).slice(0, 400)}`);
     };
@@ -415,7 +408,7 @@ export async function generateConversationReply(
             promotionRejectionCount: 0,
           };
 
-          const reactResult = await runReActLoop(promptInput, agentContext, registry, AGENTIC_MODEL);
+          const reactResult = await runReActLoop(promptInput, agentContext, registry, NIM_MODEL_KIMI_K3);
           const isSuccess = reactResult.status === 'success';
 
           const donePayload = {
@@ -441,7 +434,7 @@ export async function generateConversationReply(
       stream,
       sources: [],
       debug: {
-        model: `hermes/${AGENTIC_MODEL}`,
+        model: `nvidia-nim/${NIM_MODEL_KIMI_K3}`,
         userQuery,
       }
     };
@@ -591,7 +584,7 @@ export async function generateConversationReply(
         confidenceOverrideApplied = true;
 
         console.log(
-          `[ConversationEngine] Confidence override: ${FAST_MODEL} → ${actualModelId}` +
+          `[ConversationEngine] Confidence override → ${actualModelId}` +
           ` (ctx_conf=${confidenceSignal.contextConfidence.toFixed(3)},` +
           ` tier=${confidenceSignal.recommendedTier},` +
           ` facts=${confidenceSignal.factCount})`
@@ -862,10 +855,6 @@ export async function generateConversationReply(
   })();
   // ─────────────────────────────────────────────────────────────────────────────
 
-  // T-040: For Hermes/fast mode, pass agentic flag so the model executes
-  // rather than describing what it would do. Also forward any tools defined
-  // for this mode so Hermes can make function calls when appropriate.
-  const isHermesMode = agentMode === 'fast';
   let streamResult;
   const trace = createTrace({
     traceName: 'conversation',
@@ -883,7 +872,6 @@ export async function generateConversationReply(
       model: actualModelId,
       temperature: 0.9,
       maxTokens: 2048,
-      ...(isHermesMode ? { agentic: true } : {}),
     });
     try {
       updateTrace({
@@ -1243,23 +1231,6 @@ export async function generateConversationReply(
               sanitizedQuery, // Pass sanitized query only — NOT cleanedFullText (prevents context distraction)
               factsForRouting,
             );
-
-            // hermes-local: self-hosted Docker Model Runner on Vast.ai — inject knowledge context
-            if (decision.targetNode === 'hermes-local') {
-              try {
-                const { buildKnowledgeContext } = await import('@/lib/ucol/knowledgeContext');
-                const knowledgeCtx = await buildKnowledgeContext(userId, userQuery);
-                if (knowledgeCtx.factsUsed > 0 || knowledgeCtx.graphNodesUsed > 0) {
-                  console.log(
-                    `[UCOL/Ollama] Knowledge context injected — facts=${knowledgeCtx.factsUsed} nodes=${knowledgeCtx.graphNodesUsed}`
-                  );
-                }
-                // HermesProvider picks up Vast.ai Docker Model Runner automatically via LAMBDA_OLLAMA_URL env
-                // Knowledge context is surfaced in the next turn via the existing context pipeline
-              } catch (e) {
-                console.warn('[UCOL/Ollama] Knowledge context injection failed (non-blocking):', e);
-              }
-            }
 
             if (decision.targetNode === 'jklaw') {
               const { getAgentRouter } = await import('@/lib/ucol/agentRouter');

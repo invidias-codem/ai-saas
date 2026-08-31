@@ -1,7 +1,6 @@
 import { estimateTokenCount } from '@/lib/ragMemory';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
-import { HermesProvider } from '@/lib/llm/providers/hermes';
 import { NvidiaNimProvider } from '@/lib/llm/providers/nvidiaNim';
 import { ChatMessage } from '@/lib/llm/types';
 import { HarnessFactory } from '@/lib/harness/IOHarness';
@@ -55,9 +54,7 @@ export async function executeAgentLoop(params: AgentExecutorParams) {
 
       const provider = modelConfig.provider === 'gemini'
         ? new GeminiProvider(providerKeys.google)
-        : modelConfig.provider === 'hermes'
-          ? new HermesProvider({})
-          : new ProviderClass();
+        : new ProviderClass();
 
       const chatHistory: ChatMessage[] = dynamicHistory.map((msg: any) => {
         let attachments;
@@ -89,17 +86,12 @@ export async function executeAgentLoop(params: AgentExecutorParams) {
       let temp = 0.7;
       if (modelConfig.provider === 'deepseek') temp = 0.6;
 
-      const onReasoning = (text: string) => {
-        console.log(`[AgenticReasoning] ${String(text).slice(0, 400)}`);
-      };
-
       const streamResult = await provider.generateStream(chatHistory, systemInstruction, {
         model: modelConfig.modelId,
         maxTokens: modelConfig.maxTokens,
         temperature: temp,
         topP: modelConfig.provider === 'gemini' ? 0.7 : undefined,
         topK: modelConfig.provider === 'gemini' ? 40 : undefined,
-        onReasoning,
       });
 
       const textDecoder = new TextDecoder();
