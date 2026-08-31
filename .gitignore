@@ -106,6 +106,9 @@ packages/ucol-node/node_modules/
 # Go harness build artifacts
 go-harness/bin/
 
+# Electron build artifacts (compiled JS — never track; regenerate with `pnpm build:electron:main`)
+dist-electron/
+
 # OG-image optimizer venv
 .venv_ogfix/
 .env*
