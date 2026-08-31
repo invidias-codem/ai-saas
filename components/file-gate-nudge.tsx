@@ -3,7 +3,7 @@
 // Bottom sheet pattern (consistent with mobile design system).
 
 import { X } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 
@@ -13,21 +13,30 @@ interface FileGateNudgeProps {
 }
 
 export const FileGateNudge = ({ isOpen, onClose }: FileGateNudgeProps) => {
-  const [isVisible, setIsVisible] = useState(false);
+  const [prevOpen, setPrevOpen] = useState(isOpen);
   const t = useTranslations("FileGateNudge");
 
+  // Derive "keep mounted during exit animation" at render time instead of
+  // syncing it from an effect (React Compiler: set-state-in-effect).
+  // `prevOpen` is the previously-rendered `isOpen`; when it differs we store
+  // it via render-phase state adjustment (the compiler-approved "storing
+  // information from previous renders" pattern) and schedule the final unmount.
+  const wasOpen = prevOpen;
+  if (prevOpen !== isOpen) {
+    setPrevOpen(isOpen);
+  }
+
+  const [closing, setClosing] = useState(false);
   React.useEffect(() => {
-    if (isOpen) {
-      setIsVisible(true);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-    } else {
-      const timer = setTimeout(() => setIsVisible(false), 300);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (isOpen) return;
+    // Just closed: run the 300ms exit transition, then allow unmount.
+    const timer = setTimeout(() => setClosing(true), 300);
+    return () => clearTimeout(timer);
   }, [isOpen]);
 
-  if (!isVisible && !isOpen) return null;
+  const isVisible = isOpen || (wasOpen && !closing);
+
+  if (!isVisible) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center">
