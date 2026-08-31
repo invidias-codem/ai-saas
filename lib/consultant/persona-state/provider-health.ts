@@ -99,12 +99,7 @@ export class ProviderHealthChecker {
 
   getModel(providerKey: string): string {
     const MODEL_MAP: Record<string, string> = {
-      "anthropic-opus": "claude-3-5-sonnet-20241022",
-      "anthropic-sonnet": "claude-3-5-sonnet-20241022",
-      "anthropic-haiku": "claude-3-5-haiku-20241022",
-      "openrouter-heavy": "openai/gpt-4o",
-      "openrouter-mid": "openai/gpt-4o-mini",
-      "openrouter-auto": "openai/gpt-4o-mini",
+      "deepseek": "deepseek-ai/deepseek-v4-pro-0813",
       "gemini-ultra": "gemini-2.0-flash-exp",
       "gemini-pro": "gemini-2.0-flash-exp",
       "gemini-flash": "gemini-2.0-flash-exp",
