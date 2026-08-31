@@ -348,6 +348,23 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	var res harness.ToolExecutionResult
 
 	switch req.Action {
+	// "status" is the Tauri->daemon heartbeat: it must NOT require a workspace
+	// root and must not be gated behind workspace-scoped harness init. Rust only
+	// ever sends `action: "status"` with empty inputs; it needs daemon liveness
+	// plus the buffered telemetry backlog for the Security Audit stream.
+	case "status":
+		events := session.Telemetry.GetBufferedEvents()
+		payload := map[string]any{
+			"status":        "ok",
+			"recent_events": events,
+			"event_count":   len(events),
+		}
+		dataBytes, _ := json.Marshal(payload)
+		res = harness.ToolExecutionResult{
+			Ok:     true,
+			Output: "status ok",
+			Data:   json.RawMessage(dataBytes),
+		}
 	case "sync_root_grants":
 		var args SyncGrantsArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
