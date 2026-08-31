@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import {
   Share2,
   Copy,
@@ -132,5 +133,7 @@ export const BrandIcon = ({ name, className, size = 18, ...rest }: IconProps & {
   }
   const Component = getIcon(name);
   if (!Component) return null;
-  return <Component className={className} size={size} {...rest} />;
+  // Render the dynamically-resolved icon via createElement so the React Compiler
+  // treats it as a value (not a component created during render).
+  return React.createElement(Component, { className, size, ...rest });
 };
