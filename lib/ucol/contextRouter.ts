@@ -13,6 +13,7 @@ import * as path from 'path';
 
 import { generatePlan } from './prompts/kimiPlanner';
 import { kimiCoderProvider } from './prompts/kimiCoder';
+import { geminiCoderProvider } from './prompts/geminiCoder';
 import { reviewCode } from './prompts/kimiReviewer';
 import { logEvent } from '@/lib/telemetry';
 import { ModelRouter } from './modelRouter';
@@ -289,24 +290,40 @@ export class ContextRouter {
                 }
                 : undefined;
 
-            // ── Step 1: Generate code via Kimi K3 (single provider) ──
+            // ── Step 1: Generate code with provider fallback sequence ──
             const primaryProvider = selectedModel.provider;
             const attemptedProviders: string[] = [];
             const providerErrors: string[] = [];
 
-            const providerSequence = [primaryProvider];
+            // Fallback sequence: primary → Gemini if primary is NIM/DEGRADED.
+            const providerSequence = [primaryProvider, 'gemini'].filter(
+                (p, idx, arr) => p !== arr[idx - 1] // dedup consecutive
+            );
 
             for (const provider of providerSequence) {
                 attemptedProviders.push(provider);
                 try {
                     const files = await this.withTimeout(
-                        kimiCoderProvider.generateCode(contextPackage, refinement, session.discoveredPatterns),
+                        provider === primaryProvider
+                            ? kimiCoderProvider.generateCode(contextPackage, refinement, session.discoveredPatterns)
+                            : geminiCoderProvider.generateCode(contextPackage, refinement, session.discoveredPatterns),
                         PROVIDER_TIMEOUT_MS,
                         component.name
                     );
 
                     if (files && files.length > 0) {
                         latestFiles = files;
+                        if (provider !== primaryProvider) {
+                            this.emitContextFlow({
+                                id: crypto.randomUUID(),
+                                timestamp: Date.now(),
+                                source: primaryProvider,
+                                target: provider,
+                                action: `↪ Fell back to ${provider} for ${component.name}`,
+                                reasoning: 'Primary provider failed; auto-failed-over to Gemini.',
+                                status: 'complete',
+                            });
+                        }
                         break;
                     }
                 } catch (err: any) {
@@ -328,11 +345,17 @@ export class ContextRouter {
             if (!latestFiles || latestFiles.length === 0) {
                 const sequence = attemptedProviders.join(' -> ');
                 const errors = providerErrors.join('\n');
-                throw new Error(
-                    `Code generation failed for ${component.name}.\n` +
-                    `Exhausted provider sequence: ${sequence}.\n` +
-                    `Errors encountered:\n${errors}`
-                );
+                // Emit component-error event so the route stream stays alive.
+                this.emitContextFlow({
+                    id: crypto.randomUUID(),
+                    timestamp: Date.now(),
+                    source: 'ucol',
+                    target: 'user',
+                    action: `⚠ ${component.name} — generation failed`,
+                    reasoning: `Exhausted providers: ${sequence}. Errors:\n${errors}`,
+                    status: 'error',
+                });
+                continue; // skip review, move to next component
             }
             const currentCode = latestFiles.map(f => f.content).join('\n---\n');
 
