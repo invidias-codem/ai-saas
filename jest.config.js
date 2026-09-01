@@ -2,16 +2,8 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/__tests__', '<rootDir>/lib'],
-  // Treat helper-only modules as non-testable: they have no test cases by design.
-  testPathIgnorePatterns: [
-    '/node_modules/',
-    '__tests__/slack/testHelpers.ts',
-    '__tests__/utils/testHelpers.ts',
-    '__tests__/support/cli/scenario.ts',
-    '__tests__/support/cli/env.ts',
-    '__tests__/support/providerKeys.ts',
-    '__tests__/agents/adversarial/atlasCorpus.ts',
-  ],
+  // Only run actual test files. Helper-only modules live in __tests__ but aren't suites.
+  testMatch: ['**/?(*.)+(spec|test).ts?(x)'],
   // Transform ESM packages that ship as ES modules (uuid @ 14+)
   transformIgnorePatterns: [
     'node_modules/(?!.pnpm/uuid|uuid)',
