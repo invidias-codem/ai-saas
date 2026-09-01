@@ -46,9 +46,7 @@ export function useDefaultWorkspace() {
         }
       } finally {
         if (!cancelled) {
-          // Defer state update to next macrotask to satisfy lint rule.
-          const id = setTimeout(() => setLoading(false), 0);
-          return () => clearTimeout(id);
+          setTimeout(() => setLoading(false), 0);
         }
       }
     };
