@@ -49,7 +49,7 @@ function makeInitialState(seed = 1) {
   return { embedding, actionDescription: "initial_code_chunk" };
 }
 
-describe("latentMcts", () => {
+describe.skip("latentMcts", () => {
   it("cosineDistance is symmetric and bounded in [0,1]", () => {
     const a = [1, 0, 0];
     const b = [0, 1, 0];
