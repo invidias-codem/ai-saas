@@ -92,5 +92,7 @@ export type {
 
 export type { GossipPayload, GossipMetadata } from '@/lib/jepa/p2p/serialization';
 export type { PeerModel, PeerIngestCallback } from '@/lib/jepa/p2p/transport';
-export { JepaP2PNode } from '@/lib/jepa/p2p/transport';
 export type { P2PNodeConfig } from '@/lib/jepa/p2p/transport';
+// JepaP2PNode intentionally not re-exported from the barrel: it imports ESM-only
+// @libp2p/* packages at class-evaluation time, which breaks Jest suites that
+// transitively import this barrel. Import it directly from '@/lib/jepa/p2p/transport'.
