@@ -380,6 +380,10 @@ export async function generateConversationReply(
     );
     const { sandboxManager } = await import('@/lib/execution/sandboxManager');
     sandboxManager.setPromotionManager(promotionManager);
+    // Initialize JEPA trace emitter for execution trace capture
+    const { getDefaultTraceEmitter } = await import('@/lib/jepa');
+    const traceEmitter = await getDefaultTraceEmitter();
+    sandboxManager.setTraceEmitter(traceEmitter);
 
     // We execute the ReAct loop and stream UI events back
     const stream = new ReadableStream<Uint8Array>({
@@ -887,6 +891,7 @@ export async function generateConversationReply(
     } catch {}
     const isRateLimit = err?.status === 429 || String(err).includes('429');
     const isProviderDown = String(err).includes('1033') || String(err).includes('Tunnel') || String(err).includes('530') || (err?.status && err.status >= 500);
+    const isDegraded = err?.status === 400 && String(err?.message || err).includes('DEGRADED');
 
     if (isRateLimit) {
       console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to fast mode`);
@@ -897,8 +902,8 @@ export async function generateConversationReply(
         temperature: 0.9,
         maxTokens: 2048,
       });
-    } else if (isProviderDown) {
-      console.error(`[ConversationEngine] Provider ${actualModelId} unavailable: ${err?.message || String(err)}`);
+    } else if (isProviderDown || isDegraded) {
+      console.error(`[ConversationEngine] Provider ${actualModelId} unavailable${isDegraded ? ' (DEGRADED)' : ''}: ${err?.message || String(err)}`);
       const textEncoder = new TextEncoder();
       const stream = new ReadableStream({
         start(controller) {
@@ -912,7 +917,7 @@ export async function generateConversationReply(
         debug: {
           model: actualModelId,
           userQuery,
-          error: 'provider_unavailable',
+          error: isDegraded ? 'provider_degraded' : 'provider_unavailable',
         },
       };
     } else {
