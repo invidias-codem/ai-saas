@@ -42,6 +42,12 @@ export default function CodeBuilderPage() {
                 } catch { }
             });
 
+            eventSource.addEventListener('component-error', (e) => {
+                try {
+                    const entry: ContextFlowEntry = JSON.parse(e.data);
+                    setContextFlow(prev => [...prev, entry]);
+                } catch { }
+            });
             eventSource.addEventListener('plan-ready', (e) => {
                 try {
                     const planData: ProjectPlan = JSON.parse(e.data);
