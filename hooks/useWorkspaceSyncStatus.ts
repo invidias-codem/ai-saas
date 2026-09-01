@@ -45,7 +45,7 @@ export function useWorkspaceSyncStatus(workspaceId: string): SyncStatus {
       .limit(50);
 
     if (!error && data) {
-      setLogs(data.reverse());
+      setTimeout(() => setLogs(data.reverse()), 0);
     }
   };
 
