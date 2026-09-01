@@ -22,7 +22,8 @@ export function useDefaultWorkspace() {
 
   useEffect(() => {
     if (!userId) {
-      setLoading(false);
+      // Avoid synchronous setState inside effect — schedule a microtask instead.
+      Promise.resolve().then(() => setLoading(false));
       return;
     }
 
