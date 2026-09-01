@@ -46,7 +46,7 @@ export function useDefaultWorkspace() {
         }
       } finally {
         if (!cancelled) {
-          setLoading(false);
+          Promise.resolve().then(() => setLoading(false));
         }
       }
     };
