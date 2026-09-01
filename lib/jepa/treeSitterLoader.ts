@@ -137,7 +137,8 @@ export async function initTreeSitter(): Promise<void> {
 
     try {
       // @ts-ignore — web-tree-sitter not installed in Stage 0; installed at Stage 1/2
-      const { Parser } = await import('web-tree-sitter');
+      // webpackIgnore: true prevents Next.js from tracing this optional dependency.
+      const { Parser } = await import(/* webpackIgnore: true */ 'web-tree-sitter');
       const wasmRoot = getWasmRoot();
 
       await Parser.init({
@@ -175,7 +176,8 @@ export async function getParser(language: string): Promise<ParserAdapter> {
   try {
     // Dynamic import — only resolved at call time in Stage 1/2.
     // @ts-ignore — web-tree-sitter not installed in Stage 0
-    const { Parser, Language } = await import('web-tree-sitter');
+    // webpackIgnore: true prevents Next.js from tracing this optional dependency.
+    const { Parser, Language } = await import(/* webpackIgnore: true */ 'web-tree-sitter');
 
     // Resolve the WASM module path for this language.
     const wasmFileName = LANGUAGE_WASM_FILES[cacheKey];

@@ -46,7 +46,7 @@ const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, { auth: { persistSession: false } })
   : null;
 
-let upstashClient: Awaited<ReturnType<typeof import('@upstash/redis').createRedis>> | null = null;
+let upstashClient: InstanceType<typeof import('@upstash/redis').Redis> | null = null;
 
 async function getUpstash() {
   if (!USE_UPSTASH) return null;
