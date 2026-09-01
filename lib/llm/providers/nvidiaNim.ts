@@ -140,6 +140,7 @@ export class NvidiaNimProvider implements LLMProvider {
     const decoder = new TextDecoder();
     const encoder = new TextEncoder();
     let buffer = '';
+    let firstChunk = true;
 
     const stream = new ReadableStream<Uint8Array>({
       async pull(streamController) {
@@ -169,6 +170,17 @@ export class NvidiaNimProvider implements LLMProvider {
               const json = JSON.parse(payload);
               const delta = json.choices?.[0]?.delta ?? {};
 
+              // Track time-to-first-token for the streaming path.
+              if (firstChunk && (delta.content || delta.reasoning_content || delta.thinking)) {
+                firstChunk = false;
+                const ttft = Date.now() - started;
+                logger.info(`[NvidiaNimProvider] TTFT ${ttft}ms`, {
+                  model: modelId,
+                  ttft,
+                  upstreamLatencyMs,
+                });
+              }
+
               // Reasoning / thinking trace — wrap so downstream streaming
               // treats it consistently with Gemini/Hermes signaling.
               if (delta.reasoning_content) {
@@ -197,7 +209,7 @@ export class NvidiaNimProvider implements LLMProvider {
 
     return {
       stream,
-      debug: { model: modelId, provider: this.id },
+      debug: { model: modelId, provider: this.id, upstreamLatencyMs },
     };
   }
 }
