@@ -3,7 +3,7 @@ import { Tool, ToolResult, AgentContext } from "../core/types";
 import { searchMemories } from "@/lib/memory/vectorStore";
 import { logger } from "@/lib/logger";
 import { CodeSearchMcts, CodeSearchState, AstLanguage } from "@/lib/ucol/mcts/codeSearchMcts";
-import { serializeAstForJepa, detectLanguage } from "@/lib/jepa/astEncoderInput";
+import { serializeAstForJepaSync, detectLanguage } from "@/lib/jepa";
 import { buildAstFromSource } from "@/lib/ucol/mcts/codeSearchMcts";
 import { jepaCircuitBreaker } from "@/lib/jepa/circuitBreaker";
 import {
@@ -301,7 +301,7 @@ export const searchCodebaseTool: Tool = {
         const chunk = results[0];
         const source = String(chunk.content ?? '');
         const language = inferLanguageFromPath(chunk.metadata?.path || '');
-        const astTokens = serializeAstForJepa(source, language);
+        const astTokens = serializeAstForJepaSync(source, language);
 
         // Build latent state from AST tokens
         const embedding = astTokensToEmbedding(astTokens, 128);

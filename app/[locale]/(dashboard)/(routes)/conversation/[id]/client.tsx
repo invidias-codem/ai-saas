@@ -29,6 +29,8 @@ import { NeuralArchivalUploader, UploadedDoc } from "@/components/documents/Neur
 import { FileItem } from "@/components/documents/FileItem";
 import { FilePreview } from "@/components/FilePreview";
 import { ContextualNudge } from "@/components/workspaces/ContextualNudge";
+import { SyncStatusIndicator } from "@/components/harness/SyncStatusIndicator";
+import { useWorkspaceSyncStatus } from "@/hooks/useWorkspaceSyncStatus";
 import {
   getSessionMemoryFromStorage,
   saveSessionMemoryToStorage,
@@ -397,6 +399,11 @@ function ConversationPage({
   const [swarmSuggestion, setSwarmSuggestion] = useState<string>("");
   const [debugExecutionMode, setDebugExecutionMode] = useState<string | undefined>(undefined);
   const [debugIntent, setDebugIntent] = useState<string | undefined>(undefined);
+
+  // Workspace sync status (only when workspaceId is available)
+  const syncStatus = useWorkspaceSyncStatus(
+    conversationContext.workspaceId || ""
+  );
 
   useEffect(() => {
     const fetchSuggestion = async () => {
@@ -920,6 +927,12 @@ function ConversationPage({
             intent={debugIntent}
             pendingApproval={!!gitHubAction}
           />
+          {conversationContext.workspaceId && (
+            <SyncStatusIndicator
+              syncStatus={syncStatus}
+              variant="compact"
+            />
+          )}
           <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-indigo-500 font-bold scale-105")}>
             <span className={cn("w-1.5 h-1.5 rounded-full bg-indigo-500", isMemoryPulsing && "animate-ping")} />
             {memoryCount} memories
@@ -989,6 +1002,12 @@ function ConversationPage({
                 intent={debugIntent}
                 pendingApproval={!!gitHubAction}
               />
+              {conversationContext.workspaceId && (
+                <SyncStatusIndicator
+                  syncStatus={syncStatus}
+                  variant="compact"
+                />
+              )}
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="w-2 h-2 rounded-full bg-indigo-500" />
                 {memoryCount} memories
