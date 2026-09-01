@@ -36,6 +36,7 @@ export { jepaCircuitBreaker } from '@/lib/jepa/circuitBreaker';
 export type { CircuitState } from '@/lib/jepa/circuitBreaker';
 export {
   serializeAstForJepa,
+  serializeAstForJepaSync,
   detectLanguage,
 } from '@/lib/jepa/astEncoderInput';
 export type { SupportedLanguage, SerializeAstOptions, JepaAstToken } from '@/lib/jepa/astEncoderInput';
@@ -44,6 +45,14 @@ export {
   NoopTraceEmitter,
 } from '@/lib/jepa/executionTrace';
 export type { ExecutionTrace, ExecutionTraceAction, ExecutionTraceArtifact, ITraceEmitter } from '@/lib/jepa/executionTrace';
+export {
+  UpstashTraceEmitter,
+  SupabaseTraceEmitter,
+  DualTraceEmitter,
+  getDefaultTraceEmitter,
+  resetDefaultTraceEmitter,
+} from '@/lib/jepa/traceEmitters';
+export type { } from '@/lib/jepa/traceEmitters';
 
 export {
   computeEnergy,
