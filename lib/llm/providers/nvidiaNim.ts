@@ -21,6 +21,8 @@ export interface NvidiaNimCallOptions extends CompletionOptions {
   includeReasoning?: boolean;
   /** Kimi K3 reasoning effort passthrough ("low" | "medium" | "high" | "max"). */
   reasoningEffort?: 'low' | 'medium' | 'high' | 'max';
+  /** Per-request timeout override (ms). Falls back to NIM_REQUEST_TIMEOUT_MS env or 120s. */
+  timeoutMs?: number;
 }
 
 export class NvidiaNimProvider implements LLMProvider {
@@ -79,8 +81,9 @@ export class NvidiaNimProvider implements LLMProvider {
     }
 
     const controller = new AbortController();
-    const timeoutMs = 120_000;
+    const timeoutMs = options.timeoutMs ?? Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? '120_000');
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const started = Date.now();
 
     let response: Response;
     try {
@@ -95,16 +98,21 @@ export class NvidiaNimProvider implements LLMProvider {
       });
     } catch (err: any) {
       clearTimeout(timer);
-      logger.error('[NvidiaNimProvider] request failed', err);
-      throw new Error(`NVIDIA NIM request failed: ${err?.message ?? String(err)}`);
+      const elapsed = Date.now() - started;
+      const isTimeout = err?.name === 'AbortError' || String(err?.message || err).includes('aborted');
+      logger.error(`[NvidiaNimProvider] request failed after ${elapsed}ms`, err);
+      throw new Error(
+        `NVIDIA NIM request failed${isTimeout ? `: This operation was aborted (timeout=${timeoutMs}ms, elapsed=${elapsed}ms)` : `: ${err?.message ?? String(err)}`}`
+      );
     }
 
     if (!response.ok) {
       clearTimeout(timer);
       const errText = await response.text().catch(() => '');
       const trimmed = errText.slice(0, 500);
-      logger.error(`[NvidiaNimProvider] HTTP ${response.status}: ${trimmed}`);
-      throw new Error(`NVIDIA NIM error (${response.status}): ${trimmed}`);
+      const isDegraded = response.status === 400 && trimmed.includes('DEGRADED');
+      logger.error(`[NvidiaNimProvider] HTTP ${response.status}${isDegraded ? ' (DEGRADED)' : ''}: ${trimmed}`);
+      throw new Error(`NVIDIA NIM error (${response.status})${isDegraded ? ' [DEGRADED]' : ''}: ${trimmed}`);
     }
 
     if (!response.body) {
