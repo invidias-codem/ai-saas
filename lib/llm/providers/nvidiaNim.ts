@@ -100,18 +100,34 @@ export class NvidiaNimProvider implements LLMProvider {
       clearTimeout(timer);
       const elapsed = Date.now() - started;
       const isTimeout = err?.name === 'AbortError' || String(err?.message || err).includes('aborted');
-      logger.error(`[NvidiaNimProvider] request failed after ${elapsed}ms`, err);
+      logger.error(`[NvidiaNimProvider] request failed after ${elapsed}ms`, {
+        model: modelId,
+        elapsed,
+        isTimeout,
+        error: err?.message || String(err),
+      });
       throw new Error(
         `NVIDIA NIM request failed${isTimeout ? `: This operation was aborted (timeout=${timeoutMs}ms, elapsed=${elapsed}ms)` : `: ${err?.message ?? String(err)}`}`
       );
     }
+
+    const upstreamLatencyMs = Date.now() - started;
+    logger.info(`[NvidiaNimProvider] upstream response ${response.status}`, {
+      model: modelId,
+      upstreamLatencyMs,
+      status: response.status,
+    });
 
     if (!response.ok) {
       clearTimeout(timer);
       const errText = await response.text().catch(() => '');
       const trimmed = errText.slice(0, 500);
       const isDegraded = response.status === 400 && trimmed.includes('DEGRADED');
-      logger.error(`[NvidiaNimProvider] HTTP ${response.status}${isDegraded ? ' (DEGRADED)' : ''}: ${trimmed}`);
+      logger.error(`[NvidiaNimProvider] HTTP ${response.status}${isDegraded ? ' (DEGRADED)' : ''}: ${trimmed}`, {
+        model: modelId,
+        upstreamLatencyMs,
+        isDegraded,
+      });
       throw new Error(`NVIDIA NIM error (${response.status})${isDegraded ? ' [DEGRADED]' : ''}: ${trimmed}`);
     }
 

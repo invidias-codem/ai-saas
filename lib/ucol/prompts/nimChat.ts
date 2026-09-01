@@ -1,19 +1,24 @@
 // lib/ucol/prompts/nimChat.ts
 // Shared non-streaming OpenAI-compatible completion helper for the UCOL
 // Code Builder debate loop (planner / coder / reviewer). All three stages
-// call Kimi K3 through the same NVIDIA NIM endpoint.
+// call Kimi K3 through the internal Vercel proxy to reuse warm connection
+// pools and get first-class latency telemetry.
 import { nvidiaNimConfig } from '@/lib/env';
+import { logger } from '@/lib/logger';
 
 const NIM_MODEL_KIMI_K3 = 'moonshotai/kimi-k3';
+const INTERNAL_NIM_PROXY = '/api/internal/nim-chat';
 
 export interface NimChatResult {
   text: string;
   model: string;
+  upstreamLatencyMs?: number;
 }
 
 /**
- * Non-streaming completion against NVIDIA NIM.
- * Returns the full assistant text (JSON expected by callers).
+ * Non-streaming completion through the internal Vercel NIM proxy.
+ * The proxy reuses warm egress/TLS pools and returns upstream latency
+ * in the `x-nim-upstream-latency-ms` response header.
  */
 export async function nimChat(
   systemPrompt: string,
@@ -25,49 +30,53 @@ export async function nimChat(
     throw new Error('[NIM] NVIDIA_API_KEY is not set. Code Builder requires NVIDIA NIM.');
   }
 
-  const body: Record<string, unknown> = {
-    model: opts.model || NIM_MODEL_KIMI_K3,
+  const modelId = opts.model || NIM_MODEL_KIMI_K3;
+  const body = {
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ],
-    max_tokens: opts.maxTokens ?? 8192,
+    model: modelId,
     temperature: opts.temperature ?? 0.7,
+    max_tokens: opts.maxTokens ?? 8192,
     top_p: 0.95,
     stream: false,
     chat_template_kwargs: { thinking: false },
+    ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}),
   };
-  if (opts.reasoningEffort) body.reasoning_effort = opts.reasoningEffort;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 120_000);
+  const started = Date.now();
+  const response = await fetch(INTERNAL_NIM_PROXY, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 
-  let response: Response;
-  try {
-    response = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${cfg.apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch (err: any) {
-    clearTimeout(timer);
-    throw new Error(`[NIM] request failed: ${err?.message ?? String(err)}`);
-  }
-
-  clearTimeout(timer);
+  const latencyMs = Date.now() - started;
+  const upstreamLatencyMs = Number(response.headers.get('x-nim-upstream-latency-ms') || '0');
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
-    throw new Error(`[NIM] HTTP ${response.status}: ${errText.slice(0, 500)}`);
+    logger.error('[nimChat] proxy error', {
+      model: modelId,
+      status: response.status,
+      totalLatencyMs: latencyMs,
+      upstreamLatencyMs,
+      error: errText.slice(0, 500),
+    });
+    throw new Error(`[NIM] proxy error ${response.status}: ${errText.slice(0, 500)} (total=${latencyMs}ms, upstream=${upstreamLatencyMs}ms)`);
   }
 
   const json = await response.json().catch(() => null);
   const text = json?.choices?.[0]?.message?.content ?? '';
-  return { text, model: (opts.model || NIM_MODEL_KIMI_K3) };
+
+  logger.info('[nimChat] completed', {
+    model: modelId,
+    totalLatencyMs: latencyMs,
+    upstreamLatencyMs,
+  });
+
+  return { text, model: modelId, upstreamLatencyMs };
 }
 
 export { NIM_MODEL_KIMI_K3 };
