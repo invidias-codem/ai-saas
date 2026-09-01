@@ -101,13 +101,13 @@ const FILE_QUEUE_PATH = process.env.VECTORIZATION_FILE_QUEUE ?? 'research/world-
 
 async function dequeueFromFile(count: number): Promise<VectorizationTrace[]> {
   try {
-    const { readFileSync, existsSync } = await import('node:fs');
+    const { readFileSync, existsSync, writeFileSync } = await import('node:fs');
     if (!existsSync(FILE_QUEUE_PATH)) return [];
     const lines = readFileSync(FILE_QUEUE_PATH, 'utf8').split('\n').filter(Boolean);
     const batch = lines.slice(0, count);
     // Truncate file to remaining lines
     const remaining = lines.slice(count);
-    await import('node:fs').promises.writeFile(FILE_QUEUE_PATH, remaining.join('\n') + (remaining.length ? '\n' : ''), 'utf8');
+    writeFileSync(FILE_QUEUE_PATH, remaining.join('\n') + (remaining.length ? '\n' : ''), 'utf8');
     return batch.map((l) => JSON.parse(l));
   } catch (err) {
     logger.error('[VectorizationWorker] file queue read failed', err);
