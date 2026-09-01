@@ -387,6 +387,32 @@ export function ucb1Score(node: CodeSearchMctsNode, exploration: number = 1.414)
   return exploit + explore;
 }
 
+// ─── AST Fingerprinting ───────────────────────────────────────────────────────
+
+/** Deterministic fingerprint for an AST subtree, insensitive to whitespace. */
+export function astFingerprint(node: AstNode): string {
+  const normalized = node.text.replace(/\s+/g, ' ').trim();
+  const textHash = simpleHash(normalized);
+  if (node.children.length === 0) {
+    return `${node.type}:${textHash}`;
+  }
+  const childFingerprints = node.children.map(astFingerprint).join('|');
+  return `${node.type}:${textHash}:${childFingerprints}`;
+}
+
+function simpleHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+/** Quantize a latent vector to a string bucket for near-duplicate detection. */
+export function latentVectorKey(vec: number[], decimals = 2): string {
+  return vec.map((v) => Number(v.toFixed(decimals))).join(',');
+}
+
 // ─── Action Generator ─────────────────────────────────────────────────────────
 
 /**
@@ -487,6 +513,8 @@ export class CodeSearchMcts {
   private readonly explorationConstant: number;
   private readonly scorer: JepaDivergenceScorer;
   private readonly maxActionsPerNode: number;
+  private seenAstFingerprints: Set<string>;
+  private seenLatentKeys: Set<string>;
 
   constructor(options: CodeSearchMctsOptions = {}) {
     this.maxIterations      = options.maxIterations ?? 20;
@@ -494,6 +522,8 @@ export class CodeSearchMcts {
     this.explorationConstant = options.explorationConstant ?? 1.414;
     this.scorer             = options.scorer ?? new JepaDivergenceScorer();
     this.maxActionsPerNode  = options.maxActionsPerNode ?? 3;
+    this.seenAstFingerprints = new Set();
+    this.seenLatentKeys     = new Set();
   }
 
   /**
@@ -504,6 +534,16 @@ export class CodeSearchMcts {
    * @returns CodeSearchResult
    */
   async search(rootState: CodeSearchState, predictedEmbedding: number[] | null | undefined): Promise<CodeSearchResult> {
+    this.seenAstFingerprints.clear();
+    this.seenLatentKeys.clear();
+
+    // Seed dedup caches with the root state so we never expand back to it.
+    const rootAstKey = astFingerprint(rootState.root);
+    this.seenAstFingerprints.add(rootAstKey);
+    if (predictedEmbedding) {
+      this.seenLatentKeys.add(latentVectorKey(predictedEmbedding));
+    }
+
     const root = createMctsNode(rootState, null, null);
     let bestResult: CodeSearchResult;
 
@@ -512,7 +552,7 @@ export class CodeSearchMcts {
         // 1. SELECTION — traverse the tree via UCB1.
         const nodeToExpand = this.select(root);
 
-        // 2. EXPANSION — generate up to maxActionsPerNode children.
+        // 2. EXPANSION — generate AST actions and create child nodes.
         if (this.getDepth(nodeToExpand) < this.maxDepth) {
           await this.expand(nodeToExpand);
         }
@@ -571,11 +611,29 @@ export class CodeSearchMcts {
     return current;
   }
 
-  /** Expansion: generate AST actions and create child nodes. */
+  /** Expansion: generate AST actions and create child nodes, dedup by AST fingerprint. */
   private async expand(node: CodeSearchMctsNode): Promise<void> {
     const actions = generateAstActions(node.state, this.maxActionsPerNode);
+    const seenActionDescs = new Set<string>();
     for (const action of actions) {
+      // Skip duplicate action descriptions on the same parent.
+      if (seenActionDescs.has(action.description)) continue;
+      seenActionDescs.add(action.description);
+
       const nextState = applyAstAction(node.state, action);
+      const astKey = astFingerprint(nextState.root);
+
+      // AST-level dedup: skip structurally identical candidates.
+      if (this.seenAstFingerprints.has(astKey)) continue;
+
+      // Latent-level dedup: skip near-duplicate embeddings when available.
+      if (nextState.embedding && nextState.embedding.length) {
+        const latentKey = latentVectorKey(nextState.embedding);
+        if (this.seenLatentKeys.has(latentKey)) continue;
+        this.seenLatentKeys.add(latentKey);
+      }
+
+      this.seenAstFingerprints.add(astKey);
       node.children.push(createMctsNode(nextState, action, node));
     }
   }
