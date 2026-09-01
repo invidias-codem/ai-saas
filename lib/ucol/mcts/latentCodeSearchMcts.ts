@@ -133,13 +133,13 @@ class DefaultLatentPredictor implements LatentPredictor {
       const res = await fetch(this.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stateEmbedding: state, action: action.description }),
+        body: JSON.stringify({ latentState: state }),
         signal: AbortSignal.timeout(800),
       });
       if (!res.ok) throw new Error(`predictor ${res.status}`);
-      const data = await res.json() as { embedding?: number[] };
-      if (!data.embedding || !data.embedding.length) throw new Error('predictor returned empty embedding');
-      return data.embedding;
+      const data = await res.json() as { mu?: number[]; status?: string };
+      if (data.status === 'error' || !data.mu || !data.mu.length) throw new Error('predictor returned empty mu');
+      return data.mu;
     } catch {
       // Fallback: additive perturbation in latent space.
       const delta = this.actionToDelta(action);
