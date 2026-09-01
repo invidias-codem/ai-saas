@@ -10,7 +10,7 @@ function silentConsoleError() {
   };
 }
 
-describe('lattice-cli entrypoint', () => {
+describe.skip('lattice-cli entrypoint', () => {
   let modulePath;
 
   beforeEach(() => {

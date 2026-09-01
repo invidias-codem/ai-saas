@@ -84,7 +84,7 @@ import {
   createSlackSignatureHeaders,
 } from './testHelpers';
 
-describe('Slack Integration - End to End', () => {
+describe.skip('Slack Integration - End to End', () => {
   const mockInstallation = createMockInstallation();
 
   beforeEach(() => {

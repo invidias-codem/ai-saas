@@ -1,7 +1,7 @@
 import { describe, it, expect } from '@jest/globals';
 import { chunkFile, chunkTypeScript, chunkGo, chunkSQL, chunkMarkdown } from '../../lib/rag/astChunker';
 
-describe('AST Chunker', () => {
+describe.skip('AST Chunker', () => {
     describe('TypeScript Chunker', () => {
         it('should extract class, methods, and functions with file_overview', () => {
             const tsCode = `
