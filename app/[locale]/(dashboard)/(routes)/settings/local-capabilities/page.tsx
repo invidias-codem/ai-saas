@@ -5,12 +5,18 @@ import { Terminal, Shield, Activity, HardDrive, Zap, CheckCircle2, XCircle, Moni
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useHarnessHeartbeat } from "@/hooks/useHarnessHeartbeat";
+import { useWorkspaceSyncStatus } from "@/hooks/useWorkspaceSyncStatus";
+import { useDefaultWorkspace } from "@/hooks/useDefaultWorkspace";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { SyncStatusIndicator } from "@/components/harness/SyncStatusIndicator";
 
 export default function LocalCapabilitiesPage() {
   const locale = useLocale();
   const { isDaemonRunning, lastHeartbeat, auditLogs, appFocused } = useHarnessHeartbeat();
+  const { workspace, loading: workspaceLoading } = useDefaultWorkspace();
+  const workspaceId = workspace?.id || "";
+  const syncStatus = useWorkspaceSyncStatus(workspaceId);
 
   return (
     <div className="min-h-screen px-3 sm:px-4 md:px-10 lg:px-16 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8">
@@ -26,6 +32,21 @@ export default function LocalCapabilitiesPage() {
           Monitor your local Go sidecar and Tauri IPC boundaries.
         </p>
       </div>
+
+      {workspaceLoading && (
+        <Card className="p-8 border-dashed border-2 border-indigo-500/30 bg-indigo-500/5">
+          <div className="text-center text-muted-foreground">Loading workspace...</div>
+        </Card>
+      )}
+
+      {!workspaceLoading && !workspaceId && (
+        <Card className="p-8 border-dashed border-2 border-slate-300/30 bg-slate-500/5">
+          <div className="text-center text-muted-foreground">No workspace found. Please complete onboarding first.</div>
+        </Card>
+      )}
+
+      {!workspaceLoading && workspaceId && (
+        <>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
         <Card className="p-6 space-y-4">
@@ -179,6 +200,29 @@ export default function LocalCapabilitiesPage() {
             )}
           </ScrollArea>
         </Card>
+      )}
+
+      {/* Local File Sync Status - Detailed View */}
+      {workspaceId && (
+        <Card className="p-6 space-y-4 border-indigo-500/20 bg-indigo-500/5">
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <HardDrive className="w-6 h-6 text-indigo-500" />
+              Local File Sync Status
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Real-time synchronization status for your authorized workspace directories.
+              Ingestion events are streamed via Supabase Realtime with a 5s polling fallback.
+            </p>
+          </div>
+
+          <SyncStatusIndicator
+            syncStatus={syncStatus}
+            variant="detailed"
+          />
+        </Card>
+      )}
+        </>
       )}
     </div>
   );

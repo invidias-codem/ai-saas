@@ -16,6 +16,15 @@
  *     generated at deploy time by the CI pipeline (see plan).
  *  4. Set the feature flag `ENABLE_JEPA_WASM=true` to activate the loader.
  *
+ * WASM Asset Routing Strategy (serverless-safe):
+ *  - All WASM files MUST be placed in `public/tree-sitter/` at build time.
+ *  - The `locateFile` callback MUST return an absolute URL path that
+ *    Vercel/Edge runtime can serve without filesystem access.
+ *  - We do NOT use dynamic `import()` for WASM files — they are served
+ *    as static assets from the public directory.
+ *  - In development, we serve from `/tree-sitter/`; in production, the
+ *    same path works because Next.js serves `public/` at the root.
+ *
  * Usage:
  *
  *   import { initTreeSitter, getParser, ParserAdapter } from '@/lib/jepa/treeSitterLoader';
@@ -82,7 +91,7 @@ export interface AstNodeAdapter {
 let initPromise: Promise<void> | null = null;
 let parserCache: Map<string, ParserAdapter> = new Map();
 
-// ─── Feature-flag check ───────────────────────────────────────────────────────
+// ─── Feature-flag check ────────────────────────────────────────────────────────
 
 function isWasmEnabled(): boolean {
   // Gate on env var in Stage 0 so no code path crashes if the WASM files
@@ -109,7 +118,7 @@ class StubParser implements ParserAdapter {
   delete(): void { /* no-op */ }
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── Public API ────────────────────────────────────────────────────────────────
 
 /**
  * One-time initialisation of the WASM loader. Safe to call multiple times;
@@ -128,7 +137,8 @@ export async function initTreeSitter(): Promise<void> {
 
     try {
       // @ts-ignore — web-tree-sitter not installed in Stage 0; installed at Stage 1/2
-      const { Parser } = await import('web-tree-sitter');
+      // webpackIgnore: true prevents Next.js from tracing this optional dependency.
+      const { Parser } = await import(/* webpackIgnore: true */ 'web-tree-sitter');
       const wasmRoot = getWasmRoot();
 
       await Parser.init({
@@ -166,7 +176,8 @@ export async function getParser(language: string): Promise<ParserAdapter> {
   try {
     // Dynamic import — only resolved at call time in Stage 1/2.
     // @ts-ignore — web-tree-sitter not installed in Stage 0
-    const { Parser } = await import('web-tree-sitter');
+    // webpackIgnore: true prevents Next.js from tracing this optional dependency.
+    const { Parser, Language } = await import(/* webpackIgnore: true */ 'web-tree-sitter');
 
     // Resolve the WASM module path for this language.
     const wasmFileName = LANGUAGE_WASM_FILES[cacheKey];
@@ -177,35 +188,58 @@ export async function getParser(language: string): Promise<ParserAdapter> {
     const wasmRoot = getWasmRoot();
     const wasmPath = `${wasmRoot}/${wasmFileName}`;
 
-    // In Stage 1/2, fetch() the WASM file and create a Language from it.
-    // The web-tree-sitter API: Parser.setLanguage(Language)
-    // Language is created via Parser.Language or TreeSitterLanguage constructor.
-    // The exact import path depends on the installed version; document here
-    // for implementers.
-    //
-    // 1. Load the WASM bytes:
-    //    const wasmResponse = await fetch(wasmPath);
-    //    const wasmBytes  = await wasmResponse.arrayBuffer();
-    //
-    // 2. Create the Language:
-    //    const Language = (await import('web-tree-sitter')).Language;
-    //    const language  = new Language(wasmBytes);
-    //
-    // 3. Create and configure the Parser:
-    //    const parser    = new Parser();
-    //    parser.setLanguage(language);
-    //
-    // For Stage 0 we create a stub that logs the intended path.
-    const stub = new StubParser(cacheKey);
-    console.log(`[TreeSitterLoader] Parser stub for '${language}' (WASM at ${wasmPath} not yet compiled).`);
-    parserCache.set(cacheKey, stub);
-    return stub;
+    // Fetch the WASM bytes and create the Language.
+    const wasmResponse = await fetch(wasmPath);
+    if (!wasmResponse.ok) {
+      throw new Error(`[TreeSitterLoader] Failed to fetch WASM for ${language} from ${wasmPath}: ${wasmResponse.status}`);
+    }
+    const wasmBytes = await wasmResponse.arrayBuffer();
+
+    // Create the Language instance.
+    const languageObj = new Language(new Uint8Array(wasmBytes));
+
+    // Create and configure the Parser.
+    const parser = new Parser();
+    parser.setLanguage(languageObj);
+
+    // Wrap in our adapter interface.
+    const adapter: ParserAdapter = {
+      parse: (source: string, _languageName?: string) => {
+        const tree = parser.parse(source);
+        return adaptTreeSitterNode(tree.rootNode);
+      },
+      setLanguage: (_name: string) => {
+        // Language is fixed at creation time; ignore re-sets.
+      },
+      delete: () => {
+        parser.delete();
+      },
+    };
+
+    parserCache.set(cacheKey, adapter);
+    console.log(`[TreeSitterLoader] Parser for '${language}' initialised from ${wasmPath}`);
+    return adapter;
   } catch (err) {
     console.error(`[TreeSitterLoader] getParser('${language}') failed:`, err);
     const stub = new StubParser(cacheKey);
     parserCache.set(cacheKey, stub);
     return stub;
   }
+}
+
+/**
+ * Convert a web-tree-sitter Node to our AstNodeAdapter interface.
+ * This is a thin wrapper — the actual tree-sitter Node is returned directly
+ * since it already matches our interface (type, children, startPosition, etc.).
+ */
+function adaptTreeSitterNode(node: any): AstNodeAdapter {
+  return {
+    type: node.type,
+    startPosition: node.startPosition,
+    endPosition: node.endPosition,
+    children: node.children.map(adaptTreeSitterNode),
+    text: (source: string) => source.slice(node.startIndex, node.endIndex),
+  };
 }
 
 /**
@@ -222,16 +256,19 @@ export function clearParserCache(): void {
 /**
  * Resolve the WASM root directory. In the browser this is the public/ URL;
  * in Node.js SSR we use the project root's public/ directory.
+ *
+ * This MUST return a URL path that can be served by the web server.
+ * In Vercel/Next.js, files in `public/` are served at the root path.
+ * We configure `locateFile` to prepend this root so the WASM runtime
+ * loads `tree-sitter.wasm` and `tree-sitter-<lang>.wasm` from the
+ * correct public URL.
  */
 function getWasmRoot(): string {
-  // In a Next.js serverless function, process.env.NEXT_PUBLIC_BASE_PATH may
-  // be set. When absent, files are served from /.
+  // In a Next.js serverless function, the public directory is served at the
+  // root. The basePath is empty unless NEXT_PUBLIC_BASE_PATH is set.
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
-  // The `locateFile` callback prepends the returned string to the file name
-  // requested by the WASM runtime. The runtime looks for:
-  //   <root>/tree-sitter.wasm
-  //   <root>/tree-sitter-<lang>.wasm
-  // We point it at public/tree-sitter/ by using the full URL path.
+  // The locateFile callback receives just the filename (e.g. "tree-sitter.wasm")
+  // and must return the full URL path. We point it at public/tree-sitter/.
   const publicDir = process.env.TREE_SITTER_PUBLIC_DIR || `${basePath}${TREE_SITTER_WASM_DIR}`;
   return publicDir;
 }

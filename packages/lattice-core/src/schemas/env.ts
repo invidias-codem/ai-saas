@@ -132,6 +132,17 @@ export const envSchema = z.object({
   NOUSE_API_KEY: z.string().optional(),
   NOUS_MODEL_ID: z.string().optional(),
 
+  // NVIDIA NIM — local-first embedding
+  LATTICE_NIM_MODE: z
+    .enum(['local', 'cloud'])
+    .optional()
+    .default('local'),
+  LATTICE_NIM_LOCAL_URL: z.string().url().optional().default('http://127.0.0.1:8000/v1'),
+  LATTICE_NIM_CLOUD_URL: z.string().url().optional().default('https://integrate.api.nvidia.com/v1'),
+  LATTICE_NIM_CLOUD_API_KEY: z.string().optional(),
+  LATTICE_NIM_EMBED_MODEL: z.string().optional().default('nvidia/nv-embedqa-e5-v5'),
+  LATTICE_NIM_EMBED_DIM: z.coerce.number().optional().default(1024),
+
   // Billing / Payment
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),

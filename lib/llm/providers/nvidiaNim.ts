@@ -21,6 +21,8 @@ export interface NvidiaNimCallOptions extends CompletionOptions {
   includeReasoning?: boolean;
   /** Kimi K3 reasoning effort passthrough ("low" | "medium" | "high" | "max"). */
   reasoningEffort?: 'low' | 'medium' | 'high' | 'max';
+  /** Per-request timeout override (ms). Falls back to NIM_REQUEST_TIMEOUT_MS env or 120s. */
+  timeoutMs?: number;
 }
 
 export class NvidiaNimProvider implements LLMProvider {
@@ -79,8 +81,9 @@ export class NvidiaNimProvider implements LLMProvider {
     }
 
     const controller = new AbortController();
-    const timeoutMs = 120_000;
+    const timeoutMs = options.timeoutMs ?? Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? '120_000');
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const started = Date.now();
 
     let response: Response;
     try {
@@ -95,16 +98,37 @@ export class NvidiaNimProvider implements LLMProvider {
       });
     } catch (err: any) {
       clearTimeout(timer);
-      logger.error('[NvidiaNimProvider] request failed', err);
-      throw new Error(`NVIDIA NIM request failed: ${err?.message ?? String(err)}`);
+      const elapsed = Date.now() - started;
+      const isTimeout = err?.name === 'AbortError' || String(err?.message || err).includes('aborted');
+      logger.error(`[NvidiaNimProvider] request failed after ${elapsed}ms`, {
+        model: modelId,
+        elapsed,
+        isTimeout,
+        error: err?.message || String(err),
+      });
+      throw new Error(
+        `NVIDIA NIM request failed${isTimeout ? `: This operation was aborted (timeout=${timeoutMs}ms, elapsed=${elapsed}ms)` : `: ${err?.message ?? String(err)}`}`
+      );
     }
+
+    const upstreamLatencyMs = Date.now() - started;
+    logger.info(`[NvidiaNimProvider] upstream response ${response.status}`, {
+      model: modelId,
+      upstreamLatencyMs,
+      status: response.status,
+    });
 
     if (!response.ok) {
       clearTimeout(timer);
       const errText = await response.text().catch(() => '');
       const trimmed = errText.slice(0, 500);
-      logger.error(`[NvidiaNimProvider] HTTP ${response.status}: ${trimmed}`);
-      throw new Error(`NVIDIA NIM error (${response.status}): ${trimmed}`);
+      const isDegraded = response.status === 400 && trimmed.includes('DEGRADED');
+      logger.error(`[NvidiaNimProvider] HTTP ${response.status}${isDegraded ? ' (DEGRADED)' : ''}: ${trimmed}`, {
+        model: modelId,
+        upstreamLatencyMs,
+        isDegraded,
+      });
+      throw new Error(`NVIDIA NIM error (${response.status})${isDegraded ? ' [DEGRADED]' : ''}: ${trimmed}`);
     }
 
     if (!response.body) {
@@ -116,6 +140,7 @@ export class NvidiaNimProvider implements LLMProvider {
     const decoder = new TextDecoder();
     const encoder = new TextEncoder();
     let buffer = '';
+    let firstChunk = true;
 
     const stream = new ReadableStream<Uint8Array>({
       async pull(streamController) {
@@ -145,6 +170,17 @@ export class NvidiaNimProvider implements LLMProvider {
               const json = JSON.parse(payload);
               const delta = json.choices?.[0]?.delta ?? {};
 
+              // Track time-to-first-token for the streaming path.
+              if (firstChunk && (delta.content || delta.reasoning_content || delta.thinking)) {
+                firstChunk = false;
+                const ttft = Date.now() - started;
+                logger.info(`[NvidiaNimProvider] TTFT ${ttft}ms`, {
+                  model: modelId,
+                  ttft,
+                  upstreamLatencyMs,
+                });
+              }
+
               // Reasoning / thinking trace — wrap so downstream streaming
               // treats it consistently with Gemini/Hermes signaling.
               if (delta.reasoning_content) {
@@ -173,7 +209,7 @@ export class NvidiaNimProvider implements LLMProvider {
 
     return {
       stream,
-      debug: { model: modelId, provider: this.id },
+      debug: { model: modelId, provider: this.id, upstreamLatencyMs },
     };
   }
 }

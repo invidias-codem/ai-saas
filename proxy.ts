@@ -82,6 +82,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/jepa/reflect',
     '/api/analyze-upload',
     '/api/test/mcts-e2e',
+    '/api/internal/nim-chat',
 ]);
 
 const GUEST_COOKIE = 'guest_id';

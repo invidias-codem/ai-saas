@@ -54,6 +54,10 @@ export async function POST(req: Request) {
         language,
         timeoutMs,
         traceId,
+        env: {
+          LATTICE_WORKSPACE_ID: 'direct',
+          LATTICE_USER_ID: 'direct',
+        },
       });
 
       const responseBody: any = { ...executionResult };
