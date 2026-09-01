@@ -12,6 +12,10 @@ module.exports = {
     '__tests__/support/providerKeys.ts',
     '__tests__/agents/adversarial/atlasCorpus.ts',
   ],
+  // Transform ESM packages that ship as ES modules (uuid @ 14+)
+  transformIgnorePatterns: [
+    'node_modules/(?!.pnpm/uuid|uuid)',
+  ],
   moduleNameMapper: {
     // Manual mock for the ESM-only workspace package (see __mocks__/@lattice-os/core.ts)
     '^@lattice-os/core$': '<rootDir>/__mocks__/@lattice-os/core.ts',
