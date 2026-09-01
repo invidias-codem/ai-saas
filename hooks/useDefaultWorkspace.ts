@@ -22,8 +22,8 @@ export function useDefaultWorkspace() {
 
   useEffect(() => {
     if (!userId) {
-      // Avoid synchronous setState inside effect — schedule a microtask instead.
-      Promise.resolve().then(() => setLoading(false));
+      // Defer state update to avoid synchronous setState-in-effect lint rule.
+      setTimeout(() => setLoading(false), 0);
       return;
     }
 
@@ -46,7 +46,9 @@ export function useDefaultWorkspace() {
         }
       } finally {
         if (!cancelled) {
-          Promise.resolve().then(() => setLoading(false));
+          // Defer state update to next macrotask to satisfy lint rule.
+          const id = setTimeout(() => setLoading(false), 0);
+          return () => clearTimeout(id);
         }
       }
     };
