@@ -4,6 +4,22 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { useTranslations } from "next-intl";
 
+const EASE_OUT = [0.23, 1, 0.32, 1] as const;
+const EASE_IN_OUT = [0.77, 0, 0.175, 1] as const;
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 18 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.5,
+      delay: i * 0.08,
+      ease: EASE_OUT,
+    },
+  }),
+};
+
 export const SolutionMatrix = () => {
   const t = useTranslations("Landing.expertV2.solution");
 
@@ -22,13 +38,13 @@ export const SolutionMatrix = () => {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: 0.5, ease: EASE_OUT }}
           className="mb-16"
         >
-          <span className="text-xs font-semibold uppercase tracking-widest text-white/40 mb-4 block">
+          <span className="text-xs font-semibold uppercase tracking-widest text-white/35 mb-4 block">
             {t("eyebrow")}
           </span>
-          <h2 className="font-heading font-bold tracking-tight text-3xl md:text-5xl mb-4">
+          <h2 className="font-heading font-bold tracking-tight text-3xl md:text-5xl mb-4 text-white">
             {t("title")}
           </h2>
         </motion.div>
@@ -38,20 +54,18 @@ export const SolutionMatrix = () => {
           {rows.map((row, i) => (
             <motion.div
               key={row.outcomeKey}
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              custom={i}
+              variants={cardVariants}
+              initial="hidden"
+              whileInView="visible"
               viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: i * 0.1 }}
-              className="relative rounded-2xl border border-white/10 bg-white/[0.03] p-8"
+              className="relative rounded-2xl border border-white/5 bg-white/[0.02] p-8 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-colors duration-200 hover:bg-white/[0.04]"
             >
-              {/* Hover gradient overlay */}
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-
               <div className="relative z-10">
-                <h3 className="text-lg font-semibold mb-3 font-heading">
+                <h3 className="text-lg font-semibold mb-3 font-heading text-white">
                   {t(row.outcomeKey)}
                 </h3>
-                <p className="text-white/60 text-sm leading-relaxed">
+                <p className="text-white/50 text-sm leading-relaxed">
                   {t(row.deliveryKey)}
                 </p>
               </div>
@@ -64,7 +78,7 @@ export const SolutionMatrix = () => {
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.5, delay: 0.4 }}
+          transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.4 }}
           className="mt-10"
         >
           <Link

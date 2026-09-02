@@ -51,23 +51,26 @@ export const LandingNavbar = () => {
       setIsOpen(false);
     }, [pathname]);
 
-    const menuVariants: Variants = {
-        closed: {
-            opacity: 0,
-            y: "-10%",
-            transition: { duration: 0.2, ease: "easeInOut" }
-        },
-        open: {
-            opacity: 1,
-            y: 0,
-            transition: { duration: 0.3, ease: "easeOut" }
-        },
-    };
+const EASE_IN_OUT = [0.77, 0, 0.175, 1] as const;
+const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
-    const itemVariants: Variants = {
-        closed: { opacity: 0, y: 10 },
-        open: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-    };
+const menuVariants = {
+    closed: {
+        opacity: 0,
+        y: "-8%",
+        transition: { duration: 0.22, ease: EASE_IN_OUT }
+    },
+    open: {
+        opacity: 1,
+        y: 0,
+        transition: { duration: 0.28, ease: EASE_OUT }
+    },
+};
+
+const itemVariants = {
+    closed: { opacity: 0, y: 8 },
+    open: { opacity: 1, y: 0, transition: { duration: 0.25 } },
+};
 
     return (
         <>
