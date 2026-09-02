@@ -363,14 +363,6 @@ export default function SovereignLandingPage() {
             </motion.div>
           </div>
         </section>
-
-        {/* Footer */}
-        <footer className="border-t border-white/10 py-8">
-          <div className="mx-auto max-w-7xl px-6 flex items-center justify-between text-xs text-white/40">
-            <span>© {new Date().getFullYear()} Lattice OS. All rights reserved.</span>
-            <span>{t("hero.badge")}</span>
-          </div>
-        </footer>
       </div>
     </div>
   );
