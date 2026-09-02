@@ -298,32 +298,6 @@ export default function SupportPage() {
           </div>
         </section>
       </main>
-
-      <footer className="py-10 border-t border-border bg-background">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="relative w-6 h-6">
-                <Image src="/lattice-logo.png" alt="Lattice OS" fill className="object-cover" />
-              </div>
-              <span className="text-lg font-bold text-foreground">Lattice OS</span>
-            </div>
-
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <Link href="/privacy" className={cn(linkCls, "hover:text-foreground")}>Privacy Policy</Link>
-              <Link href="/docs" className={cn(linkCls, "hover:text-foreground")}>Docs</Link>
-              <Link href="/blog" className={cn(linkCls, "hover:text-foreground")}>Blog</Link>
-              <Link href="/" className={cn(linkCls, "hover:text-foreground")}>Home</Link>
-            </div>
-          </div>
-
-          <div className="mt-8 pt-8 border-t border-border text-center">
-            <p className="text-muted-foreground text-sm">
-              © {new Date().getFullYear()} Lattice OS. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

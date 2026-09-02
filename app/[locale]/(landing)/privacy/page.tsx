@@ -244,33 +244,6 @@ export default function PrivacyPolicyPage() {
           </div>
         </section>
       </main>
-
-      {/* Footer */}
-      <footer className="py-10 border-t border-white/5 bg-background">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="relative w-6 h-6">
-                <Image src="/lattice-logo.png" alt="Lattice OS" fill className="object-cover" />
-              </div>
-              <span className="text-lg font-bold text-white">Lattice OS</span>
-            </div>
-
-            <div className="flex items-center gap-6 text-sm text-gray-400">
-              <Link href="/support" className="hover:text-white min-h-[48px] inline-flex items-center transition">Support</Link>
-              <Link href="/slack" className="hover:text-white min-h-[48px] inline-flex items-center transition">Slack Integration</Link>
-              <Link href="/" className="hover:text-white min-h-[48px] inline-flex items-center transition">Home</Link>
-              <Link href="/blog" className="hover:text-white min-h-[48px] inline-flex items-center transition">Blog</Link>
-            </div>
-          </div>
-
-          <div className="mt-8 pt-8 border-t border-white/5 text-center">
-            <p className="text-gray-500 text-sm">
-              © {new Date().getFullYear()} Lattice OS. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

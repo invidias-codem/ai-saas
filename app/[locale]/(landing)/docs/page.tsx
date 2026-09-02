@@ -604,33 +604,6 @@ export default function DocsPage() {
                     </section>
                 </div>
             </main>
-
-            <footer className="py-10 border-t border-border bg-background">
-                <div className="max-w-7xl mx-auto px-6">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                        <div className="flex items-center gap-2">
-                            <div className="relative w-6 h-6">
-                                <Image src="/lattice-logo.png" alt="Lattice OS logo" fill className="object-contain" />
-                            </div>
-                            <span className="text-lg font-bold text-foreground">Lattice OS</span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm text-muted-foreground md:justify-end">
-                            <Link href="/beta" className="hover:text-foreground transition">Beta Tracks</Link>
-                            <Link href="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
-                            <Link href="/support" className="hover:text-foreground transition">Support</Link>
-                            <Link href="/dashboard" className="hover:text-foreground transition">Dashboard</Link>
-                            <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" className="hover:text-foreground transition">GitHub</a>
-                        </div>
-                    </div>
-
-                    <div className="mt-8 pt-8 border-t border-border text-center">
-                        <p className="text-muted-foreground text-sm">
-                            © {new Date().getFullYear()} Lattice OS. All rights reserved.
-                        </p>
-                    </div>
-                </div>
-            </footer>
         </div>
     );
 }
