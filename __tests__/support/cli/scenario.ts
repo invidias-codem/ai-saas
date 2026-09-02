@@ -1,5 +1,3 @@
-import type { UserProviderKeyScenario } from '@testsupport/cli/scenario';
-
 export interface UserProviderKeyScenario {
   scenario: string;
   input: {
