@@ -58,10 +58,10 @@ jest.mock('fs/promises', () => ({
   stat: jest.fn(async (p: any) => {
     const k = String(p);
     if (memfs.has(k)) {
-      return { isFile: () => true, isDirectory: () => false, size: memfs.get(k)!.length };
+      return { isFile: (): boolean => true, isDirectory: (): boolean => false, size: memfs.get(k)!.length };
     }
     if (memdirs.has(k)) {
-      return { isFile: () => false, isDirectory: () => true };
+      return { isFile: (): boolean => false, isDirectory: (): boolean => true };
     }
     const e: any = new Error('ENOENT');
     e.code = 'ENOENT';

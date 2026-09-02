@@ -11,7 +11,7 @@ function silentConsoleError() {
 }
 
 describe.skip('lattice-cli entrypoint', () => {
-  let modulePath;
+  let modulePath: string;
 
   beforeEach(() => {
     silentConsoleError();

@@ -66,7 +66,6 @@ describe("openLedger environment selection", () => {
   });
 
   it("returns MemoryLedger fallback when indexedDB is unavailable (SSR)", () => {
-    // @ts-expect-error - intentionally simulating a non-browser env
     delete (globalThis as { indexedDB?: IDBFactory }).indexedDB;
     const store = openLedger();
     expect(store).toBeInstanceOf(MemoryLedger);

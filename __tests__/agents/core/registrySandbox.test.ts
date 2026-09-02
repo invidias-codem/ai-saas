@@ -5,8 +5,6 @@
  * while normal tools still execute directly.
  */
 
-const { sandboxManager } = require('@/lib/execution/sandboxManager');
-
 jest.mock('@/lib/execution/sandboxManager', () => ({
   sandboxManager: {
     execute: jest.fn(),
@@ -26,9 +24,10 @@ jest.mock('@/lib/telemetry/riskAdapter', () => ({
 }));
 
 const { ToolRegistry } = require('@/lib/agents/core/registry');
+const { sandboxManager } = jest.requireMock('@/lib/execution/sandboxManager');
 
 describe.skip('ToolRegistry sandbox routing', () => {
-  let registry;
+  let registry: InstanceType<typeof ToolRegistry>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -67,7 +66,7 @@ describe.skip('ToolRegistry sandbox routing', () => {
       requiresSandbox: true,
       sandbox: {
         language: 'sh',
-        buildCommand: (input) => input.command,
+        buildCommand: (input: any) => input.command,
       },
       execute: jest.fn(),
     });
@@ -105,7 +104,7 @@ describe.skip('ToolRegistry sandbox routing', () => {
       requiresSandbox: true,
       sandbox: {
         language: 'sh',
-        buildCommand: (input) => input.command,
+        buildCommand: (input: any) => input.command,
       },
       execute: jest.fn(),
     });

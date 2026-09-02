@@ -46,17 +46,22 @@ const { mkdir, rm, readFile, writeFile } = require('fs/promises');
 const { tmpdir } = require('os');
 const path = require('path');
 
-const { LocalSandboxRunner, SandboxManager, sandboxManager } = require('@/lib/execution/sandboxManager');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { LocalSandboxRunner, SandboxManager, sandboxManager: sandboxManagerInstance } = require('@/lib/execution/sandboxManager') as {
+  LocalSandboxRunner: any;
+  SandboxManager: any;
+  sandboxManager: any;
+};
 
 const fakeStdout = Buffer.from('hello-world');
 const fakeStderr = Buffer.from('oops');
 
 function createFakeProcess(closeCode = 0, delay = 0) {
-  const timers = [];
+  const timers: NodeJS.Timeout[] = [];
   const proc = {
-    stdout: { on: (event, handler) => { if (event === 'data') timers.push(setTimeout(() => handler(fakeStdout), delay || 0)); } },
-    stderr: { on: (event, handler) => { if (event === 'data') timers.push(setTimeout(() => handler(fakeStderr), delay || 0)); } },
-    on: (event, handler) => {
+    stdout: { on: (event: string, handler: (...args: any[]) => void): void => { if (event === 'data') timers.push(setTimeout(() => handler(fakeStdout), delay || 0)); } },
+    stderr: { on: (event: string, handler: (...args: any[]) => void): void => { if (event === 'data') timers.push(setTimeout(() => handler(fakeStderr), delay || 0)); } },
+    on: (event: string, handler: (...args: any[]) => void): void => {
       if (event === 'close') timers.push(setTimeout(() => handler(closeCode), delay || 0));
       if (event === 'error') timers.push(setTimeout(() => handler(new Error('spawn failed')), delay || 0));
     },
@@ -112,11 +117,11 @@ describe('sandboxManager', () => {
 
   test('stderr is captured without stdout', async () => {
     const stdoutSpy = { on: jest.fn() };
-    const stderrSpy = { on: (event, handler) => { if (event === 'data') handler(Buffer.from('oops')); } };
+    const stderrSpy = { on: (event: string, handler: (...args: any[]) => void) => { if (event === 'data') handler(Buffer.from('oops')); } };
     const proc = {
       stdout: stdoutSpy,
       stderr: stderrSpy,
-      on: (event, handler) => { if (event === 'close') handler(1); if (event === 'error') handler(new Error('spawn failed')); },
+      on: (event: string, handler: (...args: any[]) => void) => { if (event === 'close') handler(1); if (event === 'error') handler(new Error('spawn failed')); },
       kill: jest.fn(),
     };
 
@@ -133,12 +138,12 @@ describe('sandboxManager', () => {
   });
 
   test('sandbox env does not leak host secrets', async () => {
-    const stdoutSpy = { on: (event, handler) => { if (event === 'data') handler(Buffer.from('env-data')); } };
+    const stdoutSpy = { on: (event: string, handler: (...args: any[]) => void) => { if (event === 'data') handler(Buffer.from('env-data')); } };
     const stderrSpy = { on: jest.fn() };
     const proc = {
       stdout: stdoutSpy,
       stderr: stderrSpy,
-      on: (event, handler) => { if (event === 'close') handler(0); },
+      on: (event: string, handler: (...args: any[]) => void) => { if (event === 'close') handler(0); },
       kill: jest.fn(),
     };
 
@@ -158,12 +163,12 @@ describe('sandboxManager', () => {
   });
 
   test('sandboxManager wrapper forwards to runner', async () => {
-    const stdoutSpy = { on: (event, handler) => { if (event === 'data') handler(Buffer.from('wrapper-ok')); } };
+    const stdoutSpy = { on: (event: string, handler: (...args: any[]) => void) => { if (event === 'data') handler(Buffer.from('wrapper-ok')); } };
     const stderrSpy = { on: jest.fn() };
     const proc = {
       stdout: stdoutSpy,
       stderr: stderrSpy,
-      on: (event, handler) => { if (event === 'close') handler(0); },
+      on: (event: string, handler: (...args: any[]) => void) => { if (event === 'close') handler(0); },
       kill: jest.fn(),
     };
 
@@ -172,18 +177,18 @@ describe('sandboxManager', () => {
     (writeFile as jest.Mock).mockResolvedValue(undefined);
     (rm as jest.Mock).mockResolvedValue(undefined);
 
-    const result = await sandboxManager.execute({ command: 'echo wrapper-ok', language: 'sh' });
+    const result = await sandboxManagerInstance.execute({ command: 'echo wrapper-ok', language: 'sh' });
     expect(result.stdout).toBe('wrapper-ok');
   });
 
   test('marks result as truncated when output exceeds buffer', async () => {
     const bigChunk = Buffer.from('x'.repeat(1024 * 1024 + 1)); // 1MB + 1 to force truncation flag
-    const stdoutSpy = { on: (event, handler) => { if (event === 'data') handler(bigChunk); } };
+    const stdoutSpy = { on: (event: string, handler: (...args: any[]) => void) => { if (event === 'data') handler(bigChunk); } };
     const stderrSpy = { on: jest.fn() };
     const proc = {
       stdout: stdoutSpy,
       stderr: stderrSpy,
-      on: (event, handler) => { if (event === 'close') handler(0); },
+      on: (event: string, handler: (...args: any[]) => void) => { if (event === 'close') handler(0); },
       kill: jest.fn(),
     };
 
@@ -201,12 +206,12 @@ describe('sandboxManager', () => {
   });
 
   test('does not set truncation flags when output fits in buffer', async () => {
-    const stdoutSpy = { on: (event, handler) => { if (event === 'data') handler(Buffer.from('small output')); } };
+    const stdoutSpy = { on: (event: string, handler: (...args: any[]) => void) => { if (event === 'data') handler(Buffer.from('small output')); } };
     const stderrSpy = { on: jest.fn() };
     const proc = {
       stdout: stdoutSpy,
       stderr: stderrSpy,
-      on: (event, handler) => { if (event === 'close') handler(0); },
+      on: (event: string, handler: (...args: any[]) => void) => { if (event === 'close') handler(0); },
       kill: jest.fn(),
     };
 
