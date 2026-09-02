@@ -17,7 +17,7 @@ const messageVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.55, ease: EASE_OUT },
+    transition: { duration: 0.2, ease: EASE_OUT },
   },
   exit: {
     opacity: 0,

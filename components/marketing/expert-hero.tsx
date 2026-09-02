@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ArrowRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
+import { RippleButton } from "@/components/landing/ripple-button";
 
 type Variant = "a" | "b" | "c";
 
@@ -119,26 +120,24 @@ export const ExpertHero = ({ variant }: ExpertHeroProps) => {
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.5 }}
+                transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1], delay: 0.5 }}
                 className="flex flex-col sm:flex-row gap-4"
               >
                 <Link href="/onboarding" className="w-full sm:w-auto">
-                  <Button
-                    size="lg"
-                    className="w-full sm:w-auto bg-white text-black hover:bg-white/90 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base font-semibold active:scale-95 transition-transform"
+                  <RippleButton
+                    golden
+                    className="w-full sm:w-auto bg-white text-black hover:bg-white/90 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base font-semibold transition-colors"
                   >
                     {t("ctaHeroPrimary")}
                     <ArrowRightIcon className="ml-2 h-5 w-5" />
-                  </Button>
+                  </RippleButton>
                 </Link>
                 <Link href="#how-it-works" className="w-full sm:w-auto">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="w-full sm:w-auto border-white/20 text-white hover:bg-white/10 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base backdrop-blur-sm active:scale-95 transition-transform"
+                  <RippleButton
+                    className="w-full sm:w-auto border-white/20 text-white hover:bg-white/10 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base backdrop-blur-sm transition-colors"
                   >
                     {t("ctaSecondary")}
-                  </Button>
+                  </RippleButton>
                 </Link>
               </motion.div>
             </motion.div>
