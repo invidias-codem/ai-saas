@@ -126,15 +126,15 @@ export const ExpertHero = ({ variant }: ExpertHeroProps) => {
                 <Link href="/onboarding" className="w-full sm:w-auto">
                   <RippleButton
                     golden
-                    className="w-full sm:w-auto bg-white text-black hover:bg-white/90 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base font-semibold transition-colors"
+                    className="group w-full sm:w-auto bg-white text-black hover:bg-white/90 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base font-semibold transition-colors duration-200 active:scale-[0.97]"
                   >
                     {t("ctaHeroPrimary")}
-                    <ArrowRightIcon className="ml-2 h-5 w-5" />
+                    <ArrowRightIcon className="ml-2 h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
                   </RippleButton>
                 </Link>
                 <Link href="#how-it-works" className="w-full sm:w-auto">
                   <RippleButton
-                    className="w-full sm:w-auto border-white/20 text-white hover:bg-white/10 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base backdrop-blur-sm transition-colors"
+                    className="group w-full sm:w-auto border border-white/20 text-white hover:bg-white/10 hover:border-white/30 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base backdrop-blur-sm transition-all duration-200 active:scale-[0.97]"
                   >
                     {t("ctaSecondary")}
                   </RippleButton>
