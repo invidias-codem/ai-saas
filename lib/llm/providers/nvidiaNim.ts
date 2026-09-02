@@ -13,7 +13,7 @@ import { nvidiaNimConfig } from "@/lib/env";
  * The endpoint is fixed to https://integrate.api.nvidia.com/v1 (overridable
  * via NVIDIA_NIM_BASE_URL) and authenticated with NVIDIA_API_KEY.
  */
-export const NIM_MODEL_DEEPSEEK_V4_PRO = "deepseek-ai/deepseek-v4-pro-0813";
+export const NIM_MODEL_DEEPSEEK_V4_PRO = "nvidia/nemotron-3-ultra-550b-a55b";
 export const NIM_MODEL_KIMI_K3 = "moonshotai/kimi-k3";
 
 export interface NvidiaNimCallOptions extends CompletionOptions {
@@ -74,14 +74,14 @@ export class NvidiaNimProvider implements LLMProvider {
       stream: true,
     };
 
-    // DeepSeek V4 / Kimi K3 accept a chat_template_kwargs block.
-    body.chat_template_kwargs = { thinking: options.includeReasoning === true };
+    // Nemotron uses enable_thinking in chat_template_kwargs.
+    body.chat_template_kwargs = { enable_thinking: options.includeReasoning === true };
     if (options.reasoningEffort) {
       body.reasoning_effort = options.reasoningEffort;
     }
 
     const controller = new AbortController();
-    const timeoutMs = options.timeoutMs ?? Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? '120_000');
+    const timeoutMs = options.timeoutMs ?? Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? 50_000);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const started = Date.now();
 

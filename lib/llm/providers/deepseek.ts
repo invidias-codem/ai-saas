@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
  *
  * Previously this pointed at Vertex AI Model Garden (`deepseek-r1` + GCP auth).
  * It now delegates to NvidiaNimProvider with the model pinned to
- * `deepseek-ai/deepseek-v4-pro-0813`, sharing the single HTTP/SSE parser.
+ * `nvidia/nemotron-3-ultra-550b-a55b`, sharing the single HTTP/SSE parser.
  */
 export class DeepSeekProvider implements LLMProvider {
   id = "deepseek";
