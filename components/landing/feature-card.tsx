@@ -21,7 +21,7 @@ export const FeatureCard = ({ label, description, icon: Icon, color, bgColor, de
             transition={{ duration: 0.5, delay }}
             viewport={{ once: true, margin: "-50px" }}
             className={cn(
-                "group relative p-6 rounded-2xl overflow-hidden transition-all duration-300",
+                "group relative p-6 rounded-2xl overflow-hidden transition duration-200",
                 // Semantic token styling
                 "bg-card/60 backdrop-blur-sm border border-border shadow-sm",
                 "hover:bg-accent/50 hover:shadow-md hover:border-accent-foreground/20",

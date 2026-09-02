@@ -85,7 +85,7 @@ const SlackLandingPage = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all" />
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition" />
                 <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
                   <div className="text-5xl font-bold text-white mb-2">Free to start</div>
                   <div className="text-gray-400 mb-4">Welcome credits, then pay-as-you-go</div>
@@ -94,7 +94,7 @@ const SlackLandingPage = () => {
               </div>
 
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-pink-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all" />
+                <div className="absolute inset-0 bg-gradient-to-r from-pink-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition" />
                 <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
                   <div className="text-5xl font-bold text-white mb-2">4+</div>
                   <div className="text-gray-400 mb-4">Core Features</div>
@@ -103,7 +103,7 @@ const SlackLandingPage = () => {
               </div>
 
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all" />
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition" />
                 <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
                   <div className="text-5xl font-bold text-white mb-2">Pay-as-you-go</div>
                   <div className="text-gray-400 mb-4">No subscriptions</div>
@@ -165,7 +165,7 @@ const SlackLandingPage = () => {
                   "relative group",
                   index % 2 === 1 && "lg:col-start-1 lg:row-start-1"
                 )}>
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-all" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-3xl blur-2xl group-hover:blur-3xl transition" />
                   <div className="relative aspect-[9/20] lg:aspect-[9/16] rounded-2xl border border-white/10 bg-gradient-to-br from-gray-900 to-black overflow-hidden">
                     {useCase.title === 'Image Generation' ? (
                       <video
@@ -226,7 +226,7 @@ const SlackLandingPage = () => {
             {steps.map((step, index) => (
               <div key={index} className="text-center group">
                 <div className="relative mb-6">
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/30 to-blue-600/30 rounded-full blur-xl group-hover:blur-2xl transition-all" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/30 to-blue-600/30 rounded-full blur-xl group-hover:blur-2xl transition" />
                   <div className="relative w-16 h-16 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 flex items-center justify-center text-white font-bold text-2xl mx-auto">
                     {index + 1}
                   </div>
@@ -249,7 +249,7 @@ const SlackLandingPage = () => {
             {allFeatures.map((feature) => (
               <div
                 key={feature.label}
-                className="group p-6 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-all duration-300 backdrop-blur-sm hover:border-purple-500/30"
+                className="group p-6 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition duration-200 backdrop-blur-sm hover:border-purple-500/30"
               >
                 <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110", feature.bgColor)}>
                   <feature.icon className={cn("w-6 h-6", feature.color)} />

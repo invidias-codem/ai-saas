@@ -83,7 +83,7 @@ export const SolutionMatrix = () => {
         >
           <Link
             href="/explore"
-            className="text-sm font-semibold text-white/80 hover:text-white transition-colors underline underline-offset-4"
+            className="text-sm font-semibold text-white/80 hover:text-white min-h-[48px] inline-flex items-center transition underline underline-offset-4"
           >
             Explore the platform
           </Link>

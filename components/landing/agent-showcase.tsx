@@ -127,7 +127,7 @@ export const AgentShowcase = () => {
                             key={s.id}
                             onClick={() => setActiveScenario(s.id)}
                             className={`
-                                relative flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium transition-all duration-300
+                                relative flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium min-h-[48px] transition duration-200
                                 ${activeScenario === s.id ? "text-foreground" : "text-muted-foreground hover:text-slate-700 dark:hover:text-gray-200"}
                             `}
                         >
@@ -288,7 +288,7 @@ export const AgentShowcase = () => {
 
                                 <div className="flex gap-3">
                                     <Link href="/dashboard" className="flex-1">
-                                        <Button className="w-full bg-indigo-600 dark:bg-white text-white dark:text-black hover:bg-indigo-700 dark:hover:bg-gray-200 font-semibold group">
+                                        <Button className="w-full min-h-[48px] bg-indigo-600 dark:bg-white text-white dark:text-black hover:bg-indigo-700 dark:hover:bg-gray-200 font-semibold group">
                                             <CopyIcon className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
                                             Copy & Use Script
                                         </Button>

@@ -37,7 +37,7 @@ export function BlogNavLink({ href, label }: BlogNavLinkProps) {
       onBlur={handlePointerLeave}
     >
       {/* 44px minimum hit area */}
-      <span className="absolute inset-0 -m-2 block min-h-[44px] min-w-[44px] rounded-full" aria-hidden="true" />
+      <span className="absolute inset-0 -m-2 block min-h-[48px] min-w-[48px] rounded-full" aria-hidden="true" />
 
       <motion.span
         animate={{

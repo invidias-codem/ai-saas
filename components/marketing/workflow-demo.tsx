@@ -110,7 +110,7 @@ export const WorkflowDemo = () => {
                 <button
                   key={step.titleKey}
                   onClick={() => setActiveStep(i)}
-                  className={`w-full text-left rounded-xl border p-5 transition-all duration-300 ${
+                  className={`w-full text-left rounded-xl border p-5 min-h-[48px] transition duration-200 ${
                     activeStep === i
                       ? "border-purple-500/40 bg-purple-500/10"
                       : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]"
@@ -143,7 +143,7 @@ export const WorkflowDemo = () => {
 
             {/* CTA */}
             <div className="mt-8">
-              <button className="text-sm font-semibold text-white/80 hover:text-white transition-colors underline underline-offset-4">
+              <button className="text-sm font-semibold text-white/80 hover:text-white min-h-[48px] transition underline underline-offset-4">
                 Try a sample prompt
               </button>
             </div>

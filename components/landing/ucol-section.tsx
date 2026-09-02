@@ -227,7 +227,7 @@ export const UCOLSection = () => {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: i * 0.12 }}
-              className={`landing-card group relative overflow-hidden rounded-2xl border ${card.border} ${card.glow} transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02]`}
+              className={`landing-card group relative overflow-hidden rounded-2xl border ${card.border} ${card.glow} transition duration-200 hover:-translate-y-1 hover:scale-[1.02]`}
             >
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-200/80 to-transparent dark:via-white/25" />
               <div className={`absolute inset-0 bg-gradient-to-b ${card.accent} opacity-0 transition-opacity duration-500 group-hover:opacity-100`} />

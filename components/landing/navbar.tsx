@@ -77,12 +77,12 @@ const itemVariants = {
         <>
             <header
                 className={cn(
-                    "fixed md:absolute top-0 left-0 right-0 z-50 transition-all duration-300 border-b",
+                    "fixed md:absolute top-0 left-0 right-0 z-50 transition duration-200 border-b",
                     scrolled || isOpen ? "landing-nav-shell" : "landing-nav-shell-top"
                 )}
             >
                 <div className="max-w-7xl mx-auto px-4 md:px-10 flex justify-between items-center h-16">
-                    <Link href="/" className="flex items-center gap-3 z-50 relative group">
+                    <Link href="/" className="flex items-center gap-3 z-50 relative group min-h-[48px] min-w-[48px]">
                         <div className="relative w-9 h-9 flex-shrink-0 transition-transform group-hover:scale-110 duration-300">
                             <Image
                                 src="/lattice-logo.png"
@@ -103,7 +103,7 @@ const itemVariants = {
                                 <Link
                                     key={link.href}
                                     href={link.href}
-                                    className="landing-nav-link transition-colors"
+                                    className="landing-nav-link min-h-[48px] inline-flex items-center transition"
                                 >
                                     {link.label}
                                 </Link>
@@ -127,7 +127,7 @@ const itemVariants = {
                                 </Button>
                             </Link>
                             <Link href="/dashboard">
-                                <Button className="landing-cta-primary rounded-full font-semibold shadow-lg dark:shadow-white/10 transition-all hover:scale-105">
+                                <Button className="landing-cta-primary min-h-[48px] rounded-full font-semibold shadow-lg dark:shadow-white/10 transition duration-200 hover:scale-105">
                                     {tHero("cta")}
                                 </Button>
                             </Link>
@@ -137,7 +137,7 @@ const itemVariants = {
                     <div className="md:hidden flex items-center gap-2 z-50">
                         <button
                             onClick={() => setIsOpen(!isOpen)}
-                            className="relative w-10 h-10 flex flex-col justify-center items-end gap-[5px] group"
+                            className="relative w-10 h-10 min-h-[48px] min-w-[48px] flex flex-col justify-center items-end gap-[5px] group"
                             aria-label="Toggle menu"
                         >
                             <motion.span
@@ -146,7 +146,7 @@ const itemVariants = {
                             />
                             <motion.span
                                 animate={isOpen ? { opacity: 0 } : { opacity: 1 }}
-                                className="landing-nav-burger-mid w-5 h-[3px] rounded-full group-hover:w-8 transition-all duration-300"
+                                className="landing-nav-burger-mid w-5 h-[3px] rounded-full group-hover:w-8 transition duration-200"
                             />
                             <motion.span
                                 animate={isOpen ? { rotate: -45, y: -7 } : { rotate: 0, y: 0 }}
@@ -203,12 +203,12 @@ const itemVariants = {
                                                     }}
                                                     className="group relative block w-full"
                                                 >
-                                                    <div className="relative overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-xl p-4 transition-all duration-300 hover:border-purple-500/50 hover:bg-accent/50 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.3)] hover:scale-[1.02] active:scale-[0.98]">
+                                                    <div className="relative overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-xl p-4 min-h-[48px] transition duration-200 hover:border-purple-500/50 hover:bg-accent/50 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.3)] hover:scale-[1.02] active:scale-[0.98]">
                                                         <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/5 to-pink-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
                                                         <div className="relative flex items-center justify-center gap-3">
                                                             <Icon className="h-6 w-6 text-purple-500 dark:text-purple-400 group-hover:text-pink-500 dark:group-hover:text-pink-400 transition-colors duration-300" />
-                                                            <span className="text-2xl font-semibold text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-500 group-hover:to-pink-500 transition-all duration-300">
+                                                            <span className="text-2xl font-semibold text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-500 group-hover:to-pink-500 transition duration-200">
                                                                 {link.label}
                                                             </span>
                                                         </div>
@@ -234,7 +234,7 @@ const itemVariants = {
                                             }}
                                             className="group relative block w-full"
                                         >
-                                            <div className="relative overflow-hidden rounded-2xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-pink-500/5 backdrop-blur-xl p-4 transition-all duration-300 hover:border-purple-500 hover:shadow-[0_0_40px_-5px_rgba(168,85,247,0.4)] hover:scale-[1.02] active:scale-[0.98]">
+                                            <div className="relative overflow-hidden rounded-2xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-500/5 to-pink-500/5 backdrop-blur-xl p-4 min-h-[48px] transition duration-200 hover:border-purple-500 hover:shadow-[0_0_40px_-5px_rgba(168,85,247,0.4)] hover:scale-[1.02] active:scale-[0.98]">
                                                 <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
                                                 <div className="relative flex items-center justify-center gap-3">
@@ -258,7 +258,7 @@ const itemVariants = {
                                             }}
                                             className="group relative block w-full"
                                         >
-                                            <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 transition-all duration-300 hover:border-muted-foreground/30 hover:bg-accent hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]">
+                                            <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 min-h-[48px] transition duration-200 hover:border-muted-foreground/30 hover:bg-accent hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]">
                                                 <div className="relative flex items-center justify-center gap-3">
                                                     <EnterIcon className="h-6 w-6 text-muted-foreground group-hover:text-foreground transition-colors" />
                                                     <span className="text-2xl font-semibold text-foreground group-hover:text-foreground transition-colors">
@@ -278,7 +278,7 @@ const itemVariants = {
                                                 router.push("/dashboard");
                                             }}
                                         >
-                                            <Button className="landing-cta-primary group relative h-14 w-full overflow-hidden rounded-2xl border-0 text-lg font-bold transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-2xl shadow-violet-500/30 hover:shadow-violet-500/50">
+                                            <Button className="landing-cta-primary group relative h-14 w-full overflow-hidden rounded-2xl border-0 text-lg font-bold transition duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-2xl shadow-violet-500/30 hover:shadow-violet-500/50">
                                                 <div className="absolute inset-0 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                                                 <span className="relative flex items-center justify-center gap-2">
                                                     <RocketIcon className="h-5 w-5" />

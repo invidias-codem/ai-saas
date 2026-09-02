@@ -242,7 +242,7 @@ export const GuestChat = () => {
             <button
               key={p}
               onClick={() => sendMessage(p)}
-              className="rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:text-foreground"
+              className="rounded-full border border-border bg-card/60 px-3 py-1.5 min-h-[48px] text-xs text-muted-foreground transition duration-200 hover:border-primary/50 hover:text-foreground"
             >
               {p}
             </button>
@@ -272,7 +272,7 @@ export const GuestChat = () => {
                 Liked that? Sign up to unlock persistent memory, code, and more.
               </p>
               <Link href="/dashboard">
-                <Button className="w-full rounded-full font-semibold">
+                <Button className="w-full min-h-[48px] rounded-full font-semibold">
                   Continue in Lattice OS
                   <ArrowRightIcon className="ml-2 h-4 w-4" />
                 </Button>

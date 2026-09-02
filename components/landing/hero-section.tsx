@@ -120,7 +120,7 @@ export const HeroSection = () => {
           animate="visible"
           className="mb-16 flex flex-col items-center justify-center gap-4 sm:flex-row"
         >
-          <Link href="/dashboard">
+          <Link href="/dashboard" className="inline-flex">
             <Button
               size="lg"
               className="h-12 rounded-full bg-foreground text-background px-8 text-base font-semibold transition active:scale-[0.97] md:text-lg"
@@ -129,7 +129,7 @@ export const HeroSection = () => {
               <ArrowRightIcon className="ml-2 h-5 w-5" />
             </Button>
           </Link>
-          <a href="#ucol">
+          <a href="#ucol" className="inline-flex">
             <Button
               variant="outline"
               size="lg"
