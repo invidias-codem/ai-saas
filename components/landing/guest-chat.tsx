@@ -10,16 +10,35 @@ import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/**
- * GuestChat — no-friction "try before signup" widget for the landing page.
- *
- * Calls the (previously orphaned) /api/guest-chat endpoint, which grants 10 free
- * Weaver messages, rate-limited and Turnstile-protected. When the guest hits the
- * limit (or the API returns requiresSignup), we surface a sign-up upsell.
- *
- * This is the top-of-funnel PLG surface: let people feel the product first,
- * convert second.
- */
+const EASE_OUT = [0.23, 1, 0.32, 1] as const;
+
+const messageVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.55, ease: EASE_OUT },
+  },
+  exit: {
+    opacity: 0,
+    y: -6,
+    transition: { duration: 0.2, ease: EASE_OUT },
+  },
+};
+
+const panelVariants = {
+  hidden: { opacity: 0, y: 8 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.55, ease: EASE_OUT },
+  },
+  exit: {
+    opacity: 0,
+    y: 4,
+    transition: { duration: 0.2, ease: EASE_OUT },
+  },
+};
 
 const FREE_LIMIT = 10;
 const SITE_KEY =
@@ -32,7 +51,7 @@ interface GuestMessage {
 
 const GREETING: GuestMessage = {
   role: "bot",
-  text: "Hey! 👋 I'm Weaver, the intelligence inside Lattice OS. Ask me anything — I'll show you what memory-native AI feels like.",
+  text: "Hey! I'm Weaver, the intelligence inside Lattice OS. Ask me anything — I'll show you what memory-native AI feels like.",
 };
 
 const SUGGESTED_PROMPTS = [
@@ -52,10 +71,9 @@ export const GuestChat = () => {
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [guestSessionId] = useState<string>(
-    () =>
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `guest-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `guest-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
 
   const remaining = Math.max(0, FREE_LIMIT - interactionCount);
@@ -123,26 +141,22 @@ export const GuestChat = () => {
         setInteractionCount((c) => c + 1);
         setMessages((prev) => [...prev, { role: "bot", text: data.text }]);
 
-        // If that was the last allowed message, flip to upsell mode.
         if (typeof data.remainingMessages === "number" && data.remainingMessages <= 0) {
           setLimitReached(true);
         }
       } catch (err: any) {
         setError(err.message || "Weaver is unavailable right now. Please try again.");
-        // Roll back the optimistic user message so they can retry cleanly.
         setMessages((prev) => prev.slice(0, -1));
         setInput(text);
       } finally {
         setLoading(false);
       }
     },
-    [messages, interactionCount, turnstileToken, loading, limitReached]
+    [messages, interactionCount, turnstileToken, loading, limitReached, guestSessionId]
   );
 
   return (
-    <div className="landing-card-strong relative w-full max-w-lg rounded-2xl p-4 sm:p-6">
-      <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
-
+    <div className="relative w-full max-w-lg rounded-2xl border border-border/60 bg-background/60 p-4 sm:p-6 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
       {/* Header */}
       <div className="relative flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -166,35 +180,58 @@ export const GuestChat = () => {
         ref={scrollRef}
         className="relative h-[260px] overflow-y-auto rounded-xl bg-background/40 p-3 space-y-3 scroll-smooth"
       >
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={cn(
-              "flex",
-              msg.role === "user" ? "justify-end" : "justify-start"
-            )}
-          >
-            <div
+        <AnimatePresence initial={false}>
+          {messages.map((msg, i) => (
+            <motion.div
+              key={`${msg.role}-${i}`}
+              variants={messageVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
               className={cn(
-                "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
-                msg.role === "user"
-                  ? "bg-indigo-600 text-white rounded-tr-sm"
-                  : "bg-muted text-foreground rounded-tl-sm"
+                "flex",
+                msg.role === "user" ? "justify-end" : "justify-start"
               )}
             >
-              {msg.text}
-            </div>
-          </div>
-        ))}
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
+                  msg.role === "user"
+                    ? "bg-indigo-600 text-white rounded-tr-sm"
+                    : "bg-muted text-foreground rounded-tl-sm"
+                )}
+              >
+                {msg.text}
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
 
         {loading && (
-          <div className="flex justify-start">
+          <motion.div
+            variants={messageVariants}
+            initial="hidden"
+            animate="visible"
+            className="flex justify-start"
+          >
             <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5">
-              <span className="h-2 w-2 animate-bounce rounded-full bg-indigo-400 [animation-delay:-0.3s]" />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-purple-400 [animation-delay:-0.15s]" />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-sky-400" />
+              <motion.span
+                animate={{ y: [0, -3, 0] }}
+                transition={{ duration: 0.55, repeat: Infinity, ease: EASE_OUT }}
+                className="h-2 w-2 rounded-full bg-indigo-400"
+              />
+              <motion.span
+                animate={{ y: [0, -3, 0] }}
+                transition={{ duration: 0.55, delay: 0.08, repeat: Infinity, ease: EASE_OUT }}
+                className="h-2 w-2 rounded-full bg-purple-400"
+              />
+              <motion.span
+                animate={{ y: [0, -3, 0] }}
+                transition={{ duration: 0.55, delay: 0.16, repeat: Infinity, ease: EASE_OUT }}
+                className="h-2 w-2 rounded-full bg-sky-400"
+              />
             </div>
-          </div>
+          </motion.div>
         )}
       </div>
 
@@ -205,7 +242,7 @@ export const GuestChat = () => {
             <button
               key={p}
               onClick={() => sendMessage(p)}
-              className="rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+              className="rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors duration-150 hover:border-primary/50 hover:text-foreground"
             >
               {p}
             </button>
@@ -224,9 +261,10 @@ export const GuestChat = () => {
           {limitReached ? (
             <motion.div
               key="upsell"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
+              variants={panelVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
               className="rounded-xl border border-primary/30 bg-gradient-to-br from-violet-500/10 to-indigo-500/10 p-4 text-center"
             >
               <LockClosedIcon className="mx-auto mb-2 h-5 w-5 text-primary" />
@@ -234,7 +272,7 @@ export const GuestChat = () => {
                 Liked that? Sign up to unlock persistent memory, code, and more.
               </p>
               <Link href="/dashboard">
-                <Button className="landing-cta-primary w-full rounded-full font-semibold">
+                <Button className="w-full rounded-full font-semibold">
                   Continue in Lattice OS
                   <ArrowRightIcon className="ml-2 h-4 w-4" />
                 </Button>
@@ -243,9 +281,10 @@ export const GuestChat = () => {
           ) : (
             <motion.form
               key="input"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              variants={panelVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
               onSubmit={(e) => {
                 e.preventDefault();
                 sendMessage(input);
