@@ -76,7 +76,7 @@ const SlackLandingPage = () => {
         </section>
 
         {/* Competitive Comparison - Manus-inspired */}
-        <section className="py-20 px-4 border-y border-white/10 bg-gradient-to-b from-transparent via-purple-950/10 to-transparent">
+        <section className="py-20 px-4 border-y border-white/10 bg-gradient-to-b from-transparent via-purple-950/10 to-transparent relative overflow-hidden">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
               <h2 className="text-4xl font-bold text-white mb-4">Why Teams Choose Lattice OS</h2>
@@ -85,7 +85,7 @@ const SlackLandingPage = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition" />
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-[filter] duration-200" />
                 <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
                   <div className="text-5xl font-bold text-white mb-2">Free to start</div>
                   <div className="text-gray-400 mb-4">Welcome credits, then pay-as-you-go</div>
@@ -94,7 +94,7 @@ const SlackLandingPage = () => {
               </div>
 
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-pink-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition" />
+                <div className="absolute inset-0 bg-gradient-to-r from-pink-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-[filter] duration-200" />
                 <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
                   <div className="text-5xl font-bold text-white mb-2">4+</div>
                   <div className="text-gray-400 mb-4">Core Features</div>
@@ -103,7 +103,7 @@ const SlackLandingPage = () => {
               </div>
 
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition" />
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-[filter] duration-200" />
                 <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
                   <div className="text-5xl font-bold text-white mb-2">Pay-as-you-go</div>
                   <div className="text-gray-400 mb-4">No subscriptions</div>
@@ -115,7 +115,7 @@ const SlackLandingPage = () => {
         </section>
 
         {/* Ways to Use - Manus-inspired with time savings */}
-        <section id="features" className="py-24 px-4 lg:max-w-7xl lg:mx-auto">
+        <section id="features" className="py-24 px-4 lg:max-w-7xl lg:mx-auto relative overflow-hidden">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-white mb-4">Ways to Use Lattice OS in Slack</h2>
             <p className="text-gray-400 text-lg">Transform hours of work into minutes</p>
@@ -165,7 +165,7 @@ const SlackLandingPage = () => {
                   "relative group",
                   index % 2 === 1 && "lg:col-start-1 lg:row-start-1"
                 )}>
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-3xl blur-2xl group-hover:blur-3xl transition" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-[filter] duration-200" />
                   <div className="relative aspect-[9/20] lg:aspect-[9/16] rounded-2xl border border-white/10 bg-gradient-to-br from-gray-900 to-black overflow-hidden">
                     {useCase.title === 'Image Generation' ? (
                       <video
@@ -216,7 +216,7 @@ const SlackLandingPage = () => {
         </section>
 
         {/* How It Works */}
-        <section className="px-4 py-20 max-w-5xl mx-auto border-t border-white/10">
+        <section className="px-4 py-20 max-w-5xl mx-auto border-t border-white/10 relative overflow-hidden">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-white mb-4">Get Started in 60 Seconds</h2>
             <p className="text-gray-400 text-lg">Three simple steps to transform your Slack workspace</p>
@@ -226,7 +226,7 @@ const SlackLandingPage = () => {
             {steps.map((step, index) => (
               <div key={index} className="text-center group">
                 <div className="relative mb-6">
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/30 to-blue-600/30 rounded-full blur-xl group-hover:blur-2xl transition" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/30 to-blue-600/30 rounded-full blur-xl group-hover:blur-2xl transition-[filter] duration-200" />
                   <div className="relative w-16 h-16 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 flex items-center justify-center text-white font-bold text-2xl mx-auto">
                     {index + 1}
                   </div>
@@ -239,7 +239,7 @@ const SlackLandingPage = () => {
         </section>
 
         {/* All Features Grid */}
-        <section className="px-4 py-20 max-w-7xl mx-auto border-t border-white/10">
+        <section className="px-4 py-20 max-w-7xl mx-auto border-t border-white/10 relative overflow-hidden">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-white mb-4">Everything You Need</h2>
             <p className="text-gray-400 text-lg">Powerful AI capabilities, all in one integration</p>
@@ -249,9 +249,9 @@ const SlackLandingPage = () => {
             {allFeatures.map((feature) => (
               <div
                 key={feature.label}
-                className="group p-6 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition duration-200 backdrop-blur-sm hover:border-purple-500/30"
+                className="group p-6 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors duration-200 backdrop-blur-sm hover:border-purple-500/30"
               >
-                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110", feature.bgColor)}>
+                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform duration-200 group-hover:scale-110", feature.bgColor)}>
                   <feature.icon className={cn("w-6 h-6", feature.color)} />
                 </div>
                 <h3 className="text-lg font-semibold text-white mb-2">{feature.label}</h3>
@@ -264,7 +264,7 @@ const SlackLandingPage = () => {
         </section>
 
         {/* Security Section */}
-        <section className="py-20 px-4 border-t border-white/10">
+        <section className="py-20 px-4 border-t border-white/10 relative overflow-hidden">
           <div className="max-w-4xl mx-auto text-center">
             <Shield className="w-12 h-12 text-green-400 mx-auto mb-6" />
             <h2 className="text-4xl font-bold text-white mb-4">Enterprise-Grade Security</h2>
@@ -274,7 +274,7 @@ const SlackLandingPage = () => {
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {securityFeatures.map((feature, index) => (
-                <div key={index} className="p-6 rounded-xl bg-white/5 border border-white/10 hover:border-green-500/30 transition-colors">
+                <div key={index} className="p-6 rounded-xl bg-white/5 border border-white/10 hover:border-green-500/30 transition-colors duration-200">
                   <CheckIcon className="w-6 h-6 text-green-400 mx-auto mb-3" />
                   <p className="text-white font-medium">{feature}</p>
                 </div>
@@ -321,10 +321,10 @@ const SlackLandingPage = () => {
             </div>
 
             <div className="flex items-center gap-6 text-sm text-gray-400">
-              <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
-              <Link href="/support" className="hover:text-white transition">Support</Link>
-              <Link href="/" className="hover:text-white transition">Home</Link>
-              <Link href="/blog" className="hover:text-white transition">Blog</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors duration-200">Privacy Policy</Link>
+              <Link href="/support" className="hover:text-white transition-colors duration-200">Support</Link>
+              <Link href="/" className="hover:text-white transition-colors duration-200">Home</Link>
+              <Link href="/blog" className="hover:text-white transition-colors duration-200">Blog</Link>
             </div>
           </div>
 
