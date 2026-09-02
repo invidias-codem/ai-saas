@@ -13,6 +13,7 @@ import { FileTextIcon, QuestionMarkCircledIcon, EnterIcon, RocketIcon } from "@r
 import { Rss } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { usePricingModal } from "@/lib/store/pricing-modal-store";
+import { BlogNavLink } from "@/components/landing/blog-nav-link";
 
 export const LandingNavbar = () => {
     const t = useTranslations("Landing");
@@ -97,7 +98,8 @@ const itemVariants = {
 
                     <nav className="hidden md:flex items-center gap-8">
                         <div className="flex items-center gap-6 text-sm font-medium">
-                            {navLinks.map((link) => (
+                            <BlogNavLink href="/blog" label="Blog" />
+                            {navLinks.filter(l => l.label !== "Blog").map((link) => (
                                 <Link
                                     key={link.href}
                                     href={link.href}
