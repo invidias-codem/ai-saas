@@ -131,7 +131,7 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
         <div
           key={tier.key}
           className={cn(
-            "relative rounded-2xl border p-6 flex flex-col transition-all duration-300 hover:-translate-y-1 hover:shadow-lg",
+            "relative rounded-2xl border p-6 flex flex-col transition duration-200 hover:-translate-y-1 hover:shadow-lg",
             tier.popular
               ? "border-purple-500 bg-gradient-to-br from-purple-500/5 to-pink-500/5 shadow-[0_0_35px_-8px_rgba(168,85,247,0.35)]"
               : "border-border bg-card"

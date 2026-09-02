@@ -31,7 +31,7 @@ export default function ExplorePage() {
                             <Link
                                 key={f.slug}
                                 href={`/explore/${f.slug}`}
-                                className="group relative flex flex-col rounded-2xl border border-border bg-card p-6 transition hover:border-purple-500/50 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.25)]"
+                                className="group relative flex flex-col rounded-2xl border border-border bg-card p-6 transition duration-200 hover:border-purple-500/50 hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.25)]"
                             >
                                 <div className="mb-4 flex items-center justify-between">
                                     <div className="rounded-xl bg-primary/10 p-2.5">

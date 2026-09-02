@@ -17,7 +17,7 @@ export default function PricingPage() {
               <a href="/support" className="hover:text-foreground transition-colors">Support</a>
             </nav>
             <a href="/onboarding">
-              <button className="rounded-full px-6 py-2 text-sm font-semibold bg-primary text-primary-foreground">
+              <button className="rounded-full px-6 py-3 min-h-[48px] inline-flex items-center text-sm font-semibold bg-primary text-primary-foreground transition-colors duration-200 hover:bg-primary/90">
                 Start 7-Day Trial
               </button>
             </a>
