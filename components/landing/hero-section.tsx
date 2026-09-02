@@ -138,6 +138,12 @@ export const HeroSection = () => {
               {t("ctaSecondary")}
             </Button>
           </a>
+          <Link
+            href="/sovereign"
+            className="hidden md:inline-flex min-h-[48px] items-center text-sm text-foreground/50 transition hover:text-foreground/80"
+          >
+            Need enterprise-grade sovereignty?
+          </Link>
         </motion.div>
 
         {/* Guest chat */}

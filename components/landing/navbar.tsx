@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { FileTextIcon, QuestionMarkCircledIcon, EnterIcon, RocketIcon } from "@radix-ui/react-icons";
-import { Rss } from "lucide-react";
+import { Rss, ShieldCheck as ShieldCheckIcon } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { usePricingModal } from "@/lib/store/pricing-modal-store";
 import { BlogNavLink } from "@/components/landing/blog-nav-link";
@@ -31,6 +31,7 @@ export const LandingNavbar = () => {
         { href: "/blog", label: "Blog", icon: FileTextIcon },
         { href: `/${locale}/blog/feed`, label: "RSS", icon: Rss, external: false },
         { href: "/slack", label: "Slack", icon: () => <BrandIcon name="Slack" /> },
+        { href: "/sovereign", label: "Sovereign", icon: ShieldCheckIcon, desktopOnly: true },
         { href: "/support", label: "Support", icon: QuestionMarkCircledIcon },
     ];
 
@@ -190,7 +191,7 @@ const itemVariants = {
                                     animate="open"
                                     className="flex w-full flex-col items-center space-y-3"
                                 >
-                                    {navLinks.map((link) => {
+                                    {navLinks.filter(l => !('desktopOnly' in l && l.desktopOnly)).map((link) => {
                                         const Icon = link.icon;
                                         return (
                                             <motion.div key={link.href} variants={itemVariants} className="w-full">

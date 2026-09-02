@@ -139,6 +139,12 @@ export const ExpertHero = ({ variant }: ExpertHeroProps) => {
                     {t("ctaSecondary")}
                   </RippleButton>
                 </Link>
+                <Link
+                  href="/sovereign"
+                  className="inline-flex min-h-[48px] items-center text-sm text-white/50 transition hover:text-white/80"
+                >
+                  Enterprise? See Sovereign tier
+                </Link>
               </motion.div>
             </motion.div>
 
