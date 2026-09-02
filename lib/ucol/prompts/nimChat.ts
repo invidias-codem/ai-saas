@@ -40,7 +40,7 @@ export async function nimChat(
   if (opts.reasoningEffort) body.reasoning_effort = opts.reasoningEffort;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 120_000);
+  const timer = setTimeout(() => controller.abort(), Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? 50_000));
 
   let response: Response;
   try {

@@ -886,13 +886,15 @@ export async function generateConversationReply(
       updateTrace({ metadata: { error: err?.message || String(err) } });
     } catch {}
     const isRateLimit = err?.status === 429 || String(err).includes('429');
+    const isAbortTimeout = String(err).includes('This operation was aborted') || String(err).includes('AbortError');
     const isProviderDown = String(err).includes('1033') || String(err).includes('Tunnel') || String(err).includes('530') || (err?.status && err.status >= 500);
 
-    if (isRateLimit) {
-      console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to fast mode`);
-      const fallback = resolveProviderForMode({ mode: 'fast', hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys });
-      actualModelId = fallback.execution.modelId;
-      streamResult = await fallback.execution.provider.generateStream(history, enhancedSystemInstruction, {
+    if (isRateLimit || isAbortTimeout) {
+      console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to Gemini`);
+      const { GeminiProvider } = await import('./providers/gemini');
+      const fallbackProvider = new GeminiProvider();
+      actualModelId = 'gemini-2.5-flash';
+      streamResult = await fallbackProvider.generateStream(history, enhancedSystemInstruction, {
         model: actualModelId,
         temperature: 0.9,
         maxTokens: 2048,

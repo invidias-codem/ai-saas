@@ -128,7 +128,7 @@ function resolveBaseProvider(
       routing: {
         selectionStrategy: 'single_model',
         preferredModelRefs: ['nvidia-nim.agentic'],
-        fallbackModelRefs: ['deepseek.quality'],
+        fallbackModelRefs: ['gemini.quality'],
         embeddingLanePreference: ['primary_768', 'secondary_3072'],
       },
       reason: 'agentic mode routes to Kimi K3 on NVIDIA NIM',
@@ -145,7 +145,7 @@ function resolveBaseProvider(
       routing: {
         selectionStrategy: 'single_model',
         preferredModelRefs: ['deepseek.reasoning'],
-        fallbackModelRefs: [],
+        fallbackModelRefs: ['gemini.quality'],
         embeddingLanePreference: ['primary_768', 'secondary_3072'],
       },
       reason: 'reasoning mode routes to DeepSeek V4 Pro on NVIDIA NIM',
@@ -162,7 +162,7 @@ function resolveBaseProvider(
       routing: {
         selectionStrategy: 'single_model',
         preferredModelRefs: ['deepseek.fast'],
-        fallbackModelRefs: [],
+        fallbackModelRefs: ['gemini.quality'],
         embeddingLanePreference: ['primary_768', 'secondary_3072'],
       },
       reason: 'fast mode routes to DeepSeek V4 Pro on NVIDIA NIM',
@@ -179,7 +179,7 @@ function resolveBaseProvider(
     routing: {
       selectionStrategy: 'single_model',
       preferredModelRefs: ['deepseek.quality'],
-      fallbackModelRefs: [],
+      fallbackModelRefs: ['gemini.quality'],
       embeddingLanePreference: ['primary_768', 'secondary_3072'],
     },
     reason: 'quality mode routes to DeepSeek V4 Pro on NVIDIA NIM',
