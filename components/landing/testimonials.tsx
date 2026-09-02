@@ -31,8 +31,20 @@ export const Testimonials = () => {
         <section className="py-24 border-t border-border bg-muted/50 relative overflow-hidden">
             {/* Decorative elements */}
             <div className="absolute pointer-events-none top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full">
-                <div className="absolute top-1/4 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-[80px]" />
-                <div className="absolute bottom-1/4 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[80px]" />
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    whileInView={{ opacity: 1 }}
+                    viewport={{ once: true, margin: "-100px" }}
+                    transition={{ duration: 0.8 }}
+                    className="absolute top-1/4 left-0 w-64 h-64 bg-purple-500/10 rounded-full blur-[80px]"
+                />
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    whileInView={{ opacity: 1 }}
+                    viewport={{ once: true, margin: "-100px" }}
+                    transition={{ duration: 0.8, delay: 0.15 }}
+                    className="absolute bottom-1/4 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[80px]"
+                />
             </div>
 
             <div className="container px-4 mx-auto relative z-10">
