@@ -175,6 +175,16 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
           >
             {tier.cta}
           </Button>
+          {tier.checkout && (
+            <div className="mt-3 text-center">
+              <a
+                href="/api/checkout/kofi"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-200 underline-offset-2 hover:underline"
+              >
+                Prefer PayPal? Pay via Ko-fi
+              </a>
+            </div>
+          )}
         </div>
       ))}
     </div>
