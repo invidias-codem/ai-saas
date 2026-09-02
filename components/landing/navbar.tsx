@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { FileTextIcon, QuestionMarkCircledIcon, EnterIcon, RocketIcon } from "@radix-ui/react-icons";
-import { Rss, ShieldCheck as ShieldCheckIcon } from "lucide-react";
+import { Rss, ShieldCheck as ShieldCheckIcon, Users as UsersIcon } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { usePricingModal } from "@/lib/store/pricing-modal-store";
 import { BlogNavLink } from "@/components/landing/blog-nav-link";
@@ -32,6 +32,7 @@ export const LandingNavbar = () => {
         { href: `/${locale}/blog/feed`, label: "RSS", icon: Rss, external: false },
         { href: "/slack", label: "Slack", icon: () => <BrandIcon name="Slack" /> },
         { href: "/sovereign", label: "Sovereign", icon: ShieldCheckIcon, desktopOnly: true },
+        { href: "/expert", label: "Experts", icon: UsersIcon, desktopOnly: true },
         { href: "/support", label: "Support", icon: QuestionMarkCircledIcon },
     ];
 

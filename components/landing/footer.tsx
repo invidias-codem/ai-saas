@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { href: "/blog", label: "Blog" },
   { href: "/docs", label: "Docs" },
   { href: "/sovereign", label: "Sovereign" },
+  { href: "/expert", label: "Experts" },
   { href: "/slack", label: "Slack" },
   { href: "/privacy", label: "Privacy" },
   { href: SUPPORT_URL, label: "Support" },
