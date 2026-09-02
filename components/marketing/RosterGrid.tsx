@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useSyncExternalStore } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useTranslations } from "next-intl";
 import { ArrowRightIcon } from "lucide-react";
 import { CURATED_PERSONAS } from "@/lib/constants/personas";
@@ -26,6 +26,7 @@ export const RosterGrid = () => {
   const t = useTranslations("Landing.expert.cta.roster");
   const [startIndex, setStartIndex] = useState(0);
   const { open: openPricingModal } = usePricingModal();
+  const reducedMotion = useReducedMotion();
 
   // Show 1 card on mobile, 3 on desktop
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -36,9 +37,12 @@ export const RosterGrid = () => {
   }, []);
 
   useEffect(() => {
+    // Never auto-rotate for users with vestibular motion sensitivity —
+    // dots remain fully manual.
+    if (reducedMotion) return;
     const timer = setInterval(rotate, 6000);
     return () => clearInterval(timer);
-  }, [rotate]);
+  }, [rotate, reducedMotion]);
 
   const extended = [
     ...CURATED_PERSONAS,
@@ -73,8 +77,13 @@ export const RosterGrid = () => {
         <div className="overflow-hidden">
           <motion.div
             className="flex gap-6"
+            style={{ touchAction: "pan-y" }}
             animate={{ x: -((offset + startIndex) * cardWidth) + "%" }}
-            transition={{ duration: 0.55, ease: EASE_IN_OUT }}
+            transition={
+              reducedMotion
+                ? { duration: 0.15, ease: "easeOut" } // instant-ish swap, no lateral travel
+                : { duration: 0.55, ease: EASE_IN_OUT }
+            }
           >
             {extended.map((persona, i) => (
               <div
@@ -109,7 +118,7 @@ export const RosterGrid = () => {
                   <div className="relative z-10 mt-8">
                     <button
                       onClick={() => openPricingModal()}
-                      className="group/link inline-flex items-center gap-2 text-sm font-semibold text-white/80 hover:text-white transition-colors"
+                      className="group/link inline-flex items-center gap-2 text-sm font-semibold text-white/80 hover:text-white transition min-h-[48px]"
                     >
                       {t("cta")}
                       <ArrowRightIcon className="h-4 w-4 transition-transform duration-150 group-hover/link:translate-x-1" />
