@@ -41,7 +41,7 @@ export async function nimChat(
     max_tokens: opts.maxTokens ?? 8192,
     top_p: 0.95,
     stream: false,
-    chat_template_kwargs: { thinking: false },
+    chat_template_kwargs: { enable_thinking: false },
     ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}),
   };
 
