@@ -1,20 +1,14 @@
-"use client";
+import { redirect } from 'next/navigation';
 
-import { useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { useLocale } from "next-intl";
+interface RouteParams {
+  params: Promise<{ locale: string; id: string }>;
+}
 
-export default function WorkspaceHomePage() {
-  const params = useParams();
-  const router = useRouter();
-  const locale = useLocale();
-  const workspaceId = String(params?.id || '');
+export const dynamic = 'force-dynamic';
 
-  useEffect(() => {
-    if (workspaceId) {
-      router.replace(`/${locale}/workspaces/${workspaceId}/conversation`);
-    }
-  }, [workspaceId, locale, router]);
-
-  return null;
+// Bare workspace URLs jump straight to the conversation resolver.
+// (workspace/[id]/conversation picks last-open or creates a new conversation.)
+export default async function WorkspaceRedirect({ params }: RouteParams) {
+  const { locale, id } = await params;
+  redirect(`/${locale}/workspaces/${id}/conversation`);
 }

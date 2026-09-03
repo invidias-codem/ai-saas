@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { getDefaultWorkspace } from '@/lib/workspaces/defaultWorkspace';
 import { z } from 'zod';
 import { supabaseAdmin } from "@/lib/supabaseClient";
 
@@ -41,17 +42,22 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
         }
 
+        // Resolve default workspace once — used both to scope the synced
+        // conversation and to return workspaceId to the client router.
+        const defaultWorkspace = await getDefaultWorkspace(user.userId);
+
         // Check if session already synced
         const { data: existing } = await supabaseAdmin
             .from("conversations")
             .select("id")
             .eq("metadata->>guestSessionId", guestSessionId)
-            .single();
+            .maybeSingle();
 
         if (existing) {
             return NextResponse.json({
                 success: true,
-                conversationId: existing.id
+                conversationId: existing.id,
+                workspaceId: defaultWorkspace.id
             });
         }
 
@@ -59,6 +65,7 @@ export async function POST(req: Request) {
             .from("conversations")
             .insert({
                 user_id: user.userId,
+                workspace_id: defaultWorkspace.id,
                 title: "Guest Chat Session",
                 is_deleted: false,
                 is_archived: false,
@@ -92,7 +99,8 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             success: true,
-            conversationId
+            conversationId,
+            workspaceId: defaultWorkspace.id
         });
     } catch (error) {
         console.error("[API:Chat:SyncGuest] Error:", error);
