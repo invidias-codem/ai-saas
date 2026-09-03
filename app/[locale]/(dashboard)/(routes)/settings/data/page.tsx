@@ -1,5 +1,3 @@
-"use client";
-
 import { Heading } from "@/components/heading";
 import { Database, Download, HardDrive, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
