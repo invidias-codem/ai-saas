@@ -35,17 +35,22 @@ interface Conversation {
     preview?: string;
 }
 
+interface ConversationHistoryProps {
+    onNavigate?: () => void;
+    initialConversations?: Conversation[];
+}
+
 function extractWorkspaceId(pathname: string | null): string | null {
     if (!pathname) return null;
     const match = pathname.match(/\/workspaces\/([^/]+)/);
     return match ? decodeURIComponent(match[1]) : null;
 }
 
-export function ConversationHistory({ onNavigate }: { onNavigate?: () => void }) {
+export function ConversationHistory({ onNavigate, initialConversations }: ConversationHistoryProps) {
     const router = useRouter();
     const pathname = usePathname();
-    const [conversations, setConversations] = useState<Conversation[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [conversations, setConversations] = useState<Conversation[]>(initialConversations ?? []);
+    const [loading, setLoading] = useState(!initialConversations);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [creatingNew, setCreatingNew] = useState(false);
 
@@ -68,9 +73,10 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
     }
 
     useEffect(() => {
-        // Initial data load on mount/route change — async fetch + setState.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+        // Skip the mount fetch when the RSC shell already seeded the list.
+        if (initialConversations) return;
         loadConversations();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pathname]);
 
     const visibleConversations = useMemo(() => {
@@ -106,7 +112,8 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
         try {
             clearSessionMemoryStorage();
             if (activeWorkspaceId) {
-                router.push(`/workspaces/${activeWorkspaceId}/conversation`);
+                // Blank-slate guarantee: resolver bypasses last-open restore.
+                router.push(`/workspaces/${activeWorkspaceId}/conversation?action=new`);
             } else {
                 router.push('/conversation/new');
             }
