@@ -50,7 +50,7 @@ export function AuthorCard({ author, coAuthors }: AuthorCardProps) {
                     href={`https://twitter.com/${auth.twitter}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    className="p-2 min-h-[48px] min-w-[48px] inline-flex items-center justify-center rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors duration-200"
                     aria-label={`Follow ${auth.name} on Twitter`}
                   >
                     <BrandIcon name="Twitter" className="w-4 h-4" size={16} />
@@ -58,10 +58,10 @@ export function AuthorCard({ author, coAuthors }: AuthorCardProps) {
                 )}
                 {auth.linkedin && (
                   <a
-                    href={`https://linkedin.com/company/${auth.linkedin}`}
+                    href={`https://www.linkedin.com/in/${auth.linkedin}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    className="p-2 min-h-[48px] min-w-[48px] inline-flex items-center justify-center rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors duration-200"
                     aria-label={`Connect with ${auth.name} on LinkedIn`}
                   >
                     <BrandIcon name="Linkedin" className="w-4 h-4" size={16} />
@@ -72,7 +72,7 @@ export function AuthorCard({ author, coAuthors }: AuthorCardProps) {
                     href={`https://github.com/${auth.github}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    className="p-2 min-h-[48px] min-w-[48px] inline-flex items-center justify-center rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors duration-200"
                     aria-label={`View ${auth.name} on GitHub`}
                   >
                     <BrandIcon name="Github" className="w-4 h-4" size={16} />
