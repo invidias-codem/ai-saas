@@ -54,13 +54,17 @@ export async function POST(req: Request) {
             .maybeSingle();
 
         if (existing) {
+            await supabaseAdmin.from('workspace_state').upsert({
+                workspace_id: defaultWorkspace.id,
+                last_open_conversation_id: existing.id,
+                last_open_tab: 'conversation',
+            });
             return NextResponse.json({
                 success: true,
                 conversationId: existing.id,
                 workspaceId: defaultWorkspace.id
             });
         }
-
         const { data: convData, error: convError } = await supabaseAdmin
             .from("conversations")
             .insert({
@@ -96,6 +100,14 @@ export async function POST(req: Request) {
             console.error("[API:Chat:SyncGuest] Error inserting messages:", msgError);
             throw new Error("Failed to insert synced messages");
         }
+
+        // Remember the synced conversation as last-open so the workspace
+        // resolver drops the user straight back into it next visit.
+        await supabaseAdmin.from('workspace_state').upsert({
+            workspace_id: defaultWorkspace.id,
+            last_open_conversation_id: conversationId,
+            last_open_tab: 'conversation',
+        });
 
         return NextResponse.json({
             success: true,
