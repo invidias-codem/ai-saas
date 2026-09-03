@@ -74,7 +74,7 @@ def glow(size, color, radius_scale=0.7):
     return g.resize(size, Image.LANCZOS)
 
 
-def render(slug, title, category, out_path):
+def render(slug, title, category, out_path, show_text=True):
     im = Image.new("RGB", (W, H), BG)
 
     # Corner glows
@@ -82,13 +82,6 @@ def render(slug, title, category, out_path):
     im.paste(g1, (-160, -180), g1)
     g2 = glow((520, 520), GLOW_BLUE, 1.0)
     im.paste(g2, (W - 360, H - 320), g2)
-
-    # Soft center vignette (very subtle)
-    vign = Image.new("L", (W, H), 0)
-    vd = ImageDraw.Draw(vign)
-    vd.rectangle([60, 60, W - 60, H - 60], fill=255)
-    vign = vign.filter(__import__("PIL.ImageFilter", fromlist=["GaussianBlur"]).GaussianBlur(120))
-    # skip actual blend — flat bg + corner glows is enough
 
     draw = ImageDraw.Draw(im)
 
@@ -116,24 +109,25 @@ def render(slug, title, category, out_path):
     im.paste(pill, (safe_x, safe_top), pill)
     draw.text((safe_x + pad_x, safe_top + pad_y - 2), cat_label, font=f_cat, fill=cat_color)
 
-    # Title — clamp to ~3 lines
-    y = safe_top + pill_h + 40
-    max_w = W - safe_x * 2
-    f_title = font(BOLD, 64)
-    lines = wrap_px(draw, title, f_title, max_w)
-    if len(lines) > 3:
-        # shrink one step
-        f_title = font(BOLD, 56)
+    if show_text:
+        # Title — clamp to ~3 lines
+        y = safe_top + pill_h + 40
+        max_w = W - safe_x * 2
+        f_title = font(BOLD, 64)
         lines = wrap_px(draw, title, f_title, max_w)
-    if len(lines) > 3:
-        f_title = font(BOLD, 48)
-        lines = wrap_px(draw, title, f_title, max_w)
-    if len(lines) > 3:
-        lines = lines[:3]
-        lines[2] = lines[2].rstrip() + "…"
-    for i, line in enumerate(lines):
-        draw.text((safe_x, y), line, font=f_title, fill=FG_PRIMARY)
-        y += f_title.size + 12
+        if len(lines) > 3:
+            # shrink one step
+            f_title = font(BOLD, 56)
+            lines = wrap_px(draw, title, f_title, max_w)
+        if len(lines) > 3:
+            f_title = font(BOLD, 48)
+            lines = wrap_px(draw, title, f_title, max_w)
+        if len(lines) > 3:
+            lines = lines[:3]
+            lines[2] = lines[2].rstrip() + "…"
+        for i, line in enumerate(lines):
+            draw.text((safe_x, y), line, font=f_title, fill=FG_PRIMARY)
+            y += f_title.size + 12
 
     # Author / brand row
     f_meta = font(REG, 22)
@@ -186,11 +180,13 @@ def extract(split_char="---"):
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
     posts = extract()
-    print(f"Rendering {len(posts)} OG cards -> {OUTDIR}")
+    print(f"Rendering {len(posts)} OG cards + card thumbs -> {OUTDIR}")
     for p in posts:
-        out = os.path.join(OUTDIR, f"{p['slug']}-og.jpg")
-        size = render(p["slug"], p["title"], p["category"], out)
-        print(f"  {os.path.basename(out):60s} {size/1024:6.1f} KB  [{p['category']}]")
+        og_out = os.path.join(OUTDIR, f"{p['slug']}-og.jpg")
+        card_out = os.path.join(OUTDIR, f"{p['slug']}-card.jpg")
+        og_size = render(p["slug"], p["title"], p["category"], og_out, show_text=True)
+        card_size = render(p["slug"], p["title"], p["category"], card_out, show_text=False)
+        print(f"  {p['slug']:50s} OG={og_size/1024:6.1f}KB card={card_size/1024:6.1f}KB [{p['category']}]")
 
 
 if __name__ == "__main__":

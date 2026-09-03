@@ -106,6 +106,14 @@ const parsePostFile = cache((slug: string): BlogPost | null => {
         meta.ogImage && fs.existsSync(path.join(process.cwd(), 'public', meta.ogImage))
           ? meta.ogImage
           : `/og-image.jpg`,
+      // Card thumbnail: image-only variant rendered by scripts/generate-blog-og.py.
+      // No frontmatter key needed — derived from slug; falls back to ogImage if missing.
+      cardImage: (() => {
+        const candidate = `/blog/${slug}-card.jpg`;
+        return fs.existsSync(path.join(process.cwd(), 'public', candidate))
+          ? candidate
+          : undefined;
+      })(),
       content,
     };
   } catch (error) {

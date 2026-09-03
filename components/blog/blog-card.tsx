@@ -46,7 +46,7 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
                 <ImagePlaceholder title={post.title} category={post.category} />
               ) : (
                 <Image
-                  src={post.ogImage}
+                  src={post.cardImage ?? post.ogImage}
                   alt={post.title}
                   fill
                   className="object-cover transition-transform duration-200 group-hover:scale-105"
@@ -106,7 +106,7 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
             <ImagePlaceholder title={post.title} category={post.category} />
           ) : (
             <Image
-              src={post.ogImage}
+              src={post.cardImage ?? post.ogImage}
               alt={post.title}
               fill
               className="object-cover transition-transform duration-200 group-hover:scale-105"
