@@ -4,16 +4,19 @@ import { supabaseAdmin } from '@/lib/supabaseClient';
 
 interface RouteParams {
   params: Promise<{ locale: string; id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export const dynamic = 'force-dynamic';
 
-export default async function WorkspaceConversationPage({ params }: RouteParams) {
+export default async function WorkspaceConversationPage({ params, searchParams }: RouteParams) {
   const { locale, id } = await params;
+  const search = await searchParams;
+  const forceNew = search?.action === 'new';
   const { userId } = await auth();
 
   if (!userId || !supabaseAdmin) {
-    redirect(`/${locale}/conversation/new?workspaceId=${encodeURIComponent(id)}`);
+    redirect(`/${locale}/conversation/new`);
   }
 
   const { data: workspace } = await supabaseAdmin
@@ -24,7 +27,7 @@ export default async function WorkspaceConversationPage({ params }: RouteParams)
     .maybeSingle();
 
   if (!workspace) {
-    redirect(`/${locale}/conversation/new?workspaceId=${encodeURIComponent(id)}`);
+    redirect(`/${locale}/conversation/new`);
   }
 
   const { data: workspaceState } = await supabaseAdmin
@@ -33,7 +36,7 @@ export default async function WorkspaceConversationPage({ params }: RouteParams)
     .eq('workspace_id', id)
     .maybeSingle();
 
-  if (workspaceState?.last_open_conversation_id) {
+  if (!forceNew && workspaceState?.last_open_conversation_id) {
     const { data: existingConversation } = await supabaseAdmin
       .from('conversations')
       .select('id')
@@ -71,5 +74,5 @@ export default async function WorkspaceConversationPage({ params }: RouteParams)
     redirect(`/${locale}/conversation/${createdConversation.id}`);
   }
 
-  redirect(`/${locale}/conversation/new?workspaceId=${encodeURIComponent(id)}`);
+  redirect(`/${locale}/dashboard`);
 }
