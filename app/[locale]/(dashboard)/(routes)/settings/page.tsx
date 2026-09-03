@@ -1,25 +1,28 @@
-"use client";
+import { Suspense } from 'react';
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { auth } from '@clerk/nextjs/server';
+import { Heading } from '@/components/heading';
+import { Archive, Settings, Database, Mail, Loader2 } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { supabaseAdmin } from '@/lib/supabaseClient';
+import { db } from '@/lib/firebaseAdmin';
+import { getUserCredits } from '@/lib/subscription/credits';
+import { hasUnlimitedUsageAccess } from '@/lib/credits';
+import { getConfiguredProviderKeys } from '@/lib/userProviderKeys';
+import { SlackIntegration } from '@/components/slack-integration';
+import { MembershipSection } from './MembershipSection';
+import { CreditsSection } from './CreditsSection';
+import { DigestToggleSection } from './DigestToggleSection';
+import { ProviderKeysSection } from './ProviderKeysSection';
+import { IntegrationsSection } from './IntegrationsSection';
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter } from "next/navigation";
-import { Heading } from "@/components/heading";
-import { Archive, Settings, Loader2, Database, Mail, Key, Zap, Crown, ArrowRight } from "lucide-react";
-import { BrandIcon } from "@/lib/icons/brandIcons";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
-import { useAuth } from "@clerk/nextjs";
-import { useTranslations } from "next-intl";
-import { useCredits } from "@/hooks/use-credits";
-import { StickyActionBar, FormSection } from "@/components/ui/form-mobile";
-import { SlackIntegration } from "@/components/slack-integration";
-import { ConversationHistory } from "@/components/conversation-history";
-import { RepoSelectorModal } from "@/components/integrations/RepoSelectorModal";
-import { CreditLimitError } from "@/components/credit-limit-error";
+export const dynamic = 'force-dynamic';
 
-// Loading fallback for Slack integration
+interface RouteParams {
+  params: Promise<{ locale: string }>;
+}
+
 function SlackIntegrationSkeleton() {
   return (
     <Card className="p-6 border-black/5">
@@ -35,467 +38,81 @@ function SlackIntegrationSkeleton() {
   );
 }
 
-interface Integration {
-  id: string;
-  label: string;
-  icon: string;
-  description: string;
-  connected: boolean;
-  color: string;
-  bgColor: string;
-  username?: string;
-  email?: string;
-}
+export default async function SettingsPage({ params }: RouteParams) {
+  const { locale } = await params;
+  const { userId } = await auth();
 
-type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'huggingface';
+  if (!userId) {
+    redirect(`/${locale}/sign-in`);
+  }
 
-const providerLabels: Record<ProviderName, string> = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  google: 'Google Gemini',
-  openrouter: 'OpenRouter',
-  huggingface: 'Hugging Face',
-};
-
-const providerPlaceholders: Record<ProviderName, string> = {
-  openai: 'sk-... or proj-...',
-  anthropic: 'sk-ant-...',
-  google: 'AIza...',
-  openrouter: 'sk-or-v1-...',
-  huggingface: 'hf_...',
-};
-
-const providerDescriptions: Record<ProviderName, string> = {
-  openai: 'Used first by Code Builder planning when configured.',
-  anthropic: 'Used by Code Builder code generation and agentic conversation/code modes.',
-  google: 'Used by Gemini planning, review, multimodal fallback, and quality conversation modes.',
-  openrouter: 'Optional fast-mode gateway to open models. Only used when an OpenRouter key is saved.',
-  huggingface: 'Bring your own Hugging Face Inference Providers token for open-weight model routing.',
-};
-
-// Credits overview + top-up entry point
-function CreditsCard() {
-  const { credits, isLoading } = useCredits();
-  const t = useTranslations("Settings");
-
-  const paypalUrl = process.env.NEXT_PUBLIC_PAYPAL_DONATION_URL || "https://ko-fi.com/joshuajair/?hidefeed=true&widget=true&embed=true&preview=true";
-
-  return (
-    <Card className="p-6 border-black/5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-yellow-500/10">
-            <Zap className="w-6 h-6 text-yellow-500" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold">{t("creditsTitle")}</h3>
-            <p className="text-sm text-muted-foreground">
-              {isLoading ? "…" : `${credits.toLocaleString()} compute credits available`}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {t("creditsHint")}
-            </p>
-          </div>
-        </div>
-        <Button asChild className="bg-yellow-500 hover:bg-yellow-600 text-black">
-          <a href={paypalUrl} target="_blank" rel="noopener noreferrer">
-            {t("topUp")} via PayPal
-          </a>
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
-// Membership / Subscription overview + manual claim fallback
-function MembershipCard() {
-    const { userId } = useAuth();
-    const t = useTranslations("Settings");
-    const [plan, setPlan] = useState<"free" | "pro" | null>(null);
-    const [premiumUntil, setPremiumUntil] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [claiming, setClaiming] = useState(false);
-    const [claimError, setClaimError] = useState("");
-    const [claimSuccess, setClaimSuccess] = useState("");
-
-    useEffect(() => {
-        if (!userId) return;
-
-        async function fetchPlan() {
-            try {
-                const [creditsRes, planRes] = await Promise.all([
-                    fetch("/api/user/credits"),
-                    fetch("/api/plan/check"),
-                ]);
-
-                if (planRes.ok) {
-                    const data = (await planRes.json()) as { tier?: string; premium_until?: string };
-                    setPlan(data.tier === "pro" ? "pro" : "free");
-                    setPremiumUntil(data.premium_until || null);
-                }
-
-                setLoading(false);
-            } catch {
-                setLoading(false);
-            }
-        }
-
-        fetchPlan();
-    }, [userId]);
-
-    async function handleClaim(e: React.FormEvent<HTMLFormElement>) {
-        e.preventDefault();
-        setClaimError("");
-        setClaimSuccess("");
-        setClaiming(true);
-
-        const form = e.currentTarget;
-        const transactionId = (form.elements.namedItem("transactionId") as HTMLInputElement).value.trim();
-        const email = (form.elements.namedItem("kofiEmail") as HTMLInputElement).value.trim();
-
-        try {
-            const res = await fetch("/api/settings/claim", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ transaction_id: transactionId, email }),
-            });
-
-            const data = (await res.json().catch(() => ({}))) as { error?: string; status?: string; premium_until?: string };
-
-            if (!res.ok || data.error) {
-                throw new Error(data.error || "Claim failed");
-            }
-
-            setPlan("pro");
-            if (data.premium_until) setPremiumUntil(data.premium_until);
-            setClaimSuccess("Premium activated! Enjoy the full platform.");
-            form.reset();
-        } catch (err: any) {
-            setClaimError(err.message || "Something went wrong. Try again.");
-        } finally {
-            setClaiming(false);
-        }
-    }
-
-    return (
-        <Card className="p-6 border-black/5">
-            <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-purple-500/10">
-                    <Crown className="w-6 h-6 text-purple-600" />
-                </div>
-                <div>
-                    <h3 className="text-lg font-semibold">{t("membershipTitle") || "Membership"}</h3>
-                    <p className="text-sm text-muted-foreground">
-                        {loading
-                            ? "…"
-                            : plan === "pro"
-                              ? `Premium active${premiumUntil ? ` until ${new Date(premiumUntil).toLocaleDateString()}` : ""}`
-                              : "Free tier — upgrade to unlock high-compute extensions"}
-                    </p>
-                </div>
-            </div>
-
-            {/* Manual claim fallback (always visible as a self-serve escape hatch) */}
-            <form onSubmit={handleClaim} className="mt-5 space-y-3">
-                <p className="text-xs text-muted-foreground">
-                    If you donated on Ko-fi but your account email differs from the Clerk email on this
-                    device, submit your Ko-fi transaction ID and buyer email here to manually claim
-                    premium access.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                    <Input
-                        name="transactionId"
-                        placeholder="Ko-fi Transaction ID"
-                        required
-                        className="sm:max-w-[260px]"
-                    />
-                    <Input
-                        name="kofiEmail"
-                        type="email"
-                        placeholder="Ko-fi buyer email"
-                        required
-                        className="sm:max-w-[260px]"
-                    />
-                    <Button
-                        type="submit"
-                        disabled={claiming}
-                        className="bg-purple-600 hover:bg-purple-700 whitespace-nowrap"
-                    >
-                        {claiming ? "Verifying…" : "Claim Premium"}
-                    </Button>
-                </div>
-                {claimError && <p className="text-xs text-red-600">{claimError}</p>}
-                {claimSuccess && <p className="text-xs text-emerald-600">{claimSuccess}</p>}
-            </form>
-        </Card>
-    );
-}
-
-const SettingsPage = () => {
-  const router = useRouter();
-  const t = useTranslations("Settings");
-  const { userId } = useAuth();
-  const [dailyDigestEnabled, setDailyDigestEnabled] = useState(false);
-  const [loadingSettings, setLoadingSettings] = useState(true);
-  const [repoSelectorOpen, setRepoSelectorOpen] = useState(false);
-  const [apiKeyInputs, setApiKeyInputs] = useState<Record<ProviderName, string>>({ openai: '', anthropic: '', google: '', openrouter: '', huggingface: '' });
-  const [configuredKeys, setConfiguredKeys] = useState<Record<ProviderName, { configured: boolean; preview: string | null }>>({
-    openai: { configured: false, preview: null },
-    anthropic: { configured: false, preview: null },
-    google: { configured: false, preview: null },
-    openrouter: { configured: false, preview: null },
-    huggingface: { configured: false, preview: null },
-  });
-  const [isSavingKey, setIsSavingKey] = useState(false);
-  const [keyError, setKeyError] = useState("");
-  const [keySuccess, setKeySuccess] = useState("");
-  const hasKeyChanges = Object.values(apiKeyInputs).some(v => v.length > 0);
-
-  useEffect(() => {
-    async function fetchSettings() {
-      if (!userId) return;
-      try {
-        const response = await fetch('/api/settings/digest');
-        if (response.ok) {
-          const data = await response.json();
-          setDailyDigestEnabled(data.enabled ?? false);
-        }
-
-        const keyResponse = await fetch('/api/settings/keys');
-        if (keyResponse.ok) {
-          const keyData = await keyResponse.json();
-          if (keyData.providers) {
-            setConfiguredKeys(keyData.providers);
-          }
-        }
-      } catch (err) {
-        console.error("Error fetching user settings:", err);
-      } finally {
-        setLoadingSettings(false);
-      }
-    }
-    fetchSettings();
-  }, [userId]);
-
-  const handleDigestToggle = async (enabled: boolean) => {
-    const previousValue = dailyDigestEnabled;
-    setDailyDigestEnabled(enabled); // Optimistic update
-
-    try {
-      const response = await fetch('/api/settings/digest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to update settings');
-      }
-    } catch (err) {
-      console.error("Error updating user settings:", err);
-      setDailyDigestEnabled(previousValue); // Revert to actual previous value
-    }
-  };
-
-  const handleSaveApiKey = async (provider: ProviderName) => {
-    setKeyError("");
-    setKeySuccess("");
-    const apiKey = apiKeyInputs[provider];
-    const validFormat = provider === 'openai'
-      ? (apiKey.startsWith('sk-') || apiKey.startsWith('proj-'))
-      : provider === 'anthropic'
-        ? apiKey.startsWith('sk-ant-')
-        : provider === 'openrouter'
-          ? apiKey.startsWith('sk-or-v1-')
-          : provider === 'huggingface'
-            ? apiKey.startsWith('hf_')
-            : apiKey.startsWith('AIza');
-
-    if (!validFormat) {
-      setKeyError(`Invalid ${providerLabels[provider]} API key format.`);
-      return;
-    }
-
-    setIsSavingKey(true);
-    try {
-      let savedViaNative = false;
-      if (provider === 'openrouter') {
-        try {
-          const { createSecretStore } = await import('@/lib/native/secretStore');
-          const store = await createSecretStore();
-          await store.setSecret('openrouter_api_key', apiKey);
-          savedViaNative = true;
-        } catch (nativeErr) {
-          console.warn('[Settings] Native secret store unavailable, falling back to API:', nativeErr);
-        }
-      }
-
-      if (!savedViaNative) {
-        const res = await fetch('/api/settings/keys', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, apiKey })
-        });
-
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(errText);
-        }
-
-        const data = await res.json();
-        if (data.providers) setConfiguredKeys(data.providers);
-      }
-
-      setApiKeyInputs(prev => ({ ...prev, [provider]: '' }));
-      setKeySuccess(`${providerLabels[provider]} API key securely stored!`);
-    } catch (err: any) {
-      setKeyError(err.message || "Failed to save API Key");
-    } finally {
-      setIsSavingKey(false);
-    }
-  };
-
-  // Other integrations (Slack is handled separately above)
-  const [integrations, setIntegrations] = useState<Integration[]>([
-    {
-      id: "github",
-      label: "GitHub",
-      description: "Sync with your repositories",
-      icon: "Github",
-      connected: false,
-      color: "text-slate-700",
-      bgColor: "bg-slate-700/10",
-    },
-    {
-      id: "trello",
-      label: "Trello",
-      description: "Manage projects and tasks",
-      icon: "Trello",
-      connected: false,
-      color: "text-blue-600",
-      bgColor: "bg-blue-600/10",
-    },
+  // All initial data fetched in parallel — replaces four independent
+  // post-hydration client waterfalls.
+  const [
+    credits,
+    hasPlan,
+    digestRow,
+    providerKeys,
+    githubRow,
+    trelloRow,
+  ] = await Promise.all([
+    getUserCredits(userId).catch(() => 0),
+    hasUnlimitedUsageAccess(userId).catch(() => false),
+    supabaseAdmin
+      ? supabaseAdmin
+          .from('user_settings')
+          .select('daily_digest_enabled')
+          .eq('user_id', userId)
+          .maybeSingle()
+          .then((r) => r.data, () => null)
+      : Promise.resolve(null),
+    getConfiguredProviderKeys(userId).catch(() => null),
+    supabaseAdmin
+      ? supabaseAdmin
+          .from('user_integrations')
+          .select('is_connected, access_token_encrypted, metadata')
+          .eq('user_id', userId)
+          .eq('service_name', 'github')
+          .maybeSingle()
+          .then((r) => r.data, () => null)
+      : Promise.resolve(null),
+    db
+      ? db
+          .collection('users')
+          .doc(userId)
+          .collection('integrations')
+          .doc('trello')
+          .get()
+          .then((doc) => doc.data() ?? null, () => null)
+      : Promise.resolve(null),
   ]);
 
-  const [checkingStatus, setCheckingStatus] = useState(true);
+  // Membership: match /api/plan/check semantics (hasUnlimitedUsageAccess) and
+  // surface premium_until when present.
+  let premiumUntil: string | null = null;
+  if (supabaseAdmin) {
+    const { data: sub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('tier, premium_until')
+      .eq('clerk_user_id', userId)
+      .maybeSingle();
+    premiumUntil = sub?.premium_until ?? null;
+  }
 
-  // Fetch integration status on mount
-  useEffect(() => {
-    const checkIntegrationStatus = async () => {
-      if (!userId) return;
-
-      try {
-        const [githubRes, trelloRes] = await Promise.all([
-          fetch("/api/integrations/github/status"),
-          fetch("/api/integrations/trello/status"),
-        ]);
-
-        if (githubRes.ok) {
-          const githubData = await githubRes.json();
-          setIntegrations((prev) =>
-            prev.map((int) =>
-              int.id === "github" ? { ...int, connected: githubData.connected, username: githubData.username, email: githubData.email } : int
-            )
-          );
-        }
-
-        if (trelloRes.ok) {
-          const trelloData = await trelloRes.json();
-          setIntegrations((prev) =>
-            prev.map((int) =>
-              int.id === "trello" ? { ...int, connected: trelloData.connected } : int
-            )
-          );
-        }
-      } catch (error) {
-        console.error("Error checking integration status:", error);
-      } finally {
-        setCheckingStatus(false);
-      }
-    };
-
-    checkIntegrationStatus();
-  }, [userId]);
-
-  // Handle OAuth callbacks
-  useEffect(() => {
-    const handleOAuthCallback = async () => {
-      const params = new URLSearchParams(window.location.search);
-      const hash = window.location.hash;
-
-      // Handle GitHub callback
-      if (params.get("github") === "connected") {
-        setIntegrations((prev) =>
-          prev.map((int) =>
-            int.id === "github" ? { ...int, connected: true } : int
-          )
-        );
-        // Clean up URL
-        window.history.replaceState({}, "", "/settings");
-      }
-
-      // Handle Trello callback
-      if (params.get("trello") === "connect" && hash) {
-        const tokenMatch = hash.match(/token=([^&]+)/);
-        if (tokenMatch) {
-          const token = tokenMatch[1];
-          try {
-            const response = await fetch("/api/integrations/trello/connect", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ token }),
-            });
-
-            if (response.ok) {
-              setIntegrations((prev) =>
-                prev.map((int) =>
-                  int.id === "trello" ? { ...int, connected: true } : int
-                )
-              );
-            }
-          } catch (error) {
-            console.error("Error connecting Trello:", error);
-          }
-          // Clean up URL
-          window.history.replaceState({}, "", "/settings");
-        }
-      }
-    };
-
-    handleOAuthCallback();
-  }, []);
-
-  const onConnect = (integrationId: string) => {
-    // Redirect to OAuth flow
-    if (integrationId === "github") {
-      window.location.assign("/api/integrations/github/auth");
-    } else if (integrationId === "trello") {
-      window.location.assign("/api/integrations/trello/auth");
-    }
+  const githubStatus = {
+    connected: githubRow?.is_connected === true && !!githubRow?.access_token_encrypted,
+    username: (githubRow?.metadata as any)?.github_login ?? null,
+    email: (githubRow?.metadata as any)?.github_email ?? null,
   };
-
-  const onDisconnect = async (integrationId: string) => {
-    if (integrationId === "github") {
-      try {
-        const response = await fetch("/api/integrations/github/disconnect", { method: "POST" });
-        if (response.ok) {
-          setIntegrations((prev) =>
-            prev.map((int) =>
-              int.id === "github" ? { ...int, connected: false, username: undefined, email: undefined } : int
-            )
-          );
-        }
-      } catch (error) {
-        console.error("Failed to disconnect GitHub:", error);
-      }
-    }
+  const trelloStatus = {
+    connected: trelloRow?.isConnected === true && !!trelloRow?.accessToken,
+    username: trelloRow?.username ?? null,
   };
 
   return (
     <div>
       <Heading
-        title={t("title")}
+        title="Settings"
         description="Manage your account settings, integrations, and memories."
         icon={Settings}
         iconColor="text-gray-700"
@@ -503,20 +120,20 @@ const SettingsPage = () => {
       />
 
       <div className="px-4 lg:px-8 space-y-6 pb-20 md:pb-0">
-        {/* Credits Section */}
-        <CreditsCard />
+        <CreditsSection initialCredits={credits} />
 
-        {/* Membership / Subscription */}
-        <MembershipCard />
+        <MembershipSection
+          initialPlan={hasPlan ? 'pro' : 'free'}
+          initialPremiumUntil={premiumUntil}
+        />
 
-        {/* Slack Integration Section */}
         {userId && (
           <Suspense fallback={<SlackIntegrationSkeleton />}>
             <SlackIntegration userId={userId} />
           </Suspense>
         )}
 
-        {/* Vault - Conversation History Access */}
+        {/* Vault — server-rendered nav link */}
         <Card className="p-6 border-black/5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -530,16 +147,16 @@ const SettingsPage = () => {
                 </p>
               </div>
             </div>
-            <Button
-              onClick={() => router.push('/settings/vault')}
-              className="bg-amber-600 hover:bg-amber-700"
+            <Link
+              href={`/${locale}/settings/vault`}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white transition-colors"
             >
               Open Vault
-            </Button>
+            </Link>
           </div>
         </Card>
 
-        {/* Data & Memory - Import/Export */}
+        {/* Data & Memory — server-rendered nav link */}
         <Card className="p-6 border-black/5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -547,22 +164,21 @@ const SettingsPage = () => {
                 <Database className="w-6 h-6 text-pink-700" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold">Data & Memory</h3>
+                <h3 className="text-lg font-semibold">Data &amp; Memory</h3>
                 <p className="text-sm text-muted-foreground">
                   Import chat history, manage memory bank, and export your data
                 </p>
               </div>
             </div>
-            <Button
-              onClick={() => router.push('/settings/data')}
-              className="bg-pink-700 hover:bg-pink-800"
+            <Link
+              href={`/${locale}/settings/data`}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 bg-pink-700 hover:bg-pink-800 text-white transition-colors"
             >
               Manage Data
-            </Button>
+            </Link>
           </div>
         </Card>
 
-        {/* Daily Briefing Section */}
         <Card className="p-6 border-black/5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -576,164 +192,14 @@ const SettingsPage = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={dailyDigestEnabled}
-                onCheckedChange={handleDigestToggle}
-                disabled={loadingSettings}
-              />
-              <span className="text-sm font-medium text-muted-foreground">
-                {dailyDigestEnabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </div>
+            <DigestToggleSection initialEnabled={digestRow?.daily_digest_enabled ?? false} />
           </div>
         </Card>
 
-        {/* Bring Your Own Key (BYOK) */}
-        <Card className="p-6 border-black/5">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-600/10">
-                <Key className="w-6 h-6 text-emerald-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">AI Provider Keys</h3>
-                <p className="text-sm text-muted-foreground">
-                  Bring your own OpenAI, Anthropic, and Google keys. Keys are validated server-side, encrypted in Supabase Vault, and never displayed back to the browser.
-                </p>
-              </div>
-            </div>
+        <ProviderKeysSection initialKeys={providerKeys} />
 
-            <div className="grid gap-4">
-              {(['openai', 'anthropic', 'google', 'openrouter', 'huggingface'] as ProviderName[]).map((provider) => {
-                const status = configuredKeys[provider];
-                const inputValue = apiKeyInputs[provider];
-                return (
-                  <div key={provider} className="rounded-lg border p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h4 className="font-semibold flex items-center gap-2">
-                          {providerLabels[provider]}
-                          {status.configured && (
-                            <span className="bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full text-xs font-bold">
-                              Configured{status.preview ? ` · ${status.preview}` : ''}
-                            </span>
-                          )}
-                        </h4>
-                        <p className="text-xs text-muted-foreground">{providerDescriptions[provider]}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2 max-w-2xl">
-                      <input
-                        type="password"
-                        value={inputValue}
-                        onChange={(e) => setApiKeyInputs(prev => ({ ...prev, [provider]: e.target.value }))}
-                        placeholder={status.configured ? `Enter new ${providerLabels[provider]} key to replace existing...` : providerPlaceholders[provider]}
-                        className="w-full flex h-11 sm:h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={isSavingKey}
-                      />
-                      <Button
-                        onClick={() => handleSaveApiKey(provider)}
-                        disabled={!inputValue || isSavingKey}
-                        className="bg-emerald-600 hover:bg-emerald-700 w-full sm:w-24 shrink-0"
-                      >
-                        {isSavingKey ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {keyError && <p className="text-xs text-destructive">{keyError}</p>}
-            {keySuccess && <p className="text-xs text-emerald-600">{keySuccess}</p>}
-          </div>
-        </Card>
-        {/* Other Integrations Card Section */}
-        <Card className="p-4 border-black/5">
-          <h3 className="text-lg font-medium mb-2">Other Integrations</h3>
-          <p className="text-sm text-muted-foreground mb-4">Connect additional services to enhance your workflow</p>
-          <div className="grid gap-4">
-            {integrations.map((integration) => (
-              <div
-                key={integration.id}
-                className="flex items-center justify-between p-3 border rounded-lg hover:shadow-sm transition"
-              >
-                <div className="flex items-center gap-x-4">
-                  <div
-                    className={cn("p-2 w-fit rounded-md", integration.bgColor)}
-                  >
-                    <BrandIcon
-                      name={integration.icon}
-                      className={cn("w-6 h-6", integration.color)}
-                      size={24}
-                    />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm">{integration.label}</p>
-                    <p className="text-muted-foreground text-xs">
-                      {integration.description}
-                    </p>
-                    {integration.id === "github" && integration.connected && (
-                       <p className="text-xs text-muted-foreground mt-2 max-w-lg">
-                         Connected as <strong>{integration.username}</strong> {integration.email ? `(${integration.email})` : ''}.
-                         <br/><span className="italic">Your GitHub account may use a different email address than your Lattice login. The connection is explicitly authorized by you.</span>
-                       </p>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  {integration.connected ? (
-                    <div className="flex flex-col items-end gap-2">
-                        <div className="flex items-center gap-x-2 bg-green-500/10 text-green-500 px-3 py-1 rounded-full text-xs font-bold">
-                          <span className="w-2 h-2 rounded-full bg-green-500" />
-                          Connected
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {integration.id === "github" && (
-                            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setRepoSelectorOpen(true)}>
-                              Manage Repos
-                            </Button>
-                          )}
-                          <Button variant="ghost" size="sm" className="text-destructive h-7 text-xs" onClick={() => onDisconnect(integration.id)}>
-                              Disconnect
-                          </Button>
-                        </div>
-                    </div>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onConnect(integration.id)}
-                    >
-                      Connect
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <IntegrationsSection initialGithub={githubStatus} initialTrello={trelloStatus} />
       </div>
-      <RepoSelectorModal isOpen={repoSelectorOpen} onOpenChange={setRepoSelectorOpen} />
-      <StickyActionBar visible={hasKeyChanges}>
-        <Button
-          className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-          onClick={() => {
-            // Save all providers that have input
-            (['openai', 'anthropic', 'google', 'openrouter', 'huggingface'] as ProviderName[]).forEach(provider => {
-              if (apiKeyInputs[provider]) handleSaveApiKey(provider);
-            });
-          }}
-          disabled={isSavingKey}
-        >
-          {isSavingKey ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-          Save All Keys
-        </Button>
-      </StickyActionBar>
     </div>
   );
-};
-
-export default SettingsPage;
+}
