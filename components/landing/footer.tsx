@@ -2,7 +2,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { TELEGRAM_BOT_URL, SUPPORT_URL } from "@/lib/constants/contact";
 
-const GITHUB_REPO_URL = "https://github.com/invidias-codem/ai-saas";
+const GITHUB_PROFILE_URL = "https://github.com/invidias-codem";
+const LINKEDIN_URL = "https://www.linkedin.com/in/joshua-jair-mohammed?utm_source=share_via&utm_content=profile&utm_medium=member_ios";
 
 const NAV_LINKS = [
   { href: "/blog", label: "Blog" },
@@ -35,8 +36,11 @@ export function LandingFooter() {
                 {l.label}
               </Link>
             ))}
-            <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" className={outlineLink}>
+            <a href={GITHUB_PROFILE_URL} target="_blank" rel="noreferrer" className={outlineLink}>
               GitHub
+            </a>
+            <a href={LINKEDIN_URL} target="_blank" rel="noreferrer" className={outlineLink}>
+              LinkedIn
             </a>
             <a href={TELEGRAM_BOT_URL} target="_blank" rel="noreferrer" className={outlineLink}>
               Telegram
