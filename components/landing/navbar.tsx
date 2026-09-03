@@ -25,6 +25,9 @@ export const LandingNavbar = () => {
     const { locale } = useParams() as { locale?: string };
 
     const isLandingPage = pathname === "/" || pathname === `/${locale}`;
+    // Blog article pages render their own minimal reading-surface header.
+    // Bail out here so we don't stack the full landing nav on top of it.
+    const isBlogArticle = /^\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?blog\/(?!series(?:\/|$)|feed(?:\/|$))[^/]+\/?$/.test(pathname ?? "");
     const { open: openPricingModal } = usePricingModal();
 
     const navLinks = [
@@ -74,6 +77,8 @@ const itemVariants = {
     closed: { opacity: 0, y: 8 },
     open: { opacity: 1, y: 0, transition: { duration: 0.25 } },
 };
+
+    if (isBlogArticle) return null;
 
     return (
         <>
