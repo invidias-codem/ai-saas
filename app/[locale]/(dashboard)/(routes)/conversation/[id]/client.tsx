@@ -20,7 +20,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertCircle, SendHorizontal, X, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
-import { GitHubConsentModal } from "@/components/github-consent-modal";
 import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
@@ -390,44 +389,9 @@ function ConversationPage({
     }
   }, [conversationContext.workspaceId, initialMessages.length]);
 
-  // GitHub Consent State
-  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
-  const [gitHubAction, setGitHubAction] = useState<any>(null);
-
+  // GitHub OAuth connect (redirects to /api/integrations/github/auth)
   const handleGitHubConnect = () => {
     window.location.href = "/api/integrations/github/auth"; // Trigger OAuth
-  };
-
-  const handleGitHubActionConfirm = async () => {
-    setIsGitHubModalOpen(false);
-
-    const action = gitHubAction;
-    const botMessage: Message = {
-      text: `⏳ Executing GitHub Action: ${action?.type} \`${action?.repo}\`${action?.target ? ` → ${action.target}` : ""}…`,
-      role: "bot",
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, botMessage]);
-
-    try {
-      const { data } = await fetch("/api/integrations/github/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: action?.type, repo: action?.repo, target: action?.target }),
-      }).then((res) => res.json());
-
-      const successText =
-        typeof data?.html_url === "string"
-          ? `✅ Done — ${action?.type} on \`${action?.repo}\`: ${data.html_url}`
-          : `✅ Successfully executed GitHub Action: ${action?.type} on \`${action?.repo}\``;
-
-      setMessages((prev) => [...prev, { text: successText, role: "bot", timestamp: new Date() }]);
-    } catch (err: any) {
-      setMessages((prev) => [...prev, { text: `❌ Failed to execute GitHub action: ${err?.message || "unknown error"}`, role: "bot", timestamp: new Date() }]);
-      setError(err?.message || "GitHub action failed.");
-    } finally {
-      setGitHubAction(null);
-    }
   };
 
   // Refs
@@ -499,20 +463,6 @@ function ConversationPage({
       intent: debugIntent,
     });
   }, [agentMode, loading, streaming, error, debugExecutionMode, debugIntent]);
-
-  // ─── Sync approval state to global store ──────────────────────────────────
-  useEffect(() => {
-    const store = useRuntimeStore.getState();
-    if (gitHubAction) {
-      store.setPendingApproval({
-        type: gitHubAction.type,
-        repo: gitHubAction.repo,
-        target: gitHubAction.target,
-      });
-    } else {
-      store.clearPendingApproval();
-    }
-  }, [gitHubAction]);
 
   // ---------------------------------------------------------------
 
@@ -694,7 +644,7 @@ function ConversationPage({
             error={error}
             executionMode={debugExecutionMode}
             intent={debugIntent}
-            pendingApproval={!!gitHubAction}
+            pendingApproval={false}
           />
           {conversationContext.workspaceId && (
             <SyncStatusIndicator
@@ -769,7 +719,7 @@ function ConversationPage({
                 error={error}
                 executionMode={debugExecutionMode}
                 intent={debugIntent}
-                pendingApproval={!!gitHubAction}
+                pendingApproval={false}
               />
               {conversationContext.workspaceId && (
                 <SyncStatusIndicator

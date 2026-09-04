@@ -47,3 +47,24 @@ Never proceed with a task that contradicts the vision without explicit user appr
 Project-specific customization lives in `aidd-custom/`. Before starting work,
 read `aidd-custom/index.md` to discover available project-specific skills,
 and read `aidd-custom/config.yml` to load configuration into context.
+
+## Architectural Invariants (Dashboard surfaces)
+
+All routes under `app/[locale]/(dashboard)/` follow this pattern:
+- `page.tsx` is an async Server Component: `auth()` gate + parallel server
+  data prefetch via `lib/` helpers. Never `'use client'` in `page.tsx` unless it
+  is a pure redirect (and prefer server `redirect()` for that too).
+- Interactivity lives in co-located client islands (`*Section.tsx`,
+  `*Manager.tsx`, `*Monitor.tsx`) that receive initial data as props.
+- Client islands never fetch on mount for data the server could provide.
+  Post-hydration fetching is reserved for: user mutations, background polling
+  (SWR), and targeted invalidation.
+- Cross-surface conversation freshness uses the `'conversations:invalidate'`
+  CustomEvent bus (lib: `components/conversation-history.tsx`), not
+  pathname-effect refetches.
+- `useSearchParams` in a client component MUST be wrapped in `<Suspense>`.
+- Conversation access control is scoped by `(id, user_id)` via
+  `lib/conversations/routing.ts` — never query by id alone with `supabaseAdmin`.
+- New conversations always stamp `workspace_id` + `operating_profile_id`, created
+  via `/conversation/new` (fat route handler) or `workspaces/[id]/conversation`
+  (`?action=new` bypasses last-open restore).
