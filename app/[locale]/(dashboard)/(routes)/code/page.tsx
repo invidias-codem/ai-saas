@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useRef, KeyboardEvent, useEffect } from "react";
-import axios from "axios";
+import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -36,6 +35,7 @@ import { useGithubRepoContext } from "@/components/chat/useGithubRepoContext";
 import { useMemoryCount } from "@/components/chat/useMemoryCount";
 import { MemoryInsights } from "@/components/chat/MemoryInsights";
 import { useCodeConversation, CodeContext } from "@/components/chat/useCodeConversation";
+import { useCodeStream } from "@/components/chat/useCodeStream";
 
 // ... (keep existing imports)
 
@@ -116,7 +116,6 @@ function CodePageContent() {
   }, [setProviderKeyState]);
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
@@ -178,85 +177,31 @@ function CodePageContent() {
   // "scrolled up" detection that drives the floating ScrollToBottom button.
   const { chatContainerRef, bottomRef, scrollToBottom, showScrollButton } = useChatScroll(messages.length);
 
-  // Handle sending message
-  const handleSendMessage = async () => {
-    const trimmedInput = userInput.trim();
-    if (!trimmedInput && !selectedFile) return;
-
-    setLoading(true);
-    setError(null);
-    setShowGreeting(false);
-
-    let messageText = trimmedInput;
-    if (selectedFile) {
-      messageText += `\n\n[Analysing File: ${selectedFile.name}]`;
-    }
-
-    const userMessage: Message = {
-      text: messageText,
-      role: "user",
-      timestamp: new Date(),
-      fileData: selectedFile ? {
-        name: selectedFile.name,
-        type: selectedFile.type,
-        base64Data: selectedFile.base64Data
-      } : undefined
-    };
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setUserInput("");
-
-
-    removeFile();
-
-    try {
-      const response = await axios.post("/api/code", {
-        messages: newMessages.map(msg => ({
-          role: msg.role,
-          text: msg.text,
-          fileData: msg.fileData // Pass stored file data for history reconstruction
-        })),
-        currentUserPrompt: trimmedInput,
-        fileData: selectedFile,
-        saveToMemory: saveToMemory, // Pass memory flag
-        model: codeModel, // Pass selected model
-        activeRepo: activeRepo, // Pass active GitHub repo context
-        workspaceId: codeContext.workspaceId,
-        operatingProfileId: codeContext.operatingProfileId,
-        operatingProfileMode: codeContext.operatingProfileMode,
-        conversationId
-      });
-
-      const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
-      setMessages((prevMessages) => [...prevMessages, botMessage]);
-    } catch (error: any) {
-      console.error("[CODE_PAGE_ERROR]", error);
-      if (error.response?.status === 401) {
-        window.location.href = "/sign-in?redirect_url=" + encodeURIComponent(window.location.pathname);
-        return;
-      }
-      setError(error.response?.data?.details || "Sorry, something went wrong processing your request.");
-    } finally {
-      setLoading(false);
-      trackActivity("message");
-    }
-  };
-
-  const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    } else if (e.key === 'Tab' && !e.shiftKey) {
-      e.preventDefault();
-      const { selectionStart, selectionEnd, value } = e.currentTarget;
-      setUserInput(value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd));
-      e.currentTarget.selectionStart = e.currentTarget.selectionEnd = selectionStart + 2;
-    }
-  };
-
   // Modern Typing Indicator (matching conversation page)
   // Nudge Integration
   const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
+
+  // Code send pipeline (C7): input + non-streaming POST to /api/code.
+  const {
+    userInput,
+    handleInputChange,
+    handleSendMessage,
+    handleKeyPress,
+  } = useCodeStream({
+    messages,
+    setMessages,
+    selectedFile,
+    saveToMemory,
+    removeFile,
+    codeModel,
+    activeRepo,
+    codeContext,
+    conversationId,
+    setError,
+    setLoading,
+    setShowGreeting,
+    trackActivity,
+  });
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background text-foreground relative overflow-hidden">
@@ -614,7 +559,7 @@ function CodePageContent() {
               rows={1}
               placeholder="Ask a coding question..."
               value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyPress}
               disabled={loading}
               className="flex-1 min-h-[44px] max-h-32 py-3 bg-transparent border-0 focus-visible:ring-0 resize-none text-base leading-relaxed placeholder:text-muted-foreground/70 font-mono"
