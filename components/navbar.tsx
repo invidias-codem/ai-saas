@@ -8,8 +8,13 @@ import { RuntimeIndicator } from "@/components/runtime-indicator";
 import LanguageSwitcher from "@/components/language-switcher";
 import { useTranslations } from "next-intl";
 import { useRuntimeStore } from "@/lib/store/runtimeStore";
+import type { ConversationSeed } from "@/components/SidebarClient";
 
-const Navbar = () => {
+interface NavbarProps {
+  initialConversations?: ConversationSeed[];
+}
+
+const Navbar = ({ initialConversations = [] }: NavbarProps) => {
   const t = useTranslations("Navbar");
   const { loading, streaming, error, pendingApproval } = useRuntimeStore();
 
@@ -18,7 +23,7 @@ const Navbar = () => {
   return (
     <div className="flex items-center px-3 py-2 sm:px-4 sm:py-3 gap-2">
       {/* Left: Mobile toggle */}
-      <MobileSidebar />
+      <MobileSidebar initialConversations={initialConversations} />
 
       {/* Right: Actions — responsive priority layout */}
       <div className="flex-1 flex items-center justify-end gap-1.5 sm:gap-2 overflow-hidden">

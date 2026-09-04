@@ -20,9 +20,9 @@ const montserrat = Montserrat({
   subsets: ["latin"],
 });
 
-interface ConversationSeed { id: string; workspaceId?: string | null; title: string; messageCount: number; createdAt: number; lastUpdated: number; isArchived: boolean; preview?: string; }
+export interface ConversationSeed { id: string; workspaceId?: string | null; title: string; messageCount: number; createdAt: number; lastUpdated: number; isArchived: boolean; preview?: string; }
 
-interface SidebarClientProps { onNavigate?: () => void; initialConversations: ConversationSeed[]; }
+export interface SidebarClientProps { onNavigate?: () => void; initialConversations: ConversationSeed[]; }
 
 const SidebarClient = ({ onNavigate, initialConversations }: SidebarClientProps) => {
   const pathname = usePathname();

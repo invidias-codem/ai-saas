@@ -10,11 +10,16 @@ import {
     SheetTrigger,
     SheetTitle
 } from "@/components/ui/sheet";
-import Sidebar from "@/components/sidebar";
+import SidebarClient from "@/components/SidebarClient";
+import type { ConversationSeed } from "@/components/SidebarClient";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
-const MobileSidebar = () => {
+interface MobileSidebarProps {
+    initialConversations?: ConversationSeed[];
+}
+
+const MobileSidebar = ({ initialConversations = [] }: MobileSidebarProps) => {
     const [isOpen, setIsOpen] = useState(false);
     const pathname = usePathname();
 
@@ -44,11 +49,11 @@ const MobileSidebar = () => {
             <SheetContent side="left" className="p-0 bg-background text-foreground border-border">
                 <SheetTitle className="hidden">Navigation Menu</SheetTitle>
                 <div className="h-full flex flex-col">
-                    <Sidebar onNavigate={() => setIsOpen(false)} />
+                    <SidebarClient onNavigate={() => setIsOpen(false)} initialConversations={initialConversations} />
                 </div>
             </SheetContent>
         </Sheet>
     );
-}
+};
 
 export default MobileSidebar;
