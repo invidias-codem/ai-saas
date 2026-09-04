@@ -31,7 +31,8 @@ import { useChatStream } from "@/components/chat/useChatStream";
 import { Composer } from "@/components/chat/Composer";
 import { RuntimeStatusBar } from "@/components/chat/RuntimeStatusBar";
 import { InlineMediaCard } from "@/components/chat/InlineMediaCard";
-import type { MediaEnvelope } from "@/lib/media/envelope";
+import { MediaApprovalCard } from "@/components/chat/MediaApprovalCard";
+import type { MediaEnvelope, ApprovalEnvelope } from "@/lib/media/envelope";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
 import { createNewConversation } from "@/lib/conversationManager";
@@ -56,6 +57,7 @@ interface Message {
   timestamp: Date;
   sources?: Source[];
   media?: MediaEnvelope[];
+  approvalRequest?: ApprovalEnvelope;
 }
 
 interface ConversationContext {
@@ -791,6 +793,20 @@ function ConversationPage({
                         )}
                       </div>
                       <SourceDisplay sources={msg.sources || []} />
+                      {msg.approvalRequest && (
+                        <MediaApprovalCard
+                          approvalRequest={msg.approvalRequest}
+                          onResolved={(media) => {
+                            setMessages((prev) =>
+                              prev.map((m) =>
+                                m.timestamp.getTime() === msg.timestamp.getTime()
+                                  ? { ...m, media, approvalRequest: undefined }
+                                  : m
+                              )
+                            );
+                          }}
+                        />
+                      )}
                       {msg.media && msg.media.length > 0 && (
                         <div className="mt-3">
                           {msg.media.map((env, i) => (

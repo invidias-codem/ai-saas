@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Source } from "@/components/chat/SourceDisplay";
 import { SelectedFile, FilePayload } from "./useFileUpload";
-import { MediaEnvelope, decodeMediaEvent } from "@/lib/media/envelope";
+import { MediaEnvelope, decodeMediaEvent, ApprovalEnvelope, decodeApprovalEvent } from "@/lib/media/envelope";
 
 /** Minimal message shape the stream pipeline needs (mirrors the client's Message). */
 export interface StreamMessage {
@@ -12,6 +12,7 @@ export interface StreamMessage {
   timestamp: Date;
   sources?: Source[];
   media?: MediaEnvelope[];
+  approvalRequest?: ApprovalEnvelope;
 }
 
 interface UseChatStreamOptions {
@@ -185,6 +186,16 @@ export function useChatStream({
         accumWithoutMedia = accum.replace(/__MEDIA_EVENT__[^\n]*\n?/g, "");
       }
 
+      // Extract any human-in-the-loop approval request.
+      let approvalRequest: ApprovalEnvelope | undefined;
+      const approvalEventMatch = accumWithoutMedia.match(/__APPROVAL_EVENT__[^\n]*\n?/);
+      if (approvalEventMatch) {
+        approvalRequest = decodeApprovalEvent(approvalEventMatch[0].trim()) ?? undefined;
+        if (approvalRequest) {
+          accumWithoutMedia = accumWithoutMedia.replace(/__APPROVAL_EVENT__[^\n]*\n?/g, "");
+        }
+      }
+
       const cleanedAccum = accumWithoutMedia
         .replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, "")
         .trim();
@@ -196,6 +207,7 @@ export function useChatStream({
           timestamp: new Date(),
           sources,
           ...(mediaLines.length > 0 ? { media: mediaLines } : {}),
+          ...(approvalRequest ? { approvalRequest } : {}),
         },
       ]);
       setStreamingContent("");
