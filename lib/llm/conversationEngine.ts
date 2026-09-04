@@ -207,6 +207,7 @@ export async function generateConversationReply(
     const { researchWriterTool } = await import('@/lib/agents/tools/researchWriter');
     const { novelWriterTool } = await import('@/lib/agents/tools/novelWriter');
     const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
+    const { generateMusicTool } = await import('@/lib/agents/tools/generateMusic');
     const { readFileTool, writeFileTool, patchFileTool } = await import('@/lib/agents/tools/harnessTools');
     const { executeCommandTool } = await import('@/lib/agents/tools/executionTools');
     const { discoverDocumentsTool, extractTextTool, summarizeRepoTool, semanticSearchTool, workspaceSourcesSearchTool } = await import('@/lib/agents/tools/intelligenceTools');
@@ -218,6 +219,7 @@ export async function generateConversationReply(
     registry.register(researchWriterTool);
     registry.register(novelWriterTool);
     registry.register(searchCodebaseTool);
+    registry.register(generateMusicTool);
 
     if (request.mode === 'agentic') {
       // Phase 1: Local Mutable Capabilities
