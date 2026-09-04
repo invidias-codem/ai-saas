@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, ChangeEvent, KeyboardEvent, useEffect, useSyncExternalStore } from "react";
+import React, { useState, useRef, KeyboardEvent, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import axios from "axios";
@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 // but keeping the import if you use it elsewhere.
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Paperclip, AlertCircle, SendHorizontal, X, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
+import { AlertCircle, SendHorizontal, X, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { GitHubConsentModal } from "@/components/github-consent-modal";
 import { ShareIconButton } from "@/components/share-button";
@@ -27,12 +27,13 @@ import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
 import { submitFeedback } from "@/lib/feedback/submitFeedback";
 import { NeuralArchivalUploader, UploadedDoc } from "@/components/documents/NeuralArchivalUploader";
 import { FileItem } from "@/components/documents/FileItem";
-import { FilePreview } from "@/components/FilePreview";
 import { ContextualNudge } from "@/components/workspaces/ContextualNudge";
 import { SyncStatusIndicator } from "@/components/harness/SyncStatusIndicator";
 import { useWorkspaceSyncStatus } from "@/hooks/useWorkspaceSyncStatus";
 import { useChatScroll } from "@/components/chat/useChatScroll";
 import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
+import { useFileUpload, SelectedFile } from "@/components/chat/useFileUpload";
+import { FileAttachmentPanel } from "@/components/chat/FileAttachmentPanel";
 import {
   getSessionMemoryFromStorage,
   saveSessionMemoryToStorage,
@@ -62,7 +63,6 @@ import {
 import { useSupabaseChat, Message as SupabaseMessage } from "@/app/hooks/useSupabaseChat";
 import { useRuntimeStore } from "@/lib/store/runtimeStore";
 import { usePricingModal } from "@/lib/store/pricing-modal-store";
-import { compressBase64Payload } from "@/lib/uploadCompression";
 
 // New Agentic Integration
 import { ModelProvider, useModel } from "@/contexts/ModelContext";
@@ -89,33 +89,6 @@ interface ConversationContext {
   operatingProfileName: string | null;
   operatingProfileMode: string | null;
 }
-
-// Selected file structure
-interface SelectedFile {
-  file: File;
-  preview: string;
-  name: string;
-  type: string;
-  mimeType?: string;
-  sizeBytes?: number;
-  storageProvider?: string;
-  base64Data?: string;
-  fileUri?: string; // GCS URI for large files
-  isUploading?: boolean;
-}
-
-const readFileAsBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(",")[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-};
 
 // Safe Chart Component
 interface ChartDataPoint {
@@ -385,12 +358,23 @@ function ConversationPage({
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showContextSheet, setShowContextSheet] = useState(false);
   const [showGreeting, setShowGreeting] = useState<boolean>(() => Boolean(initialConsultantGreeting));
-  const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
-  const [showFilePreview, setShowFilePreview] = useState(false);
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const [showFileGateNudge, setShowFileGateNudge] = useState(false);
   const { open: openPricingModal } = usePricingModal();
   const [sessionId, setSessionId] = useState("");
+
+  // File attachment lifecycle (T2): upload state transitions + GCS/base64 logic.
+  const {
+    selectedFile,
+    showFilePreview,
+    fileInputRef,
+    handleAttachClick,
+    handleFileChange,
+    togglePreview,
+    removeFile,
+    clearFile,
+    buildFilePayload,
+  } = useFileUpload(setError);
   const [sessionRestored, setSessionRestored] = useState(false);
   const [deviceId, setDeviceId] = useState("");
   const [multiDeviceStatus, setMultiDeviceStatus] = useState<any>(null);
@@ -469,7 +453,6 @@ function ConversationPage({
   };
 
   // Refs
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionCleanup = useSessionCleanup();
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -657,31 +640,10 @@ function ConversationPage({
     setStreamingContent("");
 
     // Capture file data before clearing state
-    const filePayload = selectedFile
-      ? selectedFile.fileUri
-        ? {
-            name: selectedFile.name,
-            type: selectedFile.type,
-            mimeType: selectedFile.mimeType || selectedFile.type,
-            sizeBytes: selectedFile.sizeBytes,
-            fileUri: selectedFile.fileUri,
-            storageProvider: selectedFile.storageProvider || 'gcs',
-          }
-        : selectedFile.base64Data
-          ? compressBase64Payload({
-              name: selectedFile.name,
-              type: selectedFile.type,
-              mimeType: selectedFile.mimeType || selectedFile.type,
-              sizeBytes: selectedFile.sizeBytes,
-              base64Data: selectedFile.base64Data,
-            })
-          : undefined
-      : undefined;
-
-    setSelectedFile(null);
-    setShowFilePreview(false);
+    const filePayload = selectedFile ? buildFilePayload() : undefined;
 
     const analyzeUploadEndpoint = selectedFile ? "/api/analyze-upload" : "/api/chat";
+    clearFile();
 
     try {
       // Dispatcher Call (Fetch with Streaming)
@@ -770,77 +732,6 @@ function ConversationPage({
       setLoading(false);
       trackActivity("message");
     }
-  };
-
-  const handleAttachClick = () => { fileInputRef.current?.click(); };
-
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const objectUrl = URL.createObjectURL(file);
-      const isLargeFile = file.size > 4 * 1024 * 1024; // 4MB
-
-      const newFileState: SelectedFile = {
-        file,
-        preview: objectUrl,
-        name: file.name,
-        type: file.type,
-        mimeType: file.type,
-        sizeBytes: file.size,
-        isUploading: isLargeFile
-      };
-
-      setSelectedFile(newFileState);
-      setShowFilePreview(false);
-
-      if (isLargeFile) {
-        // Smart Upload: GCS Direct
-        try {
-          console.log(`[SmartUpload] File > 4MB (${(file.size / 1024 / 1024).toFixed(2)}MB). Using GCS Direct Upload.`);
-
-          // 1. Get Signed URL
-          const signRes = await axios.post('/api/storage/sign', {
-            filename: file.name,
-            contentType: file.type
-          });
-
-          const { uploadUrl, fileUri } = signRes.data;
-
-          // 2. Upload to GCS
-          const uploadRes = await fetch(uploadUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': file.type },
-            body: file
-          });
-
-          if (!uploadRes.ok) {
-            throw new Error(`Upload failed: ${uploadRes.statusText}`);
-          }
-
-          console.log(`[SmartUpload] Success! URI: ${fileUri}`);
-
-          // 3. Update State
-          setSelectedFile(prev => prev ? {
-            ...prev,
-            fileUri,
-            storageProvider: 'gcs',
-            base64Data: undefined,
-            isUploading: false
-          } : null);
-
-        } catch (err: any) {
-          console.error("Smart Upload Failed:", err);
-          setError("Failed to upload large file. Please try a smaller one.");
-          URL.revokeObjectURL(objectUrl); // Clean up memory
-          setSelectedFile(null);
-        }
-      } else {
-        // Standard Upload: Base64
-        const base64 = await readFileAsBase64(file);
-        setSelectedFile(prev => prev ? { ...prev, base64Data: base64 } : null);
-      }
-    }
-    if (fileInputRef.current) { fileInputRef.current.value = ""; }
   };
 
   const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1335,52 +1226,12 @@ function ConversationPage({
       <div className="flex-none w-full p-4 bg-gradient-to-t from-background via-background to-transparent pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="max-w-3xl mx-auto relative">
           {/* File Preview Pill + expandable rich preview */}
-          {selectedFile && (
-            <div className="absolute bottom-full left-0 mb-3 w-full animate-in slide-in-from-bottom-2 fade-in">
-              {/* Rich preview panel (image / PDF / text / docx / xlsx) */}
-              {showFilePreview && (
-                <div className="mb-2 max-w-md">
-                  <FilePreview
-                    file={selectedFile.file}
-                    maxHeight="40vh"
-                    showHeader={false}
-                    allowFullscreen
-                    allowDownload={false}
-                  />
-                </div>
-              )}
-
-              <div className="inline-flex items-center gap-2 bg-background border border-border shadow-sm px-3 py-1.5 rounded-full text-xs font-medium text-foreground">
-                <Paperclip className="h-3 w-3 text-indigo-500" />
-                <span className="max-w-[150px] truncate">{selectedFile.name}</span>
-                {selectedFile.isUploading && (
-                  <span className="text-[10px] text-muted-foreground">uploading…</span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowFilePreview((v) => !v)}
-                  className="text-muted-foreground hover:text-indigo-500 transition-colors"
-                  title={showFilePreview ? "Hide preview" : "Show preview"}
-                  aria-label={showFilePreview ? "Hide file preview" : "Show file preview"}
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={() => {
-                    if (selectedFile.preview) {
-                      URL.revokeObjectURL(selectedFile.preview); // Clean up object URL
-                    }
-                    setSelectedFile(null);
-                    setShowFilePreview(false);
-                  }}
-                  className="text-muted-foreground hover:text-destructive transition-colors ml-1"
-                  aria-label="Remove attached file"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            </div>
-          )}
+          <FileAttachmentPanel
+            selectedFile={selectedFile}
+            showFilePreview={showFilePreview}
+            onTogglePreview={togglePreview}
+            onRemoveFile={removeFile}
+          />
 
           {/* Input Container */}
           <div className="relative flex items-end gap-2 bg-muted/40 hover:bg-muted/60 focus-within:bg-background focus-within:ring-2 focus-within:ring-indigo-500/20 border border-border/50 rounded-[26px] p-2 transition-all duration-200 shadow-sm">
