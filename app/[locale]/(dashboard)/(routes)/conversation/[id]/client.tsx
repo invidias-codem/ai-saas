@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 // but keeping the import if you use it elsewhere.
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { AlertCircle, X, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
+import { AlertCircle, X, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,7 @@ import { useMemoryInsights } from "@/components/chat/useMemoryInsights";
 import { MemoryInsights } from "@/components/chat/MemoryInsights";
 import { useChatStream } from "@/components/chat/useChatStream";
 import { Composer } from "@/components/chat/Composer";
+import { RuntimeStatusBar } from "@/components/chat/RuntimeStatusBar";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
 import {
@@ -167,98 +168,6 @@ function modeIcon(mode?: string | null) {
     default: return Cpu;
   }
 }
-
-// ─── Runtime Status Helpers ──────────────────────────────────────
-
-type RuntimeState = 'idle' | 'thinking' | 'executing_tools' | 'streaming' | 'error';
-
-function getRuntimeState({
-  loading,
-  streaming,
-  streamingContent,
-  error,
-  agentMode,
-}: {
-  loading: boolean;
-  streaming: boolean;
-  streamingContent: string;
-  error: string | null;
-  agentMode: string | undefined;
-}): RuntimeState {
-  if (error) return 'error';
-  if (streaming && streamingContent) return 'streaming';
-  if (loading && agentMode === 'agentic') return 'executing_tools';
-  if (loading) return 'thinking';
-  return 'idle';
-}
-
-function runtimeLabel(state: RuntimeState, agentMode?: string) {
-  switch (state) {
-    case 'thinking': return 'Thinking';
-    case 'executing_tools': return 'Executing tools';
-    case 'streaming': return 'Streaming response';
-    case 'error': return 'Error';
-    default: return agentMode ? modeLabel(agentMode) : 'Ready';
-  }
-}
-
-function runtimeColor(state: RuntimeState) {
-  switch (state) {
-    case 'thinking': return 'text-amber-600 dark:text-amber-400';
-    case 'executing_tools': return 'text-violet-600 dark:text-violet-400';
-    case 'streaming': return 'text-sky-600 dark:text-sky-400';
-    case 'error': return 'text-red-600 dark:text-red-400';
-    default: return 'text-emerald-600 dark:text-emerald-400';
-  }
-}
-
-const RuntimeStatusBar = ({
-  agentMode,
-  loading,
-  streaming,
-  streamingContent,
-  error,
-  executionMode,
-  intent,
-  pendingApproval,
-}: {
-  agentMode: string | undefined;
-  loading: boolean;
-  streaming: boolean;
-  streamingContent: string;
-  error: string | null;
-  executionMode?: string;
-  intent?: string;
-  pendingApproval?: boolean;
-}) => {
-  const state = getRuntimeState({ loading, streaming, streamingContent, error, agentMode });
-  const Icon = state === 'executing_tools' ? Wrench : Activity;
-  const label = runtimeLabel(state, agentMode);
-  const color = runtimeColor(state);
-
-  return (
-    <div className={cn(
-      "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all duration-300",
-      color,
-      state !== 'idle' && "border-current/20 bg-current/5"
-    )}>
-      <Icon className="h-3 w-3" />
-      <span>{label}</span>
-      {executionMode && state !== 'idle' && (
-        <span className="text-muted-foreground">· {executionMode}</span>
-      )}
-      {intent && state !== 'idle' && (
-        <span className="text-muted-foreground">· {intent}</span>
-      )}
-      {pendingApproval && (
-        <span className="text-amber-600 dark:text-amber-400 animate-pulse">· Awaiting approval</span>
-      )}
-      {agentMode && state === 'idle' && !pendingApproval && (
-        <span className="text-muted-foreground">· {modeLabel(agentMode)}</span>
-      )}
-    </div>
-  );
-};
 
 function ConversationPageGlobalWrapper({
   conversationId,
