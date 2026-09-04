@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useSyncExternalStore } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -10,11 +9,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { KoFiNudge } from "@/components/kofi-nudge";
 import { FileGateNudge } from "@/components/file-gate-nudge";
 import { useSupportNudge } from "@/hooks/use-support-nudge";
-import { Heading } from "@/components/heading";
 import { Button } from "@/components/ui/button";
-// Note: We are opting for native div scrolling for better mobile behavior, 
-// but keeping the import if you use it elsewhere.
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertCircle, X, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
@@ -23,13 +18,12 @@ import { cn } from "@/lib/utils";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
 import { submitFeedback } from "@/lib/feedback/submitFeedback";
 import { UploadedDoc } from "@/components/documents/NeuralArchivalUploader";
-import { FileItem } from "@/components/documents/FileItem";
 import { ContextualNudge } from "@/components/workspaces/ContextualNudge";
 import { SyncStatusIndicator } from "@/components/harness/SyncStatusIndicator";
 import { useWorkspaceSyncStatus } from "@/hooks/useWorkspaceSyncStatus";
 import { useChatScroll } from "@/components/chat/useChatScroll";
 import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
-import { useFileUpload, SelectedFile } from "@/components/chat/useFileUpload";
+import { useFileUpload } from "@/components/chat/useFileUpload";
 import { useSessionSync } from "@/components/chat/useSessionSync";
 import { useMemoryInsights } from "@/components/chat/useMemoryInsights";
 import { MemoryInsights } from "@/components/chat/MemoryInsights";
@@ -38,12 +32,8 @@ import { Composer } from "@/components/chat/Composer";
 import { RuntimeStatusBar } from "@/components/chat/RuntimeStatusBar";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
-import {
-  createNewConversation,
-  getActiveConversationId,
-  setActiveConversation,
-} from "@/lib/conversationManager";
-import { useSupabaseChat, Message as SupabaseMessage } from "@/app/hooks/useSupabaseChat";
+import { createNewConversation } from "@/lib/conversationManager";
+import { useSupabaseChat } from "@/app/hooks/useSupabaseChat";
 import { useRuntimeStore } from "@/lib/store/runtimeStore";
 import { usePricingModal } from "@/lib/store/pricing-modal-store";
 
@@ -287,7 +277,7 @@ function ConversationPage({
   };
 
   // Refs
-  const sessionCleanup = useSessionCleanup();
+  useSessionCleanup();
 
   // Chat scroll management (T1): refs, manual scroll-to-bottom, and
   // "scrolled up" detection that drives the floating ScrollToBottom button.
