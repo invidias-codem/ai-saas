@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { Tool, ToolResult, AgentContext } from "../core/types";
 import { createVideoPrediction, VideoCreditInsufficientError } from "@/lib/media/video";
+import { MediaEnvelope } from "@/lib/media/envelope";
 import { logger } from "@/lib/logger";
 
 const GenerateVideoInputSchema = z.object({
@@ -42,6 +43,12 @@ export const generateVideoTool: Tool = {
       return {
         success: true,
         data: {
+          _media: {
+            type: "video",
+            predictionId: result.predictionId,
+            pollUrl: result.pollUrl,
+            status: "pending",
+          } satisfies MediaEnvelope,
           predictionId: result.predictionId,
           status: result.status,
           pollUrl: result.pollUrl,

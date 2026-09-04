@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { Tool, ToolResult, AgentContext } from "../core/types";
 import { createImagePrediction, ImageCreditInsufficientError } from "@/lib/media/image";
+import { MediaEnvelope } from "@/lib/media/envelope";
 import { logger } from "@/lib/logger";
 
 const GenerateImageInputSchema = z.object({
@@ -49,6 +50,11 @@ export const generateImageTool: Tool = {
       return {
         success: true,
         data: {
+          _media: {
+            type: "image",
+            urls: result.images,
+            status: "succeeded",
+          } satisfies MediaEnvelope,
           images: result.images,
           model: result.model,
           message: `Generated ${result.images.length} image(s) with ${result.model}.`,

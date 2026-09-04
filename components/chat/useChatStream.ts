@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Source } from "@/components/chat/SourceDisplay";
 import { SelectedFile, FilePayload } from "./useFileUpload";
+import { MediaEnvelope, decodeMediaEvent } from "@/lib/media/envelope";
 
 /** Minimal message shape the stream pipeline needs (mirrors the client's Message). */
 export interface StreamMessage {
@@ -10,6 +11,7 @@ export interface StreamMessage {
   role: "user" | "bot";
   timestamp: Date;
   sources?: Source[];
+  media?: MediaEnvelope[];
 }
 
 interface UseChatStreamOptions {
@@ -170,12 +172,31 @@ export function useChatStream({
         setShowFileGateNudge(true);
       }
 
-      const cleanedAccum = accum
+      // Extract structured media events (emitted by the agent engine) from the
+      // stream, stripping them from prose so they don't render as raw text.
+      const mediaLines: MediaEnvelope[] = [];
+      let accumWithoutMedia = accum;
+      const mediaEventLines = accum.match(/__MEDIA_EVENT__[^\n]*\n?/g) ?? [];
+      for (const line of mediaEventLines) {
+        const envelope = decodeMediaEvent(line.trim());
+        if (envelope) mediaLines.push(envelope);
+      }
+      if (mediaLines.length > 0) {
+        accumWithoutMedia = accum.replace(/__MEDIA_EVENT__[^\n]*\n?/g, "");
+      }
+
+      const cleanedAccum = accumWithoutMedia
         .replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, "")
         .trim();
       setMessages((prev) => [
         ...prev,
-        { text: cleanedAccum, role: "bot", timestamp: new Date(), sources },
+        {
+          text: cleanedAccum,
+          role: "bot",
+          timestamp: new Date(),
+          sources,
+          ...(mediaLines.length > 0 ? { media: mediaLines } : {}),
+        },
       ]);
       setStreamingContent("");
       setStreaming(false);
