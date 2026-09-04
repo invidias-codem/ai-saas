@@ -24,7 +24,6 @@ import { cn } from "@/lib/utils";
 import { PersonIcon } from "@radix-ui/react-icons";
 import { ShareIconButton } from "@/components/share-button";
 import { GitHubRepoModal } from "@/components/github-repo-modal";
-import { GitHubConsentModal } from "@/components/github-consent-modal";
 
 // ... (keep existing imports)
 
@@ -181,18 +180,6 @@ function CodePageContent() {
       setShowGreeting(false);
     },
   });
-
-  // GitHub Consent State (for Actions - separate from Context)
-  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
-  const [gitHubAction, setGitHubAction] = useState<any>(null);
-
-  const handleGitHubActionConfirm = async () => {
-    console.log("Executing GitHub action:", gitHubAction);
-    setIsGitHubModalOpen(false);
-    // Mock execution for UI demo
-    const botMessage: Message = { text: `✅ Successfully executed GitHub Action: ${gitHubAction?.type} on ${gitHubAction?.repo}`, role: "bot", timestamp: new Date() };
-    setMessages((prev) => [...prev, botMessage]);
-  };
 
   const GREETING_MESSAGE = "Ask me a coding question, debug code, or attach a file for analysis.";
 
@@ -818,14 +805,6 @@ function CodePageContent() {
           </div>
         </div>
       </div>
-
-      {/* GitHub Consent Modal */}
-      <GitHubConsentModal
-        isOpen={isGitHubModalOpen}
-        onClose={() => setIsGitHubModalOpen(false)}
-        onConfirm={handleGitHubActionConfirm}
-        action={gitHubAction || { type: 'commit', repo: 'unknown', description: 'No action pending' }}
-      />
 
       {/* GitHub Repo Modal for Context Loading */}
       <GitHubRepoModal
