@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { useMemoryCount } from "./useMemoryCount";
 
 interface UseMemoryInsightsOptions {
   /** Workspace ID used to scope the episodic-suggestion fetch. */
@@ -13,8 +13,9 @@ interface UseMemoryInsightsOptions {
 }
 
 /**
- * Memory insights: episodic-memory prompt suggestion + memory-count badge,
- * with a transient "pulse" animation after new messages.
+ * Memory insights: episodic-memory prompt suggestion + memory-count badge.
+ * The count/pulse lives in `useMemoryCount`; this adds the ephemeral
+ * suggestion fetch on top.
  *
  * Extracted from conversation/[id]/client.tsx (T5). Read-only inputs — the
  * hook owns only its own state and never touches parent chat state.
@@ -24,8 +25,7 @@ export function useMemoryInsights({
   messageCount,
   initialMessageCount,
 }: UseMemoryInsightsOptions) {
-  const [memoryCount, setMemoryCount] = useState<number>(0);
-  const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
+  const { memoryCount, isMemoryPulsing } = useMemoryCount(messageCount);
   const [swarmSuggestion, setSwarmSuggestion] = useState<string>("");
 
   // Asynchronously fetch episodic memory suggestion (fresh conversations only)
@@ -48,33 +48,6 @@ export function useMemoryInsights({
       fetchSuggestion();
     }
   }, [workspaceId, initialMessageCount]);
-
-  const fetchMemoryCount = async () => {
-    try {
-      const res = await axios.get("/api/memory/count");
-      if (res.data.count !== undefined) {
-        setMemoryCount(res.data.count);
-      }
-    } catch (err) {
-      console.error("Failed to fetch memory count:", err);
-    }
-  };
-
-  useEffect(() => {
-    fetchMemoryCount();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Trigger fetch on new message (bot response) + transient pulse
-  useEffect(() => {
-    if (messageCount > 0) {
-      fetchMemoryCount();
-      setIsMemoryPulsing(true);
-      const timer = setTimeout(() => setIsMemoryPulsing(false), 2000);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messageCount]);
 
   return {
     memoryCount,

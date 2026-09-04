@@ -40,6 +40,8 @@ import { useChatScroll } from "@/components/chat/useChatScroll";
 import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
 import { useCodeFileUpload, CodeSelectedFile } from "@/components/chat/useCodeFileUpload";
 import { useGithubRepoContext } from "@/components/chat/useGithubRepoContext";
+import { useMemoryCount } from "@/components/chat/useMemoryCount";
+import { MemoryInsights } from "@/components/chat/MemoryInsights";
 
 // ... (keep existing imports)
 
@@ -151,10 +153,11 @@ function CodePageContent() {
     removeFile,
   } = useCodeFileUpload(setError, setLoading);
 
-  const [memoryCount, setMemoryCount] = useState<number>(0);
-  const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showContextSheet, setShowContextSheet] = useState(false);
+
+  // Memory count badge (C5): reuses the lean count hook (no episodic fetch).
+  const { memoryCount, isMemoryPulsing } = useMemoryCount(messages.length);
 
   // GitHub repo context (C3): active repo, linked-repo hydration, index status,
   // reindex, and persist-on-select. The onRepoLinked callback adds the
@@ -295,40 +298,6 @@ function CodePageContent() {
     }
   }, [messages, codeContext.workspaceId, codeContext.operatingProfileId]);
 
-  // Fetch Memory Count
-  const fetchMemoryCount = async () => {
-    try {
-      const res = await axios.get("/api/memory/count");
-      if (res.data.count !== undefined) {
-        setMemoryCount(res.data.count);
-      }
-    } catch (err) {
-      console.error("Failed to fetch memory count:", err);
-    }
-  };
-
-
-  // Initial memory-count load on mount — a data-fetch effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchMemoryCount();
-  }, []);
-
-  // Trigger fetch on new message (bot response)
-  useEffect(() => {
-    if (messages.length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      fetchMemoryCount();
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsMemoryPulsing(true);
-      const timer = setTimeout(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setIsMemoryPulsing(false);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [messages.length]);
-
   // Handle sending message
   const handleSendMessage = async () => {
     const trimmedInput = userInput.trim();
@@ -424,10 +393,7 @@ function CodePageContent() {
 
         {/* Desktop-only indicators */}
         <div className="hidden md:flex items-center gap-2">
-          <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-green-500 font-bold scale-105")}>
-            <span className={cn("w-1.5 h-1.5 rounded-full bg-green-500", isMemoryPulsing && "animate-ping")} />
-            {memoryCount} memories
-          </div>
+          <MemoryInsights memoryCount={memoryCount} isMemoryPulsing={isMemoryPulsing} variant="compact" accent="green" />
           {(codeContext.workspaceName || codeContext.operatingProfileName) && (
             <div className="flex items-center gap-1 text-[10px] text-muted-foreground rounded-full bg-muted px-2 py-0.5">
               <span>{codeContext.workspaceName ?? "Workspace"}</span>
@@ -505,10 +471,7 @@ function CodePageContent() {
             </div>
             <div className="space-y-4">
               <CodeModelToggle disabled={loading} />
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="w-2 h-2 rounded-full bg-green-500" />
-                {memoryCount} memories
-              </div>
+              <MemoryInsights memoryCount={memoryCount} isMemoryPulsing={isMemoryPulsing} variant="mobile" accent="green" />
               {(codeContext.workspaceName || codeContext.operatingProfileName) && (
                 <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-sm">
                   <span className="font-medium">{codeContext.workspaceName}</span>
