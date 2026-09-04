@@ -3,7 +3,6 @@
 import React, { useState, KeyboardEvent, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -34,6 +33,8 @@ import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
 import { useFileUpload, SelectedFile } from "@/components/chat/useFileUpload";
 import { FileAttachmentPanel } from "@/components/chat/FileAttachmentPanel";
 import { useSessionSync } from "@/components/chat/useSessionSync";
+import { useMemoryInsights } from "@/components/chat/useMemoryInsights";
+import { MemoryInsights } from "@/components/chat/MemoryInsights";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
 import {
@@ -356,9 +357,6 @@ function ConversationPage({
     buildFilePayload,
   } = useFileUpload(setError);
   const [userId, setUserId] = useState("");
-  const [memoryCount, setMemoryCount] = useState<number>(0);
-  const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
-  const [swarmSuggestion, setSwarmSuggestion] = useState<string>("");
   const [debugExecutionMode, setDebugExecutionMode] = useState<string | undefined>(undefined);
   const [debugIntent, setDebugIntent] = useState<string | undefined>(undefined);
 
@@ -367,27 +365,16 @@ function ConversationPage({
     conversationContext.workspaceId || ""
   );
 
-  useEffect(() => {
-    const fetchSuggestion = async () => {
-      try {
-        // Asynchronously fetch episodic memory suggestion to avoid blocking render
-        const res = await fetch(`/api/memory/episodic?workspaceId=${conversationContext.workspaceId || ''}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.suggestion) {
-            setSwarmSuggestion(data.suggestion);
-          }
-        }
-      } catch (e) {
-        // Fail silently to avoid interrupting the UX
-      }
-    };
-    
-    // Only fetch if we are in a fresh conversation (no messages yet)
-    if (initialMessages.length === 0) {
-      fetchSuggestion();
-    }
-  }, [conversationContext.workspaceId, initialMessages.length]);
+  // Memory insights (T5): episodic suggestion + memory count + pulse
+  const {
+    memoryCount,
+    isMemoryPulsing,
+    swarmSuggestion,
+  } = useMemoryInsights({
+    workspaceId: conversationContext.workspaceId,
+    messageCount: messages.length,
+    initialMessageCount: initialMessages.length,
+  });
 
   // GitHub OAuth connect (redirects to /api/integrations/github/auth)
   const handleGitHubConnect = () => {
@@ -424,32 +411,6 @@ function ConversationPage({
     onSetUserId: setUserId,
     onHideGreeting: () => setShowGreeting(false),
   });
-
-  // Fetch Memory Count
-  const fetchMemoryCount = async () => {
-    try {
-      const res = await axios.get("/api/memory/count");
-      if (res.data.count !== undefined) {
-        setMemoryCount(res.data.count);
-      }
-    } catch (err) {
-      console.error("Failed to fetch memory count:", err);
-    }
-  };
-
-  useEffect(() => {
-    fetchMemoryCount();
-  }, []);
-
-  // Trigger fetch on new message (bot response)
-  useEffect(() => {
-    if (messages.length > 0) {
-      fetchMemoryCount();
-      setIsMemoryPulsing(true);
-      const timer = setTimeout(() => setIsMemoryPulsing(false), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [messages.length]);
 
   // ─── Sync local runtime state to global store for dashboard shell ──────────
   useEffect(() => {
@@ -652,10 +613,11 @@ function ConversationPage({
               variant="compact"
             />
           )}
-          <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-indigo-500 font-bold scale-105")}>
-            <span className={cn("w-1.5 h-1.5 rounded-full bg-indigo-500", isMemoryPulsing && "animate-ping")} />
-            {memoryCount} memories
-          </div>
+          <MemoryInsights
+            memoryCount={memoryCount}
+            isMemoryPulsing={isMemoryPulsing}
+            variant="compact"
+          />
           <Button
             variant="outline"
             size="sm"
@@ -727,10 +689,11 @@ function ConversationPage({
                   variant="compact"
                 />
               )}
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="w-2 h-2 rounded-full bg-indigo-500" />
-                {memoryCount} memories
-              </div>
+              <MemoryInsights
+                memoryCount={memoryCount}
+                isMemoryPulsing={isMemoryPulsing}
+                variant="mobile"
+              />
               <Button
                 variant="outline"
                 size="sm"
