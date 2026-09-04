@@ -40,6 +40,7 @@ import { createNewConversation } from "@/lib/conversationManager";
 import { useChatScroll } from "@/components/chat/useChatScroll";
 import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
 import { useCodeFileUpload, CodeSelectedFile } from "@/components/chat/useCodeFileUpload";
+import { useGithubRepoContext } from "@/components/chat/useGithubRepoContext";
 
 // ... (keep existing imports)
 
@@ -156,136 +157,34 @@ function CodePageContent() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showContextSheet, setShowContextSheet] = useState(false);
 
-  // GitHub State
-  const [activeRepo, setActiveRepo] = useState<string | null>(null);
-  const [isRepoModalOpen, setIsRepoModalOpen] = useState(false);
-  const [linkedRepos, setLinkedRepos] = useState<string[]>([]);
-
-  // Hydrate repo context from workspace-linked repos once code context is available.
-  useEffect(() => {
-    let cancelled = false;
-    async function loadLinkedRepos() {
-      const workspaceId = codeContext.workspaceId;
-      if (!workspaceId) return;
-      try {
-        const res = await fetch(`/api/workspaces/${workspaceId}/repos`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const repos: string[] = Array.isArray(data.repos) ? data.repos : [];
-        if (cancelled) return;
-        setLinkedRepos(repos);
-        const savedActive = typeof data.active_github_repo === 'string' ? data.active_github_repo : null;
-        const hydrated = savedActive && repos.includes(savedActive) ? savedActive : repos[0] || null;
-        setActiveRepo(hydrated);
-      } catch (err) {
-        console.error('[CodePage] Failed to fetch workspace repos:', err);
-      }
-    }
-    loadLinkedRepos();
-    return () => { cancelled = true; };
-  }, [codeContext.workspaceId]);
-
-  // Reload workspace repo selection when Settings persists changes in the same tab.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handler = () => {
-      const workspaceId = codeContext.workspaceId;
-      if (!workspaceId) return;
-      fetch(`/api/workspaces/${workspaceId}/repos`)
-        .then(res => res.ok ? res.json() : Promise.resolve(null))
-        .then(data => {
-          if (!data) return;
-          const repos: string[] = Array.isArray(data.repos) ? data.repos : [];
-          setLinkedRepos(repos);
-          const savedActive = typeof data.active_github_repo === 'string' ? data.active_github_repo : null;
-          const hydrated = savedActive && repos.includes(savedActive) ? savedActive : repos[0] || null;
-          setActiveRepo(hydrated);
-        })
-        .catch(err => console.error('[CodePage] Failed to reload workspace repos after settings sync:', err));
-    };
-    window.addEventListener('workspace:repo-sync', handler as EventListener);
-    return () => window.removeEventListener('workspace:repo-sync', handler as EventListener);
-  }, [codeContext.workspaceId]);
-
-  // Check indexing status for the active repo so the UI can show whether chunks exist.
-  const [repoIndexed, setRepoIndexed] = useState<boolean | null>(null);
-  const [reindexing, setReindexing] = useState(false);
-  const [reindexError, setReindexError] = useState<string | null>(null);
-
-  const reindexActiveRepo = async () => {
-    if (!activeRepo || reindexing) return;
-    setReindexing(true);
-    setReindexError(null);
-    try {
-      const res = await fetch('/api/github/index', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner: activeRepo.split('/')[0], repo: activeRepo.split('/')[1] }),
-      });
-      const text = await res.text().catch(() => '');
-      if (!res.ok) throw new Error(text || 'Indexing failed');
-      setReindexError(null);
-    } catch (err: any) {
-      setReindexError(err?.message || 'Re-index failed');
-    } finally {
-      setReindexing(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!activeRepo) return;
-    let cancelled = false;
-    async function loadStatus() {
-      try {
-        const res = await fetch(`/api/github/index/status?repo=${encodeURIComponent(activeRepo!)}`);
-        const data = await res.json().catch(() => ({} as any));
-        if (cancelled) return;
-        setRepoIndexed(Boolean(data?.indexed));
-      } catch {
-        if (!cancelled) setRepoIndexed(null);
-      }
-    }
-    loadStatus();
-    return () => { cancelled = true; };
-  }, [activeRepo]);
+  // GitHub repo context (C3): active repo, linked-repo hydration, index status,
+  // reindex, and persist-on-select. The onRepoLinked callback adds the
+  // confirmation system message + clears the greeting.
+  const {
+    activeRepo,
+    isRepoModalOpen,
+    repoIndexed,
+    reindexing,
+    openRepoModal,
+    closeRepoModal,
+    reindexActiveRepo,
+    handleRepoIndexComplete,
+  } = useGithubRepoContext({
+    workspaceId: codeContext.workspaceId,
+    onRepoLinked: (fullName, fileCount) => {
+      const botMessage: Message = {
+        text: `📚 **Repository Linked:** \`${fullName}\`\nI have indexed ${fileCount} code files from this repository. You can now ask questions about the codebase!`,
+        role: "bot",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, botMessage]);
+      setShowGreeting(false);
+    },
+  });
 
   // GitHub Consent State (for Actions - separate from Context)
   const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
   const [gitHubAction, setGitHubAction] = useState<any>(null);
-
-  const handleGitHubClick = () => {
-    setIsRepoModalOpen(true);
-  };
-
-  const handleRepoIndexComplete = async (repoInfo: { owner: string; repo: string; fileCount: number }) => {
-    const fullName = `${repoInfo.owner}/${repoInfo.repo}`;
-    setActiveRepo(fullName);
-    setIsRepoModalOpen(false);
-
-    // Persist this repo as the workspace's active GitHub repo so it survives
-    // across page reloads and is shared with Settings.
-    try {
-      const workspaceId = codeContext.workspaceId;
-      if (workspaceId) {
-        await fetch(`/api/workspaces/${workspaceId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ active_github_repo: fullName }),
-        });
-      }
-    } catch (err) {
-      console.error('[CodePage] Failed to persist active repo:', err);
-    }
-
-    // Add a system message to confirm context is loaded
-    const botMessage: Message = {
-      text: `📚 **Repository Linked:** \`${fullName}\`\nI have indexed ${repoInfo.fileCount} code files from this repository. You can now ask questions about the codebase!`,
-      role: "bot",
-      timestamp: new Date()
-    };
-    setMessages((prev) => [...prev, botMessage]);
-    setShowGreeting(false);
-  };
 
   const handleGitHubActionConfirm = async () => {
     console.log("Executing GitHub action:", gitHubAction);
@@ -550,7 +449,7 @@ function CodePageContent() {
           )}
           {activeRepo ? (
             <button
-              onClick={() => setIsRepoModalOpen(true)}
+              onClick={openRepoModal}
               className="flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-md text-xs font-medium border border-green-500/20 hover:border-green-500/40 transition"
             >
               <BrandIcon name="Github" className="h-3 w-3" size={12} />
@@ -575,7 +474,7 @@ function CodePageContent() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsRepoModalOpen(true)}
+              onClick={openRepoModal}
               className="gap-2 text-xs"
             >
               <BrandIcon name="Github" className="h-3.5 w-3.5" size={14} />
@@ -637,7 +536,7 @@ function CodePageContent() {
                   size="sm"
                   className="w-full justify-start gap-2"
                   onClick={() => {
-                    setIsRepoModalOpen(true);
+                    openRepoModal();
                     setShowMobileMenu(false);
                   }}
                 >
@@ -650,7 +549,7 @@ function CodePageContent() {
                   size="sm"
                   className="w-full justify-start gap-2"
                   onClick={() => {
-                    setIsRepoModalOpen(true);
+                    openRepoModal();
                     setShowMobileMenu(false);
                   }}
                 >
@@ -680,7 +579,7 @@ function CodePageContent() {
                   {GREETING_MESSAGE}
                 </p>
                 <div className="flex justify-center pt-4">
-                  <Button variant="outline" size="sm" onClick={handleGitHubClick} className="gap-2 text-xs">
+                  <Button variant="outline" size="sm" onClick={openRepoModal} className="gap-2 text-xs">
                     <BrandIcon name="Github" className="h-3.5 w-3.5" size={14} />
                     Load Repository Context
                   </Button>
@@ -931,11 +830,8 @@ function CodePageContent() {
       {/* GitHub Repo Modal for Context Loading */}
       <GitHubRepoModal
         isOpen={isRepoModalOpen}
-        onClose={() => setIsRepoModalOpen(false)}
-        onIndexComplete={(repoInfo) => {
-          setActiveRepo(`${repoInfo.owner}/${repoInfo.repo}`);
-          setIsRepoModalOpen(false);
-        }}
+        onClose={closeRepoModal}
+        onIndexComplete={handleRepoIndexComplete}
       />
     </div>
   );
