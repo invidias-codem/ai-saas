@@ -25,20 +25,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardFooter } from "@/components/ui/card";
-import { amountOptions, resolutionOptions, modelOptions, formSchema } from "./constants";
+import { imageAmountOptions as amountOptions, imageResolutionOptions as resolutionOptions, imageModelOptions as modelOptions, imageFormSchema as formSchema } from "@/components/media/config";
+import type { ReplicatePrediction } from "@/components/media/types";
 import { ParameterDrawer, ParameterSection } from "@/components/ui/parameter-drawer";
 import { Settings2 } from "lucide-react";
 import { ShareIconButton } from "@/components/share-button";
-
-// Interface for a single Replicate prediction
-interface ReplicatePrediction {
-  id: string;
-  status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
-  output?: string | string[]; // nano-banana output can be string or array of strings
-  error?: {
-    detail?: string;
-  };
-}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

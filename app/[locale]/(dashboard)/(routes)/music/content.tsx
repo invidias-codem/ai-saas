@@ -5,7 +5,9 @@ import React from "react";
 import { Input } from "@/components/ui/input";
 import { useTranslations } from "next-intl";
 import { useState, useEffect } from "react";
-import { formSchema } from "./constants";
+import { musicFormSchema as formSchema } from "@/components/media/config";
+import type { ReplicatePrediction } from "@/components/media/types";
+import { singleOutput } from "@/components/media/types";
 import { Heading } from "@/components/heading";
 import { DiscIcon } from "@radix-ui/react-icons";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
@@ -21,15 +23,6 @@ import StereoBars from "@/components/music/stereo-bars";
 
 const DEFAULT_YOUTUBE_VIDEO_ID = "5qap5aO4i9A";
 const DEFAULT_YOUTUBE_TITLE = "Lofi beats";
-
-interface ReplicatePrediction {
-  id: string;
-  status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
-  output?: string;
-  error?: {
-    detail: string;
-  };
-}
 
 export function MusicContent() {
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
@@ -56,7 +49,7 @@ export function MusicContent() {
 
         switch (prediction.status) {
           case "succeeded":
-            setMusicUrl(prediction.output || null);
+            setMusicUrl(singleOutput(prediction));
             setIsLoading(false);
             setPredictionId(null);
             form.reset();

@@ -4,7 +4,9 @@
 // ✅ Added useEffect
 import { useTranslations } from "next-intl";
 import { useState, useEffect } from "react";
-import { formSchema, resolutionOptions, durationOptions, aspectRatioOptions } from './constants';
+import { videoFormSchema as formSchema, videoResolutionOptions as resolutionOptions, videoDurationOptions as durationOptions, videoAspectRatioOptions as aspectRatioOptions } from '@/components/media/config';
+import type { ReplicatePrediction } from '@/components/media/types';
+import { singleOutput } from '@/components/media/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Heading } from '@/components/heading';
 import { KoFiNudge } from "@/components/kofi-nudge";
@@ -21,16 +23,6 @@ import axios from 'axios';
 import { ParameterDrawer, ParameterSection } from "@/components/ui/parameter-drawer";
 import { Settings2 } from "lucide-react";
 import { ShareButton } from '@/components/share-button';
-
-// ✅ Define the structure of the prediction object we expect
-interface ReplicatePrediction {
-  id: string;
-  status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
-  output?: string; // Expecting a single string URL as output based on your previous route
-  error?: {
-    detail: string;
-  };
-}
 
 export function VideoContent() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -76,7 +68,7 @@ export function VideoContent() {
         switch (prediction.status) {
           case "succeeded":
             setStatus("completed");
-            setVideoUrl(prediction.output || null); // Set the output URL
+            setVideoUrl(singleOutput(prediction)); // Set the output URL
             setPredictionId(null); // Clear ID to stop polling
             trackActivity("video");
             form.reset(); // Reset form on success
