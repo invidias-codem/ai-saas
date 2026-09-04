@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
+import { useState, useRef, KeyboardEvent, useEffect } from "react";
 import { safeLocalStorage } from "@/lib/safeStorage";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
@@ -39,6 +39,7 @@ import {
 import { createNewConversation } from "@/lib/conversationManager";
 import { useChatScroll } from "@/components/chat/useChatScroll";
 import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
+import { useCodeFileUpload, CodeSelectedFile } from "@/components/chat/useCodeFileUpload";
 
 // ... (keep existing imports)
 
@@ -52,18 +53,12 @@ interface CodeContext {
   operatingProfileMode: string | null;
 }
 
-interface SelectedFile {
-  name: string;
-  type: string;
-  base64Data: string;
-}
-
 interface Message {
   id?: string;
   role: "user" | "bot";
   text: string;
   timestamp: Date;
-  fileData?: SelectedFile;
+  fileData?: CodeSelectedFile;
 }
 
 const CodeBlock = ({ codeString, language }: { codeString: string, language: string }) => {
@@ -145,9 +140,17 @@ function CodePageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
-  const [saveToMemory, setSaveToMemory] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Code file attachment (C2): base64 read + save-to-memory toggle.
+  const {
+    selectedFile,
+    saveToMemory,
+    setSaveToMemory,
+    fileInputRef,
+    handleFileChange,
+    removeFile,
+  } = useCodeFileUpload(setError, setLoading);
+
   const [memoryCount, setMemoryCount] = useState<number>(0);
   const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -440,19 +443,6 @@ function CodePageContent() {
     }
   }, [messages.length]);
 
-  // Helper function to read file as Base64
-  const readFileAsBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64String = (reader.result as string).split(',')[1];
-        resolve(base64String);
-      };
-      reader.onerror = (error) => reject(error);
-      reader.readAsDataURL(file);
-    });
-  };
-
   // Handle sending message
   const handleSendMessage = async () => {
     const trimmedInput = userInput.trim();
@@ -482,7 +472,7 @@ function CodePageContent() {
     setUserInput("");
 
 
-    setSelectedFile(null);
+    removeFile();
 
     try {
       const response = await axios.post("/api/code", {
@@ -515,31 +505,6 @@ function CodePageContent() {
       setLoading(false);
       trackActivity("message");
     }
-  };
-
-  const handleAttachClick = () => { fileInputRef.current?.click(); };
-
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setLoading(true);
-      setError(null);
-      try {
-        const base64Data = await readFileAsBase64(file);
-        setSelectedFile({
-          name: file.name,
-          type: file.type || 'text/plain',
-          base64Data: base64Data
-        });
-      } catch (err) {
-        console.error("Error reading file:", err);
-        setError("Sorry, could not read the selected file.");
-        setSelectedFile(null);
-      } finally {
-        setLoading(false);
-      }
-    }
-    if (fileInputRef.current) { fileInputRef.current.value = ""; }
   };
 
   const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -842,7 +807,7 @@ function CodePageContent() {
                 <Paperclip className="h-3 w-3 text-green-500" />
                 <span className="max-w-[150px] truncate">{selectedFile.name}</span>
                 <button
-                  onClick={() => setSelectedFile(null)}
+                  onClick={removeFile}
                   className="text-muted-foreground hover:text-destructive transition-colors ml-1"
                 >
                   <X className="h-3 w-3" />
