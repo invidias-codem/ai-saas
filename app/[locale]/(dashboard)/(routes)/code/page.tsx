@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, KeyboardEvent, useEffect } from "react";
-import { safeLocalStorage } from "@/lib/safeStorage";
 import axios from "axios";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -30,30 +29,17 @@ import { GitHubRepoModal } from "@/components/github-repo-modal";
 import { CodeModelProvider, useCodeModel } from "@/contexts/CodeModelContext";
 import { CodeModelToggle } from "@/components/chat/CodeModelToggle";
 import { CODE_MODELS, ProviderKeyState } from "@/lib/llm/codeModels";
-import {
-  getSessionMemoryFromStorage,
-  saveSessionMemoryToStorage,
-  SessionMessage
-} from "@/lib/sessionClientMemory";
-import { createNewConversation } from "@/lib/conversationManager";
 import { useChatScroll } from "@/components/chat/useChatScroll";
 import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
 import { useCodeFileUpload, CodeSelectedFile } from "@/components/chat/useCodeFileUpload";
 import { useGithubRepoContext } from "@/components/chat/useGithubRepoContext";
 import { useMemoryCount } from "@/components/chat/useMemoryCount";
 import { MemoryInsights } from "@/components/chat/MemoryInsights";
+import { useCodeConversation, CodeContext } from "@/components/chat/useCodeConversation";
 
 // ... (keep existing imports)
 
 // Content Component (Inner)
-
-interface CodeContext {
-  workspaceId: string | null;
-  workspaceName: string | null;
-  operatingProfileId: string | null;
-  operatingProfileName: string | null;
-  operatingProfileMode: string | null;
-}
 
 interface Message {
   id?: string;
@@ -105,12 +91,6 @@ const CodeBlock = ({ codeString, language }: { codeString: string, language: str
   );
 };
 
-const codeConversationRowKey = (workspaceId?: string | null, operatingProfileId?: string | null) => 
-  `weaver_code_conversation_id:${workspaceId || "global"}:${operatingProfileId || "global"}`;
-
-const getLocalCodeSessionId = (workspaceId?: string | null, operatingProfileId?: string | null) => 
-  `local-code-session:${workspaceId || "global"}:${operatingProfileId || "global"}`;
-
 function CodePageContent() {
   const { codeModel, setCodeModel, providerKeyState, setProviderKeyState } = useCodeModel();
 
@@ -136,12 +116,18 @@ function CodePageContent() {
   }, [setProviderKeyState]);
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [codeContext, setCodeContext] = useState<CodeContext>({ workspaceId: null, workspaceName: null, operatingProfileId: null, operatingProfileName: null, operatingProfileMode: null });
   const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
+
+  // Code context + conversation bootstrap (C6): hydrate workspace/profile,
+  // resolve/restore the row-backed conversation, and persist messages.
+  const { codeContext, conversationId } = useCodeConversation({
+    messages,
+    onRestoreMessages: setMessages,
+    onHideGreeting: () => setShowGreeting(false),
+  });
 
   // Code file attachment (C2): base64 read + save-to-memory toggle.
   const {
@@ -191,112 +177,6 @@ function CodePageContent() {
   // Chat scroll management (C1): refs, manual scroll-to-bottom, and
   // "scrolled up" detection that drives the floating ScrollToBottom button.
   const { chatContainerRef, bottomRef, scrollToBottom, showScrollButton } = useChatScroll(messages.length);
-
-  useEffect(() => {
-    const loadCodeContext = async () => {
-      try {
-        const [workspaceRes, profileRes] = await Promise.all([
-          axios.get('/api/workspaces/default'),
-          axios.get('/api/operating-profiles/default'),
-        ]);
-
-        const workspace = workspaceRes.data?.workspace ?? null;
-        const profile = profileRes.data?.operatingProfile ?? null;
-
-        setCodeContext({
-          workspaceId: workspace?.id ?? null,
-          workspaceName: workspace?.name ?? null,
-          operatingProfileId: profile?.id ?? workspace?.default_operating_profile_id ?? null,
-          operatingProfileName: profile?.name ?? null,
-          operatingProfileMode: profile?.mode ?? null,
-        });
-      } catch (err) {
-        console.error('[CODE_CONTEXT_LOAD_ERROR]', err);
-      }
-    };
-
-    loadCodeContext();
-  }, []);
-
-  // Persistence for Code Session
-
-  useEffect(() => {
-    const bootstrapCodeConversation = async () => {
-      try {
-        const conversationRowKey = codeConversationRowKey(codeContext.workspaceId, codeContext.operatingProfileId);
-        let resolvedConversationId = safeLocalStorage.getItem(conversationRowKey);
-
-        if (!resolvedConversationId && codeContext.workspaceId) {
-          const created = await createNewConversation({
-            title: codeContext.workspaceName ? `${codeContext.workspaceName} Code` : 'Code Conversation',
-            workspaceId: codeContext.workspaceId ?? undefined,
-            operatingProfileId: codeContext.operatingProfileId ?? undefined,
-          });
-
-          if (created?.id) {
-            resolvedConversationId = created.id;
-            safeLocalStorage.setItem(conversationRowKey, created.id);
-          }
-        }
-
-        if (resolvedConversationId) {
-          setConversationId(resolvedConversationId);
-          const response = await fetch(`/api/conversations/${resolvedConversationId}`, { credentials: 'include' });
-          if (response.ok) {
-            const data = await response.json();
-            const restoredMessages: Message[] = (data.messages || []).map((msg: any) => ({
-              id: msg.id,
-              text: msg.text,
-              role: msg.role,
-              timestamp: new Date(msg.timestamp),
-              fileData: msg.fileData,
-            }));
-            
-            // Authoritative rule: Row-backed history wins.
-            setMessages(restoredMessages);
-            if (restoredMessages.length > 0) {
-              setShowGreeting(false);
-            }
-            return;
-          }
-        }
-
-        // Only fall back to local storage if we absolutely could not establish or fetch a conversation
-        const localSessionId = getLocalCodeSessionId(codeContext.workspaceId, codeContext.operatingProfileId);
-        const savedMessages = getSessionMemoryFromStorage(localSessionId);
-        if (savedMessages.length > 0) {
-          const restoredMessages: Message[] = savedMessages.map(msg => ({
-            text: msg.text,
-            role: msg.role,
-            timestamp: new Date(msg.timestamp),
-            fileData: msg.fileData
-          }));
-          setMessages(restoredMessages);
-          setShowGreeting(false);
-        }
-      } catch (err) {
-        console.error('[CODE_CONVERSATION_BOOTSTRAP_ERROR]', err);
-      }
-    };
-
-    if (codeContext.workspaceId || codeContext.operatingProfileId) {
-      bootstrapCodeConversation();
-    }
-  }, [codeContext.workspaceId, codeContext.operatingProfileId, codeContext.workspaceName]);
-
-  // Save to storage on change
-  useEffect(() => {
-    if (messages.length > 0) {
-      const sessionMessages: SessionMessage[] = messages.map(msg => ({
-        text: msg.text,
-        role: msg.role,
-        timestamp: msg.timestamp.getTime(),
-        fileData: msg.fileData
-      }));
-      const localSessionId = getLocalCodeSessionId(codeContext.workspaceId, codeContext.operatingProfileId);
-      saveSessionMemoryToStorage(sessionMessages, 'current-user', 'code-session', localSessionId);
-    }
-  }, [messages, codeContext.workspaceId, codeContext.operatingProfileId]);
 
   // Handle sending message
   const handleSendMessage = async () => {
