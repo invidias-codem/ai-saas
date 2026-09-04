@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 import { getDefaultWorkspace } from '@/lib/workspaces/defaultWorkspace';
+import { resolveWorkspaceForNewConversation } from '@/lib/conversations/routing';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +34,7 @@ export async function GET(req: Request, { params }: RouteContext) {
   const requestedWorkspaceId = searchParams.get('workspaceId');
 
   // Resolve target workspace: explicit param (validated for ownership) or default.
-  let workspace: { id: string; default_operating_profile_id: string | null } | null = null;
+  let requestedWorkspaceOwned: { id: string; default_operating_profile_id: string | null } | null = null;
 
   if (requestedWorkspaceId) {
     const { data } = await supabaseAdmin
@@ -42,12 +43,21 @@ export async function GET(req: Request, { params }: RouteContext) {
       .eq('id', requestedWorkspaceId)
       .eq('user_id', userId)
       .maybeSingle();
-    workspace = data;
+    requestedWorkspaceOwned = data;
   }
 
+  const defaultWorkspace = requestedWorkspaceOwned
+    ? null
+    : await getDefaultWorkspace(userId);
+
+  const workspace = resolveWorkspaceForNewConversation({
+    requestedWorkspaceId,
+    requestedWorkspaceOwned,
+    defaultWorkspace,
+  });
+
   if (!workspace) {
-    const fallback = await getDefaultWorkspace(userId);
-    workspace = { id: fallback.id, default_operating_profile_id: (fallback as any).default_operating_profile_id ?? null };
+    redirect(`/${locale}/onboarding`);
   }
 
   const { data: conversation, error } = await supabaseAdmin

@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { conversationAccessFilter } from '@/lib/conversations/routing';
 import ChatClient from './client';
 
 export const dynamic = 'force-dynamic';
@@ -37,11 +38,14 @@ export default async function ConversationPage({ params }: { params: Promise<{ l
 
   // H2: ownership enforced at the query level — a conversation id that
   // doesn't belong to the authed user is indistinguishable from 404.
+  const accessFilter = conversationAccessFilter(conversationId, userId);
+  if (!accessFilter) notFound();
+
   const { data: conversation, error: conversationError } = await supabaseAdmin
     .from('conversations')
     .select('id, workspace_id, operating_profile_id')
-    .eq('id', conversationId)
-    .eq('user_id', userId)
+    .eq('id', accessFilter.id)
+    .eq('user_id', accessFilter.user_id)
     .maybeSingle();
 
   if (conversationError) {

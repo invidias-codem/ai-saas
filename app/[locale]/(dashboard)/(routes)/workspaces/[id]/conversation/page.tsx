@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { decideForceNew } from '@/lib/conversations/routing';
 
 interface RouteParams {
   params: Promise<{ locale: string; id: string }>;
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export default async function WorkspaceConversationPage({ params, searchParams }: RouteParams) {
   const { locale, id } = await params;
   const search = await searchParams;
-  const forceNew = search?.action === 'new';
+  const forceNew = decideForceNew(search);
   const { userId } = await auth();
 
   if (!userId || !supabaseAdmin) {
