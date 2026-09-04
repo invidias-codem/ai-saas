@@ -28,7 +28,7 @@ import { addNode, addEdge, strengthenEdge } from "@/lib/memory/graphStore";
 import { extractFactsFromConversation } from "@/lib/agents/factExtractor";
 import { SecurityAgent } from "@/lib/security/securityAgent";
 import { logEvent } from "@/lib/telemetry";
-import { encodeMediaEvent, hasMediaEnvelope, MediaEnvelope } from "@/lib/media/envelope";
+import { encodeMediaEvent, hasMediaEnvelope, MediaEnvelope, encodeApprovalEvent } from "@/lib/media/envelope";
 import { emitInteractionAudit } from "@/lib/telemetry/emit";
 import { deriveContextRole } from "@/lib/telemetry/governance";
 import { emitRiskEvent } from "@/lib/telemetry/riskAdapter";
@@ -400,6 +400,12 @@ export async function generateConversationReply(
         };
 
         try {
+          // Hydrate the agent's role for the mutative-tool gate: admins/owners
+          // (with `sensitive_tools:use`) are 'admin'; everyone else is 'user'.
+          const isAdmin = Boolean(
+            orgContext?.permissions && orgContext.permissions.includes('sensitive_tools:use')
+          );
+
           const agentContext = {
             userId,
             sessionId,
@@ -408,12 +414,18 @@ export async function generateConversationReply(
             enableTelemetry: true,
             rootSpan: undefined,
             orgContext,
+            userRole: isAdmin ? ('admin' as const) : ('user' as const),
             ioHarness: options.ioHarness,
             onStep: (step: any) => {
               const text = String(step.thought ?? '');
               onStreamEvent(text);
               onReasoning(text);
               if (options.slackStreamCallback) options.slackStreamCallback(step);
+            },
+            onToolApproval: (approval: { approvalId: string; toolName: string; params: any }) => {
+              controller.enqueue(
+                textEncoder.encode(`${encodeApprovalEvent(approval)}\n`)
+              );
             },
             promotionManager,
             promotionRejectionCount: 0,

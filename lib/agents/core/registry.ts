@@ -138,8 +138,11 @@ export class ToolRegistry {
           };
         }
 
-        // 1. P0 Security Check: Role-based Access
-        if (tool.risk === 'mutative' && context.userRole !== 'admin') {
+        // 1. P0 Security Check: Role-based Access.
+        // Mutative tools that do NOT opt into human-in-the-loop approval are
+        // admin-only. Mutative tools WITH `requiresApproval: true` fall through
+        // to the approval gate below (human-in-the-loop) regardless of role.
+        if (tool.risk === 'mutative' && context.userRole !== 'admin' && !tool.requiresApproval) {
             return {
                 success: false,
                 error: `Security Violation: User '${context.userId}' is not authorized to use mutative tool '${name}'.`

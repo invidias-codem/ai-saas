@@ -88,7 +88,18 @@ export interface Tool<TInput = any, TOutput = any> {
      ioHarness?: IOHarness;
 
      /** Callback fired whenever the agent updates its thought or executes a tool. */
-     onStep?: (step: TrajectoryStep) => void;
+         onStep?: (step: TrajectoryStep) => void;
+
+         /**
+          * Fired when a mutative tool halts for human-in-the-loop approval. The
+          * callback receives the approvalId + tool name + params so the caller can
+          * emit a structured approval event and later resume the paused tool.
+          */
+         onToolApproval?: (approval: {
+           approvalId: string;
+           toolName: string;
+           params: any;
+         }) => void;
 
      /** Optional root span for per-tool child span instrumentation. */
      rootSpan?: import('@/lib/ucol/observability/span').UcolSpan;

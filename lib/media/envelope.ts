@@ -39,3 +39,26 @@ export function decodeMediaEvent(line: string): MediaEnvelope | null {
 export function hasMediaEnvelope(data: any): data is { _media?: MediaEnvelope } {
   return Boolean(data && typeof data === "object" && data._media);
 }
+
+/* ─────────────────────── Approval envelope ─────────────────────── */
+
+export interface ApprovalEnvelope {
+  approvalId: string;
+  toolName: string;
+  params: any;
+}
+
+export const APPROVAL_EVENT_PREFIX = "__APPROVAL_EVENT__";
+
+export function encodeApprovalEvent(envelope: ApprovalEnvelope): string {
+  return `${APPROVAL_EVENT_PREFIX}${JSON.stringify(envelope)}`;
+}
+
+export function decodeApprovalEvent(line: string): ApprovalEnvelope | null {
+  if (!line.startsWith(APPROVAL_EVENT_PREFIX)) return null;
+  try {
+    return JSON.parse(line.slice(APPROVAL_EVENT_PREFIX.length)) as ApprovalEnvelope;
+  } catch {
+    return null;
+  }
+}
