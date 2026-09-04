@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, ArrowDown, RefreshCcw } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, RefreshCcw } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { CodeIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,8 @@ import {
   SessionMessage
 } from "@/lib/sessionClientMemory";
 import { createNewConversation } from "@/lib/conversationManager";
+import { useChatScroll } from "@/components/chat/useChatScroll";
+import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
 
 // ... (keep existing imports)
 
@@ -146,9 +148,6 @@ function CodePageContent() {
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [saveToMemory, setSaveToMemory] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null); // Chat container for scroll
-  const [showScrollButton, setShowScrollButton] = useState(false);
   const [memoryCount, setMemoryCount] = useState<number>(0);
   const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -297,31 +296,9 @@ function CodePageContent() {
 
   // ... (keep existing scroll and effect logic)
 
-  // Scroll to bottom function for manual trigger
-  const scrollToBottom = () => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-  // Track scroll position to show/hide scroll-to-bottom button
-  useEffect(() => {
-    const container = chatContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      // Show button when scrolled up more than 200px from bottom
-      const isScrolledUp = scrollHeight - scrollTop - clientHeight > 200;
-      setShowScrollButton(isScrolledUp && messages.length > 2);
-    };
-
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [messages.length]);
+  // Chat scroll management (C1): refs, manual scroll-to-bottom, and
+  // "scrolled up" detection that drives the floating ScrollToBottom button.
+  const { chatContainerRef, bottomRef, scrollToBottom, showScrollButton } = useChatScroll(messages.length);
 
   useEffect(() => {
     const loadCodeContext = async () => {
@@ -853,15 +830,7 @@ function CodePageContent() {
       </div>
 
       {/* ... (Scroll button) ... */}
-      {showScrollButton && (
-        <button
-          onClick={scrollToBottom}
-          className="fixed bottom-28 right-6 z-30 h-10 w-10 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-lg flex items-center justify-center transition-all duration-200 animate-in fade-in slide-in-from-bottom-2"
-          aria-label="Scroll to bottom"
-        >
-          <ArrowDown className="h-5 w-5" />
-        </button>
-      )}
+      {showScrollButton && <ScrollToBottom onClick={scrollToBottom} accent="green" />}
 
       {/* Input Area */}
       <div className="flex-none w-full p-4 bg-gradient-to-t from-background via-background to-transparent pb-[max(1rem,env(safe-area-inset-bottom))]">
