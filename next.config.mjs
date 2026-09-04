@@ -97,7 +97,12 @@ export default withMDX(
         { source: '/settings', destination: '/en/settings', permanent: false },
         { source: '/settings/:path*', destination: '/en/settings/:path*', permanent: false },
         { source: '/blog', destination: '/en/blog', permanent: false },
-        { source: '/blog/:path*', destination: '/en/blog/:path*', permanent: false },
+        // Only redirect ROUTES under /blog, never static files under public/blog/.
+        // The negative lookahead excludes paths ending in a known asset extension
+        // (jpg/png/svg/webp/etc.) so OG cards, card thumbs, and inlined post images
+        // resolve from public/blog/ as expected instead of being rewritten to
+        // /en/blog/<file> (which is a route lookup and 404s).
+        { source: '/blog/:path((?!.*\\.(?:jpe?g|png|gif|webp|svg|ico|xml|txt|json|mp4|webm|woff2?|ttf|otf))[^?]*)', destination: '/en/blog/:path', permanent: false },
         { source: '/support', destination: '/en/support', permanent: false },
         { source: '/support/:path*', destination: '/en/support/:path*', permanent: false },
         { source: '/slack', destination: '/en/slack', permanent: false },

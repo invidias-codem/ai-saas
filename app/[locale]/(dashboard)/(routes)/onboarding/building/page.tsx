@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
 
 const STEPS = [
@@ -12,16 +12,20 @@ const STEPS = [
   '> [sys] Handoff complete. Weaver is online.',
 ];
 
-export default function OnboardingBuildingPage() {
+function BuildingTerminal() {
   const router = useRouter();
   const locale = useLocale();
+  const searchParams = useSearchParams();
   const [lines, setLines] = useState<string[]>([]);
   const [step, setStep] = useState(0);
+
+  const workspaceId = searchParams.get('workspaceId') || '';
 
   useEffect(() => {
     if (step >= STEPS.length) {
       const timeout = setTimeout(() => {
-        router.replace(`/${locale}/workspaces/${new URLSearchParams(window.location.search).get('workspaceId') || ''}`);
+        // Canonical resolver route — no bare /workspaces/{id} middleman hop.
+        router.replace(`/${locale}/workspaces/${workspaceId}/conversation`);
       }, 600);
       return () => clearTimeout(timeout);
     }
@@ -32,7 +36,7 @@ export default function OnboardingBuildingPage() {
     }, 420);
 
     return () => clearTimeout(timeout);
-  }, [step, locale, router]);
+  }, [step, locale, router, workspaceId]);
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center px-4 sm:px-6">
@@ -55,5 +59,17 @@ export default function OnboardingBuildingPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OnboardingBuildingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-200" />
+      </div>
+    }>
+      <BuildingTerminal />
+    </Suspense>
   );
 }

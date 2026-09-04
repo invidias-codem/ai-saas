@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ArrowRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
+import { RippleButton } from "@/components/landing/ripple-button";
 
 type Variant = "a" | "b" | "c";
 
@@ -119,26 +120,30 @@ export const ExpertHero = ({ variant }: ExpertHeroProps) => {
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.5 }}
+                transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1], delay: 0.5 }}
                 className="flex flex-col sm:flex-row gap-4"
               >
                 <Link href="/onboarding" className="w-full sm:w-auto">
-                  <Button
-                    size="lg"
-                    className="w-full sm:w-auto bg-white text-black hover:bg-white/90 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base font-semibold active:scale-95 transition-transform"
+                  <RippleButton
+                    golden
+                    className="group w-full sm:w-auto bg-white text-black hover:bg-white/90 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base font-semibold transition duration-200 active:scale-[0.97]"
                   >
                     {t("ctaHeroPrimary")}
-                    <ArrowRightIcon className="ml-2 h-5 w-5" />
-                  </Button>
+                    <ArrowRightIcon className="ml-2 h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
+                  </RippleButton>
                 </Link>
                 <Link href="#how-it-works" className="w-full sm:w-auto">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    className="w-full sm:w-auto border-white/20 text-white hover:bg-white/10 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base backdrop-blur-sm active:scale-95 transition-transform"
+                  <RippleButton
+                    className="group w-full sm:w-auto border border-white/20 text-white hover:bg-white/10 hover:border-white/30 rounded-full px-8 py-4 md:py-6 min-h-[48px] text-base backdrop-blur-sm transition duration-200 active:scale-[0.97]"
                   >
                     {t("ctaSecondary")}
-                  </Button>
+                  </RippleButton>
+                </Link>
+                <Link
+                  href="/sovereign"
+                  className="inline-flex min-h-[48px] items-center text-sm text-white/50 transition hover:text-white/80"
+                >
+                  Enterprise? See Sovereign tier
                 </Link>
               </motion.div>
             </motion.div>
@@ -146,7 +151,8 @@ export const ExpertHero = ({ variant }: ExpertHeroProps) => {
             {/* ── Right: interactive preview card (mobile-safe) ── */}
             <motion.div
               initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-100px" }}
               transition={{ type: "spring", stiffness: 100, damping: 20 }}
               className="lg:col-span-5 relative overflow-hidden"
             >

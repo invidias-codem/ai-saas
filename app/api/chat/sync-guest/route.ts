@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { getDefaultWorkspace } from '@/lib/workspaces/defaultWorkspace';
 import { z } from 'zod';
 import { supabaseAdmin } from "@/lib/supabaseClient";
 
@@ -41,24 +42,34 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
         }
 
+        // Resolve default workspace once — used both to scope the synced
+        // conversation and to return workspaceId to the client router.
+        const defaultWorkspace = await getDefaultWorkspace(user.userId);
+
         // Check if session already synced
         const { data: existing } = await supabaseAdmin
             .from("conversations")
             .select("id")
             .eq("metadata->>guestSessionId", guestSessionId)
-            .single();
+            .maybeSingle();
 
         if (existing) {
+            await supabaseAdmin.from('workspace_state').upsert({
+                workspace_id: defaultWorkspace.id,
+                last_open_conversation_id: existing.id,
+                last_open_tab: 'conversation',
+            });
             return NextResponse.json({
                 success: true,
-                conversationId: existing.id
+                conversationId: existing.id,
+                workspaceId: defaultWorkspace.id
             });
         }
-
         const { data: convData, error: convError } = await supabaseAdmin
             .from("conversations")
             .insert({
                 user_id: user.userId,
+                workspace_id: defaultWorkspace.id,
                 title: "Guest Chat Session",
                 is_deleted: false,
                 is_archived: false,
@@ -90,9 +101,18 @@ export async function POST(req: Request) {
             throw new Error("Failed to insert synced messages");
         }
 
+        // Remember the synced conversation as last-open so the workspace
+        // resolver drops the user straight back into it next visit.
+        await supabaseAdmin.from('workspace_state').upsert({
+            workspace_id: defaultWorkspace.id,
+            last_open_conversation_id: conversationId,
+            last_open_tab: 'conversation',
+        });
+
         return NextResponse.json({
             success: true,
-            conversationId
+            conversationId,
+            workspaceId: defaultWorkspace.id
         });
     } catch (error) {
         console.error("[API:Chat:SyncGuest] Error:", error);

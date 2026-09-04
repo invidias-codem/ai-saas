@@ -12,6 +12,14 @@ import {
     setActiveConversation,
 } from "@/lib/conversationManager";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
+
+export const CONVERSATIONS_INVALIDATE_EVENT = 'conversations:invalidate';
+
+export function emitConversationsInvalidate() {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(CONVERSATIONS_INVALIDATE_EVENT));
+}
+
 import {
     AlertDialog,
     AlertDialogAction,
@@ -35,17 +43,22 @@ interface Conversation {
     preview?: string;
 }
 
+interface ConversationHistoryProps {
+    onNavigate?: () => void;
+    initialConversations?: Conversation[];
+}
+
 function extractWorkspaceId(pathname: string | null): string | null {
     if (!pathname) return null;
     const match = pathname.match(/\/workspaces\/([^/]+)/);
     return match ? decodeURIComponent(match[1]) : null;
 }
 
-export function ConversationHistory({ onNavigate }: { onNavigate?: () => void }) {
+export function ConversationHistory({ onNavigate, initialConversations }: ConversationHistoryProps) {
     const router = useRouter();
     const pathname = usePathname();
-    const [conversations, setConversations] = useState<Conversation[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [conversations, setConversations] = useState<Conversation[]>(initialConversations ?? []);
+    const [loading, setLoading] = useState(!initialConversations);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [creatingNew, setCreatingNew] = useState(false);
 
@@ -68,10 +81,24 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
     }
 
     useEffect(() => {
-        // Initial data load on mount/route change — async fetch + setState.
+        // Skip the mount fetch when the RSC shell already seeded the list.
+        if (initialConversations) return;
+        // Fetch on mount (or pathname change) — external data load.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         loadConversations();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pathname]);
+
+    // Targeted invalidation: refetch when a conversation is created/deleted
+    // elsewhere in the app (e.g. /conversation/new route handler, vault
+    // restore). Cheap event bus; avoids re-fetching on every URL change.
+    useEffect(() => {
+        const handler = () => {
+            loadConversations();
+        };
+        window.addEventListener(CONVERSATIONS_INVALIDATE_EVENT, handler);
+        return () => window.removeEventListener(CONVERSATIONS_INVALIDATE_EVENT, handler);
+    }, []);
 
     const visibleConversations = useMemo(() => {
         if (!activeWorkspaceId) return conversations;
@@ -84,6 +111,7 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
             const success = await deleteConversation(id);
             if (success) {
                 setConversations((prev) => prev.filter((c) => c.id !== id));
+                emitConversationsInvalidate();
                 if (id === activeId) {
                     clearSessionMemoryStorage();
                     onNavigate?.();
@@ -106,7 +134,8 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
         try {
             clearSessionMemoryStorage();
             if (activeWorkspaceId) {
-                router.push(`/workspaces/${activeWorkspaceId}/conversation`);
+                // Blank-slate guarantee: resolver bypasses last-open restore.
+                router.push(`/workspaces/${activeWorkspaceId}/conversation?action=new`);
             } else {
                 router.push('/conversation/new');
             }

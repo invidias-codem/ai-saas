@@ -131,7 +131,7 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
         <div
           key={tier.key}
           className={cn(
-            "relative rounded-2xl border p-6 flex flex-col transition-all duration-300 hover:-translate-y-1 hover:shadow-lg",
+            "relative rounded-2xl border p-6 flex flex-col transition duration-200 hover:-translate-y-1 hover:shadow-lg",
             tier.popular
               ? "border-purple-500 bg-gradient-to-br from-purple-500/5 to-pink-500/5 shadow-[0_0_35px_-8px_rgba(168,85,247,0.35)]"
               : "border-border bg-card"
@@ -175,6 +175,16 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
           >
             {tier.cta}
           </Button>
+          {tier.checkout && (
+            <div className="mt-3 text-center">
+              <a
+                href="/api/checkout/kofi"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-200 underline-offset-2 hover:underline"
+              >
+                Prefer PayPal? Pay via Ko-fi
+              </a>
+            </div>
+          )}
         </div>
       ))}
     </div>

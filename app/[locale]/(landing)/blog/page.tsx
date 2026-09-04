@@ -1,6 +1,5 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { BlogCard } from "@/components/blog/blog-card";
 import { NewsletterCTA } from "@/components/blog/newsletter-cta";
@@ -132,7 +131,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
             <Link
               href="/blog"
               className={cn(
-                "inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                "inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200",
                 !activeCategory && !activeTag
                   ? "bg-white/10 text-white"
                   : "text-gray-400 hover:text-white hover:bg-white/5"
@@ -145,7 +144,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                 key={category.slug}
                 href={`/blog?category=${category.slug}`}
                 className={cn(
-                  "inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  "inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200",
                   activeCategory === category.slug
                     ? cn(category.bgColor, category.color)
                     : "text-gray-400 hover:text-white hover:bg-white/5"
@@ -163,7 +162,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
               <Link
                 key={series.slug}
                 href={`/blog/series/${series.slug}`}
-                className="inline-flex items-center rounded-full border border-white/10 px-3 py-1 text-xs text-gray-300 hover:text-white hover:border-purple-500/30 transition-colors"
+                className="inline-flex items-center rounded-full border border-white/10 px-3 py-1 text-xs text-gray-300 hover:text-white hover:border-purple-500/30 transition-colors duration-200"
               >
                 {series.name}
               </Link>
@@ -227,33 +226,6 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
           <NewsletterCTA />
         </section>
       </main>
-
-      {/* Footer */}
-      <footer className="py-10 border-t border-border bg-background">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="relative w-6 h-6">
-                <Image src="/og-image.png" alt="Lattice OS logo" fill className="object-cover" />
-              </div>
-              <span className="text-lg font-bold text-white">Lattice OS</span>
-            </div>
-
-            <div className="flex items-center gap-6 text-sm text-gray-400">
-              <Link href="/blog" className="hover:text-white transition">Blog</Link>
-              <Link href="/slack" className="hover:text-white transition">Slack Integration</Link>
-              <Link href="/support" className="hover:text-white transition">Support</Link>
-              <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
-            </div>
-          </div>
-
-          <div className="mt-8 pt-8 border-t border-border text-center">
-            <p className="text-gray-500 text-sm">
-              © {new Date().getFullYear()} Lattice OS. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

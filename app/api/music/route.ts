@@ -1,33 +1,11 @@
 // app/api/music/route.ts
-// (Optimized for asynchronous polling - FIX)
+// (Optimized for asynchronous polling — generation/debiting delegated to lib/media/music)
 
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { env } from "@/lib/env";
-import Replicate from "replicate";
-import { z } from "zod";
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { musicGenerationSchema, ValidationError } from '@/lib/security/inputValidation';
-import { checkCredits, deductCredits, spendCreditsAtomic, refundCredits, CREDIT_COSTS, ensureSufficientCreditsOrRespond, hasUnlimitedUsageAccess } from "@/lib/credits";
-import { trackAIGeneration, trackAIError, trackCreditsDeducted } from "@/lib/analytics/track";
-
-// 1. Initialize Replicate client
-const replicate = new Replicate({
-  auth: env.REPLICATE_API_TOKEN_MUSIC,
-});
-
-// 2. Define the input schema
-const requestSchema = z.object({
-  prompt: z.string().min(1, { message: "Prompt cannot be empty." }),
-  model_version: z.string().optional().default("stereo-large"),
-  output_format: z.enum(["mp3", "wav"]).optional().default("mp3"),
-  normalization_strategy: z.enum(["peak", "loudness", "clip"]).optional().default("peak"),
-  duration: z.coerce.number().int().positive().optional().default(8),
-});
-
-// 3. Define the Replicate Model Identifier
-const MUSICGEN_VERSION = "671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb";
+import { createMusicPrediction, CreditInsufficientError } from "@/lib/media/music";
 
 export async function POST(req: Request) {
   let prompt: string | undefined = undefined;
@@ -71,48 +49,41 @@ export async function POST(req: Request) {
     // ✅ Assign prompt value after successful validation
     prompt = input.prompt;
 
-    // 4. Rate/Credit Check (Atomic)
-    const cost = CREDIT_COSTS.MUSIC_GENERATION;
-    const hasUnlimited = await hasUnlimitedUsageAccess(user.userId);
-    if (!hasUnlimited) {
-      const insufficient = await ensureSufficientCreditsOrRespond(user.userId, cost);
-      if (!insufficient.allowed && insufficient.response) return insufficient.response;
-    }
-
+    // 4. Rate/Credit Check + generation (delegated to shared core for consistent
+    //    deduction across both the route and the agent tool).
     const idempotencyKey = req.headers.get('idempotency-key') || `music-${user.userId}-${Date.now()}`;
-    const spendResult = await spendCreditsAtomic(user.userId, cost, idempotencyKey, "Music generation");
 
-    if (!spendResult.success && !spendResult.duplicate) {
-      return NextResponse.json(
-        { error: 'Insufficient credits', message: `You need ${cost} credits for this request.`, remaining: spendResult.remaining },
-        { status: 402 }
-      );
-    }
-
-    console.log(`Sending request to Replicate MusicGen model with input:`, input);
-
-    // 6. Call Replicate's create prediction API (asynchronous)
     let prediction;
     try {
-      prediction = await replicate.predictions.create({
-        version: MUSICGEN_VERSION,
-        input: input,
-      });
-    } catch (error) {
-      if (!spendResult.duplicate) {
-        await refundCredits(user.userId, cost, "Refund for failed music generation start");
+      const result = await createMusicPrediction(
+        {
+          prompt: input.prompt,
+          duration: input.duration,
+          model_version: (input as any).model_version,
+          output_format: (input as any).output_format,
+          normalization_strategy: (input as any).normalization_strategy,
+        },
+        user.userId,
+        idempotencyKey
+      );
+      prediction = result.prediction;
+    } catch (error: any) {
+      if (error instanceof CreditInsufficientError) {
+        return NextResponse.json(
+          {
+            error: 'Insufficient credits',
+            message: error.message,
+            remaining: error.remaining,
+          },
+          { status: 402 }
+        );
       }
       throw error;
     }
 
-    // Deduct credits handled atomically upfront
-    // await deductCredits(user.userId, cost, "Music generation");
-
     console.log("Replicate job started. Sending prediction object to client:", prediction.id);
 
     // 7. Return the initial prediction object
-    void trackAIGeneration({ tool: 'music', model: 'replicate', userId: user.userId, success: true });
-    void trackCreditsDeducted({ tool: 'music', credits: cost, userId: user.userId });
     return NextResponse.json(prediction);
 
   } catch (error: any) {

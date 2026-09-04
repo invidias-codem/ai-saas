@@ -1,5 +1,7 @@
-import { requireAuth } from '@/lib/security/apiAuth';
+import { notFound, redirect } from 'next/navigation';
+import { auth } from '@clerk/nextjs/server';
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { conversationAccessFilter } from '@/lib/conversations/routing';
 import ChatClient from './client';
 
 export const dynamic = 'force-dynamic';
@@ -12,13 +14,12 @@ interface ConversationContext {
   operatingProfileMode: string | null;
 }
 
-export default async function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: conversationId } = await params;
+export default async function ConversationPage({ params }: { params: Promise<{ locale: string; id: string }> }) {
+  const { locale, id: conversationId } = await params;
 
-  try {
-    await requireAuth();
-  } catch (err) {
-    console.error('Auth error on conversation load', err);
+  const { userId } = await auth();
+  if (!userId) {
+    redirect(`/${locale}/sign-in`);
   }
 
   let initialMessages: any[] = [];
@@ -32,109 +33,114 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   let initialConsultantGreeting: string | null = null;
 
   if (!supabaseAdmin) {
-    return (
-      <ChatClient
-        conversationId={conversationId}
-        initialMessages={initialMessages}
-        conversationContext={conversationContext}
-        initialConsultantGreeting={initialConsultantGreeting}
-      />
-    );
+    throw new Error('Supabase not configured');
   }
 
-  try {
-    const { data: conversation, error: conversationError } = await supabaseAdmin
-      .from('conversations')
-      .select('id, workspace_id, operating_profile_id')
-      .eq('id', conversationId)
-      .maybeSingle();
+  // H2: ownership enforced at the query level — a conversation id that
+  // doesn't belong to the authed user is indistinguishable from 404.
+  const accessFilter = conversationAccessFilter(conversationId, userId);
+  if (!accessFilter) notFound();
 
-    if (conversationError) {
-      console.error('Failed to load conversation context:', conversationError);
-    }
+  const { data: conversation, error: conversationError } = await supabaseAdmin
+    .from('conversations')
+    .select('id, workspace_id, operating_profile_id')
+    .eq('id', accessFilter.id)
+    .eq('user_id', accessFilter.user_id)
+    .maybeSingle();
 
-    if (conversation?.workspace_id) {
-      const { data: workspace } = await supabaseAdmin
+  if (conversationError) {
+    console.error('Failed to load conversation context:', conversationError);
+    notFound();
+  }
+  if (!conversation) {
+    notFound();
+  }
+
+  // H1: independent lookups fire in parallel — historic serial waterfall
+  // was: conversation -> workspace -> profile -> messages -> greeting probes.
+  const messagesPromise = supabaseAdmin
+    .from('messages')
+    .select('id, role, content, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true });
+
+  const workspacePromise = conversation.workspace_id
+    ? supabaseAdmin
         .from('workspaces')
         .select('id, name, default_operating_profile_id')
         .eq('id', conversation.workspace_id)
-        .maybeSingle();
+        .maybeSingle()
+    : Promise.resolve({ data: null as any });
 
-      conversationContext.workspaceId = workspace?.id ?? conversation.workspace_id;
-      conversationContext.workspaceName = workspace?.name ?? null;
-      conversationContext.operatingProfileId = conversation.operating_profile_id ?? workspace?.default_operating_profile_id ?? null;
-    } else {
-      conversationContext.operatingProfileId = conversation?.operating_profile_id ?? null;
-    }
+  const [
+    { data: messages, error: messagesError },
+    { data: workspace },
+  ] = await Promise.all([messagesPromise, workspacePromise]);
 
-    if (conversationContext.operatingProfileId) {
-      const { data: profile } = await supabaseAdmin
-        .from('operating_profiles')
-        .select('id, name, mode')
-        .eq('id', conversationContext.operatingProfileId)
-        .maybeSingle();
+  if (messagesError) {
+    console.error('Failed to load initial messages:', messagesError);
+  } else {
+    initialMessages = (messages || []).map((msg: any) => ({
+      id: msg.id,
+      role: msg.role,
+      text: msg.content,
+      timestamp: new Date(msg.created_at).toISOString(),
+      sources: [],
+    }));
+  }
 
-      conversationContext.operatingProfileId = profile?.id ?? conversationContext.operatingProfileId;
-      conversationContext.operatingProfileName = profile?.name ?? null;
-      conversationContext.operatingProfileMode = profile?.mode ?? null;
-    }
+  conversationContext.workspaceId = workspace?.id ?? conversation.workspace_id ?? null;
+  conversationContext.workspaceName = workspace?.name ?? null;
+  conversationContext.operatingProfileId =
+    conversation.operating_profile_id ?? workspace?.default_operating_profile_id ?? null;
 
-    const { data: messages, error } = await supabaseAdmin
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true });
+  if (conversationContext.operatingProfileId) {
+    const { data: profile } = await supabaseAdmin
+      .from('operating_profiles')
+      .select('id, name, mode')
+      .eq('id', conversationContext.operatingProfileId)
+      .maybeSingle();
 
-    if (error) {
-      console.error('Failed to load initial messages:', error);
-    } else {
-      initialMessages = (messages || []).map((msg: any) => ({
-        id: msg.id,
-        role: msg.role,
-        text: msg.content,
-        timestamp: new Date(msg.created_at).toISOString(),
-        sources: [],
-      }));
-    }
+    conversationContext.operatingProfileId = profile?.id ?? conversationContext.operatingProfileId;
+    conversationContext.operatingProfileName = profile?.name ?? null;
+    conversationContext.operatingProfileMode = profile?.mode ?? null;
+  }
 
-    // Build onboarding-aware greeting when the conversation is fresh.
-    const hasMessages = initialMessages.length > 0;
-    const workspaceIdForGreeting = conversation?.workspace_id || conversationContext.workspaceId;
-    if (!hasMessages && workspaceIdForGreeting) {
-      const { data: domainIntentRow } = await supabaseAdmin
+  // Build onboarding-aware greeting when the conversation is fresh.
+  const workspaceIdForGreeting = conversation.workspace_id || conversationContext.workspaceId;
+  if (initialMessages.length === 0 && workspaceIdForGreeting) {
+    const [domainIntentResult, sourceCountResult] = await Promise.all([
+      supabaseAdmin
         .from('workspace_sources')
         .select('id, title')
         .eq('workspace_id', workspaceIdForGreeting)
         .eq('metadata->>kind', 'domain_intent')
-        .maybeSingle();
-
-      const { count: sourceCount } = await supabaseAdmin
+        .maybeSingle(),
+      supabaseAdmin
         .from('workspace_sources')
         .select('id', { count: 'exact', head: true })
-        .eq('workspace_id', workspaceIdForGreeting);
+        .eq('workspace_id', workspaceIdForGreeting),
+    ]);
 
-      const hasDomainIntent = Boolean(domainIntentRow);
-      const hasSources = typeof sourceCount === 'number' && sourceCount > 0;
+    const hasDomainIntent = Boolean(domainIntentResult.data);
+    const hasSources = typeof sourceCountResult.count === 'number' && sourceCountResult.count > 0;
 
-      if (hasDomainIntent || hasSources) {
-        const parts = [
-          hasDomainIntent
-            ? "I've initialized our workspace and processed the context you provided"
+    if (hasDomainIntent || hasSources) {
+      const parts = [
+        hasDomainIntent
+          ? "I've initialized our workspace and processed the context you provided"
+          : null,
+        hasSources
+          ? `through the Data Refinery${hasDomainIntent ? ';' : '.'} I'm fully calibrated to your domain constraints.`
+          : hasDomainIntent
+            ? '.'
             : null,
-          hasSources
-            ? `through the Data Refinery${hasDomainIntent ? ';' : '.'} I'm fully calibrated to your domain constraints.`
-            : hasDomainIntent
-              ? '.'
-              : null,
-        ].filter(Boolean);
+      ].filter(Boolean);
 
-        if (parts.length > 0) {
-          initialConsultantGreeting = `${parts.join(' ')} What specific analysis or strategy are we executing first?`;
-        }
+      if (parts.length > 0) {
+        initialConsultantGreeting = `${parts.join(' ')} What specific analysis or strategy are we executing first?`;
       }
     }
-  } catch (err) {
-    console.error('Exception loading conversation page data:', err);
   }
 
   return (

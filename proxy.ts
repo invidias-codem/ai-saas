@@ -59,6 +59,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/webhooks/kofi',
     '/api/webhooks/stripe',
     '/api/support/verify-donation',
+    '/api/support',
     '/api/integrations/telegram/webhook',
     '/api/internal/jklaw',
     '/api/internal/route-to-jklaw',

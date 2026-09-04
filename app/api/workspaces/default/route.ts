@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
-import { ensureDefaultOperatingProfile } from '@/lib/workspaces/operatingProfiles';
-import { attachOperatingProfiles } from '@/lib/workspaces/query';
+import { getDefaultWorkspace } from '@/lib/workspaces/defaultWorkspace';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,50 +14,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
-    const { supabaseAdmin } = await import('@/lib/supabaseClient');
-    if (!supabaseAdmin) {
-      return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
-    }
-
-    const defaultProfile = await ensureDefaultOperatingProfile(user.userId);
-
-    let { data, error } = await supabaseAdmin
-      .from('workspaces')
-      .select('*')
-      .eq('user_id', user.userId)
-      .eq('is_default', true)
-      .maybeSingle();
-
-    if (error) throw error;
-
-    if (!data) {
-      const { data: created, error: createError } = await supabaseAdmin
-        .from('workspaces')
-        .insert({
-          user_id: user.userId,
-          name: 'My Workspace',
-          slug: 'my-workspace',
-          description: 'Your default Tech Genie workspace',
-          kind: 'personal',
-          status: 'active',
-          is_default: true,
-          onboarding_state: 'starter',
-          default_operating_profile_id: defaultProfile.id,
-        })
-        .select('*')
-        .single();
-
-      if (createError) throw createError;
-      data = created;
-
-      await supabaseAdmin.from('workspace_state').upsert({
-        workspace_id: data.id,
-        last_open_tab: 'overview',
-      });
-    }
-
-    const [workspace] = await attachOperatingProfiles([data]);
-
+    const workspace = await getDefaultWorkspace(user.userId);
     return NextResponse.json({ success: true, workspace });
   } catch (error) {
     const authResponse = handleAuthError(error);

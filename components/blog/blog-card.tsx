@@ -39,17 +39,17 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
   if (featured) {
     return (
       <Link href={`/blog/${sanitizeSlug(post.slug)}`} className="group block">
-        <article className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition-all duration-300 shadow-sm dark:shadow-none">
+        <article className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition duration-200 shadow-sm dark:shadow-none">
           <div className="grid md:grid-cols-2 gap-6">
             <div className="relative aspect-video md:aspect-auto md:h-full">
               {imageError ? (
                 <ImagePlaceholder title={post.title} category={post.category} />
               ) : (
                 <Image
-                  src={post.ogImage}
+                  src={post.cardImage ?? post.ogImage}
                   alt={post.title}
                   fill
-                  className="object-cover transition-transform duration-300 group-hover:scale-105"
+                  className="object-cover transition-transform duration-200 group-hover:scale-105"
                   sizes="(max-width: 768px) 100vw, 50vw"
                   onError={() => setImageError(true)}
                 />
@@ -100,16 +100,16 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
 
   return (
     <Link href={`/blog/${sanitizeSlug(post.slug)}`} className="group block h-full">
-      <article className="h-full flex flex-col overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition-all duration-300 shadow-sm dark:shadow-none">
+      <article className="h-full flex flex-col overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition duration-200 shadow-sm dark:shadow-none">
         <div className="relative aspect-video overflow-hidden">
           {imageError ? (
             <ImagePlaceholder title={post.title} category={post.category} />
           ) : (
             <Image
-              src={post.ogImage}
+              src={post.cardImage ?? post.ogImage}
               alt={post.title}
               fill
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              className="object-cover transition-transform duration-200 group-hover:scale-105"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               onError={() => setImageError(true)}
             />

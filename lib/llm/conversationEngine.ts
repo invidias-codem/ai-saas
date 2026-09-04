@@ -28,6 +28,7 @@ import { addNode, addEdge, strengthenEdge } from "@/lib/memory/graphStore";
 import { extractFactsFromConversation } from "@/lib/agents/factExtractor";
 import { SecurityAgent } from "@/lib/security/securityAgent";
 import { logEvent } from "@/lib/telemetry";
+import { encodeMediaEvent, hasMediaEnvelope, MediaEnvelope, encodeApprovalEvent } from "@/lib/media/envelope";
 import { emitInteractionAudit } from "@/lib/telemetry/emit";
 import { deriveContextRole } from "@/lib/telemetry/governance";
 import { emitRiskEvent } from "@/lib/telemetry/riskAdapter";
@@ -207,6 +208,9 @@ export async function generateConversationReply(
     const { researchWriterTool } = await import('@/lib/agents/tools/researchWriter');
     const { novelWriterTool } = await import('@/lib/agents/tools/novelWriter');
     const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
+    const { generateMusicTool } = await import('@/lib/agents/tools/generateMusic');
+    const { generateImageTool } = await import('@/lib/agents/tools/generateImage');
+    const { generateVideoTool } = await import('@/lib/agents/tools/generateVideo');
     const { readFileTool, writeFileTool, patchFileTool } = await import('@/lib/agents/tools/harnessTools');
     const { executeCommandTool } = await import('@/lib/agents/tools/executionTools');
     const { discoverDocumentsTool, extractTextTool, summarizeRepoTool, semanticSearchTool, workspaceSourcesSearchTool } = await import('@/lib/agents/tools/intelligenceTools');
@@ -218,6 +222,9 @@ export async function generateConversationReply(
     registry.register(researchWriterTool);
     registry.register(novelWriterTool);
     registry.register(searchCodebaseTool);
+    registry.register(generateMusicTool);
+    registry.register(generateImageTool);
+    registry.register(generateVideoTool);
 
     if (request.mode === 'agentic') {
       // Phase 1: Local Mutable Capabilities
@@ -393,6 +400,12 @@ export async function generateConversationReply(
         };
 
         try {
+          // Hydrate the agent's role for the mutative-tool gate: admins/owners
+          // (with `sensitive_tools:use`) are 'admin'; everyone else is 'user'.
+          const isAdmin = Boolean(
+            orgContext?.permissions && orgContext.permissions.includes('sensitive_tools:use')
+          );
+
           const agentContext = {
             userId,
             sessionId,
@@ -401,6 +414,7 @@ export async function generateConversationReply(
             enableTelemetry: true,
             rootSpan: undefined,
             orgContext,
+            userRole: isAdmin ? ('admin' as const) : ('user' as const),
             ioHarness: options.ioHarness,
             onStep: (step: any) => {
               const text = String(step.thought ?? '');
@@ -408,12 +422,30 @@ export async function generateConversationReply(
               onReasoning(text);
               if (options.slackStreamCallback) options.slackStreamCallback(step);
             },
+            onToolApproval: (approval: { approvalId: string; toolName: string; params: any }) => {
+              controller.enqueue(
+                textEncoder.encode(`${encodeApprovalEvent(approval)}\n`)
+              );
+            },
             promotionManager,
             promotionRejectionCount: 0,
           };
 
           const reactResult = await runReActLoop(promptInput, agentContext, registry, NIM_MODEL_KIMI_K3);
           const isSuccess = reactResult.status === 'success';
+
+          // Emit structured media events for any media-tool result in the trajectory,
+          // so the client can render inline players/grids instead of raw tool text.
+          const mediaEnvelopes: MediaEnvelope[] = [];
+          for (const step of reactResult.trajectory ?? []) {
+            const data = step.observation?.data;
+            if (hasMediaEnvelope(data) && data._media) {
+              mediaEnvelopes.push(data._media);
+            }
+          }
+          for (const envelope of mediaEnvelopes) {
+            controller.enqueue(textEncoder.encode(`${encodeMediaEvent(envelope)}\n`));
+          }
 
           const donePayload = {
             status: reactResult.status,

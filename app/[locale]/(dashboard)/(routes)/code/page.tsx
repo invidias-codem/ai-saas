@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
-import { safeLocalStorage } from "@/lib/safeStorage";
-import axios from "axios";
+import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -17,51 +15,34 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, ArrowDown, RefreshCcw } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, RefreshCcw } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { CodeIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
 import { PersonIcon } from "@radix-ui/react-icons";
 import { ShareIconButton } from "@/components/share-button";
 import { GitHubRepoModal } from "@/components/github-repo-modal";
-import { GitHubConsentModal } from "@/components/github-consent-modal";
-
-// ... (keep existing imports)
 
 import { CodeModelProvider, useCodeModel } from "@/contexts/CodeModelContext";
 import { CodeModelToggle } from "@/components/chat/CodeModelToggle";
-import { CODE_MODELS, ProviderKeyState } from "@/lib/llm/codeModels";
-import {
-  getSessionMemoryFromStorage,
-  saveSessionMemoryToStorage,
-  SessionMessage
-} from "@/lib/sessionClientMemory";
-import { createNewConversation } from "@/lib/conversationManager";
-
-// ... (keep existing imports)
+import { ProviderKeyState } from "@/lib/llm/codeModels";
+import { useChatScroll } from "@/components/chat/useChatScroll";
+import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
+import { useCodeFileUpload, CodeSelectedFile } from "@/components/chat/useCodeFileUpload";
+import { useGithubRepoContext } from "@/components/chat/useGithubRepoContext";
+import { useMemoryCount } from "@/components/chat/useMemoryCount";
+import { MemoryInsights } from "@/components/chat/MemoryInsights";
+import { useCodeConversation, CodeContext } from "@/components/chat/useCodeConversation";
+import { useCodeStream } from "@/components/chat/useCodeStream";
 
 // Content Component (Inner)
-
-interface CodeContext {
-  workspaceId: string | null;
-  workspaceName: string | null;
-  operatingProfileId: string | null;
-  operatingProfileName: string | null;
-  operatingProfileMode: string | null;
-}
-
-interface SelectedFile {
-  name: string;
-  type: string;
-  base64Data: string;
-}
 
 interface Message {
   id?: string;
   role: "user" | "bot";
   text: string;
   timestamp: Date;
-  fileData?: SelectedFile;
+  fileData?: CodeSelectedFile;
 }
 
 const CodeBlock = ({ codeString, language }: { codeString: string, language: string }) => {
@@ -106,14 +87,8 @@ const CodeBlock = ({ codeString, language }: { codeString: string, language: str
   );
 };
 
-const codeConversationRowKey = (workspaceId?: string | null, operatingProfileId?: string | null) => 
-  `weaver_code_conversation_id:${workspaceId || "global"}:${operatingProfileId || "global"}`;
-
-const getLocalCodeSessionId = (workspaceId?: string | null, operatingProfileId?: string | null) => 
-  `local-code-session:${workspaceId || "global"}:${operatingProfileId || "global"}`;
-
 function CodePageContent() {
-  const { codeModel, setCodeModel, providerKeyState, setProviderKeyState } = useCodeModel();
+  const { codeModel, setProviderKeyState } = useCodeModel();
 
   // OpenRouter visibility: refresh configured-provider state from settings API.
   useEffect(() => {
@@ -137,449 +112,89 @@ function CodePageContent() {
   }, [setProviderKeyState]);
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [codeContext, setCodeContext] = useState<CodeContext>({ workspaceId: null, workspaceName: null, operatingProfileId: null, operatingProfileName: null, operatingProfileMode: null });
-  const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
-  const [saveToMemory, setSaveToMemory] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null); // Chat container for scroll
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const [memoryCount, setMemoryCount] = useState<number>(0);
-  const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
+
+  // Code context + conversation bootstrap (C6): hydrate workspace/profile,
+  // resolve/restore the row-backed conversation, and persist messages.
+  const { codeContext, conversationId } = useCodeConversation({
+    messages,
+    onRestoreMessages: setMessages,
+    onHideGreeting: () => setShowGreeting(false),
+  });
+
+  // Code file attachment (C2): base64 read + save-to-memory toggle.
+  const {
+    selectedFile,
+    saveToMemory,
+    setSaveToMemory,
+    fileInputRef,
+    handleFileChange,
+    removeFile,
+  } = useCodeFileUpload(setError, setLoading);
+
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [showContextSheet, setShowContextSheet] = useState(false);
 
-  // GitHub State
-  const [activeRepo, setActiveRepo] = useState<string | null>(null);
-  const [isRepoModalOpen, setIsRepoModalOpen] = useState(false);
-  const [linkedRepos, setLinkedRepos] = useState<string[]>([]);
+  // Memory count badge (C5): reuses the lean count hook (no episodic fetch).
+  const { memoryCount, isMemoryPulsing } = useMemoryCount(messages.length);
 
-  // Hydrate repo context from workspace-linked repos once code context is available.
-  useEffect(() => {
-    let cancelled = false;
-    async function loadLinkedRepos() {
-      const workspaceId = codeContext.workspaceId;
-      if (!workspaceId) return;
-      try {
-        const res = await fetch(`/api/workspaces/${workspaceId}/repos`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const repos: string[] = Array.isArray(data.repos) ? data.repos : [];
-        if (cancelled) return;
-        setLinkedRepos(repos);
-        const savedActive = typeof data.active_github_repo === 'string' ? data.active_github_repo : null;
-        const hydrated = savedActive && repos.includes(savedActive) ? savedActive : repos[0] || null;
-        setActiveRepo(hydrated);
-      } catch (err) {
-        console.error('[CodePage] Failed to fetch workspace repos:', err);
-      }
-    }
-    loadLinkedRepos();
-    return () => { cancelled = true; };
-  }, [codeContext.workspaceId]);
-
-  // Reload workspace repo selection when Settings persists changes in the same tab.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handler = () => {
-      const workspaceId = codeContext.workspaceId;
-      if (!workspaceId) return;
-      fetch(`/api/workspaces/${workspaceId}/repos`)
-        .then(res => res.ok ? res.json() : Promise.resolve(null))
-        .then(data => {
-          if (!data) return;
-          const repos: string[] = Array.isArray(data.repos) ? data.repos : [];
-          setLinkedRepos(repos);
-          const savedActive = typeof data.active_github_repo === 'string' ? data.active_github_repo : null;
-          const hydrated = savedActive && repos.includes(savedActive) ? savedActive : repos[0] || null;
-          setActiveRepo(hydrated);
-        })
-        .catch(err => console.error('[CodePage] Failed to reload workspace repos after settings sync:', err));
-    };
-    window.addEventListener('workspace:repo-sync', handler as EventListener);
-    return () => window.removeEventListener('workspace:repo-sync', handler as EventListener);
-  }, [codeContext.workspaceId]);
-
-  // Check indexing status for the active repo so the UI can show whether chunks exist.
-  const [repoIndexed, setRepoIndexed] = useState<boolean | null>(null);
-  const [reindexing, setReindexing] = useState(false);
-  const [reindexError, setReindexError] = useState<string | null>(null);
-
-  const reindexActiveRepo = async () => {
-    if (!activeRepo || reindexing) return;
-    setReindexing(true);
-    setReindexError(null);
-    try {
-      const res = await fetch('/api/github/index', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner: activeRepo.split('/')[0], repo: activeRepo.split('/')[1] }),
-      });
-      const text = await res.text().catch(() => '');
-      if (!res.ok) throw new Error(text || 'Indexing failed');
-      setReindexError(null);
-    } catch (err: any) {
-      setReindexError(err?.message || 'Re-index failed');
-    } finally {
-      setReindexing(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!activeRepo) return;
-    let cancelled = false;
-    async function loadStatus() {
-      try {
-        const res = await fetch(`/api/github/index/status?repo=${encodeURIComponent(activeRepo!)}`);
-        const data = await res.json().catch(() => ({} as any));
-        if (cancelled) return;
-        setRepoIndexed(Boolean(data?.indexed));
-      } catch {
-        if (!cancelled) setRepoIndexed(null);
-      }
-    }
-    loadStatus();
-    return () => { cancelled = true; };
-  }, [activeRepo]);
-
-  // GitHub Consent State (for Actions - separate from Context)
-  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
-  const [gitHubAction, setGitHubAction] = useState<any>(null);
-
-  const handleGitHubClick = () => {
-    setIsRepoModalOpen(true);
-  };
-
-  const handleRepoIndexComplete = async (repoInfo: { owner: string; repo: string; fileCount: number }) => {
-    const fullName = `${repoInfo.owner}/${repoInfo.repo}`;
-    setActiveRepo(fullName);
-    setIsRepoModalOpen(false);
-
-    // Persist this repo as the workspace's active GitHub repo so it survives
-    // across page reloads and is shared with Settings.
-    try {
-      const workspaceId = codeContext.workspaceId;
-      if (workspaceId) {
-        await fetch(`/api/workspaces/${workspaceId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ active_github_repo: fullName }),
-        });
-      }
-    } catch (err) {
-      console.error('[CodePage] Failed to persist active repo:', err);
-    }
-
-    // Add a system message to confirm context is loaded
-    const botMessage: Message = {
-      text: `📚 **Repository Linked:** \`${fullName}\`\nI have indexed ${repoInfo.fileCount} code files from this repository. You can now ask questions about the codebase!`,
-      role: "bot",
-      timestamp: new Date()
-    };
-    setMessages((prev) => [...prev, botMessage]);
-    setShowGreeting(false);
-  };
-
-  const handleGitHubActionConfirm = async () => {
-    console.log("Executing GitHub action:", gitHubAction);
-    setIsGitHubModalOpen(false);
-    // Mock execution for UI demo
-    const botMessage: Message = { text: `✅ Successfully executed GitHub Action: ${gitHubAction?.type} on ${gitHubAction?.repo}`, role: "bot", timestamp: new Date() };
-    setMessages((prev) => [...prev, botMessage]);
-  };
+  // GitHub repo context (C3): active repo, linked-repo hydration, index status,
+  // reindex, and persist-on-select. The onRepoLinked callback adds the
+  // confirmation system message + clears the greeting.
+  const {
+    activeRepo,
+    isRepoModalOpen,
+    repoIndexed,
+    reindexing,
+    openRepoModal,
+    closeRepoModal,
+    reindexActiveRepo,
+    handleRepoIndexComplete,
+  } = useGithubRepoContext({
+    workspaceId: codeContext.workspaceId,
+    onRepoLinked: (fullName, fileCount) => {
+      const botMessage: Message = {
+        text: `📚 **Repository Linked:** \`${fullName}\`\nI have indexed ${fileCount} code files from this repository. You can now ask questions about the codebase!`,
+        role: "bot",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, botMessage]);
+      setShowGreeting(false);
+    },
+  });
 
   const GREETING_MESSAGE = "Ask me a coding question, debug code, or attach a file for analysis.";
 
-  // ... (keep existing scroll and effect logic)
-
-  // Scroll to bottom function for manual trigger
-  const scrollToBottom = () => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-  // Track scroll position to show/hide scroll-to-bottom button
-  useEffect(() => {
-    const container = chatContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      // Show button when scrolled up more than 200px from bottom
-      const isScrolledUp = scrollHeight - scrollTop - clientHeight > 200;
-      setShowScrollButton(isScrolledUp && messages.length > 2);
-    };
-
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [messages.length]);
-
-  useEffect(() => {
-    const loadCodeContext = async () => {
-      try {
-        const [workspaceRes, profileRes] = await Promise.all([
-          axios.get('/api/workspaces/default'),
-          axios.get('/api/operating-profiles/default'),
-        ]);
-
-        const workspace = workspaceRes.data?.workspace ?? null;
-        const profile = profileRes.data?.operatingProfile ?? null;
-
-        setCodeContext({
-          workspaceId: workspace?.id ?? null,
-          workspaceName: workspace?.name ?? null,
-          operatingProfileId: profile?.id ?? workspace?.default_operating_profile_id ?? null,
-          operatingProfileName: profile?.name ?? null,
-          operatingProfileMode: profile?.mode ?? null,
-        });
-      } catch (err) {
-        console.error('[CODE_CONTEXT_LOAD_ERROR]', err);
-      }
-    };
-
-    loadCodeContext();
-  }, []);
-
-  // Persistence for Code Session
-
-  useEffect(() => {
-    const bootstrapCodeConversation = async () => {
-      try {
-        const conversationRowKey = codeConversationRowKey(codeContext.workspaceId, codeContext.operatingProfileId);
-        let resolvedConversationId = safeLocalStorage.getItem(conversationRowKey);
-
-        if (!resolvedConversationId && codeContext.workspaceId) {
-          const created = await createNewConversation({
-            title: codeContext.workspaceName ? `${codeContext.workspaceName} Code` : 'Code Conversation',
-            workspaceId: codeContext.workspaceId ?? undefined,
-            operatingProfileId: codeContext.operatingProfileId ?? undefined,
-          });
-
-          if (created?.id) {
-            resolvedConversationId = created.id;
-            safeLocalStorage.setItem(conversationRowKey, created.id);
-          }
-        }
-
-        if (resolvedConversationId) {
-          setConversationId(resolvedConversationId);
-          const response = await fetch(`/api/conversations/${resolvedConversationId}`, { credentials: 'include' });
-          if (response.ok) {
-            const data = await response.json();
-            const restoredMessages: Message[] = (data.messages || []).map((msg: any) => ({
-              id: msg.id,
-              text: msg.text,
-              role: msg.role,
-              timestamp: new Date(msg.timestamp),
-              fileData: msg.fileData,
-            }));
-            
-            // Authoritative rule: Row-backed history wins.
-            setMessages(restoredMessages);
-            if (restoredMessages.length > 0) {
-              setShowGreeting(false);
-            }
-            return;
-          }
-        }
-
-        // Only fall back to local storage if we absolutely could not establish or fetch a conversation
-        const localSessionId = getLocalCodeSessionId(codeContext.workspaceId, codeContext.operatingProfileId);
-        const savedMessages = getSessionMemoryFromStorage(localSessionId);
-        if (savedMessages.length > 0) {
-          const restoredMessages: Message[] = savedMessages.map(msg => ({
-            text: msg.text,
-            role: msg.role,
-            timestamp: new Date(msg.timestamp),
-            fileData: msg.fileData
-          }));
-          setMessages(restoredMessages);
-          setShowGreeting(false);
-        }
-      } catch (err) {
-        console.error('[CODE_CONVERSATION_BOOTSTRAP_ERROR]', err);
-      }
-    };
-
-    if (codeContext.workspaceId || codeContext.operatingProfileId) {
-      bootstrapCodeConversation();
-    }
-  }, [codeContext.workspaceId, codeContext.operatingProfileId, codeContext.workspaceName]);
-
-  // Save to storage on change
-  useEffect(() => {
-    if (messages.length > 0) {
-      const sessionMessages: SessionMessage[] = messages.map(msg => ({
-        text: msg.text,
-        role: msg.role,
-        timestamp: msg.timestamp.getTime(),
-        fileData: msg.fileData
-      }));
-      const localSessionId = getLocalCodeSessionId(codeContext.workspaceId, codeContext.operatingProfileId);
-      saveSessionMemoryToStorage(sessionMessages, 'current-user', 'code-session', localSessionId);
-    }
-  }, [messages, codeContext.workspaceId, codeContext.operatingProfileId]);
-
-  // Fetch Memory Count
-  const fetchMemoryCount = async () => {
-    try {
-      const res = await axios.get("/api/memory/count");
-      if (res.data.count !== undefined) {
-        setMemoryCount(res.data.count);
-      }
-    } catch (err) {
-      console.error("Failed to fetch memory count:", err);
-    }
-  };
-
-
-  // Initial memory-count load on mount — a data-fetch effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchMemoryCount();
-  }, []);
-
-  // Trigger fetch on new message (bot response)
-  useEffect(() => {
-    if (messages.length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      fetchMemoryCount();
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsMemoryPulsing(true);
-      const timer = setTimeout(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setIsMemoryPulsing(false);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [messages.length]);
-
-  // Helper function to read file as Base64
-  const readFileAsBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64String = (reader.result as string).split(',')[1];
-        resolve(base64String);
-      };
-      reader.onerror = (error) => reject(error);
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Handle sending message
-  const handleSendMessage = async () => {
-    const trimmedInput = userInput.trim();
-    if (!trimmedInput && !selectedFile) return;
-
-    setLoading(true);
-    setError(null);
-    setShowGreeting(false);
-
-    let messageText = trimmedInput;
-    if (selectedFile) {
-      messageText += `\n\n[Analysing File: ${selectedFile.name}]`;
-    }
-
-    const userMessage: Message = {
-      text: messageText,
-      role: "user",
-      timestamp: new Date(),
-      fileData: selectedFile ? {
-        name: selectedFile.name,
-        type: selectedFile.type,
-        base64Data: selectedFile.base64Data
-      } : undefined
-    };
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setUserInput("");
-
-
-    setSelectedFile(null);
-
-    try {
-      const response = await axios.post("/api/code", {
-        messages: newMessages.map(msg => ({
-          role: msg.role,
-          text: msg.text,
-          fileData: msg.fileData // Pass stored file data for history reconstruction
-        })),
-        currentUserPrompt: trimmedInput,
-        fileData: selectedFile,
-        saveToMemory: saveToMemory, // Pass memory flag
-        model: codeModel, // Pass selected model
-        activeRepo: activeRepo, // Pass active GitHub repo context
-        workspaceId: codeContext.workspaceId,
-        operatingProfileId: codeContext.operatingProfileId,
-        operatingProfileMode: codeContext.operatingProfileMode,
-        conversationId
-      });
-
-      const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
-      setMessages((prevMessages) => [...prevMessages, botMessage]);
-    } catch (error: any) {
-      console.error("[CODE_PAGE_ERROR]", error);
-      if (error.response?.status === 401) {
-        window.location.href = "/sign-in?redirect_url=" + encodeURIComponent(window.location.pathname);
-        return;
-      }
-      setError(error.response?.data?.details || "Sorry, something went wrong processing your request.");
-    } finally {
-      setLoading(false);
-      trackActivity("message");
-    }
-  };
-
-  const handleAttachClick = () => { fileInputRef.current?.click(); };
-
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setLoading(true);
-      setError(null);
-      try {
-        const base64Data = await readFileAsBase64(file);
-        setSelectedFile({
-          name: file.name,
-          type: file.type || 'text/plain',
-          base64Data: base64Data
-        });
-      } catch (err) {
-        console.error("Error reading file:", err);
-        setError("Sorry, could not read the selected file.");
-        setSelectedFile(null);
-      } finally {
-        setLoading(false);
-      }
-    }
-    if (fileInputRef.current) { fileInputRef.current.value = ""; }
-  };
-
-  const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    } else if (e.key === 'Tab' && !e.shiftKey) {
-      e.preventDefault();
-      const { selectionStart, selectionEnd, value } = e.currentTarget;
-      setUserInput(value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd));
-      e.currentTarget.selectionStart = e.currentTarget.selectionEnd = selectionStart + 2;
-    }
-  };
+  // Chat scroll management (C1): refs, manual scroll-to-bottom, and
+  // "scrolled up" detection that drives the floating ScrollToBottom button.
+  const { chatContainerRef, bottomRef, scrollToBottom, showScrollButton } = useChatScroll(messages.length);
 
   // Modern Typing Indicator (matching conversation page)
   // Nudge Integration
   const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
+
+  // Code send pipeline (C7): input + non-streaming POST to /api/code.
+  const {
+    userInput,
+    handleInputChange,
+    handleSendMessage,
+    handleKeyPress,
+  } = useCodeStream({
+    messages,
+    setMessages,
+    selectedFile,
+    saveToMemory,
+    removeFile,
+    codeModel,
+    activeRepo,
+    codeContext,
+    conversationId,
+    setError,
+    setLoading,
+    setShowGreeting,
+    trackActivity,
+  });
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background text-foreground relative overflow-hidden">
@@ -596,10 +211,7 @@ function CodePageContent() {
 
         {/* Desktop-only indicators */}
         <div className="hidden md:flex items-center gap-2">
-          <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-green-500 font-bold scale-105")}>
-            <span className={cn("w-1.5 h-1.5 rounded-full bg-green-500", isMemoryPulsing && "animate-ping")} />
-            {memoryCount} memories
-          </div>
+          <MemoryInsights memoryCount={memoryCount} isMemoryPulsing={isMemoryPulsing} variant="compact" accent="green" />
           {(codeContext.workspaceName || codeContext.operatingProfileName) && (
             <div className="flex items-center gap-1 text-[10px] text-muted-foreground rounded-full bg-muted px-2 py-0.5">
               <span>{codeContext.workspaceName ?? "Workspace"}</span>
@@ -608,7 +220,7 @@ function CodePageContent() {
           )}
           {activeRepo ? (
             <button
-              onClick={() => setIsRepoModalOpen(true)}
+              onClick={openRepoModal}
               className="flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-md text-xs font-medium border border-green-500/20 hover:border-green-500/40 transition"
             >
               <BrandIcon name="Github" className="h-3 w-3" size={12} />
@@ -633,7 +245,7 @@ function CodePageContent() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsRepoModalOpen(true)}
+              onClick={openRepoModal}
               className="gap-2 text-xs"
             >
               <BrandIcon name="Github" className="h-3.5 w-3.5" size={14} />
@@ -677,10 +289,7 @@ function CodePageContent() {
             </div>
             <div className="space-y-4">
               <CodeModelToggle disabled={loading} />
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="w-2 h-2 rounded-full bg-green-500" />
-                {memoryCount} memories
-              </div>
+              <MemoryInsights memoryCount={memoryCount} isMemoryPulsing={isMemoryPulsing} variant="mobile" accent="green" />
               {(codeContext.workspaceName || codeContext.operatingProfileName) && (
                 <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-sm">
                   <span className="font-medium">{codeContext.workspaceName}</span>
@@ -695,7 +304,7 @@ function CodePageContent() {
                   size="sm"
                   className="w-full justify-start gap-2"
                   onClick={() => {
-                    setIsRepoModalOpen(true);
+                    openRepoModal();
                     setShowMobileMenu(false);
                   }}
                 >
@@ -708,7 +317,7 @@ function CodePageContent() {
                   size="sm"
                   className="w-full justify-start gap-2"
                   onClick={() => {
-                    setIsRepoModalOpen(true);
+                    openRepoModal();
                     setShowMobileMenu(false);
                   }}
                 >
@@ -722,7 +331,6 @@ function CodePageContent() {
       )}
 
       {/* Main Chat Area */}
-      {/* ... (keep existing chat area) ... */}
       <div ref={chatContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden w-full scroll-smooth">
         <div className="max-w-3xl mx-auto w-full px-4 py-6 md:px-6 min-h-0">
 
@@ -738,7 +346,7 @@ function CodePageContent() {
                   {GREETING_MESSAGE}
                 </p>
                 <div className="flex justify-center pt-4">
-                  <Button variant="outline" size="sm" onClick={handleGitHubClick} className="gap-2 text-xs">
+                  <Button variant="outline" size="sm" onClick={openRepoModal} className="gap-2 text-xs">
                     <BrandIcon name="Github" className="h-3.5 w-3.5" size={14} />
                     Load Repository Context
                   </Button>
@@ -853,15 +461,7 @@ function CodePageContent() {
       </div>
 
       {/* ... (Scroll button) ... */}
-      {showScrollButton && (
-        <button
-          onClick={scrollToBottom}
-          className="fixed bottom-28 right-6 z-30 h-10 w-10 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-lg flex items-center justify-center transition-all duration-200 animate-in fade-in slide-in-from-bottom-2"
-          aria-label="Scroll to bottom"
-        >
-          <ArrowDown className="h-5 w-5" />
-        </button>
-      )}
+      {showScrollButton && <ScrollToBottom onClick={scrollToBottom} accent="green" />}
 
       {/* Input Area */}
       <div className="flex-none w-full p-4 bg-gradient-to-t from-background via-background to-transparent pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -873,7 +473,7 @@ function CodePageContent() {
                 <Paperclip className="h-3 w-3 text-green-500" />
                 <span className="max-w-[150px] truncate">{selectedFile.name}</span>
                 <button
-                  onClick={() => setSelectedFile(null)}
+                  onClick={removeFile}
                   className="text-muted-foreground hover:text-destructive transition-colors ml-1"
                 >
                   <X className="h-3 w-3" />
@@ -951,7 +551,7 @@ function CodePageContent() {
               rows={1}
               placeholder="Ask a coding question..."
               value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyPress}
               disabled={loading}
               className="flex-1 min-h-[44px] max-h-32 py-3 bg-transparent border-0 focus-visible:ring-0 resize-none text-base leading-relaxed placeholder:text-muted-foreground/70 font-mono"
@@ -986,22 +586,11 @@ function CodePageContent() {
         </div>
       </div>
 
-      {/* GitHub Consent Modal */}
-      <GitHubConsentModal
-        isOpen={isGitHubModalOpen}
-        onClose={() => setIsGitHubModalOpen(false)}
-        onConfirm={handleGitHubActionConfirm}
-        action={gitHubAction || { type: 'commit', repo: 'unknown', description: 'No action pending' }}
-      />
-
       {/* GitHub Repo Modal for Context Loading */}
       <GitHubRepoModal
         isOpen={isRepoModalOpen}
-        onClose={() => setIsRepoModalOpen(false)}
-        onIndexComplete={(repoInfo) => {
-          setActiveRepo(`${repoInfo.owner}/${repoInfo.repo}`);
-          setIsRepoModalOpen(false);
-        }}
+        onClose={closeRepoModal}
+        onIndexComplete={handleRepoIndexComplete}
       />
     </div>
   );

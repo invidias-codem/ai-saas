@@ -16,6 +16,11 @@ export interface ReActResult {
   answer: string;
   trajectory: TrajectoryStep[];
   status: 'success' | 'max_loops' | 'error' | 'halted_for_approval';
+  approvalRequest?: {
+    approvalId: string;
+    toolName: string;
+    params: any;
+  };
   promotionState?: {
     sessionId: string;
     artifacts: QuarantineArtifact[];
@@ -174,10 +179,18 @@ export async function runReActLoop(
           summary: 'Halted for user approval'
         };
         if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
+
+        // Register the paused tool so a follow-up approve/deny can resume it.
+        const { registerPausedTool } = await import('./approvalStore');
+        // The tool is guaranteed present in the registry (it was just invoked).
+        const pausedTool = registry.getTool(toolName)!;
+        const approvalId = registerPausedTool(toolName, toolArgs, context, pausedTool);
+
         return {
           answer: "I need your approval to proceed with this action.",
           trajectory,
-          status: 'halted_for_approval'
+          status: 'halted_for_approval',
+          approvalRequest: { approvalId, toolName, params: toolArgs }
         };
       }
 

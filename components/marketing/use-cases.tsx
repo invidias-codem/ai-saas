@@ -34,7 +34,7 @@ export const UseCases = () => {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: i * 0.1 }}
-              className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-8 hover:border-white/20 hover:bg-white/[0.05] transition-all duration-300"
+              className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-8 hover:border-white/20 hover:bg-white/[0.05] transition duration-200"
             >
               {/* Hover gradient overlay */}
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
@@ -49,7 +49,7 @@ export const UseCases = () => {
                 </p>
                 <Link
                   href="/onboarding"
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-white/80 hover:text-white transition-colors"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-white/80 hover:text-white min-h-[48px] transition"
                 >
                   {t(`${card.id}.cta`)}
                   <svg

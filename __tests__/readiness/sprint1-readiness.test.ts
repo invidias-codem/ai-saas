@@ -81,7 +81,12 @@ describe('Sprint 1 production readiness hardening', () => {
 
     expect(sidebar).not.toContain('Joshua Mohammed');
     expect(sidebar).not.toContain('>G<');
-    expect(sidebar).toContain('useUser');
+
+    // Identity is derived from Clerk's useUser() in the client island — the
+    // server wrapper (sidebar.tsx) delegates to SidebarClient (per the RSC
+    // server/client boundary split), so assert useUser lives in the client.
+    const sidebarClient = read('components/SidebarClient.tsx');
+    expect(sidebarClient).toContain('useUser');
   });
 
   it('sets restrictive CORS headers without wildcards', () => {

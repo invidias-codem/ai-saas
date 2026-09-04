@@ -1,6 +1,5 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { BlogCard } from "@/components/blog/blog-card";
 import {
@@ -95,7 +94,7 @@ export default async function SeriesPage({ params }: SeriesPageProps) {
         <section className="pt-16 pb-12 px-4 text-center space-y-6 max-w-4xl mx-auto">
           <Link
             href="/blog"
-            className="inline-flex items-center text-gray-400 hover:text-white transition-colors text-sm"
+            className="inline-flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             All Posts
@@ -154,33 +153,6 @@ export default async function SeriesPage({ params }: SeriesPageProps) {
           </div>
         </section>
       </main>
-
-      {/* Footer */}
-      <footer className="py-10 border-t border-border bg-background">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="relative w-6 h-6">
-                <Image src="/og-image.png" alt="Lattice OS logo" fill className="object-cover" />
-              </div>
-              <span className="text-lg font-bold text-white">Lattice OS</span>
-            </div>
-
-            <div className="flex items-center gap-6 text-sm text-gray-400">
-              <Link href="/blog" className="hover:text-white transition">Blog</Link>
-              <Link href="/slack" className="hover:text-white transition">Slack Integration</Link>
-              <Link href="/support" className="hover:text-white transition">Support</Link>
-              <Link href="/privacy" className="hover:text-white transition">Privacy Policy</Link>
-            </div>
-          </div>
-
-          <div className="mt-8 pt-8 border-t border-border text-center">
-            <p className="text-gray-500 text-sm">
-              © {new Date().getFullYear()} Lattice OS. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

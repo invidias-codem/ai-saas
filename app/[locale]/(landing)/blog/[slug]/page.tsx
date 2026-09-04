@@ -176,7 +176,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         <header className="relative z-10 py-4 px-4 sm:py-6 sm:px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
           <Link href="/" className="flex items-center gap-2">
             <div className="relative w-7 h-7 sm:w-8 sm:h-8">
-              <Image src="/og-image.png" alt="Lattice OS logo" fill className="object-cover" />
+              <Image src="/lattice-logo.png" alt="Lattice OS logo" fill className="object-cover" />
             </div>
             <span className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Lattice OS</span>
           </Link>
@@ -232,32 +232,6 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             <RelatedPosts posts={relatedPosts} />
           </div>
         </main>
-
-        <footer className="py-10 border-t border-border bg-background">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-              <div className="flex items-center gap-2">
-                <div className="relative w-6 h-6">
-                  <Image src="/og-image.png" alt="Lattice OS logo" fill className="object-cover" />
-                </div>
-                <span className="text-lg font-bold text-foreground">Lattice OS</span>
-              </div>
-
-              <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                <Link href="/blog" className="hover:text-foreground transition">Blog</Link>
-                <Link href="/slack" className="hover:text-foreground transition">Slack Integration</Link>
-                <Link href="/support" className="hover:text-foreground transition">Support</Link>
-                <Link href="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
-              </div>
-            </div>
-
-            <div className="mt-8 pt-8 border-t border-border text-center">
-              <p className="text-muted-foreground text-sm">
-                © {new Date().getFullYear()} Lattice OS. All rights reserved.
-              </p>
-            </div>
-          </div>
-        </footer>
       </div>
     </>
   );

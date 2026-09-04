@@ -47,9 +47,11 @@ export default function SovereignLandingPage() {
   return (
     <div className="relative min-h-screen bg-[#050505] text-white overflow-hidden">
       {/* Animated gradient orbs */}
-      <div className="absolute top-[-20%] left-[-10%] h-[800px] w-[800px] rounded-full bg-gradient-to-br from-purple-600/20 via-violet-500/10 to-transparent blur-[120px] pointer-events-none animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-5%] h-[600px] w-[600px] rounded-full bg-gradient-to-tl from-blue-500/15 via-cyan-400/10 to-transparent blur-[100px] pointer-events-none animate-pulse" style={{ animationDelay: "2s" }} />
-      <div className="absolute top-[40%] left-[60%] h-[400px] w-[400px] rounded-full bg-gradient-to-br from-pink-500/10 via-rose-400/5 to-transparent blur-[80px] pointer-events-none animate-pulse" style={{ animationDelay: "4s" }} />
+      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+        <div className="absolute top-[-20%] left-[-10%] h-[800px] w-[800px] rounded-full bg-gradient-to-br from-purple-600/20 via-violet-500/10 to-transparent blur-[120px] pointer-events-none animate-pulse" />
+        <div className="absolute bottom-[-10%] right-[-5%] h-[600px] w-[600px] rounded-full bg-gradient-to-tl from-blue-500/15 via-cyan-400/10 to-transparent blur-[100px] pointer-events-none animate-pulse" style={{ animationDelay: "2s" }} />
+        <div className="absolute top-[40%] left-[60%] h-[400px] w-[400px] rounded-full bg-gradient-to-br from-pink-500/10 via-rose-400/5 to-transparent blur-[80px] pointer-events-none animate-pulse" style={{ animationDelay: "4s" }} />
+      </div>
 
       {/* Grid overlay */}
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
@@ -141,7 +143,7 @@ export default function SovereignLandingPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.5, delay: i * 0.1 }}
-                  className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-8 hover:border-white/20 hover:bg-white/[0.05] transition-all duration-300"
+                  className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-8 hover:border-white/20 hover:bg-white/[0.05] transition duration-200"
                 >
                   <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <div className="relative z-10">
@@ -227,7 +229,7 @@ export default function SovereignLandingPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.5, delay: i * 0.1 }}
-                  className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-8 hover:border-white/20 hover:bg-white/[0.05] transition-all duration-300"
+                  className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-8 hover:border-white/20 hover:bg-white/[0.05] transition duration-200"
                 >
                   <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <div className="relative z-10">
@@ -274,7 +276,7 @@ export default function SovereignLandingPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.5, delay: i * 0.1 }}
-                  className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-8 hover:border-white/20 hover:bg-white/[0.05] transition-all duration-300"
+                  className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-8 hover:border-white/20 hover:bg-white/[0.05] transition duration-200"
                 >
                   <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <div className="relative z-10">
@@ -321,7 +323,7 @@ export default function SovereignLandingPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.5, delay: i * 0.1 }}
-                  className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-8 hover:border-white/20 hover:bg-white/[0.05] transition-all duration-300"
+                  className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-8 hover:border-white/20 hover:bg-white/[0.05] transition duration-200"
                 >
                   <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <div className="relative z-10">
@@ -350,27 +352,27 @@ export default function SovereignLandingPage() {
             >
               <h2 className="font-heading font-bold tracking-tight text-3xl md:text-5xl mb-6">
                 {t("cta.title")}
-              </h2>
-              <p className="text-white/60 text-lg max-w-xl mx-auto mb-10">
+                </h2>
+                <p className="text-white/60 text-lg max-w-xl mx-auto mb-10">
                 {t("cta.subtitle")}
-              </p>
-              <Link href="/onboarding">
-                <Button size="lg" className="bg-white text-black hover:bg-white/90 rounded-full px-10 py-6 text-lg font-semibold min-h-[48px]">
-                  {t("cta.button")}
-                  <ArrowRightIcon className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
+                </p>
+                <div className="flex flex-col items-center gap-5">
+                <Link href="/onboarding">
+                  <Button size="lg" className="bg-white text-black hover:bg-white/90 rounded-full px-10 py-6 text-lg font-semibold min-h-[48px]">
+                    {t("cta.button")}
+                    <ArrowRightIcon className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
+                <Link
+                  href="/expert"
+                  className="inline-flex min-h-[48px] items-center text-sm text-white/50 transition hover:text-white/80"
+                >
+                  Self-hosting too much? Hire a Lattice expert instead →
+                </Link>
+                </div>
             </motion.div>
           </div>
         </section>
-
-        {/* Footer */}
-        <footer className="border-t border-white/10 py-8">
-          <div className="mx-auto max-w-7xl px-6 flex items-center justify-between text-xs text-white/40">
-            <span>© {new Date().getFullYear()} Lattice OS. All rights reserved.</span>
-            <span>{t("hero.badge")}</span>
-          </div>
-        </footer>
       </div>
     </div>
   );

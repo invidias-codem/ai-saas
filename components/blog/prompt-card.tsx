@@ -159,7 +159,7 @@ export function PromptCard({
           <button
             onClick={handleCopy}
             className={cn(
-              "absolute top-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+              "absolute top-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition duration-200",
               copied
                 ? "bg-green-500/20 text-green-600 dark:text-green-400"
                 : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
@@ -230,7 +230,7 @@ export function PromptCard({
           </p>
           <Link
             href="/sign-up"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-sm font-medium transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-sm font-medium transition duration-200"
           >
             <Sparkles className="w-4 h-4" />
             Try in Genie

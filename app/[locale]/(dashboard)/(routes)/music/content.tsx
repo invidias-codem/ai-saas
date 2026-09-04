@@ -4,8 +4,11 @@
 import React from "react";
 import { Input } from "@/components/ui/input";
 import { useTranslations } from "next-intl";
-import { useState, useEffect } from "react";
-import { formSchema } from "./constants";
+import { useState } from "react";
+import { musicFormSchema as formSchema } from "@/components/media/config";
+import { singleOutput } from "@/components/media/types";
+import { useMediaGeneration } from "@/components/media/useMediaGeneration";
+import { GenerationLoading, GenerationError, GenerationEmpty } from "@/components/media/GenerationStates";
 import { Heading } from "@/components/heading";
 import { DiscIcon } from "@radix-ui/react-icons";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
@@ -13,8 +16,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { z } from "zod";
-import EmptyState from "@/components/empty";
-import axios from "axios";
 import { ShareButton } from "@/components/share-button";
 import YouTubeEmbed from "@/components/music/youtube-embed";
 import StereoBars from "@/components/music/stereo-bars";
@@ -22,20 +23,9 @@ import StereoBars from "@/components/music/stereo-bars";
 const DEFAULT_YOUTUBE_VIDEO_ID = "5qap5aO4i9A";
 const DEFAULT_YOUTUBE_TITLE = "Lofi beats";
 
-interface ReplicatePrediction {
-  id: string;
-  status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
-  output?: string;
-  error?: {
-    detail: string;
-  };
-}
-
 export function MusicContent() {
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [predictionId, setPredictionId] = useState<string | null>(null);
   const [showYouTube, setShowYouTube] = useState(false);
 
   const t = useTranslations("Music");
@@ -46,68 +36,26 @@ export function MusicContent() {
     },
   });
 
-  useEffect(() => {
-    if (!predictionId || !isLoading) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const response = await axios.get<ReplicatePrediction>(`/api/music/predictions/${predictionId}`);
-        const prediction = response.data;
-
-        switch (prediction.status) {
-          case "succeeded":
-            setMusicUrl(prediction.output || null);
-            setIsLoading(false);
-            setPredictionId(null);
-            form.reset();
-            clearInterval(interval);
-            break;
-
-          case "failed":
-          case "canceled":
-            setError(prediction.error?.detail || "Music generation failed.");
-            setIsLoading(false);
-            setPredictionId(null);
-            clearInterval(interval);
-            break;
-
-          case "starting":
-          case "processing":
-            break;
-        }
-      } catch (err: any) {
-        console.error("[MUSIC_POLLING_ERROR]", err);
-        setError("Failed to get music status. Please try again.");
-        setIsLoading(false);
-        setPredictionId(null);
-        clearInterval(interval);
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [predictionId, isLoading, form]);
+  // Music generation dispatch (M4): async POST + 3s poll, drives musicUrl/error.
+  const { isLoading, start } = useMediaGeneration({
+    submitUrl: "/api/music",
+    pollUrlTemplate: "/api/music/predictions/${id}",
+    onSucceeded: (prediction) => {
+      setMusicUrl(singleOutput(prediction));
+      form.reset();
+    },
+    onFailed: (message) => setError(message),
+  });
 
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     setError(null);
     setMusicUrl(null);
-    setIsLoading(true);
-    setPredictionId(null);
-
-    try {
-      const response = await axios.post<ReplicatePrediction>("/api/music", values);
-      const prediction = response.data;
-
-      if (prediction && prediction.id) {
-        setPredictionId(prediction.id);
-      } else {
-        throw new Error("API response did not contain a prediction ID.");
-      }
-    } catch (error: any) {
-      console.error("[MUSIC_PAGE_ERROR]", error);
-      const errorMessage = error.response?.data?.details || "Sorry, something went wrong starting the music generation.";
+    await start(values, (err: any) => {
+      const errorMessage =
+        err?.response?.data?.details || "Sorry, something went wrong starting the music generation.";
       setError(errorMessage);
-      setIsLoading(false);
-    }
+      return errorMessage;
+    });
   };
 
   const hasContent = !isLoading && !error && (musicUrl || showYouTube);
@@ -175,30 +123,14 @@ export function MusicContent() {
 
       <div className="flex-1 space-y-4 sm:space-y-6 mt-4 sm:mt-8 px-4 lg:px-8">
         {isLoading && (
-          <div className="relative rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-8 sm:p-16 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 animate-pulse" />
-            <div className="relative flex flex-col items-center justify-center gap-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-emerald-500/30 blur-xl rounded-full animate-pulse" />
-                <div className="relative h-16 w-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-              </div>
-              <div className="text-center space-y-2">
-                <p className="text-lg font-semibold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
-                  Composing your track...
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  AI is crafting your musical masterpiece 🎵
-                </p>
-              </div>
-            </div>
-          </div>
+          <GenerationLoading
+            accent="emerald"
+            title="Composing your track..."
+            subtitle="AI is crafting your musical masterpiece 🎵"
+          />
         )}
 
-        {error && (
-          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-6 sm:p-8">
-            <p className="text-red-500 text-center text-sm">{error}</p>
-          </div>
-        )}
+        {error && <GenerationError message={error} />}
 
         {showYouTube && (
           <div className="space-y-4">
@@ -213,9 +145,7 @@ export function MusicContent() {
         )}
 
         {!musicUrl && !isLoading && !error && !showYouTube && (
-          <div className="rounded-2xl border border-emerald-500/10 bg-gradient-to-br from-background to-emerald-500/5 p-8 sm:p-12">
-            <EmptyState label={t("empty")} />
-          </div>
+          <GenerationEmpty accent="emerald" label={t("empty")} />
         )}
 
         {musicUrl && !isLoading && !error && (

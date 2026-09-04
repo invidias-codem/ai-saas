@@ -1,5 +1,3 @@
-"use client";
-
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
@@ -72,6 +70,8 @@ const onboardingPath = [
         title: "Run preflight, deploy, then smoke test",
         description: "Deployment starts with Docker, Compose v2, resources, ports, disk, auth, and license checks. Finish by creating a workspace and verifying memory-aware chat.",
         command: "lattice deploy start --name beta\nlattice health check --instance beta",
+        href: "/dashboard",
+        cta: "Open your dashboard",
     },
 ];
 
@@ -366,7 +366,7 @@ export default function DocsPage() {
                                     <li key={section.id}>
                                         <a
                                             href={`#${section.id}`}
-                                            className={`block pl-4 transition ${index === 0 ? "text-purple-500 dark:text-purple-400 border-l border-purple-500 -ml-px" : "text-muted-foreground hover:text-foreground"}`}
+                                            className={`block pl-4 min-h-[44px] inline-flex items-center transition ${index === 0 ? "text-primary border-l-2 border-primary -ml-px" : "text-muted-foreground border-l border-transparent hover:text-foreground hover:border-border"}`}
                                         >
                                             {section.title}
                                         </a>
@@ -450,9 +450,9 @@ export default function DocsPage() {
                                 If someone just received access, this is the shortest path from zero context to a working local Lattice OS instance.
                             </p>
                         </div>
-                        <div className="grid gap-4 md:grid-cols-2">
+                        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
                             {onboardingPath.map((item) => (
-                                <div key={item.step} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+                                <div key={item.step} className="rounded-2xl border border-border bg-card p-4 sm:p-6 min-w-0 overflow-hidden">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
                                         <div className="w-fit rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary">
                                             {item.step}
@@ -604,33 +604,6 @@ export default function DocsPage() {
                     </section>
                 </div>
             </main>
-
-            <footer className="py-10 border-t border-border bg-background">
-                <div className="max-w-7xl mx-auto px-6">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                        <div className="flex items-center gap-2">
-                            <div className="relative w-6 h-6">
-                                <Image src="/og-image.png" alt="Lattice OS logo" fill className="object-cover" />
-                            </div>
-                            <span className="text-lg font-bold text-foreground">Lattice OS</span>
-                        </div>
-
-                        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-sm text-muted-foreground md:justify-end">
-                            <Link href="/beta" className="hover:text-foreground transition">Beta Tracks</Link>
-                            <Link href="/privacy" className="hover:text-foreground transition">Privacy Policy</Link>
-                            <Link href="/support" className="hover:text-foreground transition">Support</Link>
-                            <Link href="/dashboard" className="hover:text-foreground transition">Dashboard</Link>
-                            <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" className="hover:text-foreground transition">GitHub</a>
-                        </div>
-                    </div>
-
-                    <div className="mt-8 pt-8 border-t border-border text-center">
-                        <p className="text-muted-foreground text-sm">
-                            © {new Date().getFullYear()} Lattice OS. All rights reserved.
-                        </p>
-                    </div>
-                </div>
-            </footer>
         </div>
     );
 }
