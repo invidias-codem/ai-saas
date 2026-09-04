@@ -27,6 +27,8 @@ export function useMemoryCount(messageCount: number) {
   };
 
   useEffect(() => {
+    // Data fetch on mount — genuinely asynchronous, not render-derivable.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMemoryCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -34,7 +36,10 @@ export function useMemoryCount(messageCount: number) {
   // Trigger fetch on new message (bot response) + transient pulse
   useEffect(() => {
     if (messageCount > 0) {
+      // Refetch count + pulse after a new message.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchMemoryCount();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsMemoryPulsing(true);
       const timer = setTimeout(() => setIsMemoryPulsing(false), 2000);
       return () => clearTimeout(timer);

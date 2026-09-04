@@ -70,11 +70,9 @@ export const GuestChat = () => {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [guestSessionId] = useState<string>(
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `guest-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  );
+  // crypto.randomUUID() is available in all modern browsers (and Node 19+).
+  // Lazy useState initializer is React-Compiler-safe (one-time ID generation).
+  const [guestSessionId] = useState<string>(() => crypto.randomUUID());
 
   const remaining = Math.max(0, FREE_LIMIT - interactionCount);
 

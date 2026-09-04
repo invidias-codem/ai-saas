@@ -48,16 +48,16 @@ function ImageGrid({ urls }: { urls: string[] }) {
 }
 
 function AsyncMedia({ envelope }: { envelope: MediaEnvelope }) {
-  const [status, setStatus] = useState<"processing" | "succeeded" | "failed">("processing");
+  const [status, setStatus] = useState<"processing" | "succeeded" | "failed">(
+    envelope.pollUrl ? "processing" : "failed"
+  );
   const [url, setUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    envelope.pollUrl ? null : "Missing poll URL for media generation."
+  );
 
   useEffect(() => {
-    if (!envelope.pollUrl) {
-      setStatus("failed");
-      setError("Missing poll URL for media generation.");
-      return;
-    }
+    if (!envelope.pollUrl) return;
 
     let cancelled = false;
     const interval = setInterval(async () => {

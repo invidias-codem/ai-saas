@@ -62,6 +62,8 @@ function IntegrationsInner({ initialGithub, initialTrello }: Props) {
   useEffect(() => {
     // GitHub: ?github=connected
     if (searchParams.get("github") === "connected") {
+      // Reflect the OAuth success into integration state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIntegrations((prev) =>
         prev.map((int) => (int.id === "github" ? { ...int, connected: true } : int))
       );

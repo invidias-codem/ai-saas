@@ -34,6 +34,8 @@ export function VaultManager({ initialData }: { initialData: VaultData }) {
     // Re-fetch when filter changes (server prefetched 'all').
     useEffect(() => {
         if (filter === 'all') {
+            // Reset to the server-prefetched data on 'all'.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setData(initialData);
             return;
         }

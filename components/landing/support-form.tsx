@@ -48,7 +48,7 @@ export function SupportForm() {
         <CheckCircledIcon className="w-12 h-12 text-green-500 mx-auto mb-4" />
         <h3 className="text-xl font-semibold text-foreground mb-2">Message sent</h3>
         <p className="text-muted-foreground mb-6">
-          Thanks for reaching out — we'll respond as soon as we can.
+          Thanks for reaching out — we&apos;ll respond as soon as we can.
         </p>
         <Button
           onClick={() => setSubmitStatus("idle")}

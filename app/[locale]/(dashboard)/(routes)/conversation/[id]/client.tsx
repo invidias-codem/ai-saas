@@ -153,15 +153,48 @@ function modeLabel(mode?: string | null) {
   }
 }
 
-function modeIcon(mode?: string | null) {
+// Module-scope icon component — avoids creating a component alias during render
+// (react-hooks/static-components).
+function ProfileModeIcon({ mode, className }: { mode?: string | null; className?: string }) {
   switch (mode) {
-    case 'research': return Search;
-    case 'agentic': return Zap;
-    case 'drafting': return FileText;
-    case 'memory_native': return Brain;
-    case 'copilot': return Cpu;
-    default: return Cpu;
+    case 'research': return <Search className={className} />;
+    case 'agentic': return <Zap className={className} />;
+    case 'drafting': return <FileText className={className} />;
+    case 'memory_native': return <Brain className={className} />;
+    case 'copilot': return <Cpu className={className} />;
+    default: return <Cpu className={className} />;
   }
+}
+
+// Module-scope typing indicator (react-hooks/static-components).
+function TypingIndicator({ agentMode }: { agentMode: string | undefined }) {
+  if (agentMode === 'agentic') {
+    return (
+      <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
+        <Avatar className="h-8 w-8 ring-1 ring-border/50">
+          <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
+          <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
+        </Avatar>
+        <div className="flex items-center space-x-2 text-indigo-500 text-sm font-medium animate-pulse">
+          <Sparkles className="w-4 h-4" />
+          <span>Thinking & Executing Code...</span>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
+      <Avatar className="h-8 w-8 ring-1 ring-border/50">
+        <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
+        <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
+      </Avatar>
+      <div className="flex items-center space-x-1.5 h-8">
+        <div className="h-2 w-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+        <div className="h-2 w-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+        <div className="h-2 w-2 bg-sky-400 rounded-full animate-bounce"></div>
+      </div>
+    </div>
+  );
 }
 
 function ConversationPageGlobalWrapper({
@@ -210,7 +243,6 @@ function ConversationPage({
   })), [initialMessages]);
   const { messages: supabaseMessages } = useSupabaseChat(conversationId, convertedInitialMessages);
   const { agentMode } = useModel(); // Use Agentic Mode Context
-  const ProfileIcon = modeIcon(conversationContext.operatingProfileMode);
   const [messages, setMessages] = useState<Message[]>(() => 
     initialMessages.map(msg => ({
       ...msg,
@@ -221,9 +253,19 @@ function ConversationPage({
   // Nudge Integration
   const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
 
-  // Sync Supabase messages to local state with deduplication
+  const [error, setError] = useState<string | null>(null);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showContextSheet, setShowContextSheet] = useState(false);
+  const [showGreeting, setShowGreeting] = useState<boolean>(() => Boolean(initialConsultantGreeting));
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
+  const [showFileGateNudge, setShowFileGateNudge] = useState(false);
+  const { open: openPricingModal } = usePricingModal();
+
+  // Sync Supabase messages to local state with deduplication.
+  // Genuine external-state synchronization (external store → local state).
   useEffect(() => {
     if (supabaseMessages && supabaseMessages.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMessages(prev => {
         // Merge: keep optimistic user messages not yet in Supabase
         const supabaseTimestamps = new Set(supabaseMessages.map(m => m.timestamp.getTime()));
@@ -232,17 +274,10 @@ function ConversationPage({
         );
         return [...supabaseMessages, ...pendingOptimistic];
       });
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowGreeting(false);
     }
   }, [supabaseMessages]);
-
-  const [error, setError] = useState<string | null>(null);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [showContextSheet, setShowContextSheet] = useState(false);
-  const [showGreeting, setShowGreeting] = useState<boolean>(() => Boolean(initialConsultantGreeting));
-  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
-  const [showFileGateNudge, setShowFileGateNudge] = useState(false);
-  const { open: openPricingModal } = usePricingModal();
 
   // File attachment lifecycle (T2): upload state transitions + GCS/base64 logic.
   const {
@@ -355,38 +390,6 @@ function ConversationPage({
   }, [agentMode, loading, streaming, error, debugExecutionMode, debugIntent]);
 
   // ---------------------------------------------------------------
-
-  // Modern Typing Indicator (Gemini Sparkle style)
-  const TypingIndicator = () => {
-    // Show 'Thinking' state for Agentic mode? or just standard dots
-    if (agentMode === 'agentic') {
-      return (
-        <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
-          <Avatar className="h-8 w-8 ring-1 ring-border/50">
-            <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
-            <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
-          </Avatar>
-          <div className="flex items-center space-x-2 text-indigo-500 text-sm font-medium animate-pulse">
-            <Sparkles className="w-4 h-4" />
-            <span>Thinking & Executing Code...</span>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
-        <Avatar className="h-8 w-8 ring-1 ring-border/50">
-          <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
-          <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
-        </Avatar>
-        <div className="flex items-center space-x-1.5 h-8">
-          <div className="h-2 w-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-          <div className="h-2 w-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-          <div className="h-2 w-2 bg-sky-400 rounded-full animate-bounce"></div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     // 1. USE 100dvh (Dynamic Viewport Height) to fix mobile browser bar cutoffs
@@ -569,7 +572,7 @@ function ConversationPage({
                   )}
                   {conversationContext.operatingProfileName && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-sky-700 dark:text-sky-300">
-                      <ProfileIcon className="h-3.5 w-3.5" />
+                      <ProfileModeIcon mode={conversationContext.operatingProfileMode} className="h-3.5 w-3.5" />
                       {conversationContext.operatingProfileName}
                     </span>
                   )}
@@ -601,7 +604,7 @@ function ConversationPage({
                       )}
                       {conversationContext.operatingProfileName && (
                         <div className="flex items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-sm">
-                          <ProfileIcon className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                          <ProfileModeIcon mode={conversationContext.operatingProfileMode} className="h-4 w-4 text-sky-600 dark:text-sky-400" />
                           <span className="font-medium">{conversationContext.operatingProfileName}</span>
                           <span className="text-xs text-muted-foreground">· {modeLabel(conversationContext.operatingProfileMode)}</span>
                         </div>
@@ -840,7 +843,7 @@ function ConversationPage({
             </div>
           )}
 
-          {loading && !streamingContent && <TypingIndicator />}
+          {loading && !streamingContent && <TypingIndicator agentMode={agentMode} />}
 
           {/* Error Message */}
           {error && (

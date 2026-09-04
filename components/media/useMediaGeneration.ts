@@ -37,10 +37,13 @@ export function useMediaGeneration({
   const [predictionId, setPredictionId] = useState<string | null>(null);
 
   // Ref-hold the callbacks so the poll interval's closure stays fresh.
+  // Synced in an effect (React Compiler forbids mutating refs during render).
   const onSucceededRef = useRef(onSucceeded);
-  onSucceededRef.current = onSucceeded;
   const onFailedRef = useRef(onFailed);
-  onFailedRef.current = onFailed;
+  useEffect(() => {
+    onSucceededRef.current = onSucceeded;
+    onFailedRef.current = onFailed;
+  });
 
   const isLoading = status === "generating";
 

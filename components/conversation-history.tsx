@@ -83,6 +83,8 @@ export function ConversationHistory({ onNavigate, initialConversations }: Conver
     useEffect(() => {
         // Skip the mount fetch when the RSC shell already seeded the list.
         if (initialConversations) return;
+        // Fetch on mount (or pathname change) — external data load.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadConversations();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pathname]);

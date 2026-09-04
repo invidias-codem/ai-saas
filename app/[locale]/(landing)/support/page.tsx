@@ -161,7 +161,7 @@ export default function SupportPage() {
           </h1>
 
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Whether you're troubleshooting a route, trying to understand the platform architecture, or reporting a bug, this page is the fastest way to get support or find the right docs.
+            Whether you&apos;re troubleshooting a route, trying to understand the platform architecture, or reporting a bug, this page is the fastest way to get support or find the right docs.
           </p>
         </section>
 
@@ -281,7 +281,7 @@ export default function SupportPage() {
             <div className="text-center mb-10">
               <h2 className="text-3xl font-bold text-foreground mb-4">Send us a message</h2>
               <p className="text-muted-foreground">
-                If the docs don't answer it, reach out here and we'll get back to you as soon as possible.
+                If the docs don&apos;t answer it, reach out here and we&apos;ll get back to you as soon as possible.
               </p>
             </div>
             <SupportForm />
