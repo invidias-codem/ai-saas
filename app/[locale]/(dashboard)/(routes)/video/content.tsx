@@ -1,12 +1,11 @@
 // app/(dashboard)/(routes)/video/page.tsx
 "use client";
 
-// ✅ Added useEffect
 import { useTranslations } from "next-intl";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { videoFormSchema as formSchema, videoResolutionOptions as resolutionOptions, videoDurationOptions as durationOptions, videoAspectRatioOptions as aspectRatioOptions } from '@/components/media/config';
-import type { ReplicatePrediction } from '@/components/media/types';
 import { singleOutput } from '@/components/media/types';
+import { useMediaGeneration } from '@/components/media/useMediaGeneration';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Heading } from '@/components/heading';
 import { KoFiNudge } from "@/components/kofi-nudge";
@@ -19,17 +18,13 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { z } from 'zod';
 import EmptyState from '@/components/empty';
-import axios from 'axios';
 import { ParameterDrawer, ParameterSection } from "@/components/ui/parameter-drawer";
 import { Settings2 } from "lucide-react";
 import { ShareButton } from '@/components/share-button';
 
 export function VideoContent() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [status, setStatus] = useState<"idle" | "generating" | "completed" | "failed">("idle");
   const [error, setError] = useState<string | null>(null);
-  // ✅ Added state to hold the prediction ID
-  const [predictionId, setPredictionId] = useState<string | null>(null);
 
   // Stable filename computed once on mount (Date.now() must not run during render).
   const [downloadName] = useState(() => `genie-video-${Date.now()}.mp4`);
@@ -50,87 +45,27 @@ export function VideoContent() {
     },
   });
 
-  const isLoading = status === "generating";
-
-  // ✅ useEffect hook for polling the prediction status
-  useEffect(() => {
-    // Stop polling if there's no prediction ID or the job is done
-    if (!predictionId || status !== "generating") {
-      return;
-    }
-
-    // Set up an interval to poll every 3 seconds
-    const interval = setInterval(async () => {
-      try {
-        const response = await axios.get<ReplicatePrediction>(`/api/video/predictions/${predictionId}`);
-        const prediction = response.data;
-
-        switch (prediction.status) {
-          case "succeeded":
-            setStatus("completed");
-            setVideoUrl(singleOutput(prediction)); // Set the output URL
-            setPredictionId(null); // Clear ID to stop polling
-            trackActivity("video");
-            form.reset(); // Reset form on success
-            clearInterval(interval);
-            break;
-
-          case "failed":
-          case "canceled":
-            setStatus("failed");
-            setError(prediction.error?.detail || "Video generation failed.");
-            setPredictionId(null); // Clear ID to stop polling
-            clearInterval(interval);
-            break;
-
-          case "starting":
-          case "processing":
-            // Still generating, do nothing and let the interval continue
-            setStatus("generating");
-            break;
-        }
-      } catch (err: any) {
-        console.error("[VIDEO_POLLING_ERROR]", err);
-        setStatus("failed");
-        setError("Failed to get video status. Please try again.");
-        setPredictionId(null); // Clear ID to stop polling
-        clearInterval(interval);
-      }
-    }, 3000); // Poll every 3 seconds
-
-    // Cleanup function to clear the interval
-    return () => clearInterval(interval);
-
-  }, [predictionId, status, form, trackActivity]); // Dependencies for the hook
-
+  // Video generation dispatch (M4): async POST + 3s poll, drives videoUrl/status/error.
+  const { status, isLoading, start } = useMediaGeneration({
+    submitUrl: "/api/video",
+    pollUrlTemplate: "/api/video/predictions/${id}",
+    onSucceeded: (prediction) => {
+      setVideoUrl(singleOutput(prediction));
+      trackActivity("video");
+      form.reset();
+    },
+    onFailed: (message) => setError(message),
+  });
 
   // ✅ Updated Form submission handler
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setError(null);
     setVideoUrl(null);
-    setStatus("generating");
-    setPredictionId(null); // Clear any old prediction ID
-
-    try {
-      // Call the API to *start* the prediction
-      console.log("Sending data to /api/video:", values);
-      // ✅ Expect the initial prediction object in response
-      const response = await axios.post<ReplicatePrediction>("/api/video", values);
-      const prediction = response.data;
-
-      if (prediction && prediction.id) {
-        // ✅ Set the prediction ID to start polling
-        setPredictionId(prediction.id);
-      } else {
-        throw new Error("API response did not contain a prediction ID.");
-      }
-      // Note: We do NOT reset the form here anymore, only on success
-
-    } catch (err: any) {
-      console.error("[VIDEO_PAGE_SUBMIT_ERROR]", err);
-      setError(err.response?.data?.details || "Failed to start video generation.");
-      setStatus("failed");
-    }
+    await start(values, (err: any) => {
+      const message = err?.response?.data?.details || "Failed to start video generation.";
+      setError(message);
+      return message;
+    });
   };
 
   // Helper function for status messages

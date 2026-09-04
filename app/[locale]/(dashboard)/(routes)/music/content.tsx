@@ -4,10 +4,10 @@
 import React from "react";
 import { Input } from "@/components/ui/input";
 import { useTranslations } from "next-intl";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { musicFormSchema as formSchema } from "@/components/media/config";
-import type { ReplicatePrediction } from "@/components/media/types";
 import { singleOutput } from "@/components/media/types";
+import { useMediaGeneration } from "@/components/media/useMediaGeneration";
 import { Heading } from "@/components/heading";
 import { DiscIcon } from "@radix-ui/react-icons";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
@@ -16,7 +16,6 @@ import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { z } from "zod";
 import EmptyState from "@/components/empty";
-import axios from "axios";
 import { ShareButton } from "@/components/share-button";
 import YouTubeEmbed from "@/components/music/youtube-embed";
 import StereoBars from "@/components/music/stereo-bars";
@@ -27,8 +26,6 @@ const DEFAULT_YOUTUBE_TITLE = "Lofi beats";
 export function MusicContent() {
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [predictionId, setPredictionId] = useState<string | null>(null);
   const [showYouTube, setShowYouTube] = useState(false);
 
   const t = useTranslations("Music");
@@ -39,68 +36,26 @@ export function MusicContent() {
     },
   });
 
-  useEffect(() => {
-    if (!predictionId || !isLoading) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const response = await axios.get<ReplicatePrediction>(`/api/music/predictions/${predictionId}`);
-        const prediction = response.data;
-
-        switch (prediction.status) {
-          case "succeeded":
-            setMusicUrl(singleOutput(prediction));
-            setIsLoading(false);
-            setPredictionId(null);
-            form.reset();
-            clearInterval(interval);
-            break;
-
-          case "failed":
-          case "canceled":
-            setError(prediction.error?.detail || "Music generation failed.");
-            setIsLoading(false);
-            setPredictionId(null);
-            clearInterval(interval);
-            break;
-
-          case "starting":
-          case "processing":
-            break;
-        }
-      } catch (err: any) {
-        console.error("[MUSIC_POLLING_ERROR]", err);
-        setError("Failed to get music status. Please try again.");
-        setIsLoading(false);
-        setPredictionId(null);
-        clearInterval(interval);
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [predictionId, isLoading, form]);
+  // Music generation dispatch (M4): async POST + 3s poll, drives musicUrl/error.
+  const { isLoading, start } = useMediaGeneration({
+    submitUrl: "/api/music",
+    pollUrlTemplate: "/api/music/predictions/${id}",
+    onSucceeded: (prediction) => {
+      setMusicUrl(singleOutput(prediction));
+      form.reset();
+    },
+    onFailed: (message) => setError(message),
+  });
 
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     setError(null);
     setMusicUrl(null);
-    setIsLoading(true);
-    setPredictionId(null);
-
-    try {
-      const response = await axios.post<ReplicatePrediction>("/api/music", values);
-      const prediction = response.data;
-
-      if (prediction && prediction.id) {
-        setPredictionId(prediction.id);
-      } else {
-        throw new Error("API response did not contain a prediction ID.");
-      }
-    } catch (error: any) {
-      console.error("[MUSIC_PAGE_ERROR]", error);
-      const errorMessage = error.response?.data?.details || "Sorry, something went wrong starting the music generation.";
+    await start(values, (err: any) => {
+      const errorMessage =
+        err?.response?.data?.details || "Sorry, something went wrong starting the music generation.";
       setError(errorMessage);
-      setIsLoading(false);
-    }
+      return errorMessage;
+    });
   };
 
   const hasContent = !isLoading && !error && (musicUrl || showYouTube);
