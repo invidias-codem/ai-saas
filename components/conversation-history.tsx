@@ -12,6 +12,14 @@ import {
     setActiveConversation,
 } from "@/lib/conversationManager";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
+
+export const CONVERSATIONS_INVALIDATE_EVENT = 'conversations:invalidate';
+
+export function emitConversationsInvalidate() {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(CONVERSATIONS_INVALIDATE_EVENT));
+}
+
 import {
     AlertDialog,
     AlertDialogAction,
@@ -79,6 +87,17 @@ export function ConversationHistory({ onNavigate, initialConversations }: Conver
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pathname]);
 
+    // Targeted invalidation: refetch when a conversation is created/deleted
+    // elsewhere in the app (e.g. /conversation/new route handler, vault
+    // restore). Cheap event bus; avoids re-fetching on every URL change.
+    useEffect(() => {
+        const handler = () => {
+            loadConversations();
+        };
+        window.addEventListener(CONVERSATIONS_INVALIDATE_EVENT, handler);
+        return () => window.removeEventListener(CONVERSATIONS_INVALIDATE_EVENT, handler);
+    }, []);
+
     const visibleConversations = useMemo(() => {
         if (!activeWorkspaceId) return conversations;
         return conversations.filter((conv) => conv.workspaceId === activeWorkspaceId);
@@ -90,6 +109,7 @@ export function ConversationHistory({ onNavigate, initialConversations }: Conver
             const success = await deleteConversation(id);
             if (success) {
                 setConversations((prev) => prev.filter((c) => c.id !== id));
+                emitConversationsInvalidate();
                 if (id === activeId) {
                     clearSessionMemoryStorage();
                     onNavigate?.();

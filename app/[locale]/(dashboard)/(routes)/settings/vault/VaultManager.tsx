@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { VaultData, VaultConversation } from "@/lib/conversations/vault";
+import { emitConversationsInvalidate } from "@/components/conversation-history";
 import {
     Archive,
     Trash2,
@@ -75,6 +76,7 @@ export function VaultManager({ initialData }: { initialData: VaultData }) {
                 ),
                 counts: { ...prev.counts, deleted: prev.counts.deleted - 1, active: prev.counts.active + 1 }
             }));
+            emitConversationsInvalidate();
         } catch (error) {
             setActionError(error instanceof Error ? error.message : 'Restore failed');
         } finally {
@@ -102,6 +104,7 @@ export function VaultManager({ initialData }: { initialData: VaultData }) {
                     c.id === id ? { ...c, isArchived: !currentlyArchived } : c
                 )
             }));
+            emitConversationsInvalidate();
         } catch (error) {
             setActionError(error instanceof Error ? error.message : 'Archive failed');
         } finally {
@@ -128,6 +131,7 @@ export function VaultManager({ initialData }: { initialData: VaultData }) {
                 ),
                 counts: { ...prev.counts, deleted: prev.counts.deleted + 1, active: prev.counts.active - 1 }
             }));
+            emitConversationsInvalidate();
         } catch (error) {
             setActionError(error instanceof Error ? error.message : 'Delete failed');
         } finally {
