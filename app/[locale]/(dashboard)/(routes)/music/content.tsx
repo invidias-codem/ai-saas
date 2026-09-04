@@ -8,6 +8,7 @@ import { useState } from "react";
 import { musicFormSchema as formSchema } from "@/components/media/config";
 import { singleOutput } from "@/components/media/types";
 import { useMediaGeneration } from "@/components/media/useMediaGeneration";
+import { GenerationLoading, GenerationError, GenerationEmpty } from "@/components/media/GenerationStates";
 import { Heading } from "@/components/heading";
 import { DiscIcon } from "@radix-ui/react-icons";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
@@ -15,7 +16,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { z } from "zod";
-import EmptyState from "@/components/empty";
 import { ShareButton } from "@/components/share-button";
 import YouTubeEmbed from "@/components/music/youtube-embed";
 import StereoBars from "@/components/music/stereo-bars";
@@ -123,30 +123,14 @@ export function MusicContent() {
 
       <div className="flex-1 space-y-4 sm:space-y-6 mt-4 sm:mt-8 px-4 lg:px-8">
         {isLoading && (
-          <div className="relative rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-8 sm:p-16 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 animate-pulse" />
-            <div className="relative flex flex-col items-center justify-center gap-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-emerald-500/30 blur-xl rounded-full animate-pulse" />
-                <div className="relative h-16 w-16 border-4 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-              </div>
-              <div className="text-center space-y-2">
-                <p className="text-lg font-semibold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
-                  Composing your track...
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  AI is crafting your musical masterpiece 🎵
-                </p>
-              </div>
-            </div>
-          </div>
+          <GenerationLoading
+            accent="emerald"
+            title="Composing your track..."
+            subtitle="AI is crafting your musical masterpiece 🎵"
+          />
         )}
 
-        {error && (
-          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-6 sm:p-8">
-            <p className="text-red-500 text-center text-sm">{error}</p>
-          </div>
-        )}
+        {error && <GenerationError message={error} />}
 
         {showYouTube && (
           <div className="space-y-4">
@@ -161,9 +145,7 @@ export function MusicContent() {
         )}
 
         {!musicUrl && !isLoading && !error && !showYouTube && (
-          <div className="rounded-2xl border border-emerald-500/10 bg-gradient-to-br from-background to-emerald-500/5 p-8 sm:p-12">
-            <EmptyState label={t("empty")} />
-          </div>
+          <GenerationEmpty accent="emerald" label={t("empty")} />
         )}
 
         {musicUrl && !isLoading && !error && (

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { videoFormSchema as formSchema, videoResolutionOptions as resolutionOptions, videoDurationOptions as durationOptions, videoAspectRatioOptions as aspectRatioOptions } from '@/components/media/config';
 import { singleOutput } from '@/components/media/types';
 import { useMediaGeneration } from '@/components/media/useMediaGeneration';
+import { GenerationLoading, GenerationError, GenerationEmpty } from "@/components/media/GenerationStates";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Heading } from '@/components/heading';
 import { KoFiNudge } from "@/components/kofi-nudge";
@@ -17,7 +18,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { z } from 'zod';
-import EmptyState from '@/components/empty';
 import { ParameterDrawer, ParameterSection } from "@/components/ui/parameter-drawer";
 import { Settings2 } from "lucide-react";
 import { ShareButton } from '@/components/share-button';
@@ -341,37 +341,19 @@ export function VideoContent() {
       <div className='space-y-4 sm:space-y-6 mt-4 sm:mt-8 px-4 lg:px-8'>
         {/* Loading/Status Message */}
         {isLoading && (
-          <div className="relative rounded-2xl border border-pink-700/20 bg-gradient-to-br from-background to-pink-700/5 p-8 sm:p-16 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-pink-700/10 via-rose-500/10 to-pink-700/10 animate-pulse" />
-            <div className="relative flex flex-col items-center justify-center gap-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-pink-700/30 blur-xl rounded-full animate-pulse" />
-                <div className="relative h-16 w-16 border-4 border-pink-700/30 border-t-pink-700 rounded-full animate-spin" />
-              </div>
-              <div className="text-center space-y-2">
-                <p className="text-lg font-semibold bg-gradient-to-r from-pink-700 to-rose-600 bg-clip-text text-transparent">
-                  {getStatusMessage()}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Crafting your cinematic moment 🎬
-                </p>
-              </div>
-            </div>
-          </div>
+          <GenerationLoading
+            accent="pink"
+            title={getStatusMessage()}
+            subtitle="Crafting your cinematic moment 🎬"
+          />
         )}
 
         {/* Error State */}
-        {error && (
-          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-6 sm:p-8">
-            <p className="text-red-500 text-center text-sm">{error}</p>
-          </div>
-        )}
+        {error && <GenerationError message={error} />}
 
         {/* Idle/Empty State */}
         {status === "idle" && !isLoading && !error && !videoUrl && (
-          <div className="rounded-2xl border border-pink-700/10 bg-gradient-to-br from-background to-pink-700/5 p-8 sm:p-12">
-            <EmptyState label={t('empty')} />
-          </div>
+          <GenerationEmpty accent="pink" label={t('empty')} />
         )}
 
         {/* Completed State */}

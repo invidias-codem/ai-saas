@@ -16,7 +16,6 @@ import { useSupportNudge } from "@/hooks/use-support-nudge";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import EmptyState from "@/components/empty";
 import {
   Select,
   SelectContent,
@@ -26,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardFooter } from "@/components/ui/card";
 import { imageAmountOptions as amountOptions, imageResolutionOptions as resolutionOptions, imageModelOptions as modelOptions, imageFormSchema as formSchema } from "@/components/media/config";
-import type { ReplicatePrediction } from "@/components/media/types";
+import { GenerationLoading, GenerationError, GenerationEmpty } from "@/components/media/GenerationStates";
 import { ParameterDrawer, ParameterSection } from "@/components/ui/parameter-drawer";
 import { Settings2 } from "lucide-react";
 import { ShareIconButton } from "@/components/share-button";
@@ -399,33 +398,17 @@ export function ImageContent() {
       {/* Output Area */}
       <div className="space-y-4 sm:space-y-6 mt-4 sm:mt-8 px-4 lg:px-8">
         {isLoading && (
-          <div className="relative rounded-2xl border border-violet-500/20 bg-gradient-to-br from-background to-violet-500/5 p-8 sm:p-16 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-violet-500/10 via-purple-500/10 to-violet-500/10 animate-pulse" />
-            <div className="relative flex flex-col items-center justify-center gap-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-violet-500/30 blur-xl rounded-full animate-pulse" />
-                <div className="relative h-16 w-16 border-4 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
-              </div>
-              <div className="text-center space-y-2">
-                <p className="text-lg font-semibold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
-                  Creating your masterpiece...
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  AI is painting your vision into reality ✨
-                </p>
-              </div>
-            </div>
-          </div>
+          <GenerationLoading
+            accent="violet"
+            title="Creating your masterpiece..."
+            subtitle="AI is painting your vision into reality ✨"
+          />
         )}
         {error && !isLoading && (
-          <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-background to-red-500/5 p-6 sm:p-8">
-            <EmptyState label={error} />
-          </div>
+          <GenerationError message={error} asEmptyState />
         )}
         {images.length === 0 && !isLoading && !error && (
-          <div className="rounded-2xl border border-violet-500/10 bg-gradient-to-br from-background to-violet-500/5 p-8 sm:p-12">
-            <EmptyState label={t('empty')} />
-          </div>
+          <GenerationEmpty accent="violet" label={t('empty')} />
         )}
         {images.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
