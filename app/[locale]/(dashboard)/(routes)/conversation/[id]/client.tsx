@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 // but keeping the import if you use it elsewhere.
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Paperclip, AlertCircle, SendHorizontal, X, Plus, ArrowDown, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { GitHubConsentModal } from "@/components/github-consent-modal";
 import { ShareIconButton } from "@/components/share-button";
@@ -31,6 +31,8 @@ import { FilePreview } from "@/components/FilePreview";
 import { ContextualNudge } from "@/components/workspaces/ContextualNudge";
 import { SyncStatusIndicator } from "@/components/harness/SyncStatusIndicator";
 import { useWorkspaceSyncStatus } from "@/hooks/useWorkspaceSyncStatus";
+import { useChatScroll } from "@/components/chat/useChatScroll";
+import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
 import {
   getSessionMemoryFromStorage,
   saveSessionMemoryToStorage,
@@ -393,7 +395,6 @@ function ConversationPage({
   const [deviceId, setDeviceId] = useState("");
   const [multiDeviceStatus, setMultiDeviceStatus] = useState<any>(null);
   const [userId, setUserId] = useState("");
-  const [showScrollButton, setShowScrollButton] = useState(false);
   const [memoryCount, setMemoryCount] = useState<number>(0);
   const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
   const [swarmSuggestion, setSwarmSuggestion] = useState<string>("");
@@ -469,40 +470,21 @@ function ConversationPage({
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null); // For auto-scroll
-  const chatContainerRef = useRef<HTMLDivElement>(null); // Chat container for scroll
   const sessionCleanup = useSessionCleanup();
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Chat scroll management (T1): refs, manual scroll-to-bottom, and
+  // "scrolled up" detection that drives the floating ScrollToBottom button.
+  const {
+    bottomRef,
+    chatContainerRef,
+    scrollToBottom,
+    showScrollButton,
+  } = useChatScroll(messages.length);
 
   const GREETING_MESSAGE = "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights.";
 
   // No auto-scroll - let users scroll manually to read responses from the beginning
-
-  // Scroll to bottom function for manual trigger
-  const scrollToBottom = () => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-  // Track scroll position to show/hide scroll-to-bottom button
-  useEffect(() => {
-    const container = chatContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      // Show button when scrolled up more than 200px from bottom
-      const isScrolledUp = scrollHeight - scrollTop - clientHeight > 200;
-      setShowScrollButton(isScrolledUp && messages.length > 2);
-    };
-
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [messages.length]);
 
   // --- Session & Sync Effects (Identical Logic to your original) ---
   useEffect(() => {
@@ -1347,17 +1329,7 @@ function ConversationPage({
       </div>
 
       {/* Scroll to Bottom Button */}
-      {
-        showScrollButton && (
-          <button
-            onClick={scrollToBottom}
-            className="fixed bottom-28 right-6 z-30 h-10 w-10 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg flex items-center justify-center transition-all duration-200 animate-in fade-in slide-in-from-bottom-2"
-            aria-label="Scroll to bottom"
-          >
-            <ArrowDown className="h-5 w-5" />
-          </button>
-        )
-      }
+      {showScrollButton && <ScrollToBottom onClick={scrollToBottom} />}
 
       {/* Input Area - Floating & Glassmorphism */}
       <div className="flex-none w-full p-4 bg-gradient-to-t from-background via-background to-transparent pb-[max(1rem,env(safe-area-inset-bottom))]">
