@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, KeyboardEvent, useEffect, useSyncExternalStore } from "react";
+import React, { useState, KeyboardEvent, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import axios from "axios";
@@ -34,27 +34,9 @@ import { useChatScroll } from "@/components/chat/useChatScroll";
 import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
 import { useFileUpload, SelectedFile } from "@/components/chat/useFileUpload";
 import { FileAttachmentPanel } from "@/components/chat/FileAttachmentPanel";
-import {
-  getSessionMemoryFromStorage,
-  saveSessionMemoryToStorage,
-  getOrCreateSessionId,
-  clearSessionMemoryStorage,
-  SessionMessage,
-  getMemoryStats
-} from "@/lib/sessionClientMemory";
+import { useSessionSync } from "@/components/chat/useSessionSync";
+import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
-import {
-  getOrCreateDeviceId,
-  getDeviceInfo,
-  getDeviceName
-} from "@/lib/deviceIdentifier";
-import {
-  registerSyncSession,
-  detectMultiDeviceLogin,
-  trackMessageSent,
-  getSyncStatus
-} from "@/lib/deviceSync";
-import { toSyncMessages } from "@/lib/messageMerge";
 import {
   createNewConversation,
   getActiveConversationId,
@@ -361,7 +343,6 @@ function ConversationPage({
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>([]);
   const [showFileGateNudge, setShowFileGateNudge] = useState(false);
   const { open: openPricingModal } = usePricingModal();
-  const [sessionId, setSessionId] = useState("");
 
   // File attachment lifecycle (T2): upload state transitions + GCS/base64 logic.
   const {
@@ -375,9 +356,6 @@ function ConversationPage({
     clearFile,
     buildFilePayload,
   } = useFileUpload(setError);
-  const [sessionRestored, setSessionRestored] = useState(false);
-  const [deviceId, setDeviceId] = useState("");
-  const [multiDeviceStatus, setMultiDeviceStatus] = useState<any>(null);
   const [userId, setUserId] = useState("");
   const [memoryCount, setMemoryCount] = useState<number>(0);
   const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
@@ -454,7 +432,6 @@ function ConversationPage({
 
   // Refs
   const sessionCleanup = useSessionCleanup();
-  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Chat scroll management (T1): refs, manual scroll-to-bottom, and
   // "scrolled up" detection that drives the floating ScrollToBottom button.
@@ -469,101 +446,20 @@ function ConversationPage({
 
   // No auto-scroll - let users scroll manually to read responses from the beginning
 
-  // --- Session & Sync Effects (Identical Logic to your original) ---
-  useEffect(() => {
-    const initializeSession = async () => {
-      try {
-        const sid = getOrCreateSessionId();
-        setSessionId(sid);
-        const did = getOrCreateDeviceId();
-        setDeviceId(did);
-        const savedMessages = getSessionMemoryFromStorage(conversationId); // Pass conversation ID
-        if (savedMessages.length > 0) {
-          const restoredMessages: Message[] = savedMessages.map(msg => ({
-            text: msg.text, role: msg.role, timestamp: new Date(msg.timestamp),
-          }));
-          setMessages(restoredMessages);
-          setShowGreeting(false);
-        }
-        try {
-          const response = await fetch('/api/auth/user');
-          if (response.ok) {
-            const data = await response.json();
-            setUserId(data.userId);
-            registerSyncSession(data.userId, savedMessages.length);
-            const status = detectMultiDeviceLogin(data.userId);
-            setMultiDeviceStatus(status);
-          }
-        } catch (err) { console.warn('[DeviceSync] Could not fetch user info:', err); }
-        setSessionRestored(true);
-      } catch (err) { console.error('[SessionMemory] Failed:', err); setSessionRestored(true); }
-    };
-    initializeSession();
-  }, [conversationId]);
-
-  useEffect(() => {
-    if (!sessionRestored || !sessionId || messages.length === 0 || !conversationId) {
-      return;
-    }
-
-    const sessionMessages: SessionMessage[] = messages.map(msg => ({
-      text: msg.text, role: msg.role, timestamp: msg.timestamp.getTime(),
-    }));
-    saveSessionMemoryToStorage(sessionMessages, 'current-user', sessionId, conversationId); // Include conversationId
-    if (deviceId) trackMessageSent(messages.length);
-  }, [messages, sessionRestored, sessionId, deviceId, conversationId]);
-
-  // Conversation-scoped cloud sync for multi-device support
-  useEffect(() => {
-    if (!sessionRestored || !userId || !deviceId || messages.length === 0 || !conversationId) return;
-
-    const syncToCloud = async () => {
-      try {
-        const messagesToSync = messages.map(msg => ({ text: msg.text, role: msg.role, timestamp: msg.timestamp.getTime() }));
-        const syncMessages = toSyncMessages(messagesToSync, deviceId);
-
-        // IMPORTANT: Pass conversationId to scope sync to THIS conversation only
-        const response = await axios.post('/api/sync/conversation', {
-          deviceId,
-          messages: syncMessages,
-          isNewDevice: false,
-          lastSyncTimestamp: Date.now(),
-          conversationId, // <-- Conversation-scoped sync!
-        });
-
-        if (response.data.merged) {
-          const mergedMessages: Message[] = response.data.merged.map((m: any) => ({
-            text: m.text, role: m.role, timestamp: new Date(m.timestamp),
-          }));
-          // Only update if we got MORE messages (from another device)
-          if (mergedMessages.length > messages.length) {
-            setMessages(mergedMessages);
-            saveSessionMemoryToStorage(
-              mergedMessages.map(msg => ({ text: msg.text, role: msg.role, timestamp: msg.timestamp.getTime() })),
-              'current-user',
-              sessionId,
-              conversationId
-            );
-          }
-          if (response.data.deviceCount > 1) {
-            setMultiDeviceStatus({ isMultiDevice: true, deviceCount: response.data.deviceCount });
-          }
-        }
-      } catch (err: any) {
-        console.warn('[DeviceSync] Sync failed:', err);
-      }
-    };
-
-    // Initial sync after 10 seconds, then every 5 minutes
-    const initialTimeout = setTimeout(syncToCloud, 10000);
-    const syncInterval = setInterval(syncToCloud, 5 * 60 * 1000);
-    syncIntervalRef.current = syncInterval;
-
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(syncInterval);
-    };
-  }, [sessionRestored, userId, deviceId, messages, sessionId, conversationId]);
+  // --- Session & Sync (T3): session/device id, memory restore/persist, cloud sync ---
+  const {
+    sessionId,
+    deviceId,
+    multiDeviceStatus,
+    sessionRestored,
+  } = useSessionSync({
+    conversationId,
+    userId,
+    messages,
+    onRestoreMessages: setMessages,
+    onSetUserId: setUserId,
+    onHideGreeting: () => setShowGreeting(false),
+  });
 
   // Fetch Memory Count
   const fetchMemoryCount = async () => {
