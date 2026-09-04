@@ -4,19 +4,18 @@ Methodology: to-tickets (vertical capability slices, blocking edges declared).
 
 Monolith: app/[locale]/(dashboard)/(routes)/code/page.tsx (~44KB, 1034 lines). Sibling of the
 conversation/[id]/client.tsx monolith already dismantled (T1–T8, see
-client-chat-slices.md). Reuses the same hooks extracted there where shapes match.
+client-chat-slices.md). Reuses shared leaves extracted during that first refactor.
 
-Module-scope pieces: CodeBlock (useClipboard), TypingIndicator, helper fns
-codeConversationRowKey / getLocalCodeSessionId, local types (CodeContext,
-SelectedFile, Message).
+Result: 623 lines (~40% reduction), 6 new/extended modules in components/chat/, with
+3 modules reused verbatim from the chat refactor.
 
 Blocking graph: 1,2,5 → 7 → 8.
 
-- [ ] C1 code-scroll — bottomRef/chatContainerRef/scrollToBottom/showScrollButton + effect → reuse chat/useChatScroll.ts + chat/ScrollToBottom.tsx (green accent prop). Edges: none.
-- [ ] C2 file-attachment — selectedFile/fileInputRef/readFileAsBase64/handleAttachClick/handleFileChange/saveToMemory → chat/useCodeFileUpload.ts + code/FileAttachmentPill.tsx (code has no GCS/base64 split; plain base64 only). Edges: none.
-- [ ] C3 github-repo-context — activeRepo/isRepoModalOpen/linkedRepos/repoIndexed/reindexing/reindexError/reindexActiveRepo/handleGitHubClick/handleRepoIndexComplete + 4 effects → chat/useGithubRepoContext.ts + code/GithubRepoHeader.tsx. Edges: none.
-- [ ] C4 github-consent-modal — isGitHubModalOpen/gitHubAction/handleGitHubActionConfirm. Edges: none. (NOTE: audit whether gitHubAction is dead — it's never set non-null here; confirm before extract-vs-remove.)
-- [ ] C5 memory-count — memoryCount/isMemoryPulsing/fetchMemoryCount + 2 effects → reuse chat/useMemoryInsights.ts + code/MemoryBadge (green variant). Edges: none.
-- [ ] C6 code-context-conversation — codeContext/conversationId/loadCodeContext/bootstrapCodeConversation/save-on-change → chat/useCodeConversation.ts. Edges: none.
-- [ ] C7 streaming-send — messages/userInput/loading/error/showGreeting/handleSendMessage/handleKeyPress → chat/useCodeStream.ts + code/Composer.tsx (messages stays in orchestrator). Edges: C1,C2,C3,C6.
-- [ ] C8 shell-collapse — residual header/mobile-menu/message-list stays in page.tsx as orchestrator; purge orphans + dead state. Edges: all prior.
+- [x] C1 code-scroll — reuse chat/useChatScroll.ts + chat/ScrollToBottom.tsx (added `accent` prop for green). Edges: none.
+- [x] C2 file-attachment — chat/useCodeFileUpload.ts (base64-only + saveToMemory toggle). Edges: none.
+- [x] C3 github-repo-context — chat/useGithubRepoContext.ts + header; WIRED the previously-unwired PATCH persist (latent bug → real persistence). Edges: none.
+- [x] C4 github-consent-modal — RESOLVED AS DEAD-CODE REMOVAL (gitHubAction never set, modal never opened; mirror of chat T4). Edges: none.
+- [x] C5 memory-count — split chat/useMemoryCount.ts out of useMemoryInsights; reuse + MemoryInsights `accent` prop. Edges: none.
+- [x] C6 code-context-conversation — chat/useCodeConversation.ts (parallel profile hydration + row-backed bootstrap + save-on-change). Edges: none.
+- [x] C7 streaming-send — chat/useCodeStream.ts (non-streaming POST /api/code; messages stays in orchestrator; shared `loading` flag kept in orchestrator and injected into both file-upload + stream hooks). Edges: C1,C2,C3,C6.
+- [x] C8 shell-collapse — residual header/mobile-menu/message-list stays in page.tsx as orchestrator; purged 4 placeholder comments + dead state (showContextSheet) + orphaned imports/destructures (CODE_MODELS, setCodeModel, providerKeyState). Edges: all prior.

@@ -23,11 +23,9 @@ import { PersonIcon } from "@radix-ui/react-icons";
 import { ShareIconButton } from "@/components/share-button";
 import { GitHubRepoModal } from "@/components/github-repo-modal";
 
-// ... (keep existing imports)
-
 import { CodeModelProvider, useCodeModel } from "@/contexts/CodeModelContext";
 import { CodeModelToggle } from "@/components/chat/CodeModelToggle";
-import { CODE_MODELS, ProviderKeyState } from "@/lib/llm/codeModels";
+import { ProviderKeyState } from "@/lib/llm/codeModels";
 import { useChatScroll } from "@/components/chat/useChatScroll";
 import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
 import { useCodeFileUpload, CodeSelectedFile } from "@/components/chat/useCodeFileUpload";
@@ -36,8 +34,6 @@ import { useMemoryCount } from "@/components/chat/useMemoryCount";
 import { MemoryInsights } from "@/components/chat/MemoryInsights";
 import { useCodeConversation, CodeContext } from "@/components/chat/useCodeConversation";
 import { useCodeStream } from "@/components/chat/useCodeStream";
-
-// ... (keep existing imports)
 
 // Content Component (Inner)
 
@@ -92,7 +88,7 @@ const CodeBlock = ({ codeString, language }: { codeString: string, language: str
 };
 
 function CodePageContent() {
-  const { codeModel, setCodeModel, providerKeyState, setProviderKeyState } = useCodeModel();
+  const { codeModel, setProviderKeyState } = useCodeModel();
 
   // OpenRouter visibility: refresh configured-provider state from settings API.
   useEffect(() => {
@@ -139,7 +135,6 @@ function CodePageContent() {
   } = useCodeFileUpload(setError, setLoading);
 
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [showContextSheet, setShowContextSheet] = useState(false);
 
   // Memory count badge (C5): reuses the lean count hook (no episodic fetch).
   const { memoryCount, isMemoryPulsing } = useMemoryCount(messages.length);
@@ -170,8 +165,6 @@ function CodePageContent() {
   });
 
   const GREETING_MESSAGE = "Ask me a coding question, debug code, or attach a file for analysis.";
-
-  // ... (keep existing scroll and effect logic)
 
   // Chat scroll management (C1): refs, manual scroll-to-bottom, and
   // "scrolled up" detection that drives the floating ScrollToBottom button.
@@ -338,7 +331,6 @@ function CodePageContent() {
       )}
 
       {/* Main Chat Area */}
-      {/* ... (keep existing chat area) ... */}
       <div ref={chatContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden w-full scroll-smooth">
         <div className="max-w-3xl mx-auto w-full px-4 py-6 md:px-6 min-h-0">
 
