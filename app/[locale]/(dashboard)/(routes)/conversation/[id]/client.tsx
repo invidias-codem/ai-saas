@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, KeyboardEvent, useEffect, useSyncExternalStore } from "react";
+import React, { useState, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import ReactMarkdown from "react-markdown";
@@ -12,18 +12,17 @@ import { FileGateNudge } from "@/components/file-gate-nudge";
 import { useSupportNudge } from "@/hooks/use-support-nudge";
 import { Heading } from "@/components/heading";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 // Note: We are opting for native div scrolling for better mobile behavior, 
 // but keeping the import if you use it elsewhere.
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { AlertCircle, SendHorizontal, X, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
+import { AlertCircle, X, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain, Activity, Wrench } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
 import { ChatBubbleIcon, PersonIcon } from "@radix-ui/react-icons";
 import { submitFeedback } from "@/lib/feedback/submitFeedback";
-import { NeuralArchivalUploader, UploadedDoc } from "@/components/documents/NeuralArchivalUploader";
+import { UploadedDoc } from "@/components/documents/NeuralArchivalUploader";
 import { FileItem } from "@/components/documents/FileItem";
 import { ContextualNudge } from "@/components/workspaces/ContextualNudge";
 import { SyncStatusIndicator } from "@/components/harness/SyncStatusIndicator";
@@ -31,10 +30,11 @@ import { useWorkspaceSyncStatus } from "@/hooks/useWorkspaceSyncStatus";
 import { useChatScroll } from "@/components/chat/useChatScroll";
 import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
 import { useFileUpload, SelectedFile } from "@/components/chat/useFileUpload";
-import { FileAttachmentPanel } from "@/components/chat/FileAttachmentPanel";
 import { useSessionSync } from "@/components/chat/useSessionSync";
 import { useMemoryInsights } from "@/components/chat/useMemoryInsights";
 import { MemoryInsights } from "@/components/chat/MemoryInsights";
+import { useChatStream } from "@/components/chat/useChatStream";
+import { Composer } from "@/components/chat/Composer";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
 import {
@@ -332,10 +332,6 @@ function ConversationPage({
     }
   }, [supabaseMessages]);
 
-  const [userInput, setUserInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [streaming, setStreaming] = useState(false);
-  const [streamingContent, setStreamingContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showContextSheet, setShowContextSheet] = useState(false);
@@ -412,6 +408,35 @@ function ConversationPage({
     onHideGreeting: () => setShowGreeting(false),
   });
 
+  // --- Core streaming pipeline (T6): input + submit + stream parsing ---
+  const {
+    userInput,
+    setUserInput,
+    loading,
+    streaming,
+    streamingContent,
+    handleInputChange,
+    handleSendMessage,
+    handleKeyPress,
+  } = useChatStream({
+    conversationId,
+    userId,
+    agentMode,
+    messages,
+    setMessages,
+    selectedFile,
+    buildFilePayload,
+    clearFile,
+    uploadedDocs,
+    setError,
+    setShowGreeting,
+    setDebugExecutionMode,
+    setDebugIntent,
+    setShowFileGateNudge,
+    openPricingModal,
+    trackActivity,
+  });
+
   // ─── Sync local runtime state to global store for dashboard shell ──────────
   useEffect(() => {
     const store = useRuntimeStore.getState();
@@ -426,127 +451,6 @@ function ConversationPage({
   }, [agentMode, loading, streaming, error, debugExecutionMode, debugIntent]);
 
   // ---------------------------------------------------------------
-
-  const handleSendMessage = async () => {
-    const trimmedInput = userInput.trim();
-    if (!trimmedInput && !selectedFile && uploadedDocs.length === 0) return;
-    if (selectedFile?.isUploading) {
-      setError("Please wait for file upload to complete.");
-      return;
-    }
-
-    setLoading(true); setError(null); setShowGreeting(false);
-
-    let messageText = trimmedInput;
-    if (selectedFile) { messageText += `\n\n[Attached File: ${selectedFile.name} (${selectedFile.type})]`; }
-
-    const userMessage: Message = { text: messageText, role: "user", timestamp: new Date() };
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages); setUserInput("");
-    setStreaming(true);
-    setStreamingContent("");
-
-    // Capture file data before clearing state
-    const filePayload = selectedFile ? buildFilePayload() : undefined;
-
-    const analyzeUploadEndpoint = selectedFile ? "/api/analyze-upload" : "/api/chat";
-    clearFile();
-
-    try {
-      // Dispatcher Call (Fetch with Streaming)
-      const response = await fetch(analyzeUploadEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          conversationId,
-          userId,
-          prompt: messageText,
-          fileData: filePayload,
-          documentIds: uploadedDocs.map(d => d.id), // Send the document IDs reference
-          messages: newMessages.map(m => ({ role: m.role, text: m.text })), // Send history for context
-          mode: agentMode, // Pass the active agent mode
-        })
-      });
-
-      // Clear uploaded docs after successful send
-      // Note: We keep uploadedDocs in state for RAG retrieval on follow-up turns
-      // The conversation engine uses documentIds to retrieve relevant chunks
-      // setUploadedDocs([]);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let accum = "";
-
-      if (reader) {
-        while (!done) {
-          const { value, done: doneReading } = await reader.read();
-          done = doneReading;
-          if (value) {
-            const chunk = decoder.decode(value, { stream: true });
-            accum += chunk;
-            setStreamingContent(prev => prev + chunk);
-          }
-        }
-      }
-
-      // Finalize message
-      const sourcesHeader = response.headers.get("X-Weaver-Sources") || response.headers.get("X-Genie-Sources");
-      let sources: Source[] = [];
-      if (sourcesHeader) {
-        try {
-          sources = JSON.parse(sourcesHeader);
-        } catch (e) {
-          console.error("Failed to parse sources header", e);
-        }
-      }
-
-      const debugExecutionMode = response.headers.get("X-Debug-Execution-Mode") || undefined;
-      const debugIntent = response.headers.get("X-Debug-Intent") || undefined;
-      setDebugExecutionMode(debugExecutionMode);
-      setDebugIntent(debugIntent);
-
-      // Check for pricing nudge trigger from server
-      if (response.headers.get("x-trigger-nudge") === "true") {
-        openPricingModal();
-      }
-
-      // Check for file upload gated — show mobile-friendly donation nudge
-      if (response.headers.get("x-file-gated") === "true") {
-        setShowFileGateNudge(true);
-      }
-
-      const cleanedAccum = accum.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim();
-      setMessages(prev => [...prev, { text: cleanedAccum, role: "bot", timestamp: new Date(), sources }]);
-      setStreamingContent("");
-      setStreaming(false);
-
-    } catch (error: any) {
-      console.error("Error sending message:", error);
-      if (error?.status === 401 || (error.response && error.response.status === 401)) {
-        window.location.href = "/sign-in?redirect_url=" + encodeURIComponent(window.location.pathname);
-        return;
-      }
-      setError(error.message || "Sorry, something went wrong.");
-      setStreaming(false);
-    } finally {
-      setLoading(false);
-      trackActivity("message");
-    }
-  };
-
-  const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
 
   // Modern Typing Indicator (Gemini Sparkle style)
   const TypingIndicator = () => {
@@ -1032,82 +936,24 @@ function ConversationPage({
       {showScrollButton && <ScrollToBottom onClick={scrollToBottom} />}
 
       {/* Input Area - Floating & Glassmorphism */}
-      <div className="flex-none w-full p-4 bg-gradient-to-t from-background via-background to-transparent pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <div className="max-w-3xl mx-auto relative">
-          {/* File Preview Pill + expandable rich preview */}
-          <FileAttachmentPanel
-            selectedFile={selectedFile}
-            showFilePreview={showFilePreview}
-            onTogglePreview={togglePreview}
-            onRemoveFile={removeFile}
-          />
-
-          {/* Input Container */}
-          <div className="relative flex items-end gap-2 bg-muted/40 hover:bg-muted/60 focus-within:bg-background focus-within:ring-2 focus-within:ring-indigo-500/20 border border-border/50 rounded-[26px] p-2 transition-all duration-200 shadow-sm">
-            
-            {/* Left: attachment group (hidden on mobile, shown on desktop) */}
-            <div className="hidden sm:block">
-              <NeuralArchivalUploader 
-                workspaceId={conversationContext.workspaceId || null} 
-                docs={uploadedDocs}
-                setDocs={setUploadedDocs}
-              />
-            </div>
-
-            {/* Mobile: grouped + button for attachments */}
-            <div className="sm:hidden relative">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                className="absolute inset-0 opacity-0 cursor-pointer"
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Plus className="h-5 w-5" />
-              </Button>
-            </div>
-
-            <Textarea
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder={swarmSuggestion || (agentMode === 'agentic' ? t("placeholderAgentic") : agentMode === 'quality' ? t("placeholderQuality") : t("placeholderFast"))}
-              className="flex-1 min-h-[44px] max-h-[200px] border-0 focus-visible:ring-0 resize-none py-3 px-2 bg-transparent text-[15px] placeholder:text-muted-foreground/70 transition-all duration-700"
-              rows={1}
-            />
-
-            {/* Send button — always visible, never pushed off-screen */}
-            <Button
-              onClick={handleSendMessage}
-              disabled={loading || (!userInput.trim() && !selectedFile && uploadedDocs.length === 0)}
-              className={cn(
-                "rounded-full h-9 w-9 shrink-0 transition-all duration-300 shadow-sm",
-                (userInput.trim() || selectedFile || uploadedDocs.length > 0)
-                  ? "bg-indigo-600 hover:bg-indigo-700 text-white scale-100"
-                  : "bg-muted text-muted-foreground opacity-50 scale-95 pointer-events-none"
-              )}
-            >
-              {loading ? (
-                <div className="h-4 w-4 border-2 border-white/50 border-t-white rounded-full animate-spin" />
-              ) : (
-                <SendHorizontal className="h-5 w-5 ml-0.5" />
-              )}
-            </Button>
-          </div>
-          <div className="text-center mt-2">
-            <p className="text-[10px] text-muted-foreground/60">
-              AI can make mistakes. Check important info.
-            </p>
-          </div>
-        </div>
-      </div>
+      <Composer
+        workspaceId={conversationContext.workspaceId}
+        userInput={userInput}
+        loading={loading}
+        agentMode={agentMode}
+        swarmSuggestion={swarmSuggestion}
+        selectedFile={selectedFile}
+        showFilePreview={showFilePreview}
+        fileInputRef={fileInputRef}
+        uploadedDocs={uploadedDocs}
+        setUploadedDocs={setUploadedDocs}
+        handleInputChange={handleInputChange}
+        handleSendMessage={handleSendMessage}
+        handleKeyPress={handleKeyPress}
+        handleFileChange={handleFileChange}
+        togglePreview={togglePreview}
+        removeFile={removeFile}
+      />
     </div>
   );
 }
