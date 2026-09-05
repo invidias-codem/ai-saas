@@ -14,9 +14,8 @@ import { PromotableMemory } from '../memoryPromotion';
 import { Source } from '../ragMemory';
 import { env } from "@/lib/env";
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
-import { GeminiProvider } from "./providers/gemini";
+import { GeminiProvider, AGENTIC_MODEL } from "./providers/gemini";
 import { DeepSeekProvider } from "./providers/deepseek";
-import { NIM_MODEL_KIMI_K3 } from "./providers/nvidiaNim";
 import {
   captureMemory,
   extractTags,
@@ -431,7 +430,12 @@ export async function generateConversationReply(
             promotionRejectionCount: 0,
           };
 
-          const reactResult = await runReActLoop(promptInput, agentContext, registry, NIM_MODEL_KIMI_K3);
+          // The ReAct loop speaks Vertex/Gemini functionCall semantics (see
+          // reactLoop.ts: VertexAI + getToolsForGemini). It must receive a real
+          // Gemini model id — NOT a NIM model string like "moonshotai/kimi-k3".
+          // Regression from #325 (provider purge) which half-migrated this path
+          // and left the loop passing a NIM id into Vertex's getGenerativeModel.
+          const reactResult = await runReActLoop(promptInput, agentContext, registry, AGENTIC_MODEL);
           const isSuccess = reactResult.status === 'success';
 
           // Emit structured media events for any media-tool result in the trajectory,
@@ -470,7 +474,7 @@ export async function generateConversationReply(
       stream,
       sources: [],
       debug: {
-        model: `nvidia-nim/${NIM_MODEL_KIMI_K3}`,
+        model: `gemini/${AGENTIC_MODEL}`,
         userQuery,
       }
     };

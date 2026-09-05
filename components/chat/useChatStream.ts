@@ -5,6 +5,40 @@ import { Source } from "@/components/chat/SourceDisplay";
 import { SelectedFile, FilePayload } from "./useFileUpload";
 import { MediaEnvelope, decodeMediaEvent, ApprovalEnvelope, decodeApprovalEvent } from "@/lib/media/envelope";
 
+/**
+ * Extract the agentic ReAct "donePayload" from an accumulated stream.
+ *
+ * The agentic path (`reactLoop.ts`) enqueues a raw JSON object at the end of the
+ * stream: `{"status":"success","answer":"...","trajectory":[...]}`. This sniffs
+ * for that trailing JSON envelope and returns its `answer` (falling back to
+ * `status`), or null when the stream was plain prose (standard chat path).
+ */
+function extractDonePayload(
+  accum: string
+): { status?: string; answer?: string } | null {
+  const trimmed = accum.trimEnd();
+  if (!trimmed.endsWith("}")) return null;
+
+  // The donePayload is JSON.stringify'd, so it begins with `{"status":`. Find the
+  // last such opening in the tail (thinking text may precede it).
+  const idx = trimmed.lastIndexOf('{"status":');
+  if (idx === -1) return null;
+
+  const candidate = trimmed.slice(idx);
+  try {
+    const parsed = JSON.parse(candidate);
+    if (parsed && typeof parsed === "object" && "answer" in parsed) {
+      return {
+        status: typeof parsed.status === "string" ? parsed.status : undefined,
+        answer: typeof parsed.answer === "string" ? parsed.answer : undefined,
+      };
+    }
+  } catch {
+    // Not a valid JSON envelope — fall through to prose handling.
+  }
+  return null;
+}
+
 /** Minimal message shape the stream pipeline needs (mirrors the client's Message). */
 export interface StreamMessage {
   text: string;
@@ -196,7 +230,17 @@ export function useChatStream({
         }
       }
 
-      const cleanedAccum = accumWithoutMedia
+      // Agentic (ReAct) responses enqueue a terminal JSON "donePayload"
+      // ({ status, answer, trajectory }) rather than streaming prose. Sniff the
+      // trailing JSON envelope and surface only the clean `answer` so the user
+      // never sees raw payload JSON or truncated-manifest noise.
+      let cleanedAccum = accumWithoutMedia;
+      const donePayload = extractDonePayload(accumWithoutMedia);
+      if (donePayload) {
+        cleanedAccum = donePayload.answer ?? donePayload.status ?? '';
+      }
+
+      cleanedAccum = cleanedAccum
         .replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, "")
         .trim();
       setMessages((prev) => [

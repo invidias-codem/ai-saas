@@ -78,7 +78,15 @@ export async function runReActLoop(
   }
 
   const vertexAI = new VertexAI({ project, location, googleAuthOptions });
-  const model = vertexAI.getGenerativeModel({ model: modelName });
+  const model = vertexAI.getGenerativeModel({
+    model: modelName,
+    generationConfig: {
+      // Prevent mid-table/chart truncation on long research answers. The default
+      // output budget was silently cutting markdown tables in half.
+      maxOutputTokens: 16384,
+      temperature: 0.2,
+    },
+  });
 
   const trajectory: TrajectoryStep[] = [];
   let loopCount = 0;
@@ -199,7 +207,10 @@ export async function runReActLoop(
         let outputString = JSON.stringify(execResult.data);
 
         if (outputString.length > 20000) {
-          outputString = outputString.substring(0, 5000) + `... [Truncated ${outputString.length - 5000} chars]`;
+          // Structural-safe truncation: keep 20k chars so data-heavy research
+          // tools (CSV/JSON/table sources) don't starve the model of the rows it
+          // needs to render a full chart/table. Generous headroom over the old 5k.
+          outputString = outputString.substring(0, 20000) + `... [Truncated ${outputString.length - 20000} chars]`;
         }
 
         trajectory[trajectory.length - 1].observation = {
