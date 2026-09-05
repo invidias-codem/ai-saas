@@ -41,6 +41,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# trigger.dev
+.trigger
+
 # build artifacts / local plans
 public/governance/asset-manifest.json
 .hermes/plans/

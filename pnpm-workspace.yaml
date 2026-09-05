@@ -8,6 +8,7 @@ overrides:
   ws: ^8.21.0
 allowBuilds:
   '@clerk/shared': true
+  '@depot/cli': false
   '@firebase/util': true
   '@google/genai': true
   '@parcel/watcher': true

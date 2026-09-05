@@ -118,6 +118,9 @@ export const envSchema = z.object({
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
 
+  // Trigger.dev v3 — Durable sandbox execution + HITL waitpoints
+  TRIGGER_SECRET_KEY: z.string().optional(),
+
   // Observability
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
