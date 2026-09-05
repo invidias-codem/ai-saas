@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Source } from "@/components/chat/SourceDisplay";
 import { SelectedFile, FilePayload } from "./useFileUpload";
-import { MediaEnvelope, decodeMediaEvent, ApprovalEnvelope, decodeApprovalEvent } from "@/lib/media/envelope";
+import { MediaEnvelope, decodeMediaEvent, ApprovalEnvelope, decodeApprovalEvent, ModelSwitchEvent, decodeModelSwitchEvent } from "@/lib/media/envelope";
 
 /** Minimal message shape the stream pipeline needs (mirrors the client's Message). */
 export interface StreamMessage {
@@ -13,6 +13,7 @@ export interface StreamMessage {
   sources?: Source[];
   media?: MediaEnvelope[];
   approvalRequest?: ApprovalEnvelope;
+  modelSwitch?: ModelSwitchEvent;
 }
 
 interface UseChatStreamOptions {
@@ -196,6 +197,18 @@ export function useChatStream({
         }
       }
 
+      // Extract the model-switch sentinel (emitted by the fallback router BEFORE
+      // the fallback stream). Strip it so it does not render as prose; surface it
+      // as structured metadata on the message for an inline transition indicator.
+      let modelSwitch: ModelSwitchEvent | undefined;
+      const modelSwitchMatch = accumWithoutMedia.match(/__MODEL_SWITCH_EVENT__:[^\n]*\n?/);
+      if (modelSwitchMatch) {
+        modelSwitch = decodeModelSwitchEvent(modelSwitchMatch[0].trim()) ?? undefined;
+        if (modelSwitch) {
+          accumWithoutMedia = accumWithoutMedia.replace(/__MODEL_SWITCH_EVENT__:[^\n]*\n?/g, "");
+        }
+      }
+
       const cleanedAccum = accumWithoutMedia
         .replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, "")
         .trim();
@@ -208,6 +221,7 @@ export function useChatStream({
           sources,
           ...(mediaLines.length > 0 ? { media: mediaLines } : {}),
           ...(approvalRequest ? { approvalRequest } : {}),
+          ...(modelSwitch ? { modelSwitch } : {}),
         },
       ]);
       setStreamingContent("");
