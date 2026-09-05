@@ -43,6 +43,10 @@ interface FallbackHop {
   provider: LLMProvider;
   /** True when this hop needs canonical-state translation (different wire format). */
   translate: boolean;
+  /** Env/DB key that gates this hop's availability (for the startup audit). */
+  gatedByKey?: string;
+  /** Whether the hop is actually active given current config (for the audit). */
+  isAvailable: boolean;
 }
 
 function isRetryableStatus(err: unknown): boolean {
@@ -70,6 +74,7 @@ export function buildFallbackChain(
       modelId: primary.modelId,
       provider: primary.provider,
       translate: false, // already in canonical wire shape for the primary
+      isAvailable: true, // primary is always attempted
     },
   ];
 
@@ -82,6 +87,19 @@ export function buildFallbackChain(
       modelId: 'minimax/minimax-m1',
       provider: new MiniMaxM1Provider(),
       translate: true,
+      gatedByKey: 'OPENROUTER_API_KEY',
+      isAvailable: true,
+    });
+  } else if (primary.modelId !== 'minimax/minimax-m1') {
+    // MiniMax hop configured but disabled — surface it in the audit.
+    chain.push({
+      key: 'fallback:minimax-m1',
+      providerId: 'minimax-m1',
+      modelId: 'minimax/minimax-m1',
+      provider: new MiniMaxM1Provider(),
+      translate: true,
+      gatedByKey: 'OPENROUTER_API_KEY',
+      isAvailable: false,
     });
   }
 
@@ -93,10 +111,42 @@ export function buildFallbackChain(
       modelId: 'gemini-2.5-flash',
       provider: new GeminiProvider(),
       translate: true,
+      gatedByKey: 'GOOGLE_API_KEY',
+      isAvailable: Boolean(process.env.GOOGLE_API_KEY),
     });
   }
 
-  return chain;
+  // Audit the FULL configured chain (including disabled hops) so operators see
+  // what *would* be available, then return only the executable (available) hops.
+  auditFallbackChain(chain);
+
+  return chain.filter((hop) => hop.isAvailable);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Startup telemetry audit — fire once per process so operators can spot a
+// missing env/DB key BEFORE a 429 storm forces the issue. Idempotent.
+// ─────────────────────────────────────────────────────────────────────────────
+let auditedChains = new Set<string>();
+
+function auditFallbackChain(chain: FallbackHop[]): void {
+  const signature = chain.map((h) => `${h.providerId}:${h.isAvailable}`).join('|');
+  if (auditedChains.has(signature)) return;
+  auditedChains.add(signature);
+
+  const redisConfigured = Boolean(
+    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+  );
+
+  logger.info('[FallbackRouter] Active execution chain:');
+  chain.forEach((hop, idx) => {
+    const status = hop.isAvailable ? 'ACTIVE' : 'DISABLED';
+    const gate = hop.gatedByKey ? `gated_by=${hop.gatedByKey}` : 'core (ungated)';
+    logger.info(`  hop ${idx + 1}: ${hop.providerId} (${hop.modelId}) — ${status} [${gate}]`);
+  });
+  logger.info(
+    `[FallbackRouter] circuit breaker: ${redisConfigured ? 'upstash-redis (distributed)' : 'local-memory (single-instance)'}`
+  );
 }
 
 /**
@@ -123,7 +173,7 @@ export async function executeWithFallback(params: {
   for (let i = 0; i < chain.length; i++) {
     const hop = chain[i];
 
-    if (!checkCircuit(hop.key)) {
+    if (!(await checkCircuit(hop.key))) {
       perHopErrors.push(`[${hop.providerId}] skipped (circuit open)`);
       continue;
     }
@@ -139,7 +189,7 @@ export async function executeWithFallback(params: {
         maxTokens: options?.maxTokens,
       });
 
-      recordCircuitSuccess(hop.key);
+      await recordCircuitSuccess(hop.key);
 
       if (switched) {
         // Emit the switch sentinel BEFORE the fallback stream so the client toasts,
@@ -192,7 +242,7 @@ export async function executeWithFallback(params: {
         switched: false,
       };
     } catch (err: any) {
-      recordCircuitFailure(hop.key);
+      await recordCircuitFailure(hop.key);
       const errMsg = `[${hop.providerId}] ${err?.message || String(err)}`;
       perHopErrors.push(errMsg);
       logger.warn(`[FallbackRouter] hop failed: ${errMsg}`);
