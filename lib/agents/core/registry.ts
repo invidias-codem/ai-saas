@@ -1,6 +1,7 @@
 
 import { Tool, SecurityPolicy, AgentContext, ToolResult } from './types';
 import { z } from 'zod';
+import { zodToOpenAITools } from './openaiTools';
 import { interceptTool } from '@/lib/ucol/contextFirewall';
 import { sandboxManager, type SandboxExecutionRequest, type SandboxWriteRequest, type SandboxPatchRequest } from '@/lib/execution/sandboxManager';
 import { randomUUID } from 'crypto';
@@ -70,6 +71,14 @@ export class ToolRegistry {
         return [{
             functionDeclarations
         }];
+    }
+
+    /**
+     * Get all tools formatted for OpenAI-compatible providers (NVIDIA NIM /
+     * vLLM). Uses zod-to-json-schema for strict, nested-schema-correct output.
+     */
+    getToolsForOpenAI(): Array<{ type: 'function'; function: { name: string; description: string; parameters: Record<string, unknown> } }> {
+        return zodToOpenAITools(Array.from(this.tools.values()));
     }
 
     /**

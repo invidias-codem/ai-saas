@@ -1,4 +1,5 @@
 import { ChatMessage, CompletionOptions, LLMProvider, StreamResult } from "../types";
+import { foldToolCallDeltas, type NimToolCall } from "../toolCallTypes";
 import { logger } from "@/lib/logger";
 import { nvidiaNimConfig } from "@/lib/env";
 
@@ -47,6 +48,94 @@ export class NvidiaNimProvider implements LLMProvider {
     }
   }
 
+  /**
+   * Non-streaming tool-calling completion (OpenAI-compatible).
+   *
+   * Used by the agentic ReAct loop, which walks a DAG of tool calls and needs
+   * the complete tool_calls set up-front (streaming accumulation can't satisfy
+   * this cleanly). Hits /chat/completions with stream:false, tools, tool_choice.
+   */
+  async chatWithTools(
+    messages: Array<Record<string, unknown>>,
+    params: {
+      systemInstruction?: string;
+      model?: string;
+      tools?: import('../toolCallTypes').NimToolSpec[];
+      tool_choice?: import('../toolCallTypes').NimToolChoice;
+      maxTokens?: number;
+      temperature?: number;
+    } = {}
+  ): Promise<{ content: string; toolCalls: NimToolCall[]; model: string }> {
+    this.assertConfigured();
+    const modelId = params.model || NIM_MODEL_KIMI_K3;
+
+    // Pass messages through as-is (they already follow the OpenAI shape:
+    // role/content/tool_calls/tool_call_id). Normalize a `text` field if present.
+    const formattedMessages = messages.map((msg) => {
+      if (msg.role === 'model') msg.role = 'assistant';
+      if (typeof msg.text === 'string' && msg.content === undefined) {
+        msg.content = msg.text;
+        delete msg.text;
+      }
+      return msg;
+    });
+    if (params.systemInstruction) {
+      formattedMessages.unshift({ role: 'system', content: params.systemInstruction });
+    }
+
+    const body: Record<string, unknown> = {
+      model: modelId,
+      messages: formattedMessages,
+      max_tokens: params.maxTokens ?? 4096,
+      temperature: params.temperature ?? 0.7,
+      top_p: 0.95,
+      stream: false,
+      ...(params.tools?.length ? { tools: params.tools, tool_choice: params.tool_choice ?? "auto" } : {}),
+    };
+
+    const controller = new AbortController();
+    const timeoutMs = Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? 50_000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      clearTimeout(timer);
+      throw new Error(`NVIDIA NIM tool-call request failed: ${err?.message ?? String(err)}`);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      const trimmed = errText.slice(0, 500);
+      const isDegraded = response.status === 400 && trimmed.includes('DEGRADED');
+      throw new Error(`NVIDIA NIM tool-call error (${response.status})${isDegraded ? ' [DEGRADED]' : ''}: ${trimmed}`);
+    }
+
+    const json = await response.json().catch(() => null);
+    const message = json?.choices?.[0]?.message ?? {};
+    const content: string = message.content ?? '';
+    const toolCalls: NimToolCall[] = Array.isArray(message.tool_calls)
+      ? message.tool_calls.map((tc: any) => ({
+          id: tc.id ?? '',
+          type: 'function',
+          function: { name: tc.function?.name ?? '', arguments: tc.function?.arguments ?? '{}' },
+        }))
+      : [];
+
+    return { content, toolCalls, model: modelId };
+  }
+
   async generateStream(
     messages: ChatMessage[],
     systemInstruction?: string,
@@ -73,6 +162,12 @@ export class NvidiaNimProvider implements LLMProvider {
       top_p: options.topP ?? 0.95,
       stream: true,
     };
+
+    // Tool-calling (OpenAI-compatible): pass tools + tool_choice when requested.
+    if (options.tools && options.tools.length > 0) {
+      body.tools = options.tools;
+      body.tool_choice = options.tool_choice ?? "auto";
+    }
 
     // Nemotron uses enable_thinking in chat_template_kwargs.
     body.chat_template_kwargs = { enable_thinking: options.includeReasoning === true };
@@ -141,6 +236,7 @@ export class NvidiaNimProvider implements LLMProvider {
     const encoder = new TextEncoder();
     let buffer = '';
     let firstChunk = true;
+    const toolCalls: NimToolCall[] = [];
 
     const stream = new ReadableStream<Uint8Array>({
       async pull(streamController) {
@@ -192,6 +288,17 @@ export class NvidiaNimProvider implements LLMProvider {
               if (delta.content) {
                 streamController.enqueue(encoder.encode(delta.content));
               }
+
+              // Accumulate streaming tool_calls deltas by index (concatenate
+              // name/arguments fragments — OpenAI-compatible providers emit
+              // them across many chunks).
+              if (delta.tool_calls) {
+                const folded = foldToolCallDeltas(toolCalls, delta.tool_calls as any);
+                toolCalls.length = 0;
+                toolCalls.push(...folded);
+                // Note: tool_calls are NOT streamed to the client — they are
+                // surfaced on the StreamResult for the agentic loop to consume.
+              }
             } catch {
               // Ignore partial / malformed chunks — SSE may split across reads.
             }
@@ -210,6 +317,7 @@ export class NvidiaNimProvider implements LLMProvider {
     return {
       stream,
       debug: { model: modelId, provider: this.id, upstreamLatencyMs },
+      ...(toolCalls.length > 0 ? { toolCalls } : {}),
     };
   }
 }
