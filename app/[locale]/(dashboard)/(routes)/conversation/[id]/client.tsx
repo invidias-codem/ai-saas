@@ -32,7 +32,7 @@ import { Composer } from "@/components/chat/Composer";
 import { RuntimeStatusBar } from "@/components/chat/RuntimeStatusBar";
 import { InlineMediaCard } from "@/components/chat/InlineMediaCard";
 import { MediaApprovalCard } from "@/components/chat/MediaApprovalCard";
-import type { MediaEnvelope, ApprovalEnvelope } from "@/lib/media/envelope";
+import type { MediaEnvelope, ApprovalEnvelope, ModelSwitchEvent } from "@/lib/media/envelope";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
 import { createNewConversation } from "@/lib/conversationManager";
@@ -58,6 +58,7 @@ interface Message {
   sources?: Source[];
   media?: MediaEnvelope[];
   approvalRequest?: ApprovalEnvelope;
+  modelSwitch?: ModelSwitchEvent;
 }
 
 interface ConversationContext {
@@ -796,6 +797,17 @@ function ConversationPage({
                         )}
                       </div>
                       <SourceDisplay sources={msg.sources || []} />
+                      {msg.modelSwitch && (
+                        <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-muted bg-muted/30 px-2 py-1 text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground/80">Model fallback</span>
+                          <span>{msg.modelSwitch.from}</span>
+                          <span aria-hidden>→</span>
+                          <span>{msg.modelSwitch.to}</span>
+                          {msg.modelSwitch.reason ? (
+                            <span className="text-muted-foreground/70">({msg.modelSwitch.reason})</span>
+                          ) : null}
+                        </div>
+                      )}
                       {msg.approvalRequest && (
                         <MediaApprovalCard
                           approvalRequest={msg.approvalRequest}

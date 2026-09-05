@@ -904,16 +904,36 @@ export async function generateConversationReply(
     try { trace?.update(patch); } catch {}
   };
   try {
-    streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
-      model: actualModelId,
-      temperature: 0.9,
-      maxTokens: 2048,
+    const { executeWithFallback } = await import('@/lib/llm/routing/fallbackRouter');
+    const fallbackResult = await executeWithFallback({
+      primary: {
+        providerId: providerResolution.providerId,
+        modelId: actualModelId,
+        provider,
+      },
+      messages: history,
+      systemInstruction: enhancedSystemInstruction,
+      options: { temperature: 0.9, maxTokens: 2048 },
+      enableMiniMax: true,
     });
+
+    streamResult = fallbackResult;
+    // Persist the actual serving model so downstream side-effects, telemetry,
+    // and the client-facing headers reflect the real (possibly fallback) model.
+    if (fallbackResult.switched) {
+      actualModelId = fallbackResult.actualModelId;
+      console.warn(
+        `[ConversationEngine] Fallback engaged: ${fallbackResult.previousModelId} → ${fallbackResult.actualModelId} (${fallbackResult.systemProvider})`
+      );
+    }
     try {
       updateTrace({
         metadata: {
           completionStatus: 'streaming',
           model: actualModelId,
+          ...(fallbackResult.switched
+            ? { fallbackFrom: fallbackResult.previousModelId, switched: true }
+            : {}),
         },
       });
     } catch {}
@@ -921,42 +941,28 @@ export async function generateConversationReply(
     try {
       updateTrace({ metadata: { error: err?.message || String(err) } });
     } catch {}
-    const isRateLimit = err?.status === 429 || String(err).includes('429');
-    const isAbortTimeout = String(err).includes('This operation was aborted') || String(err).includes('AbortError');
-    const isProviderDown = String(err).includes('1033') || String(err).includes('Tunnel') || String(err).includes('530') || (err?.status && err.status >= 500);
-    const isDegraded = err?.status === 400 && String(err?.message || err).includes('DEGRADED');
 
-    if (isRateLimit || isAbortTimeout) {
-      console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to Gemini`);
-      const { GeminiProvider } = await import('./providers/gemini');
-      const fallbackProvider = new GeminiProvider();
-      actualModelId = 'gemini-2.5-flash';
-      streamResult = await fallbackProvider.generateStream(history, enhancedSystemInstruction, {
+    // Fallback chain exhausted — surface a graceful degradation message stream
+    // rather than a hard 500, so the client's streaming reader still consumes a body.
+    console.error(`[ConversationEngine] All providers exhausted: ${err?.message || String(err)}`);
+    const textEncoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          textEncoder.encode('The AI provider is temporarily unavailable. Please try again in a few minutes.')
+        );
+        controller.close();
+      },
+    });
+    return {
+      stream,
+      sources: [],
+      debug: {
         model: actualModelId,
-        temperature: 0.9,
-        maxTokens: 2048,
-      });
-    } else if (isProviderDown || isDegraded) {
-      console.error(`[ConversationEngine] Provider ${actualModelId} unavailable${isDegraded ? ' (DEGRADED)' : ''}: ${err?.message || String(err)}`);
-      const textEncoder = new TextEncoder();
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(textEncoder.encode('The AI provider is temporarily unavailable. Please try again in a few minutes.'));
-          controller.close();
-        },
-      });
-      return {
-        stream,
-        sources: [],
-        debug: {
-          model: actualModelId,
-          userQuery,
-          error: isDegraded ? 'provider_degraded' : 'provider_unavailable',
-        },
-      };
-    } else {
-      throw err;
-    }
+        userQuery,
+        error: 'all_providers_exhausted',
+      },
+    };
   }
 
   // ── Sovereign telemetry: emit UDIF 2.0 interaction-audit (non-blocking) ──
