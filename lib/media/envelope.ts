@@ -62,3 +62,35 @@ export function decodeApprovalEvent(line: string): ApprovalEnvelope | null {
     return null;
   }
 }
+
+/* ─────────────────────── Model-switch system event ─────────────────────── */
+
+export interface ModelSwitchEvent {
+  /** Model id we fell back FROM. */
+  from: string;
+  /** Model id now serving the stream. */
+  to: string;
+  /** Provider id of the serving model. */
+  provider?: string;
+  /** Short reason: rate limit / circuit open / degraded / provider down. */
+  reason?: string;
+  /** Epoch ms when the switch was emitted. */
+  ts?: number;
+}
+
+export const MODEL_SWITCH_EVENT_PREFIX = '__MODEL_SWITCH_EVENT__:';
+
+export function encodeModelSwitchEvent(ev: ModelSwitchEvent): string {
+  return `${MODEL_SWITCH_EVENT_PREFIX}${JSON.stringify({ ...ev, ts: ev.ts ?? Date.now() })}\n`;
+}
+
+/** Decode a model-switch sentinel line (caller already stripped the leading whitespace). */
+export function decodeModelSwitchEvent(line: string): ModelSwitchEvent | null {
+  const idx = line.indexOf(MODEL_SWITCH_EVENT_PREFIX);
+  if (idx === -1) return null;
+  try {
+    return JSON.parse(line.slice(idx + MODEL_SWITCH_EVENT_PREFIX.length)) as ModelSwitchEvent;
+  } catch {
+    return null;
+  }
+}
