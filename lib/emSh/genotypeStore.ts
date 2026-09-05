@@ -19,11 +19,33 @@ function assertAdmin(): NonNullable<typeof supabaseAdmin> {
   return supabaseAdmin;
 }
 
+/**
+ * Dual-Rail Embedding Adapter (write path).
+ *
+ * The embedding layer produces 3072-dim vectors (gemini-embedding-2-preview),
+ * but `genotypes.intent_embedding` is `vector(768)`. Abstract execution DAGs
+ * and intent signatures don't need 3,000 dimensions of semantic nuance — they
+ * need a fast, low-latency, cluster-focused vector space (small ivfflat index,
+ * single-digit-ms cosine over thousands of DAGs).
+ *
+ * Matryoshka Representation Learning (MRL): for MRL-trained embedders the
+ * leading 768 dims retain most semantic structure, so slicing to (0,768) is a
+ * zero-cost, low-loss projection — no second model call. (For non-MRL models the
+ * slice is still a functional adapter, just not guaranteed near-lossless.)
+ */
+function projectTo768Dimensions(embedding?: number[] | null): number[] | null {
+  if (!embedding || embedding.length === 0) return null;
+  return embedding.length > 768 ? embedding.slice(0, 768) : embedding;
+}
+
 /** Insert or update a genotype, returning its id (null on failure). */
 export async function upsertGenotype(
   g: GenotypeRecord
 ): Promise<string | null> {
   const admin = assertAdmin();
+  // Dual-rail projection: any >768-dim vector is truncated to the genotype lane.
+  const projectedEmbedding = projectTo768Dimensions(g.intentEmbedding);
+
   const { data, error } = await admin
     .from('genotypes')
     .upsert(
@@ -31,7 +53,7 @@ export async function upsertGenotype(
         id: g.id,
         workspace_id: g.workspaceId ?? null,
         intent_signature: g.intentSignature,
-        intent_embedding: g.intentEmbedding ?? null,
+        intent_embedding: projectedEmbedding,
         abstract_dag: g.abstractDag,
         fitness_score: g.fitnessScore,
         execution_count: g.executionCount,

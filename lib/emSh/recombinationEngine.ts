@@ -226,3 +226,60 @@ function renderStrategyPrompt(p: {
   }
   return lines.join('\n');
 }
+
+/**
+ * Dual-Rail Embedding Adapter (read path).
+ *
+ * The live query embedding is 3072-dim (Gemini) while stored genotype vectors
+ * are 768-dim. Project the query to (0,768) before cosine matching so it lines
+ * up with the `match_genotypes` RPC (which assumes both are 768-dim).
+ */
+function projectQueryTo768(rawQueryEmbedding: number[]): number[] {
+  return rawQueryEmbedding.length > 768
+    ? rawQueryEmbedding.slice(0, 768)
+    : rawQueryEmbedding;
+}
+
+export interface VectorGenotypeMatch {
+  id: string;
+  intentSignature: string;
+  fitnessScore: number;
+  similarity: number;
+}
+
+/**
+ * Vector-recall path: find genotypes whose intent embedding is cosine-similar
+ * to the (3072-dim) query embedding, after projecting to the 768-dim genotype
+ * lane. Falls back to an empty list on RPC error — callers should then rely on
+ * the signature-based path in `synthesizeStrategy`.
+ */
+export async function findSimilarGenotypes(
+  rawQueryEmbedding: number[],
+  workspaceId: string | null,
+  opts: { matchThreshold?: number; matchCount?: number } = {}
+): Promise<VectorGenotypeMatch[]> {
+  const { matchThreshold = 0.85, matchCount = 5 } = opts;
+  const projected = projectQueryTo768(rawQueryEmbedding);
+
+  const { supabaseAdmin } = await import('@/lib/supabaseClient');
+  if (!supabaseAdmin) return [];
+
+  const { data, error } = await supabaseAdmin.rpc('match_genotypes', {
+    query_embedding: projected,
+    target_workspace_id: workspaceId ?? null,
+    match_threshold: matchThreshold,
+    match_count: matchCount,
+  });
+
+  if (error) {
+    console.warn('[EMSH Engine] Vector recall failed — fallback to signature matching:', error.message);
+    return [];
+  }
+
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    intentSignature: row.intent_signature,
+    fitnessScore: row.fitness_score,
+    similarity: row.similarity,
+  }));
+}
