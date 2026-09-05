@@ -180,11 +180,26 @@ export async function runReActLoop(
         };
         if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
 
-        // Register the paused tool so a follow-up approve/deny can resume it.
-        const { registerPausedTool } = await import('./approvalStore');
-        // The tool is guaranteed present in the registry (it was just invoked).
-        const pausedTool = registry.getTool(toolName)!;
-        const approvalId = registerPausedTool(toolName, toolArgs, context, pausedTool);
+        // Register the paused tool DURABLY so a follow-up approve/deny can
+        // resume it even after a serverless cold start. We persist only the
+        // serializable subset of the context; the resume route re-hydrates the
+        // tool by name from the stable agentic tool set.
+        const { registerDurableApproval } = await import('@/lib/execution/durableApprovalStore');
+        const approvalId = await registerDurableApproval({
+          userId: context.userId,
+          toolName,
+          workspaceId: context.workspaceId ?? null,
+          input: toolArgs,
+          context: {
+            userId: context.userId,
+            sessionId: context.sessionId,
+            workspaceId: context.workspaceId ?? null,
+            userRole: context.userRole,
+            orgContext: context.orgContext,
+            history: context.history,
+            enableTelemetry: context.enableTelemetry,
+          },
+        });
 
         return {
           answer: "I need your approval to proceed with this action.",
