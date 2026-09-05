@@ -431,6 +431,29 @@ export async function generateConversationReply(
             promotionRejectionCount: 0,
           };
 
+          // ── Trigger.dev durable offload (best-effort, non-blocking) ──────────
+          // When Trigger.dev is configured, kindle the durable `agent-loop` task
+          // alongside the inline run. The inline path remains authoritative for
+          // the current request; the durable run exists for long-horizon / HITL
+          // scenarios that exceed serverless limits. Guarded by env so it is a
+          // no-op until TRIGGER_SECRET_KEY is provisioned.
+          void (async () => {
+            try {
+              const { dispatchAgentLoopToTrigger } = await import('@/lib/trigger/dispatch');
+              await dispatchAgentLoopToTrigger({
+                userId,
+                workspaceId: parsed.workspaceId!,
+                conversationId: conversationId ?? undefined,
+                userQuery: sanitizedQuery,
+                modelName: NIM_MODEL_KIMI_K3,
+                mode: 'agentic',
+              });
+            } catch (err) {
+              console.warn('[Trigger.dev] offload dispatch skipped:', err);
+            }
+          })();
+          // ─────────────────────────────────────────────────────────────────────
+
           const reactResult = await runReActLoop(promptInput, agentContext, registry, NIM_MODEL_KIMI_K3);
           const isSuccess = reactResult.status === 'success';
 

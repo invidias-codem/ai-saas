@@ -12,7 +12,10 @@
     "lib/**/*.ts",
     "lib/**/*.tsx",
     "components/**/*.ts",
-    "components/**/*.tsx"
+    "components/**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "trigger.config.ts"
   ],
   "exclude": [
     ".next",
