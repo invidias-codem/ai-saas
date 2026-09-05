@@ -14,7 +14,7 @@ import { PromotableMemory } from '../memoryPromotion';
 import { Source } from '../ragMemory';
 import { env } from "@/lib/env";
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
-import { GeminiProvider } from "./providers/gemini";
+import { GeminiProvider, AGENTIC_MODEL } from "./providers/gemini";
 import { DeepSeekProvider } from "./providers/deepseek";
 import { NIM_MODEL_KIMI_K3 } from "./providers/nvidiaNim";
 import {
@@ -202,6 +202,7 @@ export async function generateConversationReply(
   // ---------------------------------------------------------
   if (agentMode === 'agentic') {
     const { runReActLoop } = await import('@/lib/agents/core/reactLoop');
+    const { runNimReactLoop } = await import('@/lib/agents/core/nimReactLoop');
     const { ToolRegistry } = await import('@/lib/agents/core/registry');
     const { dealSentinelTool } = await import('@/lib/agents/tools/dealSentinel');
     const { webSearchTool } = await import('@/lib/agents/tools/webSearch');
@@ -431,7 +432,7 @@ export async function generateConversationReply(
             promotionRejectionCount: 0,
           };
 
-          // ── Trigger.dev durable offload (best-effort, non-blocking) ──────────
+// ── Trigger.dev durable offload (best-effort, non-blocking) ──────────
           // When Trigger.dev is configured, kindle the durable `agent-loop` task
           // alongside the inline run. The inline path remains authoritative for
           // the current request; the durable run exists for long-horizon / HITL
@@ -454,7 +455,33 @@ export async function generateConversationReply(
           })();
           // ─────────────────────────────────────────────────────────────────────
 
-          const reactResult = await runReActLoop(promptInput, agentContext, registry, NIM_MODEL_KIMI_K3);
+          // ── Tool-calling route: NIM (OpenAI-compatible) vs Gemini Vertex ──────
+          // NIM (Kimi K3) is the resolved agentic provider. Use the NIM ReAct
+          // loop for text queries when NIM is configured; fall back to the
+          // Gemini Vertex loop for multimodal (attachment-bearing) queries,
+          // which NIM's text-only models cannot serve.
+          const nimConfigured = Boolean(
+            (await import('@/lib/env')).nvidiaNimConfig()?.apiKey
+          );
+          const useNimLoop = nimConfigured && typeof promptInput === 'string';
+
+          let reactResult;
+          if (useNimLoop) {
+            reactResult = await runNimReactLoop(
+              sanitizedQuery,
+              agentContext,
+              registry,
+              NIM_MODEL_KIMI_K3,
+            );
+          } else {
+            // Gemini Vertex fallback (multimodal or NIM-unconfigured).
+            reactResult = await runReActLoop(
+              promptInput,
+              agentContext,
+              registry,
+              AGENTIC_MODEL,
+            );
+          }
           const isSuccess = reactResult.status === 'success';
 
           // Emit structured media events for any media-tool result in the trajectory,

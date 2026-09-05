@@ -22,7 +22,7 @@ function getGenAI(apiKeyOverride?: string): GoogleGenerativeAI {
 }
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
-const AGENTIC_MODEL = "gemini-3-flash-preview";
+export const AGENTIC_MODEL = "gemini-3-flash-preview";
 
 export class GeminiProvider implements LLMProvider {
     id = "gemini";

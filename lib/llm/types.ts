@@ -59,12 +59,18 @@ export interface CompletionOptions {
     stream?: boolean;
     signal?: AbortSignal;
     responseMimeType?: string;
+    /** OpenAI-compatible tool declarations (NIM/vLLM). Ignored by text-only providers. */
+    tools?: import('./toolCallTypes').NimToolSpec[];
+    /** OpenAI-compatible tool choice. Ignored by text-only providers. */
+    tool_choice?: import('./toolCallTypes').NimToolChoice;
 }
 
 export interface StreamResult {
     stream: ReadableStream;
     debug?: any;
     thoughtSignaturePromise?: Promise<string | null>;
+    /** Accumulated tool calls (OpenAI-compatible providers) — undefined for text-only providers. */
+    toolCalls?: import('./toolCallTypes').NimToolCall[];
 }
 
 export interface LLMProvider {
