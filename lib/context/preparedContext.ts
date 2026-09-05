@@ -48,6 +48,7 @@ export type PreparedContextSections = {
   searchContext: string;
   memoryContext: string;
   attachedDocumentContext?: string;
+  strategyContext?: string;
 };
 
 export type PreparedContextReadEnforcement = {
@@ -311,6 +312,28 @@ export async function prepareContextBundle(args: {
     attachedDocumentContext = await getAttachedDocumentContext(userQuery, workspaceId, documentIds);
   }
 
+  // ── EMSH Strategy Synthesis (non-blocking, cold-start safe) ──────────────
+  // Query high-fitness genotypes matching this intent and synthesize a reusable
+  // operating strategy. Fenced by a short timeout so a cold/empty genotypes table
+  // (or a slow Supabase round-trip) never adds latency to the chat hot path.
+  let strategyContext = '';
+  if (!effectivelyDisabled) {
+    try {
+      const { synthesizeStrategy } = await import('@/lib/emSh/recombinationEngine');
+      const strategy = await Promise.race([
+        synthesizeStrategy({ userQuery, workspaceId }),
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), 1500)
+        ),
+      ]);
+      if (strategy && strategy.prompt) {
+        strategyContext = `${strategy.prompt}\n`;
+      }
+    } catch (e: any) {
+      console.warn('[PreparedContext] Strategy synthesis skipped (non-blocking):', e?.message || e);
+    }
+  }
+
   return {
     userContext,
     sections: {
@@ -321,6 +344,7 @@ export async function prepareContextBundle(args: {
       searchContext,
       memoryContext: [memoryContext, workspaceMemoryContext].filter(Boolean).join('\n\n'),
       attachedDocumentContext,
+      strategyContext,
     },
     raw: {
       allFacts,
@@ -351,12 +375,13 @@ export function layoutPromptContext(
 ): PromptLayoutResult {
   const candidates: PromptSection[] = [
     createPromptSection('userContextPrompt', 'User Context', sections.userContextPrompt, 100, true),
-    createPromptSection('userProfileContext', 'User Profile', sections.userProfileContext, 90),
+    createPromptSection('attachedDocumentContext', 'Attached Documents', sections.attachedDocumentContext || '', 98),
+    createPromptSection('strategyContext', 'Operating Strategy', sections.strategyContext || '', 92),
     createPromptSection('factContext', 'Fact Context', sections.factContext, 95),
+    createPromptSection('userProfileContext', 'User Profile', sections.userProfileContext, 90),
     createPromptSection('graphContext', 'Graph Context', sections.graphContext, 80),
     createPromptSection('searchContext', 'Search Context', sections.searchContext, 60),
     createPromptSection('memoryContext', 'Memory Context', sections.memoryContext, 85),
-    createPromptSection('attachedDocumentContext', 'Attached Documents', sections.attachedDocumentContext || '', 98),
   ].filter((section) => section.text && section.text.trim().length > 0);
 
   const includedSections: PromptSection[] = [];
