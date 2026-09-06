@@ -145,6 +145,10 @@ export const envSchema = z.object({
   LATTICE_NIM_CLOUD_API_KEY: z.string().optional(),
   LATTICE_NIM_EMBED_MODEL: z.string().optional().default('nvidia/nv-embedqa-e5-v5'),
   LATTICE_NIM_EMBED_DIM: z.coerce.number().optional().default(1024),
+  // Embedding request timeout (ms). Aligned to the LLM providers' 50s so embedding
+  // calls fast-fail before Vercel winds down a post-response function, letting
+  // withRetry() reuse the remaining budget instead of silently dropping memory.
+  NIM_EMBEDDING_TIMEOUT_MS: z.coerce.number().optional().default(50_000),
 
   // Billing / Payment
   PAYPAL_CLIENT_ID: z.string().optional(),

@@ -158,7 +158,11 @@ export async function embedBatch(
 
     const result = await withRetry(async () => {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), opts?.timeoutMs ?? 120_000);
+      // Aligned to 50s (was 120s): an embedding still pending past 50s will never
+      // complete under Vercel's post-response wind-down, so fast-fail and let
+      // withRetry() reuse the remaining budget instead of silently dropping memory.
+      const timeoutMs = opts?.timeoutMs ?? env.NIM_EMBEDDING_TIMEOUT_MS ?? 50_000;
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const res = await fetch(`${url.replace(/\/$/, '')}/embeddings`, {
           method: 'POST',
