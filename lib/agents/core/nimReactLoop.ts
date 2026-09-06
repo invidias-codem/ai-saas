@@ -196,7 +196,10 @@ export async function runNimReactLoop(
         consecutiveFailures = 0;
         let outputString = JSON.stringify(execResult.data);
         if (outputString.length > 20000) {
-          outputString = outputString.substring(0, 5000) + `... [Truncated ${outputString.length - 5000} chars]`;
+          // Structural-safe truncation: keep 20k chars so data-heavy research
+          // tools (CSV/JSON/table sources) don't starve the model of rows it
+          // needs to render a full chart/table.
+          outputString = outputString.substring(0, 20000) + `... [Truncated ${outputString.length - 20000} chars]`;
         }
         trajectory[trajectory.length - 1].observation = { status: 'success', data: execResult.data };
         if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
