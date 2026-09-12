@@ -15,6 +15,15 @@ export interface NimChatResult {
   upstreamLatencyMs?: number;
 }
 
+export interface NimChatOptions {
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'max';
+  /** Per-call timeout (ms). Falls back to NIM_REQUEST_TIMEOUT_MS, then 50s. */
+  timeoutMs?: number;
+}
+
 /**
  * Non-streaming completion straight to NVIDIA NIM /chat/completions.
  *
@@ -25,7 +34,7 @@ export interface NimChatResult {
 export async function nimChat(
   systemPrompt: string,
   userPrompt: string,
-  opts: { model?: string; temperature?: number; maxTokens?: number; reasoningEffort?: 'low' | 'medium' | 'high' | 'max' } = {}
+  opts: NimChatOptions = {}
 ): Promise<NimChatResult> {
   const cfg = nvidiaNimConfig();
   if (!cfg) {
@@ -49,19 +58,17 @@ export async function nimChat(
 
   const started = Date.now();
 
-  // Collapse malformed NIM_REQUEST_TIMEOUT_MS to the default: a zero, negative,
-  // or NaN value would otherwise schedule an immediate abort and kill every build.
-  const rawTimeout = Number(process.env.NIM_REQUEST_TIMEOUT_MS);
+  // Collapse malformed values to the default: a zero, negative, or NaN timeout
+  // would otherwise schedule an immediate abort and kill every build.
+  const rawTimeout = Number(opts.timeoutMs ?? process.env.NIM_REQUEST_TIMEOUT_MS);
   const timeoutMs = Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : DEFAULT_TIMEOUT_MS;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  let response: Response;
   let text = '';
-  const upstreamLatencyMs = () => Date.now() - started;
   try {
-    response = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    const response = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -71,22 +78,24 @@ export async function nimChat(
       signal: controller.signal,
     });
 
+    const errText = response.ok ? '' : await response.text().catch(() => '');
+
     if (!response.ok) {
-      const errText = await response.text().catch(() => '');
       logger.error('[nimChat] NIM error', {
         model: modelId,
         status: response.status,
-        totalLatencyMs: upstreamLatencyMs(),
+        totalLatencyMs: Date.now() - started,
         error: errText.slice(0, 500),
       });
-      throw new Error(`[NIM] error ${response.status}: ${errText.slice(0,500)} (total=${upstreamLatencyMs()}ms)`);
+      throw new Error(`[NIM] error ${response.status}: ${errText.slice(0,500)} (total=${Date.now() - started}ms)`);
     }
 
-    const json = await response.json().catch(() => null);
+    // Do NOT swallow aborts here: if the body read is aborted (timeout fired
+    // mid-consumption), `.catch(() => null)` would mask it as an empty success.
+    const json = await response.json();
     text = json?.choices?.[0]?.message?.content ?? '';
   } catch (err: any) {
-    clearTimeout(timer);
-    const latencyMs = upstreamLatencyMs();
+    const latencyMs = Date.now() - started;
     const isTimeout = err?.name === 'AbortError' || String(err?.message || err).includes('aborted');
     if (isTimeout) {
       logger.error('[nimChat] request timed out', {
@@ -96,19 +105,19 @@ export async function nimChat(
       });
       throw new Error(`[NIM] request timed out (timeout=${timeoutMs}ms, total=${latencyMs}ms)`);
     }
-    // Non-timeout failures surfaced the same way; the HTTP-error path above
-    // already logged and rethrew with a `[NIM] error` prefix.
+    // Non-timeout failures (network, HTTP error already logged+rethrown above).
     throw err;
   } finally {
     clearTimeout(timer);
   }
 
+  const latencyMs = Date.now() - started;
   logger.info('[nimChat] completed', {
     model: modelId,
-    totalLatencyMs: upstreamLatencyMs(),
+    totalLatencyMs: latencyMs,
   });
 
-  return { text, model: modelId, upstreamLatencyMs: upstreamLatencyMs() };
+  return { text, model: modelId, upstreamLatencyMs: latencyMs };
 }
 
 export { NIM_MODEL_KIMI_K3 };

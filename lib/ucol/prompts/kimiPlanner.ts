@@ -50,6 +50,7 @@ export async function generatePlan(contextPackage: ContextPackage, providerKeys:
         temperature: 0.7,
         maxTokens: 16384,
         reasoningEffort: 'high',
+        timeoutMs: 90_000,
     });
 
     return parseAndValidatePlan(text);
