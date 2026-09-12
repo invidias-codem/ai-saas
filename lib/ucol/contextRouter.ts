@@ -41,9 +41,10 @@ const MAX_REVIEW_ATTEMPTS = 3;
 const SIMILARITY_THRESHOLD = 0.95;
 const ORIGINALITY_THRESHOLD = 4;
 const PRAGMATISM_THRESHOLD = 5;
-const COMPONENT_TIMEOUT_MS = 25_000;
-// Kimi K3 on NVIDIA NIM routinely takes 30-60s for a full component.
-const PROVIDER_TIMEOUT_MS = 90_000;
+const COMPONENT_TIMEOUT_MS = 25_000; // unused; kept for reference
+// Kimi K3 on NVIDIA NIM routinely takes 30-60s for a full component; the
+// 16k-token coder path can exceed 90s. Budget under the 300s Vercel ceiling.
+const PROVIDER_TIMEOUT_MS = 240_000;
 
 // ── Constraint Tracking ──────────────────────────────────────────────────────
 // Prevents ping-ponging between opposing constraints by tracking which
