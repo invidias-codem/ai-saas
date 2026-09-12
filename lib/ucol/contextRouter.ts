@@ -176,14 +176,16 @@ export class ContextRouter {
         const allFiles: GeneratedFile[] = [];
 
         for (const tier of tiers) {
-            const tierResults = await Promise.all(
-                tier.map(component => {
-                    const deps = allFiles.filter(f =>
-                        component.dependencies.includes(f.component)
-                    );
-                    return this.generateAndReviewComponent(component, plan, deps, session, fast);
-                })
-            );
+            // Serialize within a tier: components share one NVIDIA NIM key, and
+            // concurrent coder/reviewer calls burst past the rate limit (429).
+            // Build each component in turn; results are still topologically flat.
+            const tierResults: GeneratedFile[][] = [];
+            for (const component of tier) {
+                const deps = allFiles.filter(f =>
+                    component.dependencies.includes(f.component)
+                );
+                tierResults.push(await this.generateAndReviewComponent(component, plan, deps, session, fast));
+            }
 
             for (const files of tierResults) {
                 allFiles.push(...files);
@@ -428,17 +430,27 @@ export class ContextRouter {
                     previousReviews: feedbackHistory,
                 });
             } catch (reviewErr: any) {
-                // Reviewer hard-fail: code did NOT pass the gate. Do not ship unverified code.
+                // Reviewer hard-fail: code did NOT pass the gate, OR the provider
+                // throttled/failed (which is NOT a code-quality verdict).
+                const isThrottled =
+                    reviewErr?.name === 'NimProviderError' && reviewErr?.isThrottled;
+                const reason = isThrottled
+                    ? 'NIM provider throttled — could not verify code. Component not shipped.'
+                    : 'Code gate failed — reviewer could not verify code. Component rejected.';
                 this.emitContextFlow({
                     id: crypto.randomUUID(),
                     timestamp: Date.now(),
                     source: 'gemini',
                     target: 'user',
                     action: `✗ ${component.name} — reviewer failed: ${reviewErr.message?.substring(0, 100)}`,
-                    reasoning: 'Code gate failed — reviewer could not verify code. Component rejected.',
+                    reasoning: reason,
                     status: 'error',
                 });
-                throw new Error(`Code gate failed for ${component.name}: ${reviewErr.message}`);
+                throw new Error(
+                    isThrottled
+                        ? `Provider throttled while reviewing ${component.name}: ${reviewErr.message}`
+                        : `Code gate failed for ${component.name}: ${reviewErr.message}`
+                );
             }
 
             // ── Step 3: Novel pattern extraction ──
