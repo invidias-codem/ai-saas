@@ -78,7 +78,7 @@ export async function nimChat(
       signal: controller.signal,
     });
 
-    const errText = response.ok ? '' : await response.text().catch(() => '');
+    const errText = response.ok ? '' : await response.text();
 
     if (!response.ok) {
       logger.error('[nimChat] NIM error', {
