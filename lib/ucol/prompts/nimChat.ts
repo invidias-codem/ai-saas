@@ -7,6 +7,7 @@ import { nvidiaNimConfig } from '@/lib/env';
 import { logger } from '@/lib/logger';
 
 const NIM_MODEL_KIMI_K3 = 'moonshotai/kimi-k3';
+const DEFAULT_TIMEOUT_MS = 50_000;
 
 export interface NimChatResult {
   text: string;
@@ -16,6 +17,10 @@ export interface NimChatResult {
 
 /**
  * Non-streaming completion straight to NVIDIA NIM /chat/completions.
+ *
+ * The abort timer stays armed through body consumption (not just headers), so
+ * a stalled response body can't hold the Code Builder stream open past the
+ * timeout budget.
  */
 export async function nimChat(
   systemPrompt: string,
@@ -44,11 +49,17 @@ export async function nimChat(
 
   const started = Date.now();
 
+  // Collapse malformed NIM_REQUEST_TIMEOUT_MS to the default: a zero, negative,
+  // or NaN value would otherwise schedule an immediate abort and kill every build.
+  const rawTimeout = Number(process.env.NIM_REQUEST_TIMEOUT_MS);
+  const timeoutMs = Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : DEFAULT_TIMEOUT_MS;
+
   const controller = new AbortController();
-  const timeoutMs = Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? 50_000);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
+  let text = '';
+  const upstreamLatencyMs = () => Date.now() - started;
   try {
     response = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
@@ -59,45 +70,45 @@ export async function nimChat(
       body: JSON.stringify(body),
       signal: controller.signal,
     });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      logger.error('[nimChat] NIM error', {
+        model: modelId,
+        status: response.status,
+        totalLatencyMs: upstreamLatencyMs(),
+        error: errText.slice(0, 500),
+      });
+      throw new Error(`[NIM] error ${response.status}: ${errText.slice(0,500)} (total=${upstreamLatencyMs()}ms)`);
+    }
+
+    const json = await response.json().catch(() => null);
+    text = json?.choices?.[0]?.message?.content ?? '';
   } catch (err: any) {
     clearTimeout(timer);
-    const latencyMs = Date.now() - started;
+    const latencyMs = upstreamLatencyMs();
     const isTimeout = err?.name === 'AbortError' || String(err?.message || err).includes('aborted');
-    logger.error('[nimChat] request failed', {
-      model: modelId,
-      totalLatencyMs: latencyMs,
-      isTimeout,
-      error: err?.message || String(err),
-    });
-    throw new Error(
-      `[NIM] request failed${isTimeout ? ` (timeout=${timeoutMs}ms, total=${latencyMs}ms)` : `: ${err?.message ?? String(err)}`}`
-    );
+    if (isTimeout) {
+      logger.error('[nimChat] request timed out', {
+        model: modelId,
+        totalLatencyMs: latencyMs,
+        timeoutMs,
+      });
+      throw new Error(`[NIM] request timed out (timeout=${timeoutMs}ms, total=${latencyMs}ms)`);
+    }
+    // Non-timeout failures surfaced the same way; the HTTP-error path above
+    // already logged and rethrew with a `[NIM] error` prefix.
+    throw err;
   } finally {
     clearTimeout(timer);
   }
 
-  const latencyMs = Date.now() - started;
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => '');
-    logger.error('[nimChat] NIM error', {
-      model: modelId,
-      status: response.status,
-      totalLatencyMs: latencyMs,
-      error: errText.slice(0, 500),
-    });
-    throw new Error(`[NIM] error ${response.status}: ${errText.slice(0,500)} (total=${latencyMs}ms)`);
-  }
-
-  const json = await response.json().catch(() => null);
-  const text = json?.choices?.[0]?.message?.content ?? '';
-
   logger.info('[nimChat] completed', {
     model: modelId,
-    totalLatencyMs: latencyMs,
+    totalLatencyMs: upstreamLatencyMs(),
   });
 
-  return { text, model: modelId, upstreamLatencyMs: latencyMs };
+  return { text, model: modelId, upstreamLatencyMs: upstreamLatencyMs() };
 }
 
 export { NIM_MODEL_KIMI_K3 };
