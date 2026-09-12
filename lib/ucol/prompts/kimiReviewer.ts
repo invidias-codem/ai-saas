@@ -123,6 +123,7 @@ export async function reviewCode(
         temperature: 0.3,
         maxTokens: 8192,
         reasoningEffort: 'high',
+        timeoutMs: 240_000,
     });
 
     const cleaned = sanitizeReviewJson(text);

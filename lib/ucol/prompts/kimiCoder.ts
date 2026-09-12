@@ -162,6 +162,7 @@ export const kimiCoderProvider = {
             temperature: 0.6,
             maxTokens: 8192,
             reasoningEffort: 'high',
+            timeoutMs: 240_000,
         });
 
         return parseGeneratedFiles(text, component.name);

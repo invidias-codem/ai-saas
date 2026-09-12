@@ -50,7 +50,9 @@ export async function generatePlan(contextPackage: ContextPackage, providerKeys:
         temperature: 0.7,
         maxTokens: 16384,
         reasoningEffort: 'high',
-        timeoutMs: 90_000,
+        // 16k tokens + high reasoning routinely exceed 60–90s. Budget the plan
+        // at 240s so it clears comfortably under the 300s Vercel maxDuration.
+        timeoutMs: 240_000,
     });
 
     return parseAndValidatePlan(text);
