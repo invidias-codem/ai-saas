@@ -22,7 +22,10 @@ import type { BuildSession, ContextFlowEntry, GeneratedFile } from '@/lib/ucol/t
 import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
 
 export const runtime = 'nodejs';
-export const maxDuration = 300; // Vercel Pro: 5 min ceiling for streaming SSE
+// Fluid compute now allows up to 1800s. This is a BRIDGE — it stops the 300s
+// bleed while the durable Trigger.dev orchestration lands (see
+// ai/plans/code-builder-durable-factory.md). Not the long-term solution.
+export const maxDuration = 1800;
 
 const CodeBuilderQuerySchema = z.object({
     prompt: z.string().min(1, "Prompt is required").max(5000, "Prompt too long"),
