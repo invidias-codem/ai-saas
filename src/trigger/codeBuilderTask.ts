@@ -2,27 +2,23 @@ import { task } from "@trigger.dev/sdk";
 import { z } from "zod";
 
 /**
- * Durable Code Builder orchestrator root task (Phase 2).
+ * Durable Code Builder orchestrator root task (Phase 2 → Phase 3).
  *
  * Wraps the canonical `runCodeBuilder` engine (lib/ucol/codeBuilderEngine.ts)
  * so the entire plan → generate → review lifecycle runs OUTSIDE the Next.js
  * serverless 300s timeout, in Trigger.dev's cloud runtime (maxDuration 900s).
  *
- * This is NOT a second engine — it is another durable CALLER of the same
- * runCodeBuilder() the SSE path already uses. UCOL stays the orchestration/
- * policy brain; Trigger only owns durable execution.
+ * Phase 3: the task now persists its lifecycle to the durable build store
+ * (lib/code-builder/buildStore.ts) — QUEUED→RUNNING→phase→terminal — so "where
+ * is this build right now?" is answerable independent of the SSE stream or the
+ * worker process. It does NOT persist individual BuilderEvents (that's Phase 4).
  *
- * Cancellation semantics: an AbortSignal cannot be serialized across the
- * Trigger boundary (it's a live DOM/undici object). The task therefore runs
- * progress callbacks as no-ops and does not expose cancellation; cancellation
- * of a durable build is a future concern (Trigger run cancellation + a persisted
- * build status the engine checks between phases). Documented, not implemented.
+ * Cancellation: an AbortSignal cannot serialize across the Trigger boundary;
+ * the task runs a no-op emit. Durable cancellation is a future concern.
  *
- * Operation identity: buildId is the stable logical-build identity (created by
- * the API, deterministic across retries). triggerRunId is the durable-execution
- * identity (Trigger's own run id) and is NEVER the business identity. A retried
- * task with the same buildId must not create a duplicate logical build — see
- * payload schema (buildId required, provided by the caller, not generated here).
+ * Identity: build_id (business identity, from the API) is stable; trigger run id
+ * is execution identity and may change on retry. The store upserts on build_id,
+ * so a retry NEVER mints a second logical build.
  */
 
 export const codeBuilderPayloadSchema = z.object({
@@ -43,41 +39,65 @@ export const codeBuilderTask = task({
   run: async (payload: z.infer<typeof codeBuilderPayloadSchema>) => {
     const { runCodeBuilder } = await import("@/lib/ucol/codeBuilderEngine");
     const { makeBuildSession } = await import("@/lib/ucol/buildSession");
+    const store = await import("@/lib/code-builder/buildStore");
 
-    // Reconstruct a BuildSession on the worker from the serializable payload —
-    // never deserialize live session state. This is the SAME reconstruction a
-    // future durable worker will do once build state is persisted (Phase 3).
-    const session = makeBuildSession({
-      buildId: payload.buildId,
-      requestId: payload.requestId,
-      userId: payload.userId,
-      workspaceId: payload.workspaceId,
-      userPrompt: payload.prompt,
-    });
+    // Note: the Trigger run id is NOT captured here (the SDK's `run` callback has
+    // no context arg in 4.5.16). The API route owns the buildId↔triggerRunId
+    // correlation at dispatch time (tasks.trigger returns a RunHandle with `.id`).
+    // trigger_run_id is therefore set on the build row by the API, not the worker.
 
-    // Progress callback: no-op on the worker. The SSE route owns event fan-out;
-    // Trigger Realtime (Phase 7) will replace this with a real stream.
-    const emit = () => {};
+    try {
+      // QUEUED (written by the API) → RUNNING. Upsert-safe on build_id: a retry
+      // never mints a second logical build.
+      await store.createBuild({
+        buildId: payload.buildId,
+        userId: payload.userId,
+        workspaceId: payload.workspaceId,
+        requestId: payload.requestId,
+        mode: payload.mode,
+        prompt: payload.prompt,
+      });
+      await store.markBuildRunning(payload.buildId, "");
 
-    const result = await runCodeBuilder({
-      buildId: payload.buildId,
-      requestId: payload.requestId,
-      userId: payload.userId,
-      workspaceId: payload.workspaceId,
-      prompt: payload.prompt,
-      mode: payload.mode,
-      emit,
-      installedDependencies: payload.installedDependencies ?? [],
-      session,
-    });
+      const session = makeBuildSession({
+        buildId: payload.buildId,
+        requestId: payload.requestId,
+        userId: payload.userId,
+        workspaceId: payload.workspaceId,
+        userPrompt: payload.prompt,
+      });
 
-    return {
-      status: "success",
-      buildId: payload.buildId,
-      appName: result.plan.appName,
-      componentCount: result.plan.components.length,
-      fileCount: result.files.length,
-      files: result.files.map((f) => ({ path: f.path, language: f.language })),
-    };
+      // No-op emit on the worker; SSE owns event fan-out (Realtime in Phase 7).
+      const emit = () => {};
+
+      await store.updateBuildPhase(payload.buildId, "planning", 10);
+
+      const result = await runCodeBuilder({
+        buildId: payload.buildId,
+        requestId: payload.requestId,
+        userId: payload.userId,
+        workspaceId: payload.workspaceId,
+        prompt: payload.prompt,
+        mode: payload.mode,
+        emit,
+        installedDependencies: payload.installedDependencies ?? [],
+        session,
+      });
+
+      await store.completeBuild(payload.buildId);
+
+      return {
+        status: "success",
+        buildId: payload.buildId,
+        appName: result.plan.appName,
+        componentCount: result.plan.components.length,
+        fileCount: result.files.length,
+        files: result.files.map((f) => ({ path: f.path, language: f.language })),
+      };
+    } catch (err: any) {
+      // Terminal failure, sanitized by the store (strips secrets/stack dumps).
+      await store.failBuild(payload.buildId, "BUILD_FAILED", String(err?.message ?? err)).catch(() => {});
+      throw err;
+    }
   },
 });
