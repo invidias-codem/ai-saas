@@ -99,9 +99,13 @@ CREATE TRIGGER trg_code_builder_builds_touch
 
 -- RLS: user-facing reads are tenant/user scoped. Writes go through service_role.
 ALTER TABLE public.code_builder_builds ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE public.code_builder_builds FROM PUBLIC, anon, authenticated;
+-- Deny writes + deny anon entirely; KEEP table-level SELECT for authenticated so
+-- the row-scoped policy below is reachable (RLS policies refine, they don't grant).
+REVOKE ALL ON TABLE public.code_builder_builds FROM PUBLIC, anon;
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.code_builder_builds FROM authenticated;
 
 -- Users read their own builds (RBAC read path for the future dashboard).
+GRANT SELECT ON TABLE public.code_builder_builds TO authenticated;
 CREATE POLICY "users_read_own_builds" ON public.code_builder_builds
     FOR SELECT
     TO authenticated
