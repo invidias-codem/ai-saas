@@ -1,6 +1,25 @@
 import { tasks } from "@trigger.dev/sdk";
 import { env } from "@/lib/env";
 
+export async function dispatchCodeBuilderToTrigger(args: {
+  buildId: string;
+  requestId: string;
+  userId: string;
+  workspaceId?: string;
+  prompt: string;
+  mode: "fast" | "full";
+  installedDependencies?: string[];
+}): Promise<string | null> {
+  if (!env.TRIGGER_SECRET_KEY) return null;
+  try {
+    const handle = await tasks.trigger("code-builder-orchestrator", args);
+    return handle.id ?? null;
+  } catch (err) {
+    console.warn("[Trigger.dev] code-builder-orchestrator dispatch failed:", err);
+    return null;
+  }
+}
+
 /**
  * Fire-and-forget Trigger.dev dispatch helper.
  *
