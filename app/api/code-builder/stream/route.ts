@@ -22,10 +22,7 @@ import type { BuildSession, ContextFlowEntry, GeneratedFile } from '@/lib/ucol/t
 import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
 
 export const runtime = 'nodejs';
-// Hobby plan hard-caps function duration at 300s (both default AND maximum).
-// 1800s is Pro/Enterprise extended-max (beta) only — declaring it here broke
-// every Vercel build at config validation. 300s is the legal ceiling; the
-// durable Trigger.dev path (Phases 2-3) is what lets Code Builder exceed it.
+// Hobby maximum. Longer Code Builder work runs durably through Trigger.dev.
 export const maxDuration = 300;
 
 const CodeBuilderQuerySchema = z.object({
