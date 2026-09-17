@@ -49,7 +49,7 @@ interface FallbackHop {
   isAvailable: boolean;
 }
 
-function isRetryableStatus(err: unknown): boolean {
+export function isRetryableStatus(err: unknown): boolean {
   const e = err as { status?: number; message?: string };
   const s = e?.status;
   return Boolean(
