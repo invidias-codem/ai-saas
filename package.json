@@ -118,7 +118,7 @@
     "@upstash/redis": "^1.35.3",
     "@vercel/analytics": "^1.6.1",
     "@vercel/blob": "^2.8.0",
-    "@vercel/functions": "^3.3.5",
+    "@vercel/functions": "^3.9.5",
     "@vercel/og": "^0.8.6",
     "@zapier/zapier-sdk": "^0.93.0",
     "ai": "^6.0.193",
