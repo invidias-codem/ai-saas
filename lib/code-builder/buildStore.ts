@@ -100,12 +100,24 @@ export async function createBuild(input: CreateBuildInput): Promise<BuildRow> {
 
   const { data, error } = await supabaseAdmin
     .from('code_builder_builds')
-    .upsert(row, { onConflict: 'build_id' })
+    .upsert(row, { onConflict: 'build_id', ignoreDuplicates: true })
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`[buildStore] createBuild failed: ${error.message}`);
-  return data as BuildRow;
+  if (data) return data as BuildRow;
+
+  // ponytail: ON CONFLICT DO NOTHING returns no row when the buildId already
+  // exists — read the original back untouched. This is the retry/replay path:
+  // the API route owns correlation (trigger_run_id/status/started_at); the
+  // worker must never clobber it (bug exposed by smoke run 8a40c1d5).
+  const { data: existing, error: readError } = await supabaseAdmin
+    .from('code_builder_builds')
+    .select()
+    .eq('build_id', input.buildId)
+    .maybeSingle();
+  if (readError) throw new Error(`[buildStore] createBuild readback failed: ${readError.message}`);
+  return existing as BuildRow;
 }
 
 /** markBuildRunning — QUEUED → RUNNING, stamp trigger_run_id + started_at. */
