@@ -31,9 +31,25 @@ interface DurableBuildStatus {
 
 // Feature flag - use env variable pattern consistent with codebase
 const DURABLE_EXECUTION = process.env.NEXT_PUBLIC_CODE_BUILDER_DURABLE_EXECUTION === 'true';
-
 // localStorage key for active durable build recovery
 const ACTIVE_BUILD_KEY = 'lattice:code-builder:active-build-id';
+
+// Trigger run statuses that mean the run is done (mapped from the relay's
+// product-boundary status event). These include the CRASHED/CANCELED/TIMED_OUT
+// family, which bypass the worker's onFailure hook.
+const TERMINAL_RUN_STATUSES = new Set([
+    'COMPLETED_SUCCESSFULLY',
+    'COMPLETED_WITH_ERRORS',
+    'CANCELED',
+    'CRASHED',
+    'SYSTEM_FAILURE',
+    'EXPIRED',
+    'TIMED_OUT',
+]);
+
+function isTerminalRunStatus(status: unknown): boolean {
+    return typeof status === 'string' && TERMINAL_RUN_STATUSES.has(status);
+}
 
 function getActiveBuildId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -67,12 +83,15 @@ export default function CodeBuilderPage() {
     // the buildId display state lands with Phase 4B (Realtime) if needed.
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const isSubmittingRef = useRef(false);
+    const realtimeSubRef = useRef<{ unsubscribe: () => void } | null>(null);
 
     const stopPolling = useCallback(() => {
         if (pollIntervalRef.current) {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
         }
+        realtimeSubRef.current?.unsubscribe();
+        realtimeSubRef.current = null;
     }, []);
 
     const mapDurablePhase = (status: DurableBuildStatus['status'], dPhase: DurableBuildStatus['phase']): BuildPhase => {
@@ -118,6 +137,39 @@ export default function CodeBuilderPage() {
         }
     }, [stopPolling]);
 
+    // Phase 4B: subscribe to the product relay for the run's terminal signal.
+    // The relay streams Trigger's run lifecycle (server-side; no Trigger
+    // internals reach the browser). Statuses map through the existing
+    // mapDurablePhase machine; per-phase progress stays on polling (Supabase
+    // is the durable state). EventSource auto-reconnects past Vercel's 300s
+    // function cap on the relay — each reconnect replays current run state.
+    // Any failure is non-fatal by design — polling is the fallback backbone.
+    const subscribeRealtime = useCallback(async (buildId: string) => {
+        try {
+            const es = new EventSource(`/api/code-builder/build/${buildId}/events`);
+            realtimeSubRef.current = {
+                unsubscribe: () => es.close(),
+            };
+            es.addEventListener('run-status', (e) => {
+                try {
+                    const { status } = JSON.parse((e as MessageEvent).data);
+                    if (isTerminalRunStatus(status)) {
+                        // Authoritative state lives in Supabase — read it now
+                        // (plus a 5s grace re-read for hook persistence lag).
+                        void pollDurableStatus(buildId);
+                        setTimeout(() => { void pollDurableStatus(buildId); }, 5_000);
+                        es.close();
+                    }
+                } catch { /* malformed event — polling covers it */ }
+            });
+            es.onerror = () => {
+                // EventSource retries on its own; keep poll fallback alive.
+            };
+        } catch (err) {
+            console.warn('[CodeBuilder] Realtime unavailable, polling remains:', err);
+        }
+    }, [pollDurableStatus]);
+
     const handleBuild = useCallback(async (prompt: string) => {
         if (isSubmittingRef.current) return;
         isSubmittingRef.current = true;
@@ -158,6 +210,7 @@ export default function CodeBuilderPage() {
                 pollIntervalRef.current = setInterval(() => {
                     pollDurableStatus(data.buildId);
                 }, 1500); // Poll every 1.5s
+                void subscribeRealtime(data.buildId);
                 
             } else {
                 // Existing SSE path
@@ -223,7 +276,7 @@ export default function CodeBuilderPage() {
         } finally {
             isSubmittingRef.current = false;
         }
-    }, [pollDurableStatus, stopPolling]);
+    }, [pollDurableStatus, stopPolling, subscribeRealtime]);
 
     // Cleanup on unmount
     useEffect(() => {
@@ -258,9 +311,11 @@ export default function CodeBuilderPage() {
                 pollIntervalRef.current = setInterval(() => {
                     pollDurableStatus(activeBuildId);
                 }, 1500);
+                // Deferred: setState happens in the async chain, not the effect body.
+                Promise.resolve().then(() => subscribeRealtime(activeBuildId));
             }
         }
-    }, [pollDurableStatus]);
+    }, [pollDurableStatus, subscribeRealtime]);
 
     return (
         <div className="h-[100dvh] flex flex-col bg-zinc-950 text-zinc-100 overflow-hidden">
