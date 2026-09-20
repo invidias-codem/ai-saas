@@ -49,6 +49,8 @@ export const codeBuilderTask = task({
     try {
       // QUEUED (written by the API) → RUNNING. Upsert-safe on build_id: a retry
       // never mints a second logical build.
+      // The API route already called markBuildRunning with the trigger_run_id.
+      // We do NOT call markBuildRunning here — it would overwrite the correlation.
       await store.createBuild({
         buildId: payload.buildId,
         userId: payload.userId,
@@ -57,7 +59,6 @@ export const codeBuilderTask = task({
         mode: payload.mode,
         prompt: payload.prompt,
       });
-      await store.markBuildRunning(payload.buildId, "");
 
       const session = makeBuildSession({
         buildId: payload.buildId,

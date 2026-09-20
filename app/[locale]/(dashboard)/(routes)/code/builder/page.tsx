@@ -3,16 +3,57 @@
 // Code Builder — UCOL multi-model collaborative app builder.
 // Route: /code/builder
 // Gemini plans → Claude codes → Context Flow visible in real time.
+//
+// Phase 4A: Durable execution behind feature flag
+//   CODE_BUILDER_DURABLE_EXECUTION=true  → POST /build + poll GET /build/[buildId]
+//   CODE_BUILDER_DURABLE_EXECUTION=false → existing SSE /stream path
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { PromptInput } from '../components/PromptInput';
 import { PlanPanel } from '../components/PlanPanel';
 import { CodePanel } from '../components/CodePanel';
 import { ContextFlowVisualizer } from '../components/ContextFlowVisualizer';
 import type { ProjectPlan, GeneratedFile, ContextFlowEntry } from '@/lib/ucol/types';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 
 type BuildPhase = 'idle' | 'planning' | 'coding' | 'done';
+
+interface DurableBuildStatus {
+  buildId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  phase: 'queued' | 'planning' | 'generating' | 'verifying' | 'complete';
+  progress: number;
+  error: { code: string | null; message: string } | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+// Feature flag - use env variable pattern consistent with codebase
+const DURABLE_EXECUTION = process.env.NEXT_PUBLIC_CODE_BUILDER_DURABLE_EXECUTION === 'true';
+
+// localStorage key for active durable build recovery
+const ACTIVE_BUILD_KEY = 'lattice:code-builder:active-build-id';
+
+function getActiveBuildId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(ACTIVE_BUILD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setActiveBuildId(buildId: string | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (buildId) {
+      localStorage.setItem(ACTIVE_BUILD_KEY, buildId);
+    } else {
+      localStorage.removeItem(ACTIVE_BUILD_KEY);
+    }
+  } catch { }
+}
 
 export default function CodeBuilderPage() {
     const [phase, setPhase] = useState<BuildPhase>('idle');
@@ -20,87 +61,188 @@ export default function CodeBuilderPage() {
     const [files, setFiles] = useState<GeneratedFile[]>([]);
     const [contextFlow, setContextFlow] = useState<ContextFlowEntry[]>([]);
     const [error, setError] = useState<string | null>(null);
-    // Mobile: single-panel tab view (< md). Desktop keeps side-by-side.
     const [mobileTab, setMobileTab] = useState<'plan' | 'code'>('plan');
+    
+    // Durable execution state
+    const [durableBuildId, setDurableBuildId] = useState<string | null>(null);
+    const [polling, setPolling] = useState(false);
+    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const isSubmittingRef = useRef(false);
+
+    const stopPolling = useCallback(() => {
+        if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+        }
+        setPolling(false);
+    }, []);
+
+    const mapDurablePhase = (status: DurableBuildStatus['status'], dPhase: DurableBuildStatus['phase']): BuildPhase => {
+        if (status === 'completed') return 'done';
+        if (status === 'failed' || status === 'cancelled') return 'done';
+        if (dPhase === 'planning') return 'planning';
+        if (dPhase === 'generating' || dPhase === 'verifying') return 'coding';
+        if (status === 'running' || status === 'queued') return 'planning';
+        return 'idle';
+    };
+
+    const pollDurableStatus = useCallback(async (buildId: string) => {
+        try {
+            const res = await fetch(`/api/code-builder/build/${buildId}`, {
+                headers: { 'Accept': 'application/json' },
+            });
+            
+            if (!res.ok) {
+                if (res.status === 404) {
+                    stopPolling();
+                    setError('Build not found');
+                    setPhase('done');
+                }
+                return;
+            }
+            
+            const data: DurableBuildStatus = await res.json();
+            setPhase(mapDurablePhase(data.status, data.phase));
+            
+            // Handle terminal states
+            if (data.status === 'completed') {
+                stopPolling();
+                setActiveBuildId(null);
+            } else if (data.status === 'failed' || data.status === 'cancelled') {
+                stopPolling();
+                setActiveBuildId(null);
+                setError(data.error?.message || `Build ${data.status}`);
+                setPhase('done');
+            }
+        } catch (err) {
+            // Transient polling error - do not mark build failed
+            console.warn('[CodeBuilder] Polling error:', err);
+        }
+    }, [stopPolling]);
 
     const handleBuild = useCallback(async (prompt: string) => {
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
+        
         // Reset state
         setPhase('planning');
         setPlan(null);
         setFiles([]);
         setContextFlow([]);
         setError(null);
+        setDurableBuildId(null);
+        stopPolling();
 
         try {
-            const url = `/api/code-builder/stream?prompt=${encodeURIComponent(prompt)}`;
-            const eventSource = new EventSource(url);
-
-            eventSource.addEventListener('context-flow', (e) => {
-                try {
-                    const entry: ContextFlowEntry = JSON.parse(e.data);
-                    setContextFlow(prev => [...prev, entry]);
-                } catch { }
-            });
-
-            eventSource.addEventListener('component-error', (e) => {
-                try {
-                    const entry: ContextFlowEntry = JSON.parse(e.data);
-                    setContextFlow(prev => [...prev, entry]);
-                } catch { }
-            });
-            eventSource.addEventListener('plan-ready', (e) => {
-                try {
-                    const planData: ProjectPlan = JSON.parse(e.data);
-                    setPlan(planData);
-                    setPhase('coding');
-                } catch { }
-            });
-
-            eventSource.addEventListener('file-generated', (e) => {
-                try {
-                    const file: GeneratedFile = JSON.parse(e.data);
-                    setFiles(prev => [...prev, file]);
-                    // First file: pull mobile users over to the code panel
-                    setMobileTab('code');
-                } catch { }
-            });
-
-            eventSource.addEventListener('error', (e) => {
-                try {
-                    // SSE error event from our server
-                    const data = JSON.parse((e as MessageEvent).data);
-                    setError(data.message || 'An error occurred during build');
-                    setPhase('done');
-                } catch {
-                    // Browser-level EventSource error (disconnect, etc.)
-                    setError('Connection lost. Please try again.');
-                    setPhase('done');
+            if (DURABLE_EXECUTION) {
+                // Durable path: POST /api/code-builder/build → poll GET /api/code-builder/build/[buildId]
+                const res = await fetch('/api/code-builder/build', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, mode: 'fast' }), // Use fast mode for now
+                });
+                
+                const data = await res.json();
+                
+                if (!res.ok) {
+                    throw new Error(data.error || 'Failed to start build');
                 }
-                eventSource.close();
-            });
-
-            eventSource.addEventListener('done', (e) => {
-                setPhase('done');
-                eventSource.close();
-            });
-
-            // Safety: close on unrecoverable native errors
-            eventSource.onerror = () => {
-                if (eventSource.readyState === EventSource.CLOSED) {
-                    // Already closed by a named error event — ignore
-                    return;
+                
+                if (!data.buildId || !data.runId) {
+                    throw new Error('Invalid response from build API');
                 }
-                setError('Connection error. Please try again.');
-                setPhase('done');
-                eventSource.close();
-            };
+                
+                setDurableBuildId(data.buildId);
+                setActiveBuildId(data.buildId);
+                setPolling(true);
+                
+                // Initial poll
+                await pollDurableStatus(data.buildId);
+                
+                // Start polling interval
+                pollIntervalRef.current = setInterval(() => {
+                    pollDurableStatus(data.buildId);
+                }, 1500); // Poll every 1.5s
+                
+            } else {
+                // Existing SSE path
+                const url = `/api/code-builder/stream?prompt=${encodeURIComponent(prompt)}`;
+                const eventSource = new EventSource(url);
+
+                eventSource.addEventListener('context-flow', (e) => {
+                    try {
+                        const entry: ContextFlowEntry = JSON.parse(e.data);
+                        setContextFlow(prev => [...prev, entry]);
+                    } catch { }
+                });
+
+                eventSource.addEventListener('component-error', (e) => {
+                    try {
+                        const entry: ContextFlowEntry = JSON.parse(e.data);
+                        setContextFlow(prev => [...prev, entry]);
+                    } catch { }
+                });
+                eventSource.addEventListener('plan-ready', (e) => {
+                    try {
+                        const planData: ProjectPlan = JSON.parse(e.data);
+                        setPlan(planData);
+                        setPhase('coding');
+                    } catch { }
+                });
+
+                eventSource.addEventListener('file-generated', (e) => {
+                    try {
+                        const file: GeneratedFile = JSON.parse(e.data);
+                        setFiles(prev => [...prev, file]);
+                        setMobileTab('code');
+                    } catch { }
+                });
+
+                eventSource.addEventListener('error', (e) => {
+                    try {
+                        const data = JSON.parse((e as MessageEvent).data);
+                        setError(data.message || 'An error occurred during build');
+                        setPhase('done');
+                    } catch {
+                        setError('Connection lost. Please try again.');
+                        setPhase('done');
+                    }
+                    eventSource.close();
+                });
+
+                eventSource.addEventListener('done', (e) => {
+                    setPhase('done');
+                    eventSource.close();
+                });
+
+                eventSource.onerror = () => {
+                    if (eventSource.readyState === EventSource.CLOSED) return;
+                    setError('Connection error. Please try again.');
+                    setPhase('done');
+                    eventSource.close();
+                };
+            }
         } catch (err: any) {
             setError(err.message || 'Failed to start build');
             setPhase('done');
+        } finally {
+            isSubmittingRef.current = false;
         }
+    }, [pollDurableStatus, stopPolling]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+            }
+        };
     }, []);
 
     const handleReset = () => {
+        stopPolling();
+        setActiveBuildId(null);
+        setDurableBuildId(null);
         setPhase('idle');
         setPlan(null);
         setFiles([]);
@@ -108,6 +250,21 @@ export default function CodeBuilderPage() {
         setError(null);
         setMobileTab('plan');
     };
+
+    // Recover active build on mount (browser close/reopen)
+    useEffect(() => {
+        if (DURABLE_EXECUTION) {
+            const activeBuildId = getActiveBuildId();
+            if (activeBuildId) {
+                setDurableBuildId(activeBuildId);
+                setPolling(true);
+                pollDurableStatus(activeBuildId);
+                pollIntervalRef.current = setInterval(() => {
+                    pollDurableStatus(activeBuildId);
+                }, 1500);
+            }
+        }
+    }, [pollDurableStatus]);
 
     return (
         <div className="h-[100dvh] flex flex-col bg-zinc-950 text-zinc-100 overflow-hidden">
@@ -119,7 +276,9 @@ export default function CodeBuilderPage() {
                     </div>
                     <div>
                         <h1 className="text-sm font-bold tracking-tight">Code Builder</h1>
-                        <p className="text-[10px] text-zinc-500">Gemini plans · Claude codes · UCOL orchestrates</p>
+                        <p className="text-[10px] text-zinc-500">
+                            {DURABLE_EXECUTION ? 'Durable execution via Trigger.dev' : 'Gemini plans · Claude codes · UCOL orchestrates'}
+                        </p>
                     </div>
                 </div>
 
@@ -149,7 +308,7 @@ export default function CodeBuilderPage() {
             {/* Prompt Input — always visible */}
             <PromptInput
                 onSubmit={handleBuild}
-                disabled={phase === 'planning' || phase === 'coding'}
+                disabled={phase === 'planning' || phase === 'coding' || isSubmittingRef.current}
                 phase={phase}
             />
 
@@ -180,7 +339,7 @@ export default function CodeBuilderPage() {
                         className={`flex-1 text-[11px] font-medium py-2 rounded-lg border transition-colors ${mobileTab === 'plan'
                             ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
                             : 'text-zinc-500 border-zinc-800/60 hover:text-zinc-300'
-                            }`}
+                        }`}
                     >
                         🧠 Plan{plan ? ` · ${plan.components.length}` : ''}
                     </button>
@@ -189,7 +348,7 @@ export default function CodeBuilderPage() {
                         className={`flex-1 text-[11px] font-medium py-2 rounded-lg border transition-colors ${mobileTab === 'code'
                             ? 'bg-orange-500/10 text-orange-300 border-orange-500/30'
                             : 'text-zinc-500 border-zinc-800/60 hover:text-zinc-300'
-                            }`}
+                        }`}
                     >
                         ⚙️ Code{files.length > 0 ? ` · ${files.length}` : ''}
                     </button>
