@@ -1,4 +1,4 @@
-import { task } from "@trigger.dev/sdk";
+import { task, tasks } from "@trigger.dev/sdk";
 import { z } from "zod";
 
 /**
@@ -33,6 +33,11 @@ export const codeBuilderPayloadSchema = z.object({
 
 export const codeBuilderTask = task({
   id: "code-builder-orchestrator",
+  // Task-level runaway guard; overrides the project-wide 900s default.
+  // 12-component builds at ~137s/LLM call × ~25 calls ≈ 57 min — 60 min is
+  // deliberately not the target, just the kill switch. Algorithmic fixes
+  // (DAG fan-out) live in Phase 4+.
+  maxDuration: 3600,
   retry: {
     maxAttempts: 1,
   },
@@ -101,4 +106,24 @@ export const codeBuilderTask = task({
       throw err;
     }
   },
+});
+
+// SDK 4.5.16: `tasks.onFailure(fn)` registers a project-global hook; the params'
+// `task: string` is the ONLY scoping mechanism available (the value export of
+// the standalone `onFailure` is type-only in this version). Guard on it.
+// Per Trigger docs, crashed/system-failure/cancelled statuses BYPASS this
+// hook — a reconciliation pass (Phase 4+) is the durable answer for those.
+// This hook closes the "worker died but left the row stuck RUNNING" hole for
+// the failure paths Trigger does report.
+tasks.onFailure(async ({ payload, task, error }) => {
+  if (task !== "code-builder-orchestrator") return;
+  const parsed = codeBuilderPayloadSchema.safeParse(payload);
+  if (!parsed.success) return;
+  try {
+    const store = await import("@/lib/code-builder/buildStore");
+    const msg = error instanceof Error ? error.message : String(error ?? "unknown");
+    await store.failBuild(parsed.data.buildId, "WORKER_TERMINATED", msg);
+  } catch (hookErr) {
+    console.error("[code-builder onFailure] failBuild failed:", hookErr);
+  }
 });
