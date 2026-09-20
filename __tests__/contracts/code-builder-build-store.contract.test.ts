@@ -27,18 +27,28 @@ function admin() {
   return require('@/lib/supabaseClient').supabaseAdmin as any;
 }
 
-function chain({ updateRes = { error: null }, upsertRes = { error: null, data: { build_id: 'b1' } } }: any = {}) {
+function chain({
+  updateRes = { error: null },
+  upsertRes = { error: null, data: { build_id: 'b1' } },
+  readback = { error: null, data: { build_id: 'b1' } },
+}: any = {}) {
   const supabase = admin();
   const update = jest.fn().mockReturnValue({
     eq: jest.fn().mockReturnValue({
-      not: jest.fn().mockReturnValue({ updateRes }),
+      not: jest.fn().mockReturnValue(updateRes),
     }),
   });
   const upsert = jest.fn().mockReturnValue({
-    select: jest.fn().mockReturnValue({ single: jest.fn().mockResolvedValue(upsertRes) }),
+    select: jest.fn().mockReturnValue({
+      single: jest.fn().mockResolvedValue(upsertRes),
+      maybeSingle: jest.fn().mockResolvedValue(upsertRes),
+    }),
   });
-  (supabase.from as jest.Mock).mockReturnValue({ update, upsert });
-  return { update, upsert };
+  const select = jest.fn().mockReturnValue({
+    eq: jest.fn().mockReturnValue({ maybeSingle: jest.fn().mockResolvedValue(readback) }),
+  });
+  (supabase.from as jest.Mock).mockReturnValue({ update, upsert, select });
+  return { update, upsert, select };
 }
 
 describe('buildStore — durable build lifecycle contract', () => {
@@ -53,10 +63,35 @@ describe('buildStore — durable build lifecycle contract', () => {
     expect(payload.status).toBe('queued');
   });
 
-  it('createBuild upserts on build_id (retry/replay never inserts a second build)', async () => {
+  it('createBuild upserts on build_id with ignoreDuplicates (retry never inserts a second build)', async () => {
     const { upsert } = chain();
     await createBuild({ buildId: 'b1', userId: 'u1', mode: 'full' });
-    expect(upsert.mock.calls[0][1]).toEqual({ onConflict: 'build_id' });
+    expect(upsert.mock.calls[0][1]).toEqual({ onConflict: 'build_id', ignoreDuplicates: true });
+  });
+
+  it('retry preserves the original row: no overwrite, one row, correlation kept', async () => {
+    // Run A creates the row; the API stamps correlation (running + run id A).
+    const original = {
+      build_id: 'b1', status: 'running', trigger_run_id: 'run_A',
+      request_id: 'req_A', started_at: '2026-09-20T14:25:15.609Z',
+      created_at: '2026-09-20T14:25:15.100Z', operation_key: 'codebuild:b1:v1',
+    };
+    // Run B (worker retry) upsert returns NO row — ON CONFLICT DO NOTHING hit.
+    const { upsert, select } = chain({
+      upsertRes: { error: null, data: null },
+      readback: { error: null, data: original },
+    });
+    const returned = await createBuild({ buildId: 'b1', userId: 'u1', requestId: 'req_B', mode: 'full', prompt: 'x' });
+
+    // 1. No overwrite: the upsert that fired was DO NOTHING — never an UPDATE.
+    expect(upsert.mock.calls[0][1]).toEqual({ onConflict: 'build_id', ignoreDuplicates: true });
+    // 2. Still exactly one row: readback by build_id, never a second insert.
+    expect(select).toHaveBeenCalled();
+    expect(returned).toEqual(original);
+    // 3. Original correlation fields preserved in the returned row.
+    expect(returned.trigger_run_id).toBe('run_A');
+    expect(returned.request_id).toBe('req_A');
+    expect(returned.status).toBe('running');
   });
 
   it('terminal transitions filter non-terminal rows (idempotent — no-op once terminal)', async () => {
