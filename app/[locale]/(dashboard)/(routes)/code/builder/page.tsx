@@ -63,9 +63,8 @@ export default function CodeBuilderPage() {
     const [error, setError] = useState<string | null>(null);
     const [mobileTab, setMobileTab] = useState<'plan' | 'code'>('plan');
     
-    // Durable execution state
-    const [durableBuildId, setDurableBuildId] = useState<string | null>(null);
-    const [polling, setPolling] = useState(false);
+    // Durable execution state — polling lifecycle is owned by pollIntervalRef;
+    // the buildId display state lands with Phase 4B (Realtime) if needed.
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const isSubmittingRef = useRef(false);
 
@@ -74,7 +73,6 @@ export default function CodeBuilderPage() {
             clearInterval(pollIntervalRef.current);
             pollIntervalRef.current = null;
         }
-        setPolling(false);
     }, []);
 
     const mapDurablePhase = (status: DurableBuildStatus['status'], dPhase: DurableBuildStatus['phase']): BuildPhase => {
@@ -130,7 +128,6 @@ export default function CodeBuilderPage() {
         setFiles([]);
         setContextFlow([]);
         setError(null);
-        setDurableBuildId(null);
         stopPolling();
 
         try {
@@ -152,9 +149,7 @@ export default function CodeBuilderPage() {
                     throw new Error('Invalid response from build API');
                 }
                 
-                setDurableBuildId(data.buildId);
                 setActiveBuildId(data.buildId);
-                setPolling(true);
                 
                 // Initial poll
                 await pollDurableStatus(data.buildId);
@@ -242,7 +237,6 @@ export default function CodeBuilderPage() {
     const handleReset = () => {
         stopPolling();
         setActiveBuildId(null);
-        setDurableBuildId(null);
         setPhase('idle');
         setPlan(null);
         setFiles([]);
@@ -251,14 +245,16 @@ export default function CodeBuilderPage() {
         setMobileTab('plan');
     };
 
-    // Recover active build on mount (browser close/reopen)
+    // Recover active build on mount (browser close/reopen).
+    // durableBuildId/polling state intentionally not set here: both are
+    // write-only for render; the interval below IS the recovery behavior.
     useEffect(() => {
         if (DURABLE_EXECUTION) {
             const activeBuildId = getActiveBuildId();
             if (activeBuildId) {
-                setDurableBuildId(activeBuildId);
-                setPolling(true);
-                pollDurableStatus(activeBuildId);
+                // setState lives inside the async callback, not the effect body
+                // (react-hooks/set-state-in-effect).
+                Promise.resolve().then(() => pollDurableStatus(activeBuildId));
                 pollIntervalRef.current = setInterval(() => {
                     pollDurableStatus(activeBuildId);
                 }, 1500);
@@ -308,7 +304,7 @@ export default function CodeBuilderPage() {
             {/* Prompt Input — always visible */}
             <PromptInput
                 onSubmit={handleBuild}
-                disabled={phase === 'planning' || phase === 'coding' || isSubmittingRef.current}
+                disabled={phase === 'planning' || phase === 'coding'}
                 phase={phase}
             />
 
