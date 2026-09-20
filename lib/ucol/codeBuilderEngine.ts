@@ -34,7 +34,10 @@ import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
 // ── Constants (unchanged from ContextRouter) ─────────────────────────────────
 
-const MAX_REVIEW_ATTEMPTS = 3;
+// One review + at most one revision per component. Additional rounds live in the
+// integration/sandbox pass (Phase 4+). See trace run_06gbrgstj9c3apcdqh399t2he1:
+// 3 rounds × 12 components × ~137s/call pushes past every runtime budget.
+const MAX_REVIEW_ATTEMPTS = 2;
 const SIMILARITY_THRESHOLD = 0.95;
 const ORIGINALITY_THRESHOLD = 4;
 const PRAGMATISM_THRESHOLD = 5;
