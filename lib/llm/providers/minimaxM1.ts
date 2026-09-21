@@ -12,6 +12,7 @@
 
 import { ChatMessage, CompletionOptions, LLMProvider, StreamResult } from '../types';
 import { logger } from '@/lib/logger';
+import { encodeProviderErrorEvent } from '@/lib/media/envelope';
 
 const MINIMAX_M1_MODEL = 'minimax/minimax-m1';
 
@@ -53,10 +54,17 @@ export class MiniMaxM1Provider implements LLMProvider {
       formattedMessages.unshift({ role: 'system', content: systemInstruction });
     }
 
-    const controller = new AbortController();
-    // NIM aligns to ≤50s; OpenRouter MiniMax-M1 can run long — cap below function budget.
-    const timeoutMs = Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? 50_000);
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // Split lifecycle: connect timeout cleared the moment headers arrive; the
+    // budget signal persists through streaming so a stuck stream dies at the
+    // total budget. Mid-stream death closes cleanly (marker + close), never
+    // error() — that faults the client HTTP response (Vercel 500s).
+    const CONNECT_TIMEOUT_MS = Number(process.env.NIM_CONNECT_TIMEOUT_MS ?? 30_000);
+    const IDLE_TIMEOUT_MS = Number(process.env.NIM_IDLE_TIMEOUT_MS ?? 60_000);
+    const TOTAL_BUDGET_MS = Number(process.env.NIM_TOTAL_STREAM_BUDGET_MS ?? 240_000);
+    const connectController = new AbortController();
+    const budgetController = new AbortController();
+    const connectTimer = setTimeout(() => connectController.abort(new Error('connect_timeout')), CONNECT_TIMEOUT_MS);
+    const budgetTimer = setTimeout(() => budgetController.abort(new Error('total_budget')), TOTAL_BUDGET_MS);
     const started = Date.now();
 
     let response: Response;
@@ -75,11 +83,13 @@ export class MiniMaxM1Provider implements LLMProvider {
           top_p: options.topP ?? 0.95,
           stream: true,
         }),
-        signal: controller.signal,
+        signal: AbortSignal.any([connectController.signal, budgetController.signal]),
       });
+      clearTimeout(connectTimer); // headers arrived — body runs on budget only
     } catch (err: any) {
-      clearTimeout(timer);
-      const isTimeout = err?.name === 'AbortError' || String(err?.message || err).includes('aborted');
+      clearTimeout(connectTimer);
+      clearTimeout(budgetTimer);
+      const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError' || String(err?.message || err).includes('aborted');
       logger.error('[MiniMaxM1Provider] request failed', { model: modelId, isTimeout, error: err?.message || String(err) });
       throw new Error(`MiniMax-M1 request failed${isTimeout ? ' (timeout)' : ''}: ${err?.message ?? String(err)}`);
     }
@@ -87,7 +97,6 @@ export class MiniMaxM1Provider implements LLMProvider {
     const upstreamLatencyMs = Date.now() - started;
 
     if (!response.ok) {
-      clearTimeout(timer);
       const errText = await response.text().catch(() => '');
       const trimmed = errText.slice(0, 500);
       logger.error(`[MiniMaxM1Provider] HTTP ${response.status}: ${trimmed}`, { model: modelId, upstreamLatencyMs });
@@ -98,7 +107,6 @@ export class MiniMaxM1Provider implements LLMProvider {
     }
 
     if (!response.body) {
-      clearTimeout(timer);
       throw new Error('[MiniMaxM1Provider] Empty response body.');
     }
 
@@ -107,13 +115,48 @@ export class MiniMaxM1Provider implements LLMProvider {
     const encoder = new TextEncoder();
     let buffer = '';
 
+    // Mid-stream death: marker + clean close, never error() (Vercel 500s).
+    // Idle-between-chunks watchdog (reset every upstream chunk, never fired by
+    // slow downstream pulls) — MiniMax had no watchdog at all before.
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let idleFired = false;
+    const armIdle = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        idleFired = true;
+        budgetController.abort(new Error('idle_timeout'));
+        reader.cancel().catch(() => {});
+      }, IDLE_TIMEOUT_MS);
+    };
+    const clearIdle = () => {
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    };
+    const clearBudget = () => {
+      clearTimeout(budgetTimer);
+      clearIdle();
+    };
+
+    const failCleanly = (streamController: ReadableStreamDefaultController, reason: string) => {
+      logger.error(`[MiniMaxM1Provider] stream ended early: ${reason}`);
+      try {
+        streamController.enqueue(encoder.encode(encodeProviderErrorEvent({ provider: this.id, model: modelId, reason })));
+      } catch { /* client gone */ }
+      try { streamController.close(); } catch { /* already closed */ }
+    };
+
     const stream = new ReadableStream<Uint8Array>({
       async pull(streamController) {
+        armIdle();
         try {
           const { done, value } = await reader.read();
+          clearIdle(); // upstream chunk arrived
           if (done) {
-            clearTimeout(timer);
-            streamController.close();
+            if (idleFired) {
+              failCleanly(streamController, `idle_timeout (no chunks for ${IDLE_TIMEOUT_MS}ms)`);
+            } else {
+              clearBudget();
+              streamController.close();
+            }
             return;
           }
           buffer += decoder.decode(value, { stream: true });
@@ -126,7 +169,7 @@ export class MiniMaxM1Provider implements LLMProvider {
 
             const payload = line.slice(5).trim();
             if (payload === '[DONE]') {
-              clearTimeout(timer);
+              clearBudget();
               streamController.close();
               return;
             }
@@ -135,8 +178,8 @@ export class MiniMaxM1Provider implements LLMProvider {
               const json = JSON.parse(payload);
               // OpenRouter can return 200 with an error payload on upstream failure.
               if (json.error) {
-                clearTimeout(timer);
-                streamController.error(new Error(`MiniMax-M1 upstream error: ${json.error?.message || JSON.stringify(json.error)}`));
+                clearBudget();
+                failCleanly(streamController, `upstream_error: ${json.error?.message || JSON.stringify(json.error)}`);
                 return;
               }
               const delta = json.choices?.[0]?.delta ?? {};
@@ -148,12 +191,17 @@ export class MiniMaxM1Provider implements LLMProvider {
             }
           }
         } catch (err: any) {
-          clearTimeout(timer);
-          streamController.error(err);
+          // Mid-stream provider death must NEVER error() the client stream —
+          // that faults the HTTP response. Marker + clean close.
+          clearBudget();
+          const reason = idleFired
+            ? `idle_timeout (no chunks for ${IDLE_TIMEOUT_MS}ms)`
+            : String(err?.message || err);
+          failCleanly(streamController, reason);
         }
       },
       cancel() {
-        clearTimeout(timer);
+        clearBudget();
         reader.cancel().catch(() => {});
       },
     });

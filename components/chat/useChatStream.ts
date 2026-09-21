@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Source } from "@/components/chat/SourceDisplay";
 import { SelectedFile, FilePayload } from "./useFileUpload";
-import { MediaEnvelope, decodeMediaEvent, ApprovalEnvelope, decodeApprovalEvent, ModelSwitchEvent, decodeModelSwitchEvent } from "@/lib/media/envelope";
+import { MediaEnvelope, decodeMediaEvent, ApprovalEnvelope, decodeApprovalEvent, ModelSwitchEvent, decodeModelSwitchEvent, ProviderErrorEvent, decodeProviderErrorEvent } from "@/lib/media/envelope";
 
 /**
  * Extract the agentic ReAct "donePayload" from an accumulated stream.
@@ -44,6 +44,7 @@ export interface StreamMessage {
   media?: MediaEnvelope[];
   approvalRequest?: ApprovalEnvelope;
   modelSwitch?: ModelSwitchEvent;
+  providerError?: ProviderErrorEvent;
 }
 
 interface UseChatStreamOptions {
@@ -172,7 +173,13 @@ export function useChatStream({
           if (value) {
             const chunk = decoder.decode(value, { stream: true });
             accum += chunk;
-            setStreamingContent((prev) => prev + chunk);
+            // Withhold transport markers from the LIVE text — a provider-error
+            // marker must never render as prose while streaming (it is parsed
+            // and surfaced as metadata at finalization).
+            setStreamingContent((prev) => {
+              const next = prev + chunk;
+              return next.replace(/__PROVIDER_ERROR_EVENT__:[^\n]*\n?/g, "");
+            });
           }
         }
       }
@@ -239,6 +246,16 @@ export function useChatStream({
         }
       }
 
+      // Provider died mid-stream after output started: the provider enqueued a
+      // structured marker + clean close (never an error()'d stream). Surface
+      // it as an inline notice, strip it from the prose.
+      let providerError: ProviderErrorEvent | undefined;
+      const providerErrorMatch = accumWithoutMedia.match(/__PROVIDER_ERROR_EVENT__:[^\n]*\n?/);
+      if (providerErrorMatch) {
+        providerError = decodeProviderErrorEvent(providerErrorMatch[0].trim()) ?? undefined;
+        accumWithoutMedia = accumWithoutMedia.replace(/__PROVIDER_ERROR_EVENT__:[^\n]*\n?/g, "");
+      }
+
       // Agentic (ReAct) responses enqueue a terminal JSON "donePayload"
       // ({ status, answer, trajectory }) rather than streaming prose. Sniff the
       // trailing JSON envelope and surface only the clean `answer` so the user
@@ -262,6 +279,7 @@ export function useChatStream({
           ...(mediaLines.length > 0 ? { media: mediaLines } : {}),
           ...(approvalRequest ? { approvalRequest } : {}),
           ...(modelSwitch ? { modelSwitch } : {}),
+          ...(providerError ? { providerError } : {}),
         },
       ]);
       setStreamingContent("");

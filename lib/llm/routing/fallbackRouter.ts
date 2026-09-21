@@ -15,7 +15,7 @@
 import type { ChatMessage, LLMProvider, StreamResult } from '@/lib/llm/types';
 import { MiniMaxM1Provider } from '@/lib/llm/providers/minimaxM1';
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
-import { encodeModelSwitchEvent } from '@/lib/media/envelope';
+import { encodeModelSwitchEvent, encodeProviderErrorEvent, PROVIDER_ERROR_EVENT_PREFIX } from '@/lib/media/envelope';
 import {
   checkCircuit,
   recordCircuitFailure,
@@ -149,6 +149,105 @@ function auditFallbackChain(chain: FallbackHop[]): void {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// First-chunk gate — stream-aware circuit success
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Wraps a provider stream so the fallback router can await its FIRST CHUNK
+ * before committing to the hop. Resolves only on genuine model output: a
+ * __PROVIDER_ERROR_EVENT__ marker chunk (pre-output death converted to a
+ * marker by the provider) REJECTS the gate so the router advances to the
+ * next hop instead of recording a failed provider as a circuit success.
+ * Also rejects if the stream closes or errors before producing anything.
+ *
+ * The returned stream is the one the caller MUST hand downstream (the gate
+ * owns the only upstream reader — using the original after gating would
+ * double-read and lose bytes).
+ *
+ * ponytail: the pump is eager and ignores the output queue's backpressure, so
+ * a slow downstream buffers upstream chunks in memory. Fine here: the router
+ * returns immediately after first-chunk and the bridge tee starts reading;
+ * revisit only if a provider front-loads megabytes before the client reads.
+ */
+export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
+  stream: ReadableStream<Uint8Array>;
+  firstChunk: Promise<void>;
+} {
+  let resolve!: () => void;
+  let reject!: (err: unknown) => void;
+  const firstChunk = new Promise<void>((res, rej) => { resolve = res; reject = rej; });
+  let settled = false;
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+
+  const settleResolve = () => {
+    if (settled) return;
+    settled = true;
+    resolve();
+  };
+  const settleReject = (err: unknown) => {
+    if (settled) return;
+    settled = true;
+    reject(err);
+  };
+
+  const gated = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            if (pending && !pending.includes(PROVIDER_ERROR_EVENT_PREFIX)) {
+              // Genuine sub-256B output that closed before crossing the
+              // resolve threshold — it's real model output, forward it.
+              settleResolve();
+              controller.enqueue(new TextEncoder().encode(pending));
+            } else {
+              settleReject(new Error('stream closed before first chunk'));
+            }
+            controller.close();
+            return;
+          }
+          if (!settled) {
+            // Scan for a pre-output provider-error marker: partial-safe —
+            // buffer across chunk boundaries until we can rule it out.
+            pending += decoder.decode(value, { stream: true });
+            if (pending.includes(PROVIDER_ERROR_EVENT_PREFIX)) {
+              settleReject(new Error(`provider failed before first token${pending.slice(0, 200)}`));
+              // Do NOT forward the marker — the router will try the next
+              // hop; the client must not see a failure notice for a hop it
+              // is being transparently retried past.
+              controller.close();
+              return;
+            }
+            // ponytail: a marker prefix could theoretically split across
+            // chunks; buffer at most ~256B before deciding — anything that
+            // long without a marker is genuine output.
+            if (pending.length > 256) {
+              settleResolve();
+              // Re-emit buffered text downstream as one blob.
+              controller.enqueue(new TextEncoder().encode(pending));
+              pending = '';
+            }
+            continue;
+          }
+          controller.enqueue(value);
+        }
+      } catch (err) {
+        settleReject(err);
+        controller.error(err);
+      }
+    },
+    cancel(reason) {
+      reader.cancel(reason).catch(() => {});
+    },
+  });
+
+  return { stream: gated, firstChunk };
+}
+
 /**
  * Execute the primary provider with circuit-breaker failover. Returns the first
  * successful streaming result, translating canonical state across hops as needed
@@ -189,6 +288,24 @@ export async function executeWithFallback(params: {
         maxTokens: options?.maxTokens,
       });
 
+      // Stream-aware success: a returned ReadableStream is only a HANDSHAKE.
+      // Wait for the first chunk before recording circuit success — a stream
+      // that dies before producing a byte is a hop failure and the next
+      // provider is tried transparently. A death AFTER the first byte is the
+      // provider's to own (marker + clean close reaches the client).
+      const { stream: gatedStream, firstChunk } = gateStreamOnFirstChunk(result.stream);
+      try {
+        await firstChunk;
+      } catch (gateErr: any) {
+        await recordCircuitFailure(hop.key);
+        const gateMsg = `[${hop.providerId}] stream died before first token: ${gateErr?.message || String(gateErr)}`;
+        perHopErrors.push(gateMsg);
+        logger.warn(`[FallbackRouter] ${gateMsg}`);
+        switched = true;
+        previousModelId = hop.modelId;
+        continue;
+      }
+
       await recordCircuitSuccess(hop.key);
 
       if (switched) {
@@ -205,7 +322,7 @@ export async function executeWithFallback(params: {
         const fallbackStream = new ReadableStream<Uint8Array>({
           async start(controller) {
             controller.enqueue(sentinel);
-            const reader = result.stream.getReader();
+            const reader = gatedStream.getReader();
             try {
               while (true) {
                 const { done, value } = await reader.read();
@@ -213,9 +330,21 @@ export async function executeWithFallback(params: {
                 controller.enqueue(value);
               }
               controller.close();
-            } catch (e) {
-              controller.error(e);
+            } catch (e: any) {
+              // Providers clean-close on mid-stream death, so this is
+              // belt-and-braces: never error() a client-facing stream.
+              try {
+                controller.enqueue(new TextEncoder().encode(
+                  encodeProviderErrorEvent({ provider: hop.providerId, model: hop.modelId, reason: String(e?.message || e) })
+                ));
+              } catch { /* client gone */ }
+              try { controller.close(); } catch { /* already closed */ }
             }
+          },
+          // Client disconnect must reach the provider — cancel the gated
+          // stream so the upstream reader/request actually stops.
+          cancel(reason) {
+            gatedStream.cancel(reason).catch(() => {});
           },
         });
 
@@ -233,7 +362,7 @@ export async function executeWithFallback(params: {
 
       // First (primary) hop succeeded — no switch.
       return {
-        stream: result.stream,
+        stream: gatedStream,
         thoughtSignaturePromise: result.thoughtSignaturePromise,
         debug: result.debug,
         actualModelId: hop.modelId,
