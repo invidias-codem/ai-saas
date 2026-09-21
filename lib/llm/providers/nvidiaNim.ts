@@ -2,6 +2,7 @@ import { ChatMessage, CompletionOptions, LLMProvider, StreamResult } from "../ty
 import { foldToolCallDeltas, type NimToolCall } from "../toolCallTypes";
 import { logger } from "@/lib/logger";
 import { nvidiaNimConfig } from "@/lib/env";
+import { encodeProviderErrorEvent } from "@/lib/media/envelope";
 
 /**
  * NVIDIA NIM Provider — OpenAI-compatible inference.
@@ -175,13 +176,26 @@ export class NvidiaNimProvider implements LLMProvider {
       body.reasoning_effort = options.reasoningEffort;
     }
 
-    const controller = new AbortController();
-    const timeoutMs = options.timeoutMs ?? Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? 50_000);
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const started = Date.now();
+    // ── Stream lifecycle: split timeouts, never error() the client stream ──
+    // A single wall-clock abort timer killed healthy streams mid-flight, and
+    // streamController.error() faulted the HTTP response itself (Vercel
+    // FUNCTION_INVOCATION_FAILED 500s). Split into: connection timeout
+    // (cleared once headers arrive), idle-between-chunks timeout (reset on
+    // every chunk), total stream budget (default 240s, fits Fluid's 300s).
+    // Mid-stream death: log + structured __PROVIDER_ERROR_EVENT__ marker +
+    // clean close. Pre-first-token death still throws so the fallback router
+    // can hop.
+    const CONNECT_TIMEOUT_MS = Number(process.env.NIM_CONNECT_TIMEOUT_MS ?? 30_000);
+    const IDLE_TIMEOUT_MS = Number(process.env.NIM_IDLE_TIMEOUT_MS ?? 60_000);
+    const TOTAL_BUDGET_MS = Number(process.env.NIM_TOTAL_STREAM_BUDGET_MS ?? 240_000);
+    const perRequestTimeoutMs = options.timeoutMs; // legacy per-request override caps the TOTAL budget
+    const totalBudgetMs = perRequestTimeoutMs ?? TOTAL_BUDGET_MS;
 
     let response: Response;
+    const started = Date.now();
     try {
+      const connectSignal = AbortSignal.timeout(CONNECT_TIMEOUT_MS);
+      const budgetSignal = AbortSignal.timeout(totalBudgetMs);
       response = await fetch(`${this.baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -189,12 +203,11 @@ export class NvidiaNimProvider implements LLMProvider {
           Authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal: AbortSignal.any([connectSignal, budgetSignal]),
       });
     } catch (err: any) {
-      clearTimeout(timer);
       const elapsed = Date.now() - started;
-      const isTimeout = err?.name === 'AbortError' || String(err?.message || err).includes('aborted');
+      const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError' || String(err?.message || err).includes('aborted');
       logger.error(`[NvidiaNimProvider] request failed after ${elapsed}ms`, {
         model: modelId,
         elapsed,
@@ -202,7 +215,7 @@ export class NvidiaNimProvider implements LLMProvider {
         error: err?.message || String(err),
       });
       throw new Error(
-        `NVIDIA NIM request failed${isTimeout ? `: This operation was aborted (timeout=${timeoutMs}ms, elapsed=${elapsed}ms)` : `: ${err?.message ?? String(err)}`}`
+        `NVIDIA NIM request failed${isTimeout ? `: This operation was aborted (connect=${CONNECT_TIMEOUT_MS}ms, total=${totalBudgetMs}ms, elapsed=${elapsed}ms)` : `: ${err?.message ?? String(err)}`}`
       );
     }
 
@@ -214,7 +227,6 @@ export class NvidiaNimProvider implements LLMProvider {
     });
 
     if (!response.ok) {
-      clearTimeout(timer);
       const errText = await response.text().catch(() => '');
       const trimmed = errText.slice(0, 500);
       const isDegraded = response.status === 400 && trimmed.includes('DEGRADED');
@@ -227,7 +239,6 @@ export class NvidiaNimProvider implements LLMProvider {
     }
 
     if (!response.body) {
-      clearTimeout(timer);
       throw new Error('[NvidiaNimProvider] Empty response body.');
     }
 
@@ -237,14 +248,42 @@ export class NvidiaNimProvider implements LLMProvider {
     let buffer = '';
     let firstChunk = true;
     const toolCalls: NimToolCall[] = [];
+    // Idle-between-chunks watchdog, reset on every chunk.
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let idleFired = false;
+    const armIdle = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => { idleFired = true; reader.cancel().catch(() => {}); }, IDLE_TIMEOUT_MS);
+    };
+    const clearIdle = () => {
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    };
+
+    // Never let a mid-stream provider death fault the client HTTP response:
+    // log, emit the structured marker, close cleanly.
+    const failCleanly = (streamController: ReadableStreamDefaultController, reason: string) => {
+      clearIdle();
+      logger.error(`[NvidiaNimProvider] stream ended early: ${reason}`);
+      try {
+        streamController.enqueue(encoder.encode(encodeProviderErrorEvent({ provider: this.id, model: modelId, reason })));
+      } catch { /* client gone */ }
+      try { streamController.close(); } catch { /* already closed */ }
+    };
 
     const stream = new ReadableStream<Uint8Array>({
       async pull(streamController) {
+        armIdle();
         try {
           const { done, value } = await reader.read();
           if (done) {
-            clearTimeout(timer);
-            streamController.close();
+            clearIdle();
+            if (idleFired) {
+              // reader.cancel() (idle watchdog) resolves reads as done —
+              // surface it as a clean provider interruption, not silence.
+              failCleanly(streamController, `idle_timeout (no chunks for ${IDLE_TIMEOUT_MS}ms)`);
+            } else {
+              streamController.close();
+            }
             return;
           }
           buffer += decoder.decode(value, { stream: true });
@@ -257,7 +296,7 @@ export class NvidiaNimProvider implements LLMProvider {
 
             const payload = line.slice(5).trim();
             if (payload === '[DONE]') {
-              clearTimeout(timer);
+              clearIdle();
               streamController.close();
               return;
             }
@@ -304,12 +343,20 @@ export class NvidiaNimProvider implements LLMProvider {
             }
           }
         } catch (err: any) {
-          clearTimeout(timer);
-          streamController.error(err);
+          // Mid-stream provider death must NEVER error() the client-facing
+          // stream — that faults the HTTP response (Vercel 500s). Emit the
+          // structured marker and close cleanly; the post-gen drain records
+          // the failure. (Pre-first-token deaths throw before a stream is
+          // ever returned, so the fallback router still hops.)
+          clearIdle();
+          const reason = idleFired
+            ? `idle_timeout (no chunks for ${IDLE_TIMEOUT_MS}ms)`
+            : String(err?.message || err);
+          failCleanly(streamController, reason);
         }
       },
       cancel() {
-        clearTimeout(timer);
+        clearIdle();
         reader.cancel().catch(() => {});
       },
     });

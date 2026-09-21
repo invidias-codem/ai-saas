@@ -3,6 +3,7 @@ import { ChatMessage, CompletionOptions, LLMProvider, StreamResult } from "../ty
 import { sanitizeHistory } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
 import { getStorageClient, getStorageProjectId } from '@/lib/gcp/storage';
+import { encodeProviderErrorEvent } from '@/lib/media/envelope';
 
 // Lazy initialisation — validate at first use, not at module load.
 // Module-level throws break integration tests that import routes without setting env vars.
@@ -167,6 +168,7 @@ export class GeminiProvider implements LLMProvider {
 
         const result = await chat.sendMessageStream(lastMessage.parts);
         const textEncoder = new TextEncoder();
+        const providerId = this.id; // captured: `this` doesn't bind inside start()
 
         let capturedSignature: string | null = null;
         let resolveSignature!: (v: string | null) => void;
@@ -174,26 +176,36 @@ export class GeminiProvider implements LLMProvider {
 
         const stream = new ReadableStream({
             async start(controller) {
-                for await (const chunk of result.stream) {
-                    if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
-                        for (const part of chunk.candidates[0].content.parts) {
-                            if ((part as any).thoughtSignature) {
-                                // Capture silently — do not enqueue to the text stream
-                                capturedSignature = (part as any).thoughtSignature;
-                            } else if ((part as any).thought) {
-                                controller.enqueue(textEncoder.encode(`<thought>${(part as any).thought}</thought>`));
-                            } else if (part.text) {
-                                controller.enqueue(textEncoder.encode(part.text));
+                try {
+                    for await (const chunk of result.stream) {
+                        if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
+                            for (const part of chunk.candidates[0].content.parts) {
+                                if ((part as any).thoughtSignature) {
+                                    // Capture silently — do not enqueue to the text stream
+                                    capturedSignature = (part as any).thoughtSignature;
+                                } else if ((part as any).thought) {
+                                    controller.enqueue(textEncoder.encode(`<thought>${(part as any).thought}</thought>`));
+                                } else if (part.text) {
+                                    controller.enqueue(textEncoder.encode(part.text));
+                                }
+                            }
+                        } else {
+                            const chunkText = chunk.text();
+                            if (chunkText) {
+                                controller.enqueue(textEncoder.encode(chunkText));
                             }
                         }
-                    } else {
-                        const chunkText = chunk.text();
-                        if (chunkText) {
-                            controller.enqueue(textEncoder.encode(chunkText));
-                        }
                     }
+                    controller.close();
+                } catch (err: any) {
+                    // Mid-stream death: marker + clean close, never error() —
+                    // that faults the client HTTP response (Vercel 500s).
+                    logger.error(`[GeminiProvider] stream ended early: ${err?.message || String(err)}`);
+                    try {
+                        controller.enqueue(textEncoder.encode(encodeProviderErrorEvent({ provider: providerId, model: modelId, reason: String(err?.message || err) })));
+                    } catch { /* client gone */ }
+                    try { controller.close(); } catch { /* already closed */ }
                 }
-                controller.close();
                 resolveSignature(capturedSignature); // Resolve only after stream fully drains
             }
         });

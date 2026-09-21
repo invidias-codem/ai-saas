@@ -100,6 +100,12 @@ async function drainStreamForPostGen(
     fullText += decoder.decode(value, { stream: true });
   }
 
+  // Strip system-event sentinel lines before the text reaches post-gen
+  // (memory writes / telemetry) — they are transport metadata, not content.
+  fullText = fullText
+    .replace(/__MODEL_SWITCH_EVENT__:[^\n]*\n?/g, '')
+    .replace(/__PROVIDER_ERROR_EVENT__:[^\n]*\n?/g, '');
+
   const thoughtSignature = await thoughtSignatureSource().catch(() => null);
   return { text: fullText, thoughtSignature };
 }

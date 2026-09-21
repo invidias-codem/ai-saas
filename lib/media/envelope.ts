@@ -94,3 +94,33 @@ export function decodeModelSwitchEvent(line: string): ModelSwitchEvent | null {
     return null;
   }
 }
+
+/* ─────────────────── Provider-error system event ─────────────────── */
+
+export interface ProviderErrorEvent {
+  /** Provider id whose stream died mid-flight. */
+  provider: string;
+  /** Model id that was streaming when the failure occurred. */
+  model?: string;
+  /** Short machine reason: idle_timeout / total_budget / upstream_error. */
+  reason: string;
+  /** Epoch ms when the marker was emitted. */
+  ts?: number;
+}
+
+export const PROVIDER_ERROR_EVENT_PREFIX = '__PROVIDER_ERROR_EVENT__:';
+
+export function encodeProviderErrorEvent(ev: ProviderErrorEvent): string {
+  return `${PROVIDER_ERROR_EVENT_PREFIX}${JSON.stringify({ ...ev, ts: ev.ts ?? Date.now() })}\n`;
+}
+
+/** Decode a provider-error sentinel line (caller already stripped leading whitespace). */
+export function decodeProviderErrorEvent(line: string): ProviderErrorEvent | null {
+  const idx = line.indexOf(PROVIDER_ERROR_EVENT_PREFIX);
+  if (idx === -1) return null;
+  try {
+    return JSON.parse(line.slice(idx + PROVIDER_ERROR_EVENT_PREFIX.length)) as ProviderErrorEvent;
+  } catch {
+    return null;
+  }
+}
