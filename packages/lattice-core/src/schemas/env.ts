@@ -42,6 +42,12 @@ export const envSchema = z.object({
   NVIDIA_API_KEY: z.string().min(1).optional(),
   NVIDIA_NIM_BASE_URL: z.string().url().optional().default('https://integrate.api.nvidia.com/v1'),
 
+  // TypeSafe Jev (System One decision model) — shadow decision plane.
+  // Pinned version, never the `jev-latest` alias: confidence thresholds and
+  // comparisons are calibrated against a specific version.
+  TYPESAFE_API_KEY: z.string().min(1).optional(),
+  JEV_MODEL: z.string().min(1).optional().default('jev-1.13.0'),
+
   // ADD THESE FOR VERTEX AI (IMAGEN)
   GOOGLE_PROJECT_ID: z
     .string()

@@ -5,7 +5,8 @@ import { requireAuth, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { validateRequestSize } from '@/lib/security/inputValidation';
 import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
-import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
+import { buildInitialRoutingDecision } from './routing/decision';
+import { shadowEvaluateRouting } from '@/lib/intelligence/decision/shadowRouter';
 import type { UcolRequestPacket, UcolRoutingDecision } from '@/lib/ucol/routing/types';
 import type { RuntimeContextResult } from '@/lib/ucol/runtimeContextResolver';
 import type { User } from '@clerk/nextjs/server';
@@ -135,6 +136,22 @@ export async function setupUcolSession({
             messageHistoryCount: Array.isArray(messages) ? messages.length : 0,
             profile: resolvedContext.profile,
         },
+    });
+
+    // Shadow decision plane (slice 1): Jev independently classifies the same
+    // request in parallel; output goes to telemetry ONLY — routing is
+    // untouched. Fire-and-forget by design.
+    shadowEvaluateRouting({
+        request: {
+            requestId: requestPacket.requestId,
+            rawInput: requestPacket.rawInput,
+            userId: user.userId,
+            workspaceId: resolvedContext.ucolContext.workspaceId ?? undefined,
+        },
+        productionDecision: routingDecision,
+        agentMode: resolvedContext.mode,
+        hasAttachments: Boolean(fileData),
+        messageHistoryCount: Array.isArray(messages) ? messages.length : 0,
     });
 
     console.info('[UCOL] Initial routing decision', {
