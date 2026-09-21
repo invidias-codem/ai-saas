@@ -44,6 +44,7 @@ export interface StreamMessage {
   media?: MediaEnvelope[];
   approvalRequest?: ApprovalEnvelope;
   modelSwitch?: ModelSwitchEvent;
+  providerError?: ProviderErrorEvent;
 }
 
 interface UseChatStreamOptions {
@@ -172,7 +173,13 @@ export function useChatStream({
           if (value) {
             const chunk = decoder.decode(value, { stream: true });
             accum += chunk;
-            setStreamingContent((prev) => prev + chunk);
+            // Withhold transport markers from the LIVE text — a provider-error
+            // marker must never render as prose while streaming (it is parsed
+            // and surfaced as metadata at finalization).
+            setStreamingContent((prev) => {
+              const next = prev + chunk;
+              return next.replace(/__PROVIDER_ERROR_EVENT__:[^\n]*\n?/g, "");
+            });
           }
         }
       }

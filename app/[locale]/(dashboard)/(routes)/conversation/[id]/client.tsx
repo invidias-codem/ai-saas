@@ -32,7 +32,7 @@ import { Composer } from "@/components/chat/Composer";
 import { RuntimeStatusBar } from "@/components/chat/RuntimeStatusBar";
 import { InlineMediaCard } from "@/components/chat/InlineMediaCard";
 import { MediaApprovalCard } from "@/components/chat/MediaApprovalCard";
-import type { MediaEnvelope, ApprovalEnvelope, ModelSwitchEvent } from "@/lib/media/envelope";
+import type { MediaEnvelope, ApprovalEnvelope, ModelSwitchEvent, ProviderErrorEvent } from "@/lib/media/envelope";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
 import { useSessionCleanup } from "@/lib/useSessionCleanup";
 import { createNewConversation } from "@/lib/conversationManager";
@@ -59,6 +59,7 @@ interface Message {
   media?: MediaEnvelope[];
   approvalRequest?: ApprovalEnvelope;
   modelSwitch?: ModelSwitchEvent;
+  providerError?: ProviderErrorEvent;
 }
 
 interface ConversationContext {
@@ -806,6 +807,17 @@ function ConversationPage({
                           {msg.modelSwitch.reason ? (
                             <span className="text-muted-foreground/70">({msg.modelSwitch.reason})</span>
                           ) : null}
+                        </div>
+                      )}
+                      {msg.providerError && (
+                        <div
+                          role="status"
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-600 dark:text-amber-400"
+                        >
+                          <span className="font-medium">Response interrupted</span>
+                          <span className="text-amber-600/70 dark:text-amber-400/70">
+                            The provider stopped mid-answer ({msg.providerError.reason}). Partial output shown — try sending again.
+                          </span>
                         </div>
                       )}
                       {msg.approvalRequest && (

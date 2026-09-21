@@ -15,7 +15,7 @@
 import type { ChatMessage, LLMProvider, StreamResult } from '@/lib/llm/types';
 import { MiniMaxM1Provider } from '@/lib/llm/providers/minimaxM1';
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
-import { encodeModelSwitchEvent, encodeProviderErrorEvent } from '@/lib/media/envelope';
+import { encodeModelSwitchEvent, encodeProviderErrorEvent, PROVIDER_ERROR_EVENT_PREFIX } from '@/lib/media/envelope';
 import {
   checkCircuit,
   recordCircuitFailure,
@@ -155,10 +155,15 @@ function auditFallbackChain(chain: FallbackHop[]): void {
 
 /**
  * Wraps a provider stream so the fallback router can await its FIRST CHUNK
- * before committing to the hop. Resolves once any byte flows; rejects if the
- * stream closes or errors before producing anything. The returned stream is
- * the one the caller MUST hand downstream (the gate owns the only upstream
- * reader — using the original after gating would double-read and lose bytes).
+ * before committing to the hop. Resolves only on genuine model output: a
+ * __PROVIDER_ERROR_EVENT__ marker chunk (pre-output death converted to a
+ * marker by the provider) REJECTS the gate so the router advances to the
+ * next hop instead of recording a failed provider as a circuit success.
+ * Also rejects if the stream closes or errors before producing anything.
+ *
+ * The returned stream is the one the caller MUST hand downstream (the gate
+ * owns the only upstream reader — using the original after gating would
+ * double-read and lose bytes).
  *
  * ponytail: the pump is eager and ignores the output queue's backpressure, so
  * a slow downstream buffers upstream chunks in memory. Fine here: the router
@@ -174,6 +179,19 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
   const firstChunk = new Promise<void>((res, rej) => { resolve = res; reject = rej; });
   let settled = false;
   const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+
+  const settleResolve = () => {
+    if (settled) return;
+    settled = true;
+    resolve();
+  };
+  const settleReject = (err: unknown) => {
+    if (settled) return;
+    settled = true;
+    reject(err);
+  };
 
   const gated = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -181,24 +199,44 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
-            if (!settled) {
-              settled = true;
-              reject(new Error('stream closed before first chunk'));
+            if (pending && !pending.includes(PROVIDER_ERROR_EVENT_PREFIX)) {
+              // Genuine sub-256B output that closed before crossing the
+              // resolve threshold — it's real model output, forward it.
+              settleResolve();
+              controller.enqueue(new TextEncoder().encode(pending));
+            } else {
+              settleReject(new Error('stream closed before first chunk'));
             }
             controller.close();
             return;
           }
           if (!settled) {
-            settled = true;
-            resolve();
+            // Scan for a pre-output provider-error marker: partial-safe —
+            // buffer across chunk boundaries until we can rule it out.
+            pending += decoder.decode(value, { stream: true });
+            if (pending.includes(PROVIDER_ERROR_EVENT_PREFIX)) {
+              settleReject(new Error(`provider failed before first token${pending.slice(0, 200)}`));
+              // Do NOT forward the marker — the router will try the next
+              // hop; the client must not see a failure notice for a hop it
+              // is being transparently retried past.
+              controller.close();
+              return;
+            }
+            // ponytail: a marker prefix could theoretically split across
+            // chunks; buffer at most ~256B before deciding — anything that
+            // long without a marker is genuine output.
+            if (pending.length > 256) {
+              settleResolve();
+              // Re-emit buffered text downstream as one blob.
+              controller.enqueue(new TextEncoder().encode(pending));
+              pending = '';
+            }
+            continue;
           }
           controller.enqueue(value);
         }
       } catch (err) {
-        if (!settled) {
-          settled = true;
-          reject(err);
-        }
+        settleReject(err);
         controller.error(err);
       }
     },
@@ -302,6 +340,11 @@ export async function executeWithFallback(params: {
               } catch { /* client gone */ }
               try { controller.close(); } catch { /* already closed */ }
             }
+          },
+          // Client disconnect must reach the provider — cancel the gated
+          // stream so the upstream reader/request actually stops.
+          cancel(reason) {
+            gatedStream.cancel(reason).catch(() => {});
           },
         });
 

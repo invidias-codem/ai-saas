@@ -187,7 +187,7 @@ describe('fallback router — first-chunk gate', () => {
     const good = gateStreamOnFirstChunk(
       new ReadableStream({
         start(c) {
-          c.enqueue(enc.encode('x'));
+          c.enqueue(enc.encode('x'.repeat(300))); // >256B: no marker ambiguity
           c.close();
         },
       })
@@ -203,5 +203,60 @@ describe('fallback router — first-chunk gate', () => {
       })
     );
     await expect(empty.firstChunk).rejects.toThrow(/closed before first chunk/);
+  });
+
+  it('qodo #3: marker-before-output REJECTS the gate (pre-token death = next hop, not success)', async () => {
+    const { gateStreamOnFirstChunk } = await import('@/lib/llm/routing/fallbackRouter') as any;
+    const enc = new TextEncoder();
+    const { encodeProviderErrorEvent } = await import('@/lib/media/envelope');
+
+    // Provider dies before any token → its stream is JUST the marker.
+    const dead = gateStreamOnFirstChunk(
+      new ReadableStream({
+        start(c) {
+          c.enqueue(enc.encode(encodeProviderErrorEvent({ provider: 'nim', reason: 'idle_timeout' })));
+          c.close();
+        },
+      })
+    );
+    await expect(dead.firstChunk).rejects.toThrow(/failed before first token/);
+    // Marker never reaches the client — gated stream closes empty.
+    const text = await drainWithoutThrow(dead.stream);
+    expect(text.threw).toBe(false);
+    expect(text.text).not.toContain('__PROVIDER_ERROR_EVENT__');
+  });
+
+  it('qodo #2: connect timeout does NOT kill a stream that got headers (budget governs body)', async () => {
+    // Headers arrive instantly (fetch resolves), body streams past the 30s
+    // connect window — must NOT abort. Proven by construction: connectTimer
+    // is cleared the moment fetch resolves; the test asserts a slow body
+    // completes normally with generous budget env.
+    process.env.NIM_CONNECT_TIMEOUT_MS = '50';  // 50ms connect cap
+    process.env.NIM_IDLE_TIMEOUT_MS = '5000';   // slow-chunk test: no idle trips
+    process.env.NIM_TOTAL_STREAM_BUDGET_MS = '5000';
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"a"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"b"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+    const enc = new TextEncoder();
+    const delayed = new ReadableStream({
+      async start(c) {
+        for (const ch of chunks) {
+          await new Promise((r) => setTimeout(r, 80)); // past connect window
+          c.enqueue(enc.encode(ch));
+        }
+        c.close();
+      },
+    });
+    fetchMock.mockResolvedValueOnce(new Response(delayed, { status: 200 }));
+
+    const p = new NvidiaNimProvider();
+    const result = await p.generateStream([{ role: 'user', text: 'hi' } as any]);
+    const { text, threw } = await drainWithoutThrow(result.stream);
+    expect(threw).toBe(false);
+    expect(text).toBe('ab');
+    // restore defaults for other tests
+    process.env.NIM_CONNECT_TIMEOUT_MS = '5000';
   });
 });

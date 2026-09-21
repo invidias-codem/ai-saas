@@ -193,9 +193,14 @@ export class NvidiaNimProvider implements LLMProvider {
 
     let response: Response;
     const started = Date.now();
+    // Connect timeout: a cancelable controller whose timer is cleared the
+    // moment headers arrive — the signal must NOT stay attached to the body
+    // (a 30s signal would kill healthy long streams).
+    const connectController = new AbortController();
+    const budgetController = new AbortController();
+    const connectTimer = setTimeout(() => connectController.abort(new Error('connect_timeout')), CONNECT_TIMEOUT_MS);
+    const budgetTimer = setTimeout(() => budgetController.abort(new Error('total_budget')), totalBudgetMs);
     try {
-      const connectSignal = AbortSignal.timeout(CONNECT_TIMEOUT_MS);
-      const budgetSignal = AbortSignal.timeout(totalBudgetMs);
       response = await fetch(`${this.baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -203,9 +208,12 @@ export class NvidiaNimProvider implements LLMProvider {
           Authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.any([connectSignal, budgetSignal]),
+        signal: AbortSignal.any([connectController.signal, budgetController.signal]),
       });
+      clearTimeout(connectTimer); // headers arrived — body runs on budget only
     } catch (err: any) {
+      clearTimeout(connectTimer);
+      clearTimeout(budgetTimer);
       const elapsed = Date.now() - started;
       const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError' || String(err?.message || err).includes('aborted');
       logger.error(`[NvidiaNimProvider] request failed after ${elapsed}ms`, {
@@ -248,15 +256,24 @@ export class NvidiaNimProvider implements LLMProvider {
     let buffer = '';
     let firstChunk = true;
     const toolCalls: NimToolCall[] = [];
-    // Idle-between-chunks watchdog, reset on every chunk.
+    // Idle-between-chunks watchdog, reset on every upstream chunk (NOT on
+    // client pulls — downstream backpressure must never fire it).
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     let idleFired = false;
     const armIdle = () => {
       if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => { idleFired = true; reader.cancel().catch(() => {}); }, IDLE_TIMEOUT_MS);
+      idleTimer = setTimeout(() => {
+        idleFired = true;
+        budgetController.abort(new Error('idle_timeout'));
+        reader.cancel().catch(() => {});
+      }, IDLE_TIMEOUT_MS);
     };
     const clearIdle = () => {
       if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    };
+    const clearBudget = () => {
+      clearTimeout(budgetTimer);
+      clearIdle();
     };
 
     // Never let a mid-stream provider death fault the client HTTP response:
@@ -272,16 +289,17 @@ export class NvidiaNimProvider implements LLMProvider {
 
     const stream = new ReadableStream<Uint8Array>({
       async pull(streamController) {
-        armIdle();
+        armIdle(); // covers the pre-first-chunk gap too (qodo #6: armed before read, cleared after)
         try {
           const { done, value } = await reader.read();
+          clearIdle(); // upstream chunk arrived — idle watchdog satisfied
           if (done) {
-            clearIdle();
             if (idleFired) {
-              // reader.cancel() (idle watchdog) resolves reads as done —
-              // surface it as a clean provider interruption, not silence.
+              // Watchdog-cancelled read resolves as done — surface it as a
+              // clean provider interruption, not silence.
               failCleanly(streamController, `idle_timeout (no chunks for ${IDLE_TIMEOUT_MS}ms)`);
             } else {
+              clearBudget();
               streamController.close();
             }
             return;
@@ -296,7 +314,7 @@ export class NvidiaNimProvider implements LLMProvider {
 
             const payload = line.slice(5).trim();
             if (payload === '[DONE]') {
-              clearIdle();
+              clearBudget();
               streamController.close();
               return;
             }
@@ -348,7 +366,7 @@ export class NvidiaNimProvider implements LLMProvider {
           // structured marker and close cleanly; the post-gen drain records
           // the failure. (Pre-first-token deaths throw before a stream is
           // ever returned, so the fallback router still hops.)
-          clearIdle();
+          clearBudget();
           const reason = idleFired
             ? `idle_timeout (no chunks for ${IDLE_TIMEOUT_MS}ms)`
             : String(err?.message || err);
@@ -356,7 +374,7 @@ export class NvidiaNimProvider implements LLMProvider {
         }
       },
       cancel() {
-        clearIdle();
+        clearBudget();
         reader.cancel().catch(() => {});
       },
     });
