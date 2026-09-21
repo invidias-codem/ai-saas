@@ -17,8 +17,12 @@ jest.mock('@/lib/security/apiAuth', () => ({
 }));
 
 const getBuild = jest.fn();
+const failBuild = jest.fn().mockResolvedValue(undefined);
+const cancelBuild = jest.fn().mockResolvedValue(undefined);
 jest.mock('@/lib/code-builder/buildStore', () => ({
   getBuild: (...args: unknown[]) => getBuild(...args),
+  failBuild: (...args: unknown[]) => failBuild(...args),
+  cancelBuild: (...args: unknown[]) => cancelBuild(...args),
 }));
 
 jest.mock('@/lib/env', () => ({
@@ -93,8 +97,35 @@ describe('realtime relay route — product-boundary contract', () => {
     expect(body).toContain('event: open');
     expect(body).toContain('event: run-status');
     expect(body).toContain('"status":"COMPLETED_SUCCESSFULLY"');
+    // Success is the worker's to own — relay must NOT reconcile it.
+    expect(failBuild).not.toHaveBeenCalled();
+    expect(cancelBuild).not.toHaveBeenCalled();
     // Product boundary: no payload/output/metadata keys ever emitted.
     expect(body).not.toMatch(/"payload"|"output"|"metadata"/);
+  });
+
+  it('reconciles platform failures into the durable row BEFORE emitting (qodo #1)', async () => {
+    getBuild.mockResolvedValue({ build_id: 'b1', user_id: 'u1', trigger_run_id: 'run_xyz' });
+    subscribeToRun.mockReturnValue(terminalRunStream('CRASHED'));
+
+    const res = await GET(req() as any, { params: Promise.resolve({ buildId: 'b1' }) });
+    const body = await res.text();
+
+    // Reconcile-then-emit: the CRASHED status IS in the body, and failBuild
+    // ran during the same stream (route awaits it before sending).
+    expect(failBuild).toHaveBeenCalledWith('b1', 'TRIGGER_CRASHED', expect.any(String));
+    expect(body).toContain('"status":"CRASHED"');
+    expect(body).not.toMatch(/"payload"|"output"|"metadata"/);
+  });
+
+  it('maps CANCELED to cancelBuild, not failBuild', async () => {
+    getBuild.mockResolvedValue({ build_id: 'b1', user_id: 'u1', trigger_run_id: 'run_xyz' });
+    subscribeToRun.mockReturnValue(terminalRunStream('CANCELED'));
+
+    const res = await GET(req() as any, { params: Promise.resolve({ buildId: 'b1' }) });
+    await res.text();
+    expect(cancelBuild).toHaveBeenCalledWith('b1');
+    expect(failBuild).not.toHaveBeenCalled();
   });
 
   it('unsubscribes upstream when the client disconnects', async () => {
