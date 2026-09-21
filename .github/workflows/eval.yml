@@ -53,6 +53,13 @@ jobs:
         if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
         run: pnpm install --no-frozen-lockfile
 
+      # Workspace packages (packages/lattice-*) are consumed via built dist/
+      # (gitignored) — eval scripts import @lattice-os/* and fail with
+      # ERR_PACKAGE_PATH_NOT_EXPORTED unless they're built first.
+      - name: Build workspace packages
+        if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
+        run: pnpm --filter @lattice-os/core... run build
+
       # Option 1: download curated dataset artifact from nightly workflow.
       # For now we re-run curation in the PR job for determinism.
       - name: Curate dataset (PR)
