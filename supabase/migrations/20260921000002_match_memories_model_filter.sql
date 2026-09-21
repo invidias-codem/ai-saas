@@ -35,7 +35,7 @@ AS $$
     mb.type,
     mb.metadata,
     1 - (mb.embedding_3072 <=> query_embedding) AS similarity,
-    mb.created_at,
+    mb.updated_at AS created_at,
     mb.reward_score
   FROM public.memory_bank mb
   WHERE mb.user_id = filter_user_id

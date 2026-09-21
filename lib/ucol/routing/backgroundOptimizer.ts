@@ -215,6 +215,8 @@ async function processNewMemoryWithDeduplication(
             .insert({
                 user_id: userId,
                 content: compressedContent,
+                // Plain-text shadow for lexical FTS (content is LZ-compressed).
+                content_search: mem.content,
                 type: mem.type,
                 scope: mem.scope,
                 metadata: normalizedMetadata,

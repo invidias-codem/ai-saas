@@ -172,6 +172,8 @@ export async function storeExtractedFacts(
           source_conversation_id: conversationId,
           type: fact.type,
           content: fact.value,
+          // Plain-text shadow for lexical FTS (fact.value is uncompressed here).
+          content_search: fact.value,
           scope,
           confidence: fact.confidence,
           ...buildEmbeddingColumnPatch(embeddingResult),

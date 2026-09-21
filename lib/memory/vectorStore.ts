@@ -249,6 +249,8 @@ export async function storeMemoriesBulk(
             return {
                 user_id: normalizedUserId,
                 content: compressedContent,
+                // Plain-text shadow for lexical FTS (content is LZ-compressed).
+                content_search: m.content,
                 type: m.type,
                 scope,
                 metadata: normalizedMetadata,
