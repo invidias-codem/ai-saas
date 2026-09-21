@@ -43,10 +43,16 @@ export const envSchema = z.object({
   NVIDIA_NIM_BASE_URL: z.string().url().optional().default('https://integrate.api.nvidia.com/v1'),
 
   // TypeSafe Jev (System One decision model) — shadow decision plane.
-  // Pinned version, never the `jev-latest` alias: confidence thresholds and
-  // comparisons are calibrated against a specific version.
+  // PINNED VERSION ENFORCED IN SCHEMA (slice 1A): only version-shaped IDs
+  // (e.g. jev-1.13.0) are valid. Aliases (jev-latest, jev-preview) FAIL
+  // validation — confidence thresholds and comparisons calibrate against a
+  // specific version, and an alias can silently move underneath them.
   TYPESAFE_API_KEY: z.string().min(1).optional(),
-  JEV_MODEL: z.string().min(1).optional().default('jev-1.13.0'),
+  JEV_MODEL: z
+    .string()
+    .regex(/^jev-\d+\.\d+\.\d+$/, 'JEV_MODEL must be a pinned version (jev-X.Y.Z), never an alias (jev-latest/jev-preview)')
+    .optional()
+    .default('jev-1.13.0'),
 
   // ADD THESE FOR VERTEX AI (IMAGEN)
   GOOGLE_PROJECT_ID: z

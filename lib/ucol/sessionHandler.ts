@@ -7,6 +7,7 @@ import { validateRequestSize } from '@/lib/security/inputValidation';
 import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import { buildInitialRoutingDecision } from './routing/decision';
 import { shadowEvaluateRouting } from '@/lib/intelligence/decision/shadowRouter';
+import { waitUntil } from '@vercel/functions';
 import type { UcolRequestPacket, UcolRoutingDecision } from '@/lib/ucol/routing/types';
 import type { RuntimeContextResult } from '@/lib/ucol/runtimeContextResolver';
 import type { User } from '@clerk/nextjs/server';
@@ -138,21 +139,23 @@ export async function setupUcolSession({
         },
     });
 
-    // Shadow decision plane (slice 1): Jev independently classifies the same
-    // request in parallel; output goes to telemetry ONLY — routing is
-    // untouched. Fire-and-forget by design.
-    shadowEvaluateRouting({
+    // Shadow decision plane (slice 1A): the WHOLE operation (JEV request +
+    // validation + telemetry write) is registered with waitUntil so Vercel
+    // keeps the function alive until it completes. Routing is untouched.
+    waitUntil(
+      shadowEvaluateRouting({
         request: {
-            requestId: requestPacket.requestId,
-            rawInput: requestPacket.rawInput,
-            userId: user.userId,
-            workspaceId: resolvedContext.ucolContext.workspaceId ?? undefined,
+          requestId: requestPacket.requestId,
+          rawInput: requestPacket.rawInput,
+          userId: user.userId,
+          workspaceId: resolvedContext.ucolContext.workspaceId ?? undefined,
         },
         productionDecision: routingDecision,
         agentMode: resolvedContext.mode,
         hasAttachments: Boolean(fileData),
         messageHistoryCount: Array.isArray(messages) ? messages.length : 0,
-    });
+      })
+    );
 
     console.info('[UCOL] Initial routing decision', {
         requestId: routingDecision.requestId,
