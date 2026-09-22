@@ -70,7 +70,7 @@ AS $$
       OR mb.type = filter_feature_type
       OR mb.metadata->>'feature_type' = filter_feature_type
     )
-    AND to_tsvector('english', mb.content_search) @@ plainto_tsquery('english', query_text)
+    AND to_tsvector('english', mb.content_search) @@ websearch_to_tsquery('english', query_text)
   ORDER BY similarity DESC, mb.updated_at DESC
   LIMIT GREATEST(1, match_count);
 $$;

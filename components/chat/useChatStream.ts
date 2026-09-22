@@ -63,6 +63,8 @@ interface UseChatStreamOptions {
   setShowGreeting: (v: boolean) => void;
   setDebugExecutionMode: (v: string | undefined) => void;
   setDebugIntent: (v: string | undefined) => void;
+  /** Server-resolved agent mode (X-Debug-Agent-Mode) — overrides the client's local assumption. */
+  setServerAgentMode: (v: string | undefined) => void;
   setShowFileGateNudge: (v: boolean) => void;
   openPricingModal: () => void;
   trackActivity: (key: "image" | "video" | "message") => void;
@@ -91,6 +93,7 @@ export function useChatStream({
   setShowGreeting,
   setDebugExecutionMode,
   setDebugIntent,
+  setServerAgentMode,
   setShowFileGateNudge,
   openPricingModal,
   trackActivity,
@@ -198,8 +201,13 @@ export function useChatStream({
 
       const debugExecutionMode = response.headers.get("X-Debug-Execution-Mode") || undefined;
       const debugIntent = response.headers.get("X-Debug-Intent") || undefined;
+      // The SERVER-resolved mode is authoritative — the workspace/operating
+      // profile can override the client's assumption (e.g. UI says quality
+      // while the profile actually executes agentic on Kimi K3).
+      const serverAgentMode = response.headers.get("X-Debug-Agent-Mode") || undefined;
       setDebugExecutionMode(debugExecutionMode);
       setDebugIntent(debugIntent);
+      if (serverAgentMode) setServerAgentMode(serverAgentMode);
 
       // Check for pricing nudge trigger from server
       if (response.headers.get("x-trigger-nudge") === "true") {

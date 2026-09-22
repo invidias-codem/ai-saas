@@ -65,6 +65,8 @@ export class NvidiaNimProvider implements LLMProvider {
       tool_choice?: import('../toolCallTypes').NimToolChoice;
       maxTokens?: number;
       temperature?: number;
+      /** Remaining budget for THIS step, from the loop's shared deadline. */
+      timeoutMs?: number;
     } = {}
   ): Promise<{ content: string; toolCalls: NimToolCall[]; model: string }> {
     this.assertConfigured();
@@ -94,8 +96,11 @@ export class NvidiaNimProvider implements LLMProvider {
       ...(params.tools?.length ? { tools: params.tools, tool_choice: params.tool_choice ?? "auto" } : {}),
     };
 
+    // Per-step timeout: caller passes the REMAINING loop budget (the loop
+    // owns a single 240s deadline — no more 7×50s independent calls).
+    // Falls back to a bounded default only for direct one-shot callers.
+    const timeoutMs = params.timeoutMs ?? Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? 50_000);
     const controller = new AbortController();
-    const timeoutMs = Number(process.env.NIM_REQUEST_TIMEOUT_MS ?? 50_000);
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     let response: Response;

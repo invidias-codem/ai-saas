@@ -16,6 +16,23 @@
  */
 
 const EMBEDDING_DIM = 3072;
+
+// ── Embedding circuit breaker ────────────────────────────────────────────────
+// A Google-side access denial ("Your project has been denied access") is an
+// ACCOUNT/project-level condition, not a per-request fault — retrying every
+// chat just burns a doomed round-trip and adds latency. On that specific 403,
+// open the breaker for a cooldown and go straight to the degraded lexical
+// path. Any other failure (429/network) still retries per-request as before.
+const EMBED_CIRCUIT_COOLDOWN_MS = 5 * 60 * 1000;
+let embedCircuitOpenUntil = 0;
+let embedCircuitReason = '';
+
+function isProjectDenied(err: any): boolean {
+  const msg = String(err?.message || err);
+  return err?.status === 403 || msg.includes('403')
+    ? /project has been denied access|denied access/i.test(msg)
+    : false;
+}
 const L1_CACHE_TTL_MS = 1000 * 60 * 60;
 const L2_CACHE_TTL_SEC = 60 * 60 * 24;
 const MAX_L1_CACHE_SIZE = 100;
@@ -199,11 +216,27 @@ export async function generateEmbeddingWithMetadata(text: string): Promise<Embed
 
   let result: EmbeddingResult | null = null;
 
+  // Circuit open → skip the doomed Google round-trip entirely.
+  if (Date.now() < embedCircuitOpenUntil) {
+    console.warn(`[Embedding] Circuit OPEN (${embedCircuitReason}) — lexical fallback without calling Gemini`);
+    return {
+      vector: new Array(EMBEDDING_DIM).fill(0),
+      dimension: EMBEDDING_DIM,
+      provider: 'zero_vector',
+      model: 'zero-vector-fallback',
+      degraded: true,
+    };
+  }
+
   try {
     result = await embedWithGemini(text);
   } catch (err: any) {
     const message = String(err?.message || err);
-    if (isRateLimitError(err)) {
+    if (isProjectDenied(err)) {
+      embedCircuitOpenUntil = Date.now() + EMBED_CIRCUIT_COOLDOWN_MS;
+      embedCircuitReason = 'google_project_denied_403';
+      console.warn('[Embedding] Google project access denied — opening circuit for 5 minutes');
+    } else if (isRateLimitError(err)) {
       console.warn('[Embedding] Gemini rate limited');
     } else {
       console.warn('[Embedding] Gemini embedding failed:', message);
