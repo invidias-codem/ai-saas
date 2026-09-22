@@ -48,15 +48,17 @@ export async function POST(req: Request) {
     // post-gen pipeline owns stream continuation; enforcement is a later
     // slice once we know abort share is non-trivial.
     const lifecycleRequestId = randomUUID();
-    req.signal.addEventListener('abort', () => {
-        logEvent({
-            eventType: 'chat_client_aborted',
-            metadata: {
-                requestId: lifecycleRequestId,
-                at: new Date().toISOString(),
-            },
+    if (req.signal) {
+        req.signal.addEventListener('abort', () => {
+            logEvent({
+                eventType: 'chat_client_aborted',
+                metadata: {
+                    requestId: lifecycleRequestId,
+                    at: new Date().toISOString(),
+                },
+            });
         });
-    });
+    }
     logEvent({
         eventType: 'chat_accepted',
         metadata: { requestId: lifecycleRequestId, at: new Date().toISOString() },
