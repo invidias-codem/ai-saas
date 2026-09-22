@@ -12,13 +12,13 @@
 // Shared embedContent mock — every getGenerativeModel() returns the SAME
 // instance, so tests configure rejections/resolutions that the provider's
 // own fresh getGenerativeModel() call actually hits.
-const embedContentMock = jest.fn(async () => ({
+const embedContentMock = jest.fn(async (..._a: unknown[]) => ({
   embedding: { values: new Array(3072).fill(0.1) },
 }));
 jest.mock('@google/generative-ai', () => ({
   GoogleGenerativeAI: class {
     getGenerativeModel() {
-      return { embedContent: (...a: any[]) => embedContentMock(...a) };
+      return { embedContent: (...a: unknown[]) => embedContentMock(...a) };
     }
   },
 }));

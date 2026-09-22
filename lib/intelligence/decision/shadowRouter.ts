@@ -2,21 +2,35 @@
 // SHADOW-ONLY Jev evaluation of UCOL routing decisions. Slice 1 of the
 // decision-plane rollout: zero production behavior change.
 //
-// For every real UCOL request we run the SAME batched semantic classification
-// through Jev in parallel with the existing bandit + provider policy, then
-// log agreement/disagreement. Jev never influences routing here — this
-// module's output goes to telemetry only.
-//
-// Question design follows TypeSafe guidance: ONE batched request (fan-out),
-// atomic questions, semantics only — Jev never sees provider names or the
-// model catalog (indirection is a documented Jev 1.13 weakness). Deterministic
-// code maps its answers to the bandit's own action space for comparison.
+// Slice 1A hardening:
+//   - Returns the full promise; the call site registers it with waitUntil so
+//     Vercel cannot terminate the function before the decision + telemetry
+//     write complete. (A detached promise inflated the "unavailable" rate
+//     with serverless-termination noise.)
+//   - State is redacted (scrubText) before egress — the same PII scrubbing
+//     used everywhere else in Lattice. ponytail: full workspace/provider
+//     egress policy (externalDecisionProvidersAllowed) is deferred to the
+//     enterprise-policy slice; scrubText covers the interim.
+//   - productionTier now uses the provider resolver's own tier semantics
+//     (fast|quality|reasoning) so over/under-provisioning is a real
+//     comparison; the raw model ref is retained separately for diagnostics.
+//   - Every event carries schema/provider/model/version stamps so historic
+//     agreement curves can never silently mix experiments.
 
 import { logEvent } from '@/lib/telemetry';
 import { env } from '@/lib/env';
+import { scrubText } from '@/lib/security/pii';
 import type { UcolRoutingDecision } from '@/lib/ucol/routing/types';
 import { jevEvaluate } from './provider';
 import type { Questions } from './provider';
+
+// Experimental-dataset version stamps. Bump on ANY change to question
+// wording, tier mapping, or comparison logic — these fields make the
+// telemetry joinable to the exact experiment that produced it.
+export const DECISION_PLANE_SCHEMA_VERSION = 1;
+export const QUESTION_SET_VERSION = 1;
+export const TIER_POLICY_VERSION = 1;
+export const DECISION_PROVIDER_ID = 'jev';
 
 // Bandit action space (lib/ucol/routing/decision.ts) — Jev classifies into the
 // SAME labels so agreement is directly measurable.
@@ -29,22 +43,55 @@ const TASK_CLASSES = {
 } as const;
 
 // Model tiers derived in CODE from Jev's semantic outputs (never asked of Jev).
-// Maps onto the providerResolver's mode semantics; recorded for the
-// over/under-provisioning metric.
+// Uses the provider resolver's own tier vocabulary (fast|quality|reasoning) so
+// the comparison against the production tier is apples-to-apples.
 function tierFromSemantics(answers: Record<string, any>): string {
   const complexity = answers.task_complexity as any; // score answer
   const reasoning = (answers.requires_strong_reasoning as any)?.noul ?? 0;
   // score: 0=trivial 1=standard 2=complex 3=deep
   const level = complexity?.score ?? 1;
-  if (level >= 2.5 || reasoning > 0.7) return 'strong';
-  if (level >= 1.5) return 'standard';
+  if (level >= 2.5 || reasoning > 0.7) return 'reasoning';
+  if (level >= 1.5) return 'quality';
   return 'fast';
 }
 
 /**
- * Shadow evaluation — fire-and-forget, never awaited on the request path.
- * Reads the ALREADY-MADE production decision (bandit output) and asks Jev
- * the same question independently, then logs the comparison.
+ * Production tier derived from the RESOLVED provider plan — the resolver's
+ * own vocabulary (fast|quality|reasoning), not the requested mode. The
+ * resolver stamps preferredModelRefs like 'gemini.quality' (attachments),
+ * 'deepseek.fast', 'nvidia-nim.agentic', 'deepseek.reasoning' — the suffix
+ * IS the effective tier. Falls back to mode-derived tier only if the plan is
+ * missing (never in practice).
+ */
+function productionTierFromPlan(
+  providerPlan: UcolRoutingDecision['providerPlan'] | undefined,
+  agentMode: string,
+): string {
+  const ref = providerPlan?.preferredModelRefs?.[0];
+  if (ref) {
+    const suffix = ref.split('.').pop() ?? '';
+    if (suffix === 'fast' || suffix === 'quality' || suffix === 'reasoning' || suffix === 'agentic') {
+      // Resolver ranks agentic at the reasoning tier (getModeTierRank).
+      return suffix === 'agentic' ? 'reasoning' : suffix;
+    }
+  }
+  // ponytail: mode-based fallback — only reachable if the plan shape changes;
+  // the plan suffix is the resolver's own tier statement.
+  switch (agentMode) {
+    case 'reasoning':
+    case 'agentic':
+      return 'reasoning';
+    case 'quality':
+      return 'quality';
+    default:
+      return 'fast';
+  }
+}
+
+/**
+ * Shadow evaluation — async so the call site can register the WHOLE operation
+ * (JEV request + validation + telemetry write) with waitUntil. Zero latency
+ * on the user-visible path either way.
  */
 export function shadowEvaluateRouting(args: {
   request: { requestId: string; rawInput: string; userId?: string; workspaceId?: string };
@@ -52,12 +99,15 @@ export function shadowEvaluateRouting(args: {
   agentMode: string;
   hasAttachments: boolean;
   messageHistoryCount: number;
-}): void {
-  // No key → no shadow (the plane is inert in dev/test).
-  if (!env.TYPESAFE_API_KEY) return;
+}): Promise<void> {
+  // No key → no shadow (the plane is inert without configuration).
+  if (!env.TYPESAFE_API_KEY) return Promise.resolve();
+
+  // Egress hygiene: redact secrets/PII before anything leaves Lattice.
+  const redactedInput = scrubText(args.request.rawInput).slice(0, 4_000);
 
   const state = {
-    user_request: args.request.rawInput.slice(0, 4_000),
+    user_request: redactedInput,
     conversation_length_so_far: args.messageHistoryCount,
     has_file_attachments: args.hasAttachments,
     workspace_backed: Boolean(args.productionDecision.resolvedWorkspaceId),
@@ -98,25 +148,38 @@ export function shadowEvaluateRouting(args: {
     },
   };
 
-  void (async () => {
-    const result = await jevEvaluate(state, questions);
-    if (!result) {
+  return (async () => {
+    const outcome = await jevEvaluate(state, questions);
+    if (!outcome.ok) {
       logEvent({
         eventType: 'jev_shadow_decision',
         userId: args.request.userId,
         workspaceId: args.request.workspaceId,
         metadata: {
           requestId: args.request.requestId,
-          status: 'unavailable', // timeout/error/no key path — the fallback rate metric
+          status: 'unavailable',
+          // Failure diagnostics: reason + retry burn + deadline latency —
+          // distinguishable failure classes, measurable retry behavior.
+          jevFailureReason: outcome.reason,
+          jevAttemptCount: outcome.attemptCount,
+          jevLatencyMs: outcome.latencyMs,
           productionIntent: args.productionDecision.intent.category,
+          decisionPlaneSchemaVersion: DECISION_PLANE_SCHEMA_VERSION,
+          decisionProvider: DECISION_PROVIDER_ID,
+          decisionModel: env.JEV_MODEL,
+          questionSetVersion: QUESTION_SET_VERSION,
+          tierPolicyVersion: TIER_POLICY_VERSION,
         },
       });
       return;
     }
+    const result = outcome.result;
 
     const taskClass = result.answers.task_class as any;
     const jevIntent = (taskClass?.choice ?? 'unknown') as string;
     const agreement = jevIntent === args.productionDecision.intent.category;
+    const jevTier = tierFromSemantics(result.answers);
+    const productionTier = productionTierFromPlan(args.productionDecision.providerPlan, args.agentMode);
 
     logEvent({
       eventType: 'jev_shadow_decision',
@@ -125,22 +188,29 @@ export function shadowEvaluateRouting(args: {
       metadata: {
         requestId: args.request.requestId,
         status: 'ok',
+        // Experiment stamps — historic curves stay comparable.
+        decisionPlaneSchemaVersion: DECISION_PLANE_SCHEMA_VERSION,
+        decisionProvider: DECISION_PROVIDER_ID,
+        decisionModel: result.model,
+        questionSetVersion: QUESTION_SET_VERSION,
+        tierPolicyVersion: TIER_POLICY_VERSION,
         // Agreement-rate metric
         productionIntent: args.productionDecision.intent.category,
         jevIntent,
         agreement,
         jevConfidence: taskClass?.confidence ?? null,
-        // Over/under-provisioning metric
-        jevTier: tierFromSemantics(result.answers),
-        productionTier: args.productionDecision.providerPlan?.preferredModelRefs?.[0] ?? null,
+        // Over/under-provisioning — comparable tiers on both sides now.
+        jevTier,
+        productionTier,
+        productionModelRef: args.productionDecision.providerPlan?.preferredModelRefs?.[0] ?? null,
         complexityScore: (result.answers.task_complexity as any)?.score ?? null,
         requiresToolsNoul: (result.answers.requires_tools as any)?.noul ?? null,
         requiresLongContextNoul: (result.answers.requires_long_context as any)?.noul ?? null,
         requiresStrongReasoningNoul: (result.answers.requires_strong_reasoning as any)?.noul ?? null,
-        // Cost/latency metric
+        // Cost/latency — whole-operation numbers.
         jevLatencyMs: result.latencyMs,
+        jevAttemptCount: result.attemptCount,
         jevInputTokens: result.usage.inputTokens,
-        jevModel: result.model,
       },
     });
   })().catch(() => { /* telemetry must never throw */ });

@@ -8,6 +8,11 @@ const PHONE_RE =
 const SECRET_HINT_RE =
   /\b(AIza[0-9A-Za-z_-]{20,}|sk-[0-9A-Za-z_-]{20,}|sb_secret_[0-9A-Za-z_-]{20,}|Bearer\s+[0-9A-Za-z._-]{20,})\b/g;
 
+// Assignment-shaped credentials: <label>=<value> / <label>: <value> where the
+// label marks secret material. Preserves the label, redacts only the value.
+const SECRET_LABEL_RE =
+  /\b((?:api[_-]?key|access[_-]?token|auth[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|secret|password|passwd|pwd|token|authorization|credentials?|private[_-]?key)\b\s*[=:]\s*)(["']?)[^\s"'&,;}{]{3,}\2/gi;
+
 // Generic long token heuristic (can be noisy; keep last to avoid over-redaction)
 const LONG_TOKEN_RE = /\b[0-9A-Za-z+/_-]{32,}\b/g;
 
@@ -22,6 +27,7 @@ export function scrubText(s: string): string {
     .replace(EMAIL_RE, "[REDACTED_EMAIL]")
     .replace(PHONE_RE, "[REDACTED_PHONE]")
     .replace(SECRET_HINT_RE, "[REDACTED_SECRET]")
+    .replace(SECRET_LABEL_RE, "$1$2[REDACTED_SECRET]$2")
     .replace(LONG_TOKEN_RE, "[REDACTED_SECRET]");
 }
 
