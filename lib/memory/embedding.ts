@@ -1,12 +1,18 @@
 /**
  * embedding.ts — Gemini Embedding Provider
  *
- * Single provider: Gemini (gemini-embedding-2-preview, 3072-dim).
+ * Single provider: Gemini (gemini-embedding-2 GA, 3072-dim).
  *
- * The self-hosted Vast.ai / Ollama path (LAMBDA_OLLAMA_URL / LAMBDA_EMBED_URL)
- * has been removed. Embeddings route directly and exclusively to Gemini; the
- * only defensive layer left is exponential backoff for 429s and a degraded
- * zero-vector fallback (keyword/BM25) when Gemini itself is unresolvable.
+ * gemini-embedding-2-preview reached its shutdown date (Aug 10 2026); the GA
+ * model defaults to 3072 dimensions, so the memory lane is unchanged.
+ *
+ * Cache keys are namespaced per embedding model + dimension and hashed over
+ * the FULL text (old key was a 500-char prefix — colliding documents shared
+ * embeddings). The Redis prefix bumps on every embedding-space migration so
+ * stale vectors from the retired model can never be served.
+ *
+ * Degraded zero-vectors are NEVER cached — a transient provider failure must
+ * not poison retrieval for the cache TTL.
  */
 
 const EMBEDDING_DIM = 3072;
@@ -52,7 +58,18 @@ async function withExponentialBackoff<T>(fn: () => Promise<T>): Promise<T> {
   throw lastError;
 }
 
-const REDIS_KEY_PREFIX = 'embed:v2:';
+// ponytail: bump on every embedding-space migration (model or dimension
+// change). v3 = gemini-embedding-2 GA switch; old keys (embed:v2:*) are
+// abandoned in place — TTL evicts them.
+const REDIS_KEY_PREFIX = 'embed:v3:';
+
+export const EMBEDDING_MODEL = 'gemini-embedding-2';
+
+function cacheKeyFor(text: string): string {
+  // Full-text hash: model + dimension + sha256 — no 500-char prefix collisions.
+  const hash = require('node:crypto').createHash('sha256').update(text).digest('hex');
+  return `embedding:${EMBEDDING_MODEL}:3072:${hash}`;
+}
 
 export type EmbeddingDimension = 768 | 3072;
 export type EmbeddingProvider = 'gemini' | 'zero_vector';
@@ -152,21 +169,24 @@ async function embedWithGemini(text: string): Promise<EmbeddingResult> {
 
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-  const modelName = 'gemini-embedding-2-preview';
-  const model = genAI.getGenerativeModel({ model: modelName });
+  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
 
   const result = await withExponentialBackoff(async () => {
     const result = await model.embedContent(text);
     const values = result.embedding?.values ?? [];
     if (values.length === 0) throw new Error('[Embedding] Gemini returned empty embedding');
-    return buildEmbeddingResult(values, 'gemini', modelName);
+    if (values.length !== EMBEDDING_DIM) {
+      // GA model defaults to 3072; guard against silent dimension drift.
+      throw new Error(`[Embedding] Gemini returned ${values.length} dims (expected ${EMBEDDING_DIM})`);
+    }
+    return buildEmbeddingResult(values, 'gemini', EMBEDDING_MODEL);
   });
 
   return result;
 }
 
 export async function generateEmbeddingWithMetadata(text: string): Promise<EmbeddingResult> {
-  const cacheKey = text.substring(0, 500);
+  const cacheKey = cacheKeyFor(text);
 
   const l1Hit = getL1Cached(cacheKey);
   if (l1Hit) return l1Hit;
@@ -191,8 +211,11 @@ export async function generateEmbeddingWithMetadata(text: string): Promise<Embed
   }
 
   if (!result) {
-    console.warn('[Embedding] Gemini failed — returning degraded zero vector (keyword fallback)');
-    result = {
+    console.warn('[Embedding] Gemini failed — returning degraded zero vector (lexical fallback)');
+    // NEVER cache a degraded result (L1 or L2): a transient provider failure
+    // must not serve zero-vectors for the cache TTL. Callers see degraded=true
+    // and route to lexical retrieval.
+    return {
       vector: new Array(EMBEDDING_DIM).fill(0),
       dimension: EMBEDDING_DIM,
       provider: 'zero_vector',
