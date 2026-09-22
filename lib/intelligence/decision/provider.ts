@@ -65,6 +65,19 @@ export interface DecisionResult {
   attemptCount: number;
 }
 
+/** Why an evaluation produced no evidence. */
+export type EvaluationFailureReason =
+  | 'no_api_key'
+  | 'budget_exhausted'
+  | 'http_terminal'      // non-retryable status (401/403/422/other 5xx)
+  | 'response_invalid'   // schema or semantic validation failed
+  | 'network_error';     // abort/timeout/fetch rejection
+
+/** Discriminated outcome: success and failure BOTH carry diagnostics. */
+export type EvaluationOutcome =
+  | { ok: true; result: DecisionResult }
+  | { ok: false; reason: EvaluationFailureReason; latencyMs: number; attemptCount: number };
+
 // ── Response validation: a response is evidence ONLY if complete ─────────────
 
 const ChoiceAnswerSchema = z.object({
@@ -97,8 +110,11 @@ const JevResponseSchema = z.object({
 
 /**
  * A response is evidence only if EVERY submitted question ID came back with
- * an answer of the matching type. Missing/mistyped answers → null (the
- * caller never sees partial evidence).
+ * an answer of the matching type AND semantically valid against the question:
+ *   - Choice answers must pick an option from the submitted criteria keys.
+ *   - Score answers must land within the submitted scale (0..levels-1).
+ * Anything else → null (the caller never sees partial or out-of-domain
+ * evidence).
  */
 function validateEvidence(
   parsed: z.infer<typeof JevResponseSchema>,
@@ -111,6 +127,17 @@ function validateEvidence(
     // Type match enforced by the union parse above; re-check the pairing
     // explicitly so a choice answer to a noul question can't slip through.
     if (raw.type !== question.type) return null;
+
+    if (raw.type === 'choice' && question.type === 'choice') {
+      // The chosen option must be one WE submitted.
+      if (!(raw.choice in question.criteria)) return null;
+    }
+    if (raw.type === 'score' && question.type === 'score') {
+      // Score must land within the submitted scale (allows landing between
+      // levels, per the API: probability-weighted value).
+      const maxLevel = question.criteria.length - 1;
+      if (raw.score < 0 || raw.score > maxLevel) return null;
+    }
     answers[id] = raw as Answer;
   }
   return answers;
@@ -124,16 +151,17 @@ const JEV_RETRIES = 2;
 const RETRYABLE_STATUSES = new Set([429, 529]);
 
 /**
- * Direct-HTTP Jev adapter. Pinned version, env-gated, returns null on ANY
- * failure or incomplete response: callers treat null as "no evidence",
- * never as an error.
+ * Direct-HTTP Jev adapter. Pinned version, env-gated. Returns a discriminated
+ * outcome: failures carry their reason + attempt count + whole-operation
+ * latency, so the unavailable-rate dataset can measure retry burn and
+ * deadline behavior. Callers treat !ok as "no evidence", never an error.
  */
 export async function jevEvaluate(
   state: string | object,
   questions: Questions,
-): Promise<DecisionResult | null> {
+): Promise<EvaluationOutcome> {
   const apiKey = env.TYPESAFE_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) return { ok: false, reason: 'no_api_key', latencyMs: 0, attemptCount: 0 };
 
   const body = JSON.stringify({
     state,
@@ -143,12 +171,16 @@ export async function jevEvaluate(
 
   const startedAt = Date.now();
   const deadline = startedAt + JEV_BUDGET_MS;
+  let attempts = 0;
 
   for (let attempt = 1; attempt <= JEV_RETRIES + 1; attempt++) {
     const remaining = deadline - Date.now();
-    if (remaining <= 0) break;
+    if (remaining <= 0) {
+      return { ok: false, reason: 'budget_exhausted', latencyMs: Date.now() - startedAt, attemptCount: attempts };
+    }
 
     try {
+      attempts = attempt;
       const res = await fetch('https://api.typesafe.ai/v1/systemone', {
         method: 'POST',
         headers: {
@@ -170,38 +202,41 @@ export async function jevEvaluate(
       if (!res.ok) {
         // Non-transient failure (401/403/422/5xx-except-529): terminal.
         logger.warn('[DecisionPlane] Jev HTTP error (terminal)', { status: res.status, attempt });
-        return null;
+        return { ok: false, reason: 'http_terminal', latencyMs: Date.now() - startedAt, attemptCount: attempt };
       }
 
       const json: unknown = await res.json();
       const parsed = JevResponseSchema.safeParse(json);
       if (!parsed.success) {
         logger.warn('[DecisionPlane] Jev response failed schema validation', { attempt });
-        return null;
+        return { ok: false, reason: 'response_invalid', latencyMs: Date.now() - startedAt, attemptCount: attempt };
       }
       const answers = validateEvidence(parsed.data, questions);
       if (!answers) {
-        logger.warn('[DecisionPlane] Jev response missing/mistyped question answers', { attempt });
-        return null;
+        logger.warn('[DecisionPlane] Jev response missing/mistyped/out-of-domain answers', { attempt });
+        return { ok: false, reason: 'response_invalid', latencyMs: Date.now() - startedAt, attemptCount: attempt };
       }
 
       return {
-        model: parsed.data.model,
-        answers,
-        usage: {
-          inputTokens: parsed.data.usage.input_tokens,
-          outputTokens: parsed.data.usage.output_tokens,
+        ok: true,
+        result: {
+          model: parsed.data.model,
+          answers,
+          usage: {
+            inputTokens: parsed.data.usage.input_tokens,
+            outputTokens: parsed.data.usage.output_tokens,
+          },
+          latencyMs: Date.now() - startedAt,
+          attemptCount: attempt,
         },
-        latencyMs: Date.now() - startedAt,
-        attemptCount: attempt,
       };
     } catch (err: any) {
       // Timeout/abort/network — retry if budget remains, else give up.
       if (attempt > JEV_RETRIES || Date.now() >= deadline) {
         logger.warn('[DecisionPlane] Jev unreachable:', err?.message || String(err));
-        return null;
+        return { ok: false, reason: 'network_error', latencyMs: Date.now() - startedAt, attemptCount: attempt };
       }
     }
   }
-  return null;
+  return { ok: false, reason: 'budget_exhausted', latencyMs: Date.now() - startedAt, attemptCount: Math.max(attempts, 1) };
 }

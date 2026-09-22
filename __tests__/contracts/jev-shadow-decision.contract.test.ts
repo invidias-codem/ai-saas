@@ -32,12 +32,12 @@ jest.mock('@/lib/env', () => ({ env: {} }));
 
 // scrubText is real (security-critical) — import the REAL module, no mock.
 
-function decision(category = 'coding_task') {
+function decision(category = 'coding_task', preferredModelRef = 'nvidia/nemotron-3-ultra-550b-a55b') {
   return {
     requestId: 'r1',
     resolvedWorkspaceId: 'ws1',
     intent: { category, confidence: 0.8, subtypes: [], urgency: 'normal' },
-    providerPlan: { preferredModelRefs: ['nvidia/nemotron-3-ultra-550b-a55b'] },
+    providerPlan: { preferredModelRefs: [preferredModelRef] },
   } as any;
 }
 
@@ -119,10 +119,11 @@ describe('shadow decision plane — sovereign seam contract', () => {
     expect(Object.keys(body.questions)).toHaveLength(5);
     expect(body.model).toBe('jev-1.13.0');
 
-    // Egress hygiene: emails + secrets scrubbed BEFORE leaving Lattice.
+    // Egress hygiene: emails + labeled secrets scrubbed BEFORE leaving Lattice.
     const stateJson = JSON.stringify(body.state);
     expect(stateJson).not.toContain('jj@example.com');
     expect(stateJson).not.toContain('sk-abcdefghijklmnopqrst');
+    expect(stateJson).not.toContain('supersecretvalue123');
     expect(stateJson).toContain('[REDACTED_EMAIL]');
     expect(stateJson).toContain('[REDACTED_SECRET]');
 
@@ -197,16 +198,112 @@ describe('shadow decision plane — sovereign seam contract', () => {
     expect(logEventMock.mock.calls[0][0].metadata.status).toBe('unavailable');
   });
 
-  it('slice 1A: alias model IDs FAIL env-schema validation', () => {
-    const { z } = require('zod');
-    const pinnedVersion = z
-      .string()
-      .regex(/^jev-\d+\.\d+\.\d+$/, 'JEV_MODEL must be a pinned version (jev-X.Y.Z), never an alias');
+  it('slice 1A: alias model IDs FAIL the REAL production envSchema', () => {
+    // Exercises the actual envSchema from @lattice-os/core — removing or
+    // relaxing the real JEV_MODEL constraint makes this fail, unlike a
+    // duplicated inline regex.
+    const { envSchema } = require('@lattice-os/core');
 
-    expect(pinnedVersion.safeParse('jev-1.13.0').success).toBe(true);
-    expect(pinnedVersion.safeParse('jev-latest').success).toBe(false);
-    expect(pinnedVersion.safeParse('jev-preview').success).toBe(false);
-    expect(pinnedVersion.safeParse('jev-1.13').success).toBe(false);
+    const base = { JEV_MODEL: 'jev-1.13.0' };
+    expect(envSchema.safeParse({ ...base, JEV_MODEL: 'jev-1.13.0' }).success).toBe(true);
+    const alias = envSchema.safeParse({ ...base, JEV_MODEL: 'jev-latest' });
+    expect(alias.success).toBe(false);
+    const preview = envSchema.safeParse({ ...base, JEV_MODEL: 'jev-preview' });
+    expect(preview.success).toBe(false);
+    const partial = envSchema.safeParse({ ...base, JEV_MODEL: 'jev-1.13' });
+    expect(partial.success).toBe(false);
+  });
+
+  it('blocker 1: fast-mode + attachment logs productionTier from the RESOLVED plan (quality), not the mode', async () => {
+    setEnv('TYPESAFE_API_KEY', 'ts_test');
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(jevResponse(FULL_ANSWERS)), { status: 200 })
+    );
+
+    await shadowEvaluateRouting({
+      request: { requestId: 'r7', rawInput: 'summarize this attached PDF' },
+      // The resolver routes attachments to gemini.quality regardless of mode.
+      productionDecision: decision('knowledge_query', 'gemini.quality'),
+      agentMode: 'fast',
+      hasAttachments: true,
+      messageHistoryCount: 0,
+    });
+
+    expect(logEventMock).toHaveBeenCalledTimes(1);
+    const meta = logEventMock.mock.calls[0][0].metadata;
+    expect(meta.status).toBe('ok');
+    // Effective tier from the resolved plan, NOT the requested fast mode.
+    expect(meta.productionTier).toBe('quality');
+    expect(meta.productionModelRef).toBe('gemini.quality');
+  });
+
+  it('blocker 4: a Choice answer outside the submitted criteria is NOT evidence', async () => {
+    setEnv('TYPESAFE_API_KEY', 'ts_test');
+    const bogus = {
+      ...FULL_ANSWERS,
+      task_class: { type: 'choice', choice: 'unsupported', probabilities: { unsupported: 1 }, confidence: 0.9 },
+    };
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(jevResponse(bogus)), { status: 200 })
+    );
+
+    await shadowEvaluateRouting({
+      request: { requestId: 'r8', rawInput: 'hello' },
+      productionDecision: decision('general_chat'),
+      agentMode: 'fast',
+      hasAttachments: false,
+      messageHistoryCount: 0,
+    });
+
+    const meta = logEventMock.mock.calls[0][0].metadata;
+    expect(meta.status).toBe('unavailable');
+    expect(meta.jevFailureReason).toBe('response_invalid');
+  });
+
+  it('blocker 4: a Score answer outside the submitted scale is NOT evidence', async () => {
+    setEnv('TYPESAFE_API_KEY', 'ts_test');
+    const bogus = {
+      ...FULL_ANSWERS,
+      task_complexity: { type: 'score', score: 7.5, legend: {}, probabilities: {}, confidence: 0.9 },
+    };
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify(jevResponse(bogus)), { status: 200 })
+    );
+
+    await shadowEvaluateRouting({
+      request: { requestId: 'r9', rawInput: 'hello' },
+      productionDecision: decision('general_chat'),
+      agentMode: 'fast',
+      hasAttachments: false,
+      messageHistoryCount: 0,
+    });
+
+    const meta = logEventMock.mock.calls[0][0].metadata;
+    expect(meta.status).toBe('unavailable');
+    expect(meta.jevFailureReason).toBe('response_invalid');
+  });
+
+  it('blocker 3: unavailable events carry failure reason, attempt count, and whole-operation latency', async () => {
+    setEnv('TYPESAFE_API_KEY', 'ts_test');
+    // 429, 429, then network rejection — three attempts, measurable burn.
+    fetchMock
+      .mockResolvedValueOnce(new Response('rate limited', { status: 429 }))
+      .mockResolvedValueOnce(new Response('rate limited', { status: 429 }))
+      .mockRejectedValueOnce(new Error('network down'));
+
+    await shadowEvaluateRouting({
+      request: { requestId: 'r10', rawInput: 'hello' },
+      productionDecision: decision('general_chat'),
+      agentMode: 'fast',
+      hasAttachments: false,
+      messageHistoryCount: 0,
+    });
+
+    const meta = logEventMock.mock.calls[0][0].metadata;
+    expect(meta.status).toBe('unavailable');
+    expect(meta.jevFailureReason).toBe('network_error');
+    expect(meta.jevAttemptCount).toBe(3);
+    expect(meta.jevLatencyMs).toEqual(expect.any(Number));
   });
 
   it('Jev failure → unavailable telemetry, never an exception', async () => {

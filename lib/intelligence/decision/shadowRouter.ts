@@ -56,12 +56,27 @@ function tierFromSemantics(answers: Record<string, any>): string {
 }
 
 /**
- * Production tier in the resolver's own semantics, derived from the agent
- * mode the request actually executed under (the mode that drove
- * resolveProviderForMode). Comparable with tierFromSemantics() output.
+ * Production tier derived from the RESOLVED provider plan — the resolver's
+ * own vocabulary (fast|quality|reasoning), not the requested mode. The
+ * resolver stamps preferredModelRefs like 'gemini.quality' (attachments),
+ * 'deepseek.fast', 'nvidia-nim.agentic', 'deepseek.reasoning' — the suffix
+ * IS the effective tier. Falls back to mode-derived tier only if the plan is
+ * missing (never in practice).
  */
-function productionTierFromPlan(agentMode: string, personaOverride?: boolean): string {
-  // Mirrors getModeTierRank + TIER_RANK semantics from providerResolver.
+function productionTierFromPlan(
+  providerPlan: UcolRoutingDecision['providerPlan'] | undefined,
+  agentMode: string,
+): string {
+  const ref = providerPlan?.preferredModelRefs?.[0];
+  if (ref) {
+    const suffix = ref.split('.').pop() ?? '';
+    if (suffix === 'fast' || suffix === 'quality' || suffix === 'reasoning' || suffix === 'agentic') {
+      // Resolver ranks agentic at the reasoning tier (getModeTierRank).
+      return suffix === 'agentic' ? 'reasoning' : suffix;
+    }
+  }
+  // ponytail: mode-based fallback — only reachable if the plan shape changes;
+  // the plan suffix is the resolver's own tier statement.
   switch (agentMode) {
     case 'reasoning':
     case 'agentic':
@@ -71,9 +86,6 @@ function productionTierFromPlan(agentMode: string, personaOverride?: boolean): s
     default:
       return 'fast';
   }
-  // ponytail: personaOverride can raise the effective tier; the resolver's
-  // reason string carries it. Derived mode is the honest proxy until the
-  // decision object exposes the resolved tier directly.
 }
 
 /**
@@ -137,15 +149,20 @@ export function shadowEvaluateRouting(args: {
   };
 
   return (async () => {
-    const result = await jevEvaluate(state, questions);
-    if (!result) {
+    const outcome = await jevEvaluate(state, questions);
+    if (!outcome.ok) {
       logEvent({
         eventType: 'jev_shadow_decision',
         userId: args.request.userId,
         workspaceId: args.request.workspaceId,
         metadata: {
           requestId: args.request.requestId,
-          status: 'unavailable', // timeout/error/validation-failed — the fallback-rate metric
+          status: 'unavailable',
+          // Failure diagnostics: reason + retry burn + deadline latency —
+          // distinguishable failure classes, measurable retry behavior.
+          jevFailureReason: outcome.reason,
+          jevAttemptCount: outcome.attemptCount,
+          jevLatencyMs: outcome.latencyMs,
           productionIntent: args.productionDecision.intent.category,
           decisionPlaneSchemaVersion: DECISION_PLANE_SCHEMA_VERSION,
           decisionProvider: DECISION_PROVIDER_ID,
@@ -156,12 +173,13 @@ export function shadowEvaluateRouting(args: {
       });
       return;
     }
+    const result = outcome.result;
 
     const taskClass = result.answers.task_class as any;
     const jevIntent = (taskClass?.choice ?? 'unknown') as string;
     const agreement = jevIntent === args.productionDecision.intent.category;
     const jevTier = tierFromSemantics(result.answers);
-    const productionTier = productionTierFromPlan(args.agentMode);
+    const productionTier = productionTierFromPlan(args.productionDecision.providerPlan, args.agentMode);
 
     logEvent({
       eventType: 'jev_shadow_decision',

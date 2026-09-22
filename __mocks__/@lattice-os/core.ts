@@ -8,20 +8,19 @@
  * condition, so any test that transitively imports `lib/env.ts` fails at
  * module-load time with `Cannot find module '@lattice-os/core'`.
  *
- * This mock reproduces ONLY the surface the test environment relies on:
- * `envSchema` (a permissive Zod object that accepts process.env),
- * `Env` type re-export, and the helpers `lib/env.ts` re-exports.
- * It keeps the security/route tests green without forcing the whole workspace
- * build into the Jest resolver.
+ * envSchema re-exports the REAL schema from source: the real schema has NO
+ * required fields (every var is optional or defaulted), so parsing an empty
+ * test env succeeds, and tests exercise the production constraints — e.g.
+ * the JEV_MODEL pinned-version regex — instead of a permissive stub that
+ * silently lets aliases through.
+ *
+ * Anything else the test environment needs from this package gets added
+ * below on demand (helpers lib/env.ts re-exports, etc.).
  */
 
-import { z } from 'zod';
+export { envSchema } from '../../packages/lattice-core/src/schemas/env';
 
-// The real envSchema is a strict Zod object; for tests we accept a
-// permissive passthrough so required-but-unset env vars don't crash the
-// module load. The individual routes still validate their own bodies.
-export const envSchema = z.object({
-  NODE_ENV: z.string().optional().default('test'),
-}).passthrough();
-
-export type Env = z.infer<typeof envSchema>;
+export type Env = {
+  NODE_ENV?: string;
+  [key: string]: unknown;
+};
