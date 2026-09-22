@@ -1,39 +1,30 @@
 // lib/intelligence/decision/shadowRouter.ts
-// SHADOW-ONLY Jev evaluation of UCOL routing decisions. Slice 1 of the
-// decision-plane rollout: zero production behavior change.
+// SHADOW-ONLY evaluation of UCOL routing decisions through the neutral
+// Decision Plane. Zero production behavior change (contract extraction PR:
+// behavior identical to the slice-1A Jev implementation, relocated behind
+// DecisionEngine/DecisionPolicy so UCOL depends on contracts, not Jev).
 //
-// Slice 1A hardening:
-//   - Returns the full promise; the call site registers it with waitUntil so
-//     Vercel cannot terminate the function before the decision + telemetry
-//     write complete. (A detached promise inflated the "unavailable" rate
-//     with serverless-termination noise.)
-//   - State is redacted (scrubText) before egress — the same PII scrubbing
-//     used everywhere else in Lattice. ponytail: full workspace/provider
-//     egress policy (externalDecisionProvidersAllowed) is deferred to the
-//     enterprise-policy slice; scrubText covers the interim.
-//   - productionTier now uses the provider resolver's own tier semantics
-//     (fast|quality|reasoning) so over/under-provisioning is a real
-//     comparison; the raw model ref is retained separately for diagnostics.
-//   - Every event carries schema/provider/model/version stamps so historic
-//     agreement curves can never silently mix experiments.
+// Flow (locked): engine proposes → policy decides → telemetry records.
+// The legacy jev_shadow_decision event shape is UNCHANGED so the running
+// calibration baseline stays continuous.
 
 import { logEvent } from '@/lib/telemetry';
 import { env } from '@/lib/env';
 import { scrubText } from '@/lib/security/pii';
 import type { UcolRoutingDecision } from '@/lib/ucol/routing/types';
-import { jevEvaluate } from './provider';
-import type { Questions } from './provider';
+import type { DecisionDossier, Questions } from './contracts';
+import { JevDecisionEngine } from './engines/jev';
+import { ShadowRoutingPolicy } from './policies/shadowRoutingPolicy';
 
 // Experimental-dataset version stamps. Bump on ANY change to question
-// wording, tier mapping, or comparison logic — these fields make the
-// telemetry joinable to the exact experiment that produced it.
+// wording, tier mapping, or comparison logic.
 export const DECISION_PLANE_SCHEMA_VERSION = 1;
 export const QUESTION_SET_VERSION = 1;
 export const TIER_POLICY_VERSION = 1;
 export const DECISION_PROVIDER_ID = 'jev';
 
-// Bandit action space (lib/ucol/routing/decision.ts) — Jev classifies into the
-// SAME labels so agreement is directly measurable.
+// Bandit action space (lib/ucol/routing/decision.ts) — the engine classifies
+// into the SAME labels so agreement is directly measurable.
 const TASK_CLASSES = {
   general_chat: 'Casual conversation, greetings, chit-chat, simple questions answerable from general knowledge',
   coding_task: 'Writing, modifying, debugging, or explaining code; building apps or features; technical implementation work',
@@ -42,9 +33,10 @@ const TASK_CLASSES = {
   agentic_task: 'Multi-step work the user expects to be carried out autonomously with tools (browsing, file ops, executing workflows)',
 } as const;
 
-// Model tiers derived in CODE from Jev's semantic outputs (never asked of Jev).
-// Uses the provider resolver's own tier vocabulary (fast|quality|reasoning) so
-// the comparison against the production tier is apples-to-apples.
+// Model tiers derived in CODE from the engine's semantic outputs (never asked
+// of the engine). Uses the provider resolver's own tier vocabulary
+// (fast|quality|reasoning) so the comparison against the production tier is
+// apples-to-apples.
 function tierFromSemantics(answers: Record<string, any>): string {
   const complexity = answers.task_complexity as any; // score answer
   const reasoning = (answers.requires_strong_reasoning as any)?.noul ?? 0;
@@ -57,11 +49,8 @@ function tierFromSemantics(answers: Record<string, any>): string {
 
 /**
  * Production tier derived from the RESOLVED provider plan — the resolver's
- * own vocabulary (fast|quality|reasoning), not the requested mode. The
- * resolver stamps preferredModelRefs like 'gemini.quality' (attachments),
- * 'deepseek.fast', 'nvidia-nim.agentic', 'deepseek.reasoning' — the suffix
- * IS the effective tier. Falls back to mode-derived tier only if the plan is
- * missing (never in practice).
+ * own vocabulary, not the requested mode. preferredModelRefs suffix IS the
+ * effective tier (gemini.quality / deepseek.fast / nvidia-nim.agentic→reasoning).
  */
 function productionTierFromPlan(
   providerPlan: UcolRoutingDecision['providerPlan'] | undefined,
@@ -71,12 +60,9 @@ function productionTierFromPlan(
   if (ref) {
     const suffix = ref.split('.').pop() ?? '';
     if (suffix === 'fast' || suffix === 'quality' || suffix === 'reasoning' || suffix === 'agentic') {
-      // Resolver ranks agentic at the reasoning tier (getModeTierRank).
       return suffix === 'agentic' ? 'reasoning' : suffix;
     }
   }
-  // ponytail: mode-based fallback — only reachable if the plan shape changes;
-  // the plan suffix is the resolver's own tier statement.
   switch (agentMode) {
     case 'reasoning':
     case 'agentic':
@@ -88,10 +74,16 @@ function productionTierFromPlan(
   }
 }
 
+// ponytail: engine + policy are module singletons — stateless, shareable.
+// A future engine-swap (JEV 1.14, local classifier) changes these two lines
+// and nothing else in UCOL.
+const engine = new JevDecisionEngine();
+const policy = new ShadowRoutingPolicy();
+
 /**
- * Shadow evaluation — async so the call site can register the WHOLE operation
- * (JEV request + validation + telemetry write) with waitUntil. Zero latency
- * on the user-visible path either way.
+ * Shadow evaluation — the WHOLE operation (engine evaluation + policy
+ * evaluation + telemetry write) is registered with waitUntil by the caller.
+ * Zero latency on the user-visible path.
  */
 export function shadowEvaluateRouting(args: {
   request: { requestId: string; rawInput: string; userId?: string; workspaceId?: string };
@@ -106,12 +98,23 @@ export function shadowEvaluateRouting(args: {
   // Egress hygiene: redact secrets/PII before anything leaves Lattice.
   const redactedInput = scrubText(args.request.rawInput).slice(0, 4_000);
 
-  const state = {
-    user_request: redactedInput,
-    conversation_length_so_far: args.messageHistoryCount,
-    has_file_attachments: args.hasAttachments,
-    workspace_backed: Boolean(args.productionDecision.resolvedWorkspaceId),
-    user_selected_mode: args.agentMode,
+  const dossier: DecisionDossier = {
+    schemaVersion: 1,
+    consumer: 'routing',
+    task: {
+      goal: 'Classify the user request and its capability requirements',
+      phase: 'plan',
+    },
+    state: {
+      user_request: redactedInput,
+      conversation_length_so_far: args.messageHistoryCount,
+      has_file_attachments: args.hasAttachments,
+      workspace_backed: Boolean(args.productionDecision.resolvedWorkspaceId),
+      user_selected_mode: args.agentMode,
+    },
+    candidates: [],
+    policyContext: {},
+    requestId: args.request.requestId,
   };
 
   const questions: Questions = {
@@ -149,7 +152,12 @@ export function shadowEvaluateRouting(args: {
   };
 
   return (async () => {
-    const outcome = await jevEvaluate(state, questions);
+    const outcome = await engine.evaluate(dossier, questions);
+    // Policy is pure — evaluated for the record (shadow: never applied).
+    const policyOutcome = policy.evaluate(dossier, outcome, {
+      productionIntent: args.productionDecision.intent.category,
+    });
+
     if (!outcome.ok) {
       logEvent({
         eventType: 'jev_shadow_decision',
@@ -158,8 +166,6 @@ export function shadowEvaluateRouting(args: {
         metadata: {
           requestId: args.request.requestId,
           status: 'unavailable',
-          // Failure diagnostics: reason + retry burn + deadline latency —
-          // distinguishable failure classes, measurable retry behavior.
           jevFailureReason: outcome.reason,
           jevAttemptCount: outcome.attemptCount,
           jevLatencyMs: outcome.latencyMs,
@@ -169,16 +175,17 @@ export function shadowEvaluateRouting(args: {
           decisionModel: env.JEV_MODEL,
           questionSetVersion: QUESTION_SET_VERSION,
           tierPolicyVersion: TIER_POLICY_VERSION,
+          policyAction: policyOutcome.action,
+          policyReasonCode: policyOutcome.reasonCode,
         },
       });
       return;
     }
-    const result = outcome.result;
 
-    const taskClass = result.answers.task_class as any;
+    const taskClass = outcome.answers.task_class as any;
     const jevIntent = (taskClass?.choice ?? 'unknown') as string;
     const agreement = jevIntent === args.productionDecision.intent.category;
-    const jevTier = tierFromSemantics(result.answers);
+    const jevTier = tierFromSemantics(outcome.answers);
     const productionTier = productionTierFromPlan(args.productionDecision.providerPlan, args.agentMode);
 
     logEvent({
@@ -188,29 +195,27 @@ export function shadowEvaluateRouting(args: {
       metadata: {
         requestId: args.request.requestId,
         status: 'ok',
-        // Experiment stamps — historic curves stay comparable.
         decisionPlaneSchemaVersion: DECISION_PLANE_SCHEMA_VERSION,
         decisionProvider: DECISION_PROVIDER_ID,
-        decisionModel: result.model,
+        decisionModel: outcome.model,
         questionSetVersion: QUESTION_SET_VERSION,
         tierPolicyVersion: TIER_POLICY_VERSION,
-        // Agreement-rate metric
         productionIntent: args.productionDecision.intent.category,
         jevIntent,
         agreement,
         jevConfidence: taskClass?.confidence ?? null,
-        // Over/under-provisioning — comparable tiers on both sides now.
         jevTier,
         productionTier,
         productionModelRef: args.productionDecision.providerPlan?.preferredModelRefs?.[0] ?? null,
-        complexityScore: (result.answers.task_complexity as any)?.score ?? null,
-        requiresToolsNoul: (result.answers.requires_tools as any)?.noul ?? null,
-        requiresLongContextNoul: (result.answers.requires_long_context as any)?.noul ?? null,
-        requiresStrongReasoningNoul: (result.answers.requires_strong_reasoning as any)?.noul ?? null,
-        // Cost/latency — whole-operation numbers.
-        jevLatencyMs: result.latencyMs,
-        jevAttemptCount: result.attemptCount,
-        jevInputTokens: result.usage.inputTokens,
+        complexityScore: (outcome.answers.task_complexity as any)?.score ?? null,
+        requiresToolsNoul: (outcome.answers.requires_tools as any)?.noul ?? null,
+        requiresLongContextNoul: (outcome.answers.requires_long_context as any)?.noul ?? null,
+        requiresStrongReasoningNoul: (outcome.answers.requires_strong_reasoning as any)?.noul ?? null,
+        jevLatencyMs: outcome.latencyMs,
+        jevAttemptCount: outcome.attemptCount,
+        jevInputTokens: outcome.usage.inputTokens,
+        policyAction: policyOutcome.action,
+        policyReasonCode: policyOutcome.reasonCode,
       },
     });
   })().catch(() => { /* telemetry must never throw */ });
