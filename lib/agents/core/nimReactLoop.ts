@@ -57,6 +57,12 @@ function parseToolArgs(args: string): any {
  * as OpenAI `tool_calls` / `role:"tool"` rather than Gemini `functionCall` /
  * `functionResponse` Parts.
  */
+// ponytail: one deadline for the WHOLE ReAct execution (240s < Vercel's 300s
+// ceiling), passed down as the remaining budget per chatWithTools step. No
+// more 7×50s independent calls that can jointly exceed the serverless
+// envelope. A timeout is a structured agent result, never an uncaught abort.
+const REACT_TOTAL_BUDGET_MS = Number(process.env.NIM_REACT_TOTAL_BUDGET_MS ?? 240_000);
+
 export async function runNimReactLoop(
   userQuery: string,
   context: AgentContext,
@@ -70,6 +76,7 @@ export async function runNimReactLoop(
   const trajectory: TrajectoryStep[] = [];
   let loopCount = 0;
   let consecutiveFailures = 0;
+  const deadline = Date.now() + REACT_TOTAL_BUDGET_MS;
 
   // OpenAI-compatible message history (role/content/tool_calls/tool_call_id).
   const messages: Array<Record<string, unknown>> = [
@@ -80,6 +87,17 @@ export async function runNimReactLoop(
 
   while (loopCount < MAX_LOOPS) {
     loopCount++;
+
+    // Whole-execution budget check — the structured timeout path.
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      logger.warn(`[NimReActLoop] Total budget exhausted after ${loopCount - 1} loop(s).`);
+      return {
+        answer: 'The agent ran out of its execution budget before completing. Please retry or simplify the request.',
+        trajectory,
+        status: 'error',
+      };
+    }
 
     if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
       logger.warn(`[NimReActLoop] Circuit breaker triggered after ${consecutiveFailures} failures.`);
@@ -104,13 +122,22 @@ export async function runNimReactLoop(
           tools: toolSpecs,
           tool_choice: buildToolChoice(),
           maxTokens: 4096,
+          // This step gets only what remains of the shared deadline.
+          timeoutMs: remaining,
         },
       );
       content = res.content;
       toolCalls = res.toolCalls;
     } catch (err: any) {
       logger.error('[NimReActLoop] Implementation error:', err);
-      return { answer: 'An internal error occurred during the agent loop.', trajectory, status: 'error' };
+      const isTimeout = err?.name === 'AbortError' || String(err?.message || err).includes('aborted');
+      return {
+        answer: isTimeout
+          ? 'The agent exceeded its execution time budget. Please retry or simplify the request.'
+          : 'An internal error occurred during the agent loop.',
+        trajectory,
+        status: 'error',
+      };
     }
 
     const hasToolCalls = toolCalls.length > 0;

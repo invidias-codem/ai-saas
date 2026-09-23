@@ -296,6 +296,8 @@ function ConversationPage({
   const [userId, setUserId] = useState("");
   const [debugExecutionMode, setDebugExecutionMode] = useState<string | undefined>(undefined);
   const [debugIntent, setDebugIntent] = useState<string | undefined>(undefined);
+  // Server-resolved mode (X-Debug-Agent-Mode) — authoritative when present.
+  const [serverAgentMode, setServerAgentMode] = useState<string | undefined>(undefined);
 
   // Workspace sync status (only when workspaceId is available)
   const syncStatus = useWorkspaceSyncStatus(
@@ -373,6 +375,7 @@ function ConversationPage({
     setShowGreeting,
     setDebugExecutionMode,
     setDebugIntent,
+    setServerAgentMode,
     setShowFileGateNudge,
     openPricingModal,
     trackActivity,
@@ -382,14 +385,14 @@ function ConversationPage({
   useEffect(() => {
     const store = useRuntimeStore.getState();
     store.setRuntime({
-      agentMode,
+      agentMode: serverAgentMode ?? agentMode,
       loading,
       streaming,
       error,
       executionMode: debugExecutionMode,
       intent: debugIntent,
     });
-  }, [agentMode, loading, streaming, error, debugExecutionMode, debugIntent]);
+  }, [agentMode, serverAgentMode, loading, streaming, error, debugExecutionMode, debugIntent]);
 
   // ---------------------------------------------------------------
 
@@ -411,7 +414,7 @@ function ConversationPage({
         {/* Desktop-only indicators */}
         <div className="hidden md:flex items-center gap-2">
           <RuntimeStatusBar
-            agentMode={agentMode}
+            agentMode={serverAgentMode ?? agentMode}
             loading={loading}
             streaming={streaming}
             streamingContent={streamingContent}
@@ -487,7 +490,7 @@ function ConversationPage({
             <div className="space-y-4">
               <ModelToggle disabled={loading || streaming} />
               <RuntimeStatusBar
-                agentMode={agentMode}
+                agentMode={serverAgentMode ?? agentMode}
                 loading={loading}
                 streaming={streaming}
                 streamingContent={streamingContent}

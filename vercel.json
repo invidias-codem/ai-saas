@@ -26,6 +26,10 @@
     },
     "app/api/cron/jepa-training-queue/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/chat/route.ts": {
+      "maxDuration": 300,
+      "supportsCancellation": true
     }
   }
 }

@@ -5,6 +5,7 @@
 // credit/entitlement checks, and graceful degradation.
 // Everything else (execution, post-gen pipeline, response) is delegated.
 import { randomUUID } from 'crypto';
+import { logEvent } from '@/lib/telemetry';
 import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { generateConversationReply, ConversationRequestSchema } from '@/lib/llm/conversationEngine';
@@ -21,7 +22,6 @@ import type { UcolRequestPacket } from '@/lib/ucol/routing/types';
 import type { FileAttachmentInput } from '@/lib/types/attachments';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 import { trackFreeInteraction } from '@/lib/subscription/interaction-tracker';
-import { logEvent } from '@/lib/telemetry';
 
 async function loadWorkspacePersona(workspaceId: string): Promise<string | null> {
   try {
@@ -42,6 +42,28 @@ async function loadWorkspacePersona(workspaceId: string): Promise<string | null>
 }
 
 export async function POST(req: Request) {
+    // Lifecycle observability: every event carries the same requestId, so a
+    // Status: 0 (client-aborted stream) is diagnosable instead of a mystery.
+    // ponytail: abort is observed, not enforced against providers — the
+    // post-gen pipeline owns stream continuation; enforcement is a later
+    // slice once we know abort share is non-trivial.
+    const lifecycleRequestId = randomUUID();
+    if (req.signal) {
+        req.signal.addEventListener('abort', () => {
+            logEvent({
+                eventType: 'chat_client_aborted',
+                metadata: {
+                    requestId: lifecycleRequestId,
+                    at: new Date().toISOString(),
+                },
+            });
+        });
+    }
+    logEvent({
+        eventType: 'chat_accepted',
+        metadata: { requestId: lifecycleRequestId, at: new Date().toISOString() },
+    });
+
     try {
         const user = await requireAuth();
         const clerkUser = await currentUser();
