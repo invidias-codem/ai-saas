@@ -67,7 +67,13 @@ export type DecisionDossier = z.infer<typeof DecisionDossierV1Schema>;
 export const ChoiceQuestionSchema = z.object({
   type: z.literal('choice'),
   instructions: z.string().min(1),
-  criteria: z.record(z.string(), z.union([z.string(), z.null()])),
+  // Choice = select from named options; empty criteria is an impossible
+  // contract (validateEvidence requires the answer to be a key). Pure
+  // judgments without named options use noul/score instead.
+  criteria: z.record(z.string(), z.union([z.string(), z.null()])).refine(
+    (c) => Object.keys(c).length > 0,
+    { message: 'choice criteria must contain at least one option' },
+  ),
 });
 export const ScoreQuestionSchema = z.object({
   type: z.literal('score'),

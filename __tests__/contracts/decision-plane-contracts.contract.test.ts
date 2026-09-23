@@ -68,9 +68,10 @@ describe('decision plane contracts', () => {
     });
     expect(q.success).toBe(true);
     const noCriteria = QuestionSchema.safeParse({ type: 'choice', instructions: 'pick', criteria: {} });
-    // Empty criteria = nothing to select from: still schema-valid (pure
-    // judgment questions exist), but validateEvidence rejects any answer.
-    expect(noCriteria.success).toBe(true);
+    // Empty criteria = nothing to select from: an impossible contract, since
+    // validateEvidence requires the answer to be a criteria key. Rejected at
+    // the schema boundary; pure judgments use noul/score instead.
+    expect(noCriteria.success).toBe(false);
   });
 
   it('rule 3: policy is pure — same inputs always produce the same outcome', () => {
