@@ -28,6 +28,7 @@
     "eval:compare": "tsx scripts/eval/compare_baseline.ts",
     "verify:import": "tsx scripts/verify_import_pipeline.ts",
     "rag:budget": "tsx scripts/check-rag-budget.ts",
+    "decision:replay": "tsx scripts/decision-routing-replay.ts",
     "rag:index": "tsx scripts/index-codebase.ts",
     "rag:index:dry": "tsx scripts/index-codebase.ts --dry-run",
     "rag:test": "tsx scripts/test-rag-integration.ts",
