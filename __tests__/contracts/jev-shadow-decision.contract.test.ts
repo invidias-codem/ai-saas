@@ -152,7 +152,7 @@ describe('shadow decision plane — sovereign seam contract', () => {
         decisionProvider: 'jev',
         decisionModel: 'jev-1.13.0',
         questionSetVersion: 2,
-        tierPolicyVersion: 1,
+        tierPolicyVersion: 2,
         productionIntent: 'coding_task',
         jevIntent: 'coding_task',
         agreement: true,
@@ -191,7 +191,7 @@ describe('shadow decision plane — sovereign seam contract', () => {
       messageHistoryCount: 0,
     });
 
-    expect(logEventMock).toHaveBeenCalledTimes(1);
+    expect(logEventMock).toHaveBeenCalledTimes(2);
     const meta = logEventMock.mock.calls[0][0].metadata;
     expect(meta.status).toBe('unavailable');
     expect(meta.jevIntent).toBeUndefined();
@@ -212,7 +212,7 @@ describe('shadow decision plane — sovereign seam contract', () => {
       messageHistoryCount: 0,
     });
 
-    expect(logEventMock).toHaveBeenCalledTimes(1);
+    expect(logEventMock).toHaveBeenCalledTimes(2);
     expect(logEventMock.mock.calls[0][0].metadata.status).toBe('unavailable');
   });
 

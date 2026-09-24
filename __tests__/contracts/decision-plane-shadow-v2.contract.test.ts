@@ -171,14 +171,18 @@ describe('decision plane shadow v2', () => {
       const meta = events('jev_shadow_decision')[0].metadata;
       expect(meta.status).toBe('unavailable');
       expect(meta.jevFailureReason).toBe('response_invalid');
-      expect(events('decision_event')).toHaveLength(0);
+      // Normalized decision_event IS emitted on failure — availability can't
+      // be measured if only ok rows exist.
+      expect(events('decision_event')).toHaveLength(1);
     }
   });
 
   it('dossier state carries v2 semantic context fields', async () => {
     await runOnce();
     const state = JSON.parse(fetchMock.mock.calls[0][1].body).state;
-    expect(state.has_tool_candidates).toBe(true); // coding_task
+    // has_tool_candidates is intentionally ABSENT — deriving it from the
+    // production intent category leaks B2's classification into the shadow.
+    expect('has_tool_candidates' in state).toBe(false);
     expect(state.estimated_context_size_band).toBe('medium'); // 7 messages
     expect(state.continuation_kind).toBe('continuation');
     expect(state.conversation_length_so_far).toBe(7);

@@ -20,7 +20,7 @@ import { ShadowRoutingPolicy } from './policies/shadowRoutingPolicy';
 // wording, tier mapping, or comparison logic.
 export const DECISION_PLANE_SCHEMA_VERSION = 1;
 export const QUESTION_SET_VERSION = 2;
-export const TIER_POLICY_VERSION = 1;
+export const TIER_POLICY_VERSION = 2;
 export const DECISION_PROVIDER_ID = 'jev';
 
 // Bandit action space (lib/ucol/routing/decision.ts) — the engine classifies
@@ -32,10 +32,6 @@ const TASK_CLASSES = {
   knowledge_query: 'A specific factual question the user expects answered from stored knowledge, documents, or memory',
   agentic_task: 'Multi-step work the user expects to be carried out autonomously with tools (browsing, file ops, executing workflows)',
 } as const;
-
-// Intents that plausibly involve tool use — derived deterministically from the
-// production intent category, feeding state.has_tool_candidates.
-const TOOL_INTENTS = new Set(['agentic_task', 'coding_task', 'research_task', 'knowledge_query']);
 
 // v2 semantic choices (slice 2). Options named exactly per spec; the engine
 // proposes, a later policy kernel composes — NOTHING here maps a judgment to
@@ -130,11 +126,10 @@ export function shadowEvaluateRouting(args: {
       has_file_attachments: args.hasAttachments,
       workspace_backed: Boolean(args.productionDecision.resolvedWorkspaceId),
       user_selected_mode: args.agentMode,
-      // Semantic context for interpretation only — NOT policy authority.
-      // Deterministic authority facts (deterministicRisk, approvalRequired,
-      // destructiveOperation, externalSideEffect) belong in policyContext,
-      // never here.
-      has_tool_candidates: TOOL_INTENTS.has(args.productionDecision.intent.category),
+      // ponytail: has_tool_candidates intentionally omitted — deriving it from
+      // productionDecision.intent.category leaks B2's own classification into
+      // the shadow comparison and inflates agreement. Add back only from an
+      // objective tool-registry signal at this call site.
       estimated_context_size_band: inferContextSizeBand(args.messageHistoryCount),
       continuation_kind: args.messageHistoryCount > 0 ? 'continuation' : 'new_turn',
     },
@@ -201,6 +196,27 @@ export function shadowEvaluateRouting(args: {
           policyReasonCode: policyOutcome.reasonCode,
         },
       });
+      // Normalized Decision Plane event on failure too — same shape, the
+      // engine outcome carries the failure; absence would skew availability
+      // metrics toward ok-only.
+      logEvent({
+        eventType: 'decision_event',
+        userId: args.request.userId,
+        workspaceId: args.request.workspaceId,
+        metadata: {
+          planeSchemaVersion: DECISION_PLANE_SCHEMA_VERSION,
+          consumer: dossier.consumer,
+          engineId: engine.id,
+          engineModel: env.JEV_MODEL,
+          policyId: policy.id,
+          policyVersion: policy.version,
+          questionSetVersion: QUESTION_SET_VERSION,
+          requestId: args.request.requestId,
+          outcome,
+          policyOutcome,
+          proposedLease: null,
+        },
+      });
       return;
     }
 
@@ -241,7 +257,8 @@ export function shadowEvaluateRouting(args: {
         proposedEffort: effort?.choice ?? null,
         effortConfidence: effort?.confidence ?? null,
         riskSignal: risk?.noul ?? null,
-        riskSignalConfidence: risk?.noul ?? null,
+        // ponytail: riskSignalConfidence removed — noul IS the semantic
+        // probability/signal; there is no separate confidence scalar to emit.
         proposedLease: proposedLease ?? null,
         leaseConfidence: lease?.confidence ?? null,
         jevLatencyMs: outcome.latencyMs,
