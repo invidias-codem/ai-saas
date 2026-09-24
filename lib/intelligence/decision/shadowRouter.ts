@@ -19,8 +19,8 @@ import { ShadowRoutingPolicy } from './policies/shadowRoutingPolicy';
 // Experimental-dataset version stamps. Bump on ANY change to question
 // wording, tier mapping, or comparison logic.
 export const DECISION_PLANE_SCHEMA_VERSION = 1;
-export const QUESTION_SET_VERSION = 1;
-export const TIER_POLICY_VERSION = 1;
+export const QUESTION_SET_VERSION = 2;
+export const TIER_POLICY_VERSION = 2;
 export const DECISION_PROVIDER_ID = 'jev';
 
 // Bandit action space (lib/ucol/routing/decision.ts) — the engine classifies
@@ -33,20 +33,35 @@ const TASK_CLASSES = {
   agentic_task: 'Multi-step work the user expects to be carried out autonomously with tools (browsing, file ops, executing workflows)',
 } as const;
 
-// Model tiers derived in CODE from the engine's semantic outputs (never asked
-// of the engine). Uses the provider resolver's own tier vocabulary
-// (fast|quality|reasoning) so the comparison against the production tier is
-// apples-to-apples.
-function tierFromSemantics(answers: Record<string, any>): string {
-  const complexity = answers.task_complexity as any; // score answer
-  const reasoning = (answers.requires_strong_reasoning as any)?.noul ?? 0;
-  // score: 0=trivial 1=standard 2=complex 3=deep
-  const level = complexity?.score ?? 1;
-  if (level >= 2.5 || reasoning > 0.7) return 'reasoning';
-  if (level >= 1.5) return 'quality';
-  return 'fast';
+// v2 semantic choices (slice 2). Options named exactly per spec; the engine
+// proposes, a later policy kernel composes — NOTHING here maps a judgment to
+// a route/model/provider.
+export const CAPABILITY_CHOICES = {
+  fast: 'A small, fast model can answer this well',
+  quality: 'This needs a higher-quality general model',
+  reasoning: 'This needs strong deliberate reasoning',
+} as const;
+export const EFFORT_CHOICES = {
+  low: 'Minimal reasoning effort suffices',
+  medium: 'Moderate reasoning effort',
+  high: 'Substantial reasoning effort',
+  max: 'Maximum available reasoning effort',
+} as const;
+export const LEASE_CHOICES = {
+  one_call: 'One model call can satisfy this request',
+  tool_chain: 'This request requires a chain of tool calls',
+  user_turn: 'This spans a full interactive user turn',
+} as const;
+
+function inferContextSizeBand(messageHistoryCount: number): string {
+  if (messageHistoryCount < 5) return 'small';
+  if (messageHistoryCount < 20) return 'medium';
+  return 'large';
 }
 
+// Model tiers: jevTier = the engine's capability_requirement choice (already
+// the resolver's fast|quality|reasoning vocabulary). Production tier is
+// derived in CODE from the RESOLVED provider plan below.
 /**
  * Production tier derived from the RESOLVED provider plan — the resolver's
  * own vocabulary, not the requested mode. preferredModelRefs suffix IS the
@@ -111,43 +126,45 @@ export function shadowEvaluateRouting(args: {
       has_file_attachments: args.hasAttachments,
       workspace_backed: Boolean(args.productionDecision.resolvedWorkspaceId),
       user_selected_mode: args.agentMode,
+      // ponytail: has_tool_candidates intentionally omitted — deriving it from
+      // productionDecision.intent.category leaks B2's own classification into
+      // the shadow comparison and inflates agreement. Add back only from an
+      // objective tool-registry signal at this call site.
+      estimated_context_size_band: inferContextSizeBand(args.messageHistoryCount),
+      continuation_kind: args.messageHistoryCount > 0 ? 'continuation' : 'new_turn',
     },
     candidates: [],
     policyContext: {},
     requestId: args.request.requestId,
   };
 
+  // v2 question set: independent semantic decisions, one batched call.
+  // task_class retained for generation-0 calibration continuity.
   const questions: Questions = {
     task_class: {
       type: 'choice',
       instructions: 'Which category of work is this user request?',
       criteria: { ...TASK_CLASSES },
     },
-    task_complexity: {
-      type: 'score',
-      instructions: 'How complex is satisfying this request?',
-      criteria: [
-        'Trivial: a one-line reply or single fact suffices',
-        'Standard: a normal multi-sentence answer',
-        'Complex: multi-part reasoning, careful structure, or iteration',
-        'Deep: expert-level, multi-step, or large-context analysis',
-      ],
+    capability_requirement: {
+      type: 'choice',
+      instructions: 'What level of model capability does this request require?',
+      criteria: { ...CAPABILITY_CHOICES },
     },
-    requires_tools: {
-      type: 'noul',
-      instructions: 'Does satisfying this request require external tools (search, files, browser, code execution)?',
-      criteria: {
-        true: 'Tools are needed to complete it',
-        false: 'It can be answered from the conversation alone',
-      },
+    reasoning_effort: {
+      type: 'choice',
+      instructions: 'How much reasoning effort does this request need?',
+      criteria: { ...EFFORT_CHOICES },
     },
-    requires_long_context: {
+    risk_signal: {
       type: 'noul',
-      instructions: 'Does this require reading a large amount of prior conversation or documents?',
+      // Semantic signal only. MUST NOT override policyContext.deterministicRisk.
+      instructions: 'How risky does this request semantically appear (likelihood it involves sensitive, destructive, or irreversible operations)?',
     },
-    requires_strong_reasoning: {
-      type: 'noul',
-      instructions: 'Does this request require strong, careful reasoning to answer well?',
+    route_lease: {
+      type: 'choice',
+      instructions: 'What is the smallest execution lease this request plausibly needs?',
+      criteria: { ...LEASE_CHOICES },
     },
   };
 
@@ -179,14 +196,41 @@ export function shadowEvaluateRouting(args: {
           policyReasonCode: policyOutcome.reasonCode,
         },
       });
+      // Normalized Decision Plane event on failure too — same shape, the
+      // engine outcome carries the failure; absence would skew availability
+      // metrics toward ok-only.
+      logEvent({
+        eventType: 'decision_event',
+        userId: args.request.userId,
+        workspaceId: args.request.workspaceId,
+        metadata: {
+          planeSchemaVersion: DECISION_PLANE_SCHEMA_VERSION,
+          consumer: dossier.consumer,
+          engineId: engine.id,
+          engineModel: env.JEV_MODEL,
+          policyId: policy.id,
+          policyVersion: policy.version,
+          questionSetVersion: QUESTION_SET_VERSION,
+          requestId: args.request.requestId,
+          outcome,
+          policyOutcome,
+          proposedLease: null,
+        },
+      });
       return;
     }
 
     const taskClass = outcome.answers.task_class as any;
     const jevIntent = (taskClass?.choice ?? 'unknown') as string;
     const agreement = jevIntent === args.productionDecision.intent.category;
-    const jevTier = tierFromSemantics(outcome.answers);
+    const capability = outcome.answers.capability_requirement as any;
+    const effort = outcome.answers.reasoning_effort as any;
+    const risk = outcome.answers.risk_signal as any;
+    const lease = outcome.answers.route_lease as any;
+    // ponytail: v2 proposals are the tier vocabulary; jevTier=v2 capability.
+    const jevTier = (capability?.choice ?? 'fast') as string;
     const productionTier = productionTierFromPlan(args.productionDecision.providerPlan, args.agentMode);
+    const proposedLease = lease?.choice as string | undefined;
 
     logEvent({
       eventType: 'jev_shadow_decision',
@@ -207,15 +251,42 @@ export function shadowEvaluateRouting(args: {
         jevTier,
         productionTier,
         productionModelRef: args.productionDecision.providerPlan?.preferredModelRefs?.[0] ?? null,
-        complexityScore: (outcome.answers.task_complexity as any)?.score ?? null,
-        requiresToolsNoul: (outcome.answers.requires_tools as any)?.noul ?? null,
-        requiresLongContextNoul: (outcome.answers.requires_long_context as any)?.noul ?? null,
-        requiresStrongReasoningNoul: (outcome.answers.requires_strong_reasoning as any)?.noul ?? null,
+        // v2 additive fields — per-judgment confidences, never a root one.
+        proposedCapability: capability?.choice ?? null,
+        capabilityConfidence: capability?.confidence ?? null,
+        proposedEffort: effort?.choice ?? null,
+        effortConfidence: effort?.confidence ?? null,
+        riskSignal: risk?.noul ?? null,
+        // ponytail: riskSignalConfidence removed — noul IS the semantic
+        // probability/signal; there is no separate confidence scalar to emit.
+        proposedLease: proposedLease ?? null,
+        leaseConfidence: lease?.confidence ?? null,
         jevLatencyMs: outcome.latencyMs,
         jevAttemptCount: outcome.attemptCount,
         jevInputTokens: outcome.usage.inputTokens,
         policyAction: policyOutcome.action,
         policyReasonCode: policyOutcome.reasonCode,
+      },
+    });
+
+    // Normalized Decision Plane event, emitted IN PARALLEL (migration
+    // overlap — jev_shadow_decision remains the calibration stream).
+    logEvent({
+      eventType: 'decision_event',
+      userId: args.request.userId,
+      workspaceId: args.request.workspaceId,
+      metadata: {
+        planeSchemaVersion: DECISION_PLANE_SCHEMA_VERSION,
+        consumer: dossier.consumer,
+        engineId: engine.id,
+        engineModel: outcome.model,
+        policyId: policy.id,
+        policyVersion: policy.version,
+        questionSetVersion: QUESTION_SET_VERSION,
+        requestId: args.request.requestId,
+        outcome,
+        policyOutcome,
+        proposedLease: proposedLease ?? null,
       },
     });
   })().catch(() => { /* telemetry must never throw */ });

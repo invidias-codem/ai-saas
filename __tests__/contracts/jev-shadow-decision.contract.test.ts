@@ -55,19 +55,27 @@ const CHOICE_ANSWER = {
   probabilities: { coding_task: 0.9, general_chat: 0.1 },
   confidence: 0.9,
 };
-const SCORE_ANSWER = {
-  type: 'score',
-  score: 2.1,
-  legend: { '0': 'Trivial', '1': 'Standard', '2': 'Complex', '3': 'Deep' },
-  probabilities: { '0': 0.05, '1': 0.3, '2': 0.55, '3': 0.1 },
-  confidence: 0.7,
-};
 const FULL_ANSWERS = {
   task_class: CHOICE_ANSWER,
-  task_complexity: SCORE_ANSWER,
-  requires_tools: { type: 'noul', noul: 0.8 },
-  requires_long_context: { type: 'noul', noul: 0.1 },
-  requires_strong_reasoning: { type: 'noul', noul: 0.6 },
+  capability_requirement: {
+    type: 'choice',
+    choice: 'quality',
+    probabilities: { fast: 0.1, quality: 0.7, reasoning: 0.2 },
+    confidence: 0.75,
+  },
+  reasoning_effort: {
+    type: 'choice',
+    choice: 'medium',
+    probabilities: { low: 0.2, medium: 0.6, high: 0.15, max: 0.05 },
+    confidence: 0.8,
+  },
+  risk_signal: { type: 'noul', noul: 0.2 },
+  route_lease: {
+    type: 'choice',
+    choice: 'one_call',
+    probabilities: { one_call: 0.7, tool_chain: 0.2, user_turn: 0.1 },
+    confidence: 0.85,
+  },
 };
 
 function setEnv(key: string, value: any) {
@@ -117,6 +125,9 @@ describe('shadow decision plane — sovereign seam contract', () => {
     expect(String(url)).toBe('https://api.typesafe.ai/v1/systemone');
     const body = JSON.parse(init.body);
     expect(Object.keys(body.questions)).toHaveLength(5);
+    expect(Object.keys(body.questions).sort()).toEqual([
+      'capability_requirement', 'reasoning_effort', 'risk_signal', 'route_lease', 'task_class',
+    ]);
     expect(body.model).toBe('jev-1.13.0');
 
     // Egress hygiene: emails + labeled secrets scrubbed BEFORE leaving Lattice.
@@ -140,16 +151,23 @@ describe('shadow decision plane — sovereign seam contract', () => {
         decisionPlaneSchemaVersion: 1,
         decisionProvider: 'jev',
         decisionModel: 'jev-1.13.0',
-        questionSetVersion: 1,
-        tierPolicyVersion: 1,
+        questionSetVersion: 2,
+        tierPolicyVersion: 2,
         productionIntent: 'coding_task',
         jevIntent: 'coding_task',
         agreement: true,
-        // complexity 2.1 + reasoning 0.6 → quality (>=1.5, <2.5, reasoning<=0.7)
+        // capability_requirement 'quality' → jevTier quality.
         jevTier: 'quality',
         // agentMode 'quality' → quality — comparable with jevTier.
         productionTier: 'quality',
         productionModelRef: 'nvidia/nemotron-3-ultra-550b-a55b',
+        proposedCapability: 'quality',
+        capabilityConfidence: 0.75,
+        proposedEffort: 'medium',
+        effortConfidence: 0.8,
+        riskSignal: 0.2,
+        proposedLease: 'one_call',
+        leaseConfidence: 0.85,
         jevAttemptCount: 1,
         jevLatencyMs: expect.any(Number),
       }),
@@ -160,7 +178,7 @@ describe('shadow decision plane — sovereign seam contract', () => {
     setEnv('TYPESAFE_API_KEY', 'ts_test');
     // Four of five answers returned — the old parser would have called this ok.
     const partial = { ...FULL_ANSWERS } as any;
-    delete partial.requires_long_context;
+    delete partial.risk_signal;
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify(jevResponse(partial)), { status: 200 })
     );
@@ -173,7 +191,7 @@ describe('shadow decision plane — sovereign seam contract', () => {
       messageHistoryCount: 0,
     });
 
-    expect(logEventMock).toHaveBeenCalledTimes(1);
+    expect(logEventMock).toHaveBeenCalledTimes(2);
     const meta = logEventMock.mock.calls[0][0].metadata;
     expect(meta.status).toBe('unavailable');
     expect(meta.jevIntent).toBeUndefined();
@@ -194,7 +212,7 @@ describe('shadow decision plane — sovereign seam contract', () => {
       messageHistoryCount: 0,
     });
 
-    expect(logEventMock).toHaveBeenCalledTimes(1);
+    expect(logEventMock).toHaveBeenCalledTimes(2);
     expect(logEventMock.mock.calls[0][0].metadata.status).toBe('unavailable');
   });
 
@@ -229,8 +247,9 @@ describe('shadow decision plane — sovereign seam contract', () => {
       messageHistoryCount: 0,
     });
 
-    expect(logEventMock).toHaveBeenCalledTimes(1);
-    const meta = logEventMock.mock.calls[0][0].metadata;
+    const legacyCalls = logEventMock.mock.calls.filter((c) => c[0].eventType === 'jev_shadow_decision');
+    expect(legacyCalls).toHaveLength(1);
+    const meta = legacyCalls[0][0].metadata;
     expect(meta.status).toBe('ok');
     // Effective tier from the resolved plan, NOT the requested fast mode.
     expect(meta.productionTier).toBe('quality');
@@ -260,11 +279,11 @@ describe('shadow decision plane — sovereign seam contract', () => {
     expect(meta.jevFailureReason).toBe('response_invalid');
   });
 
-  it('blocker 4: a Score answer outside the submitted scale is NOT evidence', async () => {
+  it('blocker 4: a lease answer outside the submitted criteria is NOT evidence', async () => {
     setEnv('TYPESAFE_API_KEY', 'ts_test');
     const bogus = {
       ...FULL_ANSWERS,
-      task_complexity: { type: 'score', score: 7.5, legend: {}, probabilities: {}, confidence: 0.9 },
+      route_lease: { type: 'choice', choice: 'weekly', probabilities: { weekly: 1 }, confidence: 0.9 },
     };
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify(jevResponse(bogus)), { status: 200 })

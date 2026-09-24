@@ -4,10 +4,16 @@
 --
 -- Joins telemetry_events (jev_shadow_decision events, main DB)
 -- to ucol_routing_telemetry (per-request outcome rows, main DB).
+--
+-- COHORT GUARD: tierPolicyVersion bumped 1→2 when jevTier was redefined as
+-- v2 capability_requirement. Aggregating the two semantics would corrupt the
+-- calibration signal — every metric is GROUP BY tier_policy_version, and the
+-- 7-day window is retained per cohort.
 
 WITH jev AS (
     SELECT
         metadata->>'requestId'                    AS request_id,
+        coalesce((metadata->>'tierPolicyVersion')::int, 1) AS tier_policy_version,
         (metadata->>'agreement')::boolean         AS agreement,
         metadata->>'jevIntent'                    AS jev_intent,
         metadata->>'productionIntent'              AS production_intent,
@@ -37,6 +43,7 @@ joined AS (
         ON t.request_id = j.request_id
 )
 SELECT
+    tier_policy_version,
     -- Volume + health
     count(*)                                              AS total_jev_events,
     count(*) FILTER (WHERE status = 'ok')                 AS eval_ok,
@@ -67,4 +74,6 @@ SELECT
     -- Under/over-provisioning: production tier above JEV's read = over
     count(*) FILTER (WHERE production_tier = 'reasoning' AND jev_tier = 'fast') AS over_provisioned,
     count(*) FILTER (WHERE production_tier = 'fast' AND jev_tier = 'reasoning') AS under_provisioned
-FROM joined;
+FROM joined
+GROUP BY tier_policy_version
+ORDER BY tier_policy_version;
