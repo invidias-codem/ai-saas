@@ -52,9 +52,16 @@ describe('decision plane contracts', () => {
     const outcome = okOutcome();
     expect('confidence' in outcome).toBe(false);
     // Per-judgment probability remains — policy reads it from the specific
-    // question, never from a universal field.
-    const jc = (outcome.answers.task_class as any).confidence;
-    expect(typeof jc).toBe('number');
+    // question, never from a universal field. Explicit guard: jest's
+    // expect().toBe(true) does not narrow the discriminated union for TS.
+    if (!outcome.ok) {
+      throw new Error('expected successful decision outcome');
+    }
+    const jc = outcome.answers.task_class;
+    if (jc.type !== 'choice') {
+      throw new Error('expected choice answer');
+    }
+    expect(typeof jc.confidence).toBe('number');
   });
 
   it('rule 2: question schemas reject candidate invention surfaces', () => {
