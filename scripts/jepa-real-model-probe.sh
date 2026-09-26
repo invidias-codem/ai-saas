@@ -7,7 +7,10 @@
 # Differences from scripts/jepa-probe.sh (capability probe, preserved):
 #   - targets /api/jepa/shadow-probe (real predictor + reflection_expert)
 #   - performs 1 cold + 5 warm invocations, 2s apart
-#   - does NOT retry on circuit-open (fail-closed is part of the experiment)
+#   - emits STRICT JSONL: one JSON object per invocation per line,
+#     with transport metadata merged into the body as `_http_status` and
+#     `_wall_ms` so the raw artifact parses line-by-line.
+#   - does NOT auto-retry on circuit-open (fail-closed is part of the experiment)
 
 set -euo pipefail
 
@@ -17,28 +20,50 @@ OUT_DIR="research/world-model"
 OUT="$OUT_DIR/jepa-real-model-probe-report.raw.jsonl"
 
 mkdir -p "$OUT_DIR"
+: > "$OUT"
 
 echo "== probe target: $PROBE"
 echo "== raw output:   $OUT"
 echo "== started:      $(date -u +%FT%TZ)"
 
-: > "$OUT"
+probe_once() {
+  local label="$1"
+  # Single curl: write body to stdout-readable file while capturing code+time.
+  # `-w` writes to stdout, body to a temp file; then merge into one JSON line.
+  local tmp_body
+  tmp_body=$(mktemp)
+  trap 'rm -f "$tmp_body"' RETURN
 
-# Cold probe (first request)
-echo
-echo "── cold run (t=0s)"
-COLD=$(curl -sS -w '\n__HTTP_%{http_code} t=%{time_total}s' "$PROBE")
-echo "$COLD"
-echo "$COLD" >> "$OUT"
+  local meta
+  meta=$(curl -sS -o "$tmp_body" -w '%{http_code} %{time_total}' "$PROBE")
+  local http_code="${meta%% *}"
+  local time_total="${meta##* }"
 
-# 5 warm probes — 2s apart
+  python3 - "$tmp_body" "$http_code" "$time_total" "$label" <<'PY'
+import json, sys
+body_path, code, time_total, label = sys.argv[1:5]
+try:
+    data = json.load(open(body_path))
+except Exception:
+    data = {'_unparseable_body': open(body_path).read()[:400]}
+data['_http_status'] = int(code)
+data['_wall_ms'] = int(float(time_total) * 1000)
+data['_label'] = label
+print(json.dumps(data))
+PY
+}
+
+# Cold
+LINE=$(probe_once "cold")
+echo "$LINE"
+echo "$LINE" >> "$OUT"
+
+# 5 warm
 for i in 1 2 3 4 5; do
   sleep 2
-  echo
-  echo "── warm run $i (t+=2s)"
-  WARM=$(curl -sS -w '\n__HTTP_%{http_code} t=%{time_total}s' "$PROBE")
-  echo "$WARM"
-  echo "$WARM" >> "$OUT"
+  LINE=$(probe_once "warm-$i")
+  echo "$LINE"
+  echo "$LINE" >> "$OUT"
 done
 
 echo
