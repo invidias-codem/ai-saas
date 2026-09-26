@@ -70,7 +70,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Setup Go
-        uses: actions/setup-go@c4b114b0d71a8daa0b793e88e6e0e7e3d4f0e6e5 # v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: "stable"
 
