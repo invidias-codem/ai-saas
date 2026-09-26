@@ -18,6 +18,7 @@
 use serde::Serialize;
 use serde_json::json;
 use std::sync::Mutex;
+use tauri::Manager;
 use std::time::Duration;
 
 /// Shared, Tauri-managed state. `None` until the sidecar's stdout handshake
