@@ -79,6 +79,8 @@ interface ProbeRecord {
   reflectionCold: boolean;
   coldStart: boolean; // overall: any leg still cold at request entry
   predictorArtifact: string;
+  predictorTrainingState: 'unknown_existing_artifact' | 'trained' | 'untrained_probe_only';
+  predictorSemanticValidity: 'unknown' | 'true' | 'false';
   reflectionArtifact: string;
   reflectionTrainingState: 'trained' | 'untrained_probe_only';
   reflectionSemanticValidity: boolean;
@@ -213,6 +215,8 @@ export async function GET() {
     reflectionCold,
     coldStart: predictorCold || reflectionCold,
     predictorArtifact: PREDICTOR_ARTIFACT,
+    predictorTrainingState: 'unknown_existing_artifact',
+    predictorSemanticValidity: 'unknown',
     reflectionArtifact: REFLECTION_ARTIFACT,
     reflectionTrainingState: 'untrained_probe_only',
     reflectionSemanticValidity: false,

@@ -10,7 +10,7 @@ question independent from model-quality questions.
 
 | Slot | File | trainingState | semanticValidity |
 |---|---|---|---|
-| predictor | `public/wasm/predictor.onnx` | `trained` (live worker path) | true |
+| predictor | `public/wasm/predictor.onnx` | `unknown_existing_artifact` (a trained export path exists; this specific binary's provenance is not yet hash/checkpoint-verified) | `unknown` |
 | reflection | `public/wasm/reflection_expert_probe_untrained.onnx` | `untrained_probe_only` | **false** |
 
 Emission gate (all three required):

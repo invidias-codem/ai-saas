@@ -132,6 +132,12 @@ def export_reflection_heads(
             "Pass checkpoint_path=..., or set untrained_probe_only=True to emit "
             "the structural-probe artifact under a separate filename."
         )
+    if untrained_probe_only and checkpoint_path is not None:
+        raise SystemExit(
+            "Refusing to export a checkpoint-backed artifact under the "
+            "untrained-probe filename. Drop checkpoint_path for probe exports, "
+            "or set untrained_probe_only=False for the canonical artifact."
+        )
 
     try:
         from losses.reflection_heads import ReflectionHeads  # noqa: E402
