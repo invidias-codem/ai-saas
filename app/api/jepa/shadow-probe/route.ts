@@ -78,6 +78,10 @@ interface ProbeRecord {
   predictorCold: boolean;
   reflectionCold: boolean;
   coldStart: boolean; // overall: any leg still cold at request entry
+  predictorArtifact: string;
+  reflectionArtifact: string;
+  reflectionTrainingState: 'trained' | 'untrained_probe_only';
+  reflectionSemanticValidity: boolean;
   modelBytes?: number;
   reflectModelBytes?: number;
   timings: StageTimings;
@@ -196,6 +200,9 @@ export async function GET() {
   const predictorCold = cachedPredictor === null;
   const reflectionCold = cachedReflection === null;
 
+  const PREDICTOR_ARTIFACT = 'predictor.onnx';
+  const REFLECTION_ARTIFACT = 'reflection_expert_probe_untrained.onnx';
+
   const record: ProbeRecord = {
     flag: true,
     nodeEnv: process.env.NODE_ENV,
@@ -205,6 +212,10 @@ export async function GET() {
     predictorCold,
     reflectionCold,
     coldStart: predictorCold || reflectionCold,
+    predictorArtifact: PREDICTOR_ARTIFACT,
+    reflectionArtifact: REFLECTION_ARTIFACT,
+    reflectionTrainingState: 'untrained_probe_only',
+    reflectionSemanticValidity: false,
     timings: { total_ms: 0 },
     circuitState: breaker.getState(),
     circuitFailures: breaker.getConsecutiveFailures(),
@@ -243,7 +254,7 @@ export async function GET() {
       // engine actually binds and is the dominant cold cost).
       let buf: Buffer;
       try {
-        const [b, fetchMs] = await fetchModelBytes('predictor.onnx');
+        const [b, fetchMs] = await fetchModelBytes(PREDICTOR_ARTIFACT);
         buf = b;
         record.timings.model_fetch_ms = fetchMs;
         record.modelBytes = b.length;
@@ -331,7 +342,7 @@ export async function GET() {
     if (!cachedReflection) {
       let buf: Buffer;
       try {
-        const [b, fetchMs] = await fetchModelBytes('reflection_expert.onnx');
+        const [b, fetchMs] = await fetchModelBytes(REFLECTION_ARTIFACT);
         buf = b;
         record.timings.reflect_model_fetch_ms = fetchMs;
         record.reflectModelBytes = b.length;

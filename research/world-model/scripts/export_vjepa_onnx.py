@@ -109,13 +109,29 @@ def export_reflection_heads(
     hidden_dim: int = 256,
     predictor_depth: int = 3,
     quantize: bool = False,
+    checkpoint_path: Path | None = None,
+    untrained_probe_only: bool = False,
 ) -> dict:
     """
     Export ReflectionHeads to a standalone ONNX file.
 
-    Returns metadata dict for the edge route.
+    Guardrails:
+      - Production artifact: refuses to export without `checkpoint_path` so an
+        untrained ReflectionHeads never silently becomes the canonical
+        `reflection_expert.onnx`.
+      - Probe artifact: only via `untrained_probe_only=True`. Writes to a
+        distinct filename (`reflection_expert_probe_untrained.onnx`) and is
+        labeled `trainingState=untrained_probe_only` / `semanticValidity=false`
+        in metadata. Treat this as architecture/runtime evidence only.
     """
     save_dir.mkdir(parents=True, exist_ok=True)
+
+    if not untrained_probe_only and checkpoint_path is None:
+        raise SystemExit(
+            "Refusing to export reflection_expert without a trained checkpoint. "
+            "Pass checkpoint_path=..., or set untrained_probe_only=True to emit "
+            "the structural-probe artifact under a separate filename."
+        )
 
     try:
         from losses.reflection_heads import ReflectionHeads  # noqa: E402
@@ -123,11 +139,28 @@ def export_reflection_heads(
         raise SystemExit(f"Failed to import reflection_heads: {exc}")
 
     model = ReflectionHeads(embedding_dim, hidden_dim, predictor_depth)
+    if checkpoint_path is not None:
+        state = torch.load(checkpoint_path, map_location="cpu")
+        state_dict = state.get("state_dict", state)
+        model.load_state_dict(state_dict)
     model.eval()
 
-    fp32_path = save_dir / "reflection_expert_fp32.onnx"
-    final_path = save_dir / "reflection_expert.onnx"
-    meta_path = save_dir / "reflection_expert_meta.json"
+    if untrained_probe_only:
+        final_name = "reflection_expert_probe_untrained.onnx"
+        meta_name = "reflection_expert_probe_untrained_meta.json"
+        model_label = "reflection_expert_probe_untrained"
+        training_state = "untrained_probe_only"
+        semantic_validity = False
+    else:
+        final_name = "reflection_expert.onnx"
+        meta_name = "reflection_expert_meta.json"
+        model_label = "reflection_expert"
+        training_state = "trained"
+        semantic_validity = True
+
+    fp32_path = save_dir / f"{final_name.replace('.onnx', '')}_fp32.onnx"
+    final_path = save_dir / final_name
+    meta_path = save_dir / meta_name
 
     dummy_stuck = torch.randn(1, embedding_dim, dtype=torch.float32)
     dummy_context = torch.randn(1, embedding_dim, dtype=torch.float32)
@@ -149,7 +182,9 @@ def export_reflection_heads(
     print(f"[OK] Reflection FP32 ONNX exported to {fp32_path}  ({fp32_path.stat().st_size / 1024:.1f} KB)")
 
     meta = {
-        "model": "reflection_expert",
+        "model": model_label,
+        "trainingState": training_state,
+        "semanticValidity": semantic_validity,
         "embedding_dim": embedding_dim,
         "hidden_dim": hidden_dim,
         "predictor_depth": predictor_depth,
@@ -198,12 +233,17 @@ def export_reflection_heads(
 def main() -> None:
     root = Path(__file__).resolve().parents[1]
     public_wasm = root / "public" / "wasm"
+    print(f"[INFO] output dir (resolved): {public_wasm}")
+    print("[INFO] note: default root is research/world-model/. Use JEPA_ONNX_PATH"
+          " or another absolute override if you need repo-root public/wasm.")
 
     dim = int(os.environ.get("JEPA_EMBEDDING_DIM", "128"))
     hidden = int(os.environ.get("JEPA_HIDDEN_DIM", "512"))
     depth = int(os.environ.get("JEPA_PREDICTOR_DEPTH", "4"))
     export_reflection = os.environ.get("JEPA_EXPORT_REFLECTION", "0") == "1"
+    untrained_probe = os.environ.get("JEPA_EXPORT_UNTRAINED", "0") == "1"
     quantize_reflection = os.environ.get("JEPA_QUANTIZE_REFLECTION", "0") == "1"
+    reflection_ckpt = os.environ.get("JEPA_REFLECTION_CHECKPOINT") or None
 
     meta = export_vjepa_onnx(
         save_dir=public_wasm,
@@ -222,9 +262,12 @@ def main() -> None:
                 hidden_dim=int(os.environ.get("JEPA_REFLECTION_HIDDEN_DIM", "256")),
                 predictor_depth=int(os.environ.get("JEPA_REFLECTION_DEPTH", "3")),
                 quantize=quantize_reflection,
+                checkpoint_path=Path(reflection_ckpt) if reflection_ckpt else None,
+                untrained_probe_only=untrained_probe,
             )
             print(
                 f"[SUMMARY] reflection model={reflection_meta['model']} "
+                f"trainingState={reflection_meta['trainingState']} "
                 f"precision={reflection_meta['precision']} size={reflection_meta['size_human']}"
             )
         except Exception as exc:
