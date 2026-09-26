@@ -69,6 +69,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Setup Go
+        uses: actions/setup-go@c4b114b0d71a8daa0b793e88e6e0e7e3d4f0e6e5 # v5
+        with:
+          go-version: "stable"
+
+      - name: Build lattice-harness sidecar
+        # tauri.conf.json declares binaries/lattice-harness as externalBin.
+        # The macOS artifact is committed; the Linux target must be produced
+        # in CI so cargo's build script resolves the resource.
+        run: |
+          cd go-harness
+          go build -o "../src-tauri/binaries/lattice-harness-x86_64-unknown-linux-gnu" ./cmd/lattice-harness
+
       - name: Rust lint (clippy) — src-tauri
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
