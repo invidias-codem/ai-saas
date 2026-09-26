@@ -1,14 +1,12 @@
-# ── Build the Tauri (Rust) desktop app ─────────────────────────────────────
-# Validates the Rust side (src-tauri) compiles and the full desktop app builds
-# in CI. The Lattice OS native client was scaffolded separately; this job keeps
-# the Rust command surface (e.g. flush_telemetry, ping_daemon) compile-checked
-# on every relevant change.
+# ── Validate the Tauri native shell (Rust side) ────────────────────────────
+# Compile-validates the src-tauri crate and clippy on every relevant change.
 #
-# We build with `--no-bundle` so we validate Rust + frontend compilation without
-# requiring the Go harness binary (binaries/lattice-harness), platform icons, or
-# code-signing, which are only needed at packaging time.
+# Explicitly NOT validated here: the Next.js SaaS frontend as a static Tauri
+# export. Lattice's current app has 25+ dynamic/API routes which Tauri's
+# documented Next.js integration (output: 'export') does not support. That is
+# a real desktop architecture decision tracked separately.
 
-name: Build Tauri (Rust)
+name: Validate Tauri Native Shell
 
 on:
   push:
@@ -34,10 +32,8 @@ concurrency:
 
 jobs:
   build-tauri:
-    name: Build Tauri app (Rust + frontend)
+    name: Compile Tauri native shell
     runs-on: ubuntu-22.04
-    env:
-      NEXT_PUBLIC_IS_DESKTOP: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -73,12 +69,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Rust lint (clippy) — src-tauri
-        # Non-fatal: main gate is a successful build. Reports warnings for visibility.
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets
-        continue-on-error: true
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "stable"
 
-      - name: Build Tauri app (no bundle)
-        run: pnpm tauri build --no-bundle
+      - name: Build lattice-harness sidecar
+        # tauri.conf.json declares binaries/lattice-harness as externalBin.
+        # The macOS artifact is committed; the Linux target must be produced
+        # in CI so cargo's build script resolves the resource.
+        run: |
+          cd go-harness
+          go build -o "../src-tauri/binaries/lattice-harness-x86_64-unknown-linux-gnu" ./cmd/lattice-harness
+
+      - name: Rust lint (clippy) — src-tauri
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Compile Tauri native shell
+        run: cargo build --manifest-path src-tauri/Cargo.toml
 
 
