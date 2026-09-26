@@ -13,7 +13,6 @@
     "stronghold:allow-save",
     "stronghold:allow-save-store-record",
     "stronghold:allow-get-store-record",
-    "stronghold:allow-remove-store-record",
-    "window:default"
+    "stronghold:allow-remove-store-record"
   ]
 }
