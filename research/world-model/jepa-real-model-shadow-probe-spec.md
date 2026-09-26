@@ -3,6 +3,45 @@
 **Status:** Open. Predecessor capability probe PASSED, banking as capability-only, not readiness.
 **Triggered by:** Dummy-model probe at 598 ms / 600 ms cold-start threshold and prior recorded 1.7–4.8 s real-model cold-start.
 
+## Reflection-artifact provenance
+
+This slice intentionally uses a structural probe artifact to keep the latency
+question independent from model-quality questions.
+
+| Slot | File | trainingState | semanticValidity |
+|---|---|---|---|
+| predictor | `public/wasm/predictor.onnx` | `trained` (live worker path) | true |
+| reflection | `public/wasm/reflection_expert_probe_untrained.onnx` | `untrained_probe_only` | **false** |
+
+Emission gate (all three required):
+```
+JEPA_EXPORT_REFLECTION=1
+JEPA_EXPORT_UNTRAINED=1
+# → writes reflection_expert_probe_untrained.onnx and
+#   reflection_expert_probe_untrained_meta.json with the labels above.
+```
+The trained/canonical `reflection_expert.onnx` continues to be refused by
+the exporter unless a `JEPA_REFLECTION_CHECKPOINT=<path>` is provided.
+
+Every probe response and the markdown report MUST carry the same labels:
+```
+reflectionArtifact: "reflection_expert_probe_untrained.onnx"
+trainingState: "untrained_probe_only"
+semanticValidity: false
+```
+
+## Mechanically-constrained conclusion template
+
+The final report file `research/world-model/jepa-real-model-probe-report.md`
+**must not conclude on semantic quality**. The conclusion paragraph is fixed:
+
+> Reflection latency measurements are architecture/runtime evidence only.
+> The measured artifact contains freshly initialized weights and provides
+> no evidence of semantic model quality.
+
+(in addition to the latency numbers; boilerplate is part of the contract).
+
+
 ## Goal
 
 Establish the **real latency distribution** of the JEPA stack inside the Vercel preview environment, broken down by stage, so the architecture choice between (A) warm/background execution, (B) client/local WASM execution, or (C) durable async inference is evidence-based instead of assumed.
