@@ -48,6 +48,9 @@ export interface BuildRow {
   completed_at?: string | null;
   created_at?: string;
   updated_at?: string;
+  /** Populated by completeBuild; null while running / failed / cancelled. */
+  plan_json?: unknown | null;
+  files_json?: unknown | null;
 }
 
 /**
@@ -144,12 +147,27 @@ export async function updateBuildPhase(buildId: string, phase: BuildPhase, progr
   if (error) throw new Error(`[buildStore] updateBuildPhase failed: ${error.message}`);
 }
 
-/** completeBuild — terminal + idempotent. No-op if already terminal. */
-export async function completeBuild(buildId: string): Promise<void> {
+/** completeBuild — terminal + idempotent. No-op if already terminal.
+ * Optionally persists the artifacts (plan + files) atomically with the
+ * status transition; a retry preserves the first write. */
+export async function completeBuild(
+  buildId: string,
+  artifacts?: { plan?: unknown; files?: unknown }
+): Promise<void> {
   if (!supabaseAdmin) throw new Error('[buildStore] supabaseAdmin not configured');
+  const update: Record<string, unknown> = {
+    status: 'completed',
+    phase: 'completed',
+    progress: 100,
+    completed_at: new Date().toISOString(),
+  };
+  if (artifacts) {
+    if (artifacts.plan !== undefined) update.plan_json = artifacts.plan;
+    if (artifacts.files !== undefined) update.files_json = artifacts.files;
+  }
   const { error } = await supabaseAdmin
     .from('code_builder_builds')
-    .update({ status: 'completed', phase: 'completed', progress: 100, completed_at: new Date().toISOString() })
+    .update(update)
     .eq('build_id', buildId)
     .not('status', 'in', '(completed,failed,cancelled)');
   if (error) throw new Error(`[buildStore] completeBuild failed: ${error.message}`);

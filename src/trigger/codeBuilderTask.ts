@@ -90,7 +90,10 @@ export const codeBuilderTask = task({
         session,
       });
 
-      await store.completeBuild(payload.buildId);
+      await store.completeBuild(payload.buildId, {
+        plan: result.plan,
+        files: result.files,
+      });
 
       return {
         status: "success",
