@@ -63,9 +63,12 @@ export const imageGenerationSchema = z.object({
 });
 
 // Video/Music generation schemas
+// Accept both "4" and 4 at the wire boundary; UI select values are strings.
 export const videoGenerationSchema = z.object({
     prompt: z.string().min(1).max(5000),
-    duration: z.number().min(1).max(60).optional(),
+    duration: z.coerce.number().min(1).max(60).optional(),
+    aspectRatio: z.enum(["16:9", "9:16", "1:1"]).optional(),
+    resolution: z.enum(["720p", "1080p"]).optional(),
 });
 
 export const musicGenerationSchema = z.object({

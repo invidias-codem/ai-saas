@@ -53,9 +53,9 @@ export async function POST(request: Request) {
       const result = await createVideoPrediction(
         {
           prompt: input.prompt,
-          aspectRatio: (input as any).aspect_ratio || (input as any).aspectRatio,
-          duration: (input as any).duration,
-          resolution: (input as any).resolution,
+          aspectRatio: input.aspectRatio,
+          duration: input.duration,
+          resolution: input.resolution,
         },
         user.userId,
         idempotencyKey
