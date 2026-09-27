@@ -85,6 +85,19 @@ export default function CodeBuilderIsland() {
     const [error, setError] = useState<string | null>(null);
     const [mobileTab, setMobileTab] = useState<'plan' | 'code'>('plan');
 
+    // Durable-execution observability state (PR B1). Tracks polling health
+    // separately from build progress so we can render "still running, updates
+    // stalled" without cancelling the build or falsely reporting failure.
+    const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+    const [lastProgressAt, setLastProgressAt] = useState<number | null>(null);
+    const [relayConnected, setRelayConnected] = useState<boolean | null>(null);
+    const [buildStartedAt, setBuildStartedAt] = useState<number | null>(null);
+    // "now" is updated only inside pollDurableStatus; render-time derivations
+    // stay pure for the React Compiler.
+    const [nowTick, setNowTick] = useState<number | null>(null);
+    const staleThresholdMs = 90_000;
+    const stale = lastProgressAt != null && nowTick != null && (nowTick - lastProgressAt) > staleThresholdMs;
+
     // Durable execution state — polling lifecycle is owned by pollIntervalRef;
     // the buildId display state lands with Phase 4B (Realtime) if needed.
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -140,6 +153,18 @@ export default function CodeBuilderIsland() {
             // build's active key or stop its polling.
             if (activeBuildRef.current !== buildId) return;
 
+            // PR B1: track build timeline + progress-change markers.
+            const pollNow = Date.now();
+            setNowTick(pollNow);
+            if (data.startedAt) {
+                const t = Date.parse(data.startedAt);
+                if (Number.isFinite(t)) {
+                    setBuildStartedAt(t);
+                    setElapsedMs(pollNow - t);
+                }
+            }
+            setLastProgressAt(pollNow);
+
             setPhase(mapDurablePhase(data.status, data.phase));
 
             // Handle terminal states
@@ -153,8 +178,11 @@ export default function CodeBuilderIsland() {
                 setPhase('done');
             }
         } catch (err) {
-            // Transient polling error - do not mark build failed
+            // Transient polling error — do not mark build failed. Surface a
+            // one-line banner; keep polling (the durable row is the source
+            // of truth, not the network path).
             console.warn('[CodeBuilder] Polling error:', err);
+            setError('Lost connection to build status. Still polling; will recover when network is back.');
         }
     }, [stopPolling]);
 
@@ -170,8 +198,9 @@ export default function CodeBuilderIsland() {
         try {
             const es = new EventSource(`/api/code-builder/build/${buildId}/events`);
             realtimeSubRef.current = {
-                unsubscribe: () => es.close(),
+                unsubscribe: () => { setRelayConnected(false); es.close(); },
             };
+            es.addEventListener('open', () => setRelayConnected(true));
             es.addEventListener('run-status', (e) => {
                 try {
                     const { status } = JSON.parse((e as MessageEvent).data);
@@ -189,9 +218,13 @@ export default function CodeBuilderIsland() {
             });
             es.onerror = () => {
                 // EventSource retries on its own; poll fallback stays alive.
+                // Mark disconnected so UI can render "live updates
+                // disconnected, build still running".
+                setRelayConnected(false);
             };
         } catch (err) {
             console.warn('[CodeBuilder] Realtime unavailable, polling remains:', err);
+            setRelayConnected(false);
         }
     }, [pollDurableStatus]);
 
@@ -205,6 +238,11 @@ export default function CodeBuilderIsland() {
         setFiles([]);
         setContextFlow([]);
         setError(null);
+        setElapsedMs(null);
+        setLastProgressAt(null);
+        setBuildStartedAt(null);
+        setRelayConnected(null);
+        setNowTick(null);
         stopPolling();
 
         try {
@@ -322,6 +360,11 @@ export default function CodeBuilderIsland() {
         setContextFlow([]);
         setError(null);
         setMobileTab('plan');
+        setElapsedMs(null);
+        setLastProgressAt(null);
+        setBuildStartedAt(null);
+        setRelayConnected(null);
+        setNowTick(null);
     };
 
     // Recover active build on mount (browser close/reopen).
@@ -389,6 +432,41 @@ export default function CodeBuilderIsland() {
                 disabled={phase === 'planning' || phase === 'coding'}
                 phase={phase}
             />
+
+            {/* PR B1: durable-execution UX states. Three distinct bands: */}
+            {/* 1. expectation-setting (always shown in durable mode) */}
+            {DURABLE_EXECUTION && phase === 'idle' && !error && (
+                <div className="mx-4 mt-2 text-[11px] text-zinc-400 bg-zinc-900/40 border border-zinc-800/60 rounded-lg px-3 py-2">
+                    Builds may take <strong>5+ minutes</strong>. You can leave
+                    this page; your build keeps running and re-appears when you
+                    return.
+                </div>
+            )}
+
+            {/* 2. transient connectivity/observability band (NOT failure) */}
+            {DURABLE_EXECUTION && (phase === 'planning' || phase === 'coding') && (
+                <div className="mx-4 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-400 bg-zinc-900/40 border border-zinc-800/60 rounded-lg px-3 py-2">
+                    {elapsedMs != null && (
+                        <span>
+                            ⏱ {Math.floor(elapsedMs / 60000)}m {Math.floor((elapsedMs % 60000) / 1000)}s
+                        </span>
+                    )}
+                    {relayConnected === false && (
+                        <span className="text-amber-300">
+                            Live updates disconnected · build still running
+                        </span>
+                    )}
+                    {relayConnected === true && (
+                        <span className="text-emerald-400/80">Live · connected</span>
+                    )}
+                    {stale && (
+                        <span className="text-amber-300">
+                            Updates stalled &gt; 90s — the build is still running;
+                            you can refresh or wait. We&apos;re not cancelling it.
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* Context Flow Visualizer */}
             {contextFlow.length > 0 && (
