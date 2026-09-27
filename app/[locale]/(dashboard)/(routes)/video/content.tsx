@@ -62,7 +62,20 @@ export function VideoContent() {
     setError(null);
     setVideoUrl(null);
     await start(values, (err: any) => {
-      const message = err?.response?.data?.details || "Failed to start video generation.";
+      const details = err?.response?.data?.details;
+      // Server returns Zod .flatten().fieldErrors: {field: [msg, ...]} — turn it
+      // into one readable line instead of handing an object to setError.
+      let message = "Failed to start video generation.";
+      if (typeof details === "string") {
+        message = details;
+      } else if (details && typeof details === "object") {
+        const parts = Object.entries(details).map(
+          ([field, msgs]) => `${field}: ${(Array.isArray(msgs) ? msgs : [msgs]).join(", ")}`
+        );
+        if (parts.length > 0) message = parts.join("; ");
+      } else if (err?.response?.data?.error) {
+        message = String(err.response.data.error);
+      }
       setError(message);
       return message;
     });
