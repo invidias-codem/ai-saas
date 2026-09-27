@@ -22,6 +22,9 @@ interface BuildStatusResponse {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  /** Owner-authorized artifact snapshot; only present when status='completed'. */
+  plan?: unknown | null;
+  files?: unknown | null;
 }
 
 export async function GET(
@@ -70,6 +73,11 @@ export async function GET(
       createdAt: row.created_at ?? new Date().toISOString(),
       startedAt: row.started_at ?? null,
       completedAt: row.completed_at ?? null,
+      // Artifact snapshot returned only on completed builds (B2). plan/files
+      // are NULL until the worker's terminal write; they are also NULL on
+      // failed/cancelled rows.
+      plan: row.status === 'completed' ? (row.plan_json ?? null) : null,
+      files: row.status === 'completed' ? (row.files_json ?? null) : null,
     };
 
     return Response.json(response);

@@ -32,6 +32,9 @@ interface DurableBuildStatus {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  /** Owner-authorized artifact snapshot (B2); only present when status='completed'. */
+  plan?: ProjectPlan | null;
+  files?: GeneratedFile[] | null;
 }
 
 // Feature flag - use env variable pattern consistent with codebase
@@ -171,6 +174,12 @@ export default function CodeBuilderIsland() {
             if (data.status === 'completed') {
                 stopPolling();
                 setActiveBuildId(null);
+                // B2: hydrate plan + files from the durable row so the UI can
+                // render PlanPanel/CodePanel after a page reload or refresh.
+                // null-safe: artifact write is bundled with status transition
+                // but a failed/cancelled build never has them.
+                if (data.plan) setPlan(data.plan);
+                if (data.files) setFiles(data.files);
             } else if (data.status === 'failed' || data.status === 'cancelled') {
                 stopPolling();
                 setActiveBuildId(null);
