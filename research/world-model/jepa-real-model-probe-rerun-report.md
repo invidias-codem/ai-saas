@@ -12,7 +12,7 @@ The prior `91eee47e` experiment was invalidated on the full-stack axis by a spli
 
 - `postprocess_ms` was absent on cold rows because predictor tensor shape did not match metadata.
 - The reported `output_invalid` `lastReason` was the breaker's preserved first-failure reason from **predictor** postprocess, not an open-path mislabeling of a reflection-side error.
-- The original report's wording that "the request failed in the reflection loader" was directionally consistent (the failing surface was at the loader/postprocess boundary) but the responsible artifact was the predictor's swapped binary, not the reflection ONNX.
+- The original report's wording that "the request failed in the reflection loader" was incorrect: the reflection leg was never reached. The failure occurred in predictor postprocessing because the deployed predictor binary did not match its VJEPA metadata.
 
 The original report and its raw `jepa-real-model-probe-report.raw.jsonl` are preserved unchanged for historical evidence.
 
@@ -30,7 +30,7 @@ Size/hash check at runtime: `modelBytes=737,546` (predictor), `reflectModelBytes
 - Harness: `scripts/jepa-real-model-probe.sh` shape, output redirected to `jepa-real-model-probe-report-rerun.raw.jsonl` (the original raw file is left alone per the supersede request).
 - Route: `GET /api/jepa/shadow-probe` on the GitHub-triggered Vercel Preview.
 - Sequence: 1 cold + 5 warm, 2 s apart, strict JSONL. No retry on circuit-open (none observed).
-- **Pre-harness observation:** one warm-up probe was fired from the agent to confirm the route answered (`200` JSON) after the deployment became Ready. This consumed the truly-virgin cold run for that lambda instance. The first row labeled `cold` here is therefore the *first request* of the harness but the *second request* of the lambda; on this deployment it still reported `predictorCold:true, reflectionCold:true` because the warm-up and harness landed on different container instances. Recorded for transparency; not silently treated as a fresh cold.
+- **Pre-harness observation:** one warm-up probe was fired from the agent to confirm the route answered (`200` JSON) after the deployment became Ready. That consumed the virgin cold start of one container. The harness `cold` row then landed on a different fresh container (`predictorCold:true, reflectionCold:true`), so it is a genuine cold measurement for that container, but not the first request ever made against the deployment. Recorded for transparency.
 
 ## Measured timings (ms)
 
@@ -77,11 +77,11 @@ PASS on both axes:
 - Warm: 1–2 ms ≤ 600 ms warm budget.
 - Reflection leg now observable end-to-end.
 
-The full-stack path is compatible with the synchronous Vercel lane on this artifact set. Hot path (= warm, both sessions cached) is in the low single-digit milliseconds; cold path is dominated by predictor `session_init` (406 ms of 504 ms total), which is plausible for ORT WASM graph init and not a regression.
+The full-stack path is compatible with the synchronous Vercel lane on this artifact set. Route-internal hot-path time (warm, both sessions cached) is 1–2 ms, while observed end-to-end HTTP wall time is 160–247 ms; the cold row is 504 ms route-internal and 2,690 ms wall time. Both remain inside the experiment budgets, and the cold route time is dominated by predictor `session_init` (406 ms of 504 ms total).
 
 ## Caveats and mislabels to carry forward
 
-1. **Warm-up hit consumed the truly-virgin cold of one lambda.** The harness `cold` row still landed on a fresh container so the cold shape is faithful, but the report does not claim it is the first request ever made against this deployment. Future reruns should not warm-up probe.
+1. **Warm-up hit consumed the virgin cold start of a different container.** The harness `cold` row landed on a fresh container and is therefore a valid cold measurement for that container, but it was not the first request ever made against the deployment. Future reruns should avoid a warm-up probe when possible.
 2. **Reflection is still an untrained probe artifact.** Latency numbers are architecture/runtime evidence only.
 3. **Predictor binary provenance remains labeled `unknown_existing_artifact`.** The integrity gate now guarantees size-vs-meta but cannot vouch for checkpoint lineage. Do not promote this to "trained model is fast".
 4. **The previously-flagged breaker mislabel (`output_invalid` while open)** is no longer operative — the underlying predictor-postprocess failure was the artifact swap and is fixed; the breaker remains correct in this run because it never tripped.
@@ -97,6 +97,6 @@ The full-stack path is compatible with the synchronous Vercel lane on this artif
 Previous slice banker/decision: predictor path was plausibly OK, reflection path was unknown. Rerun answer: **both legs fit the synchronous Vercel lane on the current artifact set** with order-of-magnitude headroom under both budgets. The architecture choice between (A) warm/background, (B) client/local WASM, (C) durable async inference is now informed by:
 
 - cold ≈ 500 ms total, dominated by predictor session init
-- warm ≈ 1–2 ms total, all stages sub-millisecond
+- warm route-internal ≈ 1–2 ms total (individual measured stages 0–1 ms at integer-ms resolution); observed HTTP wall time 160–247 ms
 
 This points away from needing (C) durable execution for JEPA inference *on these artifacts* and towards (A) with periodic warm-keeping if cold tail matters, or (B) if moving the runtime to the client is a deliberate UX/offline choice. Hard requirement changes (larger predictor, trained reflection expert, multi-tenant latency SLOs) re-open this decision.
