@@ -1,0 +1,47 @@
+{
+  "model": "reflection_expert_probe_untrained",
+  "trainingState": "untrained_probe_only",
+  "semanticValidity": false,
+  "embedding_dim": 128,
+  "hidden_dim": 256,
+  "predictor_depth": 3,
+  "inputs": [
+    {
+      "name": "z_stuck",
+      "shape": [
+        "batch",
+        128
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "z_context",
+      "shape": [
+        "batch",
+        128
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "z_past",
+      "shape": [
+        "batch",
+        128
+      ],
+      "dtype": "float32"
+    },
+    {
+      "name": "z_hyper_future",
+      "shape": [
+        "batch",
+        128
+      ],
+      "dtype": "float32"
+    }
+  ],
+  "precision": "fp32",
+  "size_bytes": 1191449,
+  "size_human": "1163.5 KB"
+}

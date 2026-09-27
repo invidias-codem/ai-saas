@@ -89,7 +89,11 @@ class HyperbolicPredictor(nn.Module):
         x = torch.cat([z_stuck, z_context], dim=-1)
         out = self.net(x)
         # Project onto Poincaré ball: clamp to unit radius with margin.
-        norm = out.norm(p=2, dim=-1, keepdim=True).clamp(min=1e-12)
+        # (ReduceL2 with `axes` kwarg is unsupported on opset ≤17; expand to
+        # sum-of-squares + sqrt + clamp so the exporter works on the local
+        # torch 2.2 toolchain without downgrading the rest of the graph.)
+        sq = (out * out).sum(dim=-1, keepdim=True)
+        norm = sq.sqrt().clamp(min=1e-12)
         max_norm = 1.0 - 1e-6
         scale = torch.where(norm > max_norm, max_norm / norm, torch.ones_like(norm))
         return out * scale
