@@ -30,6 +30,11 @@ jobs:
       - name: Build Workspace Packages
         run: pnpm --recursive --filter @lattice-os/core run build && pnpm --recursive --filter @lattice-os/mcp-remote run build
 
+      - name: ONNX artifact integrity
+        # Fails if any deployed .onnx's bytes disagree with its *_meta.json size_bytes.
+        # See scripts/check-onnx-artifact-integrity.sh for the incident context.
+        run: bash scripts/check-onnx-artifact-integrity.sh
+
       - name: Lint
         run: pnpm lint
 
