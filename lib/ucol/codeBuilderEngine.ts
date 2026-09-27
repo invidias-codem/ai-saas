@@ -222,10 +222,30 @@ function groupIntoTiers(buildOrder: ComponentSpec[]): ComponentSpec[][] {
     return tiers;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+/**
+ * Races `factory(signal)` against a deadline. On timeout, rejects AND aborts
+ * the inner provider so it doesn't linger. If the provider ignores the
+ * signal (e.g. its own fetch is in flight), the abort still surfaces here
+ * after the deadline, so callers move to the fallback immediately.
+ *
+ * The provider's own timeout is unchanged; this layer only enforces the
+ * upper bound on the whole call (network + body + parse) so a stuck
+ * provider cannot cascade into the fallback path.
+ */
+function withTimeout<T>(
+    factory: (signal: AbortSignal) => Promise<T>,
+    ms: number,
+    label: string
+): Promise<T> {
+    const controller = new AbortController();
     return Promise.race([
-        promise,
-        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`Timeout: ${label} exceeded ${ms}ms`)), ms)),
+        factory(controller.signal),
+        new Promise<T>((_, reject) =>
+            setTimeout(() => {
+                controller.abort();
+                reject(new Error(`Timeout: ${label} exceeded ${ms}ms (provider aborted)`));
+            }, ms)
+        ),
     ]);
 }
 
@@ -304,9 +324,10 @@ async function generateAndReviewComponent(args: {
             attemptedProviders.push(provider);
             try {
                 const files = await withTimeout(
-                    provider === primaryProvider
-                        ? kimiCoderProvider.generateCode(contextPackage, refinement, session.discoveredPatterns)
-                        : geminiCoderProvider.generateCode(contextPackage, refinement, session.discoveredPatterns),
+                    (signal) =>
+                        provider === primaryProvider
+                            ? kimiCoderProvider.generateCode(contextPackage, refinement, session.discoveredPatterns, { providerKeys, signal })
+                            : geminiCoderProvider.generateCode(contextPackage, refinement, session.discoveredPatterns, { providerKeys, signal }),
                     PROVIDER_TIMEOUT_MS,
                     component.name
                 );
