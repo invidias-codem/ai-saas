@@ -81,6 +81,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/jepa/infer',
     '/api/jepa/predict',
     '/api/jepa/reflect',
+    '/api/jepa/shadow-probe',
     '/api/analyze-upload',
     '/api/test/mcts-e2e',
 ]);
