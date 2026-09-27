@@ -88,15 +88,15 @@ export default function CodeBuilderIsland() {
     // Durable-execution observability state (PR B1). Tracks polling health
     // separately from build progress so we can render "still running, updates
     // stalled" without cancelling the build or falsely reporting failure.
-    // All three refs are mutable-side-channel (not render state); the derived
-    // `staleSince`/`elapsedMs` state is what the UI actually shows.
     const [elapsedMs, setElapsedMs] = useState<number | null>(null);
     const [lastProgressAt, setLastProgressAt] = useState<number | null>(null);
     const [relayConnected, setRelayConnected] = useState<boolean | null>(null);
     const [buildStartedAt, setBuildStartedAt] = useState<number | null>(null);
-    // Recomputed each poll; not a state value — cheap to derive.
+    // "now" is updated only inside pollDurableStatus; render-time derivations
+    // stay pure for the React Compiler.
+    const [nowTick, setNowTick] = useState<number | null>(null);
     const staleThresholdMs = 90_000;
-    const stale = lastProgressAt != null && Date.now() - lastProgressAt > staleThresholdMs;
+    const stale = lastProgressAt != null && nowTick != null && (nowTick - lastProgressAt) > staleThresholdMs;
 
     // Durable execution state — polling lifecycle is owned by pollIntervalRef;
     // the buildId display state lands with Phase 4B (Realtime) if needed.
@@ -154,22 +154,16 @@ export default function CodeBuilderIsland() {
             if (activeBuildRef.current !== buildId) return;
 
             // PR B1: track build timeline + progress-change markers.
+            const pollNow = Date.now();
+            setNowTick(pollNow);
             if (data.startedAt) {
                 const t = Date.parse(data.startedAt);
                 if (Number.isFinite(t)) {
                     setBuildStartedAt(t);
-                    setElapsedMs(Date.now() - t);
+                    setElapsedMs(pollNow - t);
                 }
             }
-            setLastProgressAt((prev) => {
-                // progress% is the only signal the durable row gives us per
-                // phase transition. Use the first observed change as the
-                // "last progress" timestamp; if the row flips phase without
-                // changing %, we still update because phase transition is
-                // itself progress evidence.
-                if (prev == null) return Date.now();
-                return Date.now(); // any successful poll reflects live backend
-            });
+            setLastProgressAt(pollNow);
 
             setPhase(mapDurablePhase(data.status, data.phase));
 
@@ -248,6 +242,7 @@ export default function CodeBuilderIsland() {
         setLastProgressAt(null);
         setBuildStartedAt(null);
         setRelayConnected(null);
+        setNowTick(null);
         stopPolling();
 
         try {
@@ -369,6 +364,7 @@ export default function CodeBuilderIsland() {
         setLastProgressAt(null);
         setBuildStartedAt(null);
         setRelayConnected(null);
+        setNowTick(null);
     };
 
     // Recover active build on mount (browser close/reopen).
