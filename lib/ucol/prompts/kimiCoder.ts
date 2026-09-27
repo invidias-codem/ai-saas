@@ -163,6 +163,7 @@ export const kimiCoderProvider = {
             maxTokens: 8192,
             reasoningEffort: 'high',
             timeoutMs: 240_000,
+            signal: call?.signal,
         });
 
         return parseGeneratedFiles(text, component.name);

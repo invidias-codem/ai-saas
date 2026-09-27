@@ -35,6 +35,7 @@ export const geminiCoderProvider = {
     contextPackage: ContextPackage,
     refinement?: RefinementContext,
     discoveredPatterns?: DiscoveredPattern[],
+    _call?: import('@/lib/llm/providers/providerInterface').ProviderCallContext,
   ): Promise<GeneratedFile[]> {
     const provider = new GeminiProvider();
     const { component, fullPlan, existingFiles, techStack } = contextPackage.payload.content;

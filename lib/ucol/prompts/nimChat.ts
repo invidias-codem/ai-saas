@@ -25,6 +25,8 @@ export interface NimChatOptions {
   reasoningEffort?: 'low' | 'medium' | 'high' | 'max';
   /** Per-call timeout (ms). Falls back to NIM_REQUEST_TIMEOUT_MS, then 50s. */
   timeoutMs?: number;
+  /** Optional outer abort signal; if provided, aborts cascade from caller. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -105,6 +107,13 @@ export async function nimChat(
 
   for (let attempt = 0; ; attempt++) {
     const controller = new AbortController();
+    // Link outer caller signal so caller-side cancellation cascades into the
+    // provider fetch. If caller aborts, our inner timer is redundant but
+    // harmless.
+    if (opts.signal) {
+      if (opts.signal.aborted) controller.abort(opts.signal.reason);
+      else opts.signal.addEventListener('abort', () => controller.abort(opts.signal!.reason), { once: true });
+    }
     const remainingMs = deadline - Date.now();
     // Give up the retry loop if we've exhausted the overall budget.
     const timer = setTimeout(() => controller.abort(), Math.max(remainingMs, 0));
@@ -138,11 +147,13 @@ export async function nimChat(
     const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
 
     if (response.status === 429 || response.status === 503) {
-      clearTimeout(timer);
       lastStatus = response.status;
       lastRetryAfterMs = retryAfterMs;
-      // Drain the body so the connection is reusable.
-      await response.text().catch(() => {});
+      // Drain body under the SAME deadline — provider still owns the budget.
+      try {
+        await response.text();
+      } catch { /* body drain failed; budget still enforced by outer timer */ }
+      clearTimeout(timer);
 
       if (attempt < MAX_RETRIES && Date.now() < deadline) {
         const delay = retryAfterMs ?? jitter(Math.min(RETRY_BASE_DELAY_MS * 2 ** attempt, RETRY_MAX_DELAY_MS));
@@ -170,9 +181,9 @@ export async function nimChat(
       );
     }
 
-    const errText = response.ok ? '' : await response.text();
-
     if (!response.ok) {
+      // Read error body under the same timer; clear AFTER parse.
+      const errText = await response.text().catch(() => '');
       clearTimeout(timer);
       logger.error('[nimChat] NIM error', {
         model: modelId,
@@ -186,10 +197,23 @@ export async function nimChat(
       );
     }
 
-    // Do NOT swallow aborts here: if the body read is aborted (timeout fired
-    // mid-consumption), `.catch(() => null)` would mask it as an empty success.
+    // Keep abort armed through body consumption AND JSON parse — a stalled
+    // response body must still hit the deadline, not clear it. (Previous
+    // version called clearTimeout(timer) BEFORE response.json(), which let
+    // a streaming-stalled body outlive the per-call budget.)
+    let json: any;
+    try {
+      json = await response.json();
+    } catch (parseErr: any) {
+      clearTimeout(timer);
+      const isTimeout = parseErr?.name === 'AbortError' || String(parseErr?.message || parseErr).includes('aborted');
+      if (isTimeout) {
+        throw new Error(`[NIM] response body timed out (timeout=${timeoutMs}ms, total=${Date.now() - started}ms)`);
+      }
+      throw new NimProviderError(`[NIM] invalid JSON body: ${parseErr?.message ?? parseErr}`, response.status);
+    }
     clearTimeout(timer);
-    const json = await response.json();
+
     const text = json?.choices?.[0]?.message?.content ?? '';
 
     logger.info('[nimChat] completed', {
