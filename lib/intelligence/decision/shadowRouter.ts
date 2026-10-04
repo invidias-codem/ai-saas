@@ -211,6 +211,8 @@ export function shadowEvaluateRouting(args: {
           policyId: policy.id,
           policyVersion: policy.version,
           questionSetVersion: QUESTION_SET_VERSION,
+          // 3A: self-describing event — the replay cohort filter needs this.
+          tierPolicyVersion: TIER_POLICY_VERSION,
           requestId: args.request.requestId,
           outcome,
           policyOutcome,
@@ -264,6 +266,9 @@ export function shadowEvaluateRouting(args: {
         jevLatencyMs: outcome.latencyMs,
         jevAttemptCount: outcome.attemptCount,
         jevInputTokens: outcome.usage.inputTokens,
+        // 3A: decision-cost capture — output tokens for the decision model
+        // itself, needed to compute routing-benefit minus decision-cost.
+        jevOutputTokens: outcome.usage.outputTokens ?? null,
         policyAction: policyOutcome.action,
         policyReasonCode: policyOutcome.reasonCode,
       },
@@ -283,6 +288,8 @@ export function shadowEvaluateRouting(args: {
         policyId: policy.id,
         policyVersion: policy.version,
         questionSetVersion: QUESTION_SET_VERSION,
+        // 3A: self-describing event — the replay cohort filter needs this.
+        tierPolicyVersion: TIER_POLICY_VERSION,
         requestId: args.request.requestId,
         outcome,
         policyOutcome,

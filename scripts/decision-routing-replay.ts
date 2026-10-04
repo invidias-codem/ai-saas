@@ -53,24 +53,41 @@ async function main() {
   const sinceIso = new Date(Date.now() - args.days * 86_400_000).toISOString();
 
   // Slice-3 cohort guard: never silently mix experimental generations.
-  const telemetryQuery = supabaseAdmin
+  // 3A: SPLIT queries — decision_event rows emitted before 3A have no
+  // tierPolicyVersion key, so a combined QSV+TPV filter silently dropped
+  // every one of them. jev_shadow_decision (Query A) is fully versioned;
+  // decision_event (Query B) is the normalized stream that became
+  // self-describing only in 3A, so it filters on QSV alone.
+  const { data: shadowRows, error: shadowErr } = await supabaseAdmin
     .from('telemetry_events')
     .select('event_type, metadata')
-    .in('event_type', ['jev_shadow_decision', 'decision_event'])
+    .eq('event_type', 'jev_shadow_decision')
     .gte('created_at', sinceIso)
     .eq('metadata->>questionSetVersion', String(args.questionSet))
     .eq('metadata->>tierPolicyVersion', String(args.tierPolicy));
+  if (shadowErr) throw shadowErr;
 
-  const { data: telemetryRows, error: telemetryErr } = await telemetryQuery;
-  if (telemetryErr) throw telemetryErr;
+  const { data: decisionEventRows, error: decisionEventErr } = await supabaseAdmin
+    .from('telemetry_events')
+    .select('event_type, metadata')
+    .eq('event_type', 'decision_event')
+    .gte('created_at', sinceIso)
+    .eq('metadata->>questionSetVersion', String(args.questionSet));
+  if (decisionEventErr) throw decisionEventErr;
+
+  const telemetryRows = [...(shadowRows ?? []), ...(decisionEventRows ?? [])];
 
   const { data: ucolRows, error: ucolErr } = await supabaseAdmin
     .from('ucol_routing_telemetry')
-    .select('request_id, outcome, latency_ms, estimated_cost_usd, user_correction_signal')
+    .select('request_id, route_timestamp, outcome, latency_ms, estimated_cost_usd, user_correction_signal')
     .gte('route_timestamp', sinceIso);
   if (ucolErr) throw ucolErr;
 
-  let records = normalizeRows(telemetryRows ?? [], ucolRows ?? []);
+  const { records: normalized, diagnostics } = normalizeRows(telemetryRows, ucolRows ?? []);
+  if (!args.json) {
+    console.log(`ingest diagnostics: ${JSON.stringify(diagnostics)}`);
+  }
+  let records = normalized;
   if (args.intent) records = records.filter((r) => r.production.intent === args.intent);
 
   const dataset = { datasetHash: datasetHash(records), records };
