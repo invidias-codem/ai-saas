@@ -276,3 +276,159 @@ function keepAll(blocks: ContextBlock[], reason: string): SievedContext {
     transportAvailable: false,
   };
 }
+
+// ── 6A.1 telemetry rows ──────────────────────────────────────────────
+// Event construction is PURE and lives here, so the five dataset
+// invariants hold BY CONSTRUCTION:
+//   1. exactly one request-summary row per buildSieveEvents call
+//   2. every candidate block → exactly one row with a deterministic blockId
+//   3. the summary reconciles against the block rows (same arrays)
+//   4. protected blocks are never emitted as DROP
+//   5. failures produce a failOpen summary row via buildFailOpenSummary
+
+export interface ContextSieveEventRow {
+  requestId: string;
+  /** '__request__' on the summary row. */
+  blockId: string;
+  /** block source, or 'request_summary'. */
+  blockType: string;
+  /** Block decisions only; null on the summary row. */
+  decision: 'KEEP' | 'DROP' | null;
+  reason: string;
+  relevanceScore: number | null;
+  protected: boolean;
+  /** True when the sieve failed open (KEEP_ALL). */
+  failOpen: boolean;
+  policyVersion: string;
+  sieveVersion: string;
+  /** Hash of the full retrieval input this decision was made against. */
+  inputHash: string;
+  /** Hash of this block's content — provenance for future recall/verify. */
+  blockHash: string;
+  latencyMs: number;
+  createdAt: string;
+  estimatedTokens: number;
+  isSummary: boolean;
+  // Summary-only fields.
+  candidateTokens?: number;
+  proposedActiveTokens?: number;
+  proposedDeferredTokens?: number;
+  proposedReductionRatio?: number;
+  blocksConsidered?: number;
+  blocksDeferred?: number;
+}
+
+/** djb2 — provenance hash, not cryptographic. Stable + deterministic. */
+function hashText(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i += 1) {
+    h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(16);
+}
+
+export function blockHashOf(block: ContextBlock): string {
+  return hashText(`${block.source}:${block.text}`);
+}
+
+export function inputHashOf(requestId: string, blocks: ContextBlock[]): string {
+  return hashText(`${requestId}|${blocks.map((b) => `${b.id}=${blockHashOf(b)}`).join('|')}`);
+}
+
+export function buildSieveEvents(args: {
+  requestId: string;
+  blocks: ContextBlock[];
+  sieved: SievedContext;
+  latencyMs: number;
+  createdAt: string;
+}): ContextSieveEventRow[] {
+  const { requestId, blocks, sieved, latencyMs, createdAt } = args;
+  const inputHash = inputHashOf(requestId, blocks);
+  const failOpen = !sieved.transportAvailable;
+  const byId = new Map(blocks.map((b) => [b.id, b]));
+
+  const rows: ContextSieveEventRow[] = sieved.decisions.map((d) => {
+    const block = byId.get(d.blockId);
+    return {
+      requestId,
+      blockId: d.blockId,
+      blockType: block?.source ?? 'unknown',
+      decision: d.disposition === 'deferred' ? 'DROP' : 'KEEP',
+      reason: d.reasonCode,
+      relevanceScore: d.relevance ?? null,
+      protected: block?.protected ?? false,
+      failOpen,
+      policyVersion: SIEVE_POLICY_VERSION,
+      sieveVersion: SIEVE_GATE_VERSION,
+      inputHash,
+      blockHash: block ? blockHashOf(block) : hashText('missing'),
+      latencyMs,
+      createdAt,
+      estimatedTokens: block?.estimatedTokens ?? 0,
+      isSummary: false,
+    };
+  });
+
+  const summary: ContextSieveEventRow = {
+    requestId,
+    blockId: '__request__',
+    blockType: 'request_summary',
+    decision: null,
+    reason: failOpen ? 'fail_open_keep_all' : 'ok',
+    relevanceScore: null,
+    protected: false,
+    failOpen,
+    policyVersion: SIEVE_POLICY_VERSION,
+    sieveVersion: SIEVE_GATE_VERSION,
+    inputHash,
+    blockHash: hashText('__request__'),
+    latencyMs,
+    createdAt,
+    estimatedTokens: sieved.originalTokens,
+    isSummary: true,
+    candidateTokens: sieved.originalTokens,
+    proposedActiveTokens: sieved.activeTokens,
+    proposedDeferredTokens: sieved.deferredTokens,
+    proposedReductionRatio: sieved.originalTokens ? sieved.deferredTokens / sieved.originalTokens : 0,
+    blocksConsidered: sieved.originalBlockCount,
+    blocksDeferred: sieved.deferred.length,
+  };
+  rows.push(summary);
+  return rows;
+}
+
+/** Failure path: exactly one failOpen summary row, even when the block
+ *  projection itself exploded. Reconciliation holds trivially (0 blocks). */
+export function buildFailOpenSummary(args: {
+  requestId: string;
+  reason: string;
+  latencyMs: number;
+  createdAt: string;
+  blocksConsidered?: number;
+  message?: string;
+}): ContextSieveEventRow {
+  return {
+    requestId: args.requestId,
+    blockId: '__request__',
+    blockType: 'request_summary',
+    decision: null,
+    reason: `fail_open:${args.reason}`,
+    relevanceScore: null,
+    protected: false,
+    failOpen: true,
+    policyVersion: SIEVE_POLICY_VERSION,
+    sieveVersion: SIEVE_GATE_VERSION,
+    inputHash: hashText(`failopen:${args.requestId}:${args.message ?? ''}`),
+    blockHash: hashText('__request__'),
+    latencyMs: args.latencyMs,
+    createdAt: args.createdAt,
+    estimatedTokens: 0,
+    isSummary: true,
+    candidateTokens: 0,
+    proposedActiveTokens: 0,
+    proposedDeferredTokens: 0,
+    proposedReductionRatio: 0,
+    blocksConsidered: args.blocksConsidered ?? 0,
+    blocksDeferred: 0,
+  };
+}
