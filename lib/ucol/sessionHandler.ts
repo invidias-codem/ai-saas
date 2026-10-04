@@ -14,6 +14,14 @@ import {
     type CanaryPromotionArtifact,
     type CanaryRequestFacts,
 } from '@/lib/intelligence/decision/canary';
+import {
+    checkLease,
+    consumeLease,
+    issueLease,
+    leaseFingerprint,
+    type DecisionLeaseRecord,
+} from '@/lib/intelligence/decision/lease';
+import { QUESTION_SET_VERSION } from '@/lib/intelligence/decision/shadowRouter';
 import type { Tier } from '@/lib/intelligence/decision/replay/types';
 import { waitUntil } from '@vercel/functions';
 import { logEvent } from '@/lib/telemetry';
@@ -46,6 +54,25 @@ async function canarySemanticTier(rawInput: string): Promise<'fast' | 'quality' 
     const t = cap?.choice;
     return t === 'fast' || t === 'quality' || t === 'reasoning' ? t : null;
 }
+
+/** Deterministic dossier projection for lease identity — same input, same
+ *  string. Uses the SAME buildRoutingDossier as transport so cache identity
+ *  can never drift from what the transport actually decided on. */
+function canarySemanticDossier(rawInput: string): unknown {
+    return buildRoutingDossier({
+        request: { requestId: 'canary', rawInput },
+        agentMode: 'fast',
+        hasAttachments: false,
+        messageHistoryCount: 0,
+        workspaceBacked: false,
+    }).dossier;
+}
+
+// Slice 5 lease store: conversation-scoped, in-process only.
+// ponytail: module-level Map keyed by conversationId; leases die with the
+// lambda and NEVER cross processes. Fine for canary-scale traffic; move to
+// Upstash/Supabase with an LRU only when hit-rate telemetry justifies it.
+const activeLeases = new Map<string, DecisionLeaseRecord>();
 
 export interface SessionSetupOptions {
     req: Request;
@@ -214,11 +241,35 @@ export async function setupUcolSession({
     };
     const canaryVerdict = authorizeCanary({ baselineTier, facts: canaryFacts, config: canaryConfig });
 
+    // ── Slice 5: lease check BEFORE transport ────────────────────────
+    // A valid lease lets the approved judgment skip the JEV call entirely.
+    // Cache identity binds the full decision context (never the prompt).
+    const leaseFp = leaseFingerprint({
+        policyVersion: canaryConfig.artifact?.policyVersion ?? '',
+        questionSetVersion: QUESTION_SET_VERSION,
+        normalizedDossier: JSON.stringify(canarySemanticDossier(requestPacket.rawInput)),
+        deterministicPolicyContext: JSON.stringify({ risk: canaryFacts.deterministicRisk, mode: resolvedContext.mode }),
+        candidateSet: JSON.stringify(canaryFacts.supportedTiers),
+    });
+    const stateFp = JSON.stringify({ workspace: resolvedContext.workspaceId, turn: requestPacket.conversationId, attachments: canaryFacts.hasAttachments });
+    const leaseCheck = checkLease({
+        lease: requestPacket.conversationId ? activeLeases.get(requestPacket.conversationId) ?? null : null,
+        decisionFingerprint: leaseFp,
+        stateFingerprint: stateFp,
+        policyVersion: canaryConfig.artifact?.policyVersion ?? '',
+        now: new Date().toISOString(),
+    });
+    let activeLease: DecisionLeaseRecord | null = leaseCheck.lease;
+
     let canaryDecisionTier: unknown = null;
     let canaryDecisionLatencyMs = 0;
     let canaryServedRef: string | null = null;
     let canaryBaselineRef: string | null = null;
-    if (canaryVerdict.eligible) {
+    if (canaryVerdict.eligible && leaseCheck.reusableTier !== null) {
+        // Lease hit: reuse the previously validated judgment; no transport.
+        canaryDecisionTier = leaseCheck.reusableTier;
+        canaryDecisionLatencyMs = 0;
+    } else if (canaryVerdict.eligible) {
         // Inline JEV transport under a strict deadline. Over budget,
         // malformed, or error → B2. No rescue, no chained fallback.
         const deadlineAt = Date.now() + canaryConfig.semanticTierBudgetMs;
@@ -261,6 +312,27 @@ export async function setupUcolSession({
         };
         canaryServedRef = ref;
         canaryBaselineRef = baselineModelRef;
+
+        // Slice 5: issue a user_turn lease on first apply within this
+        // request; subsequent requests in the same conversation reuse it
+        // and skip transport. Storage is the module-level map below.
+        if (canaryConfig.artifact && leaseCheck.disposition === 'lease_miss') {
+            activeLease = issueLease({
+                requestId: requestPacket.requestId,
+                policyId: canaryConfig.artifact.policyId,
+                policyVersion: canaryConfig.artifact.policyVersion,
+                decisionFingerprint: leaseFp,
+                stateFingerprint: stateFp,
+                kind: 'user_turn',
+                proposedTier: finalVerdict.servedTier,
+                now: new Date().toISOString(),
+            });
+        } else if (leaseCheck.lease && leaseCheck.disposition !== 'lease_miss') {
+            activeLease = consumeLease(leaseCheck.lease);
+        }
+        if (activeLease && requestPacket.conversationId) {
+            activeLeases.set(requestPacket.conversationId, activeLease);
+        }
     }
 
     // Attribution telemetry — every intervention measurable (contract #5).
@@ -287,6 +359,9 @@ export async function setupUcolSession({
                 overrideReason: finalVerdict.overrideReason,
                 fallbackReason: finalVerdict.fallbackReason,
                 decisionLatencyMs: canaryDecisionLatencyMs,
+                // Slice 5: lease/cache disposition with invalidation reasons.
+                leaseDisposition: leaseCheck.disposition,
+                leaseInvalidationReasons: leaseCheck.invalidationReasons,
             },
         });
     } catch { /* telemetry must never throw */ }
