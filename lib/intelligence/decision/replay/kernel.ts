@@ -23,7 +23,7 @@ export function tierDelta(productionTier: string, hypotheticalTier: string): Tie
   return h < p ? 'hypothetical_lower' : 'hypothetical_higher';
 }
 
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (value === null || value === undefined) return 'null';
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (typeof value === 'object') {
