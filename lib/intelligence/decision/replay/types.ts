@@ -50,6 +50,19 @@ export interface RoutingReplayRecord {
     estimatedCostUsd?: number;
     correctionSignal?: CorrectionSignal;
   };
+
+  /**
+   * 3A: cost of the Decision Plane itself — the denominator of every
+   * future "is routing worth it" computation. available=false covers the
+   * failure path (reason/latency live in decisionFailure).
+   */
+  decision?: {
+    available: boolean;
+    latencyMs?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    estimatedCostUsd?: number;
+  };
 }
 
 export interface ReplayDataset {

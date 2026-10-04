@@ -216,11 +216,11 @@ describe('decision plane replay — slice 3 contracts', () => {
         decisionModel: 'jev-1.13.0',
       },
     };
-    const ucolGen0 = [{ request_id: 'g1', outcome: 'success' as const, latency_ms: 1, estimated_cost_usd: 0, user_correction_signal: 'none' as const }];
-    const ucolV2 = [{ request_id: 'v1', outcome: 'success' as const, latency_ms: 1, estimated_cost_usd: 0, user_correction_signal: 'none' as const }];
+    const ucolGen0 = [{ request_id: 'g1', route_timestamp: '2026-09-27T10:00:00Z', outcome: 'success' as const, latency_ms: 1, estimated_cost_usd: 0, user_correction_signal: 'none' as const }];
+    const ucolV2 = [{ request_id: 'v1', route_timestamp: '2026-09-27T10:00:00Z', outcome: 'success' as const, latency_ms: 1, estimated_cost_usd: 0, user_correction_signal: 'none' as const }];
 
-    const gen0 = normalizeRows([gen0Shadow], ucolGen0);
-    const v2 = normalizeRows([v2Shadow], ucolV2);
+    const gen0 = normalizeRows([gen0Shadow], ucolGen0).records;
+    const v2 = normalizeRows([v2Shadow], ucolV2).records;
 
     expect(gen0[0].experiment.questionSetVersion).toBe(1);
     expect(gen0[0].experiment.tierPolicyVersion).toBe(1);
@@ -231,10 +231,11 @@ describe('decision plane replay — slice 3 contracts', () => {
   });
 
   it('normalizeRows routes failed judgments to decisionFailure, keeping them in the denominator', () => {
-    const rows = normalizeRows(
+    const { records: rows, diagnostics } = normalizeRows(
       [
         {
           event_type: 'jev_shadow_decision',
+          created_at: '2026-09-27T10:00:00Z',
           metadata: {
             requestId: 'f1',
             status: 'unavailable',
@@ -250,11 +251,12 @@ describe('decision plane replay — slice 3 contracts', () => {
           },
         },
       ],
-      [{ request_id: 'f1', outcome: 'success' as const }],
+      [{ request_id: 'f1', route_timestamp: '2026-09-27T10:05:00Z', outcome: 'success' as const }],
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].judgment).toBeNull();
     expect(rows[0].decisionFailure?.reason).toBe('response_invalid');
     expect(rows[0].decisionFailure?.attemptCount).toBe(2);
+    expect(diagnostics.joinedRows).toBe(1);
   });
 });

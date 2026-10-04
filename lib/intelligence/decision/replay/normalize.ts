@@ -16,15 +16,34 @@ import type { DecisionFailureReason, DecisionLease } from '../contracts';
 // Loose row shapes — what the script actually SELECTs out of Supabase.
 export interface TelemetryRow {
   event_type: string;
+  created_at: string;
   metadata: Record<string, unknown> | null;
 }
 
 export interface UcolTelemetryRow {
   request_id: string;
+  route_timestamp: string;
   outcome: OutcomeStatus;
   latency_ms?: number | null;
   estimated_cost_usd?: number | null;
   user_correction_signal?: CorrectionSignal | null;
+}
+
+/**
+ * 3A: ingest becomes deterministic. Selection rules replace last-row-wins:
+ *   shadow decision  → earliest valid event per requestId
+ *   decision_event   → earliest valid event per requestId
+ *   routing outcome  → latest finalized row per requestId (route_timestamp)
+ * Duplicates are counted, never silently collapsed.
+ */
+export interface NormalizationDiagnostics {
+  shadowRows: number;
+  outcomeRows: number;
+  joinedRows: number;
+  missingOutcomeRows: number;
+  duplicateShadowRequests: number;
+  duplicateOutcomeRequests: number;
+  rejectedMalformedRows: number;
 }
 
 const CAPABILITIES: ReadonlySet<string> = new Set(['fast', 'quality', 'reasoning']);
@@ -74,35 +93,85 @@ function resolveProductionTier(shadow: Record<string, unknown>, firstRef: unknow
   return productionTierFromModelRef(firstRef);
 }
 
+export interface NormalizeResult {
+  records: RoutingReplayRecord[];
+  diagnostics: NormalizationDiagnostics;
+}
+
 export function normalizeRows(
   telemetryRows: TelemetryRow[],
   ucolRows: UcolTelemetryRow[],
-): RoutingReplayRecord[] {
-  const outcomesByRequest = new Map<string, UcolTelemetryRow>();
-  for (const r of ucolRows) outcomesByRequest.set(r.request_id, r);
+): NormalizeResult {
+  const diagnostics: NormalizationDiagnostics = {
+    shadowRows: 0,
+    outcomeRows: ucolRows.length,
+    joinedRows: 0,
+    missingOutcomeRows: 0,
+    duplicateShadowRequests: 0,
+    duplicateOutcomeRequests: 0,
+    rejectedMalformedRows: 0,
+  };
 
-  const shadowByRequest = new Map<string, Record<string, unknown>>();
-  let decisionEvent: TelemetryRow | undefined;
-  const decisionEventsByRequest = new Map<string, TelemetryRow>();
+  // Deterministic selection: earliest shadow/decision event per requestId.
+  const shadowByRequest = new Map<string, { meta: Record<string, unknown>; createdAt: string }>();
+  const decisionEventsByRequest = new Map<string, { row: TelemetryRow; createdAt: string }>();
 
   for (const row of telemetryRows) {
     const meta = row.metadata ?? {};
     const requestId = typeof meta.requestId === 'string' ? meta.requestId : undefined;
-    if (!requestId) continue;
+    if (!requestId) {
+      diagnostics.rejectedMalformedRows += 1;
+      continue;
+    }
+    const createdAt = row.created_at ?? '';
     if (row.event_type === 'jev_shadow_decision') {
-      shadowByRequest.set(requestId, meta);
+      diagnostics.shadowRows += 1;
+      const prev = shadowByRequest.get(requestId);
+      if (!prev) {
+        shadowByRequest.set(requestId, { meta, createdAt });
+      } else {
+        diagnostics.duplicateShadowRequests += 1;
+        if (createdAt < prev.createdAt) shadowByRequest.set(requestId, { meta, createdAt });
+      }
     } else if (row.event_type === 'decision_event') {
-      decisionEventsByRequest.set(requestId, row);
-      if (!decisionEvent) decisionEvent = row;
+      const prev = decisionEventsByRequest.get(requestId);
+      if (!prev) {
+        decisionEventsByRequest.set(requestId, { row, createdAt });
+      } else {
+        diagnostics.duplicateShadowRequests += 1;
+        if (createdAt < prev.createdAt) decisionEventsByRequest.set(requestId, { row, createdAt });
+      }
+    }
+  }
+
+  // Deterministic selection: latest finalized outcome per requestId.
+  const outcomesByRequest = new Map<string, UcolTelemetryRow>();
+  for (const r of ucolRows) {
+    if (!r.request_id) {
+      diagnostics.rejectedMalformedRows += 1;
+      continue;
+    }
+    const prev = outcomesByRequest.get(r.request_id);
+    if (!prev) {
+      outcomesByRequest.set(r.request_id, r);
+    } else {
+      diagnostics.duplicateOutcomeRequests += 1;
+      if ((r.route_timestamp ?? '') > (prev.route_timestamp ?? '')) {
+        outcomesByRequest.set(r.request_id, r);
+      }
     }
   }
 
   const records: RoutingReplayRecord[] = [];
-  for (const [requestId, shadow] of shadowByRequest) {
+  for (const [requestId, { meta: shadow }] of shadowByRequest) {
     const outcomeRow = outcomesByRequest.get(requestId);
-    if (!outcomeRow) continue; // can't compare hypothetical vs actual without actual
+    if (!outcomeRow) {
+      diagnostics.missingOutcomeRows += 1;
+      continue; // can't compare hypothetical vs actual without actual
+    }
+    diagnostics.joinedRows += 1;
 
-    const deMeta = (decisionEventsByRequest.get(requestId)?.metadata ?? {}) as Record<string, unknown>;
+    const deMeta = (decisionEventsByRequest.get(requestId)?.row.metadata ?? {}) as Record<string, unknown>;
 
     const status = shadow.status;
     const usable = status === 'ok';
@@ -127,7 +196,7 @@ export function normalizeRows(
     const experiment = {
       planeSchemaVersion: asNum(shadow.decisionPlaneSchemaVersion ?? deMeta.planeSchemaVersion) ?? 1,
       questionSetVersion: asNum(shadow.questionSetVersion ?? deMeta.questionSetVersion) ?? 1,
-      tierPolicyVersion: asNum(shadow.tierPolicyVersion) ?? 1,
+      tierPolicyVersion: asNum(shadow.tierPolicyVersion ?? deMeta.tierPolicyVersion) ?? 1,
       engineId: typeof deMeta.engineId === 'string' ? deMeta.engineId : 'jev',
       engineModel:
         typeof shadow.decisionModel === 'string'
@@ -160,7 +229,14 @@ export function normalizeRows(
         estimatedCostUsd: outcomeRow.estimated_cost_usd ?? undefined,
         correctionSignal: outcomeRow.user_correction_signal ?? undefined,
       },
+      decision: {
+        available: usable,
+        latencyMs: asNum(shadow.jevLatencyMs),
+        inputTokens: asNum(shadow.jevInputTokens),
+        outputTokens: asNum(shadow.jevOutputTokens),
+        estimatedCostUsd: asNum(shadow.jevCostUsd),
+      },
     });
   }
-  return records;
+  return { records, diagnostics };
 }
