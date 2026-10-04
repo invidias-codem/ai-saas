@@ -7,11 +7,45 @@ import { validateRequestSize } from '@/lib/security/inputValidation';
 import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import { buildInitialRoutingDecision } from './routing/decision';
 import { shadowEvaluateRouting } from '@/lib/intelligence/decision/shadowRouter';
+import {
+    authorizeCanary,
+    validateCanaryDecision,
+    type CanaryConfig,
+    type CanaryPromotionArtifact,
+    type CanaryRequestFacts,
+} from '@/lib/intelligence/decision/canary';
+import type { Tier } from '@/lib/intelligence/decision/replay/types';
 import { waitUntil } from '@vercel/functions';
+import { logEvent } from '@/lib/telemetry';
+import { env } from '@/lib/env';
 import type { UcolRequestPacket, UcolRoutingDecision } from '@/lib/ucol/routing/types';
 import type { RuntimeContextResult } from '@/lib/ucol/runtimeContextResolver';
 import type { User } from '@clerk/nextjs/server';
 import type { FileAttachmentInput } from '@/lib/types/attachments';
+import { buildRoutingDossier } from '@/lib/intelligence/decision/shadowRouter';
+import { JevDecisionEngine } from '@/lib/intelligence/decision/engines/jev';
+
+/**
+ * Slice 4 canary transport: ONE inline JEV call, strictly deadline-bound by
+ * the caller's Promise.race. Returns the semantic capability tier or null.
+ * Any failure → null → B2 (validated downstream). No retry, no rescue.
+ */
+async function canarySemanticTier(rawInput: string): Promise<'fast' | 'quality' | 'reasoning' | null> {
+    if (!env.TYPESAFE_API_KEY) return null;
+    const { dossier, questions } = buildRoutingDossier({
+        request: { requestId: 'canary', rawInput },
+        agentMode: 'fast',
+        hasAttachments: false,
+        messageHistoryCount: 0,
+        workspaceBacked: false,
+    });
+    const engine = new JevDecisionEngine();
+    const outcome = await engine.evaluate(dossier, questions);
+    if (!outcome.ok) return null;
+    const cap = outcome.answers.capability_requirement as { choice?: string } | undefined;
+    const t = cap?.choice;
+    return t === 'fast' || t === 'quality' || t === 'reasoning' ? t : null;
+}
 
 export interface SessionSetupOptions {
     req: Request;
@@ -128,7 +162,7 @@ export async function setupUcolSession({
         createdAt: new Date().toISOString(),
     };
 
-    const routingDecision = buildInitialRoutingDecision({
+    let routingDecision = buildInitialRoutingDecision({
         request: requestPacket,
         context: resolvedContext.ucolContext,
         agentMode: resolvedContext.mode,
@@ -138,6 +172,124 @@ export async function setupUcolSession({
             profile: resolvedContext.profile,
         },
     });
+
+    // ── Slice 4: bounded routing canary ─────────────────────────────
+    // Kill switch + frozen artifact + allowlist. Missing config → OFF.
+    // ponytail: process.env read here (not env schema) — DECISION_CANARY_*
+    // keys are optional operators' controls; adding them to the shared
+    // lattice-core Env type couples an ops flag to a published package.
+    const canaryConfigured = process.env.DECISION_CANARY_ENABLED === 'true';
+    const canaryArtifactRaw = process.env.DECISION_CANARY_ARTIFACT_JSON;
+    let canaryArtifact: CanaryPromotionArtifact | null = null;
+    if (canaryConfigured && canaryArtifactRaw) {
+        try {
+            const parsed = JSON.parse(canaryArtifactRaw);
+            canaryArtifact =
+                parsed?.status === 'CANARY_ELIGIBLE' && parsed.datasetHash && parsed.policyId && parsed.policyVersion
+                    ? parsed
+                    : null;
+        } catch { canaryArtifact = null; }
+    }
+    const canaryConfig: CanaryConfig = {
+        enabled: canaryConfigured && canaryArtifact !== null,
+        artifact: canaryArtifact,
+        allowlist: (process.env.DECISION_CANARY_ALLOWLIST ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+        bucketPercent: Number(process.env.DECISION_CANARY_BUCKET_PERCENT ?? '0'),
+        experimentVersion: process.env.DECISION_CANARY_EXPERIMENT_VERSION ?? 'canary-v1',
+        semanticTierBudgetMs: Number(process.env.DECISION_CANARY_SEMANTIC_BUDGET_MS ?? '0'),
+    };
+
+    // B2 is already computed above (routingDecision). The canary may only
+    // OVERRIDE a copy — never mutate the baseline object.
+    const baselineTier: Tier = routingDecision.providerPlan.preferredModelRefs[0]?.split('.').pop() as Tier;
+    const canaryFacts: CanaryRequestFacts = {
+        requestId: requestPacket.requestId,
+        cohortKey: resolvedContext.workspaceId || user.userId,
+        hasAttachments: Boolean(fileData),
+        requiresUserConfirmation: routingDecision.executionPlan.requiresUserConfirmation,
+        destructiveOrExternalSideEffects: false, // B2 flags no such plans today; wire when it does
+        deterministicRisk: 'unknown',
+        supportedTiers: [],
+        providerAvailable: true,
+    };
+    const canaryVerdict = authorizeCanary({ baselineTier, facts: canaryFacts, config: canaryConfig });
+
+    let canaryDecisionTier: unknown = null;
+    let canaryDecisionLatencyMs = 0;
+    let canaryServedRef: string | null = null;
+    let canaryBaselineRef: string | null = null;
+    if (canaryVerdict.eligible) {
+        // Inline JEV transport under a strict deadline. Over budget,
+        // malformed, or error → B2. No rescue, no chained fallback.
+        const deadlineAt = Date.now() + canaryConfig.semanticTierBudgetMs;
+        try {
+            const started = Date.now();
+            canaryDecisionTier = await Promise.race([
+                canarySemanticTier(requestPacket.rawInput),
+                new Promise<null>((_, reject) =>
+                    setTimeout(() => reject(new Error('canary_decision_timeout')), Math.max(deadlineAt - started, 0))
+                ),
+            ]);
+            canaryDecisionLatencyMs = Date.now() - started;
+        } catch {
+            canaryDecisionTier = null; // any transport failure → B2
+        }
+    }
+
+    const finalVerdict = validateCanaryDecision({
+        verdict: canaryVerdict,
+        facts: canaryFacts,
+        semanticTier: canaryDecisionTier,
+        decisionLatencyMs: canaryDecisionLatencyMs,
+        semanticTierBudgetMs: canaryConfig.semanticTierBudgetMs,
+    });
+
+    if (finalVerdict.applied) {
+        // Override a COPY of the routing decision — never the B2 baseline
+        // object, which downstream telemetry and rollback still reference.
+        const ref = finalVerdict.servedTier === 'fast' ? 'deepseek.fast'
+            : finalVerdict.servedTier === 'reasoning' ? 'deepseek.reasoning'
+            : 'deepseek.quality';
+        const baselineModelRef = routingDecision.providerPlan.preferredModelRefs[0] ?? null;
+        routingDecision = {
+            ...routingDecision,
+            providerPlan: { ...routingDecision.providerPlan, preferredModelRefs: [ref] },
+            debug: {
+                ...routingDecision.debug,
+                policyFlags: [...(routingDecision.debug.policyFlags ?? []), `canary:${finalVerdict.policyId}@${finalVerdict.policyVersion}`],
+            },
+        };
+        canaryServedRef = ref;
+        canaryBaselineRef = baselineModelRef;
+    }
+
+    // Attribution telemetry — every intervention measurable (contract #5).
+    // logEvent is synchronous fire-and-forget; isolate it so telemetry
+    // failures can never touch routing.
+    try {
+        logEvent({
+            eventType: 'decision_canary_event',
+            userId: user.userId,
+            workspaceId: resolvedContext.workspaceId || undefined,
+            metadata: {
+                requestId: requestPacket.requestId,
+                canaryEligible: finalVerdict.eligible,
+                canaryApplied: finalVerdict.applied,
+                cohortId: finalVerdict.cohortId,
+                policyId: finalVerdict.policyId,
+                policyVersion: finalVerdict.policyVersion,
+                promotionDatasetHash: finalVerdict.promotionDatasetHash,
+                baselineTier: finalVerdict.baselineTier,
+                proposedTier: finalVerdict.proposedTier,
+                servedTier: finalVerdict.servedTier,
+                baselineModelRef: canaryBaselineRef ?? routingDecision.providerPlan.preferredModelRefs[0] ?? null,
+                servedModelRef: canaryServedRef ?? routingDecision.providerPlan.preferredModelRefs[0] ?? null,
+                overrideReason: finalVerdict.overrideReason,
+                fallbackReason: finalVerdict.fallbackReason,
+                decisionLatencyMs: canaryDecisionLatencyMs,
+            },
+        });
+    } catch { /* telemetry must never throw */ }
 
     // Shadow decision plane (slice 1A): the WHOLE operation (JEV request +
     // validation + telemetry write) is registered with waitUntil so Vercel
