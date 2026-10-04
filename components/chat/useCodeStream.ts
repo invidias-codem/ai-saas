@@ -115,6 +115,13 @@ export function useCodeStream({
         role: "bot",
         timestamp: new Date(),
       };
+      // Server guards against empty completions (502 empty-response), but the
+      // client should still not render an empty bubble for any other
+      // degradation path (e.g. proxy stripping the body).
+      if (!botMessage.text || !String(botMessage.text).trim()) {
+        setError("The model returned an empty response. Please try again.");
+        return;
+      }
       setMessages((prevMessages) => [...prevMessages, botMessage]);
     } catch (error: any) {
       console.error("[CODE_PAGE_ERROR]", error);

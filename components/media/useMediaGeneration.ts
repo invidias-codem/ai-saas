@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { ReplicatePrediction, GenerationStatus } from "./types";
+import { ReplicatePrediction, GenerationStatus, isUsableMediaUrl } from "./types";
 
 interface UseMediaGenerationOptions {
   /** POST endpoint that starts the prediction (video/music). */
@@ -87,6 +87,17 @@ export function useMediaGeneration({
         switch (prediction.status) {
           case "succeeded":
             setPredictionId(null);
+            // Final-output validation: a 'succeeded' status without a usable
+            // URL is treated as failure, not success. Prevents rendering a
+            // blank <video> card after Replicate nominally finished.
+            if (!isUsableMediaUrl(prediction.output)) {
+              setStatus("failed");
+              onFailedRef.current?.(
+                prediction.error?.detail || "Generation completed but produced no usable output. Please try again."
+              );
+              clearInterval(interval);
+              break;
+            }
             setStatus("completed");
             onSucceededRef.current?.(prediction);
             clearInterval(interval);

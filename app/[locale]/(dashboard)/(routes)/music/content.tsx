@@ -150,7 +150,15 @@ export function MusicContent() {
 
         {musicUrl && !isLoading && !error && (
           <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-background to-emerald-500/5 p-4 sm:p-6 shadow-2xl shadow-emerald-500/10">
-            <audio controls className="w-full rounded-xl mb-4 shadow-lg">
+            <audio
+              controls
+              className="w-full rounded-xl mb-4 shadow-lg"
+              onError={() => {
+                console.error('[MUSIC_MEDIA_LOAD_ERROR]', musicUrl);
+                setError('Music finished generating but the file failed to load. Please try again.');
+                setMusicUrl(null);
+              }}
+            >
               <source src={musicUrl} type="audio/mpeg" />
               Your browser does not support the audio element.
             </audio>
