@@ -59,4 +59,5 @@ export type PreparedContextSections = {
   searchContext?: string;
   memoryContext?: string;
   attachedDocumentContext?: string;
+  strategyContext?: string;
 };

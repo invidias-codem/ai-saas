@@ -92,6 +92,9 @@ export type ConversationEngineOptions = {
   /** Optional UCOL-resolved memory plan to drive prepared-context assembly. */
   memoryPlan?: UcolMemoryPlan;
 
+  /** Correlation ID for shadow planes (context sieve telemetry). */
+  requestId?: string;
+
   /** Local workspace execution harness */
   ioHarness?: import('@/lib/harness/IOHarness').IOHarness;
 
@@ -619,6 +622,101 @@ export async function generateConversationReply(
   const graphData = preparedContext.raw.graphData;
   const userProfileMemories = preparedContext.raw.userProfileMemories;
   const memorySources = preparedContext.raw.memorySources;
+
+  // ── Slice 6A: SHADOW context sieve ────────────────────────────────
+  // Records what it WOULD defer. Production prompt is byte-identical:
+  // blocks are a projection over preparedContext.raw; sections/layout
+  // are untouched. Gated by CONTEXT_SIEVE_SHADOW (default off).
+  if (process.env.CONTEXT_SIEVE_SHADOW === 'true') {
+    try {
+      const { buildContextBlocks, sieveShadow, SIEVE_QUESTION_SET_VERSION, SIEVE_POLICY_VERSION } = await import('@/lib/context/sieve');
+      const requestId = options.requestId ?? 'unknown';
+      const started = Date.now();
+      const blocks = buildContextBlocks({
+        requestId,
+        raw: {
+          intelligentFacts,
+          researchResults: preparedContext.raw.researchResults,
+          graphRelatedNodes: graphData?.relatedNodes ?? [],
+          userProfileMemories,
+          memorySources,
+        },
+        sections: {
+          attachedDocumentContext: preparedContext.sections.attachedDocumentContext,
+          strategyContext: preparedContext.sections.strategyContext,
+        },
+        hasAttachments: Boolean(documentIds?.length),
+      });
+
+      // Shadow transport: deterministic lexical-overlap relevance, no model
+      // call in 6A. ponytail: placeholder transport until the JEV question
+      // set exists; keep-all semantics make it safe to run in prod.
+      const query = (userQuery || '').toLowerCase();
+      const words = new Set(query.split(/\W+/).filter((w) => w.length > 3));
+      const relevanceByBlock: Record<string, number> = {};
+      for (const b of blocks) {
+        if (b.protected) continue;
+        const text = b.text.toLowerCase();
+        let hits = 0;
+        for (const w of words) if (text.includes(w)) hits += 1;
+        relevanceByBlock[b.id] = words.size ? hits / words.size : 0.5;
+      }
+
+      const sieved = sieveShadow(blocks, { relevanceByBlock, transportStatus: 'ok' });
+      const latencyMs = Date.now() - started;
+
+      const { logEvent } = await import('@/lib/telemetry');
+      // Per-block decisions: one event each keeps the dataset row-shaped.
+      for (const d of sieved.decisions) {
+        const block = blocks.find((b) => b.id === d.blockId);
+        logEvent({
+          eventType: 'context_sieve_event',
+          userId,
+          workspaceId: workspaceId ?? undefined,
+          metadata: {
+            requestId,
+            blockId: d.blockId,
+            source: block?.source ?? null,
+            estimatedTokens: block?.estimatedTokens ?? 0,
+            relevance: d.relevance ?? null,
+            proposedDisposition: d.disposition,
+            protected: block?.protected ?? false,
+            transportStatus: 'ok',
+            latencyMs,
+            questionSetVersion: SIEVE_QUESTION_SET_VERSION,
+            policyVersion: SIEVE_POLICY_VERSION,
+          },
+        });
+      }
+      // Request-level metrics: candidateTokens, proposedActive/Deferred,
+      // reduction ratio, blocksConsidered/Deferred.
+      logEvent({
+        eventType: 'context_sieve_event',
+        userId,
+        workspaceId: workspaceId ?? undefined,
+        metadata: {
+          requestId,
+          blockId: '__request__',
+          source: 'request_summary',
+          estimatedTokens: sieved.originalTokens,
+          candidateTokens: sieved.originalTokens,
+          proposedActiveTokens: sieved.activeTokens,
+          proposedDeferredTokens: sieved.deferredTokens,
+          proposedReductionRatio: sieved.originalTokens ? sieved.deferredTokens / sieved.originalTokens : 0,
+          blocksConsidered: sieved.originalBlockCount,
+          blocksDeferred: sieved.deferred.length,
+          transportStatus: sieved.transportAvailable ? 'ok' : 'unavailable',
+          latencyMs,
+          questionSetVersion: SIEVE_QUESTION_SET_VERSION,
+          policyVersion: SIEVE_POLICY_VERSION,
+        },
+      });
+    } catch (e: any) {
+      // Shadow must never affect production — swallow and log.
+      console.warn('[ContextSieve] shadow evaluation skipped:', e?.message || e);
+    }
+  }
+  // ── end Slice 6A ───────────────────────────────────────────────────
 
   // ---------------------------------------------------------
   // SPRINT 4: Security & Reasoning Integration

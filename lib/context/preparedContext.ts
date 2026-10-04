@@ -21,6 +21,12 @@ import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotio
 import { generateEmbedding } from '@/lib/memory/embedding';
 import { scoreContextForRouting } from '@/lib/memory/confidenceScoring';
 import { getAttachedDocumentContext } from '@/lib/llm/contextAggregator';
+// Slice 6A: one canonical PreparedContextSections. types.ts owns the
+// canonical shape; preparedContext re-exports so existing import paths
+// keep working. Closes the strategyContext drift at the boundary we are
+// about to formalize.
+export type { PreparedContextSections } from '@/lib/context/types';
+import type { PreparedContextSections } from '@/lib/context/types';
 
 export type PreparedContextPlan = {
   retrievalMode?: UcolRetrievalMode;
@@ -37,18 +43,6 @@ export type PreparedContextOptions = {
   disableExternalContext?: boolean;
   skipWebResearch?: boolean;
   plan?: PreparedContextPlan;
-};
-
-export type PreparedContextSections = {
-  personaContext?: string;
-  userContextPrompt: string;
-  userProfileContext: string;
-  factContext: string;
-  graphContext: string;
-  searchContext: string;
-  memoryContext: string;
-  attachedDocumentContext?: string;
-  strategyContext?: string;
 };
 
 export type PreparedContextReadEnforcement = {
@@ -374,14 +368,14 @@ export function layoutPromptContext(
   budgetTokens: number = 6000,
 ): PromptLayoutResult {
   const candidates: PromptSection[] = [
-    createPromptSection('userContextPrompt', 'User Context', sections.userContextPrompt, 100, true),
+    createPromptSection('userContextPrompt', 'User Context', sections.userContextPrompt || '', 100, true),
     createPromptSection('attachedDocumentContext', 'Attached Documents', sections.attachedDocumentContext || '', 98),
     createPromptSection('strategyContext', 'Operating Strategy', sections.strategyContext || '', 92),
-    createPromptSection('factContext', 'Fact Context', sections.factContext, 95),
-    createPromptSection('userProfileContext', 'User Profile', sections.userProfileContext, 90),
-    createPromptSection('graphContext', 'Graph Context', sections.graphContext, 80),
-    createPromptSection('searchContext', 'Search Context', sections.searchContext, 60),
-    createPromptSection('memoryContext', 'Memory Context', sections.memoryContext, 85),
+    createPromptSection('factContext', 'Fact Context', sections.factContext || '', 95),
+    createPromptSection('userProfileContext', 'User Profile', sections.userProfileContext || '', 90),
+    createPromptSection('graphContext', 'Graph Context', sections.graphContext || '', 80),
+    createPromptSection('searchContext', 'Search Context', sections.searchContext || '', 60),
+    createPromptSection('memoryContext', 'Memory Context', sections.memoryContext || '', 85),
   ].filter((section) => section.text && section.text.trim().length > 0);
 
   const includedSections: PromptSection[] = [];
