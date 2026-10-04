@@ -18,7 +18,8 @@ export type TelemetryEventType =
   | "landing_variant_viewed"
   | "persona_critic_verdict"
   | "jev_shadow_decision"
-  | "decision_event";
+  | "decision_event"
+  | "decision_canary_event";
 
 export interface TelemetryPayload {
   eventType: TelemetryEventType;

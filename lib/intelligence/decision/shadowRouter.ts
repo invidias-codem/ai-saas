@@ -23,6 +23,69 @@ export const QUESTION_SET_VERSION = 2;
 export const TIER_POLICY_VERSION = 2;
 export const DECISION_PROVIDER_ID = 'jev';
 
+/**
+ * Slice 4: build the semantic dossier + question set for a routing
+ * decision. Extracted from shadowEvaluateRouting so the canary transport
+ * and the shadow stream share ONE definition — never two copies to drift.
+ */
+export function buildRoutingDossier(args: {
+  request: { requestId: string; rawInput: string; userId?: string; workspaceId?: string };
+  agentMode: string;
+  hasAttachments: boolean;
+  messageHistoryCount: number;
+  workspaceBacked: boolean;
+}): { dossier: DecisionDossier; questions: Questions } {
+  const redactedInput = scrubText(args.request.rawInput).slice(0, 4_000);
+  const dossier: DecisionDossier = {
+    schemaVersion: 1,
+    consumer: 'routing',
+    task: {
+      goal: 'Classify the user request and its capability requirements',
+      phase: 'plan',
+    },
+    state: {
+      user_request: redactedInput,
+      conversation_length_so_far: args.messageHistoryCount,
+      has_file_attachments: args.hasAttachments,
+      workspace_backed: args.workspaceBacked,
+      user_selected_mode: args.agentMode,
+      estimated_context_size_band: inferContextSizeBand(args.messageHistoryCount),
+      continuation_kind: args.messageHistoryCount > 0 ? 'continuation' : 'new_turn',
+    },
+    candidates: [],
+    policyContext: {},
+    requestId: args.request.requestId,
+  };
+  const questions: Questions = {
+    task_class: {
+      type: 'choice',
+      instructions: 'Which category of work is this user request?',
+      criteria: { ...TASK_CLASSES },
+    },
+    capability_requirement: {
+      type: 'choice',
+      instructions: 'What level of model capability does this request require?',
+      criteria: { ...CAPABILITY_CHOICES },
+    },
+    reasoning_effort: {
+      type: 'choice',
+      instructions: 'How much reasoning effort does this request need?',
+      criteria: { ...EFFORT_CHOICES },
+    },
+    risk_signal: {
+      type: 'noul',
+      // Semantic signal only. MUST NOT override policyContext.deterministicRisk.
+      instructions: 'How risky does this request semantically appear (likelihood it involves sensitive, destructive, or irreversible operations)?',
+    },
+    route_lease: {
+      type: 'choice',
+      instructions: 'What is the smallest execution lease this request plausibly needs?',
+      criteria: { ...LEASE_CHOICES },
+    },
+  };
+  return { dossier, questions };
+}
+
 // Bandit action space (lib/ucol/routing/decision.ts) — the engine classifies
 // into the SAME labels so agreement is directly measurable.
 const TASK_CLASSES = {
