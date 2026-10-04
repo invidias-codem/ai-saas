@@ -232,13 +232,17 @@ export async function POST(req: Request) {
               surface: 'web',
             });
 
-            return {
-              text: responseText,
-              modelId: finalModelConfig.modelId,
-              routingDecision,
-              intelligentFacts,
-              userContext,
-            };
+            // Reasoning-only / empty-body guard: NIM's "first token" log can
+            // include reasoning tokens, so a nominally-successful provider
+            // request can still produce no visible answer. Refuse at the
+            // boundary and let runtimeBridge surface a typed failure.
+            const visible = (responseText ?? '').trim();
+            if (!visible) {
+              console.warn('[code] empty completion', { model: finalModelConfig?.modelId, requestId });
+              throw new Error('Provider returned an empty or reasoning-only response. Please try again.');
+            }
+
+            return { text: visible, modelId: finalModelConfig.modelId, routingDecision, intelligentFacts, userContext };
           } catch (engineErr: any) {
             console.error('[code] engine execution failed', engineErr);
             throw new Error(`Code engine failed: ${engineErr?.message || String(engineErr)}`);
@@ -274,6 +278,10 @@ export async function POST(req: Request) {
         status = 402;
         userError = 'Insufficient credits';
         userDetails = 'Weaver Code requires credits before generation starts.';
+      } else if (message.includes('empty or reasoning-only response')) {
+        status = 502;
+        userError = 'Provider returned an empty response';
+        userDetails = 'The model finished without producing a usable answer. Try again or switch models.';
       }
 
       return NextResponse.json(

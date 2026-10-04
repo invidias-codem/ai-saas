@@ -378,6 +378,14 @@ export function VideoContent() {
                 controlsList="nodownload noremoteplayback"
                 className="w-full rounded-xl shadow-lg mb-2 sm:mb-4"
                 src={videoUrl}
+                onError={() => {
+                  // Replicate's CDN can 404/signature-expire after we mark
+                  // status='completed'. Without onError, that surfaces as a
+                  // permanent blank card with no error message.
+                  console.error('[VIDEO_MEDIA_LOAD_ERROR]', videoUrl);
+                  setError('Video finished generating but the file failed to load. Try again or use the download link.');
+                  setVideoUrl(null);
+                }}
               >
                 Your browser does not support the video tag.
               </video>
