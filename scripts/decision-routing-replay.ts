@@ -16,6 +16,7 @@ import { supabaseAdmin } from '../lib/supabaseClient';
 import { CapabilityRoutingPolicyV1, ROUTING_CAPABILITY_V1_ID } from '../lib/intelligence/decision/policies/routing/capabilityPolicyV1';
 import { datasetHash, replay } from '../lib/intelligence/decision/replay/kernel';
 import { normalizeRows } from '../lib/intelligence/decision/replay/normalize';
+import { evaluatePromotion, PROMOTION_PROFILE_V1 } from '../lib/intelligence/decision/replay/promotion';
 import type { RoutingReplayPolicy } from '../lib/intelligence/decision/replay/types';
 
 interface Args {
@@ -101,13 +102,34 @@ async function main() {
 
   const result = replay(dataset, selected);
 
+  // Slice 3B: promotion gate. Calibration/holdout discipline is upstream of
+  // this call — freeze PROMOTION_PROFILE_V1 from a calibration window, then
+  // run this against a LATER window. The script itself is window-agnostic.
+  const promotion = selected.map((p) => {
+    const r = result.results.find((x) => x.policyId === p.id)!;
+    return evaluatePromotion({
+      datasetHash: result.datasetHash,
+      policyId: p.id,
+      policyVersion: p.version,
+      report: r.report,
+      records: dataset.records,
+      diagnostics,
+      profile: PROMOTION_PROFILE_V1,
+    });
+  });
+
   if (args.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+    process.stdout.write(JSON.stringify({ ...result, promotion }, null, 2) + '\n');
     return;
   }
 
   console.log(`datasetHash: ${result.datasetHash}`);
   console.log(`days: ${args.days}  questionSetVersion: ${args.questionSet}  tierPolicyVersion: ${args.tierPolicy}${args.intent ? `  intent: ${args.intent}` : ''}`);
+  for (const d of promotion) {
+    console.log(`\npromotion: ${d.status}  (${d.reasonCodes.join(', ')})`);
+    console.log(`  gate: ${d.gateVersion}  profile: ${d.promotionProfileVersion}  policy: ${d.policyId}@${d.policyVersion}`);
+    console.log(`  metrics: ${JSON.stringify(d.metrics)}`);
+  }
   for (const r of result.results) {
     console.log(`\npolicy: ${r.policyId}@${r.policyVersion}  resultHash: ${r.resultHash}`);
     const rep = r.report;
