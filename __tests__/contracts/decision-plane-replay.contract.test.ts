@@ -188,6 +188,7 @@ describe('decision plane replay — slice 3 contracts', () => {
   it('16: normalizeRows tags the experiment cohort so gen-0 and v2 cannot silently mix', () => {
     const gen0Shadow = {
       event_type: 'jev_shadow_decision',
+      created_at: '2026-09-27T10:00:00Z',
       metadata: {
         requestId: 'g1',
         status: 'ok',
@@ -203,6 +204,7 @@ describe('decision plane replay — slice 3 contracts', () => {
     };
     const v2Shadow = {
       event_type: 'jev_shadow_decision',
+      created_at: '2026-09-27T10:00:00Z',
       metadata: {
         requestId: 'v1',
         status: 'ok',

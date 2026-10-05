@@ -67,7 +67,10 @@ describe('context sieve dataset — 6A.1 contracts', () => {
     expect(summary.candidateTokens).toBe(blockRows.reduce((a, r) => a + r.estimatedTokens, 0));
     expect(summary.proposedDeferredTokens).toBe(blockRows.filter((r) => r.decision === 'DROP').reduce((a, r) => a + r.estimatedTokens, 0));
     expect(summary.proposedActiveTokens).toBe(blockRows.filter((r) => r.decision === 'KEEP').reduce((a, r) => a + r.estimatedTokens, 0));
-    expect(summary.proposedReductionRatio).toBeCloseTo(summary.proposedDeferredTokens / summary.candidateTokens, 10);
+    expect(summary.proposedReductionRatio).toBeCloseTo(
+      (summary.proposedDeferredTokens ?? 0) / (summary.candidateTokens ?? 1),
+      10,
+    );
     // Every block row shares the request's inputHash.
     expect(new Set(rows.map((r) => r.inputHash)).size).toBe(1);
   });
