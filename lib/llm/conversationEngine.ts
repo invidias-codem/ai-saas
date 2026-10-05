@@ -664,56 +664,42 @@ export async function generateConversationReply(
 
       const sieved = sieveShadow(blocks, { relevanceByBlock, transportStatus: 'ok' });
       const latencyMs = Date.now() - started;
+      const createdAt = new Date().toISOString();
 
       const { logEvent } = await import('@/lib/telemetry');
-      // Per-block decisions: one event each keeps the dataset row-shaped.
-      for (const d of sieved.decisions) {
-        const block = blocks.find((b) => b.id === d.blockId);
+      const { buildSieveEvents } = await import('@/lib/context/sieve');
+      // Rows are built PURE here (invariants hold by construction); the
+      // engine only emits them.
+      for (const row of buildSieveEvents({ requestId, blocks, sieved, latencyMs, createdAt })) {
+        logEvent({
+          eventType: 'context_sieve_event',
+          userId,
+          workspaceId: workspaceId ?? undefined,
+          metadata: { ...row },
+        });
+      }
+    } catch (e: any) {
+      // Fail open: exactly one failOpen summary row, never zero events.
+      // Shadow must never affect production.
+      console.warn('[ContextSieve] shadow evaluation failed open:', e?.message || e);
+      try {
+        const { buildFailOpenSummary } = await import('@/lib/context/sieve');
+        const { logEvent } = await import('@/lib/telemetry');
         logEvent({
           eventType: 'context_sieve_event',
           userId,
           workspaceId: workspaceId ?? undefined,
           metadata: {
-            requestId,
-            blockId: d.blockId,
-            source: block?.source ?? null,
-            estimatedTokens: block?.estimatedTokens ?? 0,
-            relevance: d.relevance ?? null,
-            proposedDisposition: d.disposition,
-            protected: block?.protected ?? false,
-            transportStatus: 'ok',
-            latencyMs,
-            questionSetVersion: SIEVE_QUESTION_SET_VERSION,
-            policyVersion: SIEVE_POLICY_VERSION,
+            ...buildFailOpenSummary({
+              requestId: options.requestId ?? 'unknown',
+              reason: 'exception',
+              latencyMs: 0,
+              createdAt: new Date().toISOString(),
+              message: String(e?.message ?? e).slice(0, 200),
+            }),
           },
         });
-      }
-      // Request-level metrics: candidateTokens, proposedActive/Deferred,
-      // reduction ratio, blocksConsidered/Deferred.
-      logEvent({
-        eventType: 'context_sieve_event',
-        userId,
-        workspaceId: workspaceId ?? undefined,
-        metadata: {
-          requestId,
-          blockId: '__request__',
-          source: 'request_summary',
-          estimatedTokens: sieved.originalTokens,
-          candidateTokens: sieved.originalTokens,
-          proposedActiveTokens: sieved.activeTokens,
-          proposedDeferredTokens: sieved.deferredTokens,
-          proposedReductionRatio: sieved.originalTokens ? sieved.deferredTokens / sieved.originalTokens : 0,
-          blocksConsidered: sieved.originalBlockCount,
-          blocksDeferred: sieved.deferred.length,
-          transportStatus: sieved.transportAvailable ? 'ok' : 'unavailable',
-          latencyMs,
-          questionSetVersion: SIEVE_QUESTION_SET_VERSION,
-          policyVersion: SIEVE_POLICY_VERSION,
-        },
-      });
-    } catch (e: any) {
-      // Shadow must never affect production — swallow and log.
-      console.warn('[ContextSieve] shadow evaluation skipped:', e?.message || e);
+      } catch { /* telemetry must never throw */ }
     }
   }
   // ── end Slice 6A ───────────────────────────────────────────────────
