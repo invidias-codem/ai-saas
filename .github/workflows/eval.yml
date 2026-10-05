@@ -37,6 +37,14 @@ jobs:
         if: steps.changes.outputs.memory != 'true' && steps.changes.outputs.prompts != 'true' && steps.changes.outputs.conversation != 'true'
         run: |
           echo "No prompt/memory/llm changes detected; skipping eval."
+          # 6A.3: a skip is a recorded decision, never silent green.
+          mkdir -p attestations
+          npx tsx scripts/attestation-cli.ts write \
+            --suite decision-plane-eval \
+            --executed false \
+            --skip-reason path_filter_no_relevant_changes \
+            --out attestations/decision-plane-eval.json
+          cat attestations/decision-plane-eval.json
 
       - name: Setup pnpm
         if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
@@ -84,10 +92,17 @@ jobs:
           DISABLE_EXTERNAL_CONTEXT: "true"
         run: |
           # Guard: skip gracefully if GOOGLE_API_KEY is not configured in repo secrets.
-          # Matches the same pattern used by Supabase credentials in the eval script.
+          # 6A.3: skipped-but-recorded, never silent green.
           if [ -z "${GOOGLE_API_KEY}" ]; then
             echo "⚠️  GOOGLE_API_KEY secret is not set — skipping Golden Dataset eval."
             echo "    Add GOOGLE_API_KEY to repository secrets (Settings → Secrets → Actions) to enable."
+            mkdir -p attestations
+            npx tsx scripts/attestation-cli.ts write \
+              --suite decision-plane-eval \
+              --executed false \
+              --skip-reason google_api_key_not_configured \
+              --out attestations/decision-plane-eval.json
+            cat attestations/decision-plane-eval.json
             exit 0
           fi
 

@@ -42,7 +42,16 @@ jobs:
         run: pnpm typecheck
 
       - name: Test
-        run: pnpm test
+        # 6A.3: attest execution. --json gives real counts; the attestation
+        # proves the suite RAN against this commit (zero tests = red flag).
+        run: |
+          npx jest --json --outputFile=.attestation-jest.json || TEST_FAILED=$?
+          npx tsx scripts/attestation-cli.ts write \
+            --suite decision-plane-contracts \
+            --jest-json .attestation-jest.json \
+            --out attestations/decision-plane-contracts.json
+          cat attestations/decision-plane-contracts.json
+          exit ${TEST_FAILED:-0}
 
       - name: Build
         run: pnpm build
