@@ -1,3 +1,5 @@
+import type { ExecutionRequirement } from '@/lib/intelligence/execution/contracts';
+
 export type UcolSurface = 'web' | 'android' | 'api' | 'background-agent' | 'extension';
 
 export type UcolAttachmentType = 'image' | 'audio' | 'video' | 'document' | 'link' | 'structured';
@@ -168,6 +170,12 @@ export interface UcolRoutingDecision {
   capabilityRequirements: string[];
   memoryPlan: UcolMemoryPlan;
   executionPlan: UcolExecutionPlan;
+  /**
+   * Execution Plane requirement (routable compute). Optional + defaulted —
+   * every existing decision implicitly carries NO_EXECUTION_REQUIRED until
+   * B2 emits real requirements. Resolver: resolveRuntime().
+   */
+  executionRequirement?: ExecutionRequirement;
   providerPlan: UcolProviderPlan;
   toolPlan: UcolToolPlan;
   writebackPlan: UcolWritebackPlan;
