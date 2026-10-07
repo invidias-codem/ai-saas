@@ -28,7 +28,7 @@ const PRIVATE_RANGES = [
   /\.local$/i,
 ];
 
-function isPrivateIp(ip: string): boolean {
+export function isPrivateIp(ip: string): boolean {
   return PRIVATE_RANGES.some(r => r.test(ip));
 }
 
