@@ -15,7 +15,7 @@
 //   - final cost > authorized → budget_violation, evidence preserved
 
 import { runIngestion, type IngestionDeps } from '@/lib/acquisition/durable/ingestion';
-import type { RawEvidence } from '@/lib/acquisition/contracts';
+import type { ProviderRunStatus, RawEvidence } from '@/lib/acquisition/contracts';
 
 function evidenceOf(n: number): RawEvidence[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -34,7 +34,7 @@ interface FixtureState {
   rows: Map<string, { operation_key: string; acquisition_request_id: string; authorized_max_cost_usd: number | null; status: string } | undefined>;
   claimedKeys: Set<string>;
   persisted: { providerRunId: string; ordinal: number; contentHash: string }[];
-  providerStatus: { status: string; failure?: string; estimatedCostUsd?: number | null; datasetItems?: unknown[] };
+  providerStatus: ProviderRunStatus & { datasetItems?: unknown[] };
   completedRows: unknown[];
   failedRows: unknown[];
   reconciledCosts: { providerRunId: string; finalCostUsd: number }[];
@@ -134,7 +134,7 @@ describe('acquisition ingestion state machine — A3 contracts', () => {
   });
 
   it('5: authoritative FAILED → provider_failed, never an access inference', async () => {
-    const state = freshState({ status: 'failed', failure: 'provider_failed', estimatedCostUsd: null, datasetItems: [] });
+    const state = freshState({ status: 'failed', failure: 'provider_failed', datasetItems: [] });
     const outcome = await runIngestion({ deps: fixtureDeps(state), ...ARGS });
     expect(outcome.kind).toBe('provider_failed');
     const failure = state.failedRows[0] as { failureCode: string };
