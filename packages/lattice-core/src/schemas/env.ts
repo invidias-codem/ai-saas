@@ -42,6 +42,10 @@ export const envSchema = z.object({
   NVIDIA_API_KEY: z.string().min(1).optional(),
   NVIDIA_NIM_BASE_URL: z.string().url().optional().default('https://integrate.api.nvidia.com/v1'),
 
+  // Apify — social evidence acquisition provider (Acquisition Plane A2).
+  // Optional: absent token ⇒ provider inert (supports=false, no runs).
+  APIFY_API_TOKEN: z.string().min(1).optional(),
+
   // TypeSafe Jev (System One decision model) — shadow decision plane.
   // PINNED VERSION ENFORCED IN SCHEMA (slice 1A): only version-shaped IDs
   // (e.g. jev-1.13.0) are valid. Aliases (jev-latest, jev-preview) FAIL
