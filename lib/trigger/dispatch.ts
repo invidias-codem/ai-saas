@@ -50,3 +50,40 @@ export async function dispatchAgentLoopToTrigger(args: {
     return null;
   }
 }
+
+/**
+ * A3: durable acquisition ingestion dispatch.
+ *
+ * Idempotency: Trigger's idempotencyKey = the acquisition operationKey, so
+ * duplicate Apify webhooks collapse into ONE logical task execution. The DB
+ * atomic claim (claimIngestion) is the authoritative backstop — Trigger is
+ * the execution optimization, never the dedupe of record.
+ *
+ * Payload carries durable identities ONLY — no dataset contents, no actor
+ * input, no user prompt, no credentials. The worker reconstructs everything
+ * from the store + provider API.
+ */
+export async function dispatchAcquisitionIngest(args: {
+  acquisitionRequestId: string;
+  provider: "apify";
+  providerRunId: string;
+  operationKey: string;
+}): Promise<{ triggerRunId: string | null } | null> {
+  if (!env.TRIGGER_SECRET_KEY) return null;
+  try {
+    const handle = await tasks.trigger(
+      "acquisition-ingest",
+      {
+        acquisitionRequestId: args.acquisitionRequestId,
+        provider: args.provider,
+        providerRunId: args.providerRunId,
+        operationKey: args.operationKey,
+      },
+      { idempotencyKey: args.operationKey },
+    );
+    return { triggerRunId: handle.id ?? null };
+  } catch (err) {
+    console.warn("[Trigger.dev] acquisition-ingest dispatch failed:", err);
+    return null;
+  }
+}
