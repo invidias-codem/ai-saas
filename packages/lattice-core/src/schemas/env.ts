@@ -46,6 +46,10 @@ export const envSchema = z.object({
   // Optional: absent token ⇒ provider inert (supports=false, no runs).
   APIFY_API_TOKEN: z.string().min(1).optional(),
 
+  // Apify webhook authentication (A3): expected in the x-lattice-apify-secret
+  // header on /api/webhooks/apify. Absent ⇒ webhook route rejects all calls.
+  APIFY_WEBHOOK_SECRET: z.string().min(1).optional(),
+
   // TypeSafe Jev (System One decision model) — shadow decision plane.
   // PINNED VERSION ENFORCED IN SCHEMA (slice 1A): only version-shaped IDs
   // (e.g. jev-1.13.0) are valid. Aliases (jev-latest, jev-preview) FAIL
