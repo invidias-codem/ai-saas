@@ -46,6 +46,7 @@ import { createTrace } from '@/lib/observability/langfuse';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { createQuarantinePromotionManager } from '@/lib/execution/quarantinePromotionManager';
 import { sandboxManager } from '@/lib/execution/sandboxManager';
+import { withAbort } from '@/lib/runtime/abort';
 
 // ChatMessageSchema imported from types
 
@@ -65,6 +66,8 @@ export type ConversationRequest = z.infer<typeof ConversationRequestSchema>;
 
 
 export type ConversationEngineOptions = {
+  /** Request deadline/disconnect, propagated to inference and response streams. */
+  signal?: AbortSignal;
   /**
    * When true, the engine will avoid writing side-effects (memory capture, graph updates).
    * Useful for eval runs and local testing.
@@ -193,11 +196,12 @@ export async function generateConversationReply(
   },
   options: ConversationEngineOptions = {}
 ): Promise<ConversationEngineResult> {
+  options.signal?.throwIfAborted();
   const { userId, clerkUser, request, conversationId } = args;
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
-  const providerKeys = await getUserProviderApiKeys(userId);
-  const nativeProviderKeys = await (await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys);
+  const providerKeys = await withAbort(getUserProviderApiKeys(userId), options.signal);
+  const nativeProviderKeys = await withAbort((await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys), options.signal);
 
   // ---------------------------------------------------------
   // UCOL AGENTIC MODE — Kimi K3 (NVIDIA NIM) + ReAct Loop
@@ -535,7 +539,7 @@ export async function generateConversationReply(
   // ─── Budget Kill Switch: enforce per-user and global LLM spend caps ─────────
   // Non-fatal: if Redis is unavailable the check is skipped and the request
   // is allowed through. Enforcement is gated by ENABLE_LLM_BUDGET_ENFORCEMENT=true.
-  const budgetCheck = await budgetKillSwitch.checkBudget(userId);
+  const budgetCheck = await withAbort(budgetKillSwitch.checkBudget(userId), options.signal);
   if (!budgetCheck.allowed) {
     const limitMsg =
       budgetCheck.reason === "global_budget_exceeded"
@@ -601,7 +605,8 @@ export async function generateConversationReply(
 
   const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan(options.memoryPlan ?? fallbackMemoryPlan);
 
-  const preparedContext = await prepareContextBundle({
+  options.signal?.throwIfAborted();
+  const preparedContext = await withAbort(prepareContextBundle({
     userId,
     clerkUser,
     userQuery,
@@ -613,7 +618,7 @@ export async function generateConversationReply(
       skipWebResearch: process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch,
       plan: contextPreparationPlan,
     },
-  });
+  }), options.signal);
 
   const userContext = preparedContext.userContext;
   const allFacts = preparedContext.raw.allFacts;
@@ -1049,6 +1054,7 @@ export async function generateConversationReply(
       systemInstruction: enhancedSystemInstruction,
       options: { temperature: 0.9, maxTokens: 2048 },
       enableMiniMax: true,
+      signal: options.signal,
     });
 
     streamResult = fallbackResult;
@@ -1072,6 +1078,7 @@ export async function generateConversationReply(
       });
     } catch {}
   } catch (err: any) {
+    options.signal?.throwIfAborted();
     try {
       updateTrace({ metadata: { error: err?.message || String(err) } });
     } catch {}
@@ -1414,7 +1421,7 @@ export async function generateConversationReply(
             if (decision.targetNode === 'jklaw') {
               const { getAgentRouter } = await import('@/lib/ucol/agentRouter');
               const router = getAgentRouter();
-              await router.dispatchToJKlaw(
+              const dispatch = await router.dispatchToJKlaw(
                 {
                   query: userQuery,
                   context: cleanedFullText.substring(0, 400),
@@ -1429,11 +1436,11 @@ export async function generateConversationReply(
                 decision,
                 false // fire-and-forget
               );
-              console.log(
-                `[UCOL] Dispatched "${userQuery.substring(0, 60)}" to JKlaw` +
-                ` (type=${decision.taskType}` +
-                `${decision.memorySignal ? `, ctx_conf=${decision.memorySignal.contextConfidence.toFixed(2)}` : ''})`
-              );
+              if (dispatch.dispatched) {
+                console.log('[UCOL] JKlaw dispatch acknowledged', { taskType: decision.taskType });
+              } else {
+                console.warn('[UCOL] JKlaw dispatch not acknowledged', { taskType: decision.taskType, error: dispatch.error });
+              }
             }
           } catch (e) {
             // Non-blocking — never surface routing errors to users

@@ -4,6 +4,7 @@
 
 import { AtpAgent } from "@atproto/api";
 import { supabaseAdmin } from "@/lib/supabaseClient";
+import { blueskyCredentials } from "./config";
 
 export interface BlueskySession {
   did: string;
@@ -56,7 +57,7 @@ export class BlueskyClient {
     if (cachedSession && new Date(cachedSession.expiresAt) > new Date()) {
       // Session still valid — resume
       try {
-        this.agent.sessionManager.resumeSession({
+        await this.agent.sessionManager.resumeSession({
           did: cachedSession.did,
           handle: cachedSession.handle,
           accessJwt: cachedSession.accessJwt,
@@ -78,12 +79,7 @@ export class BlueskyClient {
    * Authenticate with App Password and cache the session.
    */
   private async authenticate(): Promise<void> {
-    const identifier = process.env.BLUESKY_IDENTIFIER;
-    const password = process.env.BLUESKY_APP_PASSWORD;
-
-    if (!identifier || !password) {
-      throw new Error("BLUESKY_IDENTIFIER or BLUESKY_APP_PASSWORD not configured");
-    }
+    const { identifier, password } = blueskyCredentials();
 
     const response = await this.agent.login({ identifier, password });
 

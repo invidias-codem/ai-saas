@@ -36,9 +36,6 @@ function getServiceAccountFromEnv(): admin.ServiceAccount | null {
 
   if (serviceAccountJson) {
     try {
-      // Diagnostic logging (masked)
-      if (!shouldQuietBuildLogs()) console.log(`[FIREBASE_ADMIN] Found GCP_SERVICE_ACCOUNT_KEY_JSON (length: ${serviceAccountJson.length})`);
-
       let cleanedJson = serviceAccountJson.trim();
 
       // Handle wrapping quotes if present (common copy-paste error or shell behavior)
@@ -86,11 +83,8 @@ function getServiceAccountFromEnv(): admin.ServiceAccount | null {
         // Let's try to unescape if needed?
       }
 
-    } catch (error) {
-      if (!shouldQuietBuildLogs()) console.error('[FIREBASE_ADMIN] Failed to parse GCP_SERVICE_ACCOUNT_KEY_JSON:', error);
-      // Log a snippet to help debug (safety: show only start/end)
-      const safeSnippet = serviceAccountJson.substring(0, 10) + '...' + serviceAccountJson.substring(serviceAccountJson.length - 10);
-      if (!shouldQuietBuildLogs()) console.error(`[FIREBASE_ADMIN] Snippet: ${safeSnippet}`);
+    } catch {
+      if (!shouldQuietBuildLogs()) console.error('[FIREBASE_ADMIN] Invalid service account configuration');
     }
   }
 

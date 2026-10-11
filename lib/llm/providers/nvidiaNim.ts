@@ -208,7 +208,7 @@ export class NvidiaNimProvider implements LLMProvider {
           Authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.any([connectController.signal, budgetController.signal]),
+        signal: AbortSignal.any([connectController.signal, budgetController.signal, ...(options.signal ? [options.signal] : [])]),
       });
       clearTimeout(connectTimer); // headers arrived — body runs on budget only
     } catch (err: any) {

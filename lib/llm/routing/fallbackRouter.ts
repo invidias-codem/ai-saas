@@ -22,6 +22,7 @@ import {
   recordCircuitSuccess,
 } from './circuitBreaker';
 import { logger } from '@/lib/logger';
+import { abortableStream, withAbort } from '@/lib/runtime/abort';
 
 export interface FallbackStreamResult extends StreamResult {
   /** The model that ultimately served the stream. */
@@ -178,6 +179,7 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
   let reject!: (err: unknown) => void;
   const firstChunk = new Promise<void>((res, rej) => { resolve = res; reject = rej; });
   let settled = false;
+  let cancelled = false;
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let pending = '';
@@ -198,6 +200,7 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
       try {
         while (true) {
           const { done, value } = await reader.read();
+          if (cancelled) return;
           if (done) {
             if (pending && !pending.includes(PROVIDER_ERROR_EVENT_PREFIX)) {
               // Genuine sub-256B output that closed before crossing the
@@ -220,6 +223,7 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
               // hop; the client must not see a failure notice for a hop it
               // is being transparently retried past.
               controller.close();
+              void reader.cancel().catch(() => {});
               return;
             }
             // ponytail: a marker prefix could theoretically split across
@@ -236,12 +240,17 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
           controller.enqueue(value);
         }
       } catch (err) {
+        if (cancelled) return;
         settleReject(err);
         controller.error(err);
+      } finally {
+        reader.releaseLock();
       }
     },
     cancel(reason) {
-      reader.cancel(reason).catch(() => {});
+      cancelled = true;
+      settleReject(reason ?? new Error('stream cancelled before first chunk'));
+      return reader.cancel(reason).catch(() => {});
     },
   });
 
@@ -261,8 +270,9 @@ export async function executeWithFallback(params: {
   systemInstruction?: string;
   options?: { temperature?: number; maxTokens?: number };
   enableMiniMax?: boolean;
+  signal?: AbortSignal;
 }): Promise<FallbackStreamResult> {
-  const { primary, messages, systemInstruction, options, enableMiniMax } = params;
+  const { primary, messages, systemInstruction, options, enableMiniMax, signal } = params;
   const chain = buildFallbackChain(primary, { enableMiniMax });
 
   const perHopErrors: string[] = [];
@@ -270,6 +280,7 @@ export async function executeWithFallback(params: {
   let switched = false;
 
   for (let i = 0; i < chain.length; i++) {
+    signal?.throwIfAborted();
     const hop = chain[i];
 
     if (!(await checkCircuit(hop.key))) {
@@ -282,21 +293,30 @@ export async function executeWithFallback(params: {
       // canonical codec normalizes provider-specific roles before re-mapping.
       const history = hop.translate ? messages : messages;
 
-      const result = await hop.provider.generateStream(history, systemInstruction, {
+      signal?.throwIfAborted();
+      const pending = hop.provider.generateStream(history, systemInstruction, {
         model: hop.modelId,
         temperature: options?.temperature,
         maxTokens: options?.maxTokens,
+        signal,
       });
+      // Providers without signal support may return after the caller has gone.
+      void pending.then(result => {
+        if (signal?.aborted) void result.stream.cancel(signal.reason).catch(() => {});
+      }, () => {});
+      const result = await withAbort(pending, signal);
 
       // Stream-aware success: a returned ReadableStream is only a HANDSHAKE.
       // Wait for the first chunk before recording circuit success — a stream
       // that dies before producing a byte is a hop failure and the next
       // provider is tried transparently. A death AFTER the first byte is the
       // provider's to own (marker + clean close reaches the client).
-      const { stream: gatedStream, firstChunk } = gateStreamOnFirstChunk(result.stream);
+      const source = signal ? abortableStream(result.stream, signal) : result.stream;
+      const { stream: gatedStream, firstChunk } = gateStreamOnFirstChunk(source);
       try {
         await firstChunk;
       } catch (gateErr: any) {
+        signal?.throwIfAborted();
         await recordCircuitFailure(hop.key);
         const gateMsg = `[${hop.providerId}] stream died before first token: ${gateErr?.message || String(gateErr)}`;
         perHopErrors.push(gateMsg);
@@ -319,10 +339,10 @@ export async function executeWithFallback(params: {
         });
         const sentinel = new TextEncoder().encode(switchChunk);
 
+        const reader = gatedStream.getReader();
         const fallbackStream = new ReadableStream<Uint8Array>({
           async start(controller) {
             controller.enqueue(sentinel);
-            const reader = gatedStream.getReader();
             try {
               while (true) {
                 const { done, value } = await reader.read();
@@ -339,12 +359,14 @@ export async function executeWithFallback(params: {
                 ));
               } catch { /* client gone */ }
               try { controller.close(); } catch { /* already closed */ }
+            } finally {
+              reader.releaseLock();
             }
           },
           // Client disconnect must reach the provider — cancel the gated
           // stream so the upstream reader/request actually stops.
           cancel(reason) {
-            gatedStream.cancel(reason).catch(() => {});
+            return reader.cancel(reason).catch(() => {});
           },
         });
 
@@ -371,6 +393,8 @@ export async function executeWithFallback(params: {
         switched: false,
       };
     } catch (err: any) {
+      // Caller cancellation is neither a provider failure nor permission to retry.
+      signal?.throwIfAborted();
       await recordCircuitFailure(hop.key);
       const errMsg = `[${hop.providerId}] ${err?.message || String(err)}`;
       perHopErrors.push(errMsg);

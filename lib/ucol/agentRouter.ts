@@ -260,7 +260,6 @@ export class AgentRouter {
     // ─── Classify a task ─────────────────────────────────────────────────
 
     async classify(task: AgentRouterTask): Promise<RoutingDecision> {
-        console.error(`[AR] IN: q="${task.query.substring(0, 40)}" c="${task.context?.substring(0, 40) ?? 'NONE'}" cl=${task.context?.length ?? 0}`);
         
         // Fast-path overrides (highest priority — never confidence-overridden)
         if (task.requireOrchestration) {
@@ -358,7 +357,6 @@ export class AgentRouter {
             // Strip markdown blocks if the LLM hallucinates them
             const strippedRaw = cleanedRaw.replace(/```json\n?|\n?```/g, '').trim();
     
-            console.error(`[AR] RAW: ${strippedRaw.substring(0, 80)}`);
     
             // Try multiple JSON extraction strategies
             let parsed: any = null;
@@ -518,11 +516,7 @@ export class AgentRouter {
             // using the Ollama /api/generate format. Faster, no Clerk overhead.
             if (this.twinRouterUrl) {
                 try {
-                    const twinController = new AbortController();
-                    const twinTimeout = setTimeout(
-                        () => twinController.abort(),
-                        waitForResponse ? 30000 : 6000
-                    );
+                    const twinSignal = AbortSignal.timeout(waitForResponse ? 30000 : 6000);
 
                     // Build a rich prompt that gives JKlaw full context
                     const twinPrompt = [
@@ -541,10 +535,9 @@ export class AgentRouter {
                             stream: false,
                             options: { temperature: 0.7, num_predict: 1024 },
                         }),
-                        signal: twinController.signal,
+                        signal: twinSignal,
                     });
 
-                    clearTimeout(twinTimeout);
 
                     if (twinRes.ok) {
                         const twinData = await twinRes.json();
@@ -563,9 +556,10 @@ export class AgentRouter {
                     if (twinErr.name !== 'AbortError') {
                         console.warn(`[AgentRouter] Twin router unreachable: ${twinErr.message} — falling back`);
                     }
-                    // AbortError on fire-and-forget = intentional, treat as dispatched
-                    if (twinErr.name === 'AbortError' && !waitForResponse) {
-                        return { dispatched: true };
+                    // A timeout has no acknowledgement. Do not retry an ambiguous
+                    // submission through another transport or claim it succeeded.
+                    if (twinErr.name === 'AbortError' || twinErr.name === 'TimeoutError') {
+                        return { dispatched: false, error: 'JKlaw dispatch timed out; outcome unknown' };
                     }
                 }
             }
@@ -577,8 +571,7 @@ export class AgentRouter {
                 return { dispatched: false, error: 'No dispatch path available: JKLAW_API_KEY and JKLAW_TWIN_URL both unset' };
             }
 
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), waitForResponse ? 25000 : 5000);
+            const signal = AbortSignal.timeout(waitForResponse ? 25000 : 5000);
 
             const res = await fetch(this.jklawUrl, {
                 method: 'POST',
@@ -591,10 +584,9 @@ export class AgentRouter {
                         : {}),
                 },
                 body: JSON.stringify(payload),
-                signal: controller.signal,
+                signal,
             });
 
-            clearTimeout(timeout);
 
             if (!res.ok) {
                 return { dispatched: false, error: `JKlaw returned ${res.status}` };
@@ -605,10 +597,11 @@ export class AgentRouter {
                 return { dispatched: true, response: data.response };
             }
 
+            await res.body?.cancel();
             return { dispatched: true };
         } catch (err: any) {
-            if (err.name === 'AbortError') {
-                return { dispatched: true };
+            if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+                return { dispatched: false, error: 'JKlaw dispatch timed out; outcome unknown' };
             }
             return { dispatched: false, error: err.message };
         }
