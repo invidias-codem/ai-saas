@@ -19,10 +19,17 @@ import { generateConversationReply, ConversationRequestSchema } from '@/lib/llm/
 import { storeMemory, searchMemories, deleteMemory } from '@/lib/memory/vectorStore';
 import { addNode } from '@/lib/memory/graphStore';
 import { audit } from '@/lib/security/auditLog';
+import { env } from '@/lib/env';
+import { abortableStream, withAbort } from '@/lib/runtime/abort';
+import { encodeProviderErrorEvent } from '@/lib/media/envelope';
+
+export const maxDuration = 300;
+const CHAT_BUDGET_MS = 240_000;
+const CONTEXT_BUDGET_MS = 5_000;
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 const JKLAW_USER_ID = 'jklaw-internal-agent';
-const JKLAW_API_KEY = process.env.JKLAW_API_KEY;
+const JKLAW_API_KEY = env.JKLAW_API_KEY;
 
 function validateKey(req: Request): boolean {
     if (!JKLAW_API_KEY) return false;
@@ -118,47 +125,94 @@ export async function POST(req: Request) {
 
         const userQuery = prompt || messages?.at(-1)?.text || '';
 
-        // Pre-fetch knowledge graph context, bypassing the feature_type filter
-        // that would otherwise exclude our manually-pushed facts.
-        const jklawContext = await buildJklawContext(userQuery);
-
-        // Inject context directly into the user message so the engine sees it
-        // regardless of its internal RAG pipeline.
-        const enrichedPrompt = jklawContext
-            ? `${jklawContext}\n\nQuestion: ${userQuery}`
-            : userQuery;
-
-        const requestPayload = {
-            messages: [
-                ...(messages?.slice(0, -1) || []),
-                { role: 'user', text: enrichedPrompt },
-            ],
-        };
-
-        const parsed = ConversationRequestSchema.safeParse(requestPayload);
-        if (!parsed.success) {
-            return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 });
-        }
+        const deadline = new AbortController();
+        const signal = AbortSignal.any([req.signal, deadline.signal]);
+        const timer = setTimeout(() => deadline.abort(new DOMException('JKlaw chat deadline exceeded', 'TimeoutError')), CHAT_BUDGET_MS);
+        const startedAt = Date.now();
+        const requestId = crypto.randomUUID();
+        let stage = 'context';
+        let streaming = false;
 
         try {
-            const result = await generateConversationReply(
+            signal.throwIfAborted();
+            const contextDeadline = new AbortController();
+            const contextTimer = setTimeout(() => contextDeadline.abort(new DOMException('Context deadline exceeded', 'TimeoutError')), CONTEXT_BUDGET_MS);
+            let jklawContext = '';
+            try {
+                jklawContext = await withAbort(buildJklawContext(userQuery), AbortSignal.any([signal, contextDeadline.signal]));
+            } catch {
+                signal.throwIfAborted();
+                console.warn('[JKlaw] Context deadline exceeded; continuing without retrieved facts', { requestId });
+            } finally {
+                clearTimeout(contextTimer);
+            }
+
+            const enrichedPrompt = jklawContext ? `${jklawContext}\n\nQuestion: ${userQuery}` : userQuery;
+            const parsed = ConversationRequestSchema.safeParse({
+                messages: [...(messages?.slice(0, -1) || []), { role: 'user', text: enrichedPrompt }],
+            });
+            if (!parsed.success) {
+                return NextResponse.json({ error: 'Invalid request', details: parsed.error.flatten() }, { status: 400 });
+            }
+
+            stage = 'generation';
+            const pendingResult = generateConversationReply(
                 { userId: JKLAW_USER_ID, clerkUser: JKLAW_CLERK_USER, request: parsed.data },
                 {
                     // Skip web research — our curated graph is the authoritative source.
                     skipWebResearch: true,
+                    // Curated facts were already loaded above; avoid a second retrieval pass.
+                    disableExternalContext: true,
+                    signal,
+                    requestId,
                     // Disable side effects so conversation responses don't
                     // pollute the knowledge graph. Memory is managed via memory-push only.
                     disableSideEffects: true,
                 }
             );
 
+            void pendingResult.then(result => {
+                if (signal.aborted) void result.stream.cancel(signal.reason).catch(() => {});
+            }, () => {});
+            const result = await withAbort(pendingResult, signal);
+            stage = 'stream';
+            const boundedStream = abortableStream(result.stream, signal, () => clearTimeout(timer));
+
             if (wantStream) {
-                return new NextResponse(result.stream, {
+                streaming = true;
+                const reader = boundedStream.getReader();
+                let cancelled = false;
+                // Once headers have gone out, emit a failure marker and close
+                // cleanly; error() would turn a handled timeout into Status 0.
+                const output = new ReadableStream({
+                    async pull(controller) {
+                        try {
+                            const { done, value } = await reader.read();
+                            if (cancelled) return;
+                            if (done) { reader.releaseLock(); controller.close(); }
+                            else controller.enqueue(value);
+                        } catch {
+                            if (cancelled) return;
+                            console.warn('[JKlaw] Stream ended early', { requestId, elapsedMs: Date.now() - startedAt });
+                            controller.enqueue(new TextEncoder().encode(encodeProviderErrorEvent({
+                                provider: 'jklaw', model: result.debug?.model ?? 'unknown', reason: 'request_cancelled_or_timed_out',
+                            })));
+                            controller.close();
+                            reader.releaseLock();
+                        }
+                    },
+                    cancel(reason) {
+                        cancelled = true;
+                        deadline.abort(new DOMException('Response consumer disconnected', 'AbortError'));
+                        return reader.cancel(reason).catch(() => {}).finally(() => reader.releaseLock());
+                    },
+                });
+                return new NextResponse(output, {
                     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
                 });
             }
 
-            const reader = result.stream.getReader();
+            const reader = boundedStream.getReader();
             const decoder = new TextDecoder();
             let text = '';
             while (true) {
@@ -167,6 +221,8 @@ export async function POST(req: Request) {
                 text += decoder.decode(value, { stream: true });
             }
 
+            text += decoder.decode();
+            signal.throwIfAborted();
             return NextResponse.json({
                 ok: true,
                 response: text,
@@ -174,8 +230,15 @@ export async function POST(req: Request) {
                 timestamp: new Date().toISOString(),
             });
         } catch (err: any) {
-            console.error('[JKlaw] chat error:', err);
-            return NextResponse.json({ error: err.message || 'Chat failed' }, { status: 500 });
+            const timedOut = deadline.signal.aborted;
+            const disconnected = req.signal.aborted;
+            console.error('[JKlaw] chat failed', { requestId, stage, elapsedMs: Date.now() - startedAt, timedOut, disconnected });
+            return NextResponse.json({
+                error: timedOut ? 'JKlaw chat deadline exceeded' : disconnected ? 'Request cancelled' : 'Chat failed',
+                requestId,
+            }, { status: timedOut ? 504 : disconnected ? 499 : 500 });
+        } finally {
+            if (!streaming) clearTimeout(timer);
         }
     }
 
