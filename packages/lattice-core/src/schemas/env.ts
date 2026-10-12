@@ -50,6 +50,12 @@ export const envSchema = z.object({
   // header on /api/webhooks/apify. Absent ⇒ webhook route rejects all calls.
   APIFY_WEBHOOK_SECRET: z.string().min(1).optional(),
 
+  // Daytona — desktop VM provider (VDI plane). Optional: absent key ⇒ adapter
+  // factory throws at first use (never at import time); registration inert.
+  DAYTONA_API_KEY: z.string().min(1).optional(),
+  DAYTONA_API_URL: z.string().url().optional(),
+  DAYTONA_TARGET: z.string().min(1).optional(),
+
   // Bluesky: feed polling also accepts the handle used by the engagement agent.
   BLUESKY_IDENTIFIER: z.string().trim().optional(),
   BLUESKY_HANDLE: z.string().trim().optional(),
