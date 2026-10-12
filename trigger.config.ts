@@ -1,5 +1,6 @@
 import { defineConfig } from "@trigger.dev/sdk";
 import { syncEnvVars } from "@trigger.dev/build/extensions/core";
+import { env } from './lib/env';
 
 /**
  * Trigger.dev v3 project configuration for Lattice OS.
@@ -32,6 +33,10 @@ export default defineConfig({
         NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL!,
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY!,
         NVIDIA_API_KEY: process.env.NVIDIA_API_KEY!,
+        ...(env.REPLICATE_API_TOKEN_VIDEO || env.REPLICATE_API_TOKEN ? {
+          REPLICATE_API_TOKEN_VIDEO: (env.REPLICATE_API_TOKEN_VIDEO || env.REPLICATE_API_TOKEN)!,
+        } : {}),
+        ...(env.TRIGGER_SECRET_KEY ? { TRIGGER_SECRET_KEY: env.TRIGGER_SECRET_KEY } : {}),
       })),
     ],
   },
