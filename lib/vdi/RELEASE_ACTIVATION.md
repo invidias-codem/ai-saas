@@ -99,8 +99,13 @@ update). Deployed production: https://gen1e.xyz (Vercel, Ready 6m build 2h ago).
 - Pre-state verified: 0 vdi functions/tables existed remotely.
 - The SEVEN reviewed VDI migrations applied transactionally via the Supabase
   Management API (`scripts/vdi-preflight-apply.ts`), each wrapped in
-  BEGIN/COMMIT, **hardening (20261016000000) committed with the RPCs in the
-  same apply sequence — no unhardened RPC exposure window**.
+  BEGIN/COMMIT. **Exposure window — recorded honestly:** migrations 1–6
+  created RPCs carrying Postgres's default PUBLIC `EXECUTE` grant; the
+  revocations committed only with migration 7. A brief window (seconds,
+  between the sixth migration's commit and the hardening commit) therefore
+  existed with no other access restriction covering it. **Final permissions
+  are verified (below); the intermediate window is unverified.** Future
+  applies should batch create+revoke in one transaction to close it.
 - Ledger recorded via `supabase migration repair --status applied` for ONLY
   the seven versions (no broad db push; no --include-all).
 - The 8 pre-existing phantom historical ledger entries (20260524000006,
