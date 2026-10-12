@@ -149,3 +149,54 @@ remain structurally disabled (no budget row, no runtime). Activation B
 (one-workspace canary) may proceed: create the canary budget row to admit
 the single workspace, wire the broker with randomUUID tokens, and capture
 the complete deployed trace.
+
+## Activation C — bounded remediation canary (2026-10-12, deployed, ALL PASS)
+Driver: `scripts/vdi-activation-c.ts` (fresh reservations within remaining
+budget; B evidence + accounting preserved). Prior partial runs reset with
+`scripts/vdi-canary-reset-c.ts` (B rows untouched); all settlements
+idempotent-keyed — cumulative real spend 1,060,000 micros ≤ $2 limit, no
+overrun, not blocked.
+
+### checked_at regression (the B-stage defect)
+`vdi-migration-sql.contract.test.ts`: parses migration SQL in CI (no DB),
+proves every RPC column reference is defined by CREATE/ALTER across the
+migration set + every security-definer RPC pins search_path=public. Verified
+both ways: removing the fix migration reproduces the exact defect; with it,
+green. Successful migration application alone missed the original defect —
+this test no longer can.
+
+### C1 — lease-safe idle suspension (3/3 on fresh desktops; limit=1 per
+desktop+rule is the production budget, each sub-scenario its own desktop)
+- C1a: eligible desktop (no leases/input) claimed attempt 1, real provider
+  stop accepted, terminal success evidence recorded.
+- C1b: claim admitted pre-dispatch; a session lease arrived AFTER proposal;
+  executor-rule recheck blocked dispatch (refusal evidence); provider
+  untouched (command still runs — never suspended).
+- C1c: real provider stop executed, response dropped at the adapter
+  boundary; reconciler read authoritative provider state → success recorded;
+  suspendCallCount stayed 1 (no second suspend).
+
+### C2 — bounded display recovery (durable 2-attempt budget)
+- C2a: confirmed display_failed alert + fresh observation → attempt 1
+  admitted; verified recovery capability (marker repair) → healthy probe ⇒
+  success recorded.
+- C2b: attempt 2 executed the recovery command, response dropped, display
+  still broken → **unresolved** retained explicitly (unhealthy probe does not
+  establish whether the restart executed) — no blind retry.
+- C2c: third claim refused (exhausted), repeated attempts produce no second
+  escalation; durable attempts row: count=2, escalated once with timestamp.
+
+### Stop controls, reconciliation, cleanup/accounting
+- Further dispatch refused after stop (ops=26 total, all canary-scoped);
+  authorized work + files persisted under stop controls.
+- C1c reconciled to success BEFORE cleanup; C2b ambiguity retained as
+  unresolved (explicit).
+- Both C reservations settled (120000 + 150000) with settle-replay no-ops;
+  exposure replaced by actuals. Provider sandboxes destroyed.
+- Final accounting: 1,060,000 micros cumulative real spend, overrun 0,
+  admission not blocked; remediation rows scoped to canary only (0 others).
+
+### Activation C status
+**CLOSED.** Canary rollout complete (A + B + C). Production remediation
+remains canary-only until broader activation is approved. Next: VDI-5
+(tenant-isolation validation at scale).
