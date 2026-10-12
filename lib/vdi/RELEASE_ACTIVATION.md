@@ -36,7 +36,7 @@ Everything above is recorded in `lib/vdi/broker/RACE_PROOF_EVIDENCE.md`.
   cross-tenant denial must ALSO be proved through the deployed broker/API
   (two probe workspaces through the pinned broker code; unauthorized IDs
   indistinguishable from absent; probe rows destroyed after the check).
-- [ ] **Configure env** — `DAYTONA_API_KEY` (secret), optional `DAYTONA_API_URL` / `DAYTONA_TARGET`. Absent key ⇒ adapter inert (no import-time failure).
+- [ ] **Configure env** — `DAYTONA_API_KEY` (secret), optional `DAYTONA_API_URL` / `DAYTONA_TARGET`. Absent key ⇒ adapter inert (no import-time failure). **Token wiring:** the broker takes `generateToken` as an injected dependency — production wiring MUST pass `crypto.randomUUID`-backed generation (the adapter's lease tokens already use `randomUUID`; CodeQL enforces no `Math.random` in security contexts).
 - [ ] **Gateway/workers** — viewer gateway is a standalone `ws` process (not a Next route). Run it per deployment with its broker wiring; workers are horizontally safe (all authority is DB-side RPCs).
 - [ ] **Rollback controls** — two regimes:
   - *No durable VDI data yet (test/unused installation):* drop `vdi_*`
