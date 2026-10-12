@@ -69,6 +69,7 @@
     "@chainsafe/libp2p-gossipsub": "^14.1.2",
     "@clerk/clerk-js": "^6.27.0",
     "@clerk/nextjs": "^6.39.3",
+    "@daytona/sdk": "^0.223.0",
     "@google-cloud/aiplatform": "^6.4.0",
     "@google-cloud/storage": "^7.17.2",
     "@google-cloud/tasks": "^6.2.1",

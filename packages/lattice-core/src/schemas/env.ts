@@ -50,6 +50,12 @@ export const envSchema = z.object({
   // header on /api/webhooks/apify. Absent ⇒ webhook route rejects all calls.
   APIFY_WEBHOOK_SECRET: z.string().min(1).optional(),
 
+  // Daytona — desktop VM provider (VDI plane). Optional: absent key ⇒ adapter
+  // factory throws at first use (never at import time); registration inert.
+  DAYTONA_API_KEY: z.string().min(1).optional(),
+  DAYTONA_API_URL: z.string().url().optional(),
+  DAYTONA_TARGET: z.string().min(1).optional(),
+
   // TypeSafe Jev (System One decision model) — shadow decision plane.
   // PINNED VERSION ENFORCED IN SCHEMA (slice 1A): only version-shaped IDs
   // (e.g. jev-1.13.0) are valid. Aliases (jev-latest, jev-preview) FAIL
