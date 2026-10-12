@@ -88,3 +88,59 @@ nothing releases on expiry alone; the canary desktop resumes via
 - **A:** schema + deployment verified; cross-tenant access denied (seeded two-workspace probe).
 - **B:** complete flow with resource IDs, operation keys, accounting evidence (reservation → settle with provider-charge correction).
 - **C:** lease-safe suspension then bounded display recovery work in deployment, incl. lost-response reconciliation.
+
+## Activation A — production preflight RESULTS (2026-10-12, deployed)
+
+**Application SHA:** `main` @ **8b226a97** (release commit b2d9b06d + record
+update). Deployed production: https://gen1e.xyz (Vercel, Ready 6m build 2h ago).
+**Target:** Supabase `Genie AI Platform` ref `ozevwhiipwbcvyzkbhib` (ACTIVE_HEALTHY).
+
+### Migrations — targeted, transactional, ledger-truthful
+- Pre-state verified: 0 vdi functions/tables existed remotely.
+- The SEVEN reviewed VDI migrations applied transactionally via the Supabase
+  Management API (`scripts/vdi-preflight-apply.ts`), each wrapped in
+  BEGIN/COMMIT, **hardening (20261016000000) committed with the RPCs in the
+  same apply sequence — no unhardened RPC exposure window**.
+- Ledger recorded via `supabase migration repair --status applied` for ONLY
+  the seven versions (no broad db push; no --include-all).
+- The 8 pre-existing phantom historical ledger entries (20260524000006,
+  20260527000002-03, 20260906000000, 20260909000000-02, 20260910000000) are
+  **UNTOUCHED** — recovering their missing local files is a separate
+  ledger-reconciliation task, out of VDI scope.
+- Unrelated pending migration 20261011140000_repair_subscriptions.sql remains
+  pending, out of scope (its header forbids batch application).
+
+### Deployed verification results
+- **Schema:** 14 `vdi_*` tables, 13 `vdi_*` RPCs present.
+- **RPC permissions:** all 13 security-definer functions carry
+  `search_path=public` (0 unpinned); ACLs exactly
+  `{postgres=X, service_role=X}` — PUBLIC/anon/authenticated hold NO execute
+  (0 functions each); service_role executes all 13.
+- **Schema CREATE:** anon=false, authenticated=false (untrusted roles cannot
+  create objects in public).
+- **Deployed probes (8/8 PASS** via `scripts/vdi-preflight-probes.ts`, broker
+  credential path, probe rows destroyed after):
+  - anon table read denied; anon RPC denied (deployed PostgREST boundary)
+  - own-scope read sees own desktop; cross-workspace list empty
+  - foreign desktop ID indistinguishable from absent
+  - denied anon write causes no mutation (row count unchanged)
+  - no unexpected provider rows; cleanup verified (final=0)
+- **Inactive rollout health (PASS):** deployed app 200; admission refused
+  ("budget not configured") with zero mutations and zero reservations created
+  (no vdi_budgets row exists = no admissions possible); zero remediation
+  operations; **DAYTONA_API_KEY absent from Vercel production env** (adapter
+  inert; no broker runtime deployed).
+- **Token generation:** deployed code uses `crypto.randomUUID` for lease
+  tokens; broker takes `generateToken` injected (canary wiring must pass
+  randomUUID — checked at Activation B).
+- **Firebase preview failures:** separate pre-existing issue (storage-quota
+  429), fails on main's own head — not part of this rollout.
+
+### Activation A status
+**CLOSED** — schema + deployment verified; RPC permissions verified;
+cross-tenant access denied at the database boundary AND through the broker
+credential path; inactive rollout confirmed. Admissions and remediation
+remain structurally disabled (no budget row, no runtime). Activation B
+(one-workspace canary) may proceed: create the canary budget row to admit
+the single workspace, wire the broker with randomUUID tokens, and capture
+the complete deployed trace.
