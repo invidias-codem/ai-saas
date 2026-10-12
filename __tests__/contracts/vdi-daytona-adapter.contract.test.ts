@@ -673,7 +673,7 @@ describe('VDI-1 Daytona Adapter — DesktopBroker contracts', () => {
 
     const lease = await adapter.grantSession(desktop.desktopId, 'user-1', 3600_000, SCOPE);
 
-    expect(lease.sessionId).toMatch(/^sess-\d+/);
+    expect(lease.sessionId).toMatch(/^sess-[0-9a-f-]{36}$/);
     expect(lease.userId).toBe('user-1');
     expect(lease.connectionGrant).toContain('daytona-vnc://');
     expect(new Date(lease.expiresAt).getTime()).toBeGreaterThan(Date.now());
@@ -685,7 +685,7 @@ describe('VDI-1 Daytona Adapter — DesktopBroker contracts', () => {
 
     const lease = await adapter.grantExecution(desktop.desktopId, 'agent-1', 3600_000, SCOPE);
 
-    expect(lease.executionId).toMatch(/^exec-\d+/);
+    expect(lease.executionId).toMatch(/^exec-[0-9a-f-]{36}$/);
     expect(lease.agentId).toBe('agent-1');
     expect(new Date(lease.expiresAt).getTime()).toBeGreaterThan(Date.now());
   });

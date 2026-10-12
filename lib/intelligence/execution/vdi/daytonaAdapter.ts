@@ -9,6 +9,7 @@
 // - Execution timeout enforced at SDK level, not just caller wait
 // - Evidence records operation key, provider ID, desired/observed state, timings
 
+import { randomUUID } from 'crypto';
 import { Daytona, Sandbox, Image, Resources, CodeLanguage } from '@daytona/sdk';
 import type { ExecutionRuntime, RuntimeSpec, Runtime, RuntimeCapabilities, RuntimeAction, ActionResult, RuntimeSnapshot } from '../contracts';
 import type { DesktopBroker, DesktopSpec, Desktop, DesktopCapabilities, DesktopPhase, DesktopAction, DesktopSnapshot, DesktopSessionLease, ExecutionLease, DesktopHealth, TenantScope, ProvisioningOperationKey, IdempotentProvisioner, DesktopPolicy } from './contracts';
@@ -639,7 +640,7 @@ export class DaytonaExecutionAdapter implements ExecutionRuntime {
 
     // Daytona provides VNC/WebVNC via computerUse or preview
     // For now, return a connection grant token (SDK doesn't expose VNC password directly)
-    const sessionId = `sess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const sessionId = `sess-${randomUUID()}`;
     const now = this.deps.clock.now();
     const expiresAt = new Date(Date.now() + ttlMs).toISOString();
 
@@ -676,7 +677,7 @@ export class DaytonaExecutionAdapter implements ExecutionRuntime {
     const sandbox = await this._daytonaClient.get(desktopId);
     if (!sandbox) throw new Error(`Desktop not found: ${desktopId}`);
 
-    const executionId = `exec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const executionId = `exec-${randomUUID()}`;
     const now = this.deps.clock.now();
     const expiresAt = new Date(Date.now() + ttlMs).toISOString();
 
