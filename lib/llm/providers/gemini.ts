@@ -166,7 +166,8 @@ export class GeminiProvider implements LLMProvider {
             }
         });
 
-        const result = await chat.sendMessageStream(lastMessage.parts);
+        options.signal?.throwIfAborted();
+        const result = await chat.sendMessageStream(lastMessage.parts, { signal: options.signal });
         const textEncoder = new TextEncoder();
         const providerId = this.id; // captured: `this` doesn't bind inside start()
 

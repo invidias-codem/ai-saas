@@ -83,7 +83,7 @@ export class MiniMaxM1Provider implements LLMProvider {
           top_p: options.topP ?? 0.95,
           stream: true,
         }),
-        signal: AbortSignal.any([connectController.signal, budgetController.signal]),
+        signal: AbortSignal.any([connectController.signal, budgetController.signal, ...(options.signal ? [options.signal] : [])]),
       });
       clearTimeout(connectTimer); // headers arrived — body runs on budget only
     } catch (err: any) {

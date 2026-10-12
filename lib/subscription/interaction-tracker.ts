@@ -13,24 +13,28 @@ export interface TrackingResult {
 export async function trackFreeInteraction(userId: string): Promise<TrackingResult> {
   if (!supabaseAdmin) return { count: 0, shouldNudge: false };
 
-  // Atomically increment and return new count via RPC
-  const { data, error } = await supabaseAdmin.rpc("increment_free_interaction_count", {
-    target_user_id: userId,
-  });
+  try {
+    // This optional UI signal must not hold up the chat response.
+    const { data, error } = await supabaseAdmin.rpc("increment_free_interaction_count", {
+      target_user_id: userId,
+    }).abortSignal(AbortSignal.timeout(1_500));
 
-  if (error || data === null) {
-    // RPC may not exist in all environments (migration not yet applied)
-    // This is non-fatal — interaction tracking is for nudge UI only
-    if (error?.code === 'PGRST202') {
-      console.warn("[InteractionTracker] RPC increment_free_interaction_count not found — skipping interaction tracking");
-    } else {
-      console.error("[InteractionTracker] Failed to increment:", error);
+    if (error || data === null) {
+      if (['PGRST202', '42P01', '42703'].includes(error?.code ?? '')) {
+        console.warn('[InteractionTracker] Subscription schema unavailable; apply targeted subscription repair', { code: error?.code });
+      } else {
+        console.warn('[InteractionTracker] Optional tracking unavailable', { code: error?.code ?? 'empty_result' });
+      }
+      return { count: 0, shouldNudge: false };
     }
+
+    if (typeof data !== 'number' || !Number.isInteger(data) || data < 0) {
+      console.warn('[InteractionTracker] Invalid interaction count');
+      return { count: 0, shouldNudge: false };
+    }
+    return { count: data, shouldNudge: data > 0 && data % NUDGE_THRESHOLD === 0 };
+  } catch {
+    console.warn('[InteractionTracker] Optional tracking request failed');
     return { count: 0, shouldNudge: false };
   }
-
-  const count = data as number;
-  const shouldNudge = count > 0 && count % NUDGE_THRESHOLD === 0;
-
-  return { count, shouldNudge };
 }

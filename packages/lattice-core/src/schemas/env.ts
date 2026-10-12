@@ -56,6 +56,12 @@ export const envSchema = z.object({
   DAYTONA_API_URL: z.string().url().optional(),
   DAYTONA_TARGET: z.string().min(1).optional(),
 
+  // Bluesky: feed polling also accepts the handle used by the engagement agent.
+  BLUESKY_IDENTIFIER: z.string().trim().optional(),
+  BLUESKY_HANDLE: z.string().trim().optional(),
+  BLUESKY_APP_PASSWORD: z.string().optional(),
+  JKLAW_API_KEY: z.string().optional(),
+
   // TypeSafe Jev (System One decision model) — shadow decision plane.
   // PINNED VERSION ENFORCED IN SCHEMA (slice 1A): only version-shaped IDs
   // (e.g. jev-1.13.0) are valid. Aliases (jev-latest, jev-preview) FAIL
