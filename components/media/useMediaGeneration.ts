@@ -9,6 +9,8 @@ interface UseMediaGenerationOptions {
   submitUrl: string;
   /** Poll endpoint template; `${id}` is replaced with the prediction id. */
   pollUrlTemplate: string;
+  /** Server-prefetched result: restores completed output or resumes pending polling. */
+  initialPrediction?: ReplicatePrediction | null;
   /** Called with the terminal prediction on success. */
   onSucceeded?: (prediction: ReplicatePrediction) => void;
   /** Called with a human-readable message on failure. */
@@ -30,11 +32,19 @@ interface UseMediaGenerationOptions {
 export function useMediaGeneration({
   submitUrl,
   pollUrlTemplate,
+  initialPrediction,
   onSucceeded,
   onFailed,
 }: UseMediaGenerationOptions) {
-  const [status, setStatus] = useState<GenerationStatus>("idle");
-  const [predictionId, setPredictionId] = useState<string | null>(null);
+  const [status, setStatus] = useState<GenerationStatus>(() => {
+    if (!initialPrediction) return 'idle';
+    if (initialPrediction.status === 'succeeded') return isUsableMediaUrl(initialPrediction.output) ? 'completed' : 'failed';
+    if (initialPrediction.status === 'failed' || initialPrediction.status === 'canceled') return 'failed';
+    return 'generating';
+  });
+  const [predictionId, setPredictionId] = useState<string | null>(() =>
+    initialPrediction && ['starting', 'processing'].includes(initialPrediction.status) ? initialPrediction.id : null,
+  );
 
   // Ref-hold the callbacks so the poll interval's closure stays fresh.
   // Synced in an effect (React Compiler forbids mutating refs during render).
@@ -56,7 +66,9 @@ export function useMediaGeneration({
     setPredictionId(null);
 
     try {
-      const response = await axios.post<ReplicatePrediction>(submitUrl, values);
+      const response = await axios.post<ReplicatePrediction>(submitUrl, values, {
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      });
       const prediction = response.data;
 
       if (prediction && prediction.id) {
@@ -77,12 +89,19 @@ export function useMediaGeneration({
   // Polling loop.
   useEffect(() => {
     if (!predictionId) return;
+    let cancelled = false;
+    let inFlight = false;
+    let failures = 0;
 
     const interval = setInterval(async () => {
+      if (inFlight || cancelled) return;
+      inFlight = true;
       try {
         const url = pollUrlTemplate.replace("${id}", predictionId);
         const response = await axios.get<ReplicatePrediction>(url);
         const prediction = response.data;
+        if (cancelled) return;
+        failures = 0;
 
         switch (prediction.status) {
           case "succeeded":
@@ -115,15 +134,20 @@ export function useMediaGeneration({
             break;
         }
       } catch (err: any) {
+        if (cancelled) return;
+        // Brief network/storage/dispatch outages must not discard a durable job.
+        if (++failures < 3 && (!err?.response || err.response.status >= 500 || err.response.status === 429)) return;
         console.error("[MEDIA_GEN_POLL_ERROR]", err);
         setPredictionId(null);
         setStatus("failed");
-        onFailedRef.current?.("Failed to get status. Please try again.");
+        onFailedRef.current?.("Unable to reconnect. Refresh this page to check your saved generation.");
         clearInterval(interval);
+      } finally {
+        inFlight = false;
       }
     }, 3000);
 
-    return () => clearInterval(interval);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [predictionId, pollUrlTemplate]);
 
   return {

@@ -16,6 +16,8 @@ export interface ReplicatePrediction {
   status: ReplicateStatus;
   /** nano-banana (image) can emit a string or an array; video/music emit a string. */
   output?: string | string[];
+  /** Authenticated application endpoint with Content-Disposition: attachment. */
+  downloadUrl?: string;
   error?: {
     detail?: string;
   };
@@ -31,12 +33,12 @@ export function singleOutput(prediction: ReplicatePrediction): string | null {
  * Validate that prediction.output is a usable URL we can hand to <video>/<audio>.
  * Replicate's terminal success only promises truthy `output`; the value can be
  * missing, empty, or a non-URL string. Anything else becomes a 'blank card'
- * in the UI, which is the bug class we're closing. ponytail: relative URLs are
- * never valid from Replicate's CDN natural path anyway, so absolute-only is
- * the right strictness here.
+ * in the UI. Only our owner-checked video preview route may use a relative URL;
+ * provider URLs for the other media surfaces must remain absolute.
  */
 export function isUsableMediaUrl(value: unknown): value is string {
   if (typeof value !== "string" || !value) return false;
+  if (/^\/api\/video\/artifacts\/[0-9a-f-]{36}\/preview$/.test(value)) return true;
   try {
     const u = new URL(value);
     return u.protocol === "http:" || u.protocol === "https:";

@@ -2,15 +2,18 @@
 // (Optimized for asynchronous polling — generation/debiting delegated to lib/media/video)
 
 import { NextResponse } from 'next/server';
-import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { auth } from '@clerk/nextjs/server';
+import { getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { videoGenerationSchema, ValidationError } from '@/lib/security/inputValidation';
-import { createVideoPrediction, VideoCreditInsufficientError } from "@/lib/media/video";
+import { createVideoPrediction, VideoCreditInsufficientError, VideoRequestInProgressError } from "@/lib/media/video";
 
 export async function POST(request: Request) {
   try {
     // 1. Authentication
-    const user = await requireAuth();
+    const { userId } = await auth();
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const user = { userId };
     const ip = getClientIP(request);
 
     // 2. Rate Limiting (Video generation - VERY expensive, very strict limits)
@@ -62,6 +65,9 @@ export async function POST(request: Request) {
       );
       prediction = result.prediction;
     } catch (error: any) {
+      if (error instanceof VideoRequestInProgressError) {
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      }
       if (error instanceof VideoCreditInsufficientError) {
         return NextResponse.json(
           {
@@ -84,8 +90,6 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('[REPLICATE_VIDEO_API_ERROR]', error);
 
-    const authResponse = handleAuthError(error);
-    if (authResponse) return authResponse;
 
     if (error instanceof ValidationError) {
       return NextResponse.json({ error: 'Validation Error', details: error.message }, { status: 400 });

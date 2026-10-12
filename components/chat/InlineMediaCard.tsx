@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { MediaEnvelope } from "@/lib/media/envelope";
 import { GenerationLoading, GenerationError, GenerationEmpty } from "@/components/media/GenerationStates";
+import { VideoResult } from '@/components/media/VideoResult';
 
 interface PolledPrediction {
   status: "starting" | "processing" | "succeeded" | "failed" | "canceled";
   output?: string | string[];
+  downloadUrl?: string;
   error?: { detail?: string };
 }
 
@@ -52,6 +54,9 @@ function AsyncMedia({ envelope }: { envelope: MediaEnvelope }) {
     envelope.pollUrl ? "processing" : "failed"
   );
   const [url, setUrl] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const [error, setError] = useState<string | null>(
     envelope.pollUrl ? null : "Missing poll URL for media generation."
   );
@@ -63,12 +68,14 @@ function AsyncMedia({ envelope }: { envelope: MediaEnvelope }) {
     const interval = setInterval(async () => {
       try {
         const res = await fetch(envelope.pollUrl!);
+        if (!res.ok) throw new Error('Media status unavailable');
         const prediction: PolledPrediction = await res.json();
 
         switch (prediction.status) {
           case "succeeded":
             if (cancelled) return;
             setUrl(singleOutput(prediction));
+            setDownloadUrl(prediction.downloadUrl ?? null);
             setStatus("succeeded");
             clearInterval(interval);
             break;
@@ -103,7 +110,15 @@ function AsyncMedia({ envelope }: { envelope: MediaEnvelope }) {
 
   if (status === "succeeded" && url) {
     return envelope.type === "video" ? (
-      <video controls className="w-full rounded-xl mt-2" src={url} controlsList="nodownload" />
+      <VideoResult
+        previewUrl={url}
+        downloadUrl={downloadUrl}
+        playbackError={playbackError}
+        previewAttempt={previewAttempt}
+        onPlaybackError={() => setPlaybackError('Video preview unavailable. Try downloading the MP4 or retry the preview.')}
+        onPlaybackReady={() => setPlaybackError(null)}
+        onRetry={() => { setPlaybackError(null); setPreviewAttempt(attempt => attempt + 1); }}
+      />
     ) : (
       <audio controls className="w-full rounded-xl mt-2" src={url} />
     );

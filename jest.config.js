@@ -1,5 +1,8 @@
 module.exports = {
   preset: 'ts-jest',
+  // Render TSX regression fixtures with React's JSX transform (Next's normal
+  // tsconfig preserves JSX for its own compiler).
+  transform: { '^.+\\.tsx?$': ['ts-jest', { tsconfig: { jsx: 'react-jsx' } }] },
   testEnvironment: 'node',
   roots: ['<rootDir>/__tests__', '<rootDir>/lib'],
   // Only run actual test files. Helper-only modules live in __tests__ but aren't suites.
