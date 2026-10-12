@@ -351,3 +351,29 @@ restart persistence, snapshot restore) recorded; runtime class honestly
 advertised (container; resolver abstains on linux_vm); WebSocket gateway
 enforcement proven over real sockets; race proofs for leases, observations,
 alerts, operations and budget admission all recorded above.
+
+## Activation A corrections — function hardening (2026-10-12)
+**Real security gap found by the permissions review:** Postgres grants function
+EXECUTE to PUBLIC by default and security-definer functions ignore RLS — every
+`vdi_*` RPC was callable by anon/authenticated through PostgREST even with
+table RLS in place. Fixed by migration `20261016000000_vdi_function_hardening.sql`:
+- EXECUTE revoked from PUBLIC/anon/authenticated; granted to service_role
+  only; role existence guarded so the migration is robust on vanilla installs
+  (Supabase always has the roles).
+- Table grants enumerated explicitly (`all` + pattern is invalid syntax).
+- Contract check inside the migration: any security-definer `vdi_*` function
+  missing `search_path=public` fails the migration loudly.
+
+Live proofs (isolated postgres:15, Supabase-style roles created first):
+A. anon RPC execute → permission denied
+B. service_role RPC execute → admitted:true
+C. anon table read → permission denied; authenticated RPC → permission denied
+D. all 13 vdi_* functions have explicit ACLs (postgres+service_role only),
+   zero PUBLIC-default (NULL proacl) functions, search_path pinned
+
+Release-record corrections recorded: rollback now has two regimes (no-data:
+reverse drops; with data: disable admissions/remediation + revert app code,
+preserve durable records — schema removal requires separate reconciliation +
+retention review). Canary $2.00 labeled ADMISSION limit (not a provider cap),
+$0.30 labeled reserved exposure for unknown pricing. Cross-tenant denial must
+be proved through the deployed broker/API in addition to the DB boundary.
