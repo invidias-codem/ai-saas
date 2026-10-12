@@ -16,7 +16,7 @@ Everything above is recorded in `lib/vdi/broker/RACE_PROOF_EVIDENCE.md`.
 
 ## Activation A checklist (preflight)
 
-- [ ] **Pin release commit** — `feat/vdi-plane-release` merged to `main`; SHA recorded here: `<FILL ON MERGE>`
+- [x] **Pin release commit** — merged to `main` as **b2d9b06d** (squash of PR #420 incl. function hardening, crypto-grade tokens, #418 merge). Required CI on the PR head: CodeQL ✓, Analyze (actions/go/js/py/rust) ✓, GitGuardian ✓, Vercel deploy ✓. `build_and_preview`/`Deploy Preview` fail on the pre-existing Firebase Hosting storage-quota 429 — fails on main's own head too (tracked deferred issue; not caused by this PR).
 - [ ] **Apply targeted migrations** — in order, against production Supabase:
   1. `20261010000000_vdi_desktop_durable_state.sql`
   2. `20261011000000_vdi_fleet_observations.sql`
