@@ -11,7 +11,8 @@
 import { task } from "@trigger.dev/sdk";
 import { z } from "zod";
 import { runIngestion } from "@/lib/acquisition/durable/ingestion";
-import { ApifyAcquisitionProvider, type ApifyBoundary, type ProviderClock } from "@/lib/acquisition/providers/apify/provider";
+import { ApifyAcquisitionProvider, type ProviderClock } from "@/lib/acquisition/providers/apify/provider";
+import { getProductionRegistry } from "@/lib/acquisition/providers/apify";
 import * as store from "@/lib/acquisition/store/acquisitionStore";
 import { logEvent } from "@/lib/telemetry";
 import { env } from "@/lib/env";
@@ -24,33 +25,19 @@ export const acquisitionIngestPayloadSchema = z.object({
 });
 
 /**
- * ponytail: the concrete production ApifyBoundary is A4 scope — it first
- * has a caller there. Until A4 registers an actor, this task can never be
- * dispatched in production (empty registry ⇒ no runs ⇒ no terminal
- * webhooks). The exported factory keeps A4's wiring to one call.
+ * A4: production ApifyBoundary wired to official apify-client.
+ * Replaces the A3 stub boundary (which threw "lands in A4").
  */
+import { productionApifyBoundary } from '@/lib/acquisition/providers/apify/client';
+
 export function buildProductionProvider(): ApifyAcquisitionProvider {
-  // A4 replaces this stub boundary with the apify-client implementation
-  // (client.ts). Import is by type only here.
-  const boundary: ApifyBoundary = {
-    actorPricing: async () => {
-      throw new Error("apify production boundary lands in A4");
-    },
-    startRun: async () => {
-      throw new Error("apify production boundary lands in A4");
-    },
-    getRun: async () => {
-      throw new Error("apify production boundary lands in A4");
-    },
-    listDatasetItems: async () => {
-      throw new Error("apify production boundary lands in A4");
-    },
-    abortRun: async () => {
-      throw new Error("apify production boundary lands in A4");
-    },
-  };
   const clock: ProviderClock = { now: () => new Date().toISOString() };
-  return new ApifyAcquisitionProvider(boundary, clock, undefined, env.APIFY_API_TOKEN);
+  return new ApifyAcquisitionProvider(
+    productionApifyBoundary,
+    clock,
+    getProductionRegistry(), // A4: Threads actor enabled
+    env.APIFY_API_TOKEN
+  );
 }
 
 export const acquisitionIngestTask = task({

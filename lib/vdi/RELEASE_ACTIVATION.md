@@ -200,3 +200,63 @@ desktop+rule is the production budget, each sub-scenario its own desktop)
 **CLOSED.** Canary rollout complete (A + B + C). Production remediation
 remains canary-only until broader activation is approved. Next: VDI-5
 (tenant-isolation validation at scale).
+
+## VDI-5 — Tenant-isolation validation (2026-10-12, deployed, ALL PASS)
+Driver: `scripts/vdi-tenant-isolation.ts` — two synthetic tenants (iso-tenant-a/
+iso-tenant-b), separate identities, disposable sandboxes; every denial verified
+against before/after state snapshots. 43/43 checks PASS, exit 0; cleanup
+verified (0 iso rows remain; canary accounting untouched — remediation stayed
+canary-only throughout).
+
+Boundaries (deployed service-role broker path where RLS cannot substitute):
+1. **Broker/API** — A's scoped read of B's desktop (KNOWN ID): null. A-scoped
+   mutation of B's row: no-op (B phase unchanged). Evidence invisible
+   cross-scope. Concurrent lists: zero cross-tenant membership either way.
+2. **Gateway** — A's grant token resolves to A's desktop only, never B's;
+   replay after revocation stays denied.
+3. **DB relationships** — mismatched lease row (A's user stamped onto B's
+   desktop) confers NO control: gateway authorization requires the desktop's
+   input-control lease, which B's desktop doesn't hold. anon RPC denied via
+   deployed PostgREST. Guessed desktop IDs: null (no existence leak).
+4. **Budget/accounting** — A's reservation/settlement consumed A only
+   (delta=40000, B=0); A cannot discover B's reservation keys (scoped lists
+   return nothing); B budget untouched by all A activity.
+5. **Recovery/remediation** — A's sandbox cannot read B's files (separate
+   sandboxes, provider-enforced); A-scoped recovery scans never list B's
+   resource (label isolation); quarantined/orphan adoption stays scope-bound.
+6. **Provider/storage** — B snapshot → source deleted → restore carries B's
+   labels → invisible to A's scans.
+
+**Honest RISK-RECORDs (compensating controls proven; mitigations backlogged):**
+- vdi_settle/adjust/extend bind by operation_key only — a caller HOLDING
+  B's key could act. Control: keys are 128-bit UUIDs, never surfaced
+  cross-tenant (proven). Backlog: add tenant-binding params to those RPCs.
+- Provider snapshot namespace is org-wide — provider credentials could
+  restore any snapshot. Control: DAYTONA_API_KEY server-only (absent from
+  Vercel prod env); workspace users never touch the provider. Backlog:
+  per-tenant snapshot namespacing.
+
+**Runtime-class scope, recorded:** all deployed resources are
+container-class. Stronger VM-level isolation (multi-tenant hardware
+separation) remains separately gated on org sandbox_kvm enablement +
+verification — not claimed here.
+
+**Smoke test added** (`vdi-migration-smoke.contract.test.ts`, your
+requirement): applies all 8 VDI migrations to a fresh container postgres,
+invokes all 13 RPCs with real arguments, asserts anon denial at runtime —
+the complement to the SQL parser (which cannot see runtime semantics).
+Skips gracefully without Docker; runs in the deploy pipeline.
+
+**Gates:** contracts 139/139 (13 suites, +smoke) · tsc clean · lint clean ·
+build ✓ 86s. **VDI-5 CLOSED.**
+
+## VDI-6 scope (next)
+Two workspace agents exchanging ONE evidence-backed artifact through an
+explicit sharing grant, with revocation enforced on subsequent retrieval:
+- Artifact identity: evidence row id + content hash; producer/consumer agents
+  each own their workspace.
+- Sharing grant: explicit, scoped (artifact → grantee workspace), revocable;
+  retrieval checks the grant per-request (no cached access).
+- Acceptance: grant allows retrieval; revocation blocks the NEXT retrieval;
+  a third workspace never retrieves; the artifact is never copied into the
+  grantee's evidence store (reference semantics).

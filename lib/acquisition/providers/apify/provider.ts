@@ -18,6 +18,7 @@
 import {
   ACTOR_REGISTRY,
   selectActor,
+  getProductionRegistry, // A4: production registry with Threads actor
   type ApifyActorDefinition,
   type ApifyActorInputContext,
 } from './actorRegistry';
@@ -86,8 +87,6 @@ export function mapApifyStatus(apifyStatus: string): ProviderRunStatus {
       return { status: 'failed', failure: 'provider_failed' };
   }
 }
-
-// ── Provider error mapping — provider plane, never resource plane ───────
 
 export function mapProviderHttpError(status: number): ProviderRunStatus {
   if (status === 429) return { status: 'failed', failure: 'provider_rate_limited' };

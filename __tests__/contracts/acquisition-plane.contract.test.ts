@@ -106,6 +106,7 @@ describe('acquisition plane contracts — A0 boundary', () => {
       resource: { type: 'post', canonicalUrl: 'https://threads.com/@example/post/ABC', externalId: 'ABC' },
       author: { handle: 'example' },
       content: { text: 'hello world' },
+      engagement: {},
       temporal: { observedAt: '2026-10-05T10:00:00Z', retrievedAt: '2026-10-05T10:00:00Z' },
       access: { state: 'PUBLIC_FETCHABLE' },
       provenance: { rawHash: rawContentHash('{"raw":1}'), normalizerVersion: 'threads-post-v1' },
