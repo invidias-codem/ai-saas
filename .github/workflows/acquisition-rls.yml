@@ -31,7 +31,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d acquisition_rls_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -60,7 +60,7 @@ jobs:
             echo 'Expected the original A3 schema to fail the RLS regression.' >&2
             exit 1
           fi
-          if ! rg -F 'RLS is disabled on public.acquisition_requests' baseline.log; then
+          if ! grep -F 'RLS is disabled on public.acquisition_requests' baseline.log; then
             cat baseline.log >&2
             exit 1
           fi
