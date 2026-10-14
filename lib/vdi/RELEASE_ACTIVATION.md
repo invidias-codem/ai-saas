@@ -295,3 +295,38 @@ artifact RPCs) · tsc clean · lint clean · build ✓ 86s. **VDI-6 CLOSED.**
 (The codeBuilderTask.ts stash-pop conflict was resolved to HEAD's committed
 version; three unrelated untracked WIP test files were side-lined to
 .hermes-stash-side/ — nothing deleted.)
+
+## Housekeeping — working-tree reconciliation (2026-10-12)
+
+**Release qualification (explicit, standing):**
+- Tenant isolation validated for CONTAINER-CLASS resources.
+- Tenant-binding RPC parameters + per-tenant snapshot namespacing: OPEN.
+- VM-level isolation: requires separate enablement + verification.
+
+**Reconciliation results (the sidelined tests were real contracts):**
+1. **middleware-runtime / middleware-public-routes (SHIPPED):** the
+   sidelined tests exposed a REAL security leak — Clerk's bare `:locale`
+   parameter matched ANY first path segment, so `/:locale/code(.*)` made
+   `/api/code-builder/stream` PUBLIC (unauthenticated 200). Root fix: all
+   17 `:locale` entries restricted to actual locales
+   `/:locale(en|th|vi|es|fr|de)/...`; verified no API path matches public,
+   localized pages still public. Both test suites now pass 27/27 and are
+   committed into the tree (no longer sidelined).
+2. **credit-ledger (SHIPPED):** real bug — `deductUserCredits` dropped the
+   idempotency key on its way to the atomic `spend_credits` RPC (compute-path
+   retry could double-charge). Fix: optional `idempotencyKey` param forwarded
+   verbatim; test-typing corrected. 16/16 passing, committed.
+3. **memory-operation-key (RETURNED TO WIP):** contract-first stub for an
+   unimplemented feature — `storeMemory` has no `operationKey` support in
+   production code (no column, no unique constraint, no call sites). This is
+   a feature slice, not housekeeping; parked in `.hermes-stash-side/` with
+   the finding recorded here. It must NOT be force-passed into the tree.
+4. **codeBuilderTask.ts conflict (RESOLVED to HEAD):** the stash-pop conflict
+   from the code-builder WIP resolved to the committed main version; the
+   alternative remains in stash@{0} for that workstream's owner.
+5. Six other failing untracked contract tests (enterprise-licenses,
+   b2-routing, gemini-agent-step, etc.) belong to other in-flight
+   workstreams — unchanged, left with their owners.
+
+**Gates after reconciliation:** 182/182 (139 VDI + 16 credit + 27
+middleware) · tsc clean · lint clean · build ✓ 85s.
