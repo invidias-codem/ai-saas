@@ -316,11 +316,15 @@ version; three unrelated untracked WIP test files were side-lined to
    idempotency key on its way to the atomic `spend_credits` RPC (compute-path
    retry could double-charge). Fix: optional `idempotencyKey` param forwarded
    verbatim; test-typing corrected. 16/16 passing, committed.
-3. **memory-operation-key (RETURNED TO WIP):** contract-first stub for an
+3. **memory-operation-key (PARKED durably):** contract-first stub for an
    unimplemented feature — `storeMemory` has no `operationKey` support in
    production code (no column, no unique constraint, no call sites). This is
-   a feature slice, not housekeeping; parked in `.hermes-stash-side/` with
-   the finding recorded here. It must NOT be force-passed into the tree.
+   a feature slice, not housekeeping. Parked at
+   `research/parked-contracts/memory-operation-key.contract.test.ts`
+   (reconstructed after /tmp purge; verified identical semantics), with a
+   README documenting why and what ships it, and a one-line tsconfig
+   exclusion so the typed tree stays green. It must NOT be force-passed
+   into `__tests__/contracts/` until its implementation lands.
 4. **codeBuilderTask.ts conflict (RESOLVED to HEAD):** the stash-pop conflict
    from the code-builder WIP resolved to the committed main version; the
    alternative remains in stash@{0} for that workstream's owner.
