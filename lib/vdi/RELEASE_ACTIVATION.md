@@ -260,3 +260,38 @@ explicit sharing grant, with revocation enforced on subsequent retrieval:
 - Acceptance: grant allows retrieval; revocation blocks the NEXT retrieval;
   a third workspace never retrieves; the artifact is never copied into the
   grantee's evidence store (reference semantics).
+
+## VDI-6 — Evidence-backed artifact sharing (2026-10-12, deployed, ALL PASS)
+Migration `20261018000000_vdi_artifact_grants.sql` applied transactionally
+(create+revoke+grant in ONE commit — no exposure window; the VDI-A lesson
+applied), ledger-recorded; hardening verified (16 RPCs: anon 0,
+authenticated 0, service_role 16; search_path pinned — parser test enforces).
+Design: reference semantics — grants and retrievals reference the ORIGINAL
+evidence row (content hash + producer provenance), never copying content
+into the grantee's store; a retrieval audit row records access.
+
+Runtime proof (`scripts/vdi-artifact-sharing.ts`, 18/18 PASS, exit 0):
+- Grant: created for grantee agent; replay idempotent (original grant_id);
+  conflicting binding (third ws) refused; FORGED producer scope refused
+  (ownership derives through the desktop row — vdi_evidence carries no
+  tenant columns; that defect class was caught at design time this round).
+- Retrieval: allowed; provenance preserved (producer ws, type, recorded_at);
+  original content hash referenced; reference_only=true.
+- Third workspace: denied — "no active grant".
+- Revocation: recorded; NEXT retrieval denied; subsequent retrievals stay
+  denied; re-revocation idempotent.
+- State-unchanged: denied requests created ZERO retrieval audit rows and
+  ZERO new evidence rows (before/after snapshots 1→1); exactly one grant
+  row (revoked, grantee G); all audit rows grantee-only; artifact never
+  copied.
+- Cleanup verified: 0 art rows remain.
+
+VDI-5 risk-records remain OPEN (mitigations backlogged); VM-level isolation
+remains separately gated. VDI-5 validation stands for container-class.
+
+**Gates:** contracts 139/139 (13 suites; smoke test extended with the three
+artifact RPCs) · tsc clean · lint clean · build ✓ 86s. **VDI-6 CLOSED.**
+
+(The codeBuilderTask.ts stash-pop conflict was resolved to HEAD's committed
+version; three unrelated untracked WIP test files were side-lined to
+.hermes-stash-side/ — nothing deleted.)

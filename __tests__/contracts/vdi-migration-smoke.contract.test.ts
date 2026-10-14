@@ -94,7 +94,7 @@ describe('VDI migrations apply + every RPC invokes (runtime smoke)', () => {
 
     const list = psql(`select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'vdi_%' order by 1;`).out;
     const fns = list.split('\n').map(l => l.trim()).filter(l => /^vdi_/.test(l));
-    expect(fns.length).toBe(13); // update when vdi_* RPCs grow
+    expect(fns.length).toBe(16); // 13 + vdi_grant/retrieve/revoke_artifact (update when vdi_* RPCs grow)
 
     // Invoke every RPC with valid-for-schema args. Failures here are exactly
     // the runtime class the parser cannot catch.
@@ -115,6 +115,10 @@ describe('VDI migrations apply + every RPC invokes (runtime smoke)', () => {
       ['vdi_settle_reservation', `select vdi_settle_reservation('smoke-res2',1000::bigint,false,now());`, r => r.out.includes('true')],
       ['vdi_adjust_settled_charge', `select vdi_adjust_settled_charge('smoke-res2',1200::bigint,now());`, r => r.out.includes('true')],
       ['vdi_extend_reservation_horizon', `select vdi_extend_reservation_horizon('smoke-res2', now()+interval '2 hours', now());`, r => r.out.includes('t')],
+      // VDI-6 artifact sharing: artifact evidence needs a desktop row; grant → retrieve → revoke cycle.
+      ['vdi_grant_artifact_access', `insert into vdi_evidence (desktop_id, operation_type, metadata) values (${DT}, 'art-artifact-v1', '{"h":"x"}'::jsonb); select vdi_grant_artifact_access('smoke-art-grant', (select id from vdi_evidence where operation_type='art-artifact-v1' limit 1), 't', 'w', 'gt', 'gw', 'ga');`, r => r.out.includes('true')],
+      ['vdi_retrieve_shared_artifact', `select vdi_retrieve_shared_artifact((select id from vdi_evidence where operation_type='art-artifact-v1' limit 1), 'gw', 'ga');`, r => r.out.includes('true')],
+      ['vdi_revoke_artifact_access', `select vdi_revoke_artifact_access((select id from vdi_evidence where operation_type='art-artifact-v1' limit 1), 'gw', 'ga', 'by', 'reason', now());`, r => r.out.includes('t')],
     ];
     for (const [name, sql, ok] of calls) {
       const r = psql(sql);
