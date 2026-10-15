@@ -3,16 +3,14 @@
 // runIngestion state machine — no Threads knowledge, no normalization, no
 // LLM calls, no EvidenceObjectV1. Payload = durable identities ONLY.
 //
-// The production ApifyBoundary (apify-client wiring) lands in A4 with the
-// first real actor — the same slice that first dispatches this task (empty
-// registry ⇒ no runs ⇒ no webhooks before then). The state machine below
-// is fully contract-tested with fixture deps.
+// The production ApifyBoundary uses the official client; the state machine
+// remains contract-tested with fixture dependencies and no paid runs.
 
 import { task } from "@trigger.dev/sdk";
 import { z } from "zod";
 import { runIngestion } from "@/lib/acquisition/durable/ingestion";
 import { ApifyAcquisitionProvider, type ProviderClock } from "@/lib/acquisition/providers/apify/provider";
-import { getProductionRegistry } from "@/lib/acquisition/providers/apify";
+import { getProductionRegistry } from "@/lib/acquisition/providers/apify/actorRegistry";
 import * as store from "@/lib/acquisition/store/acquisitionStore";
 import { logEvent } from "@/lib/telemetry";
 import { env } from "@/lib/env";

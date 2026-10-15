@@ -6,7 +6,7 @@ import { z } from "zod";
  *
  * Wraps the canonical `runCodeBuilder` engine (lib/ucol/codeBuilderEngine.ts)
  * so the entire plan → generate → review lifecycle runs OUTSIDE the Next.js
- * serverless 300s timeout, in Trigger.dev's cloud runtime (maxDuration 900s).
+ * serverless 300s timeout, in Trigger.dev's cloud runtime (maxDuration 3600s).
  *
  * Phase 3: the task now persists its lifecycle to the durable build store
  * (lib/code-builder/buildStore.ts) — QUEUED→RUNNING→phase→terminal — so "where
@@ -73,7 +73,8 @@ export const codeBuilderTask = task({
         userPrompt: payload.prompt,
       });
 
-      // No-op emit on the worker; SSE owns event fan-out (Realtime in Phase 7).
+      // Context-flow events are ephemeral; awaited artifact checkpoints below
+      // make output recoverable through the owner-authorized status endpoint.
       const emit = () => {};
 
       await store.updateBuildPhase(payload.buildId, "planning", 10);
@@ -88,6 +89,16 @@ export const codeBuilderTask = task({
         emit,
         installedDependencies: payload.installedDependencies ?? [],
         session,
+        onPlanReady: async (plan) => {
+          await store.checkpointBuild(payload.buildId, { phase: "generating", progress: 20, plan });
+        },
+        onFilesGenerated: async (files, completed, total) => {
+          await store.checkpointBuild(payload.buildId, {
+            phase: "generating",
+            progress: 20 + Math.floor(75 * completed / Math.max(total, 1)),
+            files,
+          });
+        },
       });
 
       await store.completeBuild(payload.buildId, {

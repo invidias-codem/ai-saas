@@ -5,6 +5,7 @@
 
 import { requireAuth, handleAuthError } from '@/lib/security/apiAuth';
 import { getBuild } from '@/lib/code-builder/buildStore';
+import { hasBuildArtifacts } from '@/lib/code-builder/buildArtifacts';
 import type { BuildStatus, BuildPhase } from '@/lib/code-builder/buildStore';
 
 export const runtime = 'nodejs';
@@ -22,13 +23,15 @@ interface BuildStatusResponse {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
-  /** Owner-authorized artifact snapshot; only present when status='completed'. */
+  updatedAt: string | null;
+  artifactsMissing: boolean;
+  /** Owner-authorized checkpoints, including partial output on failure. */
   plan?: unknown | null;
   files?: unknown | null;
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ buildId: string }> }
 ) {
   try {
@@ -59,6 +62,10 @@ export async function GET(
       );
     }
 
+    // Clients that already hold this artifact version need only the small
+    // status DTO. A reload omits the cursor and gets the complete snapshot.
+    const artifactVersion = new URL(req.url).searchParams.get('artifactVersion');
+    const includeArtifacts = !row.updated_at || artifactVersion !== row.updated_at;
     const response: BuildStatusResponse = {
       buildId: row.build_id,
       status: row.status,
@@ -73,11 +80,9 @@ export async function GET(
       createdAt: row.created_at ?? new Date().toISOString(),
       startedAt: row.started_at ?? null,
       completedAt: row.completed_at ?? null,
-      // Artifact snapshot returned only on completed builds (B2). plan/files
-      // are NULL until the worker's terminal write; they are also NULL on
-      // failed/cancelled rows.
-      plan: row.status === 'completed' ? (row.plan_json ?? null) : null,
-      files: row.status === 'completed' ? (row.files_json ?? null) : null,
+      updatedAt: row.updated_at ?? null,
+      artifactsMissing: row.status === 'completed' && !hasBuildArtifacts(row.plan_json, row.files_json),
+      ...(includeArtifacts ? { plan: row.plan_json ?? null, files: row.files_json ?? null } : {}),
     };
 
     return Response.json(response);

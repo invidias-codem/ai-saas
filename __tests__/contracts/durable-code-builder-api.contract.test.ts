@@ -261,3 +261,61 @@ describe('Durable Code Builder API contracts (Phase 4A)', () => {
     });
   });
 });
+describe('Durable Code Builder partial artifact reads', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRequireAuth.mockResolvedValue({ userId: 'owner-user-id' });
+    mockHandleAuthError.mockReturnValue(null);
+  });
+
+  test.each(['running', 'failed', 'cancelled'] as const)('owner can recover checkpointed output when %s', async status => {
+    const snapshot = { appName: 'Tracker', components: [] };
+    const files = [{ path: 'Income.tsx', content: 'export default () => null' }];
+    mockGetBuild.mockResolvedValue({ ...createBuildRow({ status }), plan_json: snapshot, files_json: files });
+    const response = await GET(createMockRequest('http://localhost/api/code-builder/build/b1'), { params: Promise.resolve({ buildId: 'b1' }) });
+    const body = await response.json();
+    expect(body.status).toBe(status);
+    expect(body.plan).toEqual(snapshot);
+    expect(body.files).toEqual(files);
+  });
+
+  test('unchanged artifact version omits large output while retaining status', async () => {
+    const updatedAt = '2026-10-15T00:44:46Z';
+    mockGetBuild.mockResolvedValue({ ...createBuildRow(), updated_at: updatedAt, plan_json: { appName: 'Tracker' }, files_json: [] });
+    const response = await GET(createMockRequest(`http://localhost/api/code-builder/build/b1?artifactVersion=${encodeURIComponent(updatedAt)}`), { params: Promise.resolve({ buildId: 'b1' }) });
+    const body = await response.json();
+    expect(body.updatedAt).toBe(updatedAt);
+    expect(body.status).toBe('running');
+    expect(body).not.toHaveProperty('plan');
+    expect(body).not.toHaveProperty('files');
+  });
+
+  test('partial output is never disclosed to a different owner', async () => {
+    mockGetBuild.mockResolvedValue({ ...createBuildRow({ user_id: 'different-user' }), plan_json: { appName: 'Private' }, files_json: ['private'] });
+    const response = await GET(createMockRequest('http://localhost/api/code-builder/build/b1'), { params: Promise.resolve({ buildId: 'b1' }) });
+    expect(response.status).toBe(404);
+    expect(await response.text()).not.toMatch(/Private|private/);
+  });
+});
+
+describe('Durable Code Builder completed-without-output detection', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRequireAuth.mockResolvedValue({ userId: 'owner-user-id' });
+    mockHandleAuthError.mockReturnValue(null);
+  });
+
+  test('reports missing artifacts without rewriting the historical build outcome', async () => {
+    mockGetBuild.mockResolvedValue({ ...createBuildRow({ status: 'completed' }), plan_json: null, files_json: null });
+    const res = await GET(createMockRequest('http://localhost/api/code-builder/build/b1'), { params: Promise.resolve({ buildId: 'b1' }) });
+    expect(await res.json()).toMatchObject({ status: 'completed', artifactsMissing: true, plan: null, files: null });
+  });
+
+  test('complete output is available, including after a fresh reload without a cursor', async () => {
+    const plan = { appName: 'Tracker' };
+    const files = [{ path: 'Income.tsx', content: 'export default () => null;' }];
+    mockGetBuild.mockResolvedValue({ ...createBuildRow({ status: 'completed' }), plan_json: plan, files_json: files });
+    const res = await GET(createMockRequest('http://localhost/api/code-builder/build/b1'), { params: Promise.resolve({ buildId: 'b1' }) });
+    expect(await res.json()).toMatchObject({ status: 'completed', artifactsMissing: false, plan, files });
+  });
+});

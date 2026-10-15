@@ -42,7 +42,7 @@ function req(buildId = 'b1') {
 }
 
 /** Run-subscription mock: yields snapshots then ends (terminal close). */
-function terminalRunStream(status = 'COMPLETED_SUCCESSFULLY') {
+function terminalRunStream(status = 'COMPLETED') {
   const snapshots = [{ status, updatedAt: '2026-09-20T14:52:34Z' } as any];
   const stream = new ReadableStream({
     start(c) {
@@ -96,7 +96,7 @@ describe('realtime relay route — product-boundary contract', () => {
     expect(subscribeToRun).toHaveBeenCalledWith('run_xyz');
     expect(body).toContain('event: open');
     expect(body).toContain('event: run-status');
-    expect(body).toContain('"status":"COMPLETED_SUCCESSFULLY"');
+    expect(body).toContain('"status":"COMPLETED"');
     // Success is the worker's to own — relay must NOT reconcile it.
     expect(failBuild).not.toHaveBeenCalled();
     expect(cancelBuild).not.toHaveBeenCalled();
@@ -147,5 +147,48 @@ describe('realtime relay route — product-boundary contract', () => {
     controller.abort();
     // unsubscribe is called synchronously in the abort listener.
     expect(unsubscribe).toHaveBeenCalled();
+  });
+});
+
+describe('realtime relay bounded lifetime', () => {
+  beforeEach(() => { jest.clearAllMocks(); jest.useFakeTimers(); });
+  afterEach(() => jest.useRealTimers());
+
+  test('rotates an idle stream before 300s and reconnects without failing the build', async () => {
+    getBuild.mockResolvedValue({ build_id: 'b1', user_id: 'u1', trigger_run_id: 'run_xyz' });
+    subscribeToRun.mockImplementation(() => {
+      const upstream = new ReadableStream({ start() {} });
+      return { unsubscribe, getReader: () => upstream.getReader() };
+    });
+    for (let connection = 0; connection < 2; connection++) {
+      const res = await GET(req(), { params: Promise.resolve({ buildId: 'b1' }) });
+      const body = res.text();
+      await jest.advanceTimersByTimeAsync(240_000);
+      expect(await body).toContain('event: open');
+      expect(jest.getTimerCount()).toBe(0);
+    }
+    expect(subscribeToRun).toHaveBeenCalledTimes(2);
+    expect(unsubscribe).toHaveBeenCalledTimes(2);
+    expect(failBuild).not.toHaveBeenCalled();
+    expect(cancelBuild).not.toHaveBeenCalled();
+  });
+
+  test('FAILED is reconciled before closing; COMPLETED remains worker-owned', async () => {
+    getBuild.mockResolvedValue({ build_id: 'b1', user_id: 'u1', trigger_run_id: 'run_xyz' });
+    subscribeToRun.mockReturnValue(terminalRunStream('FAILED'));
+    const res = await GET(req(), { params: Promise.resolve({ buildId: 'b1' }) });
+    expect(await res.text()).toContain('"status":"FAILED"');
+    expect(failBuild).toHaveBeenCalledWith('b1', 'TRIGGER_FAILED', expect.any(String));
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('response cancellation releases the upstream reader and rotation timer', async () => {
+    getBuild.mockResolvedValue({ build_id: 'b1', user_id: 'u1', trigger_run_id: 'run_xyz' });
+    const upstream = new ReadableStream({ start() {} });
+    subscribeToRun.mockReturnValue({ unsubscribe, getReader: () => upstream.getReader() });
+    const res = await GET(req(), { params: Promise.resolve({ buildId: 'b1' }) });
+    await res.body!.cancel();
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
   });
 });

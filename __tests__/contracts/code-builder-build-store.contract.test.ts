@@ -14,6 +14,7 @@ import {
   cancelBuild,
   markBuildRunning,
   updateBuildPhase,
+  checkpointBuild,
   sanitizeForPersistence,
 } from '@/lib/code-builder/buildStore';
 
@@ -96,7 +97,7 @@ describe('buildStore — durable build lifecycle contract', () => {
 
   it('terminal transitions filter non-terminal rows (idempotent — no-op once terminal)', async () => {
     const { update } = chain();
-    await completeBuild('b1');
+    await completeBuild('b1', { plan: { appName: 'Tracker' }, files: [{ path: 'Income.tsx', content: 'export default () => null;' }] });
     const updateCall = update.mock.calls[0];
     expect(updateCall[0]).toMatchObject({ status: 'completed', progress: 100 });
     // .eq('build_id','b1').not('status','in','(completed,failed,cancelled)') — guards idempotency
@@ -138,5 +139,29 @@ describe('buildStore — durable build lifecycle contract', () => {
     const { update } = chain();
     await updateBuildPhase('b1', 'generating', 55);
     expect(update.mock.calls[0][0]).toEqual({ phase: 'generating', progress: 55 });
+  });
+
+  it('checkpoints artifacts and progress atomically and guards every terminal status', async () => {
+    const { update } = chain();
+    await checkpointBuild('b1', { phase: 'generating', progress: 20, plan: { appName: 'Tracker' } });
+    expect(update).toHaveBeenCalledWith({ phase: 'generating', progress: 20, plan_json: { appName: 'Tracker' } });
+    const eq = update.mock.results[0].value.eq;
+    expect(eq).toHaveBeenCalledWith('build_id', 'b1');
+    expect(eq.mock.results[0].value.not).toHaveBeenCalledWith('status', 'in', '(completed,failed,cancelled)');
+    // A later files checkpoint must leave the existing plan intact.
+    await checkpointBuild('b1', { phase: 'generating', progress: 55, files: [{ path: 'Income.tsx' }] });
+    expect(update.mock.calls[1][0]).not.toHaveProperty('plan_json');
+  });
+
+  it('reports checkpoint persistence failures to the worker', async () => {
+    chain({ updateRes: { error: { message: 'database unavailable' } } });
+    await expect(checkpointBuild('b1', { phase: 'generating', progress: 20 })).rejects.toThrow('checkpointBuild failed');
+  });
+
+  it('refuses to report completion with missing or empty output', async () => {
+    const { update } = chain();
+    await expect(completeBuild('b1', { plan: null, files: null })).rejects.toThrow('Cannot complete build');
+    await expect(completeBuild('b1', { plan: { appName: 'Tracker' }, files: [] })).rejects.toThrow('Cannot complete build');
+    expect(update).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-// PlanPanel — displays Gemini's architectural plan.
+// PlanPanel — displays the architectural plan.
 
 import type { ProjectPlan } from '@/lib/ucol/types';
 import { Loader2, Layers, FileCode, Database, Globe } from 'lucide-react';
@@ -18,7 +18,7 @@ export function PlanPanel({ plan, loading }: PlanPanelProps) {
                 <div className="h-5 w-5 rounded bg-blue-500/15 flex items-center justify-center">
                     <Layers className="h-3 w-3 text-blue-400" />
                 </div>
-                <span className="text-xs font-semibold text-zinc-300 tracking-wide">Gemini Plan</span>
+                <span className="text-xs font-semibold text-zinc-300 tracking-wide">Architecture Plan</span>
                 {loading && <Loader2 className="h-3 w-3 text-blue-400 animate-spin ml-auto" />}
                 {plan && (
                     <span className="text-[10px] text-zinc-600 ml-auto font-mono">
@@ -32,7 +32,7 @@ export function PlanPanel({ plan, loading }: PlanPanelProps) {
                 {loading && !plan && (
                     <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-500">
                         <Loader2 className="h-8 w-8 animate-spin text-blue-400/50" />
-                        <p className="text-xs">Gemini is planning the architecture...</p>
+                        <p className="text-xs">Planning the architecture...</p>
                     </div>
                 )}
 
