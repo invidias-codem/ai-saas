@@ -1,0 +1,79 @@
+name: Acquisition RLS
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/*_acquisition_*.sql'
+      - 'supabase/tests/acquisition_rls.sql'
+      - '.github/workflows/acquisition-rls.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/*_acquisition_*.sql'
+      - 'supabase/tests/acquisition_rls.sql'
+      - '.github/workflows/acquisition-rls.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  acquisition-rls:
+    name: Acquisition RLS access contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: acquisition-test-only
+          POSTGRES_DB: acquisition_rls_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d acquisition_rls_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: acquisition-test-only
+      PGDATABASE: acquisition_rls_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # Matches CI's pinned v4
+
+      - name: Reproduce the omitted RLS on the A3 schema
+        shell: bash
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          create role anon nologin;
+          create role authenticated nologin;
+          create role service_role nologin bypassrls;
+          grant usage on schema public to anon, authenticated, service_role;
+          alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+          SQL
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261007000000_acquisition_durable_state.sql
+          if psql -v ON_ERROR_STOP=1 -f supabase/tests/acquisition_rls.sql > baseline.log 2>&1; then
+            echo 'Expected the original A3 schema to fail the RLS regression.' >&2
+            exit 1
+          fi
+          if ! grep -F 'RLS is disabled on public.acquisition_requests' baseline.log; then
+            cat baseline.log >&2
+            exit 1
+          fi
+
+      - name: Harden twice and verify grants, RLS, backend CRUD, and replay locks
+        shell: bash
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          grant all on acquisition_requests, acquisition_provider_runs, acquisition_raw_evidence to public;
+          grant select (raw_json), update (raw_json) on acquisition_raw_evidence to anon, authenticated;
+          SQL
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018000000_acquisition_rls.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018000000_acquisition_rls.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/acquisition_rls.sql
+          psql -v ON_ERROR_STOP=1 -c 'alter role service_role nobypassrls;'
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/acquisition_rls.sql
