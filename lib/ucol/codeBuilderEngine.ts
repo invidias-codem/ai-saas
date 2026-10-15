@@ -114,6 +114,9 @@ export interface CodeBuilderEngineInput {
     installedDependencies?: string[];
     providerKeys?: ProviderApiKeys;
     session: BuildSession;
+    /** Awaited durable checkpoints; optional for the existing inline transport. */
+    onPlanReady?: (plan: ProjectPlan) => Promise<void>;
+    onFilesGenerated?: (files: GeneratedFile[], completed: number, total: number) => Promise<void>;
 }
 
 export interface CodeBuilderEngineResult {
@@ -123,6 +126,7 @@ export interface CodeBuilderEngineResult {
 
 export async function runCodeBuilder(input: CodeBuilderEngineInput): Promise<CodeBuilderEngineResult> {
     const plan = await planProject(input);
+    await input.onPlanReady?.(plan);
     const files = await generateCode(input, plan);
     return { plan, files };
 }
@@ -185,6 +189,7 @@ export async function generateCode(input: CodeBuilderEngineInput, plan: ProjectP
     const buildOrder = resolveBuildOrder(plan.components);
     const tiers = groupIntoTiers(buildOrder);
     const allFiles: GeneratedFile[] = [];
+    let completedComponents = 0;
 
     for (const tier of tiers) {
         // Serialize within a tier — components share one NVIDIA NIM key; concurrent
@@ -197,6 +202,10 @@ export async function generateCode(input: CodeBuilderEngineInput, plan: ProjectP
                 component, plan, dependencies: deps, session, fast,
                 installedDependencies, providerKeys, emit, modelRouter,
             }));
+            completedComponents++;
+            await input.onFilesGenerated?.(
+                [...allFiles, ...tierResults.flat()], completedComponents, buildOrder.length,
+            );
         }
         for (const files of tierResults) {
             allFiles.push(...files);
@@ -232,21 +241,26 @@ function groupIntoTiers(buildOrder: ComponentSpec[]): ComponentSpec[][] {
  * upper bound on the whole call (network + body + parse) so a stuck
  * provider cannot cascade into the fallback path.
  */
-function withTimeout<T>(
+async function withTimeout<T>(
     factory: (signal: AbortSignal) => Promise<T>,
     ms: number,
     label: string
 ): Promise<T> {
     const controller = new AbortController();
-    return Promise.race([
-        factory(controller.signal),
-        new Promise<T>((_, reject) =>
-            setTimeout(() => {
-                controller.abort();
-                reject(new Error(`Timeout: ${label} exceeded ${ms}ms (provider aborted)`));
-            }, ms)
-        ),
-    ]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            factory(controller.signal),
+            new Promise<T>((_, reject) => {
+                timer = setTimeout(() => {
+                    controller.abort();
+                    reject(new Error(`Timeout: ${label} exceeded ${ms}ms (provider aborted)`));
+                }, ms);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 async function generateAndReviewComponent(args: {

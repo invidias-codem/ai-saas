@@ -16,6 +16,7 @@
 // No Supabase calls are scattered through the task — the task imports this store.
 
 import { supabaseAdmin } from '@/lib/supabaseClient';
+import { hasBuildArtifacts } from './buildArtifacts';
 
 export type BuildStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type BuildPhase = 'queued' | 'planning' | 'generating' | 'verifying' | 'completed';
@@ -48,7 +49,7 @@ export interface BuildRow {
   completed_at?: string | null;
   created_at?: string;
   updated_at?: string;
-  /** Populated by completeBuild; null while running / failed / cancelled. */
+  /** Checkpoints while running, frozen when the build reaches a terminal state. */
   plan_json?: unknown | null;
   files_json?: unknown | null;
 }
@@ -147,24 +148,40 @@ export async function updateBuildPhase(buildId: string, phase: BuildPhase, progr
   if (error) throw new Error(`[buildStore] updateBuildPhase failed: ${error.message}`);
 }
 
-/** completeBuild — terminal + idempotent. No-op if already terminal.
- * Optionally persists the artifacts (plan + files) atomically with the
- * status transition; a retry preserves the first write. */
-export async function completeBuild(
+/** Persist observable progress and artifacts together; late writes cannot change a terminal build. */
+export async function checkpointBuild(
   buildId: string,
-  artifacts?: { plan?: unknown; files?: unknown }
+  checkpoint: { phase: BuildPhase; progress: number; plan?: unknown; files?: unknown },
 ): Promise<void> {
   if (!supabaseAdmin) throw new Error('[buildStore] supabaseAdmin not configured');
+  const update: Record<string, unknown> = { phase: checkpoint.phase, progress: checkpoint.progress };
+  if (checkpoint.plan !== undefined) update.plan_json = checkpoint.plan;
+  if (checkpoint.files !== undefined) update.files_json = checkpoint.files;
+  const { error } = await supabaseAdmin
+    .from('code_builder_builds')
+    .update(update)
+    .eq('build_id', buildId)
+    .not('status', 'in', '(completed,failed,cancelled)');
+  if (error) throw new Error(`[buildStore] checkpointBuild failed: ${error.message}`);
+}
+
+/** Terminal success requires saved output. Valid retries preserve the first terminal write. */
+export async function completeBuild(
+  buildId: string,
+  artifacts: { plan: unknown; files: unknown }
+): Promise<void> {
+  if (!supabaseAdmin) throw new Error('[buildStore] supabaseAdmin not configured');
+  if (!hasBuildArtifacts(artifacts?.plan, artifacts?.files)) {
+    throw new Error('[buildStore] Cannot complete build without a plan and generated files');
+  }
   const update: Record<string, unknown> = {
     status: 'completed',
     phase: 'completed',
     progress: 100,
     completed_at: new Date().toISOString(),
   };
-  if (artifacts) {
-    if (artifacts.plan !== undefined) update.plan_json = artifacts.plan;
-    if (artifacts.files !== undefined) update.files_json = artifacts.files;
-  }
+  update.plan_json = artifacts.plan;
+  update.files_json = artifacts.files;
   const { error } = await supabaseAdmin
     .from('code_builder_builds')
     .update(update)

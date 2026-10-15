@@ -12,30 +12,17 @@
 // those statuses — it persists the terminal state FIRST (idempotent), then
 // emits, so the client's authoritative poll observes a persisted terminal row.
 //
-// ponytail: this route holds an open SSE connection and is subject to Vercel's
-// 300s function cap — the client's EventSource auto-reconnects and the stream
-// replays the run's current state from history, so the cap costs one reconnect
-// cycle, not correctness. Upgrade path: Trigger Realtime browser tokens if a
-// future SDK ships a browser entry point.
+// Rotate each SSE connection before Vercel's 300s cap. EventSource reconnects
+// and replays current run state; connection expiry never terminates the build.
 
 import { requireAuth, handleAuthError } from '@/lib/security/apiAuth';
 import { getBuild, failBuild, cancelBuild } from '@/lib/code-builder/buildStore';
 import { env } from '@/lib/env';
+import { isTerminalRunStatus, isSuccessfulRunStatus } from '@/lib/code-builder/runStatus';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
-
-/** Trigger run statuses the relay treats as terminal. */
-const TERMINAL_RUN_STATUSES = new Set([
-  'COMPLETED_SUCCESSFULLY',
-  'COMPLETED_WITH_ERRORS',
-  'CANCELED',
-  'CRASHED',
-  'SYSTEM_FAILURE',
-  'EXPIRED',
-  'TIMED_OUT',
-]);
 
 /**
  * Persist a platform-side terminal status into the durable row (idempotent —
@@ -54,6 +41,7 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ buildId: string }> }
 ) {
+  const streamDeadline = Date.now() + 240_000;
   try {
     if (!env.TRIGGER_SECRET_KEY) {
       return new Response('event: unavailable\n\ndata: {}\n\n', {
@@ -81,12 +69,14 @@ export async function GET(
     const { runs } = await import('@trigger.dev/sdk');
 
     const encoder = new TextEncoder();
+    let cleanupStream: (() => void) | undefined;
     const stream = new ReadableStream({
       async start(controller) {
         let closed = false;
         type RunSub = { unsubscribe: () => void; getReader: () => ReadableStreamDefaultReader<unknown> };
         let reader: ReadableStreamDefaultReader<unknown> | null = null;
         let sub: RunSub | null = null;
+        let rotationTimer: ReturnType<typeof setTimeout> | undefined;
         const send = (event: string, data: unknown) => {
           if (closed) return;
           try {
@@ -103,35 +93,34 @@ export async function GET(
         const cleanup = () => {
           if (closed) return;
           closed = true;
-          try { reader?.cancel(); } catch { /* already cancelled */ }
-          sub?.unsubscribe();
+          clearTimeout(rotationTimer);
+          req.signal.removeEventListener('abort', cleanup);
+          try { void reader?.cancel().catch(() => {}); } catch { /* already cancelled */ }
+          try { sub?.unsubscribe(); } catch { /* upstream already closed */ }
           try { controller.close(); } catch { /* already closed */ }
         };
+        cleanupStream = cleanup;
 
         // qodo #5: create the subscription, then check already-aborted —
         // covers disconnects during setup; later aborts hit the listener.
-        sub = runs.subscribeToRun(row.trigger_run_id!);
-        const runReader = sub.getReader();
-        reader = runReader;
-        if (req.signal.aborted) {
-          cleanup();
-          return;
-        }
-        req.signal.addEventListener('abort', cleanup);
-
-        send('open', { buildId });
-
         try {
+          sub = runs.subscribeToRun(row.trigger_run_id!);
+          const runReader = sub.getReader();
+          reader = runReader;
+          if (req.signal.aborted) return;
+          req.signal.addEventListener('abort', cleanup);
+          rotationTimer = setTimeout(cleanup, Math.max(0, streamDeadline - Date.now()));
+          send('open', { buildId });
           while (true) {
             const run = await runReader.read();
             if (run.done) break;
             const status = String((run.value as { status?: string })?.status ?? '');
-            if (TERMINAL_RUN_STATUSES.has(status)) {
+            if (isTerminalRunStatus(status)) {
               // Persist platform-side terminals before emitting, so the
               // client's authoritative poll sees a terminal row (qodo #1).
               // Success statuses are the worker's to own; failures/cancel
               // here are exactly the ones that bypass the onFailure hook.
-              if (status !== 'COMPLETED_SUCCESSFULLY' && status !== 'COMPLETED_WITH_ERRORS') {
+              if (!isSuccessfulRunStatus(status)) {
                 try { await reconcileTerminal(buildId, status); } catch { /* poll fallback */ }
               }
               send('run-status', { status, updatedAt: (run.value as { updatedAt?: string })?.updatedAt });
@@ -145,6 +134,9 @@ export async function GET(
         } finally {
           cleanup();
         }
+      },
+      cancel() {
+        cleanupStream?.();
       },
     });
 

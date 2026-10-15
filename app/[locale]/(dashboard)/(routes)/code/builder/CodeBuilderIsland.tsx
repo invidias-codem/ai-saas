@@ -20,19 +20,23 @@ import { CodePanel } from '../components/CodePanel';
 import { ContextFlowVisualizer } from '../components/ContextFlowVisualizer';
 import type { ProjectPlan, GeneratedFile, ContextFlowEntry } from '@/lib/ucol/types';
 import { AlertCircle } from 'lucide-react';
+import { observeBuildProgress, type ProgressObservation } from '@/lib/code-builder/buildProgress';
+import { isTerminalRunStatus } from '@/lib/code-builder/runStatus';
 
 type BuildPhase = 'idle' | 'planning' | 'coding' | 'done';
 
 interface DurableBuildStatus {
   buildId: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
-  phase: 'queued' | 'planning' | 'generating' | 'verifying' | 'complete';
+  phase: 'queued' | 'planning' | 'generating' | 'verifying' | 'completed';
   progress: number;
   error: { code: string | null; message: string } | null;
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
-  /** Owner-authorized artifact snapshot (B2); only present when status='completed'. */
+  updatedAt?: string | null;
+  artifactsMissing?: boolean;
+  /** Owner-authorized artifact checkpoints while the build is running. */
   plan?: ProjectPlan | null;
   files?: GeneratedFile[] | null;
 }
@@ -42,23 +46,6 @@ const DURABLE_EXECUTION = process.env.NEXT_PUBLIC_CODE_BUILDER_DURABLE_EXECUTION
 
 // localStorage key for active durable build recovery
 const ACTIVE_BUILD_KEY = 'lattice:code-builder:active-build-id';
-
-// Trigger run statuses that mean the run is done (mapped from the relay's
-// product-boundary status event). The relay has already reconciled these
-// into the durable row before emitting, so the poll observes terminal state.
-const TERMINAL_RUN_STATUSES = new Set([
-  'COMPLETED_SUCCESSFULLY',
-  'COMPLETED_WITH_ERRORS',
-  'CANCELED',
-  'CRASHED',
-  'SYSTEM_FAILURE',
-  'EXPIRED',
-  'TIMED_OUT',
-]);
-
-function isTerminalRunStatus(status: unknown): boolean {
-  return typeof status === 'string' && TERMINAL_RUN_STATUSES.has(status);
-}
 
 function getActiveBuildId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -110,6 +97,7 @@ export default function CodeBuilderIsland() {
     // the retained terminal grace timer that must never outlive it.
     const activeBuildRef = useRef<string | null>(null);
     const graceTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const progressObservationRef = useRef<ProgressObservation | null>(null);
 
     const stopPolling = useCallback(() => {
         if (pollIntervalRef.current) {
@@ -136,9 +124,13 @@ export default function CodeBuilderIsland() {
 
     const pollDurableStatus = useCallback(async (buildId: string) => {
         try {
-            const res = await fetch(`/api/code-builder/build/${buildId}`, {
+            const version = progressObservationRef.current?.updatedAt;
+            const query = version ? `?artifactVersion=${encodeURIComponent(version)}` : '';
+            const res = await fetch(`/api/code-builder/build/${buildId}${query}`, {
                 headers: { 'Accept': 'application/json' },
             });
+
+            if (activeBuildRef.current !== buildId) return;
 
             if (!res.ok) {
                 if (res.status === 404) {
@@ -166,20 +158,28 @@ export default function CodeBuilderIsland() {
                     setElapsedMs(pollNow - t);
                 }
             }
-            setLastProgressAt(pollNow);
+            const observation = observeBuildProgress(progressObservationRef.current, data, pollNow);
+            progressObservationRef.current = observation;
+            setLastProgressAt(observation.lastChangedAt);
+
+            // Intermediate checkpoints survive reload and remain visible even
+            // if a later component fails. Missing keys mean an unchanged version.
+            if (data.plan) setPlan(data.plan);
+            if (data.files) setFiles(data.files);
 
             setPhase(mapDurablePhase(data.status, data.phase));
 
             // Handle terminal states
             if (data.status === 'completed') {
                 stopPolling();
-                setActiveBuildId(null);
-                // B2: hydrate plan + files from the durable row so the UI can
-                // render PlanPanel/CodePanel after a page reload or refresh.
-                // null-safe: artifact write is bundled with status transition
-                // but a failed/cancelled build never has them.
-                if (data.plan) setPlan(data.plan);
-                if (data.files) setFiles(data.files);
+                if (data.artifactsMissing) {
+                    // Preserve the build reference for recovery after the
+                    // worker result is restored; never claim empty success.
+                    setError('Build finished, but its output was not saved. Your build reference has been retained for recovery.');
+                } else {
+                    setActiveBuildId(null);
+                    setError(null);
+                }
             } else if (data.status === 'failed' || data.status === 'cancelled') {
                 stopPolling();
                 setActiveBuildId(null);
@@ -187,6 +187,7 @@ export default function CodeBuilderIsland() {
                 setPhase('done');
             }
         } catch (err) {
+            if (activeBuildRef.current !== buildId) return;
             // Transient polling error — do not mark build failed. Surface a
             // one-line banner; keep polling (the durable row is the source
             // of truth, not the network path).
@@ -201,7 +202,7 @@ export default function CodeBuilderIsland() {
     // terminal statuses into the durable row before emitting. Statuses map
     // through the existing mapDurablePhase machine; per-phase progress stays
     // on polling (Supabase is the durable state). EventSource auto-reconnects
-    // past Vercel's 300s relay cap — each reconnect replays current run state.
+    // after each bounded stream — reconnects replay current run state.
     // Any failure is non-fatal by design — polling is the fallback backbone.
     const subscribeRealtime = useCallback(async (buildId: string) => {
         try {
@@ -252,6 +253,7 @@ export default function CodeBuilderIsland() {
         setBuildStartedAt(null);
         setRelayConnected(null);
         setNowTick(null);
+        progressObservationRef.current = null;
         stopPolling();
 
         try {
@@ -279,6 +281,7 @@ export default function CodeBuilderIsland() {
 
                 // Initial poll
                 await pollDurableStatus(data.buildId);
+                if (activeBuildRef.current !== data.buildId) return;
 
                 // Start polling interval
                 pollIntervalRef.current = setInterval(() => {
@@ -374,6 +377,7 @@ export default function CodeBuilderIsland() {
         setBuildStartedAt(null);
         setRelayConnected(null);
         setNowTick(null);
+        progressObservationRef.current = null;
     };
 
     // Recover active build on mount (browser close/reopen).
@@ -416,11 +420,12 @@ export default function CodeBuilderIsland() {
                     {phase !== 'idle' && (
                         <div className={`text-[10px] font-mono px-2.5 py-1 rounded-full border ${phase === 'planning' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
                                 phase === 'coding' ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' :
+                                    error || files.length === 0 ? 'bg-red-500/10 text-red-400 border-red-500/30' :
                                     'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                             }`}>
                             {phase === 'planning' ? '🧠 Planning...' :
                                 phase === 'coding' ? '⚙️ Generating...' :
-                                    `✓ ${files.length} files`}
+                                    error || files.length === 0 ? 'Build needs attention' : `✓ ${files.length} files`}
                         </div>
                     )}
 
@@ -466,12 +471,12 @@ export default function CodeBuilderIsland() {
                         </span>
                     )}
                     {relayConnected === true && (
-                        <span className="text-emerald-400/80">Live · connected</span>
+                        <span className="text-zinc-400">Updates connected</span>
                     )}
                     {stale && (
                         <span className="text-amber-300">
-                            Updates stalled &gt; 90s — the build is still running;
-                            you can refresh or wait. We&apos;re not cancelling it.
+                            No new build progress for over 90s. Checking status;
+                            saved output will appear as it becomes available.
                         </span>
                     )}
                 </div>
