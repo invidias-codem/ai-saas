@@ -22,7 +22,7 @@ import {
   recordCircuitSuccess,
 } from './circuitBreaker';
 import { logger } from '@/lib/logger';
-import { abortableStream, withAbort } from '@/lib/runtime/abort';
+import { abortableStream, withAbort, createDeadline } from '@/lib/runtime/abort';
 
 export interface FallbackStreamResult extends StreamResult {
   /** The model that ultimately served the stream. */
@@ -166,7 +166,7 @@ function auditFallbackChain(chain: FallbackHop[]): void {
  * owns the only upstream reader — using the original after gating would
  * double-read and lose bytes).
  *
- * ponytail: the pump is eager and ignores the output queue's backpressure, so
+ * The pump is eager and ignores the output queue's backpressure, so
  * a slow downstream buffers upstream chunks in memory. Fine here: the router
  * returns immediately after first-chunk and the bridge tee starts reading;
  * revisit only if a provider front-loads megabytes before the client reads.
@@ -183,6 +183,7 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let pending = '';
+  let pendingChunks: Uint8Array[] = [];
 
   const settleResolve = () => {
     if (settled) return;
@@ -202,11 +203,12 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
           const { done, value } = await reader.read();
           if (cancelled) return;
           if (done) {
+            pending += decoder.decode();
             if (pending && !pending.includes(PROVIDER_ERROR_EVENT_PREFIX)) {
-              // Genuine sub-256B output that closed before crossing the
-              // resolve threshold — it's real model output, forward it.
+              // Flush genuine output if EOF arrives during prefix detection.
               settleResolve();
-              controller.enqueue(new TextEncoder().encode(pending));
+              for (const chunk of pendingChunks) controller.enqueue(chunk);
+              pendingChunks = [];
             } else {
               settleReject(new Error('stream closed before first chunk'));
             }
@@ -216,6 +218,7 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
           if (!settled) {
             // Scan for a pre-output provider-error marker: partial-safe —
             // buffer across chunk boundaries until we can rule it out.
+            pendingChunks.push(value);
             pending += decoder.decode(value, { stream: true });
             if (pending.includes(PROVIDER_ERROR_EVENT_PREFIX)) {
               settleReject(new Error(`provider failed before first token${pending.slice(0, 200)}`));
@@ -226,13 +229,13 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
               void reader.cancel().catch(() => {});
               return;
             }
-            // ponytail: a marker prefix could theoretically split across
-            // chunks; buffer at most ~256B before deciding — anything that
-            // long without a marker is genuine output.
-            if (pending.length > 256) {
+            // Buffer only a possible split marker prefix. Even one genuine
+            // character must release the gate while the provider stays open.
+            if (pending && !PROVIDER_ERROR_EVENT_PREFIX.startsWith(pending.trimStart())) {
               settleResolve();
-              // Re-emit buffered text downstream as one blob.
-              controller.enqueue(new TextEncoder().encode(pending));
+              // Preserve original bytes, including incomplete UTF-8 sequences.
+              for (const chunk of pendingChunks) controller.enqueue(chunk);
+              pendingChunks = [];
               pending = '';
             }
             continue;
@@ -264,14 +267,36 @@ export function gateStreamOnFirstChunk(stream: ReadableStream<Uint8Array>): {
  *
  * Throws only when the ENTIRE chain is exhausted.
  */
-export async function executeWithFallback(params: {
+export interface FallbackParams {
   primary: { providerId: string; modelId: string; provider: LLMProvider };
   messages: ChatMessage[];
   systemInstruction?: string;
   options?: { temperature?: number; maxTokens?: number };
   enableMiniMax?: boolean;
   signal?: AbortSignal;
-}): Promise<FallbackStreamResult> {
+  requestId?: string;
+  /** Includes connection and first model output, across metadata-only frames. */
+  firstTokenTimeoutMs?: number;
+  /** Shared across every hop and response-body consumption. */
+  totalTimeoutMs?: number;
+}
+
+export async function executeWithFallback(params: FallbackParams): Promise<FallbackStreamResult> {
+  const deadline = createDeadline(params.totalTimeoutMs ?? 240_000, params.signal);
+  try {
+    const result = await executeFallbackChain({ ...params, signal: deadline.signal });
+    return { ...result, stream: abortableStream(result.stream, deadline.signal, deadline.dispose, () =>
+      params.signal?.aborted ? undefined : new TextEncoder().encode(encodeProviderErrorEvent({
+        provider: result.systemProvider, model: result.actualModelId, reason: 'request_deadline',
+      }))
+    ) };
+  } catch (error) {
+    deadline.dispose();
+    throw error;
+  }
+}
+
+async function executeFallbackChain(params: FallbackParams): Promise<FallbackStreamResult> {
   const { primary, messages, systemInstruction, options, enableMiniMax, signal } = params;
   const chain = buildFallbackChain(primary, { enableMiniMax });
 
@@ -283,11 +308,14 @@ export async function executeWithFallback(params: {
     signal?.throwIfAborted();
     const hop = chain[i];
 
-    if (!(await checkCircuit(hop.key))) {
+    if (!(await withAbort(checkCircuit(hop.key), signal))) {
       perHopErrors.push(`[${hop.providerId}] skipped (circuit open)`);
       continue;
     }
 
+    const attempt = createDeadline(params.firstTokenTimeoutMs ?? 45_000, signal, 'first_token_timeout');
+    let candidate: ReadableStream<Uint8Array> | undefined;
+    logger.info('[FallbackRouter] hop started', { requestId: params.requestId, provider: hop.providerId, model: hop.modelId, hop: i });
     try {
       // Canonical-state translation: MiniMax/Gemini use text-only wire roles; the
       // canonical codec normalizes provider-specific roles before re-mapping.
@@ -298,26 +326,32 @@ export async function executeWithFallback(params: {
         model: hop.modelId,
         temperature: options?.temperature,
         maxTokens: options?.maxTokens,
-        signal,
+        signal: attempt.signal,
       });
       // Providers without signal support may return after the caller has gone.
       void pending.then(result => {
-        if (signal?.aborted) void result.stream.cancel(signal.reason).catch(() => {});
+        if (attempt.signal.aborted) void result.stream.cancel(attempt.signal.reason).catch(() => {});
       }, () => {});
-      const result = await withAbort(pending, signal);
+      const result = await withAbort(pending, attempt.signal);
 
       // Stream-aware success: a returned ReadableStream is only a HANDSHAKE.
       // Wait for the first chunk before recording circuit success — a stream
       // that dies before producing a byte is a hop failure and the next
       // provider is tried transparently. A death AFTER the first byte is the
       // provider's to own (marker + clean close reaches the client).
-      const source = signal ? abortableStream(result.stream, signal) : result.stream;
+      const source = abortableStream(result.stream, attempt.signal, attempt.dispose);
       const { stream: gatedStream, firstChunk } = gateStreamOnFirstChunk(source);
+      candidate = gatedStream;
       try {
-        await firstChunk;
+        await withAbort(firstChunk, attempt.signal);
+        attempt.clearTimer();
+        logger.info('[FallbackRouter] first token accepted', { requestId: params.requestId, provider: hop.providerId, model: hop.modelId, hop: i });
       } catch (gateErr: any) {
+        attempt.abort(gateErr);
+        attempt.dispose();
+        void gatedStream.cancel(gateErr).catch(() => {});
         signal?.throwIfAborted();
-        await recordCircuitFailure(hop.key);
+        await withAbort(recordCircuitFailure(hop.key), signal);
         const gateMsg = `[${hop.providerId}] stream died before first token: ${gateErr?.message || String(gateErr)}`;
         perHopErrors.push(gateMsg);
         logger.warn(`[FallbackRouter] ${gateMsg}`);
@@ -326,7 +360,7 @@ export async function executeWithFallback(params: {
         continue;
       }
 
-      await recordCircuitSuccess(hop.key);
+      await withAbort(recordCircuitSuccess(hop.key), signal);
 
       if (switched) {
         // Emit the switch sentinel BEFORE the fallback stream so the client toasts,
@@ -393,15 +427,18 @@ export async function executeWithFallback(params: {
         switched: false,
       };
     } catch (err: any) {
+      attempt.abort(err);
+      attempt.dispose();
+      if (candidate) void candidate.cancel(err).catch(() => {});
       // Caller cancellation is neither a provider failure nor permission to retry.
       signal?.throwIfAborted();
-      await recordCircuitFailure(hop.key);
+      await withAbort(recordCircuitFailure(hop.key), signal);
       const errMsg = `[${hop.providerId}] ${err?.message || String(err)}`;
       perHopErrors.push(errMsg);
       logger.warn(`[FallbackRouter] hop failed: ${errMsg}`);
 
       // Only trip to the next hop for retryable errors; rethrow irrecoverable 4xx.
-      if (!isRetryableStatus(err)) {
+      if (!isRetryableStatus(err) && err?.message !== 'first_token_timeout') {
         throw err;
       }
 

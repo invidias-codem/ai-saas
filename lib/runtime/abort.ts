@@ -18,6 +18,7 @@ export function withAbort<T>(operation: PromiseLike<T>, signal?: AbortSignal): P
 /** Keep cancellation attached through the response body, not just its headers. */
 export function abortableStream<T>(
   source: ReadableStream<T>, signal: AbortSignal, onFinish: () => void = () => {},
+  terminalChunk?: () => T | undefined,
 ): ReadableStream<T> {
   const reader = source.getReader();
   let finished = false;
@@ -36,7 +37,9 @@ export function abortableStream<T>(
       onAbort = () => {
         if (finished) return;
         finish();
-        controller.error(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+        const chunk = terminalChunk?.();
+        if (chunk !== undefined) { controller.enqueue(chunk); controller.close(); }
+        else controller.error(signal.reason ?? new DOMException('Aborted', 'AbortError'));
         cancel(signal.reason);
       };
       signal.addEventListener('abort', onAbort, { once: true });
@@ -66,4 +69,23 @@ export function abortableStream<T>(
       cancel(reason);
     },
   });
+}
+
+/** A disposable wall-clock deadline; keep it alive until the response body ends. */
+export function createDeadline(timeoutMs: number, parent?: AbortSignal, reason = 'request_deadline') {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid deadline duration');
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort(parent?.reason);
+  const timer = setTimeout(() => controller.abort(new Error(reason)), timeoutMs);
+  parent?.addEventListener('abort', forwardAbort, { once: true });
+  if (parent?.aborted) forwardAbort();
+  return {
+    signal: controller.signal,
+    abort: (cause?: unknown) => controller.abort(cause),
+    clearTimer: () => clearTimeout(timer),
+    dispose: () => {
+      clearTimeout(timer);
+      parent?.removeEventListener('abort', forwardAbort);
+    },
+  };
 }

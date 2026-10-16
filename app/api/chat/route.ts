@@ -5,6 +5,9 @@
 // credit/entitlement checks, and graceful degradation.
 // Everything else (execution, post-gen pipeline, response) is delegated.
 import { randomUUID } from 'crypto';
+import { withRequestDeadline } from '@/lib/runtime/requestDeadline';
+import { withAbort, createDeadline } from '@/lib/runtime/abort';
+import { encodeProviderErrorEvent } from '@/lib/media/envelope';
 import { NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { generateConversationReply, ConversationRequestSchema } from '@/lib/llm/conversationEngine';
@@ -41,17 +44,42 @@ async function loadWorkspacePersona(workspaceId: string): Promise<string | null>
   }
 }
 
+export const maxDuration = 300;
+
 export async function POST(req: Request) {
+    const requestId = randomUUID();
     try {
-        const user = await requireAuth();
-        const clerkUser = await currentUser();
+        const response = await withRequestDeadline(signal => handleChat(req, signal, requestId), {
+            signal: req.signal,
+            timeoutMs: 270_000,
+            streamError: () => new TextEncoder().encode(encodeProviderErrorEvent({
+                provider: 'chat', reason: 'request_deadline',
+            })),
+        });
+        response.headers.set('X-Lattice-Request-Id', requestId);
+        return response;
+    } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        logger.warn('[ChatRoute] Request stopped', { requestId, reason });
+        if (req.signal.aborted) return new Response(null, { status: 499 });
+        const timedOut = reason === 'request_deadline';
+        return NextResponse.json({ error: timedOut ? 'Request timed out' : 'Internal Server Error', requestId }, {
+            status: timedOut ? 504 : 500,
+        });
+    }
+}
+
+async function handleChat(req: Request, signal: AbortSignal, requestId: string) {
+    try {
+        const user = await withAbort(requireAuth(), signal);
+        const clerkUser = await withAbort(currentUser(), signal);
         const ip = getClientIP(req);
 
         if (!clerkUser) {
             return NextResponse.json({ error: 'User profile not found' }, { status: 401 });
         }
 
-        const rateLimit = await limitApiEndpoint(user.userId, ip, 'ai');
+        const rateLimit = await withAbort(limitApiEndpoint(user.userId, ip, 'ai'), signal);
         if (!rateLimit.success) {
             return NextResponse.json(
                 { error: 'Too many requests', message: 'AI generation rate limit exceeded. Please wait before trying again.' },
@@ -67,7 +95,7 @@ export async function POST(req: Request) {
             );
         }
 
-        const body = await req.json();
+        const body = await withAbort(req.json(), signal);
         validateRequestSize(body, 10 * 1024 * 1024); // 10MB max
 
         const { prompt, conversationId, documentIds: rawDocumentIds, messages } = body as {
@@ -116,13 +144,13 @@ export async function POST(req: Request) {
             }
         }
 
-        const resolved = await resolveRuntimeContext({ userId: user.userId, surface: 'web', conversationId, strictValidation: false });
+        const resolved = await withAbort(resolveRuntimeContext({ userId: user.userId, surface: 'web', conversationId, strictValidation: false }), signal);
         let effectiveMode = resolved.mode;
 
         // --- CREDIT ENFORCEMENT & GRACEFUL DEGRADATION ---
         // Unified ledger: balance comes from supporter_credits (Supabase),
         // not Clerk metadata — same ledger the payment webhooks credit.
-        let computeCredits = await getUserCredits(user.userId);
+        let computeCredits = await withAbort(getUserCredits(user.userId), signal);
 
         let finalCost = calculateInteractionCost({
             hasAttachments: Boolean(fileData),
@@ -144,7 +172,7 @@ export async function POST(req: Request) {
         // --------------------------------------------------
 
         const requestPacket: UcolRequestPacket = {
-            requestId: randomUUID(),
+            requestId,
             userId: user.userId,
             workspaceId: resolved.ucolContext.workspaceId,
             conversationId,
@@ -186,9 +214,10 @@ export async function POST(req: Request) {
         if (fileData && (fileData.mimeType === 'application/pdf' || fileData.name?.toLowerCase().endsWith('.pdf'))) {
             try {
                 const { extractPdfText } = await import('@/lib/fileProcessing/pdfExtractor');
-                pdfExtractedText = await extractPdfText(fileData);
+                pdfExtractedText = await withAbort(extractPdfText(fileData), signal);
                 console.error(`[ChatRoute] PDF extracted: ${pdfExtractedText.length} chars from ${fileData.name || 'document'}`);
             } catch (err) {
+                signal.throwIfAborted();
                 console.error('[ChatRoute] PDF extraction failed:', err);
             }
         }
@@ -240,7 +269,7 @@ export async function POST(req: Request) {
         if (pdfExtractedText && pdfExtractedText.trim().length > 0 && resolved.ucolContext.workspaceId && supabaseAdmin) {
             const { storePdfChunks } = await import('@/lib/fileProcessing/chunkEmbedder');
             // Get or create document ID for this file
-            const { data: docRecord, error: docError } = await supabaseAdmin
+            const { data: docRecord, error: docError } = await withAbort(supabaseAdmin
                 .from('workspace_documents')
                 .upsert({
                     workspace_id: resolved.ucolContext.workspaceId,
@@ -251,7 +280,7 @@ export async function POST(req: Request) {
                     embedding_tier: 'STANDARD_768',
                 }, { onConflict: 'workspace_id, filename' })
                 .select('id')
-                .single();
+                .single(), signal);
 
             if (!docError && docRecord) {
                 // Fire-and-forget — don't await, don't block Turn 1 response
@@ -267,7 +296,8 @@ export async function POST(req: Request) {
             }
         }
 
-        const result = await runRuntimeBridge({
+        signal.throwIfAborted();
+        const result = await withAbort(runRuntimeBridge({
             surface: 'chat',
             session: {
                 user,
@@ -300,10 +330,11 @@ export async function POST(req: Request) {
                 remaining: Math.max(0, computeCredits),
             }),
             execute: async ({ resolved: ctx, rawInput, messages: msgs, fileData: fData }) => {
+                signal.throwIfAborted();
                 // Build persona session if workspace has a custom persona
                 let personaSession = undefined;
                 const workspacePersona = resolved.ucolContext.workspaceId
-                    ? await loadWorkspacePersona(resolved.ucolContext.workspaceId)
+                    ? await withAbort(loadWorkspacePersona(resolved.ucolContext.workspaceId), signal)
                     : null;
                 if (workspacePersona) {
                     const { createPersonaSession } = await import("@/lib/consultant/personaSession");
@@ -318,6 +349,8 @@ export async function POST(req: Request) {
                         conversationId,
                     },
                     {
+                        signal,
+                        requestId,
                         mode: effectiveMode,
                         memoryPlan: routingDecision.memoryPlan,
                         personaSession,
@@ -334,10 +367,14 @@ export async function POST(req: Request) {
                     routingDecision,
                 };
             },
-        });
+        }), signal);
 
         // Track free-tier interaction and signal nudge at threshold
-        const tracking = await trackFreeInteraction(user.userId);
+        const trackingDeadline = createDeadline(1_000, signal, 'tracking_timeout');
+        const tracking = await withAbort(trackFreeInteraction(user.userId), trackingDeadline.signal)
+            .catch(() => ({ shouldNudge: false }))
+            .finally(trackingDeadline.dispose);
+        signal.throwIfAborted();
         if (tracking.shouldNudge) {
             result.headers.set("x-trigger-nudge", "true");
             logEvent({ eventType: 'plg_nudge_shown', userId: user.userId });
@@ -351,6 +388,7 @@ export async function POST(req: Request) {
         return result;
 
     } catch (error: any) {
+        signal.throwIfAborted();
         const handled = handleAuthError(error);
         if (handled) return handled;
 

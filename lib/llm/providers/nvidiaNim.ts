@@ -2,6 +2,7 @@ import { ChatMessage, CompletionOptions, LLMProvider, StreamResult } from "../ty
 import { foldToolCallDeltas, type NimToolCall } from "../toolCallTypes";
 import { logger } from "@/lib/logger";
 import { nvidiaNimConfig } from "@/lib/env";
+import { withAbort } from "@/lib/runtime/abort";
 import { encodeProviderErrorEvent } from "@/lib/media/envelope";
 
 /**
@@ -200,6 +201,7 @@ export class NvidiaNimProvider implements LLMProvider {
     const budgetController = new AbortController();
     const connectTimer = setTimeout(() => connectController.abort(new Error('connect_timeout')), CONNECT_TIMEOUT_MS);
     const budgetTimer = setTimeout(() => budgetController.abort(new Error('total_budget')), totalBudgetMs);
+    const streamSignal = AbortSignal.any([connectController.signal, budgetController.signal, ...(options.signal ? [options.signal] : [])]);
     try {
       response = await fetch(`${this.baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
@@ -208,7 +210,7 @@ export class NvidiaNimProvider implements LLMProvider {
           Authorization: `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.any([connectController.signal, budgetController.signal, ...(options.signal ? [options.signal] : [])]),
+        signal: streamSignal,
       });
       clearTimeout(connectTimer); // headers arrived — body runs on budget only
     } catch (err: any) {
@@ -235,18 +237,23 @@ export class NvidiaNimProvider implements LLMProvider {
     });
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => '');
+      let errText = '';
+      try {
+        errText = await withAbort(response.text(), streamSignal);
+      } finally {
+        clearTimeout(budgetTimer);
+        budgetController.abort(new Error('http_error'));
+      }
       const trimmed = errText.slice(0, 500);
       const isDegraded = response.status === 400 && trimmed.includes('DEGRADED');
-      logger.error(`[NvidiaNimProvider] HTTP ${response.status}${isDegraded ? ' (DEGRADED)' : ''}: ${trimmed}`, {
-        model: modelId,
-        upstreamLatencyMs,
-        isDegraded,
-      });
-      throw new Error(`NVIDIA NIM error (${response.status})${isDegraded ? ' [DEGRADED]' : ''}: ${trimmed}`);
+      const error = new Error(`NVIDIA NIM error (${response.status})${isDegraded ? ' [DEGRADED]' : ''}: ${trimmed}`);
+      Object.assign(error, { status: response.status });
+      throw error;
     }
 
     if (!response.body) {
+      clearTimeout(budgetTimer);
+      budgetController.abort(new Error('empty_body'));
       throw new Error('[NvidiaNimProvider] Empty response body.');
     }
 
@@ -255,128 +262,89 @@ export class NvidiaNimProvider implements LLMProvider {
     const encoder = new TextEncoder();
     let buffer = '';
     let firstChunk = true;
+    let terminal = false;
     const toolCalls: NimToolCall[] = [];
-    // Idle-between-chunks watchdog, reset on every upstream chunk (NOT on
-    // client pulls — downstream backpressure must never fire it).
-    let idleTimer: ReturnType<typeof setTimeout> | null = null;
-    let idleFired = false;
-    const armIdle = () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        idleFired = true;
-        budgetController.abort(new Error('idle_timeout'));
-        reader.cancel().catch(() => {});
-      }, IDLE_TIMEOUT_MS);
-    };
-    const clearIdle = () => {
-      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-    };
-    const clearBudget = () => {
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    const clearIdle = () => clearTimeout(idleTimer);
+    const finish = (reason?: unknown) => {
+      if (terminal) return;
+      terminal = true;
+      clearIdle();
       clearTimeout(budgetTimer);
-      clearIdle();
+      logger.info('[NvidiaNimProvider] stream finished', {
+        model: modelId, elapsedMs: Date.now() - started, producedOutput: !firstChunk,
+        reason: reason instanceof Error ? reason.message : reason === undefined ? 'complete' : String(reason),
+      });
+      budgetController.abort(reason ?? new Error('stream_complete'));
+      // Never await cancellation: a broken upstream must not block fallback.
+      void reader.cancel(reason).catch(() => {}).finally(() => reader.releaseLock());
     };
-
-    // Never let a mid-stream provider death fault the client HTTP response:
-    // log, emit the structured marker, close cleanly.
-    const failCleanly = (streamController: ReadableStreamDefaultController, reason: string) => {
-      clearIdle();
-      logger.error(`[NvidiaNimProvider] stream ended early: ${reason}`);
-      try {
-        streamController.enqueue(encoder.encode(encodeProviderErrorEvent({ provider: this.id, model: modelId, reason })));
-      } catch { /* client gone */ }
-      try { streamController.close(); } catch { /* already closed */ }
+    const parseLine = (line: string, controller: ReadableStreamDefaultController<Uint8Array>): number => {
+      line = line.trim();
+      if (!line.startsWith('data:')) return 0;
+      const payload = line.slice(5).trim();
+      if (payload === '[DONE]') {
+        finish();
+        controller.close();
+        return 0;
+      }
+      let json;
+      try { json = JSON.parse(payload); } catch { return 0; }
+      if (json.error) throw new Error(`NIM stream error: ${JSON.stringify(json.error).slice(0, 300)}`);
+      const delta = json.choices?.[0]?.delta ?? {};
+      if (firstChunk && (delta.content || delta.reasoning_content || delta.thinking)) {
+        firstChunk = false;
+        logger.info(`[NvidiaNimProvider] TTFT ${Date.now() - started}ms`, {
+          model: modelId, ttft: Date.now() - started, upstreamLatencyMs,
+        });
+      }
+      let emitted = 0;
+      for (const text of [
+        delta.reasoning_content ? `<thinking>${delta.reasoning_content}</thinking>` : '',
+        delta.thinking ? `<thinking>${delta.thinking}</thinking>` : '',
+        delta.content,
+      ]) {
+        if (text) { controller.enqueue(encoder.encode(text)); emitted++; }
+      }
+      if (delta.tool_calls) {
+        const folded = foldToolCallDeltas(toolCalls, delta.tool_calls);
+        toolCalls.splice(0, toolCalls.length, ...folded);
+      }
+      return emitted;
     };
-
     const stream = new ReadableStream<Uint8Array>({
-      async pull(streamController) {
-        armIdle(); // covers the pre-first-chunk gap too (qodo #6: armed before read, cleared after)
+      async pull(controller) {
+        // Metadata, heartbeats and split frames produce no downstream bytes.
+        // Keep reading within this pull until output or a terminal condition.
         try {
-          const { done, value } = await reader.read();
-          clearIdle(); // upstream chunk arrived — idle watchdog satisfied
-          if (done) {
-            if (idleFired) {
-              // Watchdog-cancelled read resolves as done — surface it as a
-              // clean provider interruption, not silence.
-              failCleanly(streamController, `idle_timeout (no chunks for ${IDLE_TIMEOUT_MS}ms)`);
-            } else {
-              clearBudget();
-              streamController.close();
+          let emitted = 0;
+          while (!terminal && emitted === 0) {
+            idleTimer = setTimeout(() => budgetController.abort(new Error('idle_timeout')), IDLE_TIMEOUT_MS);
+            const { done, value } = await withAbort(reader.read(), streamSignal);
+            clearIdle();
+            if (terminal) return;
+            buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+            let idx: number;
+            while (!terminal && (idx = buffer.indexOf('\n')) >= 0) {
+              const line = buffer.slice(0, idx);
+              buffer = buffer.slice(idx + 1);
+              emitted += parseLine(line, controller);
             }
-            return;
-          }
-          buffer += decoder.decode(value, { stream: true });
-
-          let idx: number;
-          while ((idx = buffer.indexOf('\n')) >= 0) {
-            const line = buffer.slice(0, idx).trim();
-            buffer = buffer.slice(idx + 1);
-            if (!line || !line.startsWith('data:')) continue;
-
-            const payload = line.slice(5).trim();
-            if (payload === '[DONE]') {
-              clearBudget();
-              streamController.close();
-              return;
-            }
-
-            try {
-              const json = JSON.parse(payload);
-              const delta = json.choices?.[0]?.delta ?? {};
-
-              // Track time-to-first-token for the streaming path.
-              if (firstChunk && (delta.content || delta.reasoning_content || delta.thinking)) {
-                firstChunk = false;
-                const ttft = Date.now() - started;
-                logger.info(`[NvidiaNimProvider] TTFT ${ttft}ms`, {
-                  model: modelId,
-                  ttft,
-                  upstreamLatencyMs,
-                });
-              }
-
-              // Reasoning / thinking trace — wrap so downstream streaming
-              // treats it consistently with Gemini/Hermes signaling.
-              if (delta.reasoning_content) {
-                streamController.enqueue(encoder.encode(`<thinking>${delta.reasoning_content}</thinking>`));
-              }
-              if (delta.thinking) {
-                streamController.enqueue(encoder.encode(`<thinking>${delta.thinking}</thinking>`));
-              }
-              if (delta.content) {
-                streamController.enqueue(encoder.encode(delta.content));
-              }
-
-              // Accumulate streaming tool_calls deltas by index (concatenate
-              // name/arguments fragments — OpenAI-compatible providers emit
-              // them across many chunks).
-              if (delta.tool_calls) {
-                const folded = foldToolCallDeltas(toolCalls, delta.tool_calls as any);
-                toolCalls.length = 0;
-                toolCalls.push(...folded);
-                // Note: tool_calls are NOT streamed to the client — they are
-                // surfaced on the StreamResult for the agentic loop to consume.
-              }
-            } catch {
-              // Ignore partial / malformed chunks — SSE may split across reads.
+            if (done && !terminal) {
+              if (buffer.trim()) parseLine(buffer, controller);
+              if (!terminal) { finish(); controller.close(); }
             }
           }
-        } catch (err: any) {
-          // Mid-stream provider death must NEVER error() the client-facing
-          // stream — that faults the HTTP response (Vercel 500s). Emit the
-          // structured marker and close cleanly; the post-gen drain records
-          // the failure. (Pre-first-token deaths throw before a stream is
-          // ever returned, so the fallback router still hops.)
-          clearBudget();
-          const reason = idleFired
-            ? `idle_timeout (no chunks for ${IDLE_TIMEOUT_MS}ms)`
-            : String(err?.message || err);
-          failCleanly(streamController, reason);
+        } catch (err: unknown) {
+          if (terminal) return;
+          finish(err);
+          const reason = err instanceof Error ? err.message : String(err);
+          logger.error(`[NvidiaNimProvider] stream ended early: ${reason}`);
+          controller.enqueue(encoder.encode(encodeProviderErrorEvent({ provider: 'nvidia-nim', model: modelId, reason })));
+          controller.close();
         }
       },
-      cancel() {
-        clearBudget();
-        reader.cancel().catch(() => {});
-      },
+      cancel(reason) { finish(reason); },
     });
 
     return {
