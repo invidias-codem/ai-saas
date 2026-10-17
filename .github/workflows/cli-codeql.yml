@@ -20,7 +20,6 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  security-events: write
 jobs:
   analyze:
     name: CodeQL ${{ matrix.language }}
@@ -54,6 +53,9 @@ jobs:
         with:
           category: '/cli-release/${{ matrix.language }}'
           output: codeql-results
+          # Default setup remains the repository's Code Scanning publisher.
+          # This supplemental scan enforces its own SARIF gate and keeps evidence below.
+          upload: never
       - name: Block high and critical security findings
         run: |
           python3 - <<'PY'
@@ -78,3 +80,11 @@ jobs:
           if failures:
               raise SystemExit('High/critical findings: ' + ', '.join(sorted(set(failures))))
           PY
+      - name: Retain supplemental CodeQL evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cli-codeql-${{ matrix.language }}
+          path: codeql-results/*.sarif
+          if-no-files-found: error
+          retention-days: 14
