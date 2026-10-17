@@ -129,7 +129,7 @@ def build(target_platform: str | None = None, force_tool: str | None = None) -> 
     # Choose build tool
     if force_tool == "nuitka":
         if not check_tool("nuitka"):
-            print(f"  ✗ Nuitka not installed. Run: pip install nuitka ordered-set")
+            print(f"  ERROR Nuitka not installed. Run: pip install nuitka ordered-set")
             return None
         if build_with_nuitka(output_path):
             return output_path
@@ -137,7 +137,7 @@ def build(target_platform: str | None = None, force_tool: str | None = None) -> 
 
     if force_tool == "pyinstaller":
         if not check_tool("PyInstaller"):
-            print(f"  ✗ PyInstaller not installed. Run: pip install pyinstaller")
+            print(f"  ERROR PyInstaller not installed. Run: pip install pyinstaller")
             return None
         if build_with_pyinstaller(output_path):
             return output_path
@@ -145,17 +145,17 @@ def build(target_platform: str | None = None, force_tool: str | None = None) -> 
 
     # Auto-detect: prefer Nuitka, fall back to PyInstaller
     if check_tool("nuitka"):
-        print(f"  ▸ Using Nuitka (native compilation — IP protection enabled)")
+        print(f"   Using Nuitka (native compilation — IP protection enabled)")
         if build_with_nuitka(output_path):
             return output_path
-        print(f"  ⚠ Nuitka failed — falling back to PyInstaller")
+        print(f"  WARNING Nuitka failed — falling back to PyInstaller")
 
     if check_tool("PyInstaller"):
-        print(f"  ▸ Using PyInstaller (bundled — source extractable)")
+        print(f"   Using PyInstaller (bundled — source extractable)")
         if build_with_pyinstaller(output_path):
             return output_path
 
-    print(f"\n  ✗ No build tool available.")
+    print(f"\n  ERROR No build tool available.")
     print(f"    Install one:")
     print(f"      pip install nuitka ordered-set   # preferred (native compile)")
     print(f"      pip install pyinstaller            # fallback (bundle)")
@@ -178,9 +178,9 @@ def build_all_platforms():
         path = build(target)
         results[target] = path
         if path:
-            print(f"\n  ✓ Built: {path}")
+            print(f"\n  OK Built: {path}")
         else:
-            print(f"\n  ✗ Failed: {target}")
+            print(f"\n  ERROR Failed: {target}")
 
     print(f"\n  Note: Cross-compilation requires running this script on each OS/arch.")
     print(f"  Use GitHub Actions matrix (see .github/workflows/build-lattice-cli.yml)")
@@ -199,7 +199,7 @@ if __name__ == "__main__":
 
     path = build(target_platform=os.environ.get("TARGET_PLATFORM"), force_tool=force)
     if path:
-        print(f"\n  ✓ Binary ready: {path}")
+        print(f"\n  OK Binary ready: {path}")
         size_mb = path.stat().st_size / (1024 * 1024)
         print(f"    Size: {size_mb:.1f} MB")
         sys.exit(0)
