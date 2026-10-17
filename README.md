@@ -146,7 +146,7 @@ Once the core loop makes sense, check the docs to explore integrations, local ba
 
 ## lattice-cli: Docker Appliance Management
 
-Lattice OS includes a production-ready CLI tool for managing Docker appliance deployments with cryptographic licensing and preflight validation.
+Lattice OS includes a release-candidate CLI for managing Docker appliance deployments. Stable distribution remains gated by platform signing, live deployment/recovery validation, and the findings in [CLI release readiness](docs/releases/cli-release-readiness.md).
 
 ### Installation
 
@@ -163,7 +163,8 @@ pip install -e .
 
 **Option 3: Install standalone binary**
 ```bash
-curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash
+# Download and verify a versioned executable or installer from the Lattice OS /downloads page.
+# Native artifacts are offered only after release verification.
 ```
 
 ### Core Commands
@@ -174,7 +175,7 @@ lattice --version
 lattice --help
 
 # Authentication
-lattice auth login --username <dockerhub-username> --token <dockerhub-pat>
+lattice auth login --username <dockerhub-username>  # PAT is prompted, not placed in shell history
 lattice auth status
 
 # Deploy Lattice OS
@@ -297,7 +298,8 @@ Deploy Lattice OS as a self-contained Docker appliance with zero cloud dependenc
 
 ```bash
 # Install lattice-cli
-curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash
+# Download and verify a versioned executable or installer from the Lattice OS /downloads page.
+# Native artifacts are offered only after release verification.
 
 # Authenticate with Docker Hub
 lattice auth login

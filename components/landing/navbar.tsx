@@ -36,6 +36,7 @@ export const LandingNavbar = () => {
         { href: "/slack", label: "Slack", icon: () => <BrandIcon name="Slack" /> },
         { href: "/sovereign", label: "Sovereign", icon: ShieldCheckIcon, desktopOnly: true },
         { href: "/expert", label: "Experts", icon: UsersIcon, desktopOnly: true },
+        { href: "/downloads", label: "Downloads", icon: RocketIcon },
         { href: "/support", label: "Support", icon: QuestionMarkCircledIcon },
     ];
 

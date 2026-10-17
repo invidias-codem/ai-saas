@@ -57,7 +57,9 @@ const onboardingPath = [
         step: "02",
         title: "Install the lattice CLI",
         description: "The CLI manages auth, license activation, Docker appliance deployment, preflight checks, logs, backups, and upgrades.",
-        command: "curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash\nlattice --version",
+        command: "# Download and verify the versioned CLI from /downloads\nlattice --version\nlattice doctor --offline --json",
+        href: "/downloads",
+        cta: "Open verified downloads",
     },
     {
         step: "03",

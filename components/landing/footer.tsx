@@ -8,6 +8,7 @@ const LINKEDIN_URL = "https://www.linkedin.com/in/joshua-jair-mohammed?utm_sourc
 const NAV_LINKS = [
   { href: "/blog", label: "Blog" },
   { href: "/docs", label: "Docs" },
+  { href: "/downloads", label: "Downloads" },
   { href: "/sovereign", label: "Sovereign" },
   { href: "/expert", label: "Experts" },
   { href: "/slack", label: "Slack" },

@@ -24,6 +24,8 @@ const isPublicRoute = createRouteMatcher([
     '/:locale(en|th|vi|es|fr|de)/privacy',
     '/support',
     '/:locale(en|th|vi|es|fr|de)/support',
+    '/downloads',
+    '/:locale(en|th|vi|es|fr|de)/downloads',
     '/docs',
     '/:locale(en|th|vi|es|fr|de)/docs',
     '/docs/(.*)',
