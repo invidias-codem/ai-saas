@@ -1,7 +1,7 @@
 jest.mock('next/server', () => ({ NextResponse: class extends Response {
   static json(data: unknown, init?: ResponseInit) { return new Response(JSON.stringify(data), init); }
-} }), { virtual: true });
-jest.mock('@clerk/nextjs/server', () => ({ currentUser: jest.fn().mockResolvedValue({}) }), { virtual: true });
+} }));
+jest.mock('@clerk/nextjs/server', () => ({ currentUser: jest.fn().mockResolvedValue({}) }));
 jest.mock('@/lib/llm/conversationEngine', () => ({
   ConversationRequestSchema: { safeParse: (data: unknown) => ({ success: true, data }) },
   generateConversationReply: jest.fn().mockResolvedValue({ stream: new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('reply')); c.close(); } }) }),
