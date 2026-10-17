@@ -6,6 +6,11 @@ on:
     paths:
       - 'app/api/**'
       - 'lib/security/**'
+      - 'lib/releases/**'
+      - 'scripts/lattice-cli/**'
+      - 'app/**/downloads/**'
+      - 'proxy.ts'
+      - '__tests__/contracts/cli-download*'
       - '__tests__/security/**'
       - '__tests__/readiness/**'
       - '.github/workflows/security-tests.yml'
@@ -16,6 +21,11 @@ on:
     paths:
       - 'app/api/**'
       - 'lib/security/**'
+      - 'lib/releases/**'
+      - 'scripts/lattice-cli/**'
+      - 'app/**/downloads/**'
+      - 'proxy.ts'
+      - '__tests__/contracts/cli-download*'
       - '__tests__/security/**'
       - '__tests__/readiness/**'
       - '.github/workflows/security-tests.yml'
