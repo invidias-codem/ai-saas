@@ -1055,6 +1055,7 @@ export async function generateConversationReply(
       options: { temperature: 0.9, maxTokens: 2048 },
       enableMiniMax: true,
       signal: options.signal,
+      requestId: options.requestId,
     });
 
     streamResult = fallbackResult;
