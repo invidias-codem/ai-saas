@@ -80,6 +80,8 @@ def build_with_pyinstaller(output_path: Path) -> bool:
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
+        "--paths", str(CLI_DIR),
+        "--collect-all", "cryptography",
         "--name", output_path.stem,
         "--distpath", str(output_path.parent),
         "--workpath", str(BUILD_DIR / "pyinstaller-work"),
@@ -111,7 +113,13 @@ def check_tool(tool: str) -> bool:
 def build(target_platform: str | None = None, force_tool: str | None = None) -> Path | None:
     """Build the lattice binary. Returns output path on success, None on failure."""
 
-    os_name, arch = detect_platform() if not target_platform else target_platform.split("-")
+    native = detect_platform()
+    target = tuple(target_platform.split("-")) if target_platform else native
+    if target != native:
+        raise ValueError(f"Native builds only: host={native}, requested={target}")
+    if target not in {("linux", "amd64"), ("linux", "arm64"), ("macos", "amd64"), ("macos", "arm64"), ("windows", "amd64")}:
+        raise ValueError(f"Unsupported platform: {target}")
+    os_name, arch = target
     suffix = ".exe" if os_name == "windows" else ""
     asset_name = f"lattice-{os_name}-{arch}{suffix}"
     output_path = DIST_DIR / asset_name
@@ -189,7 +197,7 @@ if __name__ == "__main__":
         build_all_platforms()
         sys.exit(0)
 
-    path = build(force_tool=force)
+    path = build(target_platform=os.environ.get("TARGET_PLATFORM"), force_tool=force)
     if path:
         print(f"\n  ✓ Binary ready: {path}")
         size_mb = path.stat().st_size / (1024 * 1024)
