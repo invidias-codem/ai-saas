@@ -37,6 +37,7 @@ export default defineConfig({
           REPLICATE_API_TOKEN_VIDEO: (env.REPLICATE_API_TOKEN_VIDEO || env.REPLICATE_API_TOKEN)!,
         } : {}),
         ...(env.TRIGGER_SECRET_KEY ? { TRIGGER_SECRET_KEY: env.TRIGGER_SECRET_KEY } : {}),
+        ...(env.APIFY_API_TOKEN ? { APIFY_API_TOKEN: env.APIFY_API_TOKEN } : {}),
       })),
     ],
   },

@@ -38,7 +38,7 @@ function request(path: string) {
   return runProxy(auth, req);
 }
 
-it.each(['/api/admin', '/trpc/private', '/api/code-builder/stream', '/api/memory/private'])(
+it.each(['/api/admin', '/trpc/private', '/api/code-builder/stream', '/api/memory/private', '/api/webhooks/apify-admin', '/api/webhooks/apify/private'])(
   'rejects unauthenticated protected endpoint %s with JSON, not a redirect', async path => {
     const response = await request(path);
     expect(response.status).toBe(401);
@@ -71,7 +71,7 @@ it('passes an authenticated protected page to locale middleware', async () => {
   expect(redirectToSignIn).not.toHaveBeenCalled();
 });
 
-it.each(['/api/guest-chat', '/api/v1/models', '/api/code', '/en/docs']) (
+it.each(['/api/guest-chat', '/api/v1/models', '/api/code', '/en/docs', '/api/webhooks/apify']) (
   'passes public route %s without requiring Clerk identity', async path => {
     const response = await request(path);
     expect(response.headers.get('x-middleware-next')).toBe('1');

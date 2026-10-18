@@ -14,37 +14,55 @@ import { stableSerialize } from './stableJson';
 
 // ── 1. Actor-row schema (trust boundary) ────────────────────────────────
 
-/** Raw row exactly as automation-lab/threads-scraper emits it today. */
+// The actor reports unavailable fields as null; canonical evidence uses undefined.
+const optionalActorField = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess(value => value === null ? undefined : value, schema.optional());
+
+/** Dataset schema for automation-lab/threads-scraper build 0.1.47. */
 export const ThreadsActorRowSchema = z.object({
   // Identity / classification
-  type: z.enum(['profile', 'post']).optional(),
-  postId: z.string().optional(),
-  code: z.string().optional(), // post short code
-  userId: z.string().optional(),
-  username: z.string().optional(),
-  fullName: z.string().optional(),
-  biography: z.string().optional(),
-  isVerified: z.boolean().optional(),
-  followerCount: z.number().int().nonnegative().optional(),
-  profilePicUrl: z.string().url().optional(),
-  url: z.string().url().optional(), // canonical post/profile URL
+  type: optionalActorField(z.enum(['profile', 'post'])),
+  postId: optionalActorField(z.string()),
+  code: optionalActorField(z.string()), // post short code
+  userId: optionalActorField(z.string()),
+  username: optionalActorField(z.string()),
+  fullName: optionalActorField(z.string()),
+  biography: optionalActorField(z.string()),
+  isVerified: optionalActorField(z.boolean()),
+  followerCount: optionalActorField(z.number().int().nonnegative()),
+  profilePicUrl: optionalActorField(z.string().url()),
+  url: optionalActorField(z.string().url()), // canonical post/profile URL
 
   // Post fields
-  text: z.string().optional(),
-  likeCount: z.number().int().nonnegative().optional(),
-  replyCount: z.number().int().nonnegative().optional(),
-  repostCount: z.number().int().nonnegative().optional(),
-  quoteCount: z.number().int().nonnegative().optional(),
-  mediaType: z.enum(['image', 'video', 'carousel', 'text']).optional(),
-  media: z.array(z.object({
-    type: z.enum(['image', 'video']),
-    url: z.string().url(),
-    thumbnailUrl: z.string().url().optional(),
-  })).optional(),
+  text: optionalActorField(z.string()),
+  likeCount: optionalActorField(z.number().int().nonnegative()),
+  replyCount: optionalActorField(z.number().int().nonnegative()),
+  repostCount: optionalActorField(z.number().int().nonnegative()),
+  quoteCount: optionalActorField(z.number().int().nonnegative()),
+  mediaType: optionalActorField(z.enum(['photo', 'image', 'video', 'carousel', 'text'])
+    .transform(type => type === 'photo' ? 'image' : type)),
+  media: optionalActorField(z.array(z.object({
+    type: optionalActorField(z.enum(['photo', 'image', 'video'])
+      .transform(type => type === 'photo' ? 'image' : type)),
+    url: optionalActorField(z.string().url()),
+    videoUrl: optionalActorField(z.string().url()),
+    thumbnailUrl: optionalActorField(z.string().url()),
+  }).passthrough()).transform(items => items.flatMap(item => {
+    const url = item.type === 'video' ? item.videoUrl ?? item.url : item.url;
+    return item.type && url ? [{
+      type: item.type, url,
+      ...(item.thumbnailUrl ? { thumbnailUrl: item.thumbnailUrl } : {}),
+    }] : [];
+  }))),
 
   // Temporal
-  timestamp: z.string().optional(), // ISO string
-  postedAt: z.string().optional(), // alternative field name
+  timestamp: optionalActorField(z.union([
+    z.string(),
+    z.number().int().nonnegative().max(8_640_000_000_000)
+      .transform(seconds => new Date(seconds * 1000).toISOString()),
+  ])),
+  postedAt: optionalActorField(z.string()), // alternative field name
+  date: optionalActorField(z.string()), // actor ISO publication date
 
   // Allow unknown fields — preserved in provenance
 }).passthrough();
@@ -233,7 +251,7 @@ export function normalizeThreadsEvidence(
     userId: validatedRow.userId,
     username: validatedRow.username,
     text: validatedRow.text,
-    timestamp: validatedRow.timestamp ?? validatedRow.postedAt,
+    timestamp: validatedRow.timestamp ?? validatedRow.postedAt ?? validatedRow.date,
     likeCount: validatedRow.likeCount,
     replyCount: validatedRow.replyCount,
     repostCount: validatedRow.repostCount,
@@ -306,7 +324,7 @@ export function normalizeThreadsEvidence(
       views: undefined,
     },
     temporal: {
-      publishedAt: validatedRow.timestamp ?? validatedRow.postedAt,
+      publishedAt: validatedRow.timestamp ?? validatedRow.postedAt ?? validatedRow.date,
       observedAt: deps.retrievedAt,
       retrievedAt: deps.retrievedAt,
     },
