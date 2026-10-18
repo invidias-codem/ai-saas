@@ -59,6 +59,7 @@ const isPublicRoute = createRouteMatcher([
     '/api/integrations/slack/auth',
     '/api/webhooks/kofi',
     '/api/webhooks/stripe',
+    '/api/webhooks/apify', // dedicated header secret is checked by the route
     '/api/support/verify-donation',
     '/api/support',
     '/api/integrations/telegram/webhook',

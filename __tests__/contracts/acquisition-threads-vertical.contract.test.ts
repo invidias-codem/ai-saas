@@ -81,7 +81,7 @@ function makeDeps(over: Partial<{ providerRunSucceeded: boolean }> = {}): {
   return {
     providerRunId: 'run-1',
     datasetId: 'ds-1',
-    providerActorId: 'automation-lab/threads-scraper@1.0.23',
+    providerActorId: 'automation-lab/threads-scraper@0.1.47',
     acquisitionRequestId: 'req-1',
     retrievedAt: clock.now(),
     providerRunSucceeded: over.providerRunSucceeded ?? true,
@@ -292,7 +292,7 @@ describe('A4 Threads vertical — deterministic normalization', () => {
     expect(evidence.acquisitionRequestId).toBe('req-1');
     expect(evidence.source.platform).toBe('threads');
     expect(evidence.source.provider).toBe('apify');
-    expect(evidence.source.providerActorId).toBe('automation-lab/threads-scraper@1.0.23');
+    expect(evidence.source.providerActorId).toBe('automation-lab/threads-scraper@0.1.47');
     expect(evidence.source.providerRunId).toBe('run-1');
     expect(evidence.resource.type).toBe('post');
     expect(evidence.resource.canonicalUrl).toBe('https://threads.com/@alice/post/ABC123');
@@ -311,7 +311,7 @@ describe('A4 Threads vertical — deterministic normalization', () => {
     expect(evidence.temporal.publishedAt).toBe('2026-10-06T10:00:00Z');
     expect(evidence.access.state).toBe('PUBLIC_FETCHABLE');
     expect(evidence.provenance.normalizerVersion).toBe('threads-v1');
-    expect(evidence.provenance.actorVersion).toBe('automation-lab/threads-scraper@1.0.23');
+    expect(evidence.provenance.actorVersion).toBe('automation-lab/threads-scraper@0.1.47');
     expect(evidence.cacheKey).toContain('social:threads:post:');
   });
 

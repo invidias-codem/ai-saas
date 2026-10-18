@@ -43,7 +43,7 @@ export const ACTOR_REGISTRY: readonly ApifyActorDefinition[] = [];
 // ── A4: Threads vertical — exactly one registration ───────────────────────
 
 /** automation-lab/threads-scraper pinned build (update deliberately). */
-export const THREADS_ACTOR_BUILD = '1.0.23' as const;
+export const THREADS_ACTOR_BUILD = '0.1.47' as const;
 
 /** Threads actor input — authority dominates actor capability. */
 export function mapThreadsInput(args: {
