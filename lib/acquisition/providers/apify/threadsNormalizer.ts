@@ -49,7 +49,10 @@ export const ThreadsActorRowSchema = z.object({
     thumbnailUrl: optionalActorField(z.string().url()),
   }).passthrough()).transform(items => items.flatMap(item => {
     const url = item.type === 'video' ? item.videoUrl ?? item.url : item.url;
-    return item.type && url ? [{ type: item.type, url, thumbnailUrl: item.thumbnailUrl }] : [];
+    return item.type && url ? [{
+      type: item.type, url,
+      ...(item.thumbnailUrl ? { thumbnailUrl: item.thumbnailUrl } : {}),
+    }] : [];
   }))),
 
   // Temporal
