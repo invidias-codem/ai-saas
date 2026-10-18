@@ -16,7 +16,8 @@ declare
 begin
   -- Catalog checks catch missing RLS or client privileges before fixtures exist.
   foreach table_name in array array[
-    'acquisition_requests', 'acquisition_provider_runs', 'acquisition_raw_evidence'
+    'acquisition_requests', 'acquisition_provider_runs', 'acquisition_raw_evidence',
+    'acquisition_evidence'
   ] loop
     if not (select relrowsecurity from pg_class where oid = format('public.%I', table_name)::regclass) then
       raise exception 'RLS is disabled on public.%', table_name;
@@ -58,8 +59,17 @@ begin
   if row_count <> 2 then raise exception 'Backend evidence insert failed'; end if;
   checks := checks + 1;
 
+  insert into public.acquisition_evidence
+    (id, acquisition_request_id, provider_run_id, platform, resource_type, access_state, raw_content_hash, evidence_json)
+  values ('acq-rls-ev-a', request_a, 'acq-rls-run-a', 'threads', 'post', 'public_available', 'acq-rls-hash-a', '{"ok":"a"}'),
+         ('acq-rls-ev-b', request_b, 'acq-rls-run-b', 'threads', 'post', 'public_available', 'acq-rls-hash-b', '{"ok":"b"}');
+  get diagnostics row_count = row_count;
+  if row_count <> 2 then raise exception 'Backend normalized evidence insert failed'; end if;
+  checks := checks + 1;
+
   foreach table_name in array array[
-    'acquisition_requests', 'acquisition_provider_runs', 'acquisition_raw_evidence'
+    'acquisition_requests', 'acquisition_provider_runs', 'acquisition_raw_evidence',
+    'acquisition_evidence'
   ] loop
     execute format('select count(*) from public.%I', table_name) into row_count;
     if row_count <> 2 then raise exception 'Backend cannot read fixtures from %', table_name; end if;
@@ -73,7 +83,8 @@ begin
       json_build_object('sub', 'user_acq_test_a', 'role', client_role)::text, true);
     execute format('set local role %I', client_role);
     foreach table_name in array array[
-      'acquisition_requests', 'acquisition_provider_runs', 'acquisition_raw_evidence'
+      'acquisition_requests', 'acquisition_provider_runs', 'acquisition_raw_evidence',
+      'acquisition_evidence'
     ] loop
       statements := array[
         format('select * from public.%I', table_name),
@@ -98,13 +109,14 @@ begin
   -- These temporary grants (including PUBLIC) disappear at ROLLBACK.
   grant select, insert, update, delete on table
     public.acquisition_requests, public.acquisition_provider_runs,
-    public.acquisition_raw_evidence to public;
+    public.acquisition_raw_evidence, public.acquisition_evidence to public;
   foreach client_role in array array['anon', 'authenticated'] loop
     perform set_config('request.jwt.claims',
       json_build_object('sub', 'user_acq_test_a', 'role', client_role)::text, true);
     execute format('set local role %I', client_role);
     foreach table_name in array array[
-      'acquisition_requests', 'acquisition_provider_runs', 'acquisition_raw_evidence'
+      'acquisition_requests', 'acquisition_provider_runs', 'acquisition_raw_evidence',
+      'acquisition_evidence'
     ] loop
       execute format('select count(*) from public.%I', table_name) into row_count;
       if row_count <> 0 then raise exception 'RLS leaks rows to % on %', client_role, table_name; end if;
@@ -117,6 +129,8 @@ begin
           'insert into public.acquisition_requests (user_id, request_id, mode) values (''user_acq_test_a'', ''acq-rls-forged'', ''resource'')'
         when 'acquisition_provider_runs' then
           format('insert into public.acquisition_provider_runs (acquisition_request_id, provider, provider_run_id) values (%L, ''apify'', ''acq-rls-forged-run'')', request_a)
+        when 'acquisition_evidence' then
+          format('insert into public.acquisition_evidence (id, acquisition_request_id, provider_run_id, platform, resource_type, access_state, raw_content_hash, evidence_json) values (''acq-rls-ev-forged'', %L, ''acq-rls-run-a'', ''threads'', ''post'', ''public_available'', ''forged-hash'', ''{}'')', request_a)
         else
           format('insert into public.acquisition_raw_evidence (acquisition_request_id, provider_run_id, ordinal, content_hash, raw_json, provider, retrieved_at) values (%L, ''acq-rls-run-a'', 99, ''forged-hash'', ''{}'', ''apify'', now())', request_a)
       end;
@@ -139,7 +153,7 @@ begin
     execute 'reset role';
   end loop;
   revoke all on table public.acquisition_requests, public.acquisition_provider_runs,
-    public.acquisition_raw_evidence from public;
+    public.acquisition_raw_evidence, public.acquisition_evidence from public;
 
   -- The durable replay locks remain usable by the backend after hardening.
   execute 'set local role service_role';
@@ -189,8 +203,33 @@ begin
   end if;
   checks := checks + 1;
 
+  -- A4: evidence upserts are idempotent on the deterministic evidence id.
+  insert into public.acquisition_evidence
+    (id, acquisition_request_id, provider_run_id, platform, resource_type, access_state, raw_content_hash, evidence_json)
+  values ('acq-rls-ev-a', request_a, 'acq-rls-run-a', 'threads', 'post', 'public_available', 'acq-rls-hash-a', '{"ok":"a"}')
+  on conflict (id) do nothing;
+  get diagnostics row_count = row_count;
+  if row_count <> 0 then raise exception 'Duplicate evidence id inserted a second row'; end if;
+  checks := checks + 1;
+
+  -- A4: the `normalizing` → `completed` transition writes normalization bookkeeping.
+  update public.acquisition_provider_runs
+  set status = 'completed', normalized_count = 1, normalization_failures = '[]'::jsonb
+  where operation_key = 'acq-rls-operation-a';
+  if not exists (select 1 from public.acquisition_provider_runs
+    where operation_key = 'acq-rls-operation-a' and status = 'completed' and normalized_count = 1) then
+    raise exception 'Backend normalization completion failed';
+  end if;
+  checks := checks + 1;
+
+  update public.acquisition_evidence set evidence_json = evidence_json || '{"verified":true}'::jsonb
+  where provider_run_id = 'acq-rls-run-a';
+  get diagnostics row_count = row_count;
+  if row_count <> 1 then raise exception 'Backend evidence update failed'; end if;
+  checks := checks + 1;
+
   foreach table_name in array array[
-    'acquisition_raw_evidence', 'acquisition_provider_runs', 'acquisition_requests'
+    'acquisition_evidence', 'acquisition_raw_evidence', 'acquisition_provider_runs', 'acquisition_requests'
   ] loop
     if table_name = 'acquisition_requests' then
       execute format('delete from public.%I where id = %L', table_name, request_b);

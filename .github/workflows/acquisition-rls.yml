@@ -74,6 +74,8 @@ jobs:
           SQL
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018000000_acquisition_rls.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261018000000_acquisition_rls.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019000000_acquisition_evidence.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019000000_acquisition_evidence.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/acquisition_rls.sql
           psql -v ON_ERROR_STOP=1 -c 'alter role service_role nobypassrls;'
           psql -v ON_ERROR_STOP=1 -f supabase/tests/acquisition_rls.sql
