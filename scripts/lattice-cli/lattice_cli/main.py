@@ -9,7 +9,7 @@ import argparse
 import sys
 
 from . import __version__
-from . import auth, deploy, license, health, upgrade, backup, crypto_license, org, task
+from . import auth, deploy, license, health, upgrade, backup, crypto_license, org, task, doctor
 
 
 BANNER = f"""
@@ -21,6 +21,11 @@ BANNER = f"""
 
 
 def main():
+    # Keep redirected output predictable on Windows as well as in terminals.
+    if sys.platform == "win32":
+        for stream in (sys.stdout, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(
         prog="lattice",
         description="Lattice OS CLI — manage Docker appliance deployments",
@@ -47,6 +52,11 @@ Built by JJEM Global Technology, Inc.
     )
 
     sub = parser.add_subparsers(dest="command", help="Command group")
+
+    doctor_parser = sub.add_parser("doctor", help="Check CLI integrity and deployment prerequisites")
+    doctor_parser.add_argument("--offline", action="store_true", help="Check CLI runtime only; do not contact Docker")
+    doctor_parser.add_argument("--json", action="store_true", help="Machine-readable diagnostics")
+    doctor_parser.set_defaults(handler=doctor.cmd_doctor)
 
     # ── Auth ──────────────────────────────────────────────────────────
     auth_parser = sub.add_parser("auth", help="Docker Hub authentication")
@@ -161,7 +171,7 @@ Built by JJEM Global Technology, Inc.
         return 0
 
     # Show banner unless --quiet
-    if not args.quiet:
+    if not args.quiet and not getattr(args, "json", False):
         print(BANNER)
 
     try:

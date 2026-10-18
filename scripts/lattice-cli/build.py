@@ -80,6 +80,8 @@ def build_with_pyinstaller(output_path: Path) -> bool:
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
+        "--paths", str(CLI_DIR),
+        "--collect-all", "cryptography",
         "--name", output_path.stem,
         "--distpath", str(output_path.parent),
         "--workpath", str(BUILD_DIR / "pyinstaller-work"),
@@ -111,7 +113,13 @@ def check_tool(tool: str) -> bool:
 def build(target_platform: str | None = None, force_tool: str | None = None) -> Path | None:
     """Build the lattice binary. Returns output path on success, None on failure."""
 
-    os_name, arch = detect_platform() if not target_platform else target_platform.split("-")
+    native = detect_platform()
+    target = tuple(target_platform.split("-")) if target_platform else native
+    if target != native:
+        raise ValueError(f"Native builds only: host={native}, requested={target}")
+    if target not in {("linux", "amd64"), ("linux", "arm64"), ("macos", "amd64"), ("macos", "arm64"), ("windows", "amd64")}:
+        raise ValueError(f"Unsupported platform: {target}")
+    os_name, arch = target
     suffix = ".exe" if os_name == "windows" else ""
     asset_name = f"lattice-{os_name}-{arch}{suffix}"
     output_path = DIST_DIR / asset_name
@@ -121,7 +129,7 @@ def build(target_platform: str | None = None, force_tool: str | None = None) -> 
     # Choose build tool
     if force_tool == "nuitka":
         if not check_tool("nuitka"):
-            print(f"  ✗ Nuitka not installed. Run: pip install nuitka ordered-set")
+            print(f"  ERROR Nuitka not installed. Run: pip install nuitka ordered-set")
             return None
         if build_with_nuitka(output_path):
             return output_path
@@ -129,7 +137,7 @@ def build(target_platform: str | None = None, force_tool: str | None = None) -> 
 
     if force_tool == "pyinstaller":
         if not check_tool("PyInstaller"):
-            print(f"  ✗ PyInstaller not installed. Run: pip install pyinstaller")
+            print(f"  ERROR PyInstaller not installed. Run: pip install pyinstaller")
             return None
         if build_with_pyinstaller(output_path):
             return output_path
@@ -137,17 +145,17 @@ def build(target_platform: str | None = None, force_tool: str | None = None) -> 
 
     # Auto-detect: prefer Nuitka, fall back to PyInstaller
     if check_tool("nuitka"):
-        print(f"  ▸ Using Nuitka (native compilation — IP protection enabled)")
+        print(f"   Using Nuitka (native compilation — IP protection enabled)")
         if build_with_nuitka(output_path):
             return output_path
-        print(f"  ⚠ Nuitka failed — falling back to PyInstaller")
+        print(f"  WARNING Nuitka failed — falling back to PyInstaller")
 
     if check_tool("PyInstaller"):
-        print(f"  ▸ Using PyInstaller (bundled — source extractable)")
+        print(f"   Using PyInstaller (bundled — source extractable)")
         if build_with_pyinstaller(output_path):
             return output_path
 
-    print(f"\n  ✗ No build tool available.")
+    print(f"\n  ERROR No build tool available.")
     print(f"    Install one:")
     print(f"      pip install nuitka ordered-set   # preferred (native compile)")
     print(f"      pip install pyinstaller            # fallback (bundle)")
@@ -170,9 +178,9 @@ def build_all_platforms():
         path = build(target)
         results[target] = path
         if path:
-            print(f"\n  ✓ Built: {path}")
+            print(f"\n  OK Built: {path}")
         else:
-            print(f"\n  ✗ Failed: {target}")
+            print(f"\n  ERROR Failed: {target}")
 
     print(f"\n  Note: Cross-compilation requires running this script on each OS/arch.")
     print(f"  Use GitHub Actions matrix (see .github/workflows/build-lattice-cli.yml)")
@@ -189,9 +197,9 @@ if __name__ == "__main__":
         build_all_platforms()
         sys.exit(0)
 
-    path = build(force_tool=force)
+    path = build(target_platform=os.environ.get("TARGET_PLATFORM"), force_tool=force)
     if path:
-        print(f"\n  ✓ Binary ready: {path}")
+        print(f"\n  OK Binary ready: {path}")
         size_mb = path.stat().st_size / (1024 * 1024)
         print(f"    Size: {size_mb:.1f} MB")
         sys.exit(0)

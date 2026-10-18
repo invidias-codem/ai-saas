@@ -1,0 +1,90 @@
+name: CLI release CodeQL
+on:
+  pull_request:
+    paths:
+      - 'scripts/lattice-cli/**'
+      - 'lib/releases/**'
+      - 'app/**/downloads/**'
+      - 'components/landing/**'
+      - 'proxy.ts'
+      - '.github/workflows/cli-codeql.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/lattice-cli/**'
+      - 'lib/releases/**'
+      - 'app/**/downloads/**'
+      - 'components/landing/**'
+      - 'proxy.ts'
+      - '.github/workflows/cli-codeql.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  analyze:
+    name: CodeQL ${{ matrix.language }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, python]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@f051dc808ef3645eb0d08647ec751634ec2304ac # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+          config: |
+            paths:
+              - scripts/lattice-cli
+              - lib/releases
+              - components/landing
+              - app/**/downloads/**
+              - proxy.ts
+            paths-ignore:
+              - '**/build/**'
+              - '**/tests/**'
+              - '**/*.test.ts'
+      - uses: github/codeql-action/analyze@f051dc808ef3645eb0d08647ec751634ec2304ac # v4
+        with:
+          category: '/cli-release/${{ matrix.language }}'
+          output: codeql-results
+          # Default setup remains the repository's Code Scanning publisher.
+          # This supplemental scan enforces its own SARIF gate and keeps evidence below.
+          upload: never
+      - name: Block high and critical security findings
+        run: |
+          python3 - <<'PY'
+          import json, pathlib
+          failures = []
+          files = list(pathlib.Path('codeql-results').glob('*.sarif'))
+          if not files:
+              raise SystemExit('No CodeQL evidence produced')
+          for path in files:
+              runs = json.loads(path.read_text()).get('runs', [])
+              if not runs:
+                  raise SystemExit('Empty CodeQL evidence')
+              for run in runs:
+                  components = [run['tool']['driver'], *run['tool'].get('extensions', [])]
+                  rules = {rule['id']: rule for component in components for rule in component.get('rules', [])}
+                  for finding in run.get('results', []):
+                      if finding.get('ruleId') not in rules:
+                          raise SystemExit('Unrecognized CodeQL finding')
+                      severity = float(rules[finding['ruleId']].get('properties', {}).get('security-severity', 0))
+                      if severity >= 7.0:
+                          failures.append(finding['ruleId'])
+          if failures:
+              raise SystemExit('High/critical findings: ' + ', '.join(sorted(set(failures))))
+          PY
+      - name: Retain supplemental CodeQL evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: cli-codeql-${{ matrix.language }}
+          path: codeql-results/*.sarif
+          if-no-files-found: error
+          retention-days: 14

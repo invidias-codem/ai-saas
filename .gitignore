@@ -115,3 +115,7 @@ dist-electron/
 # OG-image optimizer venv
 .venv_ogfix/
 .env*
+
+# Native CLI release outputs (publish through the release workflow only)
+/dist/cli/
+/scripts/lattice-cli/build/

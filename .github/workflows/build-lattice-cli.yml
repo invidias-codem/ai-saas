@@ -1,136 +1,128 @@
-# ── Cross-platform lattice-cli binary build + release ─────────────────────────
-# Triggered manually via workflow_dispatch, or on tag push (v*-cli-*).
-# Produces native binaries for linux/macos (amd64 + arm64) via Nuitka,
-# then uploads as GitHub Release assets.
-
 name: Build lattice-cli
 on:
+  pull_request:
+    paths:
+      - 'scripts/lattice-cli/**'
+      - '.github/workflows/build-lattice-cli.yml'
   workflow_dispatch:
     inputs:
-      version:
-        description: "Semantic version (e.g. 0.2.0)"
+      release_tag:
+        description: 'Exact candidate tag matching the CLI version, e.g. cli-v0.3.1-rc.1'
         required: true
-      prerelease:
-        description: "Mark as prerelease?"
-        type: boolean
-        default: false
-  push:
-    tags:
-      - "v*-cli-*"
-
+        type: string
+permissions:
+  contents: read
 concurrency:
-  group: build-lattice-cli
-  cancel-in-progress: false
-
+  group: cli-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   build:
-    name: Build ${{ matrix.os }}-${{ matrix.arch }}
+    name: CLI ${{ matrix.target }}
+    timeout-minutes: 30
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: linux
-            arch: amd64
-            runner: ubuntu-22.04
-          - os: linux
-            arch: arm64
-            runner: ubuntu-22.04-arm
-          - os: macos
-            arch: amd64
-            runner: macos-13
-          - os: macos
-            arch: arm64
-            runner: macos-14-arm64
-
+          - { target: linux-amd64, runner: ubuntu-22.04 }
+          - { target: linux-arm64, runner: ubuntu-22.04-arm }
+          - { target: macos-amd64, runner: macos-15-intel }
+          - { target: macos-arm64, runner: macos-14 }
+          - { target: windows-amd64, runner: windows-2025 }
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          python-version: "3.12"
-
-      - name: Install Nuitka
-        run: |
-          python -m pip install --upgrade pip
-          pip install nuitka ordered-set
-
-      - name: Build binary
-        run: python scripts/lattice-cli/build.py --nuitka
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Install locked build dependencies
+        run: python -m pip install --require-hashes -r scripts/lattice-cli/requirements-build.lock
+      - name: Unit and security regressions
+        run: python -m unittest discover -s scripts/lattice-cli/tests -v
+      - name: Build native executable
+        run: python scripts/lattice-cli/build.py --pyinstaller
         env:
-          TARGET_PLATFORM: ${{ matrix.os }}-${{ matrix.arch }}
-
-      - name: Verify binary
+          TARGET_PLATFORM: ${{ matrix.target }}
+      - name: Smoke test the packaged executable
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+          PYTHONUTF8: '1'
+          SOURCE_COMMIT: ${{ github.sha }}
         run: |
-          BINARY=$(ls dist/cli/lattice-* | head -1)
-          chmod +x "$BINARY"
-          "$BINARY" --version
-          "$BINARY" --help | head -5
-
-      - name: Upload artifact
+          python - <<'PY'
+          import json, os, pathlib, sys
+          sys.path.insert(0, 'scripts/lattice-cli')
+          from smoke_binary import smoke
+          from lattice_cli import __version__
+          target = os.environ['TARGET_PLATFORM']
+          asset = 'lattice-' + target + ('.exe' if target.startswith('windows') else '')
+          smoke(pathlib.Path('dist/cli') / asset)
+          report = {'target': target, 'version': __version__, 'sourceCommit': os.environ['SOURCE_COMMIT'], 'passed': True}
+          pathlib.Path(f'dist/cli/smoke-{target}.json').write_text(json.dumps(report))
+          PY
+      - name: Dependency vulnerability gate and CycloneDX SBOM
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+        run: |
+          python -m pip install pip-audit==2.10.1
+          python -m pip_audit -r scripts/lattice-cli/requirements-build.lock --require-hashes --format cyclonedx-json --output "dist/cli/sbom-$TARGET_PLATFORM.json"
+      - name: Upload only release inputs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: lattice-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/cli/lattice-*
+          name: cli-${{ matrix.target }}
+          path: |
+            dist/cli/lattice-${{ matrix.target }}*
+            dist/cli/smoke-${{ matrix.target }}.json
+            dist/cli/sbom-${{ matrix.target }}.json
           if-no-files-found: error
-
+          retention-days: 14
   release:
-    name: Create GitHub Release
-    runs-on: ubuntu-22.04
+    name: Stage attested candidate release
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     needs: build
+    environment: cli-release
+    timeout-minutes: 10
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Download all build artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          path: dist/cli/
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: cli-*
+          path: dist/cli
           merge-multiple: true
-
-      - name: Determine version
-        id: version
+      - name: Validate version and aggregate release evidence
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/}"
-          else
-            VERSION="v${{ inputs.version }}"
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'scripts/lattice-cli')
+          from lattice_cli import __version__
+          from release_manifest import generate
+          if '-rc.' not in __version__ or os.environ['RELEASE_TAG'] != f'cli-v{__version__}':
+              raise SystemExit('Only an exact, versioned release candidate can be staged')
+          generate('dist/cli', os.environ['GITHUB_SHA'], os.environ['GITHUB_RUN_ID'])
+          PY
+      - name: Attest all release assets
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: "lattice-cli ${{ steps.version.outputs.version }}"
-          files: dist/cli/lattice-*
-          prerelease: ${{ inputs.prerelease }}
-          generate_release_notes: true
-          body: |
-            ## lattice-cli ${{ steps.version.outputs.version }}
-
-            ### Install
-
-            ```bash
-            curl -sL https://lattice.sh/install.sh | bash
-            ```
-
-            ### Binaries
-
-            | Platform | Arch | Asset |
-            |---|---|---|
-            | Linux | amd64 | `lattice-linux-amd64` |
-            | Linux | arm64 | `lattice-linux-arm64` |
-            | macOS | amd64 | `lattice-macos-amd64` |
-            | macOS | arm64 | `lattice-macos-arm64` |
-
-            ### Verify
-
-            ```bash
-            chmod +x lattice-*
-            ./lattice-<platform>-<arch> --version
-            ```
-
-            Built with Nuitka (native compilation — source not extractable).
-
+          subject-path: 'dist/cli/*'
+      - name: Create a draft prerelease for operator verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/cli/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease --title "Lattice OS CLI $RELEASE_TAG" --notes-file docs/releases/cli-candidate-notes.md
