@@ -12,6 +12,7 @@ import { runIngestion } from "@/lib/acquisition/durable/ingestion";
 import { ApifyAcquisitionProvider, type ProviderClock } from "@/lib/acquisition/providers/apify/provider";
 import { getProductionRegistry } from "@/lib/acquisition/providers/apify/actorRegistry";
 import * as store from "@/lib/acquisition/store/acquisitionStore";
+import { runNormalization } from "@/lib/acquisition/durable/normalization";
 import { logEvent } from "@/lib/telemetry";
 import { env } from "@/lib/env";
 
@@ -71,6 +72,19 @@ export const acquisitionIngestTask = task({
       providerRunId: payload.providerRunId,
       operationKey: payload.operationKey,
     });
+
+    // A4 (issue #417): the `normalizing` → `completed` transition. Runs on
+    // completed AND budget_violation — a cost violation is a governance
+    // signal, never a reason to drop already-collected evidence.
+    if (outcome.kind === "completed" || outcome.kind === "budget_violation") {
+      const normalization = await runNormalization({
+        store,
+        provider: payload.provider,
+        providerRunId: payload.providerRunId,
+        now: new Date().toISOString(),
+      });
+      return { outcome, normalization };
+    }
 
     return { outcome };
   },

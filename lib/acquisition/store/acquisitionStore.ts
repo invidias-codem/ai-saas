@@ -7,7 +7,7 @@
 // timing.
 
 import { supabaseAdmin } from '@/lib/supabaseClient';
-import type { RawEvidence } from '../contracts';
+import type { EvidenceObjectV1, RawEvidence } from '../contracts';
 
 export interface AcquisitionRequestRow {
   id: string;
@@ -40,6 +40,8 @@ export interface ProviderRunRow {
   authorized_max_cost_usd: number | null;
   authorized_max_records: number | null;
   record_count: number | null;
+  normalized_count: number | null;
+  normalization_failures: unknown | null;
   trigger_run_id: string | null;
   provider_started_at: string | null;
   provider_completed_at: string | null;
@@ -277,4 +279,100 @@ export async function reconcileFinalCost(args: {
     .eq('provider', args.provider)
     .eq('provider_run_id', args.providerRunId);
   if (error) throw new Error(`acquisition reconcileFinalCost failed: ${error.message}`);
+}
+
+// ── A4 normalization storage (issue #417) ───────────────────────────────
+
+/** Staged raw rows for a run, in collect order, shaped back to RawEvidence. */
+export async function getRawEvidence(providerRunId: string): Promise<RawEvidence[]> {
+  const { data, error } = await sb()
+    .from('acquisition_raw_evidence')
+    .select('ordinal, content_hash, raw_json, provider, provider_actor_id, dataset_id, retrieved_at')
+    .eq('provider_run_id', providerRunId)
+    .order('ordinal');
+  if (error) throw new Error(`acquisition getRawEvidence failed: ${error.message}`);
+  return (data ?? []).map((r) => ({
+    raw: r.raw_json,
+    contentHash: r.content_hash,
+    retrievalMetadata: {
+      provider: r.provider,
+      providerActorId: r.provider_actor_id ?? undefined,
+      providerRunId,
+      datasetId: r.dataset_id ?? undefined,
+      retrievedAt: r.retrieved_at,
+    },
+  }));
+}
+
+/**
+ * Persist canonical EvidenceObjectV1 rows. Idempotent on the deterministic
+ * evidence id: duplicate normalization and duplicate callbacks are no-ops.
+ */
+export async function persistNormalizedEvidence(args: {
+  evidence: EvidenceObjectV1[];
+  rawContentHashes: string[];
+}): Promise<number> {
+  if (args.evidence.length === 0) return 0;
+  const rows = args.evidence.map((e, i) => ({
+    id: e.id,
+    acquisition_request_id: e.acquisitionRequestId,
+    provider_run_id: e.source.providerRunId,
+    platform: e.source.platform,
+    resource_type: e.resource.type,
+    access_state: e.access.state,
+    raw_content_hash: args.rawContentHashes[i] ?? e.provenance.rawHash,
+    evidence_json: e as object,
+  }));
+  const { error } = await sb()
+    .from('acquisition_evidence')
+    .upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
+  if (error) throw new Error(`acquisition persistNormalizedEvidence failed: ${error.message}`);
+  return rows.length;
+}
+
+/** `normalizing` → `completed` on the run; completes the request. */
+export async function completeNormalization(args: {
+  provider: string;
+  providerRunId: string;
+  acquisitionRequestId: string;
+  normalizedCount: number;
+  failures: { rowIndex: number; error: string }[];
+  now: string;
+}): Promise<void> {
+  const { error: runError } = await sb()
+    .from('acquisition_provider_runs')
+    .update({
+      status: 'completed',
+      failure_code: null,
+      normalized_count: args.normalizedCount,
+      normalization_failures: args.failures,
+      updated_at: args.now,
+    })
+    .eq('provider', args.provider)
+    .eq('provider_run_id', args.providerRunId);
+  if (runError) throw new Error(`acquisition completeNormalization failed: ${runError.message}`);
+  const { error: requestError } = await sb()
+    .from('acquisition_requests')
+    .update({ status: 'completed', completed_at: args.now, updated_at: args.now })
+    .eq('id', args.acquisitionRequestId);
+  if (requestError) throw new Error(`acquisition completeNormalization request failed: ${requestError.message}`);
+}
+
+/** Typed abstention: no normalizer registered for this actor. Raw retained. */
+export async function markNormalizationUnsupported(args: {
+  provider: string;
+  providerRunId: string;
+  failureCode: string;
+  now: string;
+}): Promise<void> {
+  const { error } = await sb()
+    .from('acquisition_provider_runs')
+    .update({
+      status: 'normalization_unsupported',
+      failure_code: args.failureCode,
+      updated_at: args.now,
+    })
+    .eq('provider', args.provider)
+    .eq('provider_run_id', args.providerRunId);
+  if (error) throw new Error(`acquisition markNormalizationUnsupported failed: ${error.message}`);
 }
