@@ -47,6 +47,12 @@ import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { createQuarantinePromotionManager } from '@/lib/execution/quarantinePromotionManager';
 import { sandboxManager } from '@/lib/execution/sandboxManager';
 import { withAbort } from '@/lib/runtime/abort';
+import {
+  buildCapabilityManifest,
+  buildWeaverSystemInstruction,
+  logCapabilityResolution,
+  type CapabilityManifest,
+} from '@/lib/agents/core/capabilityManifest';
 
 // ChatMessageSchema imported from types
 
@@ -152,28 +158,11 @@ function getGoogleApiKey(): string {
   return key;
 }
 
-function getSystemInstruction() {
-  return `You are 'Genie', a highly capable AI assistant equipped with dynamic tool integrations.
-Current Date: ${new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })}.
-
-CAPABILITIES:
-- You DO have real-time internet access. When you receive "Web Search Results" in your context, it means the system has searched the live internet on your behalf.
-- You DO have long-term memory. When you see "User Profile" or "Relevant Previous Work", it means the system has retrieved past context.
-- Never deny these capabilities. If the context contains the answer, speak authoritatively as if you fetched it yourself.
-
-CITATION RULES:
-- When you retrieve sources from the Data Refinery (query_workspace_sources), each result contains content and optional lineage.
-- The content field is the factual text. Cite it using [1], [2], etc.
-- The lineage field contains optional transition metadata (SUPERSEDES, CAUSES edges).
-- Use lineage ONLY to explain WHY state changed (e.g., "X changed to Y in January"). Never cite lineage as a source.
-- If a source has lineage showing SUPERSEDES: mention the transition in your prose, then cite the current content.
-
-Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences.`;
+// Phase 0 (#440): the instruction is derived from the per-request capability
+// manifest — no unconditional capability claims. Weaver is the customer-facing
+// identity; "Genie" is handled explicitly as a former name of the same assistant.
+function getSystemInstruction(manifest: CapabilityManifest) {
+  return buildWeaverSystemInstruction(manifest);
 }
 
 const GREETING = "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights.";
@@ -200,6 +189,14 @@ export async function generateConversationReply(
   const { userId, clerkUser, request, conversationId } = args;
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
+  // Phase 0 (#440): server-produced capability manifest for THIS request.
+  // Invalid/missing resolved mode is a typed failure — never a silent default.
+  const capabilityManifest = buildCapabilityManifest({
+    resolvedMode: agentMode,
+    workspaceId: parsed.workspaceId ?? null,
+    backgroundWebResearchEnabled: process.env.ENABLE_WEB_RESEARCH === 'true',
+    longTermMemoryEnabled: process.env.ENABLE_HEAVY_CONTEXT !== 'false' && !options.disableExternalContext,
+  });
   const providerKeys = await withAbort(getUserProviderApiKeys(userId), options.signal);
   const nativeProviderKeys = await withAbort((await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys), options.signal);
 
@@ -210,44 +207,20 @@ export async function generateConversationReply(
   if (agentMode === 'agentic') {
     const { runReActLoop } = await import('@/lib/agents/core/reactLoop');
     const { runNimReactLoop } = await import('@/lib/agents/core/nimReactLoop');
-    const { ToolRegistry } = await import('@/lib/agents/core/registry');
-    const { dealSentinelTool } = await import('@/lib/agents/tools/dealSentinel');
-    const { webSearchTool } = await import('@/lib/agents/tools/webSearch');
-    const { researchWriterTool } = await import('@/lib/agents/tools/researchWriter');
-    const { novelWriterTool } = await import('@/lib/agents/tools/novelWriter');
-    const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
-    const { generateMusicTool } = await import('@/lib/agents/tools/generateMusic');
-    const { generateImageTool } = await import('@/lib/agents/tools/generateImage');
-    const { generateVideoTool } = await import('@/lib/agents/tools/generateVideo');
-    const { readFileTool, writeFileTool, patchFileTool } = await import('@/lib/agents/tools/harnessTools');
-    const { executeCommandTool } = await import('@/lib/agents/tools/executionTools');
-    const { discoverDocumentsTool, extractTextTool, summarizeRepoTool, semanticSearchTool, workspaceSourcesSearchTool } = await import('@/lib/agents/tools/intelligenceTools');
+    const { buildAuthorizedToolSet, registryFromTools } = await import('@/lib/agents/core/agenticToolSet');
 
-    // 1. Initialize Registry with all agentic tools
-    const registry = new ToolRegistry();
-    registry.register(dealSentinelTool);
-    registry.register(webSearchTool);
-    registry.register(researchWriterTool);
-    registry.register(novelWriterTool);
-    registry.register(searchCodebaseTool);
-    registry.register(generateMusicTool);
-    registry.register(generateImageTool);
-    registry.register(generateVideoTool);
-
-    if (request.mode === 'agentic') {
-      // Phase 1: Local Mutable Capabilities
-      registry.register(readFileTool);
-      registry.register(writeFileTool);
-      registry.register(patchFileTool);
-      registry.register(executeCommandTool);
-
-      // Phase 3 & 4: Intelligence Capabilities
-      registry.register(discoverDocumentsTool);
-      registry.register(extractTextTool);
-      registry.register(summarizeRepoTool);
-      registry.register(semanticSearchTool);
-      registry.register(workspaceSourcesSearchTool);
-    }
+    // 1. Authorized tool catalog (Phase 0 #440): one shared, manifest-gated
+    // builder for web AND worker — parity by construction. Gating follows the
+    // RESOLVED runtime mode (not the raw request field), and the set is never
+    // wider than what the worker exposes for the same resolved conversation.
+    const registry = registryFromTools(buildAuthorizedToolSet(capabilityManifest));
+    void logCapabilityResolution({
+      userId,
+      workspaceId: parsed.workspaceId ?? undefined,
+      manifest: capabilityManifest,
+      surface: 'web-agentic',
+      toolNames: registry.getToolNames(),
+    });
 
     // 2. Construct Prompt (Multimodal support)
     const userQuery = parsed.messages[parsed.messages.length - 1]?.text || "";
@@ -775,8 +748,18 @@ export async function generateConversationReply(
   const TOOL_SCHEMA_ESTIMATE = 3000;
   const maxContextBudget = Math.max(0, modelLimits.totalMax - GENERATION_HEADROOM - TOOL_SCHEMA_ESTIMATE);
 
+  // Phase 0 (#440): record capability resolution + (empty) tool exposure for
+  // the prepared-context path. No secrets — statuses and names only.
+  void logCapabilityResolution({
+    userId,
+    workspaceId: workspaceId ?? undefined,
+    manifest: capabilityManifest,
+    surface: 'web-prepared',
+    toolNames: [],
+  });
+
   const allocation = ContextTokenManager.assembleContext(
-    getSystemInstruction(),
+    getSystemInstruction(capabilityManifest),
     preparedContext.sections,
     {
       modelId: actualModelId,
@@ -785,7 +768,7 @@ export async function generateConversationReply(
     }
   );
 
-  let baseSystemInstruction = getSystemInstruction();
+  let baseSystemInstruction = getSystemInstruction(capabilityManifest);
 
   // Append extracted PDF text to the system instruction if available
   // Empty text indicates a scanned/image-only PDF (no text layer)

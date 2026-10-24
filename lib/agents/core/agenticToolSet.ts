@@ -64,3 +64,57 @@ export function buildAgenticRegistry(): ToolRegistry {
 export function resolveAgenticTool(name: string): Tool | undefined {
   return AGENTIC_TOOLS.find((t) => t.name === name);
 }
+
+// ── Phase 0 (#440): authorization-aware catalog ──────────────────────────────
+// The base set is registered for every agentic run; harness + intelligence
+// tools require the manifest's agentic capabilities (resolved runtime mode).
+// ponytail: capability flags currently derive from resolved mode only;
+// profile-level narrowing (tool_use_level) lands with Phase 1 unification.
+
+const BASE_TOOL_NAMES = [
+  'analyze_and_negotiate_quote',
+  'web_search',
+  'write_research_paper',
+  'write_creative_content',
+  'search_codebase',
+  'generate_music',
+  'generate_image',
+  'generate_video',
+] as const;
+
+const EXTENDED_TOOL_NAMES = [
+  'read_file',
+  'write_file',
+  'patch_file',
+  'execute_command',
+  'discover_documents_secure',
+  'extract_text_secure',
+  'summarize_repo_secure',
+  'semantic_search_secure',
+  'query_workspace_sources',
+] as const;
+
+/**
+ * The single authorized tool-set builder. Both the web engine
+ * (conversationEngine agentic branch) and the Trigger.dev worker
+ * (_registry.ts) MUST route through this — identical manifest inputs
+ * produce identical catalogs (web/worker parity contract).
+ */
+export function buildAuthorizedToolSet(manifest: import('./capabilityManifest').CapabilityManifest): Tool[] {
+  const allowExtended =
+    manifest.capabilities.agentic_harness === 'available' &&
+    manifest.capabilities.workspace_intelligence === 'available';
+  const names = new Set<string>(
+    allowExtended ? [...BASE_TOOL_NAMES, ...EXTENDED_TOOL_NAMES] : [...BASE_TOOL_NAMES],
+  );
+  return AGENTIC_TOOLS.filter((t) => names.has(t.name));
+}
+
+/** Register a tool list into a fresh ToolRegistry. */
+export function registryFromTools(tools: Tool[]): ToolRegistry {
+  const registry = new ToolRegistry();
+  for (const tool of tools) {
+    registry.register(tool);
+  }
+  return registry;
+}

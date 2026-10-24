@@ -20,7 +20,8 @@ export type TelemetryEventType =
   | "jev_shadow_decision"
   | "decision_event"
   | "decision_canary_event"
-  | "context_sieve_event";
+  | "context_sieve_event"
+  | "capability_manifest_resolved";
 
 export interface TelemetryPayload {
   eventType: TelemetryEventType;

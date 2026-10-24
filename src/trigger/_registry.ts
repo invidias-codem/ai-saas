@@ -1,56 +1,37 @@
 import { ToolRegistry } from '@/lib/agents/core/registry';
+import {
+  buildCapabilityManifest,
+  logCapabilityResolution,
+  type CapabilityManifest,
+} from '@/lib/agents/core/capabilityManifest';
 
 /**
- * Rebuilds the agentic ToolRegistry on the Trigger.dev worker from stable
- * module-level tool constants.
+ * Builds the agentic ToolRegistry on the Trigger.dev worker (Phase 0 #440).
  *
- * This is duplicated from the agentic branch of `generateConversationReply`
- * (lib/llm/conversationEngine.ts) ON PURPOSE: the task worker runs outside the
- * request lifecycle, so it cannot inherit the route's in-memory registry. The
- * tools themselves are stable module singletons — safe to re-register here by
- * importing them directly (never serialized across the task boundary).
+ * Delegates to the SAME manifest-gated builder the web engine uses
+ * (lib/agents/core/agenticToolSet.buildAuthorizedToolSet), so web and worker
+ * construct identical catalogs for identical resolved contexts — parity by
+ * construction, never widened. Tools are stable module constants; nothing is
+ * ever serialized across the task boundary.
  */
-export async function buildAgenticRegistry(mode: 'agentic'): Promise<ToolRegistry> {
-  const { dealSentinelTool } = await import('@/lib/agents/tools/dealSentinel');
-  const { webSearchTool } = await import('@/lib/agents/tools/webSearch');
-  const { researchWriterTool } = await import('@/lib/agents/tools/researchWriter');
-  const { novelWriterTool } = await import('@/lib/agents/tools/novelWriter');
-  const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
-  const { generateMusicTool } = await import('@/lib/agents/tools/generateMusic');
-  const { generateImageTool } = await import('@/lib/agents/tools/generateImage');
-  const { generateVideoTool } = await import('@/lib/agents/tools/generateVideo');
-  const { readFileTool, writeFileTool, patchFileTool } = await import('@/lib/agents/tools/harnessTools');
-  const { executeCommandTool } = await import('@/lib/agents/tools/executionTools');
-  const {
-    discoverDocumentsTool,
-    extractTextTool,
-    summarizeRepoTool,
-    semanticSearchTool,
-    workspaceSourcesSearchTool,
-  } = await import('@/lib/agents/tools/intelligenceTools');
-
-  const registry = new ToolRegistry();
-  registry.register(dealSentinelTool);
-  registry.register(webSearchTool);
-  registry.register(researchWriterTool);
-  registry.register(novelWriterTool);
-  registry.register(searchCodebaseTool);
-  registry.register(generateMusicTool);
-  registry.register(generateImageTool);
-  registry.register(generateVideoTool);
-
-  // Phase 1: Local Mutable Capabilities
-  registry.register(readFileTool);
-  registry.register(writeFileTool);
-  registry.register(patchFileTool);
-  registry.register(executeCommandTool);
-
-  // Phase 3 & 4: Intelligence Capabilities
-  registry.register(discoverDocumentsTool);
-  registry.register(extractTextTool);
-  registry.register(summarizeRepoTool);
-  registry.register(semanticSearchTool);
-  registry.register(workspaceSourcesSearchTool);
-
+export async function buildAgenticRegistry(
+  mode: 'agentic',
+  ctx?: { userId?: string; workspaceId?: string | null },
+): Promise<ToolRegistry> {
+  const manifest: CapabilityManifest = buildCapabilityManifest({
+    resolvedMode: mode,
+    workspaceId: ctx?.workspaceId ?? null,
+    backgroundWebResearchEnabled: process.env.ENABLE_WEB_RESEARCH === 'true',
+    longTermMemoryEnabled: process.env.ENABLE_HEAVY_CONTEXT !== 'false',
+  });
+  const { buildAuthorizedToolSet, registryFromTools } = await import('@/lib/agents/core/agenticToolSet');
+  const registry = registryFromTools(buildAuthorizedToolSet(manifest));
+  void logCapabilityResolution({
+    userId: ctx?.userId,
+    workspaceId: ctx?.workspaceId ?? undefined,
+    manifest,
+    surface: 'trigger-worker',
+    toolNames: registry.getToolNames(),
+  });
   return registry;
 }

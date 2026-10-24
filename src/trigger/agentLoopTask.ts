@@ -41,7 +41,10 @@ export const agentLoopTask = task({
 
     // Rebuild the tool registry + context on the worker (stable module-level
     // constants), never deserialize live tool objects from the payload.
-    const registry = await buildAgenticRegistry(payload.mode);
+    const registry = await buildAgenticRegistry(payload.mode, {
+      userId: payload.userId,
+      workspaceId: payload.workspaceId,
+    });
     const context = await getAgenticContext({
       userId: payload.userId,
       workspaceId: payload.workspaceId,
