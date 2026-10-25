@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 import { encrypt } from "@/lib/encryption";
 import { cookies } from "next/headers";
+import { appUrl } from "@/lib/appUrl";
 
 export async function GET(req: NextRequest) {
     const { userId } = await auth();
@@ -67,12 +68,19 @@ export async function GET(req: NextRequest) {
             throw new Error("Failed to save integration to database");
         }
 
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-        return NextResponse.redirect(`${appUrl}/settings?github=connected`);
+        // Normalized join (#446 follow-up): trailing-slash env values must not
+        // produce "//settings". Fallback matches the codebase convention.
+        return NextResponse.redirect(
+            appUrl('/settings?github=connected', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
+        );
 
     } catch (error: any) {
         console.error("[GitHub Auth] Error:", error);
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-        return NextResponse.redirect(`${appUrl}/settings?github=error&message=${encodeURIComponent(error.message)}`);
+        return NextResponse.redirect(
+            appUrl(
+                `/settings?github=error&message=${encodeURIComponent(error.message)}`,
+                process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+            ),
+        );
     }
 }
