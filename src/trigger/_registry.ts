@@ -11,10 +11,12 @@ import {
  * registry AND the manifest-derived system instruction, from the SAME
  * manifest-gated builder the web engine uses — parity by construction.
  *
- * The worker supplies no ioHarness (src/trigger/_context.ts), and every
- * harness/intelligence tool refuses at execute-time without one, so the
- * effective catalog is the base set and the manifest reports those
- * capabilities as unavailable — never as available-but-failing.
+ * The worker supplies no ioHarness (src/trigger/_context.ts); the harness
+ * tools and the four LOCAL discovery tools refuse at execute-time without
+ * one, so their capabilities report unavailable. query_workspace_sources is
+ * SERVER-SIDE source search (workspace/user guards, no harness — #440 review
+ * finding 1), so the worker's effective catalog is the base set plus that
+ * one tool: 9 exposed, advertised identically.
  */
 export async function buildAgenticRuntime(ctx: {
   userId?: string;
@@ -26,7 +28,7 @@ export async function buildAgenticRuntime(ctx: {
     resolvedMode: 'agentic',
     workspaceId: ctx.workspaceId ?? null,
     surface: 'trigger-worker',
-    preparedContextEnabled: false,
+    memoryReadEnabled: false,
     webResearchEnabled: false,
     ioHarnessPresent: false,
   });

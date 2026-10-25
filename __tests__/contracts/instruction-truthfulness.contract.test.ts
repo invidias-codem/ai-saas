@@ -16,7 +16,7 @@ const FULL = {
   resolvedMode: 'agentic',
   workspaceId: 'ws_1',
   surface: 'web' as const,
-  preparedContextEnabled: true,
+  memoryReadEnabled: true,
   webResearchEnabled: true,
   ioHarnessPresent: true,
 };
@@ -25,7 +25,7 @@ const OFF = {
   resolvedMode: 'fast',
   workspaceId: null,
   surface: 'web' as const,
-  preparedContextEnabled: false,
+  memoryReadEnabled: false,
   webResearchEnabled: false,
   ioHarnessPresent: false,
 };
@@ -69,6 +69,14 @@ describe('capability claims match the manifest (#440)', () => {
     );
   });
 
+  it('claims workspace source search only when a workspace is selected in a tool-running mode', () => {
+    const on = buildWeaverSystemInstruction(buildCapabilityManifest(FULL));
+    expect(on).toContain('Workspace source search: available through the query_workspace_sources tool');
+    const off = buildWeaverSystemInstruction(buildCapabilityManifest(OFF));
+    expect(off).toContain('Workspace source search: not supported');
+    expect(off).not.toContain('Workspace source search: available');
+  });
+
   it('unsupported runtime capabilities use the unsupported wording', () => {
     const text = buildWeaverSystemInstruction(buildCapabilityManifest(OFF));
     expect(text).toContain('Agentic tool use: not supported in this runtime mode');
@@ -77,7 +85,8 @@ describe('capability claims match the manifest (#440)', () => {
 
 describe('status distinctions survive rendering — review finding 3 (#440)', () => {
   // Hand-built manifest exercising every status on a distinct capability:
-  // unknown web access, unavailable memory, unsupported workspace context.
+  // unknown web access, unavailable memory, unsupported workspace context,
+  // unknown source search.
   const mixed: CapabilityManifest = {
     identity: 'weaver',
     surface: 'web',
@@ -89,6 +98,7 @@ describe('status distinctions survive rendering — review finding 3 (#440)', ()
       workspace_context: 'unsupported',
       agentic_harness: 'available',
       workspace_intelligence: 'unknown',
+      workspace_source_search: 'unknown',
     },
     connections: [],
   };
@@ -98,6 +108,7 @@ describe('status distinctions survive rendering — review finding 3 (#440)', ()
     expect(text).toContain('Web research: availability unverified for this session');
     expect(text).not.toContain('Web research: not available in this session');
     expect(text).toContain('Workspace intelligence: availability unverified for this session');
+    expect(text).toContain('Workspace source search: availability unverified for this session');
   });
 
   it('unavailable renders as switched-off, not as unsupported', () => {

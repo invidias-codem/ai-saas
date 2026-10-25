@@ -6,9 +6,11 @@
  *
  * Review corrections locked here:
  *  - Parity compares EQUIVALENT effective capabilities, not a fixed count.
- *  - The worker supplies no ioHarness, and every harness/intelligence tool
- *    refuses at execute-time without one, so the worker's effective catalog
- *    is the base set — advertised and exposed must agree.
+ *  - The worker supplies no ioHarness; the harness tools and the four LOCAL
+ *    discovery tools refuse at execute-time without one. query_workspace_sources
+ *    is SERVER-SIDE source search (workspace/user guards, no harness) and
+ *    stays exposed on the worker — the worker's effective catalog is the base
+ *    set plus that one tool.
  */
 jest.mock('@/lib/agents/tools/dealSentinel', () => ({ dealSentinelTool: { name: 'analyze_and_negotiate_quote' } }));
 jest.mock('@/lib/agents/tools/webSearch', () => ({ webSearchTool: { name: 'web_search' } }));
@@ -59,8 +61,9 @@ const INTELLIGENCE = [
   'extract_text_secure',
   'summarize_repo_secure',
   'semantic_search_secure',
-  'query_workspace_sources',
 ];
+
+const SOURCE_SEARCH = ['query_workspace_sources'];
 
 const sorted = (names: string[]) => [...names].sort();
 const catalogNames = (manifest: CapabilityManifest) =>
@@ -70,7 +73,7 @@ const WEB_FULL = {
   resolvedMode: 'agentic' as const,
   workspaceId: 'ws_1',
   surface: 'web' as const,
-  preparedContextEnabled: true,
+  memoryReadEnabled: true,
   webResearchEnabled: true,
   ioHarnessPresent: true,
 };
@@ -86,29 +89,44 @@ describe('parity compares equivalent effective capabilities (#440 review finding
     expect(catalogNames(workerEquivalent)).toEqual(catalogNames(webManifest));
   });
 
-  it('the real worker runtime (no ioHarness) exposes the base set — not the 17-tool blanket', async () => {
+  it('the real worker runtime exposes base + server-side source search (9) — not the blanket, and not less than executable', async () => {
     const runtime = await buildAgenticRuntime({
       userId: 'u1',
       workspaceId: 'ws_1',
       requestId: 'req-1',
       conversationId: 'conv-1',
     });
-    expect(sorted(runtime.registry.getToolNames())).toEqual(sorted(BASE));
-    expect(runtime.registry.getToolNames()).toHaveLength(8);
+    expect(sorted(runtime.registry.getToolNames())).toEqual(sorted([...BASE, ...SOURCE_SEARCH]));
+    expect(runtime.registry.getToolNames()).toHaveLength(9);
     expect(runtime.manifest.capabilities.agentic_harness).toBe('unavailable');
     expect(runtime.manifest.capabilities.workspace_intelligence).toBe('unavailable');
+    expect(runtime.manifest.capabilities.workspace_source_search).toBe('available');
   });
 
-  it('the worker instruction agrees with the worker catalog (no harness wording)', async () => {
+  it('a worker run with no workspace loses server-side source search too', async () => {
+    const runtime = await buildAgenticRuntime({ userId: 'u1', workspaceId: null });
+    expect(sorted(runtime.registry.getToolNames())).toEqual(sorted(BASE));
+    expect(runtime.manifest.capabilities.workspace_source_search).toBe('unsupported');
+  });
+
+  it('the worker instruction agrees with the worker catalog', async () => {
     const runtime = await buildAgenticRuntime({ userId: 'u1', workspaceId: 'ws_1' });
     expect(runtime.systemInstruction).toContain('no execution harness connected');
+    expect(runtime.systemInstruction).toContain('Workspace source search: available through the query_workspace_sources tool');
     expect(runtime.systemInstruction).toContain('You are Weaver');
   });
 
   it('the web agentic surface WITH harness exposes the full set', () => {
     const manifest = buildCapabilityManifest(WEB_FULL);
-    expect(catalogNames(manifest)).toEqual(sorted([...BASE, ...HARNESS, ...INTELLIGENCE]));
+    expect(catalogNames(manifest)).toEqual(
+      sorted([...BASE, ...HARNESS, ...INTELLIGENCE, ...SOURCE_SEARCH]),
+    );
     expect(catalogNames(manifest)).toHaveLength(17);
+  });
+
+  it('a web agentic run WITHOUT a harness keeps local discovery off but source search on', () => {
+    const manifest = buildCapabilityManifest({ ...WEB_FULL, ioHarnessPresent: false });
+    expect(catalogNames(manifest)).toEqual(sorted([...BASE, ...SOURCE_SEARCH]));
   });
 
   it('a non-agentic resolved mode yields the base set only — no broadening', () => {
@@ -118,9 +136,9 @@ describe('parity compares equivalent effective capabilities (#440 review finding
 });
 
 describe('advertised capabilities agree with the filtered catalog (#440 review finding 3)', () => {
-  const harnessStatuses = ['available', 'unavailable', 'unsupported', 'unknown'] as const;
+  const statuses = ['available', 'unavailable', 'unsupported', 'unknown'] as const;
 
-  it.each(harnessStatuses)('agentic_harness=%s → harness tools present iff available', (status) => {
+  it.each(statuses)('agentic_harness=%s → harness tools present iff available', (status) => {
     const manifest = buildCapabilityManifest(WEB_FULL);
     manifest.capabilities.agentic_harness = status;
     const names = catalogNames(manifest);
@@ -130,30 +148,40 @@ describe('advertised capabilities agree with the filtered catalog (#440 review f
       for (const tool of HARNESS) {
         expect(names).not.toContain(tool);
       }
-      // Intelligence gating is independent: with only agentic_harness down,
-      // the intelligence tools remain exposed.
-      expect(names).toEqual(sorted([...BASE, ...INTELLIGENCE]));
+      // Gating is independent: intelligence and source search remain.
+      expect(names).toEqual(sorted([...BASE, ...INTELLIGENCE, ...SOURCE_SEARCH]));
     }
   });
 
-  it.each(harnessStatuses)(
-    'workspace_intelligence=%s → intelligence tools present iff available',
-    (status) => {
-      const manifest = buildCapabilityManifest(WEB_FULL);
-      manifest.capabilities.workspace_intelligence = status;
-      const names = catalogNames(manifest);
-      if (status === 'available') {
-        expect(names).toEqual(expect.arrayContaining(INTELLIGENCE));
-      } else {
-        for (const tool of INTELLIGENCE) {
-          expect(names).not.toContain(tool);
-        }
-        expect(names).toEqual(sorted([...BASE, ...HARNESS]));
+  it.each(statuses)('workspace_intelligence=%s → local discovery tools present iff available', (status) => {
+    const manifest = buildCapabilityManifest(WEB_FULL);
+    manifest.capabilities.workspace_intelligence = status;
+    const names = catalogNames(manifest);
+    if (status === 'available') {
+      expect(names).toEqual(expect.arrayContaining(INTELLIGENCE));
+    } else {
+      for (const tool of INTELLIGENCE) {
+        expect(names).not.toContain(tool);
       }
-    },
-  );
+      expect(names).toEqual(sorted([...BASE, ...HARNESS, ...SOURCE_SEARCH]));
+    }
+  });
 
-  it('the instruction never advertises a harness the catalog does not carry', () => {
+  it.each(statuses)('workspace_source_search=%s → query_workspace_sources present iff available', (status) => {
+    const manifest = buildCapabilityManifest(WEB_FULL);
+    manifest.capabilities.workspace_source_search = status;
+    const names = catalogNames(manifest);
+    if (status === 'available') {
+      expect(names).toEqual(expect.arrayContaining(SOURCE_SEARCH));
+    } else {
+      for (const tool of SOURCE_SEARCH) {
+        expect(names).not.toContain(tool);
+      }
+      expect(names).toEqual(sorted([...BASE, ...HARNESS, ...INTELLIGENCE]));
+    }
+  });
+
+  it('the instruction never advertises a capability the catalog does not carry', () => {
     const withHarness = buildWeaverSystemInstruction(buildCapabilityManifest(WEB_FULL));
     expect(withHarness).toContain('Agentic tool use: this session runs with the file and execution tools');
     const withoutHarness = buildWeaverSystemInstruction(

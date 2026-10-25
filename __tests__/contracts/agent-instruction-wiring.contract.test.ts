@@ -65,7 +65,7 @@ const manifest = buildCapabilityManifest({
   resolvedMode: 'agentic',
   workspaceId: 'ws_1',
   surface: 'web',
-  preparedContextEnabled: true,
+  memoryReadEnabled: true,
   webResearchEnabled: true,
   ioHarnessPresent: true,
 });

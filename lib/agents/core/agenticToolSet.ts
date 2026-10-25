@@ -87,13 +87,16 @@ const BASE_TOOL_NAMES = [
 
 const HARNESS_TOOL_NAMES = ['read_file', 'write_file', 'patch_file', 'execute_command'] as const;
 
+// LOCAL discovery tools — all four refuse at execute-time without
+// context.ioHarness. Server-side source search is gated separately below.
 const INTELLIGENCE_TOOL_NAMES = [
   'discover_documents_secure',
   'extract_text_secure',
   'summarize_repo_secure',
   'semantic_search_secure',
-  'query_workspace_sources',
 ] as const;
+
+const SOURCE_SEARCH_TOOL_NAMES = ['query_workspace_sources'] as const;
 
 /**
  * The single authorized tool-set builder. Both the web engine
@@ -101,8 +104,11 @@ const INTELLIGENCE_TOOL_NAMES = [
  * (_registry.ts) MUST route through this — identical manifest inputs
  * produce identical catalogs (web/worker parity contract). Advertised
  * capabilities and the filtered catalog agree by construction: the harness
- * tools exist iff agentic_harness is available; the intelligence tools iff
- * workspace_intelligence is available.
+ * tools exist iff agentic_harness is available; the LOCAL discovery tools
+ * iff workspace_intelligence is available (all four refuse without
+ * context.ioHarness); query_workspace_sources is SERVER-SIDE source search
+ * (#440 review finding 1: it guards on workspace/user only, no harness) and
+ * follows workspace_source_search.
  */
 export function buildAuthorizedToolSet(manifest: CapabilityManifest): Tool[] {
   const harness =
@@ -111,7 +117,9 @@ export function buildAuthorizedToolSet(manifest: CapabilityManifest): Tool[] {
     manifest.capabilities.workspace_intelligence === 'available'
       ? [...INTELLIGENCE_TOOL_NAMES]
       : [];
-  const names = new Set<string>([...BASE_TOOL_NAMES, ...harness, ...intelligence]);
+  const sourceSearch =
+    manifest.capabilities.workspace_source_search === 'available' ? [...SOURCE_SEARCH_TOOL_NAMES] : [];
+  const names = new Set<string>([...BASE_TOOL_NAMES, ...harness, ...intelligence, ...sourceSearch]);
   return AGENTIC_TOOLS.filter((t) => names.has(t.name));
 }
 

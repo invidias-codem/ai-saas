@@ -5,7 +5,8 @@
 // (buildWeaverSystemInstruction), (b) which tools the authorized catalog
 // exposes (buildAuthorizedToolSet in agenticToolSet.ts), and (c) what the
 // capability trace records. No secrets, no external calls, no DB reads —
-// callers pass explicit EFFECTIVE runtime values.
+// callers pass explicit EFFECTIVE runtime values, derived for the prepared
+// path from the SAME read enforcement retrieval uses.
 //
 // Status vocabulary (closed unions — extend deliberately, never by string):
 //   connections:  not_connected | authorization_required | expired_reconnect_required
@@ -19,6 +20,12 @@
 //   unknown      = availability not verified — never collapse into either
 
 import type { AgentMode } from '@/lib/llm/types';
+import {
+  buildReadEnforcement,
+  normalizePreparedContextPlan,
+  type PreparedContextOptions,
+  type PreparedContextPlan,
+} from '@/lib/context/readEnforcement';
 
 /** The resolved runtime mode vocabulary (lib/llm/types AgentMode). */
 const AGENT_MODES: readonly AgentMode[] = ['fast', 'quality', 'agentic', 'reasoning'];
@@ -43,7 +50,8 @@ export type CapabilityId =
   | 'long_term_memory'
   | 'workspace_context'
   | 'agentic_harness'
-  | 'workspace_intelligence';
+  | 'workspace_intelligence'
+  | 'workspace_source_search';
 
 /** Provider verification evidence. Required (and checked) for connected_verified. */
 export interface ConnectionVerification {
@@ -124,16 +132,21 @@ export function connectionStatus(input: ConnectionInput): ConnectionStatus {
  * `resolvedMode` must be the RESOLVED runtime mode and a member of the
  * AgentMode vocabulary; invalid/unknown/whitespace-only modes are typed
  * failures. The boolean inputs describe effective execution:
- *   preparedContextEnabled — prepared-context sections run at all
- *   webResearchEnabled     — background web research gate, AFTER skip flags
- *   ioHarnessPresent       — context.ioHarness is supplied; every harness and
- *                            intelligence tool refuses at execute-time without it
+ *   memoryReadEnabled  — prepared-path memory retrieval is enforcement-allowed
+ *   webResearchEnabled — background web research is enforcement-allowed
+ *                        (researchReadAllowed: plan limits + skip flags +
+ *                        disable gates all included — pass it through as-is)
+ *   ioHarnessPresent  — context.ioHarness is supplied; the harness tools and
+ *                      the LOCAL discovery tools refuse at execute-time
+ *                      without it. query_workspace_sources is SERVER-SIDE
+ *                      (workspace/user guards only) and follows the workspace
+ *                      gate instead (#440 review finding 1).
  */
 export function buildCapabilityManifest(input: {
   resolvedMode: unknown;
   workspaceId?: string | null;
   surface: CapabilitySurface;
-  preparedContextEnabled: boolean;
+  memoryReadEnabled: boolean;
   webResearchEnabled: boolean;
   ioHarnessPresent: boolean;
   connections?: ConnectionInput[];
@@ -160,19 +173,19 @@ export function buildCapabilityManifest(input: {
     capabilities: {
       // Agentic runs reach the internet through the web_search tool (base
       // catalog); prepared runs only through background research sections,
-      // which require prepared context AND the research gate.
+      // which the read enforcement must allow.
       background_web_research: isAgentic
         ? 'available'
-        : input.webResearchEnabled && input.preparedContextEnabled
+        : input.webResearchEnabled
           ? 'available'
           : 'unavailable',
       // Agentic memory = episodic recall, which requires the io harness;
-      // prepared memory = the prepared-context sections.
+      // prepared memory = the prepared-context sections the enforcement allows.
       long_term_memory: isAgentic
         ? input.ioHarnessPresent
           ? 'available'
           : 'unavailable'
-        : input.preparedContextEnabled
+        : input.memoryReadEnabled
           ? 'available'
           : 'unavailable',
       workspace_context: input.workspaceId ? 'available' : 'unsupported',
@@ -181,17 +194,50 @@ export function buildCapabilityManifest(input: {
         : input.ioHarnessPresent
           ? 'available'
           : 'unavailable',
+      // The four LOCAL discovery tools refuse without context.ioHarness.
       workspace_intelligence: !isAgentic
         ? 'unsupported'
         : input.ioHarnessPresent
           ? 'available'
           : 'unavailable',
+      // query_workspace_sources is server-side source search: it guards on
+      // workspace + user only (no harness), so the workspace is its gate.
+      workspace_source_search: !isAgentic
+        ? 'unsupported'
+        : input.workspaceId
+          ? 'available'
+          : 'unsupported',
     },
     connections: (input.connections ?? []).map((c) => ({
       label: c.label,
       provider: c.provider,
       status: connectionStatus(c),
     })),
+  };
+}
+
+/**
+ * Derive the prepared-path manifest inputs from the SAME effective read
+ * enforcement retrieval uses (#440 review finding 2 — the manifest must never
+ * advertise a read the enforcement layer will not perform). Pure function
+ * over the extracted enforcement layer (lib/context/readEnforcement.ts).
+ */
+export function derivePreparedCapabilityInputs(
+  args: Pick<PreparedContextOptions, 'disableExternalContext' | 'skipWebResearch'> & {
+    plan?: PreparedContextPlan | null;
+  },
+): { webResearchEnabled: boolean; memoryReadEnabled: boolean } {
+  const normalizedPlan = normalizePreparedContextPlan(args.plan ?? undefined);
+  const enforcement = buildReadEnforcement(normalizedPlan, {
+    disableExternalContext: args.disableExternalContext,
+    skipWebResearch: args.skipWebResearch,
+  });
+  return {
+    webResearchEnabled: enforcement.researchReadAllowed,
+    memoryReadEnabled:
+      enforcement.conversationMemoryReadAllowed ||
+      enforcement.workspaceMemoryReadAllowed ||
+      enforcement.userProfileReadAllowed,
   };
 }
 
@@ -233,11 +279,18 @@ const CAPABILITY_LINES: Record<CapabilityId, Record<CapabilityStatus, string>> =
   },
   workspace_intelligence: {
     available:
-      '- Workspace intelligence (document discovery, source search): available through registered tools.',
+      '- Workspace intelligence (local document discovery): available through registered tools.',
     unavailable:
-      '- Workspace intelligence: not available in this session (no execution harness connected).',
+      '- Workspace intelligence (local document discovery): not available in this session (no execution harness connected).',
     unsupported: '- Workspace intelligence: not supported in this runtime mode.',
     unknown: '- Workspace intelligence: availability unverified for this session.',
+  },
+  workspace_source_search: {
+    available:
+      '- Workspace source search: available through the query_workspace_sources tool (your workspace knowledge base).',
+    unavailable: '- Workspace source search: not available in this session.',
+    unsupported: '- Workspace source search: not supported — no workspace is selected for this conversation, or this runtime mode does not carry the tool.',
+    unknown: '- Workspace source search: availability unverified for this session.',
   },
 };
 

@@ -50,6 +50,7 @@ import { withAbort } from '@/lib/runtime/abort';
 import {
   buildCapabilityManifest,
   buildWeaverSystemInstruction,
+  derivePreparedCapabilityInputs,
   logCapabilityResolution,
   type CapabilityManifest,
 } from '@/lib/agents/core/capabilityManifest';
@@ -190,15 +191,32 @@ export async function generateConversationReply(
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
   // Phase 0 (#440): server-produced capability manifest for THIS request,
-  // derived from EFFECTIVE execution values (#440 review finding 2) — skip
-  // flags, prepared-context gates, and harness presence all shape it.
+  // derived from the SAME effective read enforcement retrieval uses (#440
+  // review finding 2). The plan computation is hoisted here — before the
+  // agentic branch — so the manifest and prepareContextBundle cannot drift.
   // Invalid/missing resolved mode is a typed failure — never a silent default.
+  const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
+  const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
+  const graphReadScope: UcolMemoryScope[] = agentMode === 'fast' ? [] : ['graph'];
+  const fallbackMemoryPlan: UcolMemoryPlan = {
+    readScopes: ['conversation', 'user', ...graphReadScope],
+    retrievalMode: agentMode === 'reasoning' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
+    usePreparedContext: true,
+    useGraphRecall: agentMode !== 'fast',
+    useRecentTaskState: false,
+  };
+  const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan(options.memoryPlan ?? fallbackMemoryPlan);
+  const preparedCapabilityInputs = derivePreparedCapabilityInputs({
+    plan: contextPreparationPlan,
+    disableExternalContext: effectivelyDisabled,
+    skipWebResearch: process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch,
+  });
   const capabilityManifest = buildCapabilityManifest({
     resolvedMode: agentMode,
     workspaceId: parsed.workspaceId ?? null,
     surface: 'web',
-    preparedContextEnabled: process.env.ENABLE_HEAVY_CONTEXT !== 'false' && !options.disableExternalContext,
-    webResearchEnabled: process.env.ENABLE_WEB_RESEARCH === 'true' && !options.skipWebResearch,
+    memoryReadEnabled: preparedCapabilityInputs.memoryReadEnabled,
+    webResearchEnabled: preparedCapabilityInputs.webResearchEnabled,
     ioHarnessPresent: Boolean(options.ioHarness),
   });
   const providerKeys = await withAbort(getUserProviderApiKeys(userId), options.signal);
@@ -590,19 +608,10 @@ export async function generateConversationReply(
   // to prevent the router from being distracted by file metadata
   const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
 
-  const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
-  const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
-
-  const graphReadScope: UcolMemoryScope[] = agentMode === 'fast' ? [] : ['graph'];
-  const fallbackMemoryPlan: UcolMemoryPlan = {
-    readScopes: ['conversation', 'user', ...graphReadScope],
-    retrievalMode: agentMode === 'reasoning' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
-    usePreparedContext: true,
-    useGraphRecall: agentMode !== 'fast',
-    useRecentTaskState: false,
-  };
-
-  const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan(options.memoryPlan ?? fallbackMemoryPlan);
+  // Phase 0 (#440): heavy-context gates, fallback memory plan, and the
+  // prepared-context plan are computed ONCE above (before the agentic
+  // branch) — the manifest and prepareContextBundle share them by
+  // construction; no duplicate derivation here.
 
   options.signal?.throwIfAborted();
   const preparedContext = await withAbort(prepareContextBundle({
