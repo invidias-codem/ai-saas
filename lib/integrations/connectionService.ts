@@ -107,22 +107,47 @@ export async function resolveConnectionCredential(
  * Classify a GitHub provider error by inspecting provider evidence (#444):
  * GitHub returns 403 for rate limiting, so status codes alone cannot
  * distinguish authorization failures from availability failures.
+ *
+ * #445 review finding 1: the installed SDK (@octokit/request-error@7.1.0
+ * RequestError) exposes headers at err.response.headers — there is NO
+ * top-level err.headers. Primary rate limit = 403 + exhausted
+ * x-ratelimit-remaining; SECONDARY rate limit = 403 + Retry-After. Both are
+ * availability failures, never authorization failures.
  */
 export function classifyGitHubError(err: unknown): {
   status: ProviderConnectionStatus;
   message: string;
   evidence: Record<string, unknown>;
 } {
-  const e = err as { status?: number; message?: string; headers?: Record<string, unknown> } | null;
-  const headers = (e?.headers ?? {}) as Record<string, unknown>;
-  const rateRemaining = headers['x-ratelimit-remaining'] ?? headers['X-RateLimit-Remaining'];
+  const e = err as
+    | {
+        status?: number;
+        message?: string;
+        response?: { headers?: Record<string, unknown> };
+        headers?: Record<string, unknown>;
+      }
+    | null;
+  // SDK shape first (err.response.headers); top-level headers only as a
+  // fallback for non-SDK error shapes.
+  const headers = (e?.response?.headers ?? e?.headers ?? {}) as Record<string, unknown>;
+  const header = (name: string): string | undefined => {
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase() === name.toLowerCase()) return String(headers[key]);
+    }
+    return undefined;
+  };
+  const rateRemaining = header('x-ratelimit-remaining');
+  const retryAfter = header('retry-after');
   const status = e?.status;
 
-  if (status === 403 && (rateRemaining === '0' || rateRemaining === 0)) {
+  if (status === 403 && (rateRemaining === '0' || retryAfter !== undefined)) {
     return {
       status: 'provider_unavailable',
-      message: 'GitHub rate limit exhausted — this is not an authorization failure. Try again later.',
-      evidence: { status, ratelimitRemaining: 0 },
+      message:
+        retryAfter !== undefined
+          ? 'GitHub secondary rate limit — this is not an authorization failure. Retry after the indicated delay.'
+          : 'GitHub rate limit exhausted — this is not an authorization failure. Try again later.',
+      evidence: { status, ratelimitRemaining: rateRemaining ?? null, retryAfter: retryAfter ?? null },
     };
   }
   if (status === 401) {
@@ -188,18 +213,11 @@ export async function describeGitHubConnection(
     return { status: 'not_connected', connected: false, ...base, verification: null };
   }
 
-  let token: string;
-  try {
-    token = decrypt(data.access_token_encrypted);
-  } catch {
-    return {
-      status: 'expired_reconnect_required',
-      connected: false,
-      ...base,
-      verification: null,
-    };
-  }
-  if (!token) {
+  // Reuse the SHARED resolver (#445 review finding 4): DB and decryption
+  // failures stay typed and propagate — a local decryption failure is NOT
+  // provider revocation and must never surface as expired_reconnect_required.
+  const credential = await resolveConnectionCredential(userId, 'github');
+  if (!credential) {
     return { status: 'not_connected', connected: false, ...base, verification: null };
   }
   if (!opts.verify) {
@@ -208,7 +226,7 @@ export async function describeGitHubConnection(
 
   try {
     const { getOctokit } = await import('@/lib/github');
-    const octokit = getOctokit(token);
+    const octokit = getOctokit(credential.token);
     const response = await octokit.rest.users.getAuthenticated();
     return {
       status: 'connected_verified',

@@ -82,12 +82,12 @@ export const githubListRepositoriesTool: Tool<{ page?: number; perPage?: number 
     try {
       const { getOctokit } = await import("@/lib/github");
       const octokit = getOctokit(credential.token);
-      const response = await octokit.rest.repos.listForAuthenticatedUser({
+      const listing = await octokit.rest.repos.listForAuthenticatedUser({
         per_page: perPage,
         page,
         sort: "updated",
       });
-      const items = (response.data ?? []) as Array<{
+      const items = (listing.data ?? []) as Array<{
         id: number;
         full_name: string;
         private: boolean;
@@ -98,7 +98,35 @@ export const githubListRepositoriesTool: Tool<{ page?: number; perPage?: number 
         owner?: { login?: string };
       }>;
 
-      const hasMore = items.length === perPage;
+      // #445 review finding 2: identity evidence comes from the AUTHENTICATED
+      // user — never inferred from repository owners, which may be an
+      // organization or a collaborator. If the identity call fails, degrade
+      // to null rather than guessing.
+      let account: string | null = null;
+      try {
+        const user = await octokit.rest.users.getAuthenticated();
+        account = (user.data as { login?: string }).login ?? null;
+      } catch {
+        account = null;
+      }
+
+      // #445 review finding 3: continuation derives from GitHub's Link
+      // header — a full FINAL page has no rel="next" and must not be
+      // reported as "more available".
+      const linkHeader = (listing.headers as Record<string, unknown>)["link"];
+      const nextMatch =
+        typeof linkHeader === "string" ? /<([^>]+)>;\s*rel="next"/.exec(linkHeader) : null;
+      const hasMore = Boolean(nextMatch);
+      let nextPage: number | null = null;
+      if (nextMatch) {
+        try {
+          const pageParam = new URL(nextMatch[1], "https://api.github.com").searchParams.get("page");
+          nextPage = pageParam ? Number(pageParam) : null;
+        } catch {
+          nextPage = null;
+        }
+      }
+
       return {
         success: true,
         data: {
@@ -116,7 +144,7 @@ export const githubListRepositoriesTool: Tool<{ page?: number; perPage?: number 
             page,
             perPage,
             hasMore,
-            nextPage: hasMore ? page + 1 : null,
+            nextPage,
             note: hasMore
               ? "More repositories are available — pass nextPage to continue. This page is not the complete list."
               : "End of results: this listing has no further pages.",
@@ -124,9 +152,9 @@ export const githubListRepositoriesTool: Tool<{ page?: number; perPage?: number 
           verification: {
             verifiedAt: new Date().toISOString(),
             method: "github:repos.listForAuthenticatedUser",
-            account: items[0]?.owner?.login ?? null,
+            account,
             requestId:
-              ((response.headers as Record<string, unknown>)["x-github-request-id"] as string | undefined) ??
+              ((listing.headers as Record<string, unknown>)["x-github-request-id"] as string | undefined) ??
               null,
           },
           connectionStatus: "connected_verified",

@@ -1,10 +1,11 @@
 /**
- * Phase 2A (#444) — shared connection service contracts.
+ * Phase 2A (#444 + #445 review) — shared connection service contracts.
  *
  * Pure + mocked-supabase tests: inventory states (stored credential is
  * unverified, never connected), typed lookup failures distinct from
- * not_connected, provider-error classification by evidence (GitHub 403 can
- * be rate limiting), and the status endpoint's honest derivation.
+ * not_connected, provider-error classification from the INSTALLED SDK's
+ * error shape (err.response.headers; primary + secondary rate limits), and
+ * the status endpoint's honest derivation with typed failure propagation.
  */
 jest.mock('@/lib/supabaseClient', () => ({ supabaseAdmin: { from: jest.fn() } }));
 jest.mock('@/lib/encryption', () => ({ decrypt: jest.fn() }));
@@ -23,7 +24,6 @@ import {
   getConnections,
   resolveConnectionCredential,
   describeGitHubConnection,
-  ConnectionLookupError,
 } from '@/lib/integrations/connectionService';
 import { decrypt } from '@/lib/encryption';
 import { getOctokit } from '@/lib/github';
@@ -49,22 +49,44 @@ beforeEach(() => {
   (getOctokit as jest.Mock).mockReset();
 });
 
-describe('provider-error classification inspects evidence (#444)', () => {
-  it('GitHub 403 with exhausted rate limit is provider_unavailable, not access_denied', () => {
-    const classified = classifyGitHubError({ status: 403, headers: { 'x-ratelimit-remaining': '0' } });
+describe('provider-error classification reads the installed SDK shape (#445 finding 1)', () => {
+  // @octokit/request-error@7.1.0 RequestError: headers live at
+  // err.response.headers — there is no top-level err.headers.
+  it('primary rate limit (403 + exhausted remaining, on response.headers) is provider_unavailable', () => {
+    const classified = classifyGitHubError({
+      status: 403,
+      message: 'API rate limit exceeded',
+      response: { headers: { 'x-ratelimit-remaining': '0' } },
+    });
     expect(classified.status).toBe('provider_unavailable');
-    expect(classified.evidence).toMatchObject({ status: 403, ratelimitRemaining: 0 });
+    expect(classified.evidence).toMatchObject({ status: 403, ratelimitRemaining: '0' });
+  });
+
+  it('SECONDARY rate limit (403 + Retry-After) is provider_unavailable, not access_denied', () => {
+    const classified = classifyGitHubError({
+      status: 403,
+      message: 'You have triggered an abuse detection mechanism',
+      response: { headers: { 'retry-after': '60' } },
+    });
+    expect(classified.status).toBe('provider_unavailable');
+    expect(classified.evidence).toMatchObject({ retryAfter: '60' });
   });
 
   it('401 is expired_reconnect_required', () => {
-    expect(classifyGitHubError({ status: 401, message: 'Bad credentials' }).status).toBe(
-      'expired_reconnect_required',
-    );
+    expect(
+      classifyGitHubError({ status: 401, message: 'Bad credentials', response: { headers: {} } }).status,
+    ).toBe('expired_reconnect_required');
   });
 
-  it('403 without rate-limit exhaustion is access_denied', () => {
-    expect(classifyGitHubError({ status: 403, headers: { 'x-ratelimit-remaining': '4900' } }).status).toBe(
-      'access_denied',
+  it('403 without rate-limit evidence is access_denied', () => {
+    expect(
+      classifyGitHubError({ status: 403, response: { headers: { 'x-ratelimit-remaining': '4900' } } }).status,
+    ).toBe('access_denied');
+  });
+
+  it('non-SDK error shapes with top-level headers still classify (fallback)', () => {
+    expect(classifyGitHubError({ status: 403, headers: { 'x-ratelimit-remaining': '0' } }).status).toBe(
+      'provider_unavailable',
     );
   });
 
@@ -99,7 +121,7 @@ describe('inventory: stored credential is unverified, never connected (#444)', (
     expect(await getConnections('u1')).toEqual([]);
   });
 
-  it('DB failure is a typed ConnectionLookupError, never not_connected', async () => {
+  it('DB failure is a typed lookup failure, never not_connected', async () => {
     supabase().from.mockReturnValue(makeQuery({ error: { message: 'connection refused' } }));
     await expect(getConnections('u1')).rejects.toMatchObject({ code: 'DB_ERROR' });
   });
@@ -112,9 +134,7 @@ describe('credential resolution: distinct failures stay distinct (#444)', () => 
   });
 
   it('decryption failure is DECRYPTION_FAILED, never not_connected', async () => {
-    supabase().from.mockReturnValue(
-      makeQuery({ data: { access_token_encrypted: 'enc-token' } }),
-    );
+    supabase().from.mockReturnValue(makeQuery({ data: { access_token_encrypted: 'enc-token' } }));
     (decrypt as jest.Mock).mockImplementation(() => {
       throw new Error('bad key');
     });
@@ -180,12 +200,28 @@ describe('describeGitHubConnection — the status endpoint\'s rules (#444)', () 
     (decrypt as jest.Mock).mockReturnValue('token');
     (getOctokit as jest.Mock).mockReturnValue({
       rest: {
-        users: { getAuthenticated: jest.fn().mockRejectedValue({ status: 401, message: 'Bad credentials' }) },
+        users: {
+          getAuthenticated: jest
+            .fn()
+            .mockRejectedValue({ status: 401, message: 'Bad credentials', response: { headers: {} } }),
+        },
       },
     });
     const status = await describeGitHubConnection('u1', { verify: true });
     expect(status.status).toBe('expired_reconnect_required');
     expect(status.connected).toBe(false);
+  });
+
+  it('a local decryption failure PROPAGATES typed — never reported as provider revocation (#445 finding 4)', async () => {
+    supabase().from.mockReturnValue(
+      makeQuery({ data: { access_token_encrypted: 'enc', metadata: {} } }),
+    );
+    (decrypt as jest.Mock).mockImplementation(() => {
+      throw new Error('bad key');
+    });
+    await expect(describeGitHubConnection('u1', { verify: true })).rejects.toMatchObject({
+      code: 'DECRYPTION_FAILED',
+    });
   });
 });
 
@@ -201,5 +237,15 @@ describe('status endpoint uses the shared rules, UI shape preserved (#444)', () 
       status: 'not_connected',
     });
     expect(getOctokit).not.toHaveBeenCalled();
+  });
+
+  it('GET surfaces a typed decryption failure as a server error, not a connection state (#445 finding 4)', async () => {
+    supabase().from.mockReturnValue(makeQuery({ data: { access_token_encrypted: 'enc', metadata: {} } }));
+    (decrypt as jest.Mock).mockImplementation(() => {
+      throw new Error('bad key');
+    });
+    const { GET } = await import('@/app/api/integrations/github/status/route');
+    const status = await GET();
+    expect((status as unknown as { status: number }).status).toBe(500);
   });
 });

@@ -1,8 +1,9 @@
 /**
- * Phase 2A (#444) — connections → read-only GitHub access, fixture-backed
- * through the ACTUAL registry. Real tools + real executeTool path; only the
- * data edges (supabase via the connection service, octokit) are mocked.
- * The real error classifier runs (partial module mock); no live calls.
+ * Phase 2A (#444 + #445 review) — connections → read-only GitHub access,
+ * fixture-backed through the ACTUAL registry. Real tools + real executeTool
+ * path; only the data edges (supabase via the connection service, octokit)
+ * are mocked. The real error classifier runs (partial module mock); octokit
+ * fixtures use the INSTALLED SDK's error shape (err.response.headers).
  */
 jest.mock('@/lib/supabaseClient', () => ({ supabaseAdmin: { from: jest.fn() } }));
 jest.mock('@/lib/encryption', () => ({ decrypt: jest.fn() }));
@@ -66,13 +67,19 @@ const MANIFEST = buildCapabilityManifest({
   ioHarnessPresent: false,
 });
 
+/** Octokit stub: repos listing + authenticated identity (jj-em). */
 function octokitStub(listImpl: jest.Mock) {
   (getOctokit as jest.Mock).mockReturnValue({
-    rest: { repos: { listForAuthenticatedUser: listImpl } },
+    rest: {
+      repos: { listForAuthenticatedUser: listImpl },
+      users: {
+        getAuthenticated: jest.fn().mockResolvedValue({ data: { login: 'jj-em' }, headers: {} }),
+      },
+    },
   });
 }
 
-const repo = (id: number, name: string) => ({
+const repo = (id: number, name: string, owner = 'jj-em') => ({
   id,
   full_name: name,
   private: false,
@@ -80,7 +87,7 @@ const repo = (id: number, name: string) => ({
   language: 'TypeScript',
   updated_at: '2026-10-20T00:00:00Z',
   html_url: `https://github.com/${name}`,
-  owner: { login: 'jj-em' },
+  owner: { login: owner },
 });
 
 beforeEach(() => {
@@ -133,9 +140,27 @@ describe('acceptance journey: "Which tools have I connected?" → "Show my GitHu
     });
     expect(Date.parse(listing.data.data.verification.verifiedAt)).not.toBeNaN();
   });
+
+  it('organization-owned repositories never misattribute the account (#445 finding 2)', async () => {
+    (resolveConnectionCredential as jest.Mock).mockResolvedValue({ service: 'github', token: 't' });
+    // Every repository visible in the listing is owned by an ORG — the
+    // authenticated user is jj-em, and the evidence must say so.
+    octokitStub(
+      jest.fn().mockResolvedValue({
+        data: [repo(1, 'acme-org/widget', 'acme-org'), repo(2, 'acme-org/internal-tools', 'acme-org')],
+        headers: { 'x-github-request-id': 'GH-REQ-2' },
+      }),
+    );
+    const registry = registryFromTools(buildAuthorizedToolSet(MANIFEST));
+    const listing = await registry.executeTool('github_list_repositories', { perPage: 2 }, ctx);
+    expect(listing.data.success).toBe(true);
+    expect(listing.data.data.verification.account).toBe('jj-em');
+    expect(listing.data.data.verification.account).not.toBe('acme-org');
+    expect(listing.data.data.repositories[0]).toMatchObject({ owner: 'acme-org' });
+  });
 });
 
-describe('acceptance cases through the real registry (#444)', () => {
+describe('acceptance cases through the real registry (#444 + #445)', () => {
   it('no credential → not_connected, and no provider request is made', async () => {
     (resolveConnectionCredential as jest.Mock).mockResolvedValue(null);
     const registry = registryFromTools(buildAuthorizedToolSet(MANIFEST));
@@ -159,7 +184,9 @@ describe('acceptance cases through the real registry (#444)', () => {
 
   it('revoked credential (401) → reconnect required on the next operation', async () => {
     (resolveConnectionCredential as jest.Mock).mockResolvedValue({ service: 'github', token: 't' });
-    octokitStub(jest.fn().mockRejectedValue({ status: 401, message: 'Bad credentials' }));
+    octokitStub(
+      jest.fn().mockRejectedValue({ status: 401, message: 'Bad credentials', response: { headers: {} } }),
+    );
     const registry = registryFromTools(buildAuthorizedToolSet(MANIFEST));
     const result = await registry.executeTool('github_list_repositories', {}, ctx);
     expect(result.data.success).toBe(false);
@@ -167,10 +194,14 @@ describe('acceptance cases through the real registry (#444)', () => {
     expect(String(result.data.error)).toContain('Reconnect');
   });
 
-  it('rate limit (403 + exhausted header) stays distinguishable from authorization failure', async () => {
+  it('primary rate limit (403 + exhausted, SDK response.headers) stays distinguishable from authorization failure', async () => {
     (resolveConnectionCredential as jest.Mock).mockResolvedValue({ service: 'github', token: 't' });
     octokitStub(
-      jest.fn().mockRejectedValue({ status: 403, message: 'rate limited', headers: { 'x-ratelimit-remaining': '0' } }),
+      jest.fn().mockRejectedValue({
+        status: 403,
+        message: 'rate limited',
+        response: { headers: { 'x-ratelimit-remaining': '0' } },
+      }),
     );
     const registry = registryFromTools(buildAuthorizedToolSet(MANIFEST));
     const result = await registry.executeTool('github_list_repositories', {}, ctx);
@@ -178,26 +209,70 @@ describe('acceptance cases through the real registry (#444)', () => {
     expect(result.data.data.connectionStatus).not.toBe('access_denied');
   });
 
+  it('SECONDARY rate limit (403 + Retry-After, SDK response.headers) is provider_unavailable (#445 finding 1)', async () => {
+    (resolveConnectionCredential as jest.Mock).mockResolvedValue({ service: 'github', token: 't' });
+    octokitStub(
+      jest.fn().mockRejectedValue({
+        status: 403,
+        message: 'abuse detection',
+        response: { headers: { 'retry-after': '60' } },
+      }),
+    );
+    const registry = registryFromTools(buildAuthorizedToolSet(MANIFEST));
+    const result = await registry.executeTool('github_list_repositories', {}, ctx);
+    expect(result.data.data.connectionStatus).toBe('provider_unavailable');
+    expect(result.data.data.connectionStatus).not.toBe('access_denied');
+    expect(result.data.data.evidence).toMatchObject({ retryAfter: '60' });
+  });
+
   it('a plain 403 is access_denied', async () => {
     (resolveConnectionCredential as jest.Mock).mockResolvedValue({ service: 'github', token: 't' });
-    octokitStub(jest.fn().mockRejectedValue({ status: 403, headers: { 'x-ratelimit-remaining': '4900' } }));
+    octokitStub(
+      jest.fn().mockRejectedValue({
+        status: 403,
+        response: { headers: { 'x-ratelimit-remaining': '4900' } },
+      }),
+    );
     const registry = registryFromTools(buildAuthorizedToolSet(MANIFEST));
     const result = await registry.executeTool('github_list_repositories', {}, ctx);
     expect(result.data.data.connectionStatus).toBe('access_denied');
   });
 
-  it('pagination: a full page reports hasMore + nextPage; a partial page is never "all"', async () => {
+  it('pagination: continuation derives from the Link header — a full FINAL page has no rel="next" (#445 finding 3)', async () => {
     (resolveConnectionCredential as jest.Mock).mockResolvedValue({ service: 'github', token: 't' });
-    octokitStub(jest.fn().mockResolvedValue({ data: [repo(1, 'a'), repo(2, 'b')], headers: {} }));
     const registry = registryFromTools(buildAuthorizedToolSet(MANIFEST));
+
+    // Page 1 of 2: rel="next" present → hasMore + nextPage from the header.
+    octokitStub(
+      jest.fn().mockResolvedValue({
+        data: [repo(1, 'a'), repo(2, 'b')],
+        headers: {
+          link: '<https://api.github.com/user/repos?page=2&per_page=2>; rel="next", <https://api.github.com/user/repos?page=1&per_page=2>; rel="first"',
+        },
+      }),
+    );
     const full = await registry.executeTool('github_list_repositories', { page: 1, perPage: 2 }, ctx);
     expect(full.data.data.pagination).toMatchObject({ hasMore: true, nextPage: 2 });
     expect(String(full.data.data.pagination.note)).toContain('not the complete list');
 
-    octokitStub(jest.fn().mockResolvedValue({ data: [repo(3, 'c')], headers: {} }));
-    const partial = await registry.executeTool('github_list_repositories', { page: 2, perPage: 2 }, ctx);
+    // A full FINAL page: exactly perPage items and NO rel="next" — must not
+    // invent another page.
+    octokitStub(
+      jest.fn().mockResolvedValue({
+        data: [repo(3, 'c'), repo(4, 'd')],
+        headers: {
+          link: '<https://api.github.com/user/repos?page=1&per_page=2>; rel="first", <https://api.github.com/user/repos?page=2&per_page=2>; rel="prev"',
+        },
+      }),
+    );
+    const finalFull = await registry.executeTool('github_list_repositories', { page: 2, perPage: 2 }, ctx);
+    expect(finalFull.data.data.pagination).toMatchObject({ hasMore: false, nextPage: null });
+    expect(String(finalFull.data.data.pagination.note)).toContain('no further pages');
+
+    // A partial page without any Link header at all.
+    octokitStub(jest.fn().mockResolvedValue({ data: [repo(5, 'e')], headers: {} }));
+    const partial = await registry.executeTool('github_list_repositories', { page: 3, perPage: 2 }, ctx);
     expect(partial.data.data.pagination).toMatchObject({ hasMore: false, nextPage: null });
-    expect(String(partial.data.data.pagination.note)).toContain('no further pages');
   });
 
   it('another user\'s credential is inaccessible: resolution uses the caller identity only', async () => {
