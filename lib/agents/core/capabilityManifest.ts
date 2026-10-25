@@ -234,10 +234,16 @@ export function derivePreparedCapabilityInputs(
   });
   return {
     webResearchEnabled: enforcement.researchReadAllowed,
+    // Every IMPLEMENTED memory read counts: prepareContextBundle retrieves
+    // graph context under graphReadAllowed (allowGraphRecall), independently
+    // of the conversation/workspace/userProfile gates — a graph-only plan
+    // retrieves stored context and must not read as memory-unavailable
+    // (#440 review round 4).
     memoryReadEnabled:
       enforcement.conversationMemoryReadAllowed ||
       enforcement.workspaceMemoryReadAllowed ||
-      enforcement.userProfileReadAllowed,
+      enforcement.userProfileReadAllowed ||
+      enforcement.graphReadAllowed,
   };
 }
 

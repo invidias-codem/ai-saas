@@ -221,6 +221,56 @@ describe('prepared-path derivation uses the real read enforcement — review fin
     expect(inputs.webResearchEnabled).toBe(false);
     expect(inputs.memoryReadEnabled).toBe(false);
   });
+
+  it('graph-only plan: graph recall is an implemented memory read → memory advertised', () => {
+    // Review round 4 reproduction: prepareContextBundle permits graph
+    // retrieval and includes its context for this plan, so the manifest must
+    // not report memory unavailable while graph context reaches the prompt.
+    const plan = createPreparedContextPlanFromMemoryPlan({
+      retrievalMode: 'deep',
+      readScopes: ['graph'],
+      usePreparedContext: true,
+      useGraphRecall: true,
+      useRecentTaskState: false,
+    });
+    const inputs = derivePreparedCapabilityInputs({ plan });
+    expect(inputs.memoryReadEnabled).toBe(true);
+    const manifest = buildCapabilityManifest({
+      ...BASE,
+      resolvedMode: 'fast',
+      workspaceId: 'ws_1',
+      memoryReadEnabled: inputs.memoryReadEnabled,
+      webResearchEnabled: inputs.webResearchEnabled,
+    });
+    expect(manifest.capabilities.long_term_memory).toBe('available');
+  });
+
+  it('graph scope with graph recall disabled → memory NOT advertised', () => {
+    const inputs = derivePreparedCapabilityInputs({
+      plan: {
+        retrievalMode: 'deep',
+        readScopes: ['graph'],
+        usePreparedContext: true,
+        useGraphRecall: false,
+        useRecentTaskState: false,
+      },
+    });
+    expect(inputs.memoryReadEnabled).toBe(false);
+  });
+
+  it('graph-only plan with usePreparedContext=false → memory NOT advertised', () => {
+    const inputs = derivePreparedCapabilityInputs({
+      plan: {
+        retrievalMode: 'deep',
+        readScopes: ['graph'],
+        usePreparedContext: false,
+        useGraphRecall: true,
+        useRecentTaskState: false,
+      },
+    });
+    expect(inputs.memoryReadEnabled).toBe(false);
+    expect(inputs.webResearchEnabled).toBe(false);
+  });
 });
 
 describe('availability derives from effective execution values — review findings 1+2 (#440)', () => {
