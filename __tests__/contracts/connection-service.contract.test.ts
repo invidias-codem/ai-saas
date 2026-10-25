@@ -72,6 +72,38 @@ describe('provider-error classification reads the installed SDK shape (#445 find
     expect(classified.evidence).toMatchObject({ retryAfter: '60' });
   });
 
+  it('secondary rate limit WITHOUT Retry-After, identified by the provider message (#445 final fix)', () => {
+    // GitHub documents Retry-After as optional: the message names the limit.
+    const classified = classifyGitHubError({
+      status: 403,
+      message: 'You have triggered an abuse detection mechanism and must wait before making more requests.',
+      response: { headers: { 'x-ratelimit-remaining': '4999' } },
+    });
+    expect(classified.status).toBe('provider_unavailable');
+    expect(classified.status).not.toBe('access_denied');
+    expect(classified.evidence).toMatchObject({ retryAfter: null, messageMatched: true });
+  });
+
+  it('secondary rate limit phrased as "exceeded a secondary rate limit" is provider_unavailable', () => {
+    const classified = classifyGitHubError({
+      status: 403,
+      message: 'You have exceeded a secondary rate limit and have been temporarily blocked from content creation.',
+      response: { headers: {} },
+    });
+    expect(classified.status).toBe('provider_unavailable');
+  });
+
+  it('an ordinary 403 message stays access_denied', () => {
+    const classified = classifyGitHubError({
+      status: 403,
+      message: 'Resource not accessible by integration',
+      response: { headers: { 'x-ratelimit-remaining': '4999' } },
+    });
+    expect(classified.status).toBe('access_denied');
+    // No secondary-limit evidence is claimed for an ordinary 403.
+    expect(classified.evidence.messageMatched ?? null).toBeNull();
+  });
+
   it('401 is expired_reconnect_required', () => {
     expect(
       classifyGitHubError({ status: 401, message: 'Bad credentials', response: { headers: {} } }).status,

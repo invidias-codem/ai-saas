@@ -139,15 +139,31 @@ export function classifyGitHubError(err: unknown): {
   const rateRemaining = header('x-ratelimit-remaining');
   const retryAfter = header('retry-after');
   const status = e?.status;
+  const message = e?.message ?? '';
 
-  if (status === 403 && (rateRemaining === '0' || retryAfter !== undefined)) {
+  // Secondary rate limits: GitHub documents Retry-After as OPTIONAL — the
+  // provider's message names the limit explicitly ("secondary rate limit",
+  // "abuse detection mechanism"). Recognize the message so an availability
+  // failure is never reported as an authorization failure (#445 final fix).
+  // Ordinary 403 messages ("Resource not accessible by integration",
+  // "Forbidden") do not match and stay access_denied.
+  const secondaryLimitMessage = /secondary rate limit|abuse detection mechanism/i.test(message);
+
+  if (status === 403 && (rateRemaining === '0' || retryAfter !== undefined || secondaryLimitMessage)) {
     return {
       status: 'provider_unavailable',
       message:
-        retryAfter !== undefined
-          ? 'GitHub secondary rate limit — this is not an authorization failure. Retry after the indicated delay.'
-          : 'GitHub rate limit exhausted — this is not an authorization failure. Try again later.',
-      evidence: { status, ratelimitRemaining: rateRemaining ?? null, retryAfter: retryAfter ?? null },
+        secondaryLimitMessage && retryAfter === undefined
+          ? 'GitHub secondary rate limit — this is not an authorization failure. Retry after a delay.'
+          : retryAfter !== undefined
+            ? 'GitHub secondary rate limit — this is not an authorization failure. Retry after the indicated delay.'
+            : 'GitHub rate limit exhausted — this is not an authorization failure. Try again later.',
+      evidence: {
+        status,
+        ratelimitRemaining: rateRemaining ?? null,
+        retryAfter: retryAfter ?? null,
+        messageMatched: secondaryLimitMessage || null,
+      },
     };
   }
   if (status === 401) {
