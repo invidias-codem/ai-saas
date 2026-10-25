@@ -1,5 +1,6 @@
 // lib/agents/core/capabilityManifest.ts
-// Phase 0 (#440): server-produced, per-request capability manifest.
+// Phase 0 (#440) + Phase 1 (#442) + Phase 2A (#444): server-produced,
+// per-request capability manifest.
 //
 // Single source of truth for (a) what the model is told it can do
 // (buildWeaverSystemInstruction), (b) which tools the authorized catalog
@@ -52,7 +53,8 @@ export type CapabilityId =
   | 'agentic_harness'
   | 'workspace_intelligence'
   | 'workspace_source_search'
-  | 'workspace_discovery';
+  | 'workspace_discovery'
+  | 'connection_discovery';
 
 /** Provider verification evidence. Required (and checked) for connected_verified. */
 export interface ConnectionVerification {
@@ -60,7 +62,7 @@ export interface ConnectionVerification {
   checkedAt: string;
 }
 
-/** Caller-supplied connection facts. Phase 0 callers pass none (no external calls). */
+/** Caller-supplied connection facts. The manifest itself carries no inventory (#444). */
 export interface ConnectionInput {
   label: string;
   provider: string;
@@ -139,9 +141,9 @@ export function connectionStatus(input: ConnectionInput): ConnectionStatus {
  *                        disable gates all included — pass it through as-is)
  *   ioHarnessPresent  — context.ioHarness is supplied; the harness tools and
  *                      the LOCAL discovery tools refuse at execute-time
- *                      without it. query_workspace_sources is SERVER-SIDE
- *                      (workspace/user guards only) and follows the workspace
- *                      gate instead (#440 review finding 1).
+ *                      without it. Server-side tools (source search,
+ *                      workspace discovery, connection discovery) follow
+ *                      identity gates instead (#443/#444).
  */
 export function buildCapabilityManifest(input: {
   resolvedMode: unknown;
@@ -209,6 +211,10 @@ export function buildCapabilityManifest(input: {
       // workspace_list / workspace_describe are server-side reads gated on
       // the caller's identity (userId) — carried by every agentic surface.
       workspace_discovery: isAgentic ? 'available' : 'unsupported',
+      // connections_list / github_list_repositories are server-side tools
+      // gated on the authenticated identity — never on harness presence or
+      // workspace selection (#444). Credential state resolves at execute time.
+      connection_discovery: isAgentic ? 'available' : 'unsupported',
     },
     connections: (input.connections ?? []).map((c) => ({
       label: c.label,
@@ -307,6 +313,13 @@ const CAPABILITY_LINES: Record<CapabilityId, Record<CapabilityStatus, string>> =
     unsupported: '- Workspace discovery: not supported in this runtime mode.',
     unknown: '- Workspace discovery: availability unverified for this session.',
   },
+  connection_discovery: {
+    available:
+      '- Connected accounts: available — list your connected tools and read your own GitHub repositories through registered tools. Connection states come from the connections_list tool and operation results, not from this manifest.',
+    unavailable: '- Connected accounts: not available in this session.',
+    unsupported: '- Connected accounts: not supported in this runtime mode.',
+    unknown: '- Connected accounts: availability unverified for this session.',
+  },
 };
 
 function renderCapabilityLines(manifest: CapabilityManifest): string[] {
@@ -317,6 +330,13 @@ function renderCapabilityLines(manifest: CapabilityManifest): string[] {
 
 function renderConnectionLines(manifest: CapabilityManifest): string[] {
   if (manifest.connections.length === 0) {
+    // The manifest carries no inventory by design (#444: inventory alone
+    // makes no external calls). Where the discovery tool runs, point at it.
+    if (manifest.capabilities.connection_discovery === 'available') {
+      return [
+        '- Connections: not inventoried in this manifest — use the connections_list tool to discover connected accounts and their verification states.',
+      ];
+    }
     return ['- Connections: none reported in this session.'];
   }
   return manifest.connections.map((c) => `- ${c.label} (${c.provider}): ${c.status.replace(/_/g, ' ')}`);
@@ -344,7 +364,7 @@ ${renderCapabilityLines(manifest).join('\n')}
 
 CONNECTIONS (server-provided):
 ${renderConnectionLines(manifest).join('\n')}
-- When you report on connections, use only these states: not connected, authorization required, reconnect required, access denied, provider unavailable, unverified, connected and verified. A stored credential without a completed provider verification is "unverified" — never "connected".
+- When you report on connections, use only these states: not connected, authorization required, reconnect required, access denied, provider unavailable, unverified, connected and verified. A stored credential without a completed provider verification is "unverified" — never "connected". A successful provider operation in this session (its result carries verification evidence) establishes verified access for that operation.
 
 TRUTHFUL REPORTING:
 - Speak about your access only from the CAPABILITIES list above and from actual tool results. Never claim a capability that is not listed as available, and never deny one that is.
