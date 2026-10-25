@@ -64,3 +64,70 @@ export function buildAgenticRegistry(): ToolRegistry {
 export function resolveAgenticTool(name: string): Tool | undefined {
   return AGENTIC_TOOLS.find((t) => t.name === name);
 }
+
+// ── Phase 0 (#440): authorization-aware catalog ──────────────────────────────
+// Gating follows the manifest's EFFECTIVE execution capabilities: the harness
+// tools and the intelligence tools each refuse at execute-time without
+// context.ioHarness, so a surface that supplies no harness must not expose
+// them. ponytail: profile-level narrowing (tool_use_level) lands with Phase 1
+// unification.
+
+import type { CapabilityManifest } from './capabilityManifest';
+
+const BASE_TOOL_NAMES = [
+  'analyze_and_negotiate_quote',
+  'web_search',
+  'write_research_paper',
+  'write_creative_content',
+  'search_codebase',
+  'generate_music',
+  'generate_image',
+  'generate_video',
+] as const;
+
+const HARNESS_TOOL_NAMES = ['read_file', 'write_file', 'patch_file', 'execute_command'] as const;
+
+// LOCAL discovery tools — all four refuse at execute-time without
+// context.ioHarness. Server-side source search is gated separately below.
+const INTELLIGENCE_TOOL_NAMES = [
+  'discover_documents_secure',
+  'extract_text_secure',
+  'summarize_repo_secure',
+  'semantic_search_secure',
+] as const;
+
+const SOURCE_SEARCH_TOOL_NAMES = ['query_workspace_sources'] as const;
+
+/**
+ * The single authorized tool-set builder. Both the web engine
+ * (conversationEngine agentic branch) and the Trigger.dev worker
+ * (_registry.ts) MUST route through this — identical manifest inputs
+ * produce identical catalogs (web/worker parity contract). Advertised
+ * capabilities and the filtered catalog agree by construction: the harness
+ * tools exist iff agentic_harness is available; the LOCAL discovery tools
+ * iff workspace_intelligence is available (all four refuse without
+ * context.ioHarness); query_workspace_sources is SERVER-SIDE source search
+ * (#440 review finding 1: it guards on workspace/user only, no harness) and
+ * follows workspace_source_search.
+ */
+export function buildAuthorizedToolSet(manifest: CapabilityManifest): Tool[] {
+  const harness =
+    manifest.capabilities.agentic_harness === 'available' ? [...HARNESS_TOOL_NAMES] : [];
+  const intelligence =
+    manifest.capabilities.workspace_intelligence === 'available'
+      ? [...INTELLIGENCE_TOOL_NAMES]
+      : [];
+  const sourceSearch =
+    manifest.capabilities.workspace_source_search === 'available' ? [...SOURCE_SEARCH_TOOL_NAMES] : [];
+  const names = new Set<string>([...BASE_TOOL_NAMES, ...harness, ...intelligence, ...sourceSearch]);
+  return AGENTIC_TOOLS.filter((t) => names.has(t.name));
+}
+
+/** Register a tool list into a fresh ToolRegistry. */
+export function registryFromTools(tools: Tool[]): ToolRegistry {
+  const registry = new ToolRegistry();
+  for (const tool of tools) {
+    registry.register(tool);
+  }
+  return registry;
+}
