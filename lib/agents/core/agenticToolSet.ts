@@ -29,6 +29,7 @@ export const AGENTIC_TOOLS: Tool[] = (() => {
     semanticSearchTool,
     workspaceSourcesSearchTool,
   } = require('@/lib/agents/tools/intelligenceTools');
+  const { workspaceListTool, workspaceDescribeTool } = require('@/lib/agents/tools/workspaceTools');
 
   return [
     dealSentinelTool,
@@ -48,6 +49,8 @@ export const AGENTIC_TOOLS: Tool[] = (() => {
     summarizeRepoTool,
     semanticSearchTool,
     workspaceSourcesSearchTool,
+    workspaceListTool,
+    workspaceDescribeTool,
   ] as Tool[];
 })();
 
@@ -98,6 +101,9 @@ const INTELLIGENCE_TOOL_NAMES = [
 
 const SOURCE_SEARCH_TOOL_NAMES = ['query_workspace_sources'] as const;
 
+// Phase 1 (#442): read-only discovery tools — server-side, identity-gated.
+const WORKSPACE_DISCOVERY_TOOL_NAMES = ['workspace_list', 'workspace_describe'] as const;
+
 /**
  * The single authorized tool-set builder. Both the web engine
  * (conversationEngine agentic branch) and the Trigger.dev worker
@@ -119,7 +125,17 @@ export function buildAuthorizedToolSet(manifest: CapabilityManifest): Tool[] {
       : [];
   const sourceSearch =
     manifest.capabilities.workspace_source_search === 'available' ? [...SOURCE_SEARCH_TOOL_NAMES] : [];
-  const names = new Set<string>([...BASE_TOOL_NAMES, ...harness, ...intelligence, ...sourceSearch]);
+  const discovery =
+    manifest.capabilities.workspace_discovery === 'available'
+      ? [...WORKSPACE_DISCOVERY_TOOL_NAMES]
+      : [];
+  const names = new Set<string>([
+    ...BASE_TOOL_NAMES,
+    ...harness,
+    ...intelligence,
+    ...sourceSearch,
+    ...discovery,
+  ]);
   return AGENTIC_TOOLS.filter((t) => names.has(t.name));
 }
 

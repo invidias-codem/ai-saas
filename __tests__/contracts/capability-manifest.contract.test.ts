@@ -277,6 +277,7 @@ describe('availability derives from effective execution values — review findin
   it('agentic WITH harness: full tool-backed capabilities', () => {
     const manifest = buildCapabilityManifest({ ...BASE, resolvedMode: 'agentic', workspaceId: 'ws_1' });
     expect(manifest.capabilities.agentic_harness).toBe('available');
+    expect(manifest.capabilities.workspace_discovery).toBe('available');
     expect(manifest.capabilities.workspace_intelligence).toBe('available');
     expect(manifest.capabilities.long_term_memory).toBe('available');
     expect(manifest.capabilities.background_web_research).toBe('available');
@@ -299,9 +300,9 @@ describe('availability derives from effective execution values — review findin
     expect(manifest.capabilities.background_web_research).toBe('available');
   });
 
-  it('agentic WITHOUT a workspace: server-side source search is unsupported', () => {
+  it('agentic WITHOUT a workspace: explicit-target source search stays available (#443 review)', () => {
     const manifest = buildCapabilityManifest({ ...BASE, resolvedMode: 'agentic' });
-    expect(manifest.capabilities.workspace_source_search).toBe('unsupported');
+    expect(manifest.capabilities.workspace_source_search).toBe('available');
     expect(manifest.capabilities.workspace_context).toBe('unsupported');
   });
 
@@ -333,6 +334,7 @@ describe('availability derives from effective execution values — review findin
     expect(manifest.capabilities.agentic_harness).toBe('unsupported');
     expect(manifest.capabilities.workspace_intelligence).toBe('unsupported');
     expect(manifest.capabilities.workspace_source_search).toBe('unsupported');
+    expect(manifest.capabilities.workspace_discovery).toBe('unsupported');
   });
 
   it('carries surface and the Weaver identity', () => {

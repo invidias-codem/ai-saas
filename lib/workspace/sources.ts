@@ -4,6 +4,7 @@
 
 import { supabaseAdmin } from "@/lib/supabaseClient";
 import { generateEmbedding } from "@/lib/ai/embeddings";
+import { getWorkspaceAccess } from "@/lib/security/workspaceAccess";
 
 export interface LineageNode {
   node_id: string;
@@ -54,15 +55,10 @@ export async function queryWorkspaceSources(
 
   if (!supabaseAdmin) return [];
 
-  // Access check: ensure the user owns or belongs to this workspace.
-  const { data: workspaceData, error: workspaceError } = await supabaseAdmin
-    .from("workspaces")
-    .select("id")
-    .eq("id", workspaceId)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (workspaceError || !workspaceData) {
+  // Access check (#442): the single shared seam covers ownership AND accepted
+  // membership — pending invitations grant nothing, revocations block reads.
+  const access = await getWorkspaceAccess(userId, workspaceId);
+  if (!access) {
     return [];
   }
 
