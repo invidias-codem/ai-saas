@@ -30,6 +30,7 @@ export const AGENTIC_TOOLS: Tool[] = (() => {
     workspaceSourcesSearchTool,
   } = require('@/lib/agents/tools/intelligenceTools');
   const { workspaceListTool, workspaceDescribeTool } = require('@/lib/agents/tools/workspaceTools');
+  const { connectionsListTool, githubListRepositoriesTool } = require('@/lib/agents/tools/connectionTools');
 
   return [
     dealSentinelTool,
@@ -51,6 +52,8 @@ export const AGENTIC_TOOLS: Tool[] = (() => {
     workspaceSourcesSearchTool,
     workspaceListTool,
     workspaceDescribeTool,
+    connectionsListTool,
+    githubListRepositoriesTool,
   ] as Tool[];
 })();
 
@@ -104,6 +107,11 @@ const SOURCE_SEARCH_TOOL_NAMES = ['query_workspace_sources'] as const;
 // Phase 1 (#442): read-only discovery tools — server-side, identity-gated.
 const WORKSPACE_DISCOVERY_TOOL_NAMES = ['workspace_list', 'workspace_describe'] as const;
 
+// Phase 2A (#444): connection discovery + read-only GitHub access —
+// server-side, identity-gated (the credential resolves from the authenticated
+// runtime identity only). Independent of harness presence or workspace.
+const CONNECTION_TOOL_NAMES = ['connections_list', 'github_list_repositories'] as const;
+
 /**
  * The single authorized tool-set builder. Both the web engine
  * (conversationEngine agentic branch) and the Trigger.dev worker
@@ -129,12 +137,15 @@ export function buildAuthorizedToolSet(manifest: CapabilityManifest): Tool[] {
     manifest.capabilities.workspace_discovery === 'available'
       ? [...WORKSPACE_DISCOVERY_TOOL_NAMES]
       : [];
+  const connections =
+    manifest.capabilities.connection_discovery === 'available' ? [...CONNECTION_TOOL_NAMES] : [];
   const names = new Set<string>([
     ...BASE_TOOL_NAMES,
     ...harness,
     ...intelligence,
     ...sourceSearch,
     ...discovery,
+    ...connections,
   ]);
   return AGENTIC_TOOLS.filter((t) => names.has(t.name));
 }
