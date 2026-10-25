@@ -77,6 +77,14 @@ describe('capability claims match the manifest (#440)', () => {
     expect(off).not.toContain('Workspace source search: available');
   });
 
+  it('claims connection discovery in tool-running modes only (#444)', () => {
+    const on = buildWeaverSystemInstruction(buildCapabilityManifest(FULL));
+    expect(on).toContain('Connected accounts: available');
+    const off = buildWeaverSystemInstruction(buildCapabilityManifest(OFF));
+    expect(off).toContain('Connected accounts: not supported in this runtime mode');
+    expect(off).not.toContain('Connected accounts: available');
+  });
+
   it('unsupported runtime capabilities use the unsupported wording', () => {
     const text = buildWeaverSystemInstruction(buildCapabilityManifest(OFF));
     expect(text).toContain('Agentic tool use: not supported in this runtime mode');
@@ -100,6 +108,7 @@ describe('status distinctions survive rendering — review finding 3 (#440)', ()
       workspace_intelligence: 'unknown',
       workspace_source_search: 'unknown',
       workspace_discovery: 'unknown',
+      connection_discovery: 'unknown',
     },
     connections: [],
   };
@@ -111,6 +120,7 @@ describe('status distinctions survive rendering — review finding 3 (#440)', ()
     expect(text).toContain('Workspace intelligence: availability unverified for this session');
     expect(text).toContain('Workspace source search: availability unverified for this session');
     expect(text).toContain('Workspace discovery: availability unverified for this session');
+    expect(text).toContain('Connected accounts: availability unverified for this session');
   });
 
   it('unavailable renders as switched-off, not as unsupported', () => {
