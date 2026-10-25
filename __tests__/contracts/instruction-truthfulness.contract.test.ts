@@ -99,6 +99,7 @@ describe('status distinctions survive rendering — review finding 3 (#440)', ()
       agentic_harness: 'available',
       workspace_intelligence: 'unknown',
       workspace_source_search: 'unknown',
+      workspace_discovery: 'unknown',
     },
     connections: [],
   };
@@ -109,6 +110,7 @@ describe('status distinctions survive rendering — review finding 3 (#440)', ()
     expect(text).not.toContain('Web research: not available in this session');
     expect(text).toContain('Workspace intelligence: availability unverified for this session');
     expect(text).toContain('Workspace source search: availability unverified for this session');
+    expect(text).toContain('Workspace discovery: availability unverified for this session');
   });
 
   it('unavailable renders as switched-off, not as unsupported', () => {

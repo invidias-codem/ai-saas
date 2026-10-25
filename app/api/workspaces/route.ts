@@ -90,8 +90,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
     }
 
-    await ensureDefaultWorkspace(user.userId);
-
+    // #442: discovery is read-only — no default-workspace creation here.
+    // Listing covers ownership only by historical contract; shared membership
+    // discovery lives in lib/security/workspaceAccess.listAccessibleWorkspaces
+    // (used by the agent tooling).
     const { data, error } = await supabaseAdmin
       .from('workspaces')
       .select('*')

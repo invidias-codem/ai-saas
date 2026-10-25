@@ -51,7 +51,8 @@ export type CapabilityId =
   | 'workspace_context'
   | 'agentic_harness'
   | 'workspace_intelligence'
-  | 'workspace_source_search';
+  | 'workspace_source_search'
+  | 'workspace_discovery';
 
 /** Provider verification evidence. Required (and checked) for connected_verified. */
 export interface ConnectionVerification {
@@ -207,6 +208,9 @@ export function buildCapabilityManifest(input: {
         : input.workspaceId
           ? 'available'
           : 'unsupported',
+      // workspace_list / workspace_describe are server-side reads gated on
+      // the caller's identity (userId) — carried by every agentic surface.
+      workspace_discovery: isAgentic ? 'available' : 'unsupported',
     },
     connections: (input.connections ?? []).map((c) => ({
       label: c.label,
@@ -297,6 +301,13 @@ const CAPABILITY_LINES: Record<CapabilityId, Record<CapabilityStatus, string>> =
     unavailable: '- Workspace source search: not available in this session.',
     unsupported: '- Workspace source search: not supported — no workspace is selected for this conversation, or this runtime mode does not carry the tool.',
     unknown: '- Workspace source search: availability unverified for this session.',
+  },
+  workspace_discovery: {
+    available:
+      '- Workspace discovery: available — list the workspaces you can access and describe an authorized one through registered tools.',
+    unavailable: '- Workspace discovery: not available in this session.',
+    unsupported: '- Workspace discovery: not supported in this runtime mode.',
+    unknown: '- Workspace discovery: availability unverified for this session.',
   },
 };
 
