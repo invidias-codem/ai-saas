@@ -21,7 +21,8 @@ export type TelemetryEventType =
   | "decision_event"
   | "decision_canary_event"
   | "context_sieve_event"
-  | "capability_manifest_resolved";
+  | "capability_manifest_resolved"
+  | "agent_loop_offloaded";
 
 export interface TelemetryPayload {
   eventType: TelemetryEventType;

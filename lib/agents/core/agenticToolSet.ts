@@ -66,10 +66,13 @@ export function resolveAgenticTool(name: string): Tool | undefined {
 }
 
 // ── Phase 0 (#440): authorization-aware catalog ──────────────────────────────
-// The base set is registered for every agentic run; harness + intelligence
-// tools require the manifest's agentic capabilities (resolved runtime mode).
-// ponytail: capability flags currently derive from resolved mode only;
-// profile-level narrowing (tool_use_level) lands with Phase 1 unification.
+// Gating follows the manifest's EFFECTIVE execution capabilities: the harness
+// tools and the intelligence tools each refuse at execute-time without
+// context.ioHarness, so a surface that supplies no harness must not expose
+// them. ponytail: profile-level narrowing (tool_use_level) lands with Phase 1
+// unification.
+
+import type { CapabilityManifest } from './capabilityManifest';
 
 const BASE_TOOL_NAMES = [
   'analyze_and_negotiate_quote',
@@ -82,11 +85,9 @@ const BASE_TOOL_NAMES = [
   'generate_video',
 ] as const;
 
-const EXTENDED_TOOL_NAMES = [
-  'read_file',
-  'write_file',
-  'patch_file',
-  'execute_command',
+const HARNESS_TOOL_NAMES = ['read_file', 'write_file', 'patch_file', 'execute_command'] as const;
+
+const INTELLIGENCE_TOOL_NAMES = [
   'discover_documents_secure',
   'extract_text_secure',
   'summarize_repo_secure',
@@ -98,15 +99,19 @@ const EXTENDED_TOOL_NAMES = [
  * The single authorized tool-set builder. Both the web engine
  * (conversationEngine agentic branch) and the Trigger.dev worker
  * (_registry.ts) MUST route through this — identical manifest inputs
- * produce identical catalogs (web/worker parity contract).
+ * produce identical catalogs (web/worker parity contract). Advertised
+ * capabilities and the filtered catalog agree by construction: the harness
+ * tools exist iff agentic_harness is available; the intelligence tools iff
+ * workspace_intelligence is available.
  */
-export function buildAuthorizedToolSet(manifest: import('./capabilityManifest').CapabilityManifest): Tool[] {
-  const allowExtended =
-    manifest.capabilities.agentic_harness === 'available' &&
-    manifest.capabilities.workspace_intelligence === 'available';
-  const names = new Set<string>(
-    allowExtended ? [...BASE_TOOL_NAMES, ...EXTENDED_TOOL_NAMES] : [...BASE_TOOL_NAMES],
-  );
+export function buildAuthorizedToolSet(manifest: CapabilityManifest): Tool[] {
+  const harness =
+    manifest.capabilities.agentic_harness === 'available' ? [...HARNESS_TOOL_NAMES] : [];
+  const intelligence =
+    manifest.capabilities.workspace_intelligence === 'available'
+      ? [...INTELLIGENCE_TOOL_NAMES]
+      : [];
+  const names = new Set<string>([...BASE_TOOL_NAMES, ...harness, ...intelligence]);
   return AGENTIC_TOOLS.filter((t) => names.has(t.name));
 }
 

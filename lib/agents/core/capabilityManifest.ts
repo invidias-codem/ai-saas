@@ -2,15 +2,26 @@
 // Phase 0 (#440): server-produced, per-request capability manifest.
 //
 // Single source of truth for (a) what the model is told it can do
-// (buildWeaverSystemInstruction) and (b) which tools the authorized catalog
-// exposes (buildAuthorizedToolSet in agenticToolSet.ts). No secrets, no
-// external calls, no DB reads — callers pass explicit inputs.
+// (buildWeaverSystemInstruction), (b) which tools the authorized catalog
+// exposes (buildAuthorizedToolSet in agenticToolSet.ts), and (c) what the
+// capability trace records. No secrets, no external calls, no DB reads —
+// callers pass explicit EFFECTIVE runtime values.
 //
 // Status vocabulary (closed unions — extend deliberately, never by string):
 //   connections:  not_connected | authorization_required | expired_reconnect_required
 //                 | access_denied | provider_unavailable | unverified
 //                 | connected_verified | no_matching_authorized_results
 //   capabilities: available | unavailable | unsupported | unknown
+//
+// Distinctions that must survive rendering (#440 review):
+//   unavailable  = supported by the runtime, switched off for this session
+//   unsupported  = this resolved runtime mode does not carry the capability
+//   unknown      = availability not verified — never collapse into either
+
+import type { AgentMode } from '@/lib/llm/types';
+
+/** The resolved runtime mode vocabulary (lib/llm/types AgentMode). */
+const AGENT_MODES: readonly AgentMode[] = ['fast', 'quality', 'agentic', 'reasoning'];
 
 export const CONNECTION_STATUSES = [
   'not_connected',
@@ -54,9 +65,12 @@ export interface ConnectionSummary {
   status: ConnectionStatus;
 }
 
+export type CapabilitySurface = 'web' | 'trigger-worker';
+
 export interface CapabilityManifest {
   identity: 'weaver';
-  resolvedMode: string;
+  surface: CapabilitySurface;
+  resolvedMode: AgentMode;
   workspaceId: string | null;
   capabilities: Record<CapabilityId, CapabilityStatus>;
   connections: ConnectionSummary[];
@@ -66,7 +80,7 @@ export interface CapabilityManifest {
 export class CapabilityManifestError extends Error {
   constructor(
     message: string,
-    readonly code: 'INVALID_RESOLVED_MODE' | 'VERIFICATION_REQUIRED',
+    readonly code: 'INVALID_RESOLVED_MODE' | 'INVALID_VERIFICATION' | 'INVALID_CONNECTION_INPUT',
   ) {
     super(message);
     this.name = 'CapabilityManifestError';
@@ -76,52 +90,102 @@ export class CapabilityManifestError extends Error {
 /**
  * Map connection facts to a status. Runtime enforcement of #440: a persisted
  * credential WITHOUT verification evidence is `unverified` — `connected_verified`
- * is reachable only through connectionStatus() with a complete verification
- * record, and an incomplete record is a typed failure, not a downgrade.
+ * is reachable only through connectionStatus() with a COMPLETE verification
+ * record (nonblank method, parseable checkedAt); anything less is a typed
+ * failure, not a downgrade.
  */
 export function connectionStatus(input: ConnectionInput): ConnectionStatus {
+  const label = typeof input.label === 'string' ? input.label.trim() : '';
+  if (!label || typeof input.provider !== 'string' || !input.provider.trim()) {
+    throw new CapabilityManifestError(
+      'connection label and provider must be nonblank strings',
+      'INVALID_CONNECTION_INPUT',
+    );
+  }
   if (!input.hasPersistedCredential) return 'not_connected';
   if (!input.verification) return 'unverified';
-  if (!input.verification.method || !input.verification.checkedAt) {
+  const method = typeof input.verification.method === 'string' ? input.verification.method.trim() : '';
+  const checkedAt =
+    typeof input.verification.checkedAt === 'string' ? input.verification.checkedAt.trim() : '';
+  if (!method || !checkedAt || Number.isNaN(Date.parse(checkedAt))) {
     throw new CapabilityManifestError(
-      `connection '${input.label}': connected_verified requires verification evidence (method, checkedAt)`,
-      'VERIFICATION_REQUIRED',
+      `connection '${label}': connected_verified requires a nonblank verification method and a parseable checkedAt date`,
+      'INVALID_VERIFICATION',
     );
   }
   return 'connected_verified';
 }
 
 /**
- * Build the per-request manifest. `resolvedMode` must be the RESOLVED runtime
- * mode (engine: parsed.mode || options.mode || 'fast'; worker: task payload mode).
- * Missing/invalid mode is a typed failure surfaced to the caller.
+ * Build the per-request manifest from EFFECTIVE runtime values (#440 review
+ * finding 2: availability must reflect what this session can actually
+ * execute, not just its resolved mode).
+ *
+ * `resolvedMode` must be the RESOLVED runtime mode and a member of the
+ * AgentMode vocabulary; invalid/unknown/whitespace-only modes are typed
+ * failures. The boolean inputs describe effective execution:
+ *   preparedContextEnabled — prepared-context sections run at all
+ *   webResearchEnabled     — background web research gate, AFTER skip flags
+ *   ioHarnessPresent       — context.ioHarness is supplied; every harness and
+ *                            intelligence tool refuses at execute-time without it
  */
 export function buildCapabilityManifest(input: {
   resolvedMode: unknown;
-  workspaceId: string | null | undefined;
-  backgroundWebResearchEnabled: boolean;
-  longTermMemoryEnabled: boolean;
+  workspaceId?: string | null;
+  surface: CapabilitySurface;
+  preparedContextEnabled: boolean;
+  webResearchEnabled: boolean;
+  ioHarnessPresent: boolean;
   connections?: ConnectionInput[];
 }): CapabilityManifest {
-  if (typeof input.resolvedMode !== 'string' || input.resolvedMode.length === 0) {
+  if (typeof input.resolvedMode !== 'string') {
     throw new CapabilityManifestError(
       'capability manifest requires a resolved runtime mode',
       'INVALID_RESOLVED_MODE',
     );
   }
-  const isAgentic = input.resolvedMode === 'agentic';
+  const resolvedMode = input.resolvedMode.trim() as AgentMode;
+  if (!AGENT_MODES.includes(resolvedMode)) {
+    throw new CapabilityManifestError(
+      `resolved mode '${input.resolvedMode}' is not in the runtime mode vocabulary: ${AGENT_MODES.join(' | ')}`,
+      'INVALID_RESOLVED_MODE',
+    );
+  }
+  const isAgentic = resolvedMode === 'agentic';
   return {
     identity: 'weaver',
-    resolvedMode: input.resolvedMode,
+    surface: input.surface,
+    resolvedMode,
     workspaceId: input.workspaceId ?? null,
     capabilities: {
-      // unavailable = supported by the runtime but switched off in this session.
-      // unsupported = the resolved runtime/mode does not carry this capability at all.
-      background_web_research: input.backgroundWebResearchEnabled ? 'available' : 'unavailable',
-      long_term_memory: input.longTermMemoryEnabled ? 'available' : 'unavailable',
+      // Agentic runs reach the internet through the web_search tool (base
+      // catalog); prepared runs only through background research sections,
+      // which require prepared context AND the research gate.
+      background_web_research: isAgentic
+        ? 'available'
+        : input.webResearchEnabled && input.preparedContextEnabled
+          ? 'available'
+          : 'unavailable',
+      // Agentic memory = episodic recall, which requires the io harness;
+      // prepared memory = the prepared-context sections.
+      long_term_memory: isAgentic
+        ? input.ioHarnessPresent
+          ? 'available'
+          : 'unavailable'
+        : input.preparedContextEnabled
+          ? 'available'
+          : 'unavailable',
       workspace_context: input.workspaceId ? 'available' : 'unsupported',
-      agentic_harness: isAgentic ? 'available' : 'unsupported',
-      workspace_intelligence: isAgentic ? 'available' : 'unsupported',
+      agentic_harness: !isAgentic
+        ? 'unsupported'
+        : input.ioHarnessPresent
+          ? 'available'
+          : 'unavailable',
+      workspace_intelligence: !isAgentic
+        ? 'unsupported'
+        : input.ioHarnessPresent
+          ? 'available'
+          : 'unavailable',
     },
     connections: (input.connections ?? []).map((c) => ({
       label: c.label,
@@ -131,42 +195,56 @@ export function buildCapabilityManifest(input: {
   };
 }
 
-const CAPABILITY_LINES: Record<CapabilityId, Record<'available' | 'not', string>> = {
+// Distinct wording per capability per status (#440 review finding 3: unknown,
+// unavailable and unsupported must never render identically).
+const CAPABILITY_LINES: Record<CapabilityId, Record<CapabilityStatus, string>> = {
   background_web_research: {
     available:
-      '- Web research: available. "Web Search Results" in your context means the system searched the live internet for you.',
-    not: '- Web research: not available in this session. Do not claim to have searched the internet.',
+      '- Web research: available — the system may search the live internet for you (results appear as "Web Search Results", or through the web_search tool).',
+    unavailable:
+      '- Web research: not available in this session. Do not claim to have searched the internet.',
+    unsupported: '- Web research: not supported in this runtime mode.',
+    unknown:
+      '- Web research: availability unverified for this session. Do not assume access either way.',
   },
   long_term_memory: {
     available:
       '- Long-term memory: available. "User Profile" and "Relevant Previous Work" sections in your context mean the system retrieved stored context for you.',
-    not: '- Long-term memory: unavailable in this session. Stored context is not being retrieved; do not claim to remember prior work.',
+    unavailable:
+      '- Long-term memory: not available in this session. Stored context is not being retrieved; do not claim to remember prior work.',
+    unsupported: '- Long-term memory: not supported in this runtime mode.',
+    unknown:
+      '- Long-term memory: availability unverified for this session. Do not assume either way.',
   },
   workspace_context: {
     available:
       '- Workspace context: a workspace is selected for this conversation; workspace-scoped documents and sources may appear in your context.',
-    not: '- Workspace context: no workspace is selected for this conversation.',
+    unavailable: '- Workspace context: not available in this session.',
+    unsupported: '- Workspace context: no workspace is selected for this conversation.',
+    unknown: '- Workspace context: availability unverified for this session.',
   },
   agentic_harness: {
-    available: '- Agentic tool use: this session runs with the tools the system has registered.',
-    not: '- Agentic tool use: not supported in this session.',
+    available:
+      '- Agentic tool use: this session runs with the file and execution tools the system has registered.',
+    unavailable:
+      '- Agentic tool use: not available in this session (no execution harness connected).',
+    unsupported: '- Agentic tool use: not supported in this runtime mode.',
+    unknown: '- Agentic tool use: availability unverified for this session.',
   },
   workspace_intelligence: {
     available:
       '- Workspace intelligence (document discovery, source search): available through registered tools.',
-    not: '- Workspace intelligence: not supported in this session.',
+    unavailable:
+      '- Workspace intelligence: not available in this session (no execution harness connected).',
+    unsupported: '- Workspace intelligence: not supported in this runtime mode.',
+    unknown: '- Workspace intelligence: availability unverified for this session.',
   },
 };
 
 function renderCapabilityLines(manifest: CapabilityManifest): string[] {
-  return (Object.keys(CAPABILITY_LINES) as CapabilityId[]).map((id) => {
-    const line = CAPABILITY_LINES[id];
-    const status = manifest.capabilities[id];
-    if (status === 'available') return line.available;
-    // unsupported / unavailable / unknown all render as the not-available form;
-    // the status union remains machine-readable for traces and tests.
-    return line.not;
-  });
+  return (Object.keys(CAPABILITY_LINES) as CapabilityId[]).map(
+    (id) => CAPABILITY_LINES[id][manifest.capabilities[id]],
+  );
 }
 
 function renderConnectionLines(manifest: CapabilityManifest): string[] {
@@ -217,14 +295,17 @@ Provide informative and concise responses. When presenting structured data (like
 }
 
 /**
- * Record capability resolution + exposed tool names (no secrets). Fire-and-
- * forget: telemetry must never fail the request or the worker run.
+ * Record capability resolution + exposed tool names with request correlation
+ * (#440 review finding 5: requestId/conversationId so a reported response can
+ * be attributed directly). Fire-and-forget: telemetry must never fail the
+ * request or the worker run.
  */
 export async function logCapabilityResolution(args: {
   userId?: string;
   workspaceId?: string;
+  requestId?: string;
+  conversationId?: string;
   manifest: CapabilityManifest;
-  surface: string;
   toolNames: string[];
 }): Promise<void> {
   try {
@@ -234,11 +315,13 @@ export async function logCapabilityResolution(args: {
       userId: args.userId,
       workspaceId: args.workspaceId,
       metadata: {
+        requestId: args.requestId ?? 'unknown',
+        conversationId: args.conversationId ?? null,
+        surface: args.manifest.surface,
         resolvedMode: args.manifest.resolvedMode,
         workspaceId: args.manifest.workspaceId,
         capabilities: args.manifest.capabilities,
         connections: args.manifest.connections,
-        surface: args.surface,
         toolNames: args.toolNames,
       },
     });

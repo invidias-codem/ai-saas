@@ -37,6 +37,7 @@ export async function dispatchAgentLoopToTrigger(args: {
   userId: string;
   workspaceId: string;
   conversationId?: string;
+  requestId?: string;
   userQuery: string;
   modelName: string;
   mode: "agentic";

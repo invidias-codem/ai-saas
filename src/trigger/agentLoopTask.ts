@@ -21,6 +21,7 @@ export const agentLoopPayloadSchema = z.object({
   userId: z.string(),
   workspaceId: z.string(),
   conversationId: z.string().optional(),
+  requestId: z.string().optional(),
   userQuery: z.string(),
   modelName: z.string().default("gemini-2.5-flash"),
   mode: z.enum(["agentic"]).default("agentic"),
@@ -36,14 +37,18 @@ export const agentLoopTask = task({
   },
   run: async (payload: z.infer<typeof agentLoopPayloadSchema>) => {
     const { runReActLoop } = await import("@/lib/agents/core/reactLoop");
-    const { buildAgenticRegistry } = await import("./_registry");
+    const { buildAgenticRuntime } = await import("./_registry");
     const { getAgenticContext } = await import("./_context");
 
-    // Rebuild the tool registry + context on the worker (stable module-level
-    // constants), never deserialize live tool objects from the payload.
-    const registry = await buildAgenticRegistry(payload.mode, {
+    // Rebuild the authorized runtime (registry + manifest-derived system
+    // instruction) on the worker from stable module-level constants, never
+    // deserialize live tool objects from the payload. The instruction is
+    // derived from the SAME manifest that gates the catalog (#440).
+    const runtime = await buildAgenticRuntime({
       userId: payload.userId,
       workspaceId: payload.workspaceId,
+      requestId: payload.requestId,
+      conversationId: payload.conversationId,
     });
     const context = await getAgenticContext({
       userId: payload.userId,
@@ -54,8 +59,9 @@ export const agentLoopTask = task({
     const result = await runReActLoop(
       payload.userQuery,
       context,
-      registry,
+      runtime.registry,
       payload.modelName,
+      runtime.systemInstruction,
     );
 
     return {

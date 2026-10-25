@@ -1,25 +1,34 @@
 /**
- * Phase 0 (#440) — instruction truthfulness contracts.
+ * Phase 0 (#440 + review) — instruction truthfulness contracts.
  *
  * The system instruction is derived from the per-request capability manifest.
  * The removed unconditional directives must stay gone; capability claims must
- * match the manifest; Weaver is the identity with explicit Genie compatibility.
+ * match the manifest; unknown/unavailable/unsupported must render distinctly;
+ * Weaver is the identity with explicit Genie compatibility.
  */
-import { buildCapabilityManifest, buildWeaverSystemInstruction } from '@/lib/agents/core/capabilityManifest';
+import {
+  buildCapabilityManifest,
+  buildWeaverSystemInstruction,
+  type CapabilityManifest,
+} from '@/lib/agents/core/capabilityManifest';
 
 const FULL = {
   resolvedMode: 'agentic',
   workspaceId: 'ws_1',
-  backgroundWebResearchEnabled: true,
-  longTermMemoryEnabled: true,
-} as const;
+  surface: 'web' as const,
+  preparedContextEnabled: true,
+  webResearchEnabled: true,
+  ioHarnessPresent: true,
+};
 
 const OFF = {
   resolvedMode: 'fast',
   workspaceId: null,
-  backgroundWebResearchEnabled: false,
-  longTermMemoryEnabled: false,
-} as const;
+  surface: 'web' as const,
+  preparedContextEnabled: false,
+  webResearchEnabled: false,
+  ioHarnessPresent: false,
+};
 
 describe('removed unconditional-capability directives stay removed (#440)', () => {
   it.each([
@@ -40,14 +49,14 @@ describe('capability claims match the manifest (#440)', () => {
     expect(on).toContain('Web research: available');
     const off = buildWeaverSystemInstruction(buildCapabilityManifest(OFF));
     expect(off).toContain('Web research: not available in this session');
-    expect(off).not.toContain('Web research: available.');
+    expect(off).not.toContain('Web research: available');
   });
 
   it('claims memory only when available', () => {
     const on = buildWeaverSystemInstruction(buildCapabilityManifest(FULL));
     expect(on).toContain('Long-term memory: available');
     const off = buildWeaverSystemInstruction(buildCapabilityManifest(OFF));
-    expect(off).toContain('Long-term memory: unavailable in this session');
+    expect(off).toContain('Long-term memory: not available in this session');
     expect(off).not.toContain('Long-term memory: available');
   });
 
@@ -60,9 +69,47 @@ describe('capability claims match the manifest (#440)', () => {
     );
   });
 
-  it('never claims capabilities outside the manifest (rendered text derives from statuses)', () => {
+  it('unsupported runtime capabilities use the unsupported wording', () => {
     const text = buildWeaverSystemInstruction(buildCapabilityManifest(OFF));
-    expect(text).toContain('not supported in this session');
+    expect(text).toContain('Agentic tool use: not supported in this runtime mode');
+  });
+});
+
+describe('status distinctions survive rendering — review finding 3 (#440)', () => {
+  // Hand-built manifest exercising every status on a distinct capability:
+  // unknown web access, unavailable memory, unsupported workspace context.
+  const mixed: CapabilityManifest = {
+    identity: 'weaver',
+    surface: 'web',
+    resolvedMode: 'agentic',
+    workspaceId: null,
+    capabilities: {
+      background_web_research: 'unknown',
+      long_term_memory: 'unavailable',
+      workspace_context: 'unsupported',
+      agentic_harness: 'available',
+      workspace_intelligence: 'unknown',
+    },
+    connections: [],
+  };
+
+  it('unknown renders as unverified availability, not as "not available"', () => {
+    const text = buildWeaverSystemInstruction(mixed);
+    expect(text).toContain('Web research: availability unverified for this session');
+    expect(text).not.toContain('Web research: not available in this session');
+    expect(text).toContain('Workspace intelligence: availability unverified for this session');
+  });
+
+  it('unavailable renders as switched-off, not as unsupported', () => {
+    const text = buildWeaverSystemInstruction(mixed);
+    expect(text).toContain('Long-term memory: not available in this session');
+    expect(text).not.toContain('Long-term memory: not supported in this runtime mode');
+  });
+
+  it('unsupported keeps its own wording, never the unavailable one', () => {
+    const text = buildWeaverSystemInstruction(mixed);
+    expect(text).toContain('no workspace is selected for this conversation');
+    expect(text).not.toContain('Workspace context: not available in this session');
   });
 });
 

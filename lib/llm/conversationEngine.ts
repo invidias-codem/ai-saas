@@ -189,13 +189,17 @@ export async function generateConversationReply(
   const { userId, clerkUser, request, conversationId } = args;
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
-  // Phase 0 (#440): server-produced capability manifest for THIS request.
+  // Phase 0 (#440): server-produced capability manifest for THIS request,
+  // derived from EFFECTIVE execution values (#440 review finding 2) — skip
+  // flags, prepared-context gates, and harness presence all shape it.
   // Invalid/missing resolved mode is a typed failure — never a silent default.
   const capabilityManifest = buildCapabilityManifest({
     resolvedMode: agentMode,
     workspaceId: parsed.workspaceId ?? null,
-    backgroundWebResearchEnabled: process.env.ENABLE_WEB_RESEARCH === 'true',
-    longTermMemoryEnabled: process.env.ENABLE_HEAVY_CONTEXT !== 'false' && !options.disableExternalContext,
+    surface: 'web',
+    preparedContextEnabled: process.env.ENABLE_HEAVY_CONTEXT !== 'false' && !options.disableExternalContext,
+    webResearchEnabled: process.env.ENABLE_WEB_RESEARCH === 'true' && !options.skipWebResearch,
+    ioHarnessPresent: Boolean(options.ioHarness),
   });
   const providerKeys = await withAbort(getUserProviderApiKeys(userId), options.signal);
   const nativeProviderKeys = await withAbort((await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys), options.signal);
@@ -217,8 +221,9 @@ export async function generateConversationReply(
     void logCapabilityResolution({
       userId,
       workspaceId: parsed.workspaceId ?? undefined,
+      requestId: options.requestId,
+      conversationId: conversationId ?? undefined,
       manifest: capabilityManifest,
-      surface: 'web-agentic',
       toolNames: registry.getToolNames(),
     });
 
@@ -421,14 +426,29 @@ export async function generateConversationReply(
           void (async () => {
             try {
               const { dispatchAgentLoopToTrigger } = await import('@/lib/trigger/dispatch');
-              await dispatchAgentLoopToTrigger({
+              const triggerRunId = await dispatchAgentLoopToTrigger({
                 userId,
                 workspaceId: parsed.workspaceId!,
                 conversationId: conversationId ?? undefined,
+                requestId: options.requestId,
                 userQuery: sanitizedQuery,
                 modelName: NIM_MODEL_KIMI_K3,
                 mode: 'agentic',
               });
+              if (triggerRunId) {
+                // Correlate request → durable worker run for attribution
+                // (#440 review finding 5).
+                logEvent({
+                  eventType: 'agent_loop_offloaded',
+                  userId,
+                  workspaceId: parsed.workspaceId || undefined,
+                  metadata: {
+                    requestId: options.requestId ?? 'unknown',
+                    conversationId: conversationId ?? null,
+                    triggerRunId,
+                  },
+                });
+              }
             } catch (err) {
               console.warn('[Trigger.dev] offload dispatch skipped:', err);
             }
@@ -447,19 +467,25 @@ export async function generateConversationReply(
 
           let reactResult;
           if (useNimLoop) {
+            // Phase 0 (#440): the manifest-derived instruction reaches agentic
+            // inference — NIM path (runNimReactLoop passes it to
+            // provider.chatWithTools as the system instruction).
             reactResult = await runNimReactLoop(
               sanitizedQuery,
               agentContext,
               registry,
               NIM_MODEL_KIMI_K3,
+              getSystemInstruction(capabilityManifest),
             );
           } else {
-            // Gemini Vertex fallback (multimodal or NIM-unconfigured).
+            // Gemini Vertex fallback (multimodal or NIM-unconfigured) —
+            // StartChatParams.systemInstruction carries the same manifest-derived text.
             reactResult = await runReActLoop(
               promptInput,
               agentContext,
               registry,
               AGENTIC_MODEL,
+              getSystemInstruction(capabilityManifest),
             );
           }
           const isSuccess = reactResult.status === 'success';
@@ -753,8 +779,9 @@ export async function generateConversationReply(
   void logCapabilityResolution({
     userId,
     workspaceId: workspaceId ?? undefined,
+    requestId: options.requestId,
+    conversationId: conversationId ?? undefined,
     manifest: capabilityManifest,
-    surface: 'web-prepared',
     toolNames: [],
   });
 

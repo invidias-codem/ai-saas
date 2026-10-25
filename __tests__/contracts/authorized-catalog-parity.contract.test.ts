@@ -1,11 +1,14 @@
 /**
- * Phase 0 (#440) — web/worker authorized-catalog parity contracts.
+ * Phase 0 (#440 + review) — web/worker authorized-catalog parity contracts.
  *
  * Tool modules are mocked to name-only stubs: the contract under test is the
  * CATALOG COMPOSITION (who gets which tools), not the tools' internals.
- * Parity is derived from the resolved runtime mode + manifest capabilities —
- * registering all tools everywhere would broaden access and is explicitly
- * rejected by #440.
+ *
+ * Review corrections locked here:
+ *  - Parity compares EQUIVALENT effective capabilities, not a fixed count.
+ *  - The worker supplies no ioHarness, and every harness/intelligence tool
+ *    refuses at execute-time without one, so the worker's effective catalog
+ *    is the base set — advertised and exposed must agree.
  */
 jest.mock('@/lib/agents/tools/dealSentinel', () => ({ dealSentinelTool: { name: 'analyze_and_negotiate_quote' } }));
 jest.mock('@/lib/agents/tools/webSearch', () => ({ webSearchTool: { name: 'web_search' } }));
@@ -31,15 +34,12 @@ jest.mock('@/lib/agents/tools/intelligenceTools', () => ({
 jest.mock('@/lib/telemetry', () => ({ logEvent: jest.fn() }));
 
 import { buildAuthorizedToolSet } from '@/lib/agents/core/agenticToolSet';
-import { buildAgenticRegistry } from '@/src/trigger/_registry';
-import { buildCapabilityManifest } from '@/lib/agents/core/capabilityManifest';
-
-const AGENTIC_INPUT = {
-  resolvedMode: 'agentic' as const,
-  workspaceId: 'ws_1',
-  backgroundWebResearchEnabled: true,
-  longTermMemoryEnabled: true,
-};
+import { buildAgenticRuntime } from '@/src/trigger/_registry';
+import {
+  buildCapabilityManifest,
+  buildWeaverSystemInstruction,
+  type CapabilityManifest,
+} from '@/lib/agents/core/capabilityManifest';
 
 const BASE = [
   'analyze_and_negotiate_quote',
@@ -52,11 +52,9 @@ const BASE = [
   'generate_video',
 ];
 
-const EXTENDED = [
-  'read_file',
-  'write_file',
-  'patch_file',
-  'execute_command',
+const HARNESS = ['read_file', 'write_file', 'patch_file', 'execute_command'];
+
+const INTELLIGENCE = [
   'discover_documents_secure',
   'extract_text_secure',
   'summarize_repo_secure',
@@ -65,49 +63,102 @@ const EXTENDED = [
 ];
 
 const sorted = (names: string[]) => [...names].sort();
+const catalogNames = (manifest: CapabilityManifest) =>
+  sorted(buildAuthorizedToolSet(manifest).map((t) => t.name));
 
-describe('web/worker parity — identical resolved context, identical catalog (#440)', () => {
-  it('web builder and worker buildAgenticRegistry expose the same names for the same resolved mode', async () => {
-    const manifest = buildCapabilityManifest(AGENTIC_INPUT);
-    const webNames = sorted(buildAuthorizedToolSet(manifest).map((t) => t.name));
-    const workerRegistry = await buildAgenticRegistry('agentic', {
-      userId: 'user_1',
-      workspaceId: 'ws_1',
+const WEB_FULL = {
+  resolvedMode: 'agentic' as const,
+  workspaceId: 'ws_1',
+  surface: 'web' as const,
+  preparedContextEnabled: true,
+  webResearchEnabled: true,
+  ioHarnessPresent: true,
+};
+
+describe('parity compares equivalent effective capabilities (#440 review finding 2)', () => {
+  it('equivalent inputs produce identical capabilities and identical catalogs across surfaces', () => {
+    const webManifest = buildCapabilityManifest(WEB_FULL);
+    const workerEquivalent = buildCapabilityManifest({
+      ...WEB_FULL,
+      surface: 'trigger-worker',
     });
-    expect(sorted(workerRegistry.getToolNames())).toEqual(webNames);
+    expect(workerEquivalent.capabilities).toEqual(webManifest.capabilities);
+    expect(catalogNames(workerEquivalent)).toEqual(catalogNames(webManifest));
   });
 
-  it('the same resolved agentic conversation yields the full 17-tool catalog on both surfaces', async () => {
-    const webNames = sorted(buildAuthorizedToolSet(buildCapabilityManifest(AGENTIC_INPUT)).map((t) => t.name));
-    expect(webNames).toEqual(sorted([...BASE, ...EXTENDED]));
-    expect(webNames).toHaveLength(17);
-    const workerRegistry = await buildAgenticRegistry('agentic', {
-      userId: 'user_1',
+  it('the real worker runtime (no ioHarness) exposes the base set — not the 17-tool blanket', async () => {
+    const runtime = await buildAgenticRuntime({
+      userId: 'u1',
       workspaceId: 'ws_1',
+      requestId: 'req-1',
+      conversationId: 'conv-1',
     });
-    expect(workerRegistry.getToolNames()).toHaveLength(17);
+    expect(sorted(runtime.registry.getToolNames())).toEqual(sorted(BASE));
+    expect(runtime.registry.getToolNames()).toHaveLength(8);
+    expect(runtime.manifest.capabilities.agentic_harness).toBe('unavailable');
+    expect(runtime.manifest.capabilities.workspace_intelligence).toBe('unavailable');
+  });
+
+  it('the worker instruction agrees with the worker catalog (no harness wording)', async () => {
+    const runtime = await buildAgenticRuntime({ userId: 'u1', workspaceId: 'ws_1' });
+    expect(runtime.systemInstruction).toContain('no execution harness connected');
+    expect(runtime.systemInstruction).toContain('You are Weaver');
+  });
+
+  it('the web agentic surface WITH harness exposes the full set', () => {
+    const manifest = buildCapabilityManifest(WEB_FULL);
+    expect(catalogNames(manifest)).toEqual(sorted([...BASE, ...HARNESS, ...INTELLIGENCE]));
+    expect(catalogNames(manifest)).toHaveLength(17);
+  });
+
+  it('a non-agentic resolved mode yields the base set only — no broadening', () => {
+    const manifest = buildCapabilityManifest({ ...WEB_FULL, resolvedMode: 'fast' });
+    expect(catalogNames(manifest)).toEqual(sorted(BASE));
   });
 });
 
-describe('parity is authorization-aware, not blanket registration (#440)', () => {
-  it('a non-agentic resolved mode yields the base set only — no harness, no intelligence tools', () => {
-    const manifest = buildCapabilityManifest({ ...AGENTIC_INPUT, resolvedMode: 'fast' });
-    const names = sorted(buildAuthorizedToolSet(manifest).map((t) => t.name));
-    expect(names).toEqual(sorted(BASE));
-    expect(names).not.toContain('read_file');
-    expect(names).not.toContain('execute_command');
-    expect(names).not.toContain('query_workspace_sources');
+describe('advertised capabilities agree with the filtered catalog (#440 review finding 3)', () => {
+  const harnessStatuses = ['available', 'unavailable', 'unsupported', 'unknown'] as const;
+
+  it.each(harnessStatuses)('agentic_harness=%s → harness tools present iff available', (status) => {
+    const manifest = buildCapabilityManifest(WEB_FULL);
+    manifest.capabilities.agentic_harness = status;
+    const names = catalogNames(manifest);
+    if (status === 'available') {
+      expect(names).toEqual(expect.arrayContaining(HARNESS));
+    } else {
+      for (const tool of HARNESS) {
+        expect(names).not.toContain(tool);
+      }
+      // Intelligence gating is independent: with only agentic_harness down,
+      // the intelligence tools remain exposed.
+      expect(names).toEqual(sorted([...BASE, ...INTELLIGENCE]));
+    }
   });
 
-  it('workspace presence does not gate the harness — the resolved mode does', () => {
-    const noWorkspace = buildCapabilityManifest({ ...AGENTIC_INPUT, workspaceId: null });
-    expect(buildAuthorizedToolSet(noWorkspace)).toHaveLength(17);
-  });
+  it.each(harnessStatuses)(
+    'workspace_intelligence=%s → intelligence tools present iff available',
+    (status) => {
+      const manifest = buildCapabilityManifest(WEB_FULL);
+      manifest.capabilities.workspace_intelligence = status;
+      const names = catalogNames(manifest);
+      if (status === 'available') {
+        expect(names).toEqual(expect.arrayContaining(INTELLIGENCE));
+      } else {
+        for (const tool of INTELLIGENCE) {
+          expect(names).not.toContain(tool);
+        }
+        expect(names).toEqual(sorted([...BASE, ...HARNESS]));
+      }
+    },
+  );
 
-  it('extended tools disappear when the manifest marks them unsupported', () => {
-    const manifest = buildCapabilityManifest(AGENTIC_INPUT);
-    manifest.capabilities.agentic_harness = 'unsupported';
-    const names = sorted(buildAuthorizedToolSet(manifest).map((t) => t.name));
-    expect(names).toEqual(sorted(BASE));
+  it('the instruction never advertises a harness the catalog does not carry', () => {
+    const withHarness = buildWeaverSystemInstruction(buildCapabilityManifest(WEB_FULL));
+    expect(withHarness).toContain('Agentic tool use: this session runs with the file and execution tools');
+    const withoutHarness = buildWeaverSystemInstruction(
+      buildCapabilityManifest({ ...WEB_FULL, ioHarnessPresent: false }),
+    );
+    expect(withoutHarness).toContain('Agentic tool use: not available in this session');
   });
 });

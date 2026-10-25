@@ -30,8 +30,10 @@ describe('reported-response regression fixture (#440)', () => {
       buildCapabilityManifest({
         resolvedMode: 'fast',
         workspaceId: 'ws_1',
-        backgroundWebResearchEnabled: false,
-        longTermMemoryEnabled: true,
+        surface: 'web',
+        preparedContextEnabled: true,
+        webResearchEnabled: false,
+        ioHarnessPresent: false,
       }),
     );
     expect(text).toContain('Never describe yourself as a stateless model');
@@ -43,8 +45,10 @@ describe('reported-response regression fixture (#440)', () => {
       buildCapabilityManifest({
         resolvedMode: 'fast',
         workspaceId: 'ws_1',
-        backgroundWebResearchEnabled: false,
-        longTermMemoryEnabled: true,
+        surface: 'web',
+        preparedContextEnabled: true,
+        webResearchEnabled: false,
+        ioHarnessPresent: false,
       }),
     );
     expect(text).toContain('the only source of truth');
