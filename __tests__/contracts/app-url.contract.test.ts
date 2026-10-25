@@ -42,4 +42,34 @@ describe('appUrl — normalized base, never a double slash (#446 follow-up)', ()
     // instead of building an OAuth redirect_uri nobody registered.
     expect(() => appBaseUrl('https://host/some-path')).toThrow();
   });
+
+  it('returns the validated origin — no trailing slash, exact scheme+host', () => {
+    expect(appBaseUrl('https://gen1e.xyz')).toBe('https://gen1e.xyz');
+    expect(appBaseUrl('https://gen1e.xyz/')).toBe('https://gen1e.xyz');
+    expect(appBaseUrl('https://gen1e.xyz///')).toBe('https://gen1e.xyz');
+  });
+
+  it('non-HTTP schemes are rejected (#447 review P2)', () => {
+    expect(() => appBaseUrl('ftp://gen1e.xyz')).toThrow(/http\(s\)/);
+    expect(() => appBaseUrl('file:///etc')).toThrow();
+    expect(() => appBaseUrl('javascript:alert(1)')).toThrow();
+  });
+
+  it('http is accepted for local development', () => {
+    expect(appBaseUrl('http://localhost:3000')).toBe('http://localhost:3000');
+  });
+
+  it('credentials in the base are rejected (#447 review P2)', () => {
+    expect(() => appBaseUrl('https://user:pass@gen1e.xyz')).toThrow(/credentials/);
+    expect(() => appBaseUrl('https://token@gen1e.xyz')).toThrow(/credentials/);
+  });
+
+  it('query or fragment in the base are rejected (#447 review P2)', () => {
+    expect(() => appBaseUrl('https://gen1e.xyz?x=1')).toThrow(/query or fragment/);
+    expect(() => appBaseUrl('https://gen1e.xyz#frag')).toThrow(/query or fragment/);
+  });
+
+  it('a missing hostname is rejected', () => {
+    expect(() => appBaseUrl('https://')).toThrow(/hostname|not a valid URL/);
+  });
 });

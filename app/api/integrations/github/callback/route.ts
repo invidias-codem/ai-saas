@@ -4,12 +4,28 @@ import { auth } from "@clerk/nextjs/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 import { encrypt } from "@/lib/encryption";
 import { cookies } from "next/headers";
-import { appUrl } from "@/lib/appUrl";
+import { appUrl, appBaseUrl } from "@/lib/appUrl";
 
 export async function GET(req: NextRequest) {
     const { userId } = await auth();
     if (!userId) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // #447 review P2: validate configuration BEFORE any provider call or
+    // persistence. Previously a missing base fell back to localhost, which let
+    // the code exchange + credential upsert complete and then redirect to a
+    // bogus URL — a config error masked as success.
+    const appUrlBase = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrlBase) {
+        console.error("[GitHub Callback] Missing NEXT_PUBLIC_APP_URL");
+        return NextResponse.json({ error: "Server configuration missing: NEXT_PUBLIC_APP_URL" }, { status: 500 });
+    }
+    try {
+        appBaseUrl(appUrlBase);
+    } catch (e) {
+        console.error("[GitHub Callback] Invalid NEXT_PUBLIC_APP_URL:", (e as Error).message);
+        return NextResponse.json({ error: "Server configuration invalid: NEXT_PUBLIC_APP_URL" }, { status: 500 });
     }
 
     const searchParams = req.nextUrl.searchParams;
