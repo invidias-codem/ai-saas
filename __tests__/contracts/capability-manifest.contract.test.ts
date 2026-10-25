@@ -300,9 +300,9 @@ describe('availability derives from effective execution values — review findin
     expect(manifest.capabilities.background_web_research).toBe('available');
   });
 
-  it('agentic WITHOUT a workspace: server-side source search is unsupported', () => {
+  it('agentic WITHOUT a workspace: explicit-target source search stays available (#443 review)', () => {
     const manifest = buildCapabilityManifest({ ...BASE, resolvedMode: 'agentic' });
-    expect(manifest.capabilities.workspace_source_search).toBe('unsupported');
+    expect(manifest.capabilities.workspace_source_search).toBe('available');
     expect(manifest.capabilities.workspace_context).toBe('unsupported');
   });
 

@@ -201,13 +201,11 @@ export function buildCapabilityManifest(input: {
         : input.ioHarnessPresent
           ? 'available'
           : 'unavailable',
-      // query_workspace_sources is server-side source search: it guards on
-      // workspace + user only (no harness), so the workspace is its gate.
-      workspace_source_search: !isAgentic
-        ? 'unsupported'
-        : input.workspaceId
-          ? 'available'
-          : 'unsupported',
+      // query_workspace_sources is server-side source search with an explicit
+      // target option (#443 review): it runs in any agentic session. The
+      // execute-time check requires the selected workspace OR an authorized
+      // targetWorkspaceId — and fails only when neither exists.
+      workspace_source_search: isAgentic ? 'available' : 'unsupported',
       // workspace_list / workspace_describe are server-side reads gated on
       // the caller's identity (userId) — carried by every agentic surface.
       workspace_discovery: isAgentic ? 'available' : 'unsupported',
@@ -297,9 +295,9 @@ const CAPABILITY_LINES: Record<CapabilityId, Record<CapabilityStatus, string>> =
   },
   workspace_source_search: {
     available:
-      '- Workspace source search: available through the query_workspace_sources tool (your workspace knowledge base).',
+      '- Workspace source search: available through the query_workspace_sources tool — it searches the conversation\'s workspace by default, or another authorized workspace when given an explicit target.',
     unavailable: '- Workspace source search: not available in this session.',
-    unsupported: '- Workspace source search: not supported — no workspace is selected for this conversation, or this runtime mode does not carry the tool.',
+    unsupported: '- Workspace source search: not supported in this runtime mode.',
     unknown: '- Workspace source search: availability unverified for this session.',
   },
   workspace_discovery: {

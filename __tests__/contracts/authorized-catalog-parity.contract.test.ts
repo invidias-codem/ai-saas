@@ -112,10 +112,12 @@ describe('parity compares equivalent effective capabilities (#440 + #442)', () =
     expect(runtime.manifest.capabilities.workspace_discovery).toBe('available');
   });
 
-  it('a worker run with no workspace loses source search but keeps identity-gated discovery', async () => {
+  it('a worker run with no workspace keeps source search (explicit target) and discovery', async () => {
     const runtime = await buildAgenticRuntime({ userId: 'u1', workspaceId: null });
-    expect(sorted(runtime.registry.getToolNames())).toEqual(sorted([...BASE, ...DISCOVERY]));
-    expect(runtime.manifest.capabilities.workspace_source_search).toBe('unsupported');
+    expect(sorted(runtime.registry.getToolNames())).toEqual(
+      sorted([...BASE, ...SOURCE_SEARCH, ...DISCOVERY]),
+    );
+    expect(runtime.manifest.capabilities.workspace_source_search).toBe('available');
     expect(runtime.manifest.capabilities.workspace_discovery).toBe('available');
   });
 
