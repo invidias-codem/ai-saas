@@ -313,10 +313,10 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	// #448 review: UNCONDITIONAL — the previous `expectedToken != "" &&`
 	// short-circuit let the daemon run fully unauthenticated whenever the
 	// launch token was missing ("insecure mode"), which is the exact taint
-	// path behind the CodeQL network/command-sink criticals. A missing
-	// expected token now rejects every request; startup refuses to run
-	// without one (validateLaunchAuthToken).
-	if req.AuthToken != expectedToken {
+	// path behind the CodeQL network/command-sink criticals. Defense in depth
+	// behind the fail-closed startup: an unconfigured token rejects EVERY
+	// request, and a configured token must match exactly.
+	if expectedToken == "" || req.AuthToken != expectedToken {
 		log.Printf("Unauthorized JSON-RPC payload received. Expected valid auth token.")
 		sendErrorResponse(w, req.ID, -32000, "Unauthorized: Invalid or missing authToken")
 		return
