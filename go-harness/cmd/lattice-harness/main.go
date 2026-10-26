@@ -82,13 +82,7 @@ type SearchEpisodicEventsArgs struct {
 	TopK           int       `json:"top_k"`
 }
 
-type ExecuteCommandSecureArgs struct {
-	Command        string `json:"command"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	Path           string `json:"path"`
-	WorkspaceID    string `json:"workspace_id"`
-	UserID         string `json:"user_id"`
-}
+type ExecuteCommandSecureArgs = harness.CommandRequest
 
 type StartWorkspaceIngestionArgs struct {
 	Path        string `json:"path"`
@@ -248,7 +242,7 @@ func main() {
 		}
 		defer r.Body.Close()
 
-		processFrame(w, ctx, session, body)
+		processFrame(w, r.Context(), session, body)
 	})
 
 	addr := fmt.Sprintf("127.0.0.1:%d", *portFlag)
@@ -429,12 +423,7 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "execute_command_secure":
 		var args ExecuteCommandSecureArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
-			outputStr, execErr := harness.ExecuteCommandSecure(session.Registry, session.Telemetry, args.Command, args.Path, args.WorkspaceID, args.UserID, args.TimeoutSeconds)
-			if execErr != nil {
-				res = harness.ToolExecutionResult{Ok: false, Error: execErr.Error(), Code: "COMMAND_FAILED"}
-			} else {
-				res = harness.ToolExecutionResult{Ok: true, Output: outputStr}
-			}
+			res = harness.ExecuteCommand(ctx, session.Registry, session.Telemetry, args)
 		} else {
 			sendErrorResponse(w, req.ID, -32602, "Invalid params for execute_command_secure")
 			return
@@ -575,13 +564,9 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 			return
 		}
 	case "run_command":
-		var args RunCommandArgs
-		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = ioHarness.RunCommand(ctx, args.Command, args.TimeoutMs)
-		} else {
-			sendErrorResponse(w, req.ID, -32602, "Invalid params for run_command")
-			return
-		}
+		// Legacy RPC must not bypass the identity/root-grant execution gate.
+		res = harness.ToolExecutionResult{Error: "Use execute_command_secure with user/workspace identity and a root grant", Code: "COMMAND_ACCESS_DENIED"}
+
 	case "github_request":
 		var args GitHubRequestArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {

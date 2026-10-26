@@ -15,13 +15,15 @@ type BoundedWriter struct {
 	limit     int
 	truncated bool
 	marker    []byte
+	exceeded  chan struct{}
 }
 
 // NewBoundedWriter constructs a thread-safe BoundedWriter.
 func NewBoundedWriter(limit int) *BoundedWriter {
 	return &BoundedWriter{
-		limit:  limit,
-		marker: []byte("\n...[OUTPUT TRUNCATED DUE TO SIZE LIMIT]...\n"),
+		limit:    limit,
+		exceeded: make(chan struct{}),
+		marker:   []byte("\n...[OUTPUT TRUNCATED DUE TO SIZE LIMIT]...\n"),
 	}
 }
 
@@ -37,6 +39,7 @@ func (w *BoundedWriter) Write(p []byte) (int, error) {
 	if currentLen >= w.limit {
 		w.buf.Write(w.marker)
 		w.truncated = true
+		close(w.exceeded)
 		return 0, ErrOutputLimitExceeded
 	}
 
@@ -45,6 +48,7 @@ func (w *BoundedWriter) Write(p []byte) (int, error) {
 		w.buf.Write(p[:remaining])
 		w.buf.Write(w.marker)
 		w.truncated = true
+		close(w.exceeded)
 		return remaining, ErrOutputLimitExceeded
 	}
 
@@ -63,3 +67,5 @@ func (w *BoundedWriter) IsTruncated() bool {
 	defer w.mu.Unlock()
 	return w.truncated
 }
+
+func (w *BoundedWriter) Exceeded() <-chan struct{} { return w.exceeded }

@@ -1,0 +1,30 @@
+name: Windows command harness
+
+on:
+  pull_request:
+    paths: ['go-harness/**', '.github/workflows/windows-command-harness.yml']
+  push:
+    branches: [main]
+    paths: ['go-harness/**', '.github/workflows/windows-command-harness.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  native-commands:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: go-harness
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go-harness/go.mod
+          cache-dependency-path: go-harness/go.sum
+      - name: Native shell, ownership, cancellation and RPC tests
+        run: go test ./internal/executil ./harness ./cmd/lattice-harness -run 'Test(SplitCommand|CommandShellSelection|Managed|Windows|ExecuteCommand|RPCCommand)' -count=1 -v

@@ -2,6 +2,7 @@ package harness
 
 import (
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -10,14 +11,18 @@ import (
 )
 
 func setupExecutionTestEnv(t *testing.T) (*fsutil.RootRegistry, *telemetry.Manager, string) {
+	if runtime.GOOS == "windows" {
+		t.Skip("legacy POSIX direct-executable fixtures; native shell tests run separately")
+	}
 	registry := fsutil.NewRootRegistry()
 	tempDir := t.TempDir()
 
 	registry.UpdateGrants([]fsutil.RootGrant{
 		{
-			Path:        tempDir,
-			WorkspaceID: "test_workspace_1",
-			UserID:      "user_1",
+			Path:             tempDir,
+			AllowDestructive: true,
+			WorkspaceID:      "test_workspace_1",
+			UserID:           "user_1",
 		},
 	})
 
@@ -59,7 +64,7 @@ func TestExecuteCommandSecure_Truncation(t *testing.T) {
 	os.WriteFile(testFile, []byte(largeContent), 0644)
 
 	output, _ := ExecuteCommandSecure(registry, tel, "cat large.txt", tempDir, "test_workspace_1", "user_1", 5)
-	
+
 	// The length should be strictly controlled (Head + Tail + Truncation Message length)
 	if !strings.Contains(output, "[OUTPUT TRUNCATED") {
 		t.Errorf("Expected output to be truncated. Output was %d bytes long. Output: %s", len(output), output)
@@ -76,7 +81,7 @@ func TestExecuteCommandSecure_ShellInjectionPrevention(t *testing.T) {
 	// Since we execute directly and don't pass to bash -c, this should fail because
 	// `echo` doesn't interpret `&& ls` as separate commands but as literal strings.
 	output, _ := ExecuteCommandSecure(registry, tel, "echo hello && ls", tempDir, "test_workspace_1", "user_1", 5)
-	
+
 	// Even if it succeeds printing, it should print "hello && ls" literally, not list the directory.
 	if !strings.Contains(output, "&& ls") {
 		t.Errorf("Expected && to be treated as a literal argument, but it wasn't. Output: %s", output)

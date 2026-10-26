@@ -1,3 +1,4 @@
+import type { CommandShell } from './commandShell';
 import type { ToolExecutionResult } from './types';
 import { LocalIOHarness } from './LocalIOHarness';
 import { GoIOHarness } from './GoIOHarness';
@@ -9,7 +10,7 @@ export interface IOHarness {
   readFile(filePath: string): Promise<ToolExecutionResult>;
   writeFile(filePath: string, content: string): Promise<ToolExecutionResult>;
   patchFile(filePath: string, searchBlock: string, replaceBlock: string): Promise<ToolExecutionResult>;
-  executeCommandSecure(command: string, timeoutSeconds: number, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
+  executeCommandSecure(command: string, timeoutSeconds: number, workspaceId: string, userId: string, shell?: CommandShell): Promise<ToolExecutionResult>;
   discoverDocuments(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
   extractText(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
   summarizeRepo(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;

@@ -1,3 +1,5 @@
+import { randomBytes } from 'crypto';
+import type { CommandShell } from './commandShell';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import * as os from 'os';
@@ -11,6 +13,7 @@ import type { ToolExecutionResult } from './types';
  */
 export class GoIOHarness implements IOHarness {
   private workspaceRoot: string;
+  private readonly daemonAuthToken = randomBytes(32).toString('hex');
   private binaryPath: string = '';
   private available = false;
   
@@ -62,7 +65,7 @@ export class GoIOHarness implements IOHarness {
       try {
         this.child = spawn(this.binaryPath, ['--port=0'], {
           cwd: this.workspaceRoot,
-          env: process.env,
+          env: { ...process.env, LATTICE_AUTH_TOKEN: this.daemonAuthToken },
           stdio: ['ignore', 'pipe', 'pipe']
         });
       } catch (err: any) {
@@ -132,6 +135,7 @@ export class GoIOHarness implements IOHarness {
     const payload = {
       id,
       jsonrpc: "2.0",
+      authToken: this.daemonAuthToken,
       workspaceRoot: this.workspaceRoot,
       action,
       inputs
@@ -152,7 +156,7 @@ export class GoIOHarness implements IOHarness {
       if (jsonRes.error) {
         return { ok: false, error: jsonRes.error.message, code: 'DAEMON_RPC_ERROR' };
       }
-      return jsonRes.result;
+      return { ...jsonRes.result, meta: jsonRes.result.meta ?? jsonRes.result.data };
     } catch (err: any) {
       return { ok: false, error: err.message, code: 'DAEMON_NETWORK_ERROR' };
     }
@@ -171,9 +175,10 @@ export class GoIOHarness implements IOHarness {
     return this.sendRequest('patch_file', { filePath, search_block: searchBlock, replace_block: replaceBlock });
   }
 
-  public async executeCommandSecure(command: string, timeoutSeconds: number, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
+  public async executeCommandSecure(command: string, timeoutSeconds: number, workspaceId: string, userId: string, shell?: CommandShell): Promise<ToolExecutionResult> {
     return this.sendRequest('execute_command_secure', { 
-      command, 
+      command,
+      shell,
       timeout_seconds: timeoutSeconds, 
       path: this.workspaceRoot,
       workspace_id: workspaceId, 
