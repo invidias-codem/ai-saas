@@ -60,6 +60,7 @@ func TestExecuteCommandSymlinkEscape(t *testing.T) {
 		t.Skip("symlink creation requires additional Windows privileges")
 	}
 	registry, tel, dir := setupCommandTestEnv(t)
+	registry.UpdateGrants([]fsutil.RootGrant{{Path: dir, UserID: "user_1", WorkspaceID: "test_workspace_1", AllowDestructive: true}})
 	outside := t.TempDir()
 	link := filepath.Join(dir, "escape")
 	if err := os.Symlink(outside, link); err != nil {
@@ -68,6 +69,22 @@ func TestExecuteCommandSymlinkEscape(t *testing.T) {
 	res := ExecuteCommand(context.Background(), registry, tel, CommandRequest{Path: link, UserID: "user_1", WorkspaceID: "test_workspace_1", Command: "echo forbidden"})
 	if res.Ok || res.Code != "COMMAND_ACCESS_DENIED" {
 		t.Fatalf("symlink escaped: %+v", res)
+	}
+}
+
+func TestExecuteCommandGrantedDirectoryAlias(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows short-path grants are exercised by TestExecuteCommandShell and RPC tests")
+	}
+	registry, tel, dir := setupCommandTestEnv(t)
+	alias := filepath.Join(t.TempDir(), "project-alias")
+	if err := os.Symlink(dir, alias); err != nil {
+		t.Fatal(err)
+	}
+	registry.UpdateGrants([]fsutil.RootGrant{{Path: alias, UserID: "employee", WorkspaceID: "project", AllowDestructive: true}})
+	res := ExecuteCommand(context.Background(), registry, tel, CommandRequest{Path: dir, UserID: "employee", WorkspaceID: "project", Shell: executil.SH, Command: "printf approved"})
+	if !res.Ok || res.Output != "approved" {
+		t.Fatalf("canonical grant alias rejected: %+v", res)
 	}
 }
 

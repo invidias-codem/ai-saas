@@ -41,7 +41,7 @@ func ExecuteCommand(ctx context.Context, registry *fsutil.RootRegistry, tel *tel
 	if err != nil {
 		return deny("invalid execution directory")
 	}
-	grant, err := registry.GetMatchingGrant(dir)
+	grant, err := registry.GetMatchingResolvedGrant(dir)
 	if err != nil || grant == nil {
 		return deny("execution directory is outside authorized workspace roots")
 	}

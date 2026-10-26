@@ -16,8 +16,8 @@ import (
 func TestRPCCommandCannotBypassGrantGate(t *testing.T) {
 	previous := expectedToken
 	expectedToken = "test-launch-token"
-	t.Cleanup(func() { expectedToken = previous; cleanupHarnesses() })
 	dir := t.TempDir()
+	t.Cleanup(func() { expectedToken = previous; cleanupHarnesses() })
 	session := &SessionContext{Registry: fsutil.NewRootRegistry(), Telemetry: telemetry.NewManager()}
 	for _, action := range []string{"run_command", "execute_command_secure"} {
 		payload, _ := json.Marshal(map[string]any{"id": "test", "jsonrpc": "2.0", "workspaceRoot": dir, "authToken": expectedToken, "action": action, "inputs": map[string]any{"command": "echo forbidden", "shell": "cmd", "path": dir, "workspace_id": "ws", "user_id": "user"}})
@@ -32,8 +32,8 @@ func TestRPCCommandCannotBypassGrantGate(t *testing.T) {
 func TestRPCCommandAuthenticatedExecution(t *testing.T) {
 	previous := expectedToken
 	expectedToken = "test-launch-token"
-	t.Cleanup(func() { expectedToken = previous; cleanupHarnesses() })
 	dir := t.TempDir()
+	t.Cleanup(func() { expectedToken = previous; cleanupHarnesses() })
 	session := &SessionContext{Registry: fsutil.NewRootRegistry(), Telemetry: telemetry.NewManager()}
 	session.Registry.UpdateGrants([]fsutil.RootGrant{{Path: dir, UserID: "employee", WorkspaceID: "project", AllowDestructive: true}})
 	shell, script := "sh", "printf 'approved output'; exit 7"

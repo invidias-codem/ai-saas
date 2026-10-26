@@ -1,6 +1,9 @@
 package fsutil
 
-import "sync"
+import (
+	"path/filepath"
+	"sync"
+)
 
 type RootRegistry struct {
 	grants []RootGrant
@@ -34,4 +37,28 @@ func (r *RootRegistry) GetMatchingGrant(targetPath string) (*RootGrant, error) {
 		}
 	}
 	return nil, nil // No match
+}
+
+// GetMatchingResolvedGrant compares existing directories in the same canonical
+// namespace. Windows short paths and symlink/junction aliases must be resolved
+// on both sides; resolving only the requested cwd rejects legitimate grants.
+func (r *RootRegistry) GetMatchingResolvedGrant(targetPath string) (*RootGrant, error) {
+	target, err := filepath.EvalSymlinks(targetPath)
+	if err != nil {
+		return nil, err
+	}
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+	for _, grant := range r.grants {
+		root, err := filepath.EvalSymlinks(grant.Path)
+		if err != nil {
+			continue // unavailable roots never authorize execution
+		}
+		contained, err := IsPathContained(root, target)
+		if err == nil && contained {
+			matched := grant
+			return &matched, nil
+		}
+	}
+	return nil, nil
 }
