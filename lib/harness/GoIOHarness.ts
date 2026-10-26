@@ -1,31 +1,21 @@
-import { randomBytes } from 'crypto';
-import type { CommandShell } from './commandShell';
 import * as path from 'path';
-import * as fs from 'fs/promises';
 import * as os from 'os';
-import { spawn, ChildProcess } from 'child_process';
+import type { CommandShell } from './commandShell';
+import { NativeDaemonClient } from './nativeDaemonClient';
 import type { IOHarness } from './IOHarness';
 import type { ToolExecutionResult } from './types';
 
-/**
- * A TypeScript IOHarness implementation that acts as an IPC client
- * to the compiled Go binary execution daemon (`go-harness/bin/lattice-harness`).
- */
+/** Typed operations over a managed, authenticated native daemon session. */
 export class GoIOHarness implements IOHarness {
-  private workspaceRoot: string;
-  private readonly daemonAuthToken = randomBytes(32).toString('hex');
-  private binaryPath: string = '';
-  private available = false;
-  
-  private child: ChildProcess | null = null;
-  private daemonPort: number | null = null;
-  private requestIdCounter: number = 0;
+  private readonly workspaceRoot: string;
+  private readonly daemon: NativeDaemonClient;
 
   constructor(workspaceRoot: string) {
     this.workspaceRoot = path.resolve(workspaceRoot);
+    this.daemon = new NativeDaemonClient(this.workspaceRoot);
   }
 
-  public async initialize(): Promise<void> {
+  public initialize(): Promise<void> {
     const suffix = os.platform() === 'win32' ? '.exe' : '';
     const binaryName = `lattice-harness${suffix}`;
 
@@ -44,124 +34,12 @@ export class GoIOHarness implements IOHarness {
       path.resolve(__dirname, `../../../standalone/go-harness/bin/${platformBinaryName}`),
     ].filter((p): p is string => typeof p === 'string' && p.length > 0);
 
-    let found = false;
-    for (const p of pathsToTry) {
-      try {
-        await fs.access(p, fs.constants.X_OK);
-        this.binaryPath = p;
-        found = true;
-        break;
-      } catch {
-      }
-    }
-
-    if (!found) {
-      console.warn('[Lattice OS] Go harness binary not found; continuing without local execution bridge.');
-      this.available = false;
-      return;
-    }
-
-    return new Promise((resolve, reject) => {
-      try {
-        this.child = spawn(this.binaryPath, ['--port=0'], {
-          cwd: this.workspaceRoot,
-          env: { ...process.env, LATTICE_AUTH_TOKEN: this.daemonAuthToken },
-          stdio: ['ignore', 'pipe', 'pipe']
-        });
-      } catch (err: any) {
-        console.warn(`[Lattice OS] Failed to spawn Go harness execution bridge: ${err.message}`);
-        this.available = false;
-        return resolve();
-      }
-
-      this.child.stderr?.on('data', (chunk: Buffer) => {
-        process.stderr.write(`[Go Daemon Debug] ${chunk.toString('utf-8')}`);
-      });
-
-      let stdoutBuffer = '';
-      let portFound = false;
-
-      this.child.stdout?.on('data', (chunk: Buffer) => {
-        if (portFound) return;
-        stdoutBuffer += chunk.toString('utf-8');
-        let newlineIdx = stdoutBuffer.indexOf('\n');
-        if (newlineIdx !== -1) {
-          const line = stdoutBuffer.substring(0, newlineIdx).trim();
-          try {
-            const data = JSON.parse(line);
-            if (data.status === 'ready' && data.port) {
-              this.daemonPort = data.port;
-              portFound = true;
-              this.available = true;
-              resolve();
-            }
-          } catch (e) {
-            console.error('[Lattice OS] Failed to parse daemon boot line:', line);
-          }
-        }
-      });
-
-      this.child.on('error', (err) => {
-        console.warn(`[Lattice OS] Go harness execution bridge errored: ${err.message}`);
-        this.available = false;
-        resolve();
-      });
-
-      this.child.on('close', (code) => {
-        if (code !== 0 && code !== null) {
-          console.warn(`[Lattice OS] Go Harness Daemon closed unexpectedly with exit code: ${code}`);
-        }
-        this.daemonPort = null;
-        this.available = false;
-      });
-      
-      // Safety timeout
-      setTimeout(() => {
-        if (!portFound) {
-          this.available = false;
-          resolve();
-        }
-      }, 5000);
-    });
+    return this.daemon.initialize(pathsToTry);
   }
 
-
-  private async sendRequest(action: string, inputs: any): Promise<ToolExecutionResult> {
-    if (!this.daemonPort) {
-      return { ok: false, error: 'Harness daemon process is dead or uninitialized', code: 'DAEMON_DOWN' };
-    }
-
-    const id = `req_${++this.requestIdCounter}_${Date.now()}`;
-    const payload = {
-      id,
-      jsonrpc: "2.0",
-      authToken: this.daemonAuthToken,
-      workspaceRoot: this.workspaceRoot,
-      action,
-      inputs
-    };
-
-    try {
-      const res = await fetch(`http://127.0.0.1:${this.daemonPort}/rpc`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      if (!res.ok) {
-        return { ok: false, error: `HTTP ${res.status} from daemon`, code: 'DAEMON_HTTP_ERROR' };
-      }
-      
-      const jsonRes = await res.json();
-      if (jsonRes.error) {
-        return { ok: false, error: jsonRes.error.message, code: 'DAEMON_RPC_ERROR' };
-      }
-      return { ...jsonRes.result, meta: jsonRes.result.meta ?? jsonRes.result.data };
-    } catch (err: any) {
-      return { ok: false, error: err.message, code: 'DAEMON_NETWORK_ERROR' };
-    }
+  private sendRequest(action: string, inputs: Record<string, unknown>): Promise<ToolExecutionResult> {
+    return this.daemon.request(action, inputs);
   }
-
 
   public async readFile(filePath: string): Promise<ToolExecutionResult> {
     return this.sendRequest('read_file', { filePath });
@@ -233,9 +111,7 @@ export class GoIOHarness implements IOHarness {
     });
   }
 
-  public shutdown() {
-    if (this.child && !this.child.killed) {
-      this.child.kill('SIGTERM');
-    }
+  public shutdown(): Promise<void> {
+    return this.daemon.shutdown();
   }
 }

@@ -5,15 +5,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/invidias-codem/ai-saas/go-harness/harness"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
@@ -171,7 +170,7 @@ func main() {
 	corsOriginsFlag := flag.String("cors-origins", "http://localhost:3000,tauri://localhost,https://tauri.localhost", "Comma-separated list of allowed CORS origins")
 	flag.Parse()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	defer cleanupHarnesses()
 
@@ -180,23 +179,14 @@ func main() {
 		log.Println("WARNING: LATTICE_AUTH_TOKEN is not set. The daemon is running in insecure mode (not recommended).")
 	}
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		sig := <-sigChan
-		log.Printf("Received signal %v, shutting down...", sig)
-		cancel()
-		cleanupHarnesses()
-		os.Exit(1)
-	}()
-
 	// 1. Initialize the decoupled memory structures
 	telemetryManager := telemetry.NewManager() // Buffer is ready, flusher is OFF
 	rootRegistry := fsutil.NewRootRegistry()
 	vectorDB, err := harness.NewVectorIndex("lattice_vectors.db")
 	if err != nil {
-		log.Printf("Failed to initialize vector index: %v", err)
+		log.Fatalf("Failed to initialize vector index: %v", err)
 	}
+	defer vectorDB.Close()
 
 	session := &SessionContext{
 		Registry:  rootRegistry,
@@ -205,45 +195,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/rpc", func(w http.ResponseWriter, r *http.Request) {
-		// CORS Headers
-		origin := r.Header.Get("Origin")
-		allowedOrigins := strings.Split(*corsOriginsFlag, ",")
-		allowed := false
-		for _, o := range allowedOrigins {
-			if origin == strings.TrimSpace(o) {
-				allowed = true
-				break
-			}
-		}
-		if allowed {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		} else {
-			// Fallback for development if no origin is provided
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-		}
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Bad request", http.StatusBadRequest)
-			return
-		}
-		defer r.Body.Close()
-
-		processFrame(w, r.Context(), session, body)
-	})
+	mux.Handle("/rpc", newRPCHandler(session, *corsOriginsFlag))
 
 	addr := fmt.Sprintf("127.0.0.1:%d", *portFlag)
 	listener, err := net.Listen("tcp", addr)
@@ -260,16 +212,33 @@ func main() {
 	}
 	json.NewEncoder(os.Stdout).Encode(readyMsg)
 
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      130 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		MaxHeaderBytes:    32 * 1024,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+	}
 
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
-		srv.Shutdown(context.Background())
+		deadline, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		if err := srv.Shutdown(deadline); err != nil {
+			_ = srv.Close()
+		}
 	}()
 
 	log.Printf("Listening on http://127.0.0.1:%d", actualPort)
 	if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("HTTP server error: %v", err)
+	}
+	if ctx.Err() != nil {
+		<-shutdownDone
 	}
 }
 

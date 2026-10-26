@@ -13,6 +13,7 @@ export type ToolExecutionResult =
   | {
       ok: false;
       error: string;
+      output?: string;
       code?: string;
       meta?: Record<string, unknown>;
     };

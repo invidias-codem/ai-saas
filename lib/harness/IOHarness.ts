@@ -18,7 +18,7 @@ export interface IOHarness {
   ingestWorkspace(targetPath: string, workspaceId: string, userId: string): Promise<ToolExecutionResult>;
   insertEpisodicEvent(workspaceId: string, eventType: string, content: string, metadata: string, embedding: number[]): Promise<ToolExecutionResult>;
   searchEpisodicEvents(workspaceId: string, queryEmbedding: number[], topK: number): Promise<ToolExecutionResult>;
-  shutdown?: () => void;
+  shutdown?: () => void | Promise<void>;
 }
 
 export interface HarnessConfig {
@@ -51,31 +51,16 @@ export class HarnessFactory {
         : 'local_execution_enabled';
     }
 
-    const harness =
+    const harness: IOHarness =
       selectedHarness === 'GoIOHarness'
         ? new GoIOHarness(config.workspaceRoot)
         : new LocalIOHarness(config.workspaceRoot);
 
     try {
       await harness.initialize();
-    } catch (error: any) {
-      if (selectedHarness === 'GoIOHarness') {
-        const fallback = new LocalIOHarness(config.workspaceRoot);
-        try {
-          await fallback.initialize();
-          void HarnessFactory.recordHarnessSelection({
-            selectedHarness: 'LocalIOHarness',
-            selectionReason: 'go_daemon_init_failed_fallback',
-            workspaceId: config.workspaceId,
-            userId: config.userId,
-            traceId: config.traceId,
-            workspaceRoot: config.workspaceRoot,
-          });
-          return fallback;
-        } catch {
-          throw error;
-        }
-      }
+    } catch (error) {
+      // A requested native runtime must not silently change execution policy.
+      await harness.shutdown?.();
       throw error;
     }
 
