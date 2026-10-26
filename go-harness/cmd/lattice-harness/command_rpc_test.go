@@ -61,3 +61,33 @@ func TestRPCCommandAuthenticatedExecution(t *testing.T) {
 		}
 	}
 }
+
+// #448 review regressions: the auth gate is unconditional, and startup is
+// fail-closed. The previous `expectedToken != "" &&` short-circuit let the
+// daemon run fully unauthenticated whenever LATTICE_AUTH_TOKEN was missing.
+
+func TestProcessFrameRejectsAllRequestsWhenExpectedTokenEmpty(t *testing.T) {
+	previous := expectedToken
+	expectedToken = "" // the old "insecure mode" condition
+	dir := t.TempDir()
+	t.Cleanup(func() { expectedToken = previous; cleanupHarnesses() })
+	session := &SessionContext{Registry: fsutil.NewRootRegistry(), Telemetry: telemetry.NewManager()}
+	session.Registry.UpdateGrants([]fsutil.RootGrant{{Path: dir, UserID: "employee", WorkspaceID: "project", AllowDestructive: true}})
+	for _, token := range []string{"", "anything"} {
+		payload, _ := json.Marshal(map[string]any{"id": "test", "jsonrpc": "2.0", "workspaceRoot": dir, "authToken": token, "action": "list_workspace", "inputs": map[string]any{"path": dir, "workspace_id": "project", "user_id": "employee"}})
+		w := httptest.NewRecorder()
+		processFrame(w, context.Background(), session, payload)
+		if !strings.Contains(w.Body.String(), "Unauthorized") {
+			t.Fatalf("request accepted with expectedToken empty (authToken=%q): %s", token, w.Body.String())
+		}
+	}
+}
+
+func TestValidateLaunchAuthToken(t *testing.T) {
+	if err := validateLaunchAuthToken(""); err == nil {
+		t.Fatal("missing launch token must be rejected — packaged startup rejects missing authentication")
+	}
+	if err := validateLaunchAuthToken("some-token"); err != nil {
+		t.Fatalf("valid launch token rejected: %v", err)
+	}
+}

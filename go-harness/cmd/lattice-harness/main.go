@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -162,6 +163,16 @@ var (
 	expectedToken   string
 )
 
+// validateLaunchAuthToken enforces fail-closed startup (#448 review):
+// packaged startup rejects missing authentication instead of running the
+// daemon unauthenticated.
+func validateLaunchAuthToken(token string) error {
+	if token == "" {
+		return errors.New("LATTICE_AUTH_TOKEN is not set; refusing to start. Packaged startup rejects missing authentication.")
+	}
+	return nil
+}
+
 func main() {
 	// Violent Descriptor Separation
 	log.SetOutput(os.Stderr)
@@ -175,8 +186,11 @@ func main() {
 	defer cleanupHarnesses()
 
 	expectedToken = os.Getenv("LATTICE_AUTH_TOKEN")
-	if expectedToken == "" {
-		log.Println("WARNING: LATTICE_AUTH_TOKEN is not set. The daemon is running in insecure mode (not recommended).")
+	// #448 review: fail closed. Packaged startup rejects missing
+	// authentication — the previous behavior (warn + run unauthenticated)
+	// exposed every daemon capability to any local process.
+	if err := validateLaunchAuthToken(expectedToken); err != nil {
+		log.Fatalf("%v", err)
 	}
 
 	// 1. Initialize the decoupled memory structures
@@ -295,8 +309,14 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 		return
 	}
 
-	// Inner Ring Security check: verify the injected auth token
-	if expectedToken != "" && req.AuthToken != expectedToken {
+	// Inner Ring Security check: verify the injected auth token.
+	// #448 review: UNCONDITIONAL — the previous `expectedToken != "" &&`
+	// short-circuit let the daemon run fully unauthenticated whenever the
+	// launch token was missing ("insecure mode"), which is the exact taint
+	// path behind the CodeQL network/command-sink criticals. A missing
+	// expected token now rejects every request; startup refuses to run
+	// without one (validateLaunchAuthToken).
+	if req.AuthToken != expectedToken {
 		log.Printf("Unauthorized JSON-RPC payload received. Expected valid auth token.")
 		sendErrorResponse(w, req.ID, -32000, "Unauthorized: Invalid or missing authToken")
 		return
