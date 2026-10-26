@@ -33,7 +33,7 @@ func FetchEmbeddings(texts []string, authToken string) ([][]float32, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create embeddings request: %w", err)
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	if authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+authToken)
@@ -60,7 +60,6 @@ func FetchEmbeddings(texts []string, authToken string) ([][]float32, error) {
 
 	return response.Embeddings, nil
 }
-
 
 // VectorIndex manages the local SQLite connection for chunk storage
 type VectorIndex struct {
@@ -97,11 +96,15 @@ func NewVectorIndex(dbPath string) (*VectorIndex, error) {
 	CREATE INDEX IF NOT EXISTS idx_episodic_workspace ON episodic_events(workspace_id);
 	`
 	if _, err := db.Exec(schema); err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to initialize vector schema: %w", err)
 	}
 
 	return &VectorIndex{db: db}, nil
 }
+
+// Close releases the memory database before profile restart or application exit.
+func (v *VectorIndex) Close() error { return v.db.Close() }
 
 // --- VECTOR SERIALIZATION ---
 
@@ -345,5 +348,3 @@ func (vi *VectorIndex) SearchEpisodicEvents(workspaceID string, queryEmbedding [
 	}
 	return results, nil
 }
-
-

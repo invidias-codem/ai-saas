@@ -3,17 +3,17 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/invidias-codem/ai-saas/go-harness/harness"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
@@ -82,13 +82,7 @@ type SearchEpisodicEventsArgs struct {
 	TopK           int       `json:"top_k"`
 }
 
-type ExecuteCommandSecureArgs struct {
-	Command        string `json:"command"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	Path           string `json:"path"`
-	WorkspaceID    string `json:"workspace_id"`
-	UserID         string `json:"user_id"`
-}
+type ExecuteCommandSecureArgs = harness.CommandRequest
 
 type StartWorkspaceIngestionArgs struct {
 	Path        string `json:"path"`
@@ -169,6 +163,16 @@ var (
 	expectedToken   string
 )
 
+// validateLaunchAuthToken enforces fail-closed startup (#448 review):
+// packaged startup rejects missing authentication instead of running the
+// daemon unauthenticated.
+func validateLaunchAuthToken(token string) error {
+	if token == "" {
+		return errors.New("LATTICE_AUTH_TOKEN is not set; refusing to start. Packaged startup rejects missing authentication.")
+	}
+	return nil
+}
+
 func main() {
 	// Violent Descriptor Separation
 	log.SetOutput(os.Stderr)
@@ -177,32 +181,26 @@ func main() {
 	corsOriginsFlag := flag.String("cors-origins", "http://localhost:3000,tauri://localhost,https://tauri.localhost", "Comma-separated list of allowed CORS origins")
 	flag.Parse()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	defer cleanupHarnesses()
 
 	expectedToken = os.Getenv("LATTICE_AUTH_TOKEN")
-	if expectedToken == "" {
-		log.Println("WARNING: LATTICE_AUTH_TOKEN is not set. The daemon is running in insecure mode (not recommended).")
+	// #448 review: fail closed. Packaged startup rejects missing
+	// authentication — the previous behavior (warn + run unauthenticated)
+	// exposed every daemon capability to any local process.
+	if err := validateLaunchAuthToken(expectedToken); err != nil {
+		log.Fatalf("%v", err)
 	}
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		sig := <-sigChan
-		log.Printf("Received signal %v, shutting down...", sig)
-		cancel()
-		cleanupHarnesses()
-		os.Exit(1)
-	}()
 
 	// 1. Initialize the decoupled memory structures
 	telemetryManager := telemetry.NewManager() // Buffer is ready, flusher is OFF
 	rootRegistry := fsutil.NewRootRegistry()
 	vectorDB, err := harness.NewVectorIndex("lattice_vectors.db")
 	if err != nil {
-		log.Printf("Failed to initialize vector index: %v", err)
+		log.Fatalf("Failed to initialize vector index: %v", err)
 	}
+	defer vectorDB.Close()
 
 	session := &SessionContext{
 		Registry:  rootRegistry,
@@ -211,45 +209,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/rpc", func(w http.ResponseWriter, r *http.Request) {
-		// CORS Headers
-		origin := r.Header.Get("Origin")
-		allowedOrigins := strings.Split(*corsOriginsFlag, ",")
-		allowed := false
-		for _, o := range allowedOrigins {
-			if origin == strings.TrimSpace(o) {
-				allowed = true
-				break
-			}
-		}
-		if allowed {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		} else {
-			// Fallback for development if no origin is provided
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-		}
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Bad request", http.StatusBadRequest)
-			return
-		}
-		defer r.Body.Close()
-
-		processFrame(w, ctx, session, body)
-	})
+	mux.Handle("/rpc", newRPCHandler(session, *corsOriginsFlag))
 
 	addr := fmt.Sprintf("127.0.0.1:%d", *portFlag)
 	listener, err := net.Listen("tcp", addr)
@@ -266,16 +226,33 @@ func main() {
 	}
 	json.NewEncoder(os.Stdout).Encode(readyMsg)
 
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      130 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		MaxHeaderBytes:    32 * 1024,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+	}
 
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
-		srv.Shutdown(context.Background())
+		deadline, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		if err := srv.Shutdown(deadline); err != nil {
+			_ = srv.Close()
+		}
 	}()
 
 	log.Printf("Listening on http://127.0.0.1:%d", actualPort)
 	if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("HTTP server error: %v", err)
+	}
+	if ctx.Err() != nil {
+		<-shutdownDone
 	}
 }
 
@@ -332,8 +309,14 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 		return
 	}
 
-	// Inner Ring Security check: verify the injected auth token
-	if expectedToken != "" && req.AuthToken != expectedToken {
+	// Inner Ring Security check: verify the injected auth token.
+	// #448 review: UNCONDITIONAL — the previous `expectedToken != "" &&`
+	// short-circuit let the daemon run fully unauthenticated whenever the
+	// launch token was missing ("insecure mode"), which is the exact taint
+	// path behind the CodeQL network/command-sink criticals. Defense in depth
+	// behind the fail-closed startup: an unconfigured token rejects EVERY
+	// request, and a configured token must match exactly.
+	if expectedToken == "" || req.AuthToken != expectedToken {
 		log.Printf("Unauthorized JSON-RPC payload received. Expected valid auth token.")
 		sendErrorResponse(w, req.ID, -32000, "Unauthorized: Invalid or missing authToken")
 		return
@@ -429,12 +412,7 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "execute_command_secure":
 		var args ExecuteCommandSecureArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
-			outputStr, execErr := harness.ExecuteCommandSecure(session.Registry, session.Telemetry, args.Command, args.Path, args.WorkspaceID, args.UserID, args.TimeoutSeconds)
-			if execErr != nil {
-				res = harness.ToolExecutionResult{Ok: false, Error: execErr.Error(), Code: "COMMAND_FAILED"}
-			} else {
-				res = harness.ToolExecutionResult{Ok: true, Output: outputStr}
-			}
+			res = harness.ExecuteCommand(ctx, session.Registry, session.Telemetry, args)
 		} else {
 			sendErrorResponse(w, req.ID, -32602, "Invalid params for execute_command_secure")
 			return
@@ -575,13 +553,9 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 			return
 		}
 	case "run_command":
-		var args RunCommandArgs
-		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = ioHarness.RunCommand(ctx, args.Command, args.TimeoutMs)
-		} else {
-			sendErrorResponse(w, req.ID, -32602, "Invalid params for run_command")
-			return
-		}
+		// Legacy RPC must not bypass the identity/root-grant execution gate.
+		res = harness.ToolExecutionResult{Error: "Use execute_command_secure with user/workspace identity and a root grant", Code: "COMMAND_ACCESS_DENIED"}
+
 	case "github_request":
 		var args GitHubRequestArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {

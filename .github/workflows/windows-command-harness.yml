@@ -1,0 +1,61 @@
+name: Windows command harness
+
+on:
+  pull_request:
+    paths: ['go-harness/**', 'lib/harness/**', '.github/workflows/windows-command-harness.yml']
+  push:
+    branches: [main]
+    paths: ['go-harness/**', 'lib/harness/**', '.github/workflows/windows-command-harness.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  native-commands:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: go-harness
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go-harness/go.mod
+          cache-dependency-path: go-harness/go.sum
+      - name: Native shell, ownership, cancellation and RPC tests
+        run: go test ./internal/executil ./harness ./cmd/lattice-harness -run 'Test(SplitCommand|CommandShellSelection|Managed|Windows|ExecuteCommand|RPC)' -count=3 -v
+      - name: Race detection
+        if: runner.os == 'Linux'
+        run: go test -race ./internal/fsutil ./internal/executil ./harness ./cmd/lattice-harness
+
+  native-client:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go-harness/go.mod
+          cache-dependency-path: go-harness/go.sum
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+        with:
+          version: 11.6.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build this revision's native daemon
+        working-directory: go-harness
+        run: go build -o bin/lattice-test-daemon.exe ./cmd/lattice-harness
+      - name: Host lifecycle and real daemon restart tests
+        env:
+          LATTICE_TEST_DAEMON_PATH: ${{ github.workspace }}/go-harness/bin/lattice-test-daemon.exe
+        run: pnpm exec jest --runInBand lib/harness/GoIOHarness.test.ts lib/harness/IOHarness.stability.test.ts lib/harness/nativeDaemonClient.integration.test.ts lib/harness/commandShell.test.ts __tests__/harness/router.test.ts __tests__/security/ToolRouter.test.ts

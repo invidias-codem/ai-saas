@@ -1,3 +1,4 @@
+import { CommandShellSchema, CommandTextSchema, buildCommandSandbox, type CommandShell } from "@/lib/harness/commandShell";
 import { z } from "zod";
 import { Tool } from "../core/types";
 
@@ -83,12 +84,13 @@ export const patchFileTool: Tool<{ filePath: string; searchBlock: string; replac
     }
 };
 
-export const runCommandTool: Tool<{ command: string; timeoutMs?: number }, any> = {
+export const runCommandTool: Tool<{ command: string; timeoutMs?: number; shell?: CommandShell }, any> = {
     name: "run_command",
     description: "Run a shell command in the workspace.",
     schema: z.object({
-        command: z.string(),
-        timeoutMs: z.number().optional()
+        command: CommandTextSchema,
+        shell: CommandShellSchema.optional(),
+        timeoutMs: z.number().int().positive().max(120000).optional()
     }),
     risk: "mutative",
     requiresApproval: true,
@@ -96,17 +98,18 @@ export const runCommandTool: Tool<{ command: string; timeoutMs?: number }, any> 
     sandbox: {
       language: 'sh',
       allowedEnv: ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'SHELL', 'NODE_ENV'],
-      buildCommand: (input) => {
-        const timeoutSeconds = input.timeoutMs ? Math.ceil(input.timeoutMs / 1000) : 30;
-        return `set -e\n${input.command}`;
-      },
+      buildCommand: buildCommandSandbox,
     },
     execute: async (input, context) => {
         if (!context.ioHarness) {
             return { success: false, error: "Execution harness is not available in the current context." };
         }
         const timeoutSeconds = input.timeoutMs ? Math.ceil(input.timeoutMs / 1000) : 30;
-        const res = await context.ioHarness.executeCommandSecure(input.command, timeoutSeconds, context.workspaceId || "default", context.userId);
-        return { success: res.ok, data: res.ok ? res : undefined, error: res.ok ? undefined : res.error };
+        if (!context.workspaceId || !context.userId) return { success: false, error: "Workspace context is missing." };
+        const args = [input.command, timeoutSeconds, context.workspaceId, context.userId] as const;
+        const res = input.shell === undefined
+          ? await context.ioHarness.executeCommandSecure(...args)
+          : await context.ioHarness.executeCommandSecure(...args, input.shell);
+        return { success: res.ok, data: res, error: res.ok ? undefined : res.error };
     }
 };
