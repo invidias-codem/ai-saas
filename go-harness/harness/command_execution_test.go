@@ -89,5 +89,8 @@ func TestExecuteCommandGrantedDirectoryAlias(t *testing.T) {
 }
 
 func setupCommandTestEnv(t *testing.T) (*fsutil.RootRegistry, *telemetry.Manager, string) {
-	return fsutil.NewRootRegistry(), telemetry.NewManager(), t.TempDir()
+	dir := t.TempDir()
+	registry := fsutil.NewRootRegistry()
+	t.Cleanup(func() { _ = registry.Close() })
+	return registry, telemetry.NewManager(), dir
 }

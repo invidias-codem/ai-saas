@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
 	"net/http"
 )
 
@@ -67,8 +68,11 @@ func (c *IngestClient) Flush() error {
 		return fmt.Errorf("failed to marshal ingest payload: %v", err)
 	}
 
-	url := fmt.Sprintf("%s/api/workspaces/%s/ingest", c.APIBaseURL, c.WorkspaceID)
-	
+	url, err := netguard.APIURL(c.APIBaseURL, c.WorkspaceID, "ingest")
+	if err != nil {
+		return err
+	}
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create ingest request: %v", err)
@@ -77,7 +81,7 @@ func (c *IngestClient) Flush() error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.AuthToken))
 
-	client := &http.Client{}
+	client := netguard.CloudClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("ingest request failed: %v", err)

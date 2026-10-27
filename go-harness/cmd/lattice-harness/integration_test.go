@@ -15,6 +15,7 @@ func TestSecureCapabilities(t *testing.T) {
 	// 1. Initialize the decoupled SessionContext
 	telemetryManager := telemetry.NewManager() // Flusher is OFF
 	rootRegistry := fsutil.NewRootRegistry()
+	defer rootRegistry.Close()
 	session := &SessionContext{
 		Registry:  rootRegistry,
 		Telemetry: telemetryManager,
@@ -30,11 +31,11 @@ func TestSecureCapabilities(t *testing.T) {
 
 	// CHECKLIST ITEM 1: Granted root stored and reloaded correctly (Hydration)
 	grants := []fsutil.RootGrant{
-		{ID: "grant_1", Path: safeDir, Label: "Test Root", ReadOnly: true},
-		{ID: "grant_2", Path: safeDir, Label: "Mutable Root", ReadOnly: false, AllowDestructive: false},
+		{ID: "grant_1", Path: safeDir, UserID: "usr_1", WorkspaceID: "ws_1", Label: "Test Root", ReadOnly: true},
+		{ID: "grant_2", Path: safeDir, UserID: "usr_1", WorkspaceID: "ws_1", Label: "Mutable Root", ReadOnly: false, AllowDestructive: false},
 	}
 	session.Registry.UpdateGrants(grants)
-	
+
 	// Ensure the internal state correctly accepted the grant
 	matchedGrant, _ := session.Registry.GetMatchingGrant(safeFile)
 	if matchedGrant == nil || matchedGrant.ID != "grant_1" {
@@ -42,7 +43,7 @@ func TestSecureCapabilities(t *testing.T) {
 	}
 
 	// --- SUCCESSFUL CAPABILITIES (INSIDE GRANTS) ---
-	
+
 	// CHECKLIST ITEM 3: read_file works inside granted root
 	resSafeRead := harness.ReadFileSecure(session.Registry, session.Telemetry, safeFile, "ws_1", "usr_1")
 	if !resSafeRead.Ok || !strings.Contains(resSafeRead.Output, "Lattice secure read successful") {
@@ -68,7 +69,7 @@ func TestSecureCapabilities(t *testing.T) {
 	if resDeniedRead.Ok || !strings.Contains(resDeniedRead.Error, "Forbidden") {
 		t.Fatalf("CRITICAL: Out of root path read was NOT denied! Result: %v", resDeniedRead.Output)
 	}
-	
+
 	resDeniedList := harness.ListDirectorySecure(session.Registry, session.Telemetry, "/etc", "ws_1", "usr_1")
 	if resDeniedList.Ok || !strings.Contains(resDeniedList.Error, "Forbidden") {
 		t.Fatalf("CRITICAL: Out of root path list was NOT denied!")
@@ -87,7 +88,7 @@ func TestSecureCapabilities(t *testing.T) {
 	readOnlyPath := filepath.Join(safeDir, "test_authorized.txt")
 	// Temporarily switch registry to ReadOnly for testing
 	session.Registry.UpdateGrants([]fsutil.RootGrant{
-		{ID: "grant_1", Path: safeDir, Label: "Test Root", ReadOnly: true},
+		{ID: "grant_1", Path: safeDir, UserID: "usr_1", WorkspaceID: "ws_1", Label: "Test Root", ReadOnly: true},
 	})
 	resDeniedWrite := harness.WriteFileSecure(session.Registry, session.Telemetry, readOnlyPath, "Should fail", "ws_1", "usr_1")
 	if resDeniedWrite.Ok || !strings.Contains(resDeniedWrite.Error, "Read-Only") {
@@ -97,7 +98,7 @@ func TestSecureCapabilities(t *testing.T) {
 	// --- MUTATION FLOW (PHASE 2) ---
 	// Switch registry to Mutable but NOT Destructive
 	session.Registry.UpdateGrants([]fsutil.RootGrant{
-		{ID: "grant_2", Path: safeDir, Label: "Mutable Root", ReadOnly: false, AllowDestructive: false},
+		{ID: "grant_2", Path: safeDir, UserID: "usr_1", WorkspaceID: "ws_1", Label: "Mutable Root", ReadOnly: false, AllowDestructive: false},
 	})
 
 	mutFile := filepath.Join(safeDir, "mut_test.txt")
@@ -131,7 +132,7 @@ func TestSecureCapabilities(t *testing.T) {
 
 	// Enable Destructive
 	session.Registry.UpdateGrants([]fsutil.RootGrant{
-		{ID: "grant_3", Path: safeDir, Label: "Destructive Root", ReadOnly: false, AllowDestructive: true},
+		{ID: "grant_3", Path: safeDir, UserID: "usr_1", WorkspaceID: "ws_1", Label: "Destructive Root", ReadOnly: false, AllowDestructive: true},
 	})
 
 	resDelete := harness.DeletePathSecure(session.Registry, session.Telemetry, movedFile, "ws_1", "usr_1")
@@ -147,10 +148,10 @@ func TestSecureCapabilities(t *testing.T) {
 	os.WriteFile(filepath.Join(repoDir, ".git", "config"), []byte("..."), 0644)
 	os.WriteFile(filepath.Join(repoDir, "package.json"), []byte("{}"), 0644)
 	os.WriteFile(filepath.Join(repoDir, "index.ts"), []byte("console.log('hi');"), 0644)
-	
+
 	largePdfPath := filepath.Join(repoDir, "manual.pdf")
 	os.WriteFile(largePdfPath, make([]byte, 1024), 0644) // Unsupported
-	
+
 	hugeTextPath := filepath.Join(repoDir, "huge.txt")
 	os.WriteFile(hugeTextPath, make([]byte, 200*1024), 0644) // 200KB (Over 100KB limit)
 

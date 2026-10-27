@@ -3,8 +3,8 @@ package harness
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
-	"os"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
+
 	"path/filepath"
 	"time"
 
@@ -26,23 +26,21 @@ func StartWorkspaceIngestion(
 	authToken string,
 	apiBaseURL string,
 ) ToolExecutionResult {
-	start := time.Now()
+	// Validate identity and the pinned grant before scheduling any work.
+	err := registry.WithGrantedPaths(userID, workspaceID, []fsutil.PathAccess{{Path: targetPath}}, func(_ []fsutil.GrantedPath) error { return nil })
+	if err != nil {
+		return ToolExecutionResult{Error: err.Error(), Code: CodePathOutsideWorkspace}
+	}
 
-	// 1. Validate permissions before even starting the background job
-	grant, err := registry.GetMatchingGrant(targetPath)
-	if err != nil || grant == nil {
-		denialErr := fmt.Errorf("403 Forbidden: path not within any authorized root grant")
-		tel.RecordEvent(telemetry.NewEvent(
-			userID, workspaceID,
-			telemetry.EventRootAccessDenied,
-			targetPath, "start_workspace_ingestion",
-			time.Since(start), denialErr,
-		))
-		return ToolExecutionResult{Ok: false, Error: denialErr.Error(), Code: CodePathOutsideWorkspace}
+	if authToken == "" {
+		return ToolExecutionResult{Error: "Cloud authentication is required", Code: "UPSTREAM_AUTH_REQUIRED"}
+	}
+	if _, err := netguard.APIURL(apiBaseURL, workspaceID, "ingest"); err != nil {
+		return ToolExecutionResult{Error: err.Error(), Code: CodeInvalidArgument}
 	}
 
 	// 2. Start the async goroutine
-	go runAsyncIngestion(tel, vi, targetPath, workspaceID, userID, authToken, apiBaseURL)
+	go runAsyncIngestion(registry, tel, vi, targetPath, workspaceID, userID, authToken, apiBaseURL)
 
 	// 3. Return 202-style Accepted response
 	outputMap := map[string]interface{}{
@@ -54,6 +52,7 @@ func StartWorkspaceIngestion(
 }
 
 func runAsyncIngestion(
+	registry *fsutil.RootRegistry,
 	tel *telemetry.Manager,
 	vi *VectorIndex,
 	targetPath string,
@@ -84,14 +83,14 @@ func runAsyncIngestion(
 
 	existingFiles, err := vi.GetWorkspaceFiles(workspaceID)
 	if err != nil {
-		fmt.Printf("Warning: failed to get existing files for workspace %s: %v\n", workspaceID, err)
+		fmt.Printf("Warning: failed to get existing files for workspace %q: %v\n", workspaceID, err)
 		existingFiles = []string{}
 	}
 	visitedFiles := make(map[string]bool)
 
 	var currentBatch []FileChunk
 	var batchStrings []string
-	
+
 	totalFilesProcessed := 0
 	totalChunksIndexed := 0
 
@@ -116,14 +115,14 @@ func runAsyncIngestion(
 		for filePath := range filesInBatch {
 			if err := vi.DeleteFileChunks(workspaceID, filePath); err != nil {
 				// Log but continue
-				fmt.Printf("Warning: failed to delete old chunks for %s: %v\n", filePath, err)
+				fmt.Printf("Warning: failed to delete old chunks for %q: %v\n", filePath, err)
 			}
 		}
 
 		// 2. Insert into DB
 		filePaths := make([]string, len(currentBatch))
 		chunks := make([]string, len(currentBatch))
-		
+
 		for i, c := range currentBatch {
 			filePaths[i] = c.FilePath
 			chunks[i] = c.Content
@@ -132,7 +131,7 @@ func runAsyncIngestion(
 		// We need to pass the file path for each chunk. Wait, the InsertChunks signature
 		// is func(workspaceId string, filePath string, chunks []string, embeddings [][]float32)
 		// It assumes a single file per call.
-		
+
 		// Let's refactor the insertion call to iterate per-file, since our currentBatch might span multiple files.
 		// Group by file:
 		type fileGroup struct {
@@ -171,59 +170,56 @@ func runAsyncIngestion(
 		return nil
 	}
 
-	err = filepath.WalkDir(targetPath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if d.IsDir() {
-			if traversalExclusions[d.Name()] {
-				return filepath.SkipDir
+	// Build an inventory through the granted descriptor, then recheck each
+	// read. Never hold a registry lock across an HTTP request.
+	discovered := DiscoverDocumentsSecure(registry, tel, targetPath, workspaceID, userID)
+	var inventory struct {
+		Documents []DocumentMeta `json:"documents"`
+	}
+	if !discovered.Ok {
+		err = fmt.Errorf("document discovery failed: %s", discovered.Error)
+	} else {
+		err = json.Unmarshal([]byte(discovered.Output), &inventory)
+	}
+	if err == nil {
+		for _, document := range inventory.Documents {
+			if document.Size > MaxExtractFileSize {
+				continue
 			}
-			return nil
-		}
-
-		if !isSupportedTextFile(path) {
-			return nil
-		}
-
-		info, err := d.Info()
-		if err != nil || info.Size() > MaxExtractFileSize {
-			return nil // Skip unreadable or too large files
-		}
-
-		contentBytes, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
-
-		// Optional: Skip binary looking files
-		if bytesContainNull(contentBytes) {
-			return nil
-		}
-
-		relPath, err := filepath.Rel(targetPath, path)
-		if err != nil {
-			relPath = path
-		}
-		visitedFiles[relPath] = true
-
-		fileChunks := ChunkFile(relPath, string(contentBytes))
-		
-		for _, c := range fileChunks {
-			currentBatch = append(currentBatch, c)
-			batchStrings = append(batchStrings, c.Content)
-			
-			if len(currentBatch) >= IngestionBatchSize {
-				if err := flushBatch(); err != nil {
-					return err // Stop WalkDir on fatal embedding/db error
+			var content []byte
+			err = registry.WithGrantedPaths(userID, workspaceID, []fsutil.PathAccess{{Path: document.Path}}, func(paths []fsutil.GrantedPath) error {
+				var readErr error
+				content, readErr = fsutil.ReadRegularFile(paths[0].Root, paths[0].Name, MaxExtractFileSize)
+				return readErr
+			})
+			if err != nil {
+				break
+			}
+			if bytesContainNull(content) {
+				continue
+			}
+			relPath, relErr := filepath.Rel(targetPath, document.Path)
+			if relErr != nil {
+				err = relErr
+				break
+			}
+			visitedFiles[relPath] = true
+			for _, chunk := range ChunkFile(relPath, string(content)) {
+				currentBatch = append(currentBatch, chunk)
+				batchStrings = append(batchStrings, chunk.Content)
+				if len(currentBatch) >= IngestionBatchSize {
+					err = flushBatch()
+					if err != nil {
+						break
+					}
 				}
 			}
+			if err != nil {
+				break
+			}
+			totalFilesProcessed++
 		}
-		
-		totalFilesProcessed++
-		return nil
-	})
+	}
 
 	// Flush any remaining
 	if err == nil {
@@ -235,7 +231,7 @@ func runAsyncIngestion(
 		for _, existingFile := range existingFiles {
 			if !visitedFiles[existingFile] {
 				if deleteErr := vi.DeleteFileChunks(workspaceID, existingFile); deleteErr != nil {
-					fmt.Printf("Warning: failed to delete orphaned file %s: %v\n", existingFile, deleteErr)
+					fmt.Printf("Warning: failed to delete orphaned file %q: %v\n", existingFile, deleteErr)
 				}
 			}
 		}

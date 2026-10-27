@@ -35,8 +35,9 @@ Point `LATTICE_HARNESS_BINARY_PATH` at the executable when using `GoIOHarness`.
 That Node host generates a random per-instance RPC credential, supplies it to the
 child daemon, and attaches it to requests. The credential is removed from executed
 commands' environment. Other daemon launchers must independently configure
-`LATTICE_AUTH_TOKEN`; the daemon's existing compatibility mode still allows an
-unset token. Do not expose a compatibility-mode daemon outside a trusted host.
+`LATTICE_AUTH_TOKEN`. Startup now refuses an unset token, and the frame gate
+rejects every request when no token is configured. The Rust launcher still needs
+its own credential injection and authenticated RPC implementation.
 
 Before execution, the trusted host must hydrate the registry through the existing
 `sync_root_grants` RPC with a root grant containing the authenticated `user_id`,

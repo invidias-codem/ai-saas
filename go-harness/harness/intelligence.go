@@ -2,12 +2,12 @@ package harness
 
 import (
 	"encoding/json"
-	"fmt"
+
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/telemetry"
@@ -35,10 +35,10 @@ type DocumentMeta struct {
 }
 
 type RepoSummary struct {
-	TopLevelDirectories []string           `json:"top_level_directories"`
-	ConfiguredFiles     []string           `json:"configured_files"`
-	FileDistribution    map[string]int     `json:"file_distribution"`
-	TotalFilesScanned   int                `json:"total_files_scanned"`
+	TopLevelDirectories []string       `json:"top_level_directories"`
+	ConfiguredFiles     []string       `json:"configured_files"`
+	FileDistribution    map[string]int `json:"file_distribution"`
+	TotalFilesScanned   int            `json:"total_files_scanned"`
 }
 
 func isSupportedTextFile(path string) bool {
@@ -46,235 +46,95 @@ func isSupportedTextFile(path string) bool {
 	return supportedTextExtensions[ext]
 }
 
-// DiscoverDocumentsSecure recursively scans a directory for supported text files.
-func DiscoverDocumentsSecure(registry *fsutil.RootRegistry, tel *telemetry.Manager, targetPath, workspaceID, userID string) ToolExecutionResult {
-	start := time.Now()
-
-	grant, err := registry.GetMatchingGrant(targetPath)
-	if err != nil || grant == nil {
-		denialErr := fmt.Errorf("403 Forbidden: path not within any authorized root grant")
-		tel.RecordEvent(telemetry.NewEvent(
-			userID, workspaceID,
-			telemetry.EventRootAccessDenied,
-			targetPath, "discover_documents",
-			time.Since(start), denialErr,
-		))
-		return ToolExecutionResult{Ok: false, Error: denialErr.Error(), Code: CodePathOutsideWorkspace}
+// walkGranted uses only descriptor-relative directory traversal. Symlink entries
+// are excluded; extraction separately opens a bounded regular-file descriptor.
+func walkGranted(p fsutil.GrantedPath, visit func(string, fs.DirEntry) error) error {
+	root, err := p.Root.OpenRoot(p.Name)
+	if err != nil {
+		return err
 	}
-
-	var documents []DocumentMeta
-	err = filepath.WalkDir(targetPath, func(path string, d fs.DirEntry, err error) error {
+	defer root.Close()
+	count := 0
+	return fs.WalkDir(root.FS(), ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-
-		if d.IsDir() {
-			if traversalExclusions[d.Name()] {
-				return filepath.SkipDir
-			}
+		count++
+		if count > 10000 {
+			return errors.New("workspace scan exceeds local tool entry limit")
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
 			return nil
 		}
-
-		if isSupportedTextFile(path) {
-			info, err := d.Info()
-			if err == nil {
-				documents = append(documents, DocumentMeta{
-					Path:      path,
-					Size:      info.Size(),
-					Extension: filepath.Ext(path),
-				})
-			}
+		if entry.IsDir() && traversalExclusions[entry.Name()] {
+			return fs.SkipDir
 		}
-		return nil
+		return visit(name, entry)
 	})
-
-	if err != nil {
-		tel.RecordEvent(telemetry.NewEvent(
-			userID, workspaceID,
-			telemetry.EventDocumentDiscoveryFailure,
-			targetPath, "discover_documents",
-			time.Since(start), err,
-		))
-		return ToolExecutionResult{Ok: false, Error: err.Error()}
-	}
-
-	tel.RecordEvent(telemetry.NewEvent(
-		userID, workspaceID,
-		telemetry.EventDocumentDiscoverySuccess,
-		targetPath, "discover_documents",
-		time.Since(start), nil,
-	))
-
-	outputMap := map[string]interface{}{
-		"documents": documents,
-		"count":     len(documents),
-	}
-	outBytes, _ := json.Marshal(outputMap)
-
-	return ToolExecutionResult{Ok: true, Output: string(outBytes)}
 }
 
-// ExtractTextSecure safely reads a supported text file, enforcing a strict 100KB size limit.
-func ExtractTextSecure(registry *fsutil.RootRegistry, tel *telemetry.Manager, targetPath, workspaceID, userID string) ToolExecutionResult {
-	start := time.Now()
-
-	grant, err := registry.GetMatchingGrant(targetPath)
-	if err != nil || grant == nil {
-		denialErr := fmt.Errorf("403 Forbidden: path not within any authorized root grant")
-		tel.RecordEvent(telemetry.NewEvent(
-			userID, workspaceID,
-			telemetry.EventRootAccessDenied,
-			targetPath, "extract_text",
-			time.Since(start), denialErr,
-		))
-		return ToolExecutionResult{Ok: false, Error: denialErr.Error(), Code: CodePathOutsideWorkspace}
-	}
-
-	if !isSupportedTextFile(targetPath) {
-		unsupportedErr := fmt.Errorf("Unsupported file type: only safe text extensions are allowed for extraction")
-		tel.RecordEvent(telemetry.NewEvent(
-			userID, workspaceID,
-			telemetry.EventUnsupportedLocalInput,
-			targetPath, "extract_text",
-			time.Since(start), unsupportedErr,
-		))
-		return ToolExecutionResult{Ok: false, Error: unsupportedErr.Error()}
-	}
-
-	info, err := os.Stat(targetPath)
-	if err != nil {
-		tel.RecordEvent(telemetry.NewEvent(
-			userID, workspaceID,
-			telemetry.EventDocumentExtractFailure,
-			targetPath, "extract_text",
-			time.Since(start), err,
-		))
-		return ToolExecutionResult{Ok: false, Error: err.Error()}
-	}
-
-	if info.Size() > MaxExtractFileSize {
-		sizeErr := fmt.Errorf("File too large (%.2f KB). Maximum allowed size is 100KB to prevent context exhaustion.", float64(info.Size())/1024.0)
-		tel.RecordEvent(telemetry.NewEvent(
-			userID, workspaceID,
-			telemetry.EventDocumentExtractFailure,
-			targetPath, "extract_text",
-			time.Since(start), sizeErr,
-		))
-		return ToolExecutionResult{Ok: false, Error: sizeErr.Error()}
-	}
-
-	content, err := os.ReadFile(targetPath)
-	if err != nil {
-		tel.RecordEvent(telemetry.NewEvent(
-			userID, workspaceID,
-			telemetry.EventDocumentExtractFailure,
-			targetPath, "extract_text",
-			time.Since(start), err,
-		))
-		return ToolExecutionResult{Ok: false, Error: err.Error()}
-	}
-
-	tel.RecordEvent(telemetry.NewEvent(
-		userID, workspaceID,
-		telemetry.EventDocumentExtractSuccess,
-		targetPath, "extract_text",
-		time.Since(start), nil,
-	))
-
-	outputMap := map[string]interface{}{
-		"content": string(content),
-		"path":    targetPath,
-		"size":    info.Size(),
-	}
-	outBytes, _ := json.Marshal(outputMap)
-	return ToolExecutionResult{Ok: true, Output: string(outBytes)}
-}
-
-// SummarizeRepoSecure maps out a repository structure without returning full file contents.
-func SummarizeRepoSecure(registry *fsutil.RootRegistry, tel *telemetry.Manager, targetPath, workspaceID, userID string) ToolExecutionResult {
-	start := time.Now()
-
-	grant, err := registry.GetMatchingGrant(targetPath)
-	if err != nil || grant == nil {
-		denialErr := fmt.Errorf("403 Forbidden: path not within any authorized root grant")
-		tel.RecordEvent(telemetry.NewEvent(
-			userID, workspaceID,
-			telemetry.EventRootAccessDenied,
-			targetPath, "summarize_repo",
-			time.Since(start), denialErr,
-		))
-		return ToolExecutionResult{Ok: false, Error: denialErr.Error(), Code: CodePathOutsideWorkspace}
-	}
-
-	summary := RepoSummary{
-		TopLevelDirectories: []string{},
-		ConfiguredFiles:     []string{},
-		FileDistribution:    make(map[string]int),
-	}
-
-	majorConfigs := map[string]bool{
-		"package.json": true, "go.mod": true, "Cargo.toml": true, "pyproject.toml": true,
-		"requirements.txt": true, "dockerfile": true, "docker-compose.yml": true,
-		"tsconfig.json": true, ".eslintrc.js": true, "webpack.config.js": true,
-	}
-
-	err = filepath.WalkDir(targetPath, func(path string, d fs.DirEntry, err error) error {
+func DiscoverDocumentsSecure(registry *fsutil.RootRegistry, tel *telemetry.Manager, target, workspace, user string) ToolExecutionResult {
+	return withLocalPath(registry, tel, target, workspace, user, telemetry.EventDocumentDiscoverySuccess, "discover_documents", false, false, func(p fsutil.GrantedPath) (ToolExecutionResult, error) {
+		documents := []DocumentMeta{}
+		err := walkGranted(p, func(name string, entry fs.DirEntry) error {
+			if entry.IsDir() || !isSupportedTextFile(name) {
+				return nil
+			}
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			if info.Mode().IsRegular() {
+				documents = append(documents, DocumentMeta{Path: filepath.Join(target, filepath.FromSlash(name)), Size: info.Size(), Extension: filepath.Ext(name)})
+			}
+			return nil
+		})
 		if err != nil {
-			return err
+			return ToolExecutionResult{}, err
 		}
+		data, err := json.Marshal(map[string]any{"documents": documents, "count": len(documents)})
+		return ToolExecutionResult{Ok: err == nil, Output: string(data)}, err
+	})
+}
 
-		if d.IsDir() {
-			if traversalExclusions[d.Name()] {
-				return filepath.SkipDir
+func ExtractTextSecure(registry *fsutil.RootRegistry, tel *telemetry.Manager, target, workspace, user string) ToolExecutionResult {
+	return withLocalPath(registry, tel, target, workspace, user, telemetry.EventDocumentExtractSuccess, "extract_text", false, false, func(p fsutil.GrantedPath) (ToolExecutionResult, error) {
+		if !isSupportedTextFile(p.Name) {
+			return ToolExecutionResult{}, errors.New("Unsupported file type: only text extensions are allowed")
+		}
+		content, err := fsutil.ReadRegularFile(p.Root, p.Name, MaxExtractFileSize)
+		if err != nil {
+			return ToolExecutionResult{}, err
+		}
+		data, err := json.Marshal(map[string]any{"content": string(content), "path": target, "size": len(content)})
+		return ToolExecutionResult{Ok: err == nil, Output: string(data)}, err
+	})
+}
+
+func SummarizeRepoSecure(registry *fsutil.RootRegistry, tel *telemetry.Manager, target, workspace, user string) ToolExecutionResult {
+	return withLocalPath(registry, tel, target, workspace, user, telemetry.EventRepoSummarySuccess, "summarize_repo", false, false, func(p fsutil.GrantedPath) (ToolExecutionResult, error) {
+		summary := RepoSummary{TopLevelDirectories: []string{}, ConfiguredFiles: []string{}, FileDistribution: map[string]int{}}
+		configs := map[string]bool{"package.json": true, "go.mod": true, "cargo.toml": true, "pyproject.toml": true, "requirements.txt": true, "dockerfile": true, "docker-compose.yml": true, "tsconfig.json": true, ".eslintrc.js": true, "webpack.config.js": true}
+		err := walkGranted(p, func(name string, entry fs.DirEntry) error {
+			if entry.IsDir() {
+				if name != "." && !strings.Contains(name, "/") {
+					summary.TopLevelDirectories = append(summary.TopLevelDirectories, entry.Name())
+				}
+				return nil
 			}
-			
-			// Only capture immediate children of the targetPath for TopLevelDirectories
-			if filepath.Dir(path) == filepath.Clean(targetPath) && path != targetPath {
-				summary.TopLevelDirectories = append(summary.TopLevelDirectories, d.Name())
+			summary.TotalFilesScanned++
+			if ext := strings.ToLower(filepath.Ext(name)); ext != "" {
+				summary.FileDistribution[ext]++
+			}
+			if configs[strings.ToLower(entry.Name())] {
+				summary.ConfiguredFiles = append(summary.ConfiguredFiles, name)
 			}
 			return nil
+		})
+		if err != nil {
+			return ToolExecutionResult{}, err
 		}
-
-		summary.TotalFilesScanned++
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext != "" {
-			summary.FileDistribution[ext]++
-		}
-
-		name := strings.ToLower(d.Name())
-		if majorConfigs[name] {
-			// Record config files relative to targetPath for clarity
-			rel, err := filepath.Rel(targetPath, path)
-			if err == nil {
-				summary.ConfiguredFiles = append(summary.ConfiguredFiles, rel)
-			} else {
-				summary.ConfiguredFiles = append(summary.ConfiguredFiles, d.Name())
-			}
-		}
-
-		return nil
+		data, err := json.Marshal(map[string]any{"summary": summary})
+		return ToolExecutionResult{Ok: err == nil, Output: string(data)}, err
 	})
-
-	if err != nil {
-		tel.RecordEvent(telemetry.NewEvent(
-			userID, workspaceID,
-			telemetry.EventRepoSummaryFailure,
-			targetPath, "summarize_repo",
-			time.Since(start), err,
-		))
-		return ToolExecutionResult{Ok: false, Error: err.Error()}
-	}
-
-	tel.RecordEvent(telemetry.NewEvent(
-		userID, workspaceID,
-		telemetry.EventRepoSummarySuccess,
-		targetPath, "summarize_repo",
-		time.Since(start), nil,
-	))
-
-	outputMap := map[string]interface{}{
-		"summary": summary,
-	}
-	outBytes, _ := json.Marshal(outputMap)
-	return ToolExecutionResult{Ok: true, Output: string(outBytes)}
 }
