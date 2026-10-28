@@ -1,6 +1,6 @@
 # Native host lifecycle
 
-**Status**: Implemented; verification and PR review in progress
+**Status**: Implemented; combined main integration and required checks in PR #453
 **Goal**: Stop owned work before restarting the desktop's authenticated local service.
 
 ## Overview

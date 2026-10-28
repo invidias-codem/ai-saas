@@ -1,6 +1,6 @@
 # Native desktop host startup
 
-**Status**: Implemented; verification and PR review in progress
+**Status**: Implemented; combined main integration and required checks in PR #453
 **Goal**: Establish an authenticated Rust-owned heartbeat before exposing approved desktop operations.
 
 ## Overview
