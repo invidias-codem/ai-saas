@@ -1,9 +1,11 @@
 mod native_host;
 
+use lattice_native_host::lifecycle::{NativeHost, Phase};
 use lattice_native_host::{permits_window, TelemetryEvent};
-use native_host::{NativeHost, Phase};
+use native_host::TauriLauncher;
 use serde::Serialize;
 use serde_json::json;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::Manager;
 
@@ -84,11 +86,32 @@ async fn ping_daemon(
             "recent_events": status.events.iter().map(to_harness_event).collect::<Vec<_>>()
         })),
         Ok(None) => Ok(json!({"status":"booting","recent_events":[]})),
+        Err(_) if state.phase() == Phase::Stopping => {
+            Ok(json!({"status":"stopping","recent_events":[]}))
+        }
+        Err(_) if state.phase() == Phase::Booting => {
+            Ok(json!({"status":"booting","recent_events":[]}))
+        }
         Err(error) => Ok(json!({
             "status": if state.phase() == Phase::Stopped { "stopped" } else { "error" },
             "recent_events": [],
             "error": { "code": error.code(), "message": error.message() }
         })),
+    }
+}
+
+#[tauri::command]
+async fn restart_daemon(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<NativeHost>>,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    match state.restart(TauriLauncher(app)).await {
+        Ok(()) => Ok(json!({"status":"ok"})),
+        Err(error) => {
+            Ok(json!({"status":"error","error":{"code":error.code(),"message":error.message()}}))
+        }
     }
 }
 
@@ -126,7 +149,9 @@ pub fn run() {
             let host = Arc::new(NativeHost::default());
             app.manage(host.clone());
             let handle = app.handle().clone();
-            tauri::async_runtime::spawn(native_host::start(handle, host));
+            tauri::async_runtime::spawn(async move {
+                let _ = host.start(TauriLauncher(handle)).await;
+            });
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -136,12 +161,33 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![ping_daemon, flush_telemetry])
+        .invoke_handler(tauri::generate_handler![
+            ping_daemon,
+            restart_daemon,
+            flush_telemetry
+        ])
         .build(tauri::generate_context!())
         .expect("error while building Tauri application");
-    app.run(|handle, event| {
-        if let tauri::RunEvent::Exit = event {
-            handle.state::<Arc<NativeHost>>().stop();
+    let exit_started = Arc::new(AtomicBool::new(false));
+    let exit_ready = Arc::new(AtomicBool::new(false));
+    app.run(move |handle, event| match event {
+        tauri::RunEvent::ExitRequested { api, code, .. } if !exit_ready.load(Ordering::Acquire) => {
+            api.prevent_exit();
+            if !exit_started.swap(true, Ordering::AcqRel) {
+                let app = handle.clone();
+                let host = handle.state::<Arc<NativeHost>>().inner().clone();
+                let ready = exit_ready.clone();
+                tauri::async_runtime::spawn(async move {
+                    let clean = host.shutdown().await.is_ok();
+                    if !clean {
+                        log::error!("LOCAL_CLEANUP_UNCONFIRMED");
+                    }
+                    ready.store(true, Ordering::Release);
+                    app.exit(if clean { code.unwrap_or(0) } else { 1 });
+                });
+            }
         }
+        tauri::RunEvent::Exit => handle.state::<Arc<NativeHost>>().emergency_stop(),
+        _ => {}
     });
 }

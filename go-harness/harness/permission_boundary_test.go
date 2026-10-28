@@ -45,7 +45,7 @@ func TestFileIdentityBoundaryAcrossCapabilities(t *testing.T) {
 			"extract":  func() ToolExecutionResult { return ExtractTextSecure(registry, tel, file, workspace, user) },
 			"summary":  func() ToolExecutionResult { return SummarizeRepoSecure(registry, tel, dir, workspace, user) },
 			"ingest": func() ToolExecutionResult {
-				return StartWorkspaceIngestion(registry, tel, nil, dir, workspace, user, "", "")
+				return StartWorkspaceIngestion(nil, registry, tel, nil, dir, workspace, user, "", "")
 			},
 		}
 		for name, operation := range operations {

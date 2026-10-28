@@ -21,10 +21,15 @@ type Manager struct {
 	flusherOn   bool
 	ctx         context.Context
 	cancel      context.CancelFunc
+	workers     sync.WaitGroup
 }
 
 func NewManager() *Manager {
-	ctx, cancel := context.WithCancel(context.Background())
+	return NewManagerContext(context.Background())
+}
+
+func NewManagerContext(parent context.Context) *Manager {
+	ctx, cancel := context.WithCancel(parent)
 	return &Manager{eventBuffer: []TelemetryEvent{}, ctx: ctx, cancel: cancel}
 }
 
@@ -54,12 +59,18 @@ func (m *Manager) StartFlusher(base, token string) error {
 	m.apiEndpoint, m.bearerToken = netguard.AppOrigin+"/api/harness/telemetry", token
 	if !m.flusherOn {
 		m.flusherOn = true
+		m.workers.Add(1)
 		go m.flushWorker()
 	}
 	return nil
 }
 
-func (m *Manager) Close() { m.cancel() }
+func (m *Manager) Close() {
+	m.bufferMutex.Lock()
+	m.cancel()
+	m.bufferMutex.Unlock()
+	m.workers.Wait()
+}
 
 func (m *Manager) RecordEvent(event TelemetryEvent) {
 	if event.Timestamp == "" {
@@ -74,9 +85,15 @@ func (m *Manager) RecordEvent(event TelemetryEvent) {
 	m.eventBuffer = append(m.eventBuffer, event)
 }
 
-func (m *Manager) FlushImmediate(event TelemetryEvent) { m.RecordEvent(event); go m.Flush() }
+func (m *Manager) FlushImmediate(event TelemetryEvent) {
+	m.RecordEvent(event)
+	if m.beginFlush() {
+		go func() { defer m.workers.Done(); m.flush() }()
+	}
+}
 
 func (m *Manager) flushWorker() {
+	defer m.workers.Done()
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -90,6 +107,24 @@ func (m *Manager) flushWorker() {
 }
 
 func (m *Manager) Flush() {
+	if !m.beginFlush() {
+		return
+	}
+	defer m.workers.Done()
+	m.flush()
+}
+
+func (m *Manager) beginFlush() bool {
+	m.bufferMutex.Lock()
+	defer m.bufferMutex.Unlock()
+	if m.ctx.Err() != nil {
+		return false
+	}
+	m.workers.Add(1)
+	return true
+}
+
+func (m *Manager) flush() {
 	m.bufferMutex.Lock()
 	if len(m.eventBuffer) == 0 || m.apiEndpoint == "" {
 		m.bufferMutex.Unlock()

@@ -16,4 +16,4 @@ zeroize = { version = "1", features = ["alloc"] }
 
 [dev-dependencies]
 tempfile = "3"
-tokio = { version = "1", features = ["process", "io-util", "net", "rt-multi-thread"] }
+tokio = { version = "1", features = ["process", "io-util", "net", "rt-multi-thread", "test-util"] }

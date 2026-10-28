@@ -1,6 +1,8 @@
 //! Native-only startup/authentication protocol, independent of a webview runtime.
 //! Only typed heartbeat data crosses the IPC boundary; credentials never do.
 
+pub mod lifecycle;
+
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
@@ -55,6 +57,7 @@ pub enum HostError {
     Busy,
     StorageUnavailable,
     StateUnavailable,
+    CleanupUncertain,
 }
 
 impl HostError {
@@ -75,6 +78,7 @@ impl HostError {
             Self::Busy => "LOCAL_SERVICE_BUSY",
             Self::StorageUnavailable => "LOCAL_STORAGE_UNAVAILABLE",
             Self::StateUnavailable => "LOCAL_STATE_UNAVAILABLE",
+            Self::CleanupUncertain => "LOCAL_CLEANUP_UNCONFIRMED",
         }
     }
     pub fn message(self) -> &'static str {
@@ -84,7 +88,8 @@ impl HostError {
             Self::StorageUnavailable => {
                 "Local storage is unavailable. Check your device's storage permissions."
             }
-            _ => "The local service could not connect securely. Restart Lattice OS to try again.",
+            Self::CleanupUncertain => "Local task cleanup could not be confirmed. Close Lattice OS and check running tasks before reopening.",
+            _ => "The local service could not connect securely. Try restarting the local service.",
         }
     }
 }
@@ -219,7 +224,7 @@ struct DaemonResult {
     _output: Option<String>,
     error: Option<String>,
     code: Option<String>,
-    data: Option<StatusData>,
+    data: Option<serde_json::Value>,
 }
 
 // No generic action/URL/token setter is exposed to the webview. The endpoint
@@ -231,6 +236,7 @@ pub struct RpcSession {
     sequence: AtomicU64,
     closed: watch::Sender<bool>,
     permits: Semaphore,
+    shutdown_sent: std::sync::atomic::AtomicBool,
 }
 
 impl RpcSession {
@@ -253,6 +259,7 @@ impl RpcSession {
             sequence: AtomicU64::new(0),
             closed,
             permits: Semaphore::new(4),
+            shutdown_sent: std::sync::atomic::AtomicBool::new(false),
         })
     }
     pub fn close(&self) {
@@ -272,7 +279,35 @@ impl RpcSession {
             }
         }
     }
+    /// Native lifecycle control only. Closing heartbeats does not invalidate
+    /// this one shutdown request; credentials never cross into the webview.
+    pub async fn shutdown(&self) -> Result<(), HostError> {
+        if self.shutdown_sent.swap(true, Ordering::AcqRel) {
+            return Err(HostError::Closed);
+        }
+        let data = self.request("shutdown").await?;
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct ShutdownData {
+            status: String,
+        }
+        let reply: ShutdownData =
+            serde_json::from_value(data).map_err(|_| HostError::InvalidResponse)?;
+        if reply.status != "stopping" {
+            return Err(HostError::InvalidResponse);
+        }
+        Ok(())
+    }
     async fn send_status(&self) -> Result<Status, HostError> {
+        let data: StatusData = serde_json::from_value(self.request("status").await?)
+            .map_err(|_| HostError::InvalidResponse)?;
+        let events = data.recent_events.unwrap_or_default();
+        if data.status != "ok" || data.event_count != events.len() || events.len() > 1000 {
+            return Err(HostError::InvalidResponse);
+        }
+        Ok(Status { events })
+    }
+    async fn request(&self, action: &'static str) -> Result<serde_json::Value, HostError> {
         let id = format!(
             "native-status-{}",
             self.sequence.fetch_add(1, Ordering::Relaxed)
@@ -281,7 +316,7 @@ impl RpcSession {
             id: &id,
             jsonrpc: "2.0",
             auth_token: self.credential.child_env_value(),
-            action: "status",
+            action,
             inputs: serde_json::json!({}),
         };
         let mut response = self
@@ -332,12 +367,7 @@ impl RpcSession {
         {
             return Err(HostError::RpcRejected);
         }
-        let data = result.data.ok_or(HostError::InvalidResponse)?;
-        let events = data.recent_events.unwrap_or_default();
-        if data.status != "ok" || data.event_count != events.len() || events.len() > 1000 {
-            return Err(HostError::InvalidResponse);
-        }
-        Ok(Status { events })
+        result.data.ok_or(HostError::InvalidResponse)
     }
 }
 

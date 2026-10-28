@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/invidias-codem/ai-saas/go-harness/harness"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/lifecycle"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/telemetry"
 )
 
@@ -47,6 +49,7 @@ type SessionContext struct {
 	Registry  *fsutil.RootRegistry
 	Telemetry *telemetry.Manager
 	VectorDB  *harness.VectorIndex
+	Work      *lifecycle.Group
 }
 
 type SyncGrantsArgs struct {
@@ -189,10 +192,17 @@ func main() {
 
 	portFlag := flag.Int("port", 0, "Port to bind the HTTP server to (0 for dynamic)")
 	corsOriginsFlag := flag.String("cors-origins", "http://localhost:3000,tauri://localhost,https://tauri.localhost", "Comma-separated list of allowed CORS origins")
+	parentStdio := flag.Bool("parent-stdio", false, "Stop when the native parent's stdin lifeline closes")
 	flag.Parse()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	work := lifecycle.New(ctx)
+	defer work.Stop()
+	ctx = work.Context()
+	if *parentStdio {
+		go func() { _, _ = io.Copy(io.Discard, os.Stdin); work.Stop() }()
+	}
 	defer cleanupHarnesses()
 
 	expectedToken = os.Getenv("LATTICE_AUTH_TOKEN")
@@ -204,7 +214,7 @@ func main() {
 	}
 
 	// 1. Initialize the decoupled memory structures
-	telemetryManager := telemetry.NewManager() // Buffer is ready, flusher is OFF
+	telemetryManager := telemetry.NewManagerContext(ctx) // Buffer is ready, flusher is OFF
 	defer telemetryManager.Close()
 	rootRegistry := fsutil.NewRootRegistry()
 	defer rootRegistry.Close()
@@ -218,6 +228,7 @@ func main() {
 		Registry:  rootRegistry,
 		Telemetry: telemetryManager,
 		VectorDB:  vectorDB,
+		Work:      work,
 	}
 
 	mux := http.NewServeMux()
@@ -252,10 +263,17 @@ func main() {
 	go func() {
 		defer close(shutdownDone)
 		<-ctx.Done()
+		work.Stop()
 		deadline, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
 		if err := srv.Shutdown(deadline); err != nil {
 			_ = srv.Close()
+		}
+		if err := work.Wait(deadline); err != nil {
+			// Do not run shared-resource closers underneath unfinished work or
+			// advertise a clean exit. The native owner handles bounded fallback.
+			log.Print("Local work did not finish before the shutdown deadline")
+			os.Exit(1)
 		}
 	}()
 
@@ -332,6 +350,24 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 		log.Printf("Unauthorized JSON-RPC payload received. Expected valid auth token.")
 		sendErrorResponse(w, req.ID, -32000, "Unauthorized: Invalid or missing authToken")
 		return
+	}
+	if req.Action == "shutdown" {
+		if session.Work == nil {
+			sendErrorResponse(w, req.ID, -32603, "Lifecycle control is unavailable")
+			return
+		}
+		session.Work.Stop()
+		writeResponse(w, JSONRPCResponse{ID: req.ID, Version: "2.0", Result: &harness.ToolExecutionResult{Ok: true, Data: json.RawMessage(`{"status":"stopping"}`)}})
+		return
+	}
+	if session.Work != nil {
+		workCtx, finish, err := session.Work.Begin(ctx)
+		if err != nil {
+			sendErrorResponse(w, req.ID, -32001, "Local service is stopping")
+			return
+		}
+		defer finish()
+		ctx = workCtx
 	}
 
 	var res harness.ToolExecutionResult
@@ -423,7 +459,7 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
 				return
 			}
-			res = harness.StartWorkspaceIngestion(session.Registry, session.Telemetry, session.VectorDB, args.Path, args.WorkspaceID, args.UserID, args.AuthToken, args.ApiBaseUrl)
+			res = harness.StartWorkspaceIngestion(session.Work, session.Registry, session.Telemetry, session.VectorDB, args.Path, args.WorkspaceID, args.UserID, args.AuthToken, args.ApiBaseUrl)
 		} else {
 			sendErrorResponse(w, req.ID, -32602, "Invalid params for start_workspace_ingestion")
 			return
@@ -472,7 +508,7 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
 				return
 			}
-			res = harness.SemanticSearchSecure(session.Registry, session.Telemetry, session.VectorDB, args.Query, args.WorkspaceID, args.UserID, args.AuthToken)
+			res = harness.SemanticSearchSecure(ctx, session.Registry, session.Telemetry, session.VectorDB, args.Query, args.WorkspaceID, args.UserID, args.AuthToken)
 		} else {
 			sendErrorResponse(w, req.ID, -32602, "Invalid params for semantic_search_secure")
 			return
@@ -583,7 +619,7 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
 				return
 			}
-			err := harness.CrawlAndIngest(harness.CrawlerConfig{
+			err := harness.CrawlAndIngest(ctx, harness.CrawlerConfig{
 				WorkspaceID:  args.WorkspaceID,
 				RepoFullName: args.RepoFullName,
 				AuthToken:    args.ClerkToken,

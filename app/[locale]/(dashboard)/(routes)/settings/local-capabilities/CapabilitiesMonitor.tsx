@@ -6,10 +6,11 @@ import { useHarnessHeartbeat } from "@/hooks/useHarnessHeartbeat";
 import { useWorkspaceSyncStatus } from "@/hooks/useWorkspaceSyncStatus";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { SyncStatusIndicator } from "@/components/harness/SyncStatusIndicator";
 
 export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
-  const { isDaemonRunning, lastHeartbeat, auditLogs, nativeError } = useHarnessHeartbeat();
+  const { isDaemonRunning, lastHeartbeat, auditLogs, nativeError, isRestarting, restartDaemon, canRestart } = useHarnessHeartbeat();
   const syncStatus = useWorkspaceSyncStatus(workspaceId);
   const isTauri =
     typeof window !== 'undefined' &&
@@ -96,11 +97,16 @@ export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
             <div className="space-y-2">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Terminal className="w-6 h-6" />
-                {isTauri ? (nativeError ? 'Local service unavailable' : 'Connecting to the local service') : 'Set up the local service'}
+                {isTauri ? (isRestarting ? 'Restarting the local service' : nativeError ? 'Local service unavailable' : 'Connecting to the local service') : 'Set up the local service'}
               </h2>
               <p className="text-muted-foreground max-w-3xl">
                 {isTauri ? (nativeError ?? 'Starting the local service on your device. This should only take a moment.') : 'Local features require the desktop application. Developers can run the app from source using the commands below.'}
               </p>
+              {isTauri && ((nativeError && canRestart) || isRestarting) && (
+                <Button onClick={() => void restartDaemon()} disabled={isRestarting}>
+                  {isRestarting ? 'Restarting…' : 'Restart local service'}
+                </Button>
+              )}
             </div>
 
             {!isTauri && <div className="space-y-4">
