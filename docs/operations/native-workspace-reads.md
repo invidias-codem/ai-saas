@@ -10,6 +10,8 @@ Rust opens the selected directory before confirmation and retains its handle unt
 
 Rust generates an independent 128-bit `local-grant-...` ID. The frontend receives that ID, the selection-time display path and `read_only: true`. The path is display text and is never accepted back as authority. Keep one picker/confirmation active and at most 32 grants per native session. The native Tauri dialog dependency is pinned; desktop builds require Rust 1.90 or later. Its transitive filesystem plugin receives no frontend command permission.
 
+The pinned rfd 0.17.2 GTK message backend forwards descriptions to `gtk_message_dialog_format_secondary_text` as a format string. The native adapter doubles percent signs for that backend before showing confirmation; the displayed path remains literal. A regression exercises the C formatter with `%s`, `%n`, `%p` and literal-percent folder names after verifying the escaped format. Windows/macOS retain their plain-text spelling. This mitigation is tied to the pinned backend and must be rechecked when changing dialog versions/features.
+
 ## Atomic grant snapshots
 
 The private `native_update_grants` request contains `next_revision` and the complete list of `{grant_id, path, directory_identity}` records. The authenticated envelope carries the bound local identity, generation and current policy/grant revisions. No user/workspace claim or write/destructive flag exists in a grant record. Every grant is workspace-specific and read-only.

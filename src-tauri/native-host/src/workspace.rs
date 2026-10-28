@@ -245,6 +245,23 @@ fn unsafe_character(c: char) -> bool {
         || ('\u{2066}'..='\u{2069}').contains(&c)
 }
 
+/// The pinned rfd GTK backend passes descriptions to a printf-style function.
+/// Escape its format metacharacter while leaving the displayed text unchanged.
+/// Windows/macOS dialogs consume plain text and must not receive this escaping.
+pub fn native_dialog_text(text: &str) -> String {
+    if cfg!(any(
+        target_os = "linux",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    )) {
+        text.replace('%', "%%")
+    } else {
+        text.to_owned()
+    }
+}
+
 /// Portable spelling shared with Go's final descriptor boundary. This is an
 /// admission check, never a substitute for the daemon's os.Root confinement.
 pub fn valid_relative_path(path: &str) -> bool {
@@ -489,5 +506,41 @@ mod path_tests {
                 "accepted {value}"
             );
         }
+    }
+
+    #[test]
+    fn native_confirmation_displays_percent_directives_as_literal_folder_text() {
+        let text = "/selected/100%ready/%s%n%p%%/资料";
+        let formatted = super::native_dialog_text(text);
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        ))]
+        {
+            use std::ffi::{CStr, CString};
+            // Validate before exercising C formatting so a regressed sanitizer
+            // cannot execute the adversarial directives inside this test.
+            assert_eq!(formatted, "/selected/100%%ready/%%s%%n%%p%%%%/资料");
+            let format = CString::new(formatted).unwrap();
+            let mut output = vec![0 as libc::c_char; 1024];
+            let size =
+                unsafe { libc::snprintf(output.as_mut_ptr(), output.len(), format.as_ptr()) };
+            assert!(size >= 0 && (size as usize) < output.len());
+            assert_eq!(
+                unsafe { CStr::from_ptr(output.as_ptr()) }.to_str().unwrap(),
+                text
+            );
+        }
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd",
+            target_os = "dragonfly"
+        )))]
+        assert_eq!(formatted, text);
     }
 }

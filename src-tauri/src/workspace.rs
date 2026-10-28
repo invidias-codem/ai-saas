@@ -72,7 +72,7 @@ impl<R: tauri::Runtime> FolderPicker for NativeFolderPicker<R> {
                 ""
             };
             self.window.app_handle().dialog()
-                .message(format!("Allow Lattice OS to list files and preview UTF-8 text in this folder?\n\n{path}\n\nRead access only. You can revoke access during this session.{platform_note}"))
+                .message(lattice_native_host::workspace::native_dialog_text(&format!("Allow Lattice OS to list files and preview UTF-8 text in this folder?\n\n{path}\n\nRead access only. You can revoke access during this session.{platform_note}")))
                 .title("Confirm folder read access").parent(&self.window)
                 .kind(MessageDialogKind::Info)
                 .buttons(MessageDialogButtons::OkCancelCustom("Allow read access".into(),"Cancel".into()))
