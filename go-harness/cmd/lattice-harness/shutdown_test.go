@@ -65,11 +65,13 @@ func TestShutdownIsAuthenticatedAndClosesAdmission(t *testing.T) {
 }
 
 func TestShutdownCancelsAndJoinsAnActiveCommand(t *testing.T) {
+	// Register directory removal first so LIFO cleanup closes pinned roots
+	// before Windows attempts to remove their directories.
+	dir := t.TempDir()
 	session := shutdownSession(t)
 	previous := expectedToken
 	expectedToken = "lifecycle-regression-token"
 	t.Cleanup(func() { expectedToken = previous; session.Work.Stop() })
-	dir := t.TempDir()
 	if err := session.Registry.UpdateGrants([]fsutil.RootGrant{{Path: dir, UserID: "employee", WorkspaceID: "project", AllowDestructive: true}}); err != nil {
 		t.Fatal(err)
 	}
