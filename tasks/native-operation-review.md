@@ -1,6 +1,6 @@
 # Native exact operation review
 
-**Status**: Implemented; platform CI and human review pending
+**Status**: Implemented; human review pending
 
 **Goal**: Review immutable local operation proposals in an isolated native-created window and retain one-use decisions in the native session.
 

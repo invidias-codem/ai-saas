@@ -298,10 +298,8 @@ fn a_native_close_notification_invalidates_the_review_before_any_decision() {
         .1;
     // Exercise the production close callback explicitly: MockRuntime does not
     // deliver OS events. Installed WebKit/WebView2 cleanup still needs S2c.6.
-    review::window_event(
-        &app.get_window(window.label()).unwrap(),
-        &tauri::WindowEvent::Destroyed,
-    );
+    let webview: &tauri::Webview<MockRuntime> = window.as_ref();
+    review::window_event(&webview.window(), &tauri::WindowEvent::Destroyed);
     assert!(call(
         &window,
         "native_review_document",
