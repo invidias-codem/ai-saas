@@ -1,6 +1,6 @@
 # Native desktop host: authenticated startup and lifecycle
 
-S2a/S2b establish the Rust-owned authenticated session and lifecycle. S2c.1 adds versioned local authority and a closed native action allowlist; S2c.2 adds [native-confirmed read-only folder grants](native-workspace-reads.md). This builds on [S1](native-capability-security.md); it does not qualify a downloadable installer.
+S2a/S2b establish the Rust-owned authenticated session and lifecycle. S2c.1 adds versioned local authority and a closed native action allowlist; S2c.2 adds [native-confirmed read-only folder grants](native-workspace-reads.md). S2c.3 adds [isolated native review and exact decisions](native-operation-review.md) while retaining the read-only permission ceiling. This builds on [S1](native-capability-security.md); it does not qualify a downloadable installer.
 
 ## Startup contract
 
@@ -30,7 +30,7 @@ Only the local `main` window can invoke the heartbeat. Release origins are `taur
 
 Rust retains the child handle through the shared `lattice-native-host` lifecycle coordinator. The Tauri adapter only spawns the bundled service, forwards bounded events, and terminates/releases its owned process handle. Concurrent lifecycle operations return `LOCAL_SERVICE_BUSY`. A caller disappearing does not cancel an already owned transition. Generation checks invalidate old heartbeat results and readiness callbacks.
 
-The local main window can request `restart_daemon`. Rust closes the old heartbeat session, sends one authenticated typed `shutdown` RPC, and waits for a confirmed normal zero exit before launching a replacement with fresh credentials and local authority. Grants are not carried into the replacement. Selected grants and exact-operation approvals remain S2c.2 onward. The frontend offers a restart action and ignores heartbeat replies from the previous restart generation.
+The local main window can request `restart_daemon`. Rust closes the old heartbeat session, sends one authenticated typed `shutdown` RPC, and waits for a confirmed normal zero exit before launching a replacement with fresh credentials and local authority. Grants, proposals and review decisions are not carried into the replacement. The frontend offers a restart action and ignores heartbeat replies from the previous restart generation.
 
 The Go daemon closes work admission at shutdown, cancels active request contexts and registered background ingestion, and waits for them before closing shared resources. Command runners cancel and wait for their own process groups/jobs; internal Git commands now use the same management. Embedding, repository upload and telemetry requests inherit cancellation. Telemetry close joins its workers. Unfinished work after the five-second daemon deadline produces a nonzero exit, not a clean shutdown result.
 

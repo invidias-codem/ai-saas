@@ -2,10 +2,10 @@ name: Native desktop host
 
 on:
   pull_request:
-    paths: ['src-tauri/**', 'go-harness/**', 'scripts/native-host/**', 'testdata/native-relative-paths.json', '.github/workflows/native-host.yml', 'package.json', 'pnpm-lock.yaml']
+    paths: ['src-tauri/**', 'go-harness/**', 'scripts/native-host/**', 'testdata/native-*.json', '.github/workflows/native-host.yml', 'package.json', 'pnpm-lock.yaml']
   push:
     branches: [main]
-    paths: ['src-tauri/**', 'go-harness/**', 'scripts/native-host/**', 'testdata/native-relative-paths.json', '.github/workflows/native-host.yml', 'package.json', 'pnpm-lock.yaml']
+    paths: ['src-tauri/**', 'go-harness/**', 'scripts/native-host/**', 'testdata/native-*.json', '.github/workflows/native-host.yml', 'package.json', 'pnpm-lock.yaml']
 
 permissions:
   contents: read
@@ -40,6 +40,8 @@ jobs:
         run: pnpm exec playwright install chromium
       - name: Exercise the configured CSP with real blocked requests
         run: node --test scripts/native-host/csp.test.mjs
+      - name: Exact bundled review renderer and incomplete-display denial
+        run: node --test scripts/native-host/review.test.mjs
 
   protocol:
     name: Rust and Go authenticated startup (${{ matrix.os }})

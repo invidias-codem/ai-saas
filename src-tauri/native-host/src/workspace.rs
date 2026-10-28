@@ -102,6 +102,14 @@ pub(crate) struct GrantState {
     pub(crate) revision: u64,
     grants: Vec<DaemonGrant>,
 }
+impl GrantState {
+    pub(crate) fn review_grant(&self, id: &str) -> Option<GrantInfo> {
+        self.grants
+            .iter()
+            .find(|g| g.grant_id == id)
+            .map(DaemonGrant::info)
+    }
+}
 #[derive(Serialize)]
 struct GrantSnapshot<'a> {
     next_revision: u64,
@@ -297,7 +305,7 @@ pub fn valid_relative_path(path: &str) -> bool {
 }
 
 impl RpcSession {
-    fn ensure_workspace(&self) -> Result<(), HostError> {
+    pub(crate) fn ensure_workspace(&self) -> Result<(), HostError> {
         if *self.closed.borrow() || self.authority.get().is_none() {
             return Err(HostError::Closed);
         }
@@ -386,6 +394,7 @@ impl RpcSession {
         state: &mut GrantState,
         next: Vec<DaemonGrant>,
     ) -> Result<(), HostError> {
+        self.invalidate_reviews();
         let Some(revision) = state.revision.checked_add(1) else {
             self.workspace_blocked.store(true, Ordering::Release);
             return Err(HostError::WorkspaceBlocked);

@@ -1,0 +1,89 @@
+[
+  {
+    "material": {
+      "proposal_id": "local-proposal-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 1
+      },
+      "display_root": "/selected/project",
+      "read_only": true,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "create_file",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": "draft.md",
+        "content": "hello\n资料 <script>literal</script>"
+      }
+    },
+    "digest": "44141249d3dd54c339f6b95ed24f195f351362a29ecc96b26f2698fb9b25fd1a"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 1
+      },
+      "display_root": "/selected/project",
+      "read_only": true,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "create_file",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": "empty.txt",
+        "content": ""
+      }
+    },
+    "digest": "fb302c0eb535ac1453ffa75ebce3a4ee66b6f76a9c170f251ce21bf94d0b0e50"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 1
+      },
+      "display_root": "/selected/project",
+      "read_only": true,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "create_directory",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": "docs"
+      }
+    },
+    "digest": "2731768409350bbd7318827ae4168dfe97b44ef9990d9d2177a992d0d7fd3f48"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 1
+      },
+      "display_root": "/selected/project",
+      "read_only": true,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "create_file",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": "literal%2Fname",
+        "content": "\\quoted \"text\"\t\r\n‮"
+      }
+    },
+    "digest": "b5b7d3222e3087af5ef1168c061501242ff4e9712df7e8d69eca3f7f7cf7152c"
+  }
+]

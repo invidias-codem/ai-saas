@@ -8,8 +8,15 @@ use tauri::{
 };
 
 fn app() -> tauri::App<MockRuntime> {
+    app_with_host(Arc::new(NativeHost::default()))
+}
+
+fn app_with_host(host: Arc<NativeHost>) -> tauri::App<MockRuntime> {
     mock_builder()
-        .manage(Arc::new(NativeHost::default()))
+        .manage(host)
+        .manage(review::ReviewWindows::<MockRuntime>::default())
+        .register_uri_scheme_protocol("lattice-review", |_, request| review::resource(request))
+        .on_window_event(review::window_event)
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_stronghold::Builder::new(|_| vec![0; 32]).build())
         .invoke_handler(tauri::generate_handler![
@@ -21,10 +28,257 @@ fn app() -> tauri::App<MockRuntime> {
             workspace::native_revoke_grant,
             workspace::native_list,
             workspace::native_stat,
-            workspace::native_read_text
+            workspace::native_read_text,
+            review::native_propose_operation,
+            review::native_proposal_status,
+            review::native_cancel_proposal,
+            review::native_open_review,
+            review::native_review_document,
+            review::native_review_ready,
+            review::native_review_decide,
+            review::native_review_cancel
         ])
         .build(tauri::generate_context!())
         .unwrap()
+}
+
+#[test]
+fn review_origin_and_embedded_resources_are_closed() {
+    for url in [
+        "lattice-review://localhost/index.html",
+        "http://lattice-review.localhost/index.html",
+    ] {
+        assert!(review::review_url(url));
+    }
+    for url in [
+        "https://untrusted.invalid/index.html",
+        "lattice-review://localhost/index.html?proposal=forged",
+        "lattice-review://localhost/index.html#forged",
+        "lattice-review://user@localhost/index.html",
+        "http://lattice-review.localhost:8080/index.html",
+        "lattice-review://localhost/review.js",
+    ] {
+        assert!(!review::review_url(url), "{url}");
+    }
+    for (method, uri, expected_status) in [
+        ("GET", "/index.html", 200),
+        ("GET", "/review.js", 200),
+        ("GET", "/review.css", 200),
+        ("GET", "/index.html?forged=true", 404),
+        ("GET", "/../../secret", 404),
+        ("GET", "/policy.json", 404),
+        ("POST", "/index.html", 404),
+    ] {
+        let response = review::resource(
+            tauri::http::Request::builder()
+                .method(method)
+                .uri(uri)
+                .body(Vec::new())
+                .unwrap(),
+        );
+        assert_eq!(
+            response.status().as_u16(),
+            expected_status,
+            "{method} {uri}"
+        );
+        assert_eq!(response.headers()["Content-Security-Policy"], review::csp());
+        assert_eq!(response.headers()["Cache-Control"], "no-store");
+        assert_eq!(response.headers()["X-Content-Type-Options"], "nosniff");
+    }
+}
+
+#[test]
+fn main_and_forged_review_windows_cannot_submit_decisions() {
+    let app = app();
+    let main = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+    let fake = tauri::WebviewWindowBuilder::new(
+        &app,
+        "native-review-forged",
+        tauri::WebviewUrl::CustomProtocol("lattice-review://localhost/index.html".parse().unwrap()),
+    )
+    .build()
+    .unwrap();
+    for command in [
+        "native_review_document",
+        "native_review_ready",
+        "native_review_decide",
+        "native_review_cancel",
+    ] {
+        let input = match command {
+            "native_review_ready" => json!({"proposal_id":"forged","digest":"forged"}),
+            "native_review_decide" => {
+                json!({"proposal_id":"forged","digest":"forged","decision":"accept"})
+            }
+            _ => json!({}),
+        };
+        let denied = call_input(
+            &main,
+            command,
+            &main.url().unwrap().to_string(),
+            input.clone(),
+        )
+        .err()
+        .unwrap()
+        .to_string();
+        assert!(denied.contains("not allowed"), "{command}: {denied}");
+        let denied = call_input(&fake, command, &fake.url().unwrap().to_string(), input)
+            .err()
+            .unwrap();
+        assert_eq!(denied["code"], "LOCAL_REVIEW_DENIED", "{command}: {denied}");
+    }
+    for command in [
+        "native_select_folder",
+        "native_open_review",
+        "native_propose_operation",
+        "plugin:shell|execute",
+        "plugin:fs|read_text_file",
+        "plugin:opener|open_url",
+        "plugin:window|create",
+        "plugin:event|emit",
+        "consume_approval",
+    ] {
+        let denied = call(&fake, command, &fake.url().unwrap().to_string())
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(denied.contains("not allowed"), "{command}: {denied}");
+    }
+}
+
+#[test]
+fn a_native_created_review_uses_real_scope_and_never_changes_files() {
+    let fixture = super::review_test_support::Fixture::start();
+    let app = app_with_host(fixture.host.clone());
+    let main = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+    let url = main.url().unwrap().to_string();
+    let input = json!({"kind":"create_file","grant_id":fixture.grant_id,"relative_path":"proposed.txt","content":"<script>literal</script>\n资料"});
+    let proposed = call_input(&main, "native_propose_operation", &url, input)
+        .unwrap()
+        .deserialize::<serde_json::Value>()
+        .unwrap();
+    call_input(
+        &main,
+        "native_open_review",
+        &url,
+        json!({"proposal_id":proposed["proposal_id"]}),
+    )
+    .unwrap();
+    let window = app
+        .webview_windows()
+        .into_iter()
+        .find(|(label, _)| label.starts_with("native-review-"))
+        .unwrap()
+        .1;
+    let origin = window.url().unwrap().to_string();
+    let document = call(&window, "native_review_document", &origin)
+        .unwrap()
+        .deserialize::<serde_json::Value>()
+        .unwrap();
+    assert_eq!(document["digest"], proposed["digest"]);
+    assert_eq!(document["read_only"], true);
+    assert_eq!(document["execution_available"], false);
+    let wrong=call_input(&window,"native_review_decide","https://untrusted.invalid/",json!({"proposal_id":document["proposal_id"],"digest":document["digest"],"decision":"accept"})).err().unwrap().to_string();
+    assert!(wrong.contains("not allowed"));
+    call_input(
+        &window,
+        "native_review_ready",
+        &origin,
+        json!({"proposal_id":document["proposal_id"],"digest":document["digest"]}),
+    )
+    .unwrap();
+    call_input(&window,"native_review_decide",&origin,json!({"proposal_id":document["proposal_id"],"digest":document["digest"],"decision":"accept"})).unwrap();
+    let status = tauri::async_runtime::block_on(
+        fixture
+            .host
+            .proposal_status(document["proposal_id"].as_str().unwrap()),
+    )
+    .unwrap();
+    assert_eq!(
+        status.status,
+        lattice_native_host::review::ProposalState::Accepted
+    );
+    assert!(
+        !fixture.project.join("proposed.txt").exists(),
+        "review executed an unexposed file operation"
+    );
+    assert!(call_input(&window,"native_review_decide",&origin,json!({"proposal_id":document["proposal_id"],"digest":document["digest"],"decision":"accept"})).is_err());
+}
+
+#[test]
+fn review_navigation_and_recreated_labels_cannot_reuse_native_authority() {
+    let fixture = super::review_test_support::Fixture::start();
+    let app = app_with_host(fixture.host.clone());
+    let proposed = tauri::async_runtime::block_on(fixture.host.propose_operation(
+        lattice_native_host::review::ProposalInput::CreateDirectory {
+            grant_id: fixture.grant_id.clone(),
+            relative_path: "new-dir".into(),
+        },
+    ))
+    .unwrap();
+    let main = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+    call_input(
+        &main,
+        "native_open_review",
+        &main.url().unwrap().to_string(),
+        json!({"proposal_id":proposed.proposal_id}),
+    )
+    .unwrap();
+    let window = app
+        .webview_windows()
+        .into_iter()
+        .find(|(label, _)| label.starts_with("native-review-"))
+        .unwrap()
+        .1;
+    let label = window.label().to_owned();
+    assert!(!review::allow_navigation(
+        app.handle(),
+        &label,
+        &"https://untrusted.invalid/".parse().unwrap()
+    ));
+    assert!(call(
+        &window,
+        "native_review_document",
+        &window.url().unwrap().to_string()
+    )
+    .is_err());
+    let status =
+        tauri::async_runtime::block_on(fixture.host.proposal_status(&proposed.proposal_id))
+            .unwrap();
+    assert_eq!(
+        status.status,
+        lattice_native_host::review::ProposalState::Denied
+    );
+    // Tauri refuses duplicate live labels; a later native-created forgery still
+    // cannot revive the spent lease, even if the platform reuses its OS handle.
+    let _ = window.destroy();
+    tauri::async_runtime::block_on(async {
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while app.get_webview_window(&label).is_some() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+    });
+    let fake = tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::CustomProtocol("lattice-review://localhost/index.html".parse().unwrap()),
+    )
+    .build()
+    .unwrap();
+    assert!(call(
+        &fake,
+        "native_review_document",
+        &fake.url().unwrap().to_string()
+    )
+    .is_err());
 }
 
 fn call(

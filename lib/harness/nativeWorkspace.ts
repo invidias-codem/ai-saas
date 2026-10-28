@@ -20,6 +20,25 @@ const listSchema = z.object({
   entries: z.array(z.object({ name: z.string(), kind: kindSchema }).strict()).max(10000),
 }).strict().refine(list => byteLength(JSON.stringify(list)) <= 1024 * 1024);
 const statSchema = z.object({ kind: kindSchema, size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict();
+const proposalIdSchema = z.string().regex(/^local-proposal-[a-f0-9]{32}$/);
+const proposalReferenceSchema = z.object({ proposal_id: proposalIdSchema }).strict();
+const proposalPath = z.string().min(1).max(4096).refine(path => path !== '.');
+const proposalInputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('create_file'), grant_id: grantIdSchema, relative_path: proposalPath,
+    content: z.string().refine(content => byteLength(content) <= 256 * 1024 && !content.includes('\0')),
+  }).strict(),
+  z.object({
+    kind: z.literal('create_directory'), grant_id: grantIdSchema, relative_path: proposalPath,
+  }).strict(),
+]);
+const proposalSummarySchema = z.object({
+  proposal_id: proposalIdSchema, digest: z.string().regex(/^[a-f0-9]{64}$/),
+  status: z.enum(['pending', 'reviewing', 'accepted', 'denied', 'expired', 'stale', 'consumed']),
+  kind: z.enum(['create_file', 'create_directory']), grant_id: grantIdSchema,
+  relative_path: proposalPath, execution_available: z.literal(false),
+}).strict();
+export type NativeProposalInput = z.infer<typeof proposalInputSchema>;
 
 const errorCodes = [
   'LOCAL_WORKSPACE_BLOCKED', 'LOCAL_SELECTION_INVALID', 'LOCAL_PATH_INVALID',
@@ -29,6 +48,8 @@ const errorCodes = [
   'LOCAL_SERVICE_UNAVAILABLE', 'LOCAL_REQUEST_TIMEOUT', 'LOCAL_CLEANUP_UNCONFIRMED',
   'LOCAL_STATE_UNAVAILABLE', 'LOCAL_STORAGE_UNAVAILABLE', 'LOCAL_PROTOCOL_INCOMPATIBLE',
   'LOCAL_DESKTOP_REQUIRED',
+  'LOCAL_PROPOSAL_INVALID', 'LOCAL_PROPOSAL_TOO_LARGE', 'LOCAL_PROPOSAL_CAPACITY',
+  'LOCAL_PROPOSAL_UNAVAILABLE', 'LOCAL_REVIEW_DENIED', 'LOCAL_WRITE_GRANT_REQUIRED',
 ] as const;
 const rejectionSchema = z.object({ code: z.enum(errorCodes), message: z.string() }).strict();
 
@@ -59,6 +80,9 @@ export function createNativeWorkspaceClient(invokeNative: NativeInvoke) {
         LOCAL_FILE_TOO_LARGE: 'Text previews are limited to 256 KiB.',
         LOCAL_DIRECTORY_TOO_LARGE: 'This directory exceeds the entry or preview size limit.',
         LOCAL_TEXT_UNSUPPORTED: 'Only UTF-8 text without NUL bytes can be previewed.',
+        LOCAL_REVIEW_DENIED: 'The review was denied, expired or is no longer current.',
+        LOCAL_PROPOSAL_CAPACITY: 'The native proposal or attempt limit has been reached.',
+        LOCAL_WRITE_GRANT_REQUIRED: 'A separately authorized writable grant is required. Folder access remains read only.',
       };
       const message = messages[code] ?? 'The local workspace request could not complete.';
       throw workspaceError(code, message);
@@ -69,6 +93,14 @@ export function createNativeWorkspaceClient(invokeNative: NativeInvoke) {
   };
   const empty = z.object({}).strict();
   return {
+    proposeOperation: (input: NativeProposalInput) => request('native_propose_operation', proposalInputSchema, proposalSummarySchema, input),
+    proposalStatus: (proposalId: string) => request('native_proposal_status', proposalReferenceSchema, proposalSummarySchema, { proposal_id: proposalId }),
+    openReview: async (proposalId: string) => {
+      await request('native_open_review', proposalReferenceSchema, z.null(), { proposal_id: proposalId });
+    },
+    cancelProposal: async (proposalId: string) => {
+      await request('native_cancel_proposal', proposalReferenceSchema, z.null(), { proposal_id: proposalId });
+    },
     selectFolder: () => request('native_select_folder', empty, grantSchema.nullable(), {}),
     grants: () => request('native_workspace_grants', empty, z.array(grantSchema).max(32), {}),
     readText: (input: NativeReadInput) => request('native_read_text', readInputSchema, textSchema, input),

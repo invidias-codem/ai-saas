@@ -3,6 +3,9 @@
 
 mod authority;
 pub mod lifecycle;
+pub mod review;
+#[cfg(test)]
+mod review_tests;
 pub mod workspace;
 
 use authority::{Authority, Binding, Protocol};
@@ -73,6 +76,12 @@ pub enum HostError {
     DirectoryTooLarge,
     TextUnsupported,
     ReadFailed,
+    ProposalInvalid,
+    ProposalTooLarge,
+    ProposalCapacity,
+    ProposalUnknown,
+    ReviewDenied,
+    WriteGrantRequired,
 }
 
 impl HostError {
@@ -104,6 +113,12 @@ impl HostError {
             Self::DirectoryTooLarge => "LOCAL_DIRECTORY_TOO_LARGE",
             Self::TextUnsupported => "LOCAL_TEXT_UNSUPPORTED",
             Self::ReadFailed => "LOCAL_READ_FAILED",
+            Self::ProposalInvalid => "LOCAL_PROPOSAL_INVALID",
+            Self::ProposalTooLarge => "LOCAL_PROPOSAL_TOO_LARGE",
+            Self::ProposalCapacity => "LOCAL_PROPOSAL_CAPACITY",
+            Self::ProposalUnknown => "LOCAL_PROPOSAL_UNAVAILABLE",
+            Self::ReviewDenied => "LOCAL_REVIEW_DENIED",
+            Self::WriteGrantRequired => "LOCAL_WRITE_GRANT_REQUIRED",
         }
     }
     pub fn message(self) -> &'static str {
@@ -119,6 +134,12 @@ impl HostError {
             Self::DirectoryTooLarge => "This directory exceeds the entry or preview size limit.",
             Self::TextUnsupported => "Only UTF-8 text without NUL bytes can be previewed.",
             Self::ReadFailed => "The selected path could not be read securely.",
+            Self::ProposalInvalid => "This operation proposal is invalid or unsupported.",
+            Self::ProposalTooLarge => "The complete operation exceeds the review display limit.",
+            Self::ProposalCapacity => "The native proposal or attempt limit has been reached.",
+            Self::ProposalUnknown => "This proposal is unavailable in the current local session.",
+            Self::ReviewDenied => "This review is denied, expired or no longer current.",
+            Self::WriteGrantRequired => "A separately authorized writable grant is required. This build keeps folder access read only.",
             Self::StorageUnavailable => {
                 "Local storage is unavailable. Check your device's storage permissions."
             }
@@ -279,6 +300,7 @@ pub struct RpcSession {
     grants: tokio::sync::RwLock<workspace::GrantState>,
     selection: tokio::sync::Mutex<()>,
     workspace_blocked: std::sync::atomic::AtomicBool,
+    reviews: std::sync::Mutex<review::ReviewBook>,
 }
 
 impl RpcSession {
@@ -307,10 +329,12 @@ impl RpcSession {
             grants: tokio::sync::RwLock::new(workspace::GrantState::default()),
             selection: tokio::sync::Mutex::new(()),
             workspace_blocked: std::sync::atomic::AtomicBool::new(false),
+            reviews: std::sync::Mutex::new(review::ReviewBook::default()),
         })
     }
     pub fn close(&self) {
         self.closed.send_replace(true);
+        self.invalidate_reviews();
     }
     /// Trusted native startup only. There is no caller-supplied identity and
     /// no matching Tauri command. An ambiguous/failed bind closes this session.
