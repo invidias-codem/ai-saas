@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -139,14 +140,14 @@ func MovePathSecure(registry *fsutil.RootRegistry, tel *telemetry.Manager, src, 
 }
 
 // SemanticSearchSecure executes an in-memory cosine similarity search against local SQLite chunks.
-func SemanticSearchSecure(registry *fsutil.RootRegistry, tel *telemetry.Manager, vectorIndex *VectorIndex, query string, workspaceID string, userID string, authToken string) ToolExecutionResult {
+func SemanticSearchSecure(ctx context.Context, registry *fsutil.RootRegistry, tel *telemetry.Manager, vectorIndex *VectorIndex, query string, workspaceID string, userID string, authToken string) ToolExecutionResult {
 	start := time.Now()
 	if authToken == "" {
 		return ToolExecutionResult{Error: "Cloud authentication is required", Code: "UPSTREAM_AUTH_REQUIRED"}
 	}
 
 	// 1. Fetch embeddings for the query
-	queryEmbeddings, err := FetchEmbeddings([]string{query}, authToken)
+	queryEmbeddings, err := FetchEmbeddings(ctx, []string{query}, authToken)
 	if err != nil || len(queryEmbeddings) == 0 {
 		return ToolExecutionResult{Ok: false, Error: fmt.Sprintf("500 Internal Server Error: Failed to fetch query embedding: %v", err), Code: CodeReadError}
 	}

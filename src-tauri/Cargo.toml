@@ -23,10 +23,11 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.11.2" }
 tauri-plugin-log = "2"
-tauri-plugin-shell = "2"
+tauri-plugin-shell = "2.5.0"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-store = "2"
 tauri-plugin-stronghold = "2"
 sha2 = "0.10.8"
-reqwest = { version = "0.12", features = ["json"], default-features = false }
+lattice-native-host = { path = "native-host" }
+tokio = { version = "1", features = ["sync", "time"] }

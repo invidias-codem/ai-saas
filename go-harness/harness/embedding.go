@@ -2,6 +2,7 @@ package harness
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/binary"
 	"encoding/json"
@@ -16,7 +17,7 @@ import (
 )
 
 // FetchEmbeddings calls the Next.js API route to batch generate embeddings via OpenAI
-func FetchEmbeddings(texts []string, authToken string) ([][]float32, error) {
+func FetchEmbeddings(ctx context.Context, texts []string, authToken string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return nil, nil
 	}
@@ -29,7 +30,7 @@ func FetchEmbeddings(texts []string, authToken string) ([][]float32, error) {
 		return nil, fmt.Errorf("failed to marshal embeddings payload: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", netguard.AppOrigin+"/api/harness/embeddings", bytes.NewBuffer(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", netguard.AppOrigin+"/api/harness/embeddings", bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create embeddings request: %w", err)
 	}

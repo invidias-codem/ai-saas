@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/executil"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
 	"io/fs"
@@ -70,11 +71,11 @@ func cloneCommand(ctx context.Context, config CrawlerConfig, dir string) (*exec.
 	return cmd, nil
 }
 
-func CrawlAndIngest(config CrawlerConfig) error {
+func CrawlAndIngest(parent context.Context, config CrawlerConfig) error {
 	if _, err := netguard.APIURL(config.APIBaseURL, config.WorkspaceID, "ingest"); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 120*time.Second)
 	defer cancel()
 	dir, err := os.MkdirTemp("", "lattice-crawler-*")
 	if err != nil {
@@ -85,7 +86,7 @@ func CrawlAndIngest(config CrawlerConfig) error {
 	if err != nil {
 		return err
 	}
-	if err := cmd.Run(); err != nil {
+	if err := executil.RunPrepared(ctx, cmd, 64*1024); err != nil {
 		return errors.New("repository clone failed")
 	}
 	root, err := os.OpenRoot(dir)
@@ -93,7 +94,7 @@ func CrawlAndIngest(config CrawlerConfig) error {
 		return err
 	}
 	defer root.Close()
-	client := NewIngestClient(config.WorkspaceID, config.RepoFullName, config.AuthToken, config.APIBaseURL)
+	client := NewIngestClientContext(ctx, config.WorkspaceID, config.RepoFullName, config.AuthToken, config.APIBaseURL)
 	count := 0
 	err = fs.WalkDir(root.FS(), ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil {

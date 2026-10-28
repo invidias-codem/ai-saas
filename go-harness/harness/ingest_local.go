@@ -1,8 +1,10 @@
 package harness
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/lifecycle"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
 
 	"path/filepath"
@@ -17,6 +19,7 @@ const IngestionBatchSize = 1000 // chunks per embedding API request
 // StartWorkspaceIngestion begins an asynchronous background job to crawl and index a workspace.
 // It returns immediately with a success acknowledgment.
 func StartWorkspaceIngestion(
+	work *lifecycle.Group,
 	registry *fsutil.RootRegistry,
 	tel *telemetry.Manager,
 	vi *VectorIndex,
@@ -39,8 +42,17 @@ func StartWorkspaceIngestion(
 		return ToolExecutionResult{Error: err.Error(), Code: CodeInvalidArgument}
 	}
 
-	// 2. Start the async goroutine
-	go runAsyncIngestion(registry, tel, vi, targetPath, workspaceID, userID, authToken, apiBaseURL)
+	if work == nil {
+		return ToolExecutionResult{Error: "Owned background lifecycle is required", Code: "SERVICE_STOPPING"}
+	}
+	ctx, finish, err := work.Begin(work.Context())
+	if err != nil {
+		return ToolExecutionResult{Error: "Local service is stopping", Code: "SERVICE_STOPPING"}
+	}
+	go func() {
+		defer finish()
+		runAsyncIngestion(ctx, registry, tel, vi, targetPath, workspaceID, userID, authToken, apiBaseURL)
+	}()
 
 	// 3. Return 202-style Accepted response
 	outputMap := map[string]interface{}{
@@ -52,6 +64,7 @@ func StartWorkspaceIngestion(
 }
 
 func runAsyncIngestion(
+	ctx context.Context,
 	registry *fsutil.RootRegistry,
 	tel *telemetry.Manager,
 	vi *VectorIndex,
@@ -61,6 +74,9 @@ func runAsyncIngestion(
 	authToken string,
 	apiBaseURL string,
 ) {
+	if ctx.Err() != nil {
+		return
+	}
 	start := time.Now()
 
 	defer func() {
@@ -96,12 +112,15 @@ func runAsyncIngestion(
 
 	// Helper to flush a batch
 	flushBatch := func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if len(currentBatch) == 0 {
 			return nil
 		}
 
 		// 1. Fetch Embeddings
-		embeddings, err := FetchEmbeddings(batchStrings, authToken)
+		embeddings, err := FetchEmbeddings(ctx, batchStrings, authToken)
 		if err != nil {
 			return fmt.Errorf("failed to fetch embeddings: %w", err)
 		}
@@ -183,6 +202,9 @@ func runAsyncIngestion(
 	}
 	if err == nil {
 		for _, document := range inventory.Documents {
+			if err = ctx.Err(); err != nil {
+				break
+			}
 			if document.Size > MaxExtractFileSize {
 				continue
 			}
@@ -229,6 +251,9 @@ func runAsyncIngestion(
 	// Delete orphaned files
 	if err == nil {
 		for _, existingFile := range existingFiles {
+			if err = ctx.Err(); err != nil {
+				break
+			}
 			if !visitedFiles[existingFile] {
 				if deleteErr := vi.DeleteFileChunks(workspaceID, existingFile); deleteErr != nil {
 					fmt.Printf("Warning: failed to delete orphaned file %q: %v\n", existingFile, deleteErr)

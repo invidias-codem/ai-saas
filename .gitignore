@@ -119,3 +119,10 @@ dist-electron/
 # Native CLI release outputs (publish through the release workflow only)
 /dist/cli/
 /scripts/lattice-cli/build/
+
+# Native desktop build outputs (source and Cargo.lock stay tracked)
+/src-tauri/target/
+/src-tauri/native-host/target/
+/src-tauri/gen/
+/src-tauri/binaries/lattice-harness-*-unknown-linux-gnu
+/src-tauri/binaries/lattice-harness-*-pc-windows-msvc.exe

@@ -6,10 +6,11 @@ import { useHarnessHeartbeat } from "@/hooks/useHarnessHeartbeat";
 import { useWorkspaceSyncStatus } from "@/hooks/useWorkspaceSyncStatus";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { SyncStatusIndicator } from "@/components/harness/SyncStatusIndicator";
 
 export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
-  const { isDaemonRunning, lastHeartbeat, auditLogs } = useHarnessHeartbeat();
+  const { isDaemonRunning, lastHeartbeat, auditLogs, nativeError, isRestarting, restartDaemon, canRestart } = useHarnessHeartbeat();
   const syncStatus = useWorkspaceSyncStatus(workspaceId);
   const isTauri =
     typeof window !== 'undefined' &&
@@ -30,7 +31,7 @@ export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
           <div className="flex items-center justify-between">
             <h2 className="font-semibold flex items-center gap-2">
               <Zap className="w-5 h-5 text-yellow-500" />
-              Go IPC Daemon
+              Local service
             </h2>
             {isDaemonRunning ? (
               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
@@ -43,7 +44,7 @@ export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
             )}
           </div>
           <p className="text-sm text-muted-foreground">
-            The core engine bridging the web interface to your operating system via cryptographically secure Named Pipes / Unix Sockets.
+            Connects Lattice to the local service running on your device.
           </p>
         </Card>
 
@@ -96,14 +97,19 @@ export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
             <div className="space-y-2">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Terminal className="w-6 h-6" />
-                Boot the Local Harness
+                {isTauri ? (isRestarting ? 'Restarting the local service' : nativeError ? 'Local service unavailable' : 'Connecting to the local service') : 'Set up the local service'}
               </h2>
               <p className="text-muted-foreground max-w-3xl">
-                Lattice is running in standard web mode. To unlock Tier 2 capabilities, start the Tauri shell and the Go daemon locally on your machine.
+                {isTauri ? (nativeError ?? 'Starting the local service on your device. This should only take a moment.') : 'Local features require the desktop application. Developers can run the app from source using the commands below.'}
               </p>
+              {isTauri && ((nativeError && canRestart) || isRestarting) && (
+                <Button onClick={() => void restartDaemon()} disabled={isRestarting}>
+                  {isRestarting ? 'Restarting…' : 'Restart local service'}
+                </Button>
+              )}
             </div>
 
-            <div className="space-y-4">
+            {!isTauri && <div className="space-y-4">
               <div className="bg-slate-950 rounded-lg p-4 font-mono text-sm text-slate-300 overflow-x-auto">
                 <div className="flex items-center gap-4">
                   <span className="text-slate-500">$</span>
@@ -125,7 +131,7 @@ export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
                   <span className="text-green-400">pnpm</span> tauri dev
                 </div>
               </div>
-            </div>
+            </div>}
           </div>
         </Card>
       )}
@@ -138,7 +144,7 @@ export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
               Security Audit Stream
             </h2>
             <p className="text-sm text-muted-foreground">
-              A transparent, real-time log of the exact payloads crossing the OS boundary between the web UI and your filesystem.
+              Recent activity reported by the local service.
               Last successful ping: {lastHeartbeat?.toLocaleTimeString() || "Pending..."}
             </p>
           </div>
@@ -146,7 +152,7 @@ export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
           <ScrollArea className="h-72 rounded-md border bg-slate-950/50 p-4">
             {auditLogs.length === 0 ? (
               <div className="text-sm text-slate-500 text-center py-10 font-mono">
-                Listening for IPC events on the Unix Socket / Named Pipe...
+                No local activity recorded yet.
               </div>
             ) : (
               <div className="space-y-3">
@@ -166,11 +172,6 @@ export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
                     <div className="text-slate-200">
                       {log.description}
                     </div>
-                    {log.payload && (
-                      <div className="text-slate-500 mt-1 truncate">
-                        payload: {JSON.stringify(log.payload)}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>

@@ -27,10 +27,10 @@ jobs:
           go-version-file: go-harness/go.mod
           cache-dependency-path: go-harness/go.sum
       - name: Native shell, ownership, cancellation and RPC tests
-        run: go test ./internal/fsutil ./internal/netguard ./internal/telemetry ./internal/executil ./harness ./cmd/lattice-harness -count=3 -v
+        run: go test ./internal/fsutil ./internal/netguard ./internal/lifecycle ./internal/telemetry ./internal/executil ./harness ./cmd/lattice-harness -count=3 -v
       - name: Race detection
         if: runner.os == 'Linux'
-        run: go test -race ./internal/fsutil ./internal/netguard ./internal/telemetry ./internal/executil ./harness ./cmd/lattice-harness
+        run: go test -race ./internal/fsutil ./internal/netguard ./internal/lifecycle ./internal/telemetry ./internal/executil ./harness ./cmd/lattice-harness
 
   native-client:
     strategy:
