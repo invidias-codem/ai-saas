@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -31,7 +32,7 @@ func nativeData(value any) harness.ToolExecutionResult {
 
 // Desktop mode has its own exhaustive allowlist. Never fall through to the
 // standalone dispatcher, even with a valid launch credential and forged inputs.
-func nativeDispatch(w http.ResponseWriter, req nativeFrame, session *SessionContext) {
+func nativeDispatch(w http.ResponseWriter, ctx context.Context, req nativeFrame, session *SessionContext) {
 	var result harness.ToolExecutionResult
 	switch req.Action {
 	case "status", "native_protocol", "native_session_status":
@@ -62,6 +63,26 @@ func nativeDispatch(w http.ResponseWriter, req nativeFrame, session *SessionCont
 			result = nativeFailure(code)
 		} else {
 			result = nativeData(binding)
+		}
+	case "native_update_grants":
+		var snapshot nativeprotocol.GrantSnapshot
+		if nativeprotocol.Decode(req.Inputs, &snapshot) != nil {
+			result = nativeFailure(session.Native.RejectGrantUpdate(req.Authority))
+		} else if ack, code := session.Native.UpdateGrants(req.Authority, snapshot); code != "" {
+			result = nativeFailure(code)
+		} else {
+			result = nativeData(ack)
+		}
+	case "native_read_text", "native_list", "native_stat":
+		var inputs nativeprotocol.ReadRequest
+		if nativeprotocol.Decode(req.Inputs, &inputs) != nil {
+			sendErrorResponse(w, req.ID, -32602, "Invalid native read inputs")
+			return
+		}
+		if data, code := session.Native.Read(ctx, req.Authority, req.Action, inputs); code != "" {
+			result = nativeFailure(code)
+		} else {
+			result = nativeData(data)
 		}
 	default:
 		code := session.Native.Check(req.Authority)

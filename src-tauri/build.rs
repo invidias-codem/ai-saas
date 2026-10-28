@@ -4,6 +4,12 @@ fn main() {
             "ping_daemon",
             "restart_daemon",
             "flush_telemetry",
+            "native_select_folder",
+            "native_workspace_grants",
+            "native_revoke_grant",
+            "native_list",
+            "native_stat",
+            "native_read_text",
         ]),
     ))
     .expect("native command permissions must compile");

@@ -15,6 +15,7 @@ func nativeFixture(t *testing.T) (*SessionContext, nativeprotocol.Authority) {
 	t.Helper()
 	s := shutdownSession(t)
 	s.Native = nativeprotocol.NewSession()
+	t.Cleanup(func() { _ = s.Native.Close() })
 	previous := expectedToken
 	expectedToken = "native-authority-regression"
 	t.Cleanup(func() { expectedToken = previous })

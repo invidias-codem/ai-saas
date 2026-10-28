@@ -1,8 +1,9 @@
 //! Native-only startup/authentication protocol, independent of a webview runtime.
-//! Only typed heartbeat data crosses the IPC boundary; credentials never do.
+//! Only typed local status and scoped read data cross IPC; credentials never do.
 
 mod authority;
 pub mod lifecycle;
+pub mod workspace;
 
 use authority::{Authority, Binding, Protocol};
 
@@ -63,6 +64,15 @@ pub enum HostError {
     StateUnavailable,
     CleanupUncertain,
     ProtocolIncompatible,
+    WorkspaceBlocked,
+    SelectionInvalid,
+    PathInvalid,
+    GrantDenied,
+    FileNotFound,
+    FileTooLarge,
+    DirectoryTooLarge,
+    TextUnsupported,
+    ReadFailed,
 }
 
 impl HostError {
@@ -85,12 +95,30 @@ impl HostError {
             Self::StateUnavailable => "LOCAL_STATE_UNAVAILABLE",
             Self::CleanupUncertain => "LOCAL_CLEANUP_UNCONFIRMED",
             Self::ProtocolIncompatible => "LOCAL_PROTOCOL_INCOMPATIBLE",
+            Self::WorkspaceBlocked => "LOCAL_WORKSPACE_BLOCKED",
+            Self::SelectionInvalid => "LOCAL_SELECTION_INVALID",
+            Self::PathInvalid => "LOCAL_PATH_INVALID",
+            Self::GrantDenied => "LOCAL_GRANT_DENIED",
+            Self::FileNotFound => "LOCAL_FILE_NOT_FOUND",
+            Self::FileTooLarge => "LOCAL_FILE_TOO_LARGE",
+            Self::DirectoryTooLarge => "LOCAL_DIRECTORY_TOO_LARGE",
+            Self::TextUnsupported => "LOCAL_TEXT_UNSUPPORTED",
+            Self::ReadFailed => "LOCAL_READ_FAILED",
         }
     }
     pub fn message(self) -> &'static str {
         match self {
             Self::Closed => "The local service is stopped.",
             Self::Busy => "The local service is busy. Try again shortly.",
+            Self::WorkspaceBlocked => "Folder permissions could not be confirmed. Restart the local service before trying again.",
+            Self::SelectionInvalid => "The selected folder is unavailable or unsupported. Select a local folder again.",
+            Self::PathInvalid => "Use a relative path within the selected folder.",
+            Self::GrantDenied => "This folder is not currently permitted. Select and confirm it again.",
+            Self::FileNotFound => "The selected path no longer exists.",
+            Self::FileTooLarge => "Text previews are limited to 256 KiB.",
+            Self::DirectoryTooLarge => "This directory exceeds the entry or preview size limit.",
+            Self::TextUnsupported => "Only UTF-8 text without NUL bytes can be previewed.",
+            Self::ReadFailed => "The selected path could not be read securely.",
             Self::StorageUnavailable => {
                 "Local storage is unavailable. Check your device's storage permissions."
             }
@@ -248,6 +276,9 @@ pub struct RpcSession {
     shutdown_sent: std::sync::atomic::AtomicBool,
     authority: OnceLock<Authority>,
     enrollment: tokio::sync::Mutex<()>,
+    grants: tokio::sync::RwLock<workspace::GrantState>,
+    selection: tokio::sync::Mutex<()>,
+    workspace_blocked: std::sync::atomic::AtomicBool,
 }
 
 impl RpcSession {
@@ -273,6 +304,9 @@ impl RpcSession {
             shutdown_sent: std::sync::atomic::AtomicBool::new(false),
             authority: OnceLock::new(),
             enrollment: tokio::sync::Mutex::new(()),
+            grants: tokio::sync::RwLock::new(workspace::GrantState::default()),
+            selection: tokio::sync::Mutex::new(()),
+            workspace_blocked: std::sync::atomic::AtomicBool::new(false),
         })
     }
     pub fn close(&self) {
@@ -364,6 +398,27 @@ impl RpcSession {
         action: &'static str,
         inputs: serde_json::Value,
     ) -> Result<serde_json::Value, HostError> {
+        // Shutdown remains available even when grant state is uncertain.
+        if action == "shutdown" {
+            return self.request_authority(action, inputs, None).await;
+        }
+        let grants = self.grants.try_read().map_err(|_| HostError::Busy)?;
+        if self.workspace_blocked.load(Ordering::Acquire) {
+            return Err(HostError::WorkspaceBlocked);
+        }
+        let authority = self
+            .authority
+            .get()
+            .map(|a| a.with_grant_revision(grants.revision));
+        self.request_authority(action, inputs, authority.as_ref())
+            .await
+    }
+    async fn request_authority(
+        &self,
+        action: &'static str,
+        inputs: serde_json::Value,
+        authority: Option<&Authority>,
+    ) -> Result<serde_json::Value, HostError> {
         let id = format!(
             "native-status-{}",
             self.sequence.fetch_add(1, Ordering::Relaxed)
@@ -374,7 +429,7 @@ impl RpcSession {
             auth_token: self.credential.child_env_value(),
             action,
             inputs,
-            authority: self.authority.get(),
+            authority,
         };
         let mut response = self
             .client
@@ -418,6 +473,19 @@ impl RpcSession {
             return Err(HostError::InvalidResponse);
         }
         let result = reply.result.ok_or(HostError::RpcRejected)?;
+        if !result.ok {
+            return Err(match result.code.as_deref() {
+                Some("LOCAL_WORKSPACE_BLOCKED") => HostError::WorkspaceBlocked,
+                Some("LOCAL_PATH_INVALID") => HostError::PathInvalid,
+                Some("LOCAL_GRANT_DENIED") => HostError::GrantDenied,
+                Some("LOCAL_FILE_NOT_FOUND") => HostError::FileNotFound,
+                Some("LOCAL_FILE_TOO_LARGE") => HostError::FileTooLarge,
+                Some("LOCAL_DIRECTORY_TOO_LARGE") => HostError::DirectoryTooLarge,
+                Some("LOCAL_TEXT_UNSUPPORTED") => HostError::TextUnsupported,
+                Some("LOCAL_READ_FAILED") => HostError::ReadFailed,
+                _ => HostError::RpcRejected,
+            });
+        }
         if !result.ok
             || result.error.as_deref().is_some_and(|s| !s.is_empty())
             || result.code.as_deref().is_some_and(|s| !s.is_empty())

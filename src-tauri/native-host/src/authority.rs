@@ -4,7 +4,11 @@ use crate::HostError;
 use serde::{Deserialize, Serialize};
 
 const VERSION: u32 = 1;
-const FEATURES: [&str; 2] = ["session-authority-v1", "native-action-allowlist-v1"];
+const FEATURES: [&str; 3] = [
+    "session-authority-v1",
+    "native-action-allowlist-v1",
+    "read-grants-v1",
+];
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -16,13 +20,18 @@ pub(crate) struct Authority {
     grant_revision: u64,
 }
 
-fn random_id() -> Result<String, HostError> {
+pub(crate) fn random_id() -> Result<String, HostError> {
     let mut bytes = [0u8; 16];
     getrandom::getrandom(&mut bytes).map_err(|_| HostError::RandomUnavailable)?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
 impl Authority {
+    pub(crate) fn with_grant_revision(&self, revision: u64) -> Self {
+        let mut authority = self.clone();
+        authority.grant_revision = revision;
+        authority
+    }
     pub(crate) fn generate() -> Result<Self, HostError> {
         Ok(Self {
             principal_id: format!("local-user-{}", random_id()?),

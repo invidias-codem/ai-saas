@@ -1,6 +1,7 @@
 use lattice_native_host::lifecycle::{
     Launcher, NativeHost, ProcessControl, ProcessEvent, SpawnedProcess,
 };
+use lattice_native_host::workspace::{DialogFuture, FolderPicker, ReadInput};
 use lattice_native_host::{child_environment, HostError, LaunchCredential, StartupHandshake};
 use serde_json::{json, Value};
 use std::{
@@ -15,6 +16,25 @@ use std::{
 };
 use tokio::sync::mpsc;
 use zeroize::Zeroizing;
+
+struct SessionPicker {
+    path: PathBuf,
+    gate: Option<(Arc<tokio::sync::Notify>, Arc<tokio::sync::Notify>)>,
+}
+impl FolderPicker for SessionPicker {
+    fn pick_folder(&self) -> DialogFuture<'_, Option<PathBuf>> {
+        Box::pin(async { Ok(Some(self.path.clone())) })
+    }
+    fn confirm_read_access(&self, _path: String) -> DialogFuture<'_, bool> {
+        Box::pin(async move {
+            if let Some((started, release)) = &self.gate {
+                started.notify_one();
+                release.notified().await;
+            }
+            Ok(true)
+        })
+    }
+}
 
 struct ChildControl(Mutex<Option<Child>>);
 impl ProcessControl for ChildControl {
@@ -219,6 +239,17 @@ async fn repeated_restart_rotates_auth_and_never_overlaps_generations() {
     };
     let host = Arc::new(NativeHost::default());
     host.start(launcher.clone()).await.unwrap();
+    let workspace = dir.path().join("selected");
+    std::fs::create_dir(&workspace).unwrap();
+    std::fs::write(workspace.join("note.md"), "selected").unwrap();
+    let mut grant = host
+        .select_folder(SessionPicker {
+            path: workspace.clone(),
+            gate: None,
+        })
+        .await
+        .unwrap()
+        .unwrap();
     for _ in 0..3 {
         let retired = launcher.latest();
         host.restart(launcher.clone()).await.unwrap();
@@ -231,11 +262,137 @@ async fn repeated_restart_rotates_auth_and_never_overlaps_generations() {
             "retired credential authenticated a new generation"
         );
         assert!(host.status().await.unwrap().is_some());
+        assert!(
+            host.workspace_grants().await.unwrap().is_empty(),
+            "restart restored a remembered grant"
+        );
+        assert!(matches!(
+            host.read_text(ReadInput {
+                grant_id: grant.grant_id.clone(),
+                relative_path: "note.md".into()
+            })
+            .await,
+            Err(HostError::GrantDenied)
+        ));
+        let next = host
+            .select_folder(SessionPicker {
+                path: workspace.clone(),
+                gate: None,
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(grant.grant_id, next.grant_id);
+        grant = next;
     }
     assert_eq!(launcher.peak.load(Ordering::Acquire), 1);
     host.shutdown().await.unwrap();
     assert_eq!(launcher.active.load(Ordering::Acquire), 0);
     assert!(matches!(host.status().await, Err(HostError::Closed)));
+}
+
+#[tokio::test]
+async fn restart_invalidates_a_pending_native_confirmation() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some((launcher, _)) = fixture(dir.path()) else {
+        return;
+    };
+    let host = Arc::new(NativeHost::default());
+    host.start(launcher.clone()).await.unwrap();
+    let started = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let picker = SessionPicker {
+        path: dir.path().to_owned(),
+        gate: Some((started.clone(), release.clone())),
+    };
+    let caller = host.clone();
+    let selection = tokio::spawn(async move { caller.select_folder(picker).await });
+    started.notified().await;
+    host.restart(launcher).await.unwrap();
+    release.notify_one();
+    assert!(matches!(selection.await.unwrap(), Err(HostError::Closed)));
+    assert!(host.workspace_grants().await.unwrap().is_empty());
+    host.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn native_confirmation_remains_owned_when_its_ipc_caller_disappears() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some((launcher, _)) = fixture(dir.path()) else {
+        return;
+    };
+    let host = Arc::new(NativeHost::default());
+    host.start(launcher).await.unwrap();
+    let started = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let picker = SessionPicker {
+        path: dir.path().to_owned(),
+        gate: Some((started.clone(), release.clone())),
+    };
+    let caller = host.clone();
+    let selection = tokio::spawn(async move { caller.select_folder(picker).await });
+    started.notified().await;
+    assert!(matches!(
+        host.select_folder(SessionPicker {
+            path: dir.path().to_owned(),
+            gate: None
+        })
+        .await,
+        Err(HostError::Busy)
+    ));
+    selection.abort();
+    release.notify_one();
+    let grants = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            match host.workspace_grants().await {
+                Ok(grants) if !grants.is_empty() => break grants,
+                Ok(_) | Err(HostError::Busy) => {}
+                Err(error) => panic!("owned grant transition failed: {error}"),
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(grants.len(), 1);
+    host.revoke_grant(grants[0].grant_id.clone()).await.unwrap();
+    assert!(host.workspace_grants().await.unwrap().is_empty());
+    host.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn revocation_invalidates_an_already_open_folder_confirmation() {
+    let dir = tempfile::tempdir().unwrap();
+    let Some((launcher, _)) = fixture(dir.path()) else {
+        return;
+    };
+    let host = Arc::new(NativeHost::default());
+    host.start(launcher).await.unwrap();
+    let first = host
+        .select_folder(SessionPicker {
+            path: dir.path().to_owned(),
+            gate: None,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let started = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let picker = SessionPicker {
+        path: dir.path().to_owned(),
+        gate: Some((started.clone(), release.clone())),
+    };
+    let caller = host.clone();
+    let selection = tokio::spawn(async move { caller.select_folder(picker).await });
+    started.notified().await;
+    host.revoke_grant(first.grant_id).await.unwrap();
+    release.notify_one();
+    assert!(matches!(
+        selection.await.unwrap(),
+        Err(HostError::GrantDenied)
+    ));
+    assert!(host.workspace_grants().await.unwrap().is_empty());
+    host.shutdown().await.unwrap();
 }
 
 #[tokio::test]

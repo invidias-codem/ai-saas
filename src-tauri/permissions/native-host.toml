@@ -2,3 +2,8 @@
 identifier = "native-host-control"
 description = "Authenticated local service liveness and lifecycle only; no arbitrary RPC, identity, grant or execution setters."
 commands.allow = ["ping_daemon", "restart_daemon", "flush_telemetry"]
+
+[[permission]]
+identifier = "native-workspace-read"
+description = "Native-confirmed folder selection, opaque grant revocation and typed read-only file previews; no raw paths, grants, identity, mutation or execution setters."
+commands.allow = ["native_select_folder", "native_workspace_grants", "native_revoke_grant", "native_list", "native_stat", "native_read_text"]

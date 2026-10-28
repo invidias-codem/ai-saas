@@ -1,3 +1,4 @@
+use lattice_native_host::workspace::{DialogFuture, FolderPicker, ReadInput};
 use lattice_native_host::{
     child_environment, HostError, LaunchCredential, RpcSession, StartupHandshake, STARTUP_TIMEOUT,
 };
@@ -32,6 +33,130 @@ fn binary() -> Option<std::ffi::OsString> {
         );
     }
     path
+}
+
+struct DirectoryPicker {
+    path: std::path::PathBuf,
+    replace: bool,
+}
+impl FolderPicker for DirectoryPicker {
+    fn pick_folder(&self) -> DialogFuture<'_, Option<std::path::PathBuf>> {
+        Box::pin(async { Ok(Some(self.path.clone())) })
+    }
+    fn confirm_read_access(&self, path: String) -> DialogFuture<'_, bool> {
+        Box::pin(async move {
+            assert_eq!(
+                std::fs::canonicalize(&path).unwrap(),
+                std::fs::canonicalize(&self.path).unwrap()
+            );
+            if self.replace {
+                let old = self.path.with_extension("pinned");
+                std::fs::rename(&self.path, &old).unwrap();
+                std::fs::create_dir(&self.path).unwrap();
+                std::fs::write(self.path.join("note.md"), "replacement").unwrap();
+            }
+            Ok(true)
+        })
+    }
+}
+
+async fn native_session(binary: std::ffi::OsString, dir: &std::path::Path) -> (Child, RpcSession) {
+    let credential = Arc::new(LaunchCredential::generate().unwrap());
+    let mut child = Command::new(binary)
+        .arg("--native-host")
+        .env_clear()
+        .envs(child_environment())
+        .env("LATTICE_AUTH_TOKEN", credential.child_env_value())
+        .current_dir(dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let port = port(&mut child).await;
+    let session = RpcSession::new(port, credential).unwrap();
+    session.bind_native().await.unwrap();
+    (child, session)
+}
+
+#[tokio::test]
+async fn native_selected_directory_identity_and_typed_reads_work_with_real_go() {
+    let Some(binary) = binary() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let selected = dir.path().join("project");
+    std::fs::create_dir(&selected).unwrap();
+    std::fs::write(selected.join("note.md"), "selected text\n资料").unwrap();
+    let (mut child, session) = native_session(binary, dir.path()).await;
+    let grant = session
+        .select_folder(&DirectoryPicker {
+            path: selected,
+            replace: false,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let input = ReadInput {
+        grant_id: grant.grant_id.clone(),
+        relative_path: "note.md".into(),
+    };
+    assert_eq!(
+        session.read_text(input.clone()).await.unwrap().content,
+        "selected text\n资料"
+    );
+    assert!(session.stat_path(input.clone()).await.unwrap().size > 0);
+    assert_eq!(
+        session
+            .list_directory(ReadInput {
+                relative_path: ".".into(),
+                ..input.clone()
+            })
+            .await
+            .unwrap()
+            .entries[0]
+            .name,
+        "note.md"
+    );
+    session.revoke_grant(&grant.grant_id).await.unwrap();
+    assert!(matches!(
+        session.read_text(input).await,
+        Err(HostError::GrantDenied)
+    ));
+    session.status().await.unwrap();
+    session.shutdown().await.unwrap();
+    assert!(tokio::time::timeout(STARTUP_TIMEOUT, child.wait())
+        .await
+        .unwrap()
+        .unwrap()
+        .success());
+}
+
+#[tokio::test]
+async fn directory_replaced_during_native_confirmation_never_grants_the_replacement() {
+    let Some(binary) = binary() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let selected = dir.path().join("project");
+    std::fs::create_dir(&selected).unwrap();
+    std::fs::write(selected.join("note.md"), "selected").unwrap();
+    let (mut child, session) = native_session(binary, dir.path()).await;
+    assert!(matches!(
+        session
+            .select_folder(&DirectoryPicker {
+                path: selected,
+                replace: true
+            })
+            .await,
+        Err(HostError::WorkspaceBlocked)
+    ));
+    assert!(matches!(
+        session.workspace_grants().await,
+        Err(HostError::WorkspaceBlocked)
+    ));
+    session.shutdown().await.unwrap();
+    assert!(tokio::time::timeout(STARTUP_TIMEOUT, child.wait())
+        .await
+        .unwrap()
+        .unwrap()
+        .success());
 }
 
 #[tokio::test]

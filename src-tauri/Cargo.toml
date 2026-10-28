@@ -6,7 +6,7 @@ authors = ["you"]
 license = ""
 repository = ""
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.90"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -28,6 +28,7 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-store = "2"
 tauri-plugin-stronghold = "2"
+tauri-plugin-dialog = "=2.8.4"
 sha2 = "0.10.8"
 lattice-native-host = { path = "native-host" }
 tokio = { version = "1", features = ["sync", "time"] }
