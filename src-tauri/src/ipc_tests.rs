@@ -43,6 +43,19 @@ fn app_with_host(host: Arc<NativeHost>) -> tauri::App<MockRuntime> {
         .unwrap()
 }
 
+fn review_ipc_origin(window: &tauri::WebviewWindow<MockRuntime>) -> String {
+    let url = window.url().unwrap();
+    assert!(review::review_url(url.as_str()));
+    // WebView2 translates the registered custom scheme; MockRuntime retains
+    // the builder URL. Exercise the real platform ACL origin, never a remote
+    // capability override or an untranslated Windows-only denial.
+    if cfg!(windows) {
+        "http://lattice-review.localhost/index.html".into()
+    } else {
+        url.to_string()
+    }
+}
+
 #[test]
 fn review_origin_and_embedded_resources_are_closed() {
     for url in [
@@ -101,6 +114,7 @@ fn main_and_forged_review_windows_cannot_submit_decisions() {
     )
     .build()
     .unwrap();
+    let fake_origin = review_ipc_origin(&fake);
     for command in [
         "native_review_document",
         "native_review_ready",
@@ -119,7 +133,7 @@ fn main_and_forged_review_windows_cannot_submit_decisions() {
             .unwrap()
             .to_string();
         assert!(denied.contains("not allowed"), "{command}: {denied}");
-        let denied = call_input(&fake, command, fake.url().unwrap().as_str(), input)
+        let denied = call_input(&fake, command, &fake_origin, input)
             .err()
             .unwrap();
         assert_eq!(denied["code"], "LOCAL_REVIEW_DENIED", "{command}: {denied}");
@@ -135,7 +149,7 @@ fn main_and_forged_review_windows_cannot_submit_decisions() {
         "plugin:event|emit",
         "consume_approval",
     ] {
-        let denied = call(&fake, command, fake.url().unwrap().as_str())
+        let denied = call(&fake, command, &fake_origin)
             .err()
             .unwrap()
             .to_string();
@@ -169,7 +183,7 @@ fn a_native_created_review_uses_real_scope_and_never_changes_files() {
         .find(|(label, _)| label.starts_with("native-review-"))
         .unwrap()
         .1;
-    let origin = window.url().unwrap().to_string();
+    let origin = review_ipc_origin(&window);
     let document = call(&window, "native_review_document", &origin)
         .unwrap()
         .deserialize::<serde_json::Value>()
@@ -232,17 +246,18 @@ fn review_navigation_and_a_recreated_app_cannot_reuse_native_authority() {
         .unwrap()
         .1;
     let label = window.label().to_owned();
+    let origin = review_ipc_origin(&window);
     assert!(!review::allow_navigation(
         app.handle(),
         &label,
         &"https://untrusted.invalid/".parse().unwrap()
     ));
-    assert!(call(
-        &window,
-        "native_review_document",
-        window.url().unwrap().as_str()
-    )
-    .is_err());
+    assert_eq!(
+        call(&window, "native_review_document", &origin)
+            .err()
+            .unwrap()["code"],
+        "LOCAL_REVIEW_DENIED"
+    );
     let status =
         tauri::async_runtime::block_on(fixture.host.proposal_status(&proposed.proposal_id))
             .unwrap();
@@ -261,12 +276,13 @@ fn review_navigation_and_a_recreated_app_cannot_reuse_native_authority() {
     )
     .build()
     .unwrap();
-    assert!(call(
-        &fake,
-        "native_review_document",
-        fake.url().unwrap().as_str()
-    )
-    .is_err());
+    let origin = review_ipc_origin(&fake);
+    assert_eq!(
+        call(&fake, "native_review_document", &origin)
+            .err()
+            .unwrap()["code"],
+        "LOCAL_REVIEW_DENIED"
+    );
 }
 
 #[test]
@@ -298,21 +314,26 @@ fn a_native_close_notification_invalidates_the_review_before_any_decision() {
         .1;
     // Exercise the production close callback explicitly: MockRuntime does not
     // deliver OS events. Installed WebKit/WebView2 cleanup still needs S2c.6.
+    let origin = review_ipc_origin(&window);
     let webview: &tauri::Webview<MockRuntime> = window.as_ref();
     review::window_event(&webview.window(), &tauri::WindowEvent::Destroyed);
-    assert!(call(
-        &window,
-        "native_review_document",
-        window.url().unwrap().as_str()
-    )
-    .is_err());
-    assert!(call_input(
-        &window,
-        "native_review_decide",
-        window.url().unwrap().as_str(),
-        json!({"proposal_id":proposed.proposal_id,"digest":proposed.digest,"decision":"accept"})
-    )
-    .is_err());
+    assert_eq!(
+        call(&window, "native_review_document", &origin)
+            .err()
+            .unwrap()["code"],
+        "LOCAL_REVIEW_DENIED"
+    );
+    assert_eq!(
+        call_input(
+            &window,
+            "native_review_decide",
+            &origin,
+            json!({"proposal_id":proposed.proposal_id,"digest":proposed.digest,"decision":"accept"})
+        )
+        .err()
+        .unwrap()["code"],
+        "LOCAL_REVIEW_DENIED"
+    );
     let status =
         tauri::async_runtime::block_on(fixture.host.proposal_status(&proposed.proposal_id))
             .unwrap();
