@@ -66,8 +66,13 @@ impl<R: tauri::Runtime> FolderPicker for NativeFolderPicker<R> {
         Box::pin(async move {
             super::require_local_window(&self.window).map_err(|_| HostError::GrantDenied)?;
             let (send, receive) = tokio::sync::oneshot::channel();
+            let platform_note = if cfg!(windows) {
+                "\nOn Windows, revoke this access before moving or renaming the folder."
+            } else {
+                ""
+            };
             self.window.app_handle().dialog()
-                .message(format!("Allow Lattice OS to list files and preview UTF-8 text in this folder?\n\n{path}\n\nRead access only. You can revoke access during this session."))
+                .message(format!("Allow Lattice OS to list files and preview UTF-8 text in this folder?\n\n{path}\n\nRead access only. You can revoke access during this session.{platform_note}"))
                 .title("Confirm folder read access").parent(&self.window)
                 .kind(MessageDialogKind::Info)
                 .buttons(MessageDialogButtons::OkCancelCustom("Allow read access".into(),"Cancel".into()))

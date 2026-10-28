@@ -68,6 +68,9 @@ func TestNativeDirectoryResponseByteLimitIsExplicit(t *testing.T) {
 
 func installReadSnapshot(t *testing.T, s *SessionContext, a *nativeprotocol.Authority, snapshot nativeprotocol.GrantSnapshot) {
 	t.Helper()
+	// Registered after the selected TempDir: close Windows' pinned Root before
+	// TempDir's LIFO cleanup attempts to remove the directory.
+	t.Cleanup(func() { _ = s.Native.Close() })
 	reply := nativeCall(t, s, "native_update_grants", snapshot, a)
 	if reply.Error != nil || reply.Result == nil || !reply.Result.Ok {
 		t.Fatalf("snapshot failed: %+v %+v", reply.Error, reply.Result)
@@ -264,13 +267,17 @@ func TestNativeRootPinningAndDirectoryEscape(t *testing.T) {
 		}
 	}
 	if err := os.Rename(dir, filepath.Join(base, "pinned")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(dir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("replacement"), 0600); err != nil {
-		t.Fatal(err)
+		if !pinnedRootBlocksRename(err) {
+			t.Fatal(err)
+		}
+		t.Log("Windows' pinned Root prevented replacement; still verify its content and the junction denial")
+	} else {
+		if err := os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("replacement"), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	snapshot.NextRevision = 2
 	installReadSnapshot(t, s, &a, snapshot)

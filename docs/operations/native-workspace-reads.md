@@ -18,6 +18,8 @@ Go checks exact current authority and the next revision, validates every record,
 
 Grant writers close new read admission and wait for admitted reads. Revocation sends a complete snapshot without the selected handle and acknowledges only after the registry boundary has drained. It cannot recall content already returned, or remove permission conferred by a separately confirmed overlapping grant. Failed or uncertain revocation blocks the whole workspace.
 
+On Windows, the pinned `os.Root` prevents moving or renaming its directory until access is revoked. Native confirmation explains this effect. The Windows regression asserts the sharing-violation protection and subsequent reads; Unix tests replace the path and prove the old directory remains pinned. Both platforms separately test outward directory-link traversal. No new native test skips that protection.
+
 Permission transitions remain owned when an IPC caller disappears. Restart closes the old session, cancels pending picker results and clears all grants. A permission change during a pending confirmation makes that selection stale. No remembered path silently restores access after restart.
 
 ## Typed reads and limits
