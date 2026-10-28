@@ -17,6 +17,7 @@ fn app_with_host(host: Arc<NativeHost>) -> tauri::App<MockRuntime> {
         .manage(review::ReviewWindows::<MockRuntime>::default())
         .register_uri_scheme_protocol("lattice-review", |_, request| review::resource(request))
         .on_window_event(review::window_event)
+        .plugin(workspace::boundary())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_stronghold::Builder::new(|_| vec![0; 32]).build())
         .invoke_handler(tauri::generate_handler![
@@ -113,17 +114,12 @@ fn main_and_forged_review_windows_cannot_submit_decisions() {
             }
             _ => json!({}),
         };
-        let denied = call_input(
-            &main,
-            command,
-            &main.url().unwrap().to_string(),
-            input.clone(),
-        )
-        .err()
-        .unwrap()
-        .to_string();
+        let denied = call_input(&main, command, main.url().unwrap().as_str(), input.clone())
+            .err()
+            .unwrap()
+            .to_string();
         assert!(denied.contains("not allowed"), "{command}: {denied}");
-        let denied = call_input(&fake, command, &fake.url().unwrap().to_string(), input)
+        let denied = call_input(&fake, command, fake.url().unwrap().as_str(), input)
             .err()
             .unwrap();
         assert_eq!(denied["code"], "LOCAL_REVIEW_DENIED", "{command}: {denied}");
@@ -139,7 +135,7 @@ fn main_and_forged_review_windows_cannot_submit_decisions() {
         "plugin:event|emit",
         "consume_approval",
     ] {
-        let denied = call(&fake, command, &fake.url().unwrap().to_string())
+        let denied = call(&fake, command, fake.url().unwrap().as_str())
             .err()
             .unwrap()
             .to_string();
@@ -209,7 +205,7 @@ fn a_native_created_review_uses_real_scope_and_never_changes_files() {
 }
 
 #[test]
-fn review_navigation_and_recreated_labels_cannot_reuse_native_authority() {
+fn review_navigation_and_a_recreated_app_cannot_reuse_native_authority() {
     let fixture = super::review_test_support::Fixture::start();
     let app = app_with_host(fixture.host.clone());
     let proposed = tauri::async_runtime::block_on(fixture.host.propose_operation(
@@ -225,7 +221,7 @@ fn review_navigation_and_recreated_labels_cannot_reuse_native_authority() {
     call_input(
         &main,
         "native_open_review",
-        &main.url().unwrap().to_string(),
+        main.url().unwrap().as_str(),
         json!({"proposal_id":proposed.proposal_id}),
     )
     .unwrap();
@@ -244,7 +240,7 @@ fn review_navigation_and_recreated_labels_cannot_reuse_native_authority() {
     assert!(call(
         &window,
         "native_review_document",
-        &window.url().unwrap().to_string()
+        window.url().unwrap().as_str()
     )
     .is_err());
     let status =
@@ -254,20 +250,12 @@ fn review_navigation_and_recreated_labels_cannot_reuse_native_authority() {
         status.status,
         lattice_native_host::review::ProposalState::Denied
     );
-    // Tauri refuses duplicate live labels; a later native-created forgery still
-    // cannot revive the spent lease, even if the platform reuses its OS handle.
-    let _ = window.destroy();
-    tauri::async_runtime::block_on(async {
-        tokio::time::timeout(std::time::Duration::from_secs(2), async {
-            while app.get_webview_window(&label).is_some() {
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap();
-    });
+    // MockRuntime does not emit Destroyed or remove Tauri's manager entry.
+    // Recreate the app/window registration with the same real host and label:
+    // ACL membership alone must not recreate the previous native lease.
+    let recreated = app_with_host(fixture.host.clone());
     let fake = tauri::WebviewWindowBuilder::new(
-        &app,
+        &recreated,
         label,
         tauri::WebviewUrl::CustomProtocol("lattice-review://localhost/index.html".parse().unwrap()),
     )
@@ -276,9 +264,65 @@ fn review_navigation_and_recreated_labels_cannot_reuse_native_authority() {
     assert!(call(
         &fake,
         "native_review_document",
-        &fake.url().unwrap().to_string()
+        fake.url().unwrap().as_str()
     )
     .is_err());
+}
+
+#[test]
+fn a_native_close_notification_invalidates_the_review_before_any_decision() {
+    let fixture = super::review_test_support::Fixture::start();
+    let app = app_with_host(fixture.host.clone());
+    let proposed = tauri::async_runtime::block_on(fixture.host.propose_operation(
+        lattice_native_host::review::ProposalInput::CreateDirectory {
+            grant_id: fixture.grant_id.clone(),
+            relative_path: "closed-dir".into(),
+        },
+    ))
+    .unwrap();
+    let main = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+    call_input(
+        &main,
+        "native_open_review",
+        main.url().unwrap().as_str(),
+        json!({"proposal_id":proposed.proposal_id}),
+    )
+    .unwrap();
+    let window = app
+        .webview_windows()
+        .into_iter()
+        .find(|(label, _)| label.starts_with("native-review-"))
+        .unwrap()
+        .1;
+    // Exercise the production close callback explicitly: MockRuntime does not
+    // deliver OS events. Installed WebKit/WebView2 cleanup still needs S2c.6.
+    review::window_event(
+        &app.get_window(window.label()).unwrap(),
+        &tauri::WindowEvent::Destroyed,
+    );
+    assert!(call(
+        &window,
+        "native_review_document",
+        window.url().unwrap().as_str()
+    )
+    .is_err());
+    assert!(call_input(
+        &window,
+        "native_review_decide",
+        window.url().unwrap().as_str(),
+        json!({"proposal_id":proposed.proposal_id,"digest":proposed.digest,"decision":"accept"})
+    )
+    .is_err());
+    let status =
+        tauri::async_runtime::block_on(fixture.host.proposal_status(&proposed.proposal_id))
+            .unwrap();
+    assert_eq!(
+        status.status,
+        lattice_native_host::review::ProposalState::Denied
+    );
+    assert!(!fixture.project.join("closed-dir").exists());
 }
 
 fn call(

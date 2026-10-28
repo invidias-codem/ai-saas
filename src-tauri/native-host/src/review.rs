@@ -181,6 +181,7 @@ fn display_json(value: &str) -> Result<String, HostError> {
         .chars()
         .map(|c| {
             if c.is_control()
+                || matches!(c, '\u{061c}' | '\u{200e}' | '\u{200f}')
                 || ('\u{202a}'..='\u{202e}').contains(&c)
                 || ('\u{2066}'..='\u{2069}').contains(&c)
             {

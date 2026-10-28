@@ -5,18 +5,37 @@ const grant = { grant_id: grantId, display_path: '/selected/project', read_only:
 
 describe('Native workspace client', () => {
   test('main can propose and request review, without supplying a decision or authority', async () => {
-    const proposalId=`local-proposal-${'c'.repeat(32)}`;
-    const proposal={proposal_id:proposalId,digest:'d'.repeat(64),status:'pending',kind:'create_file',grant_id:grantId,relative_path:'draft.txt',execution_available:false};
-    const invoke=jest.fn().mockResolvedValueOnce(proposal).mockResolvedValueOnce(null).mockResolvedValueOnce(proposal).mockResolvedValueOnce(null);
-    const client=createNativeWorkspaceClient(invoke);const input={kind:'create_file' as const,grant_id:grantId,relative_path:'draft.txt',content:'exact bytes\n资料'};
-    expect(await client.proposeOperation(input)).toEqual(proposal);await client.openReview(proposalId);expect(await client.proposalStatus(proposalId)).toEqual(proposal);await client.cancelProposal(proposalId);
-    expect(invoke.mock.calls).toEqual([['native_propose_operation',{input}],['native_open_review',{input:{proposal_id:proposalId}}],['native_proposal_status',{input:{proposal_id:proposalId}}],['native_cancel_proposal',{input:{proposal_id:proposalId}}]]);
+    const proposalId = `local-proposal-${'c'.repeat(32)}`;
+    const proposal = {
+      proposal_id: proposalId, digest: 'd'.repeat(64), status: 'pending', kind: 'create_file',
+      grant_id: grantId, relative_path: 'draft.txt', execution_available: false,
+    };
+    const invoke = jest.fn().mockResolvedValueOnce(proposal).mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(proposal).mockResolvedValueOnce(null);
+    const client = createNativeWorkspaceClient(invoke);
+    const input = { kind: 'create_file' as const, grant_id: grantId, relative_path: 'draft.txt', content: 'exact bytes\n资料' };
+    expect(await client.proposeOperation(input)).toEqual(proposal);
+    await client.openReview(proposalId);
+    expect(await client.proposalStatus(proposalId)).toEqual(proposal);
+    await client.cancelProposal(proposalId);
+    expect(invoke.mock.calls).toEqual([
+      ['native_propose_operation', { input }],
+      ['native_open_review', { input: { proposal_id: proposalId } }],
+      ['native_proposal_status', { input: { proposal_id: proposalId } }],
+      ['native_cancel_proposal', { input: { proposal_id: proposalId } }],
+    ]);
   });
   test('proposals reject caller approvals, unsupported execution and oversized content before IPC', async () => {
-    const invoke=jest.fn();const client=createNativeWorkspaceClient(invoke);
-    for(const input of [{kind:'create_file',grant_id:grantId,relative_path:'draft.txt',content:'exact',approved:true},{kind:'command',grant_id:grantId,command:'whoami'},{kind:'create_file',grant_id:grantId,relative_path:'draft.txt',content:'x'.repeat(256*1024+1)}]){
-      await expect(client.proposeOperation(input as never)).rejects.toMatchObject({code:'LOCAL_INPUT_INVALID'});
-    }expect(invoke).not.toHaveBeenCalled();
+    const invoke = jest.fn();
+    const client = createNativeWorkspaceClient(invoke);
+    for (const input of [
+      { kind: 'create_file', grant_id: grantId, relative_path: 'draft.txt', content: 'exact', approved: true },
+      { kind: 'command', grant_id: grantId, command: 'whoami' },
+      { kind: 'create_file', grant_id: grantId, relative_path: 'draft.txt', content: 'x'.repeat(256 * 1024 + 1) },
+    ]) {
+      await expect(client.proposeOperation(input as never)).rejects.toMatchObject({ code: 'LOCAL_INPUT_INVALID' });
+    }
+    expect(invoke).not.toHaveBeenCalled();
   });
   test('requires the desktop runtime without a network fallback', async () => {
     await expect(nativeWorkspace.grants()).rejects.toMatchObject({ code: 'LOCAL_DESKTOP_REQUIRED' });

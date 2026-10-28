@@ -282,7 +282,7 @@ async fn accepted_decisions_expire_and_each_authority_dimension_is_bound() {
 async fn complete_display_preserves_bytes_escapes_controls_and_rejects_oversize() {
     let scope = scope(false);
     let mut book = ReviewBook::default();
-    let content = "<img onerror=execute()>\n\u{202e}%n 资料";
+    let content = "<img onerror=execute()>\n\u{061c}\u{200e}\u{200f}\u{202e}\u{2066}%n 资料";
     let p = book
         .propose(
             scope.clone(),
@@ -296,8 +296,10 @@ async fn complete_display_preserves_bytes_escapes_controls_and_rejects_oversize(
     let lease = book.begin(&p.proposal_id, &scope).unwrap();
     let doc = book.document(&lease, &scope).unwrap();
     let displayed = doc.content_json.unwrap();
-    assert!(!displayed.contains('\u{202e}'));
-    assert!(displayed.contains("\\u202e"));
+    for c in ['\u{061c}', '\u{200e}', '\u{200f}', '\u{202e}', '\u{2066}'] {
+        assert!(!displayed.contains(c));
+        assert!(displayed.contains(&format!("\\u{:04x}", c as u32)));
+    }
     assert_eq!(serde_json::from_str::<String>(&displayed).unwrap(), content);
     assert_eq!(doc.byte_count, content.len());
     assert_eq!(
