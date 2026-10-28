@@ -1,6 +1,6 @@
 # Desktop installation slices
 
-Current slice: S2a/S2b integration in [PR #453](https://github.com/invidias-codem/ai-saas/pull/453), targeting main. The [S2c implementation plan](https://github.com/invidias-codem/ai-saas/blob/plan/native-workspace-authority/docs/operations/native-workspace-authority-plan.md) is ready for the next implementation agent.
+Current slice: [S2c.1 — Native session authority](tasks/native-session-authority.md). Native mode now negotiates and binds local authority before readiness; platform checks and PR review are pending. The next slice is S2c.2: selected folder grants and typed bounded reads. The [full S2c plan](https://github.com/invidias-codem/ai-saas/blob/plan/native-workspace-authority/docs/operations/native-workspace-authority-plan.md) defines the remaining approval and operation work.
 
 Dependencies: [S1 — Native capability boundaries](tasks/native-capability-boundaries.md) reached main in #451. [S2a — Authenticated startup](tasks/native-desktop-host-startup.md) merged in #452 into the former S1 feature branch after S1 had already merged, leaving S2a outside main. #453 now carries both S2a and [S2b — Native host lifecycle](tasks/native-host-lifecycle.md) against current main. Fresh required checks, CodeQL and human review gate its integration; no automatic merge is enabled.
 

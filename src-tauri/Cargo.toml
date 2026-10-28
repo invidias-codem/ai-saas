@@ -31,3 +31,6 @@ tauri-plugin-stronghold = "2"
 sha2 = "0.10.8"
 lattice-native-host = { path = "native-host" }
 tokio = { version = "1", features = ["sync", "time"] }
+
+[dev-dependencies]
+tauri = { version = "2.11.2", features = ["test"] }

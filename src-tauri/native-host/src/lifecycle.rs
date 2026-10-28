@@ -186,6 +186,8 @@ impl NativeHost {
                 s.session = Some(session.clone());
             }
             session.status().await?;
+            session.bind_native().await?;
+            session.status().await?;
             let mut s = self.state.lock().map_err(|_| HostError::StateUnavailable)?;
             if s.generation != generation
                 || s.phase != Phase::Booting

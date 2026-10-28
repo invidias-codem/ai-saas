@@ -219,6 +219,7 @@
     "eslint-config-next": "^16.2.1",
     "jest": "30.4.1",
     "jest-environment-node": "30.4.1",
+    "playwright": "1.62.1",
     "postcss": "^8",
     "shell-quote": "1.8.4",
     "tailwindcss": "^4.1.18",

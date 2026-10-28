@@ -20,6 +20,7 @@ import (
 	"github.com/invidias-codem/ai-saas/go-harness/harness"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/lifecycle"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/nativeprotocol"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/telemetry"
 )
 
@@ -50,6 +51,7 @@ type SessionContext struct {
 	Telemetry *telemetry.Manager
 	VectorDB  *harness.VectorIndex
 	Work      *lifecycle.Group
+	Native    *nativeprotocol.Session
 }
 
 type SyncGrantsArgs struct {
@@ -193,6 +195,7 @@ func main() {
 	portFlag := flag.Int("port", 0, "Port to bind the HTTP server to (0 for dynamic)")
 	corsOriginsFlag := flag.String("cors-origins", "http://localhost:3000,tauri://localhost,https://tauri.localhost", "Comma-separated list of allowed CORS origins")
 	parentStdio := flag.Bool("parent-stdio", false, "Stop when the native parent's stdin lifeline closes")
+	nativeHost := flag.Bool("native-host", false, "Require the native desktop's versioned local authority protocol")
 	flag.Parse()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -218,17 +221,24 @@ func main() {
 	defer telemetryManager.Close()
 	rootRegistry := fsutil.NewRootRegistry()
 	defer rootRegistry.Close()
-	vectorDB, err := harness.NewVectorIndex("lattice_vectors.db")
-	if err != nil {
-		log.Fatalf("Failed to initialize vector index: %v", err)
+	var vectorDB *harness.VectorIndex
+	if !*nativeHost {
+		var err error
+		vectorDB, err = harness.NewVectorIndex("lattice_vectors.db")
+		if err != nil {
+			log.Fatalf("Failed to initialize vector index: %v", err)
+		}
+		defer vectorDB.Close()
 	}
-	defer vectorDB.Close()
 
 	session := &SessionContext{
 		Registry:  rootRegistry,
 		Telemetry: telemetryManager,
 		VectorDB:  vectorDB,
 		Work:      work,
+	}
+	if *nativeHost {
+		session.Native = nativeprotocol.NewSession()
 	}
 
 	mux := http.NewServeMux()
@@ -351,6 +361,20 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 		sendErrorResponse(w, req.ID, -32000, "Unauthorized: Invalid or missing authToken")
 		return
 	}
+	var native nativeFrame
+	if session.Native != nil {
+		if nativeprotocol.Decode(line, &native) != nil || native.Version != "2.0" || native.ID == "" || len(native.ID) > 128 {
+			sendErrorResponse(w, req.ID, -32602, "Invalid native request")
+			return
+		}
+		if req.Action == "shutdown" {
+			var empty struct{}
+			if nativeprotocol.Decode(native.Inputs, &empty) != nil {
+				sendErrorResponse(w, req.ID, -32602, "Invalid native shutdown inputs")
+				return
+			}
+		}
+	}
 	if req.Action == "shutdown" {
 		if session.Work == nil {
 			sendErrorResponse(w, req.ID, -32603, "Lifecycle control is unavailable")
@@ -368,6 +392,10 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 		}
 		defer finish()
 		ctx = workCtx
+	}
+	if session.Native != nil {
+		nativeDispatch(w, native, session)
+		return
 	}
 
 	var res harness.ToolExecutionResult

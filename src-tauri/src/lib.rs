@@ -1,5 +1,8 @@
 mod native_host;
 
+#[cfg(test)]
+mod ipc_tests;
+
 use lattice_native_host::lifecycle::{NativeHost, Phase};
 use lattice_native_host::{permits_window, TelemetryEvent};
 use native_host::TauriLauncher;
@@ -63,7 +66,7 @@ fn to_harness_event(event: &TelemetryEvent) -> HarnessEvent {
     }
 }
 
-fn require_local_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+fn require_local_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Result<(), String> {
     let url = window
         .url()
         .map_err(|_| "Local window required".to_string())?;
@@ -75,8 +78,8 @@ fn require_local_window(window: &tauri::WebviewWindow) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn ping_daemon(
-    window: tauri::WebviewWindow,
+async fn ping_daemon<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<NativeHost>>,
 ) -> Result<serde_json::Value, String> {
     require_local_window(&window)?;
@@ -101,9 +104,9 @@ async fn ping_daemon(
 }
 
 #[tauri::command]
-async fn restart_daemon(
-    window: tauri::WebviewWindow,
-    app: tauri::AppHandle,
+async fn restart_daemon<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    app: tauri::AppHandle<R>,
     state: tauri::State<'_, Arc<NativeHost>>,
 ) -> Result<serde_json::Value, String> {
     require_local_window(&window)?;
@@ -116,7 +119,9 @@ async fn restart_daemon(
 }
 
 #[tauri::command]
-async fn flush_telemetry(window: tauri::WebviewWindow) -> Result<serde_json::Value, String> {
+async fn flush_telemetry<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+) -> Result<serde_json::Value, String> {
     require_local_window(&window)?;
     // Existing frontend trigger only; no generic native RPC or cloud credential.
     Ok(json!({"status":"trigger_ok"}))

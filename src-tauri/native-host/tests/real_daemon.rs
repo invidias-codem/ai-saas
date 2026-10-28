@@ -40,6 +40,7 @@ async fn rust_status_authenticates_with_this_launchs_credential() {
     let dir = tempfile::tempdir().unwrap();
     let credential = Arc::new(LaunchCredential::generate().unwrap());
     let mut child = Command::new(binary)
+        .arg("--native-host")
         .env_clear()
         .envs(child_environment())
         .env("LATTICE_AUTH_TOKEN", credential.child_env_value())
@@ -54,7 +55,39 @@ async fn rust_status_authenticates_with_this_launchs_credential() {
     assert!(matches!(wrong.status().await, Err(HostError::RpcRejected)));
     let session = RpcSession::new(port, credential).unwrap();
     assert!(session.status().await.unwrap().events.is_empty());
+    session
+        .bind_native()
+        .await
+        .expect("enroll the real native daemon");
+    assert!(session.status().await.unwrap().events.is_empty());
+    assert!(
+        !dir.path().join("lattice_vectors.db").exists(),
+        "native mode initialized unexposed shared memory"
+    );
     session.close();
+    assert!(matches!(session.status().await, Err(HostError::Closed)));
+    child.kill().await.unwrap();
+    child.wait().await.unwrap();
+}
+
+#[tokio::test]
+async fn standalone_daemons_cannot_satisfy_native_enrollment() {
+    let Some(binary) = binary() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let credential = Arc::new(LaunchCredential::generate().unwrap());
+    let mut child = Command::new(binary)
+        .env_clear()
+        .envs(child_environment())
+        .env("LATTICE_AUTH_TOKEN", credential.child_env_value())
+        .current_dir(dir.path())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let port = port(&mut child).await;
+    let session = RpcSession::new(port, credential).unwrap();
+    assert!(session.bind_native().await.is_err());
     assert!(matches!(session.status().await, Err(HostError::Closed)));
     child.kill().await.unwrap();
     child.wait().await.unwrap();

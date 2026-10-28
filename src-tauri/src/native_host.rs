@@ -70,7 +70,7 @@ impl<R: Runtime> Launcher for TauriLauncher<R> {
             .map_err(|_| HostError::SpawnFailed)?
             .env_clear()
             .current_dir(dir)
-            .args(["--parent-stdio"])
+            .args(["--parent-stdio", "--native-host"])
             .set_raw_out(true)
             .set_process_group(true);
         for (key, value) in child_environment() {

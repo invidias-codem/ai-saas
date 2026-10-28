@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "native-host-control"
+description = "Authenticated local service liveness and lifecycle only; no arbitrary RPC, identity, grant or execution setters."
+commands.allow = ["ping_daemon", "restart_daemon", "flush_telemetry"]

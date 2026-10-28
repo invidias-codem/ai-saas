@@ -2,10 +2,10 @@ name: Native desktop host
 
 on:
   pull_request:
-    paths: ['src-tauri/**', 'go-harness/**', '.github/workflows/native-host.yml']
+    paths: ['src-tauri/**', 'go-harness/**', 'scripts/native-host/**', '.github/workflows/native-host.yml', 'package.json', 'pnpm-lock.yaml']
   push:
     branches: [main]
-    paths: ['src-tauri/**', 'go-harness/**', '.github/workflows/native-host.yml']
+    paths: ['src-tauri/**', 'go-harness/**', 'scripts/native-host/**', '.github/workflows/native-host.yml', 'package.json', 'pnpm-lock.yaml']
 
 permissions:
   contents: read
@@ -15,6 +15,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  web-policy:
+    name: Local webview CSP (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+        with:
+          version: 11.6.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install policy test browser (Linux)
+        if: runner.os == 'Linux'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install policy test browser (Windows)
+        if: runner.os == 'Windows'
+        run: pnpm exec playwright install chromium
+      - name: Exercise the configured CSP with real blocked requests
+        run: node --test scripts/native-host/csp.test.mjs
+
   protocol:
     name: Rust and Go authenticated startup (${{ matrix.os }})
     strategy:
