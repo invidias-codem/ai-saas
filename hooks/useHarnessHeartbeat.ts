@@ -8,7 +8,7 @@
 //    closures over live state.
 //  - No sync setState in the mount effect: the Tauri branch is the only writer.
 //    In a plain browser the hook stays permanently "disconnected" by default.
-//  - Interval interval misses are tracked in a Ref to avoid extra renders.
+//  - Heartbeat misses are tracked in a Ref to avoid extra renders.
 
 import { useState, useEffect, useRef } from 'react';
 
@@ -22,7 +22,6 @@ export interface HarnessEvent {
   timestamp: string;
   type: 'read' | 'execution' | 'heartbeat' | 'sync';
   description: string;
-  payload?: any;
 }
 
 export interface HarnessState {
@@ -30,6 +29,13 @@ export interface HarnessState {
   lastHeartbeat: Date | null;
   auditLogs: HarnessEvent[];
   appFocused: boolean;
+  nativeError: string | null;
+}
+
+interface NativeHeartbeat {
+  status: 'ok' | 'booting' | 'error' | 'stopped';
+  recent_events?: HarnessEvent[];
+  error?: { code: string; message: string };
 }
 
 export function useHarnessHeartbeat(): HarnessState {
@@ -37,6 +43,7 @@ export function useHarnessHeartbeat(): HarnessState {
   const [lastHeartbeat, setLastHeartbeat] = useState<Date | null>(null);
   const [auditLogs, setAuditLogs] = useState<HarnessEvent[]>([]);
   const [appFocused, setAppFocused] = useState(true);
+  const [nativeError, setNativeError] = useState<string | null>(null);
 
   const missedPingsRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -56,6 +63,7 @@ export function useHarnessHeartbeat(): HarnessState {
       return;
     }
 
+    let alive = true;
     const pingDaemon = async () => {
       // Don't burn IPC calls while the window is backgrounded.
       if (!appFocusedRef.current) {
@@ -65,11 +73,14 @@ export function useHarnessHeartbeat(): HarnessState {
      
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const result: any = await invoke('ping_daemon').catch(() => null);
+        if (!alive) return;
+        const result = await invoke<NativeHeartbeat>('ping_daemon');
+        if (!alive) return;
 
-        if (result === 'ok' || result?.status === 'ok') {
+        if (result.status === 'ok') {
           missedPingsRef.current = 0;
           setIsDaemonRunning(true);
+          setNativeError(null);
           setLastHeartbeat(new Date());
 
           if (result?.recent_events && Array.isArray(result.recent_events)) {
@@ -79,19 +90,27 @@ export function useHarnessHeartbeat(): HarnessState {
               return [...incoming, ...prev.filter(e => !seen.has(e.id))].slice(0, 50);
             });
           }
-        } else if (result?.status === 'booting') {
-          // Sidecar spawned but not ready; treat as a miss but keep pinging.
-          missedPingsRef.current++;
+        } else if (result.status === 'error' || result.status === 'stopped') {
+          missedPingsRef.current = 0;
+          setIsDaemonRunning(false);
+          setNativeError(result.error?.message ?? 'The local service is unavailable. Restart Lattice OS to try again.');
+        } else if (result.status === 'booting') {
+          // Rust bounds startup and reports its final error; keep connecting.
+          missedPingsRef.current = 0;
+          setIsDaemonRunning(false);
+          setNativeError(null);
         } else {
           missedPingsRef.current++;
         }
       } catch {
+        if (!alive) return;
         missedPingsRef.current++;
       }
 
       // Sliding-window debounce: require 3 consecutive misses before disconnecting.
       if (missedPingsRef.current > 2) {
         setIsDaemonRunning(false);
+        setNativeError('The local service is unavailable. Restart Lattice OS to try again.');
       }
     };
 
@@ -105,24 +124,17 @@ export function useHarnessHeartbeat(): HarnessState {
         const { getCurrentWindow } = await import('@tauri-apps/api/window');
         const win = getCurrentWindow();
         const unlistenFocus = await win.onFocusChanged(({ payload: focused }) => {
-          setAppFocused(focused);
+          if (alive) setAppFocused(focused);
         });
-        const unlistenClose = await win.onCloseRequested(event => {
-          missedPingsRef.current = 0;
-          setIsDaemonRunning(false);
-          event.preventDefault();
-          win.close();
-        });
-        unlistenWindow = () => {
-          unlistenFocus();
-          unlistenClose();
-        };
+        if (alive) unlistenWindow = unlistenFocus;
+        else unlistenFocus();
       } catch (err) {
         console.warn('[useHarnessHeartbeat] Window lifecycle listeners unavailable:', err);
       }
     })();
 
     return () => {
+      alive = false;
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -133,5 +145,5 @@ export function useHarnessHeartbeat(): HarnessState {
     // intentional so the IPC interval never thrashes on state change.
   }, []);
 
-  return { isDaemonRunning, lastHeartbeat, auditLogs, appFocused };
+  return { isDaemonRunning, lastHeartbeat, auditLogs, appFocused, nativeError };
 }
