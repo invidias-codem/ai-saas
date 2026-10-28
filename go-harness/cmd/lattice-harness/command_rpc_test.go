@@ -19,6 +19,8 @@ func TestRPCCommandCannotBypassGrantGate(t *testing.T) {
 	dir := t.TempDir()
 	t.Cleanup(func() { expectedToken = previous; cleanupHarnesses() })
 	session := &SessionContext{Registry: fsutil.NewRootRegistry(), Telemetry: telemetry.NewManager()}
+	defer session.Registry.Close()
+	defer session.Telemetry.Close()
 	for _, action := range []string{"run_command", "execute_command_secure"} {
 		payload, _ := json.Marshal(map[string]any{"id": "test", "jsonrpc": "2.0", "workspaceRoot": dir, "authToken": expectedToken, "action": action, "inputs": map[string]any{"command": "echo forbidden", "shell": "cmd", "path": dir, "workspace_id": "ws", "user_id": "user"}})
 		w := httptest.NewRecorder()
@@ -35,6 +37,8 @@ func TestRPCCommandAuthenticatedExecution(t *testing.T) {
 	dir := t.TempDir()
 	t.Cleanup(func() { expectedToken = previous; cleanupHarnesses() })
 	session := &SessionContext{Registry: fsutil.NewRootRegistry(), Telemetry: telemetry.NewManager()}
+	defer session.Registry.Close()
+	defer session.Telemetry.Close()
 	session.Registry.UpdateGrants([]fsutil.RootGrant{{Path: dir, UserID: "employee", WorkspaceID: "project", AllowDestructive: true}})
 	shell, script := "sh", "printf 'approved output'; exit 7"
 	if runtime.GOOS == "windows" {
@@ -72,6 +76,8 @@ func TestProcessFrameRejectsAllRequestsWhenExpectedTokenEmpty(t *testing.T) {
 	dir := t.TempDir()
 	t.Cleanup(func() { expectedToken = previous; cleanupHarnesses() })
 	session := &SessionContext{Registry: fsutil.NewRootRegistry(), Telemetry: telemetry.NewManager()}
+	defer session.Registry.Close()
+	defer session.Telemetry.Close()
 	session.Registry.UpdateGrants([]fsutil.RootGrant{{Path: dir, UserID: "employee", WorkspaceID: "project", AllowDestructive: true}})
 	for _, token := range []string{"", "anything"} {
 		payload, _ := json.Marshal(map[string]any{"id": "test", "jsonrpc": "2.0", "workspaceRoot": dir, "authToken": token, "action": "list_workspace", "inputs": map[string]any{"path": dir, "workspace_id": "project", "user_id": "employee"}})

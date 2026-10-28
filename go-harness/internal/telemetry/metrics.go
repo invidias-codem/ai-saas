@@ -2,11 +2,15 @@ package telemetry
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
+	"log"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
 )
 
 type Manager struct {
@@ -15,108 +19,111 @@ type Manager struct {
 	apiEndpoint string
 	bearerToken string
 	flusherOn   bool
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 func NewManager() *Manager {
-	return &Manager{
-		eventBuffer: make([]TelemetryEvent, 0),
-		flusherOn:   false,
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Manager{eventBuffer: []TelemetryEvent{}, ctx: ctx, cancel: cancel}
 }
 
-// StartFlusher activates the background flusher securely
-func (m *Manager) StartFlusher(apiBaseUrl, authToken string) {
+func ValidateCloudConfig(base, token string) error {
+	if base == "" {
+		return nil
+	} // Local-only recording never requires egress.
+	if base != netguard.AppOrigin || token == "" {
+		return errors.New("telemetry requires an approved HTTPS origin and an upstream credential")
+	}
+	return nil
+}
+
+func (m *Manager) StartFlusher(base, token string) error {
+	if err := ValidateCloudConfig(base, token); err != nil {
+		return err
+	}
 	m.bufferMutex.Lock()
 	defer m.bufferMutex.Unlock()
-
-	m.apiEndpoint = apiBaseUrl + "/api/harness/telemetry"
-	m.bearerToken = authToken
-
+	if m.ctx.Err() != nil {
+		return errors.New("telemetry manager is closed")
+	}
+	if base == "" {
+		m.apiEndpoint, m.bearerToken = "", ""
+		return nil
+	}
+	m.apiEndpoint, m.bearerToken = netguard.AppOrigin+"/api/harness/telemetry", token
 	if !m.flusherOn {
 		m.flusherOn = true
 		go m.flushWorker()
 	}
+	return nil
 }
 
-// RecordEvent pushes a new event into the thread-safe buffer
+func (m *Manager) Close() { m.cancel() }
+
 func (m *Manager) RecordEvent(event TelemetryEvent) {
 	if event.Timestamp == "" {
 		event.Timestamp = time.Now().UTC().Format(time.RFC3339)
 	}
-
 	m.bufferMutex.Lock()
+	defer m.bufferMutex.Unlock()
+	if len(m.eventBuffer) >= 1000 {
+		copy(m.eventBuffer, m.eventBuffer[1:])
+		m.eventBuffer = m.eventBuffer[:999]
+	}
 	m.eventBuffer = append(m.eventBuffer, event)
-	m.bufferMutex.Unlock()
 }
 
-// FlushImmediate records an event and immediately pushes the entire buffer to the cloud
-func (m *Manager) FlushImmediate(event TelemetryEvent) {
-	m.RecordEvent(event)
-	// Execute flush in a goroutine to not block the caller
-	go m.Flush()
-}
+func (m *Manager) FlushImmediate(event TelemetryEvent) { m.RecordEvent(event); go m.Flush() }
 
 func (m *Manager) flushWorker() {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
-
 	for {
-		<-ticker.C
-		m.Flush()
+		select {
+		case <-ticker.C:
+			m.Flush()
+		case <-m.ctx.Done():
+			return
+		}
 	}
 }
 
-// Flush sends buffered events to the cloud and clears the local buffer
 func (m *Manager) Flush() {
 	m.bufferMutex.Lock()
 	if len(m.eventBuffer) == 0 || m.apiEndpoint == "" {
 		m.bufferMutex.Unlock()
 		return
 	}
-	
-	// Copy buffer to release lock quickly
-	eventsToFlush := make([]TelemetryEvent, len(m.eventBuffer))
-	copy(eventsToFlush, m.eventBuffer)
+	events := append([]TelemetryEvent(nil), m.eventBuffer...)
+	endpoint, token := m.apiEndpoint, m.bearerToken
 	m.eventBuffer = nil
 	m.bufferMutex.Unlock()
-
-	// Send to cloud
-	payload, err := json.Marshal(eventsToFlush)
+	payload, err := json.Marshal(events)
 	if err != nil {
-		fmt.Printf("[Telemetry] Error marshaling events: %v\n", err)
+		log.Print("[Telemetry] Cannot encode event batch")
 		return
 	}
-
-	req, err := http.NewRequest("POST", m.apiEndpoint, bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(m.ctx, "POST", endpoint, bytes.NewBuffer(payload))
 	if err != nil {
-		fmt.Printf("[Telemetry] Error creating request: %v\n", err)
+		log.Print("[Telemetry] Cannot construct request")
 		return
 	}
-	
 	req.Header.Set("Content-Type", "application/json")
-	if m.bearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+m.bearerToken)
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := netguard.CloudClient.Do(req)
 	if err != nil {
-		fmt.Printf("[Telemetry] Error sending events: %v\n", err)
+		log.Print("[Telemetry] Approved upstream unavailable")
 		return
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		fmt.Printf("[Telemetry] Cloud rejected events with status: %d\n", resp.StatusCode)
+		log.Printf("[Telemetry] Cloud rejected event batch: %d", resp.StatusCode)
 	}
 }
 
-// GetBufferedEvents returns a copy of the current buffered events (used for testing)
 func (m *Manager) GetBufferedEvents() []TelemetryEvent {
 	m.bufferMutex.Lock()
 	defer m.bufferMutex.Unlock()
-	
-	eventsCopy := make([]TelemetryEvent, len(m.eventBuffer))
-	copy(eventsCopy, m.eventBuffer)
-	return eventsCopy
+	return append([]TelemetryEvent(nil), m.eventBuffer...)
 }

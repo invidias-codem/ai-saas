@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha3"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -64,6 +65,7 @@ type LocalCapabilityArgs struct {
 
 type SemanticSearchSecureArgs struct {
 	Query       string `json:"query"`
+	AuthToken   string `json:"auth_token"`
 	WorkspaceID string `json:"workspace_id"`
 	UserID      string `json:"user_id"`
 }
@@ -128,6 +130,7 @@ type RunCommandArgs struct {
 }
 
 type GitHubRequestArgs struct {
+	GitHubToken  string   `json:"githubToken"`
 	Method       string   `json:"method"`
 	URL          string   `json:"url"`
 	Body         string   `json:"body,omitempty"`
@@ -151,6 +154,7 @@ type SemanticSearchArgs struct {
 }
 
 type GetFileContentsArgs struct {
+	GitHubToken  string   `json:"githubToken"`
 	RepoFullName string   `json:"repoFullName"`
 	FilePath     string   `json:"filePath"`
 	AllowedRepos []string `json:"allowedRepos"` // Injected by Next.js per request
@@ -162,6 +166,12 @@ var (
 	stdoutMutex     sync.Mutex
 	expectedToken   string
 )
+
+// Compare fixed-length SHA3 digests rather than raw secret prefixes, per the
+// repository authentication policy. Never log either candidate or launch token.
+func sameToken(candidate, expected string) bool {
+	return sha3.Sum256([]byte(candidate)) == sha3.Sum256([]byte(expected))
+}
 
 // validateLaunchAuthToken enforces fail-closed startup (#448 review):
 // packaged startup rejects missing authentication instead of running the
@@ -195,7 +205,9 @@ func main() {
 
 	// 1. Initialize the decoupled memory structures
 	telemetryManager := telemetry.NewManager() // Buffer is ready, flusher is OFF
+	defer telemetryManager.Close()
 	rootRegistry := fsutil.NewRootRegistry()
+	defer rootRegistry.Close()
 	vectorDB, err := harness.NewVectorIndex("lattice_vectors.db")
 	if err != nil {
 		log.Fatalf("Failed to initialize vector index: %v", err)
@@ -316,15 +328,9 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	// path behind the CodeQL network/command-sink criticals. Defense in depth
 	// behind the fail-closed startup: an unconfigured token rejects EVERY
 	// request, and a configured token must match exactly.
-	if expectedToken == "" || req.AuthToken != expectedToken {
+	if expectedToken == "" || !sameToken(req.AuthToken, expectedToken) {
 		log.Printf("Unauthorized JSON-RPC payload received. Expected valid auth token.")
 		sendErrorResponse(w, req.ID, -32000, "Unauthorized: Invalid or missing authToken")
-		return
-	}
-
-	ioHarness, err := getOrInitHarness(req.WorkspaceRoot)
-	if err != nil {
-		sendErrorResponse(w, req.ID, -32602, fmt.Sprintf("Invalid workspace initialization: %v", err))
 		return
 	}
 
@@ -351,11 +357,21 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "sync_root_grants":
 		var args SyncGrantsArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
-			// 1. Hydrate the registry
-			session.Registry.UpdateGrants(args.Grants)
+			// Validate the entire control-plane update before changing grants.
+			if (args.AuthToken != "" && sameToken(args.AuthToken, expectedToken)) || telemetry.ValidateCloudConfig(args.ApiBaseUrl, args.AuthToken) != nil {
+				sendErrorResponse(w, req.ID, -32602, "Invalid upstream configuration; launch credentials cannot be used upstream")
+				return
+			}
+			if err := session.Registry.UpdateGrants(args.Grants); err != nil {
+				sendErrorResponse(w, req.ID, -32602, "Invalid root grants")
+				return
+			}
 
 			// 2. Activate the background flusher securely
-			session.Telemetry.StartFlusher(args.ApiBaseUrl, args.AuthToken)
+			if err := session.Telemetry.StartFlusher(args.ApiBaseUrl, args.AuthToken); err != nil {
+				sendErrorResponse(w, req.ID, -32603, "Telemetry is unavailable")
+				return
+			}
 
 			// Log the successful hydration
 			session.Telemetry.RecordEvent(telemetry.NewEvent(
@@ -403,6 +419,10 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "start_workspace_ingestion":
 		var args StartWorkspaceIngestionArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
+			if sameToken(args.AuthToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
 			res = harness.StartWorkspaceIngestion(session.Registry, session.Telemetry, session.VectorDB, args.Path, args.WorkspaceID, args.UserID, args.AuthToken, args.ApiBaseUrl)
 		} else {
 			sendErrorResponse(w, req.ID, -32602, "Invalid params for start_workspace_ingestion")
@@ -448,7 +468,11 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "semantic_search_secure":
 		var args SemanticSearchSecureArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = harness.SemanticSearchSecure(session.Registry, session.Telemetry, session.VectorDB, args.Query, args.WorkspaceID, args.UserID, expectedToken)
+			if sameToken(args.AuthToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
+			res = harness.SemanticSearchSecure(session.Registry, session.Telemetry, session.VectorDB, args.Query, args.WorkspaceID, args.UserID, args.AuthToken)
 		} else {
 			sendErrorResponse(w, req.ID, -32602, "Invalid params for semantic_search_secure")
 			return
@@ -528,30 +552,9 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 			return
 		}
 
-	case "read_file":
-		var args ReadFileArgs
-		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = ioHarness.ReadFile(ctx, args.FilePath)
-		} else {
-			sendErrorResponse(w, req.ID, -32602, "Invalid params for read_file")
-			return
-		}
-	case "write_file":
-		var args WriteFileArgs
-		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = ioHarness.WriteFile(ctx, args.FilePath, args.Content)
-		} else {
-			sendErrorResponse(w, req.ID, -32602, "Invalid params for write_file")
-			return
-		}
-	case "patch_file":
-		var args PatchFileArgs
-		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = ioHarness.PatchFile(ctx, args.FilePath, args.SearchBlock, args.ReplaceBlock)
-		} else {
-			sendErrorResponse(w, req.ID, -32602, "Invalid params for patch_file")
-			return
-		}
+	case "read_file", "write_file", "patch_file":
+		res = harness.ToolExecutionResult{Error: "Use grant-checked file capabilities with user/workspace identity", Code: "FILE_ACCESS_DENIED"}
+
 	case "run_command":
 		// Legacy RPC must not bypass the identity/root-grant execution gate.
 		res = harness.ToolExecutionResult{Error: "Use execute_command_secure with user/workspace identity and a root grant", Code: "COMMAND_ACCESS_DENIED"}
@@ -559,8 +562,12 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "github_request":
 		var args GitHubRequestArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
+			if sameToken(args.GitHubToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
 			var err error
-			res, err = harness.ExecuteGitHubRequest(ctx, args.Method, args.URL, args.Body, expectedToken, args.AllowedRepos)
+			res, err = harness.ExecuteGitHubRequest(ctx, args.Method, args.URL, args.Body, args.GitHubToken, args.AllowedRepos)
 			if err != nil {
 				sendErrorResponse(w, req.ID, -32603, fmt.Sprintf("Failed to execute GitHub request: %v", err))
 				return
@@ -572,6 +579,10 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "ingest_repository":
 		var args IngestRepositoryArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
+			if sameToken(args.ClerkToken, expectedToken) || sameToken(args.GitHubToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
 			err := harness.CrawlAndIngest(harness.CrawlerConfig{
 				WorkspaceID:  args.WorkspaceID,
 				RepoFullName: args.RepoFullName,
@@ -594,6 +605,10 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "semantic_code_search":
 		var args SemanticSearchArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
+			if sameToken(args.ClerkToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
 			var err error
 			res, err = harness.SemanticCodeSearch(ctx, harness.SemanticSearchConfig{
 				WorkspaceID:  args.WorkspaceID,
@@ -613,8 +628,12 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "get_file_contents":
 		var args GetFileContentsArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
+			if sameToken(args.GitHubToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
 			var err error
-			res, err = harness.GetFileContents(ctx, args.RepoFullName, args.FilePath, expectedToken, args.AllowedRepos)
+			res, err = harness.GetFileContents(ctx, args.RepoFullName, args.FilePath, args.GitHubToken, args.AllowedRepos)
 			if err != nil {
 				sendErrorResponse(w, req.ID, -32603, fmt.Sprintf("File read error: %v", err))
 				return

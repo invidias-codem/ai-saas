@@ -18,6 +18,8 @@ import (
 
 func TestRPCTransportBoundaries(t *testing.T) {
 	session := &SessionContext{Registry: fsutil.NewRootRegistry(), Telemetry: telemetry.NewManager()}
+	defer session.Registry.Close()
+	defer session.Telemetry.Close()
 	handler := newRPCHandler(session, "tauri://localhost")
 	for _, tc := range []struct {
 		name, method, origin, body string
@@ -64,6 +66,8 @@ func TestRPCCommandHTTPDisconnectCancelsProcess(t *testing.T) {
 	expectedToken = "transport-test-token"
 	t.Cleanup(func() { expectedToken = previous; cleanupHarnesses() })
 	session := &SessionContext{Registry: fsutil.NewRootRegistry(), Telemetry: telemetry.NewManager()}
+	defer session.Registry.Close()
+	defer session.Telemetry.Close()
 	session.Registry.UpdateGrants([]fsutil.RootGrant{{Path: dir, UserID: "user", WorkspaceID: "project", AllowDestructive: true}})
 	server := httptest.NewServer(newRPCHandler(session, "tauri://localhost"))
 	defer server.Close()

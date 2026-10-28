@@ -16,6 +16,7 @@ func setupExecutionTestEnv(t *testing.T) (*fsutil.RootRegistry, *telemetry.Manag
 	}
 	registry := fsutil.NewRootRegistry()
 	tempDir := t.TempDir()
+	t.Cleanup(func() { _ = registry.Close() })
 
 	registry.UpdateGrants([]fsutil.RootGrant{
 		{

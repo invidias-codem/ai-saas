@@ -1,11 +1,17 @@
 package harness
 
 import (
-	"fmt"
+	"context"
+	"encoding/base64"
+	"errors"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type CrawlerConfig struct {
@@ -34,83 +40,99 @@ var ignoredExtensions = map[string]bool{
 	".lock": true,
 }
 
+// cloneCommand keeps credentials out of argv and .git/config. Git receives
+// host-scoped authentication through its transient config environment only.
+func cloneCommand(ctx context.Context, config CrawlerConfig, dir string) (*exec.Cmd, error) {
+	parts := strings.Split(config.RepoFullName, "/")
+	if len(parts) != 2 || !repoPart.MatchString(parts[0]) || !repoPart.MatchString(parts[1]) || parts[0] == "." || parts[0] == ".." || parts[1] == "." || parts[1] == ".." {
+		return nil, errors.New("invalid repository identity")
+	}
+	if strings.ContainsAny(config.GitHubToken, "\r\n\x00") {
+		return nil, errors.New("invalid GitHub credential")
+	}
+	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--", "https://github.com/"+config.RepoFullName+".git", dir)
+	for _, key := range []string{"PATH", "SystemRoot", "WINDIR", "TMP", "TEMP", "LANG", "LC_ALL"} {
+		if value := os.Getenv(key); value != "" {
+			cmd.Env = append(cmd.Env, key+"="+value)
+		}
+	}
+	header := ""
+	if config.GitHubToken != "" {
+		header = "Authorization: Basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:"+config.GitHubToken))
+	}
+	cmd.Env = append(cmd.Env, "GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull,
+		"GIT_CONFIG_COUNT=6", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=",
+		"GIT_CONFIG_KEY_1=http.https://github.com/.extraHeader", "GIT_CONFIG_VALUE_1="+header,
+		"GIT_CONFIG_KEY_2=protocol.allow", "GIT_CONFIG_VALUE_2=never",
+		"GIT_CONFIG_KEY_3=protocol.https.allow", "GIT_CONFIG_VALUE_3=always",
+		"GIT_CONFIG_KEY_4=core.hooksPath", "GIT_CONFIG_VALUE_4="+filepath.Join(dir, ".no-hooks"),
+		"GIT_CONFIG_KEY_5=init.templateDir", "GIT_CONFIG_VALUE_5="+filepath.Join(dir, ".no-templates"))
+	return cmd, nil
+}
+
 func CrawlAndIngest(config CrawlerConfig) error {
-	// Create temp directory for cloning
-	tmpDir, err := os.MkdirTemp("", "lattice-crawler-*")
+	if _, err := netguard.APIURL(config.APIBaseURL, config.WorkspaceID, "ingest"); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	dir, err := os.MkdirTemp("", "lattice-crawler-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %v", err)
+		return errors.New("cannot prepare repository clone")
 	}
-	defer os.RemoveAll(tmpDir)
-
-	// Build clone URL with auth token
-	// https://x-access-token:<token>@github.com/<repo>.git
-	cloneURL := fmt.Sprintf("https://x-access-token:%s@github.com/%s.git", config.GitHubToken, config.RepoFullName)
-
-	// Shallow clone
-	cmd := exec.Command("git", "clone", "--depth", "1", cloneURL, tmpDir)
+	defer os.RemoveAll(dir)
+	cmd, err := cloneCommand(ctx, config, dir)
+	if err != nil {
+		return err
+	}
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git clone failed: %v", err)
+		return errors.New("repository clone failed")
 	}
-
-	ingestClient := NewIngestClient(config.WorkspaceID, config.RepoFullName, config.AuthToken, config.APIBaseURL)
-
-	// Walk directory
-	err = filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	client := NewIngestClient(config.WorkspaceID, config.RepoFullName, config.AuthToken, config.APIBaseURL)
+	count := 0
+	err = fs.WalkDir(root.FS(), ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		count++
+		if count > 10000 {
+			return errors.New("repository exceeds crawler entry limit")
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
 			return nil
 		}
-
-		// Skip ignored directories
-		if info.IsDir() {
-			if ignoredDirs[info.Name()] {
-				return filepath.SkipDir
+		if entry.IsDir() {
+			if ignoredDirs[entry.Name()] {
+				return fs.SkipDir
 			}
 			return nil
 		}
-
-		// Skip ignored extensions
-		ext := strings.ToLower(filepath.Ext(info.Name()))
-		if ignoredExtensions[ext] {
+		if ignoredExtensions[strings.ToLower(filepath.Ext(name))] {
 			return nil
 		}
-
-		// Read file content
-		contentBytes, err := os.ReadFile(path)
-		if err != nil {
-			return nil // Skip unreadable files
-		}
-
-		// Verify it's text (skip if null byte found)
-		if bytesContainNull(contentBytes) {
+		content, err := fsutil.ReadRegularFile(root, filepath.FromSlash(name), MaxExtractFileSize)
+		if err != nil || bytesContainNull(content) {
 			return nil
 		}
-
-		relPath, _ := filepath.Rel(tmpDir, path)
-		contentStr := string(contentBytes)
-
-		// Chunk the file
-		chunks := ChunkFile(relPath, contentStr)
-
-		// Add chunks to ingest client
-		for _, chunk := range chunks {
-			if err := ingestClient.AddChunk(chunk); err != nil {
-				return fmt.Errorf("failed to add chunk: %v", err)
+		for _, chunk := range ChunkFile(name, string(content)) {
+			if err := client.AddChunk(chunk); err != nil {
+				return err
 			}
 		}
-
 		return nil
 	})
-
 	if err != nil {
-		return fmt.Errorf("error walking repository: %v", err)
+		return err
 	}
-
-	// Flush any remaining chunks
-	if err := ingestClient.Flush(); err != nil {
-		return fmt.Errorf("final flush failed: %v", err)
-	}
-
-	return nil
+	return client.Flush()
 }
 
 func bytesContainNull(b []byte) bool {

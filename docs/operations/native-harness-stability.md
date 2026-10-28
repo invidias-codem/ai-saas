@@ -71,9 +71,12 @@ Server runtime tests also do not replace installation tests on Windows 11.
 | Load and crash qualification | Bounded simultaneous commands, sustained-session memory/handle measurements, parent-crash recovery and durable reconciliation of ambiguous mutations |
 | Distribution | Signed standard/offline installers; final-byte checksums and provenance; clean-machine install, upgrade, interruption recovery, rollback and uninstall |
 
-The current daemon still has an unset-token compatibility mode used by existing
-launchers. It is a release blocker for packaging until Rust authentication is
-wired and packaged startup refuses that mode. The memory database remains relative
+The daemon now refuses missing launch authentication; the former unset-token
+compatibility mode was removed during #448 review. Rust credential injection and
+authenticated RPC remain packaging blockers. The follow-up
+[native capability security slice](native-capability-security.md) adds pinned,
+identity-scoped file grants and outbound HTTP/credential restrictions.
+The memory database remains relative
 to the launch directory; the restart test establishes persistence at that location,
 not encryption, enterprise identity isolation, or recovery after workspace removal.
 Local Node fallback and cloud approval/resume routes are not qualified by this slice.

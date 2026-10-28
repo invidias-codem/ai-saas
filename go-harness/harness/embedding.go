@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
 	"math"
 	"net/http"
 	"time"
@@ -29,7 +29,7 @@ func FetchEmbeddings(texts []string, authToken string) ([][]float32, error) {
 		return nil, fmt.Errorf("failed to marshal embeddings payload: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "http://localhost:3000/api/harness/embeddings", bytes.NewBuffer(bodyBytes))
+	req, err := http.NewRequest("POST", netguard.AppOrigin+"/api/harness/embeddings", bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create embeddings request: %w", err)
 	}
@@ -39,7 +39,7 @@ func FetchEmbeddings(texts []string, authToken string) ([][]float32, error) {
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
 
-	client := &http.Client{}
+	client := netguard.CloudClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch embeddings: %w", err)
@@ -47,14 +47,18 @@ func FetchEmbeddings(texts []string, authToken string) ([][]float32, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := netguard.ReadBody(resp.Body)
 		return nil, fmt.Errorf("embeddings API returned status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var response struct {
 		Embeddings [][]float32 `json:"embeddings"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	responseBody, err := netguard.ReadBody(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
 		return nil, fmt.Errorf("failed to decode embeddings response: %w", err)
 	}
 

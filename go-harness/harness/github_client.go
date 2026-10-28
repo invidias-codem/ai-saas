@@ -3,6 +3,7 @@ package harness
 import (
 	"context"
 	"fmt"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
 	"io"
 	"net/http"
 	"strings"
@@ -14,10 +15,11 @@ func ExecuteGitHubRequest(ctx context.Context, method, url, body, token string, 
 	// Initialize secure client with WAF middleware
 	secureClient := &http.Client{
 		Transport: &WAFTransport{
-			Base:         http.DefaultTransport,
+			Base:         githubTransport,
 			AllowedRepos: allowedRepos,
 		},
-		Timeout: 15 * time.Second,
+		Timeout:       15 * time.Second,
+		CheckRedirect: netguard.RejectRedirect,
 	}
 
 	var reqBody io.Reader
@@ -45,7 +47,7 @@ func ExecuteGitHubRequest(ctx context.Context, method, url, body, token string, 
 	resp, err := secureClient.Do(req)
 	if err != nil {
 		// Ensure token is scrubbed from error logs if Do() fails and somehow includes headers
-		safeErr := strings.ReplaceAll(err.Error(), token, "[REDACTED_TOKEN]")
+		safeErr := "upstream request denied or unavailable"
 		return ToolExecutionResult{
 			Ok:    false,
 			Error: fmt.Sprintf("Failed to execute request: %s", safeErr),
@@ -54,7 +56,7 @@ func ExecuteGitHubRequest(ctx context.Context, method, url, body, token string, 
 	}
 	defer resp.Body.Close()
 
-	respBodyBytes, err := io.ReadAll(resp.Body)
+	respBodyBytes, err := netguard.ReadBody(resp.Body)
 	if err != nil {
 		return ToolExecutionResult{
 			Ok:    false,
