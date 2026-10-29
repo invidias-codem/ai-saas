@@ -1,6 +1,6 @@
 # Native command admission and qualified providers
 
-**Status**: In progress
+**Status**: Implemented; human review pending
 
 **Goal**: Bind exact commands to native review and refuse process launch without a qualified execution provider.
 

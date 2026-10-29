@@ -441,8 +441,7 @@ async fn overwrite_review_binds_complete_base_and_preserves_external_edits_on_co
     assert!(child.wait().await.unwrap().success());
 }
 
-#[tokio::test]
-async fn abandoned_caller_and_lost_dispatch_reply_reconcile_existing_id_without_retry() {
+async fn reconcile_dropped_dispatch_reply(command: bool) {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::{io::AsyncWriteExt, net::TcpListener, sync::oneshot};
     let binary = binary().expect("real mutation regression requires the CI daemon");
@@ -502,7 +501,12 @@ async fn abandoned_caller_and_lost_dispatch_reply_reconcile_existing_id_without_
             }
             let request: serde_json::Value =
                 serde_json::from_slice(&bytes[start..start + len]).unwrap();
-            let is_dispatch = request["action"] == "native_dispatch_mutation";
+            let is_dispatch = request["action"]
+                == if command {
+                    "native_dispatch_command"
+                } else {
+                    "native_dispatch_mutation"
+                };
             let response = client
                 .post(format!("http://127.0.0.1:{daemon_port}/rpc"))
                 .json(&request)
@@ -540,19 +544,34 @@ async fn abandoned_caller_and_lost_dispatch_reply_reconcile_existing_id_without_
         .await
         .unwrap()
         .unwrap();
-    session
-        .request_write_access(&g.grant_id, &NativeWriteConsent(true))
-        .await
-        .unwrap();
-    let id = accept_exact(
-        &session,
+    let op = if command {
+        let command = if cfg!(windows) {
+            CommandInput::Cmd {
+                script: "echo must-not-run>one.txt".into(),
+            }
+        } else {
+            CommandInput::Sh {
+                script: "printf must-not-run > one.txt".into(),
+            }
+        };
+        ProposalInput::ExecuteCommand {
+            grant_id: g.grant_id,
+            relative_path: ".".into(),
+            command,
+            timeout_seconds: None,
+        }
+    } else {
+        session
+            .request_write_access(&g.grant_id, &NativeWriteConsent(true))
+            .await
+            .unwrap();
         ProposalInput::CreateFile {
             grant_id: g.grant_id,
             relative_path: "one.txt".into(),
             content: "one attempt".into(),
-        },
-    )
-    .await;
+        }
+    };
+    let id = accept_exact(&session, op).await;
     let s = session.clone();
     let dispatch_id = id.clone();
     let caller = tokio::spawn(async move { s.dispatch_operation(&dispatch_id).await });
@@ -560,21 +579,34 @@ async fn abandoned_caller_and_lost_dispatch_reply_reconcile_existing_id_without_
     caller.abort();
     let _ = caller.await;
     release.send(()).unwrap();
-    assert_eq!(
-        observed(&session, &id).await.status,
-        OperationState::Succeeded
-    );
+    let result = observed(&session, &id).await;
+    if command {
+        assert_eq!(result.status, OperationState::Denied);
+        assert_eq!(result.code, "LOCAL_SANDBOX_REQUIRED");
+        assert!(!selected.join("one.txt").exists());
+    } else {
+        assert_eq!(result.status, OperationState::Succeeded);
+        assert_eq!(
+            std::fs::read_to_string(selected.join("one.txt")).unwrap(),
+            "one attempt"
+        );
+    }
     assert_eq!(dispatches.load(Ordering::SeqCst), 1);
-    assert_eq!(
-        std::fs::read_to_string(selected.join("one.txt")).unwrap(),
-        "one attempt"
-    );
     assert!(session.dispatch_operation(&id).await.is_err());
     assert_eq!(dispatches.load(Ordering::SeqCst), 1);
     session.shutdown().await.unwrap();
     assert!(child.wait().await.unwrap().success());
     proxy.abort();
     let _ = proxy.await;
+}
+
+#[tokio::test]
+async fn abandoned_caller_and_lost_dispatch_reply_reconcile_existing_id_without_retry() {
+    reconcile_dropped_dispatch_reply(false).await;
+}
+#[tokio::test]
+async fn lost_command_denial_reply_reconciles_without_redispatch_or_launch() {
+    reconcile_dropped_dispatch_reply(true).await;
 }
 
 #[tokio::test]
