@@ -1,6 +1,6 @@
 # Guarded native file mutations
 
-**Status**: In progress
+**Status**: Implemented; human review pending
 
 **Goal**: Apply a reviewed local file change once, with trusted target preconditions and owned outcome tracking.
 

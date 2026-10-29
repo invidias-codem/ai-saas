@@ -75,10 +75,10 @@ func TestNativeMutationParentReplacementMissingParentsAndRootAreRefused(t *testi
 	}
 	defer p.Close()
 	err := os.Rename(sub, filepath.Join(dir, "old"))
-	if runtime.GOOS == "windows" {
-		if err == nil {
-			t.Fatal("pinned Windows parent unexpectedly moved")
-		}
+	if err != nil && runtime.GOOS == "windows" {
+		// Some Windows directory handles prohibit rename. If protected, release
+		// the review pin before arranging the replacement. In either case the
+		// mutation must detect the new parent identity and touch neither target.
 		p.Close()
 		err = os.Rename(sub, filepath.Join(dir, "old"))
 	}

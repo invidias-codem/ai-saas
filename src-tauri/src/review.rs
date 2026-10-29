@@ -4,8 +4,8 @@ use crate::workspace::NativeIpcError;
 use lattice_native_host::{
     lifecycle::NativeHost,
     review::{
-        DisplayAcknowledgement, ProposalInput, ProposalReference, ProposalSummary, ReviewDecision,
-        ReviewDocument, ReviewLease,
+        DisplayAcknowledgement, ProposalInput, ProposalReference, ProposalState, ProposalSummary,
+        ReviewDecision, ReviewDocument, ReviewLease,
     },
     workspace::EmptyInput,
     HostError,
@@ -263,6 +263,15 @@ async fn open<R: Runtime>(
     tauri::async_runtime::spawn(async move {
         lease.finished().await;
         cleanup(&app, &lease);
+        // A denied/expired window must promptly release Go's prepared handles.
+        // An accepted proposal keeps its target pin until dispatch or expiry.
+        if host
+            .proposal_status(&id)
+            .await
+            .is_ok_and(|s| !matches!(s.status, ProposalState::Accepted | ProposalState::Consumed))
+        {
+            let _ = host.cancel_proposal(&id).await;
+        }
     });
     Ok(())
 }

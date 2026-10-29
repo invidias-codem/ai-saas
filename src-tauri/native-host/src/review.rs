@@ -506,6 +506,15 @@ impl ReviewBook {
     pub(crate) fn cancel(&mut self, id: &str) -> Result<(), HostError> {
         self.sweep();
         if !self.entries.contains_key(id) {
+            if self.history.iter().any(|s| {
+                s.proposal_id == id
+                    && matches!(
+                        s.status,
+                        ProposalState::Denied | ProposalState::Expired | ProposalState::Stale
+                    )
+            }) {
+                return Ok(());
+            }
             return Err(HostError::ProposalUnknown);
         }
         self.retire(id, ProposalState::Denied);
