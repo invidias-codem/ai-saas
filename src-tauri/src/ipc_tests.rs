@@ -133,11 +133,12 @@ fn main_and_forged_review_windows_cannot_submit_decisions() {
             }
             _ => json!({}),
         };
+        // Main window has permission but no active review lease -> LOCAL_REVIEW_DENIED
         let denied = call_input(&main, command, main.url().unwrap().as_str(), input.clone())
             .err()
-            .unwrap()
-            .to_string();
-        assert!(denied.contains("not allowed"), "{command}: {denied}");
+            .unwrap();
+        assert_eq!(denied["code"], "LOCAL_REVIEW_DENIED", "{command}: {denied}");
+        // Forged review window always gets LOCAL_REVIEW_DENIED
         let denied = call_input(&fake, command, &fake_origin, input)
             .err()
             .unwrap();
