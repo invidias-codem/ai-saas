@@ -4,11 +4,12 @@ use crate::HostError;
 use serde::{Deserialize, Serialize};
 
 const VERSION: u32 = 1;
-const FEATURES: [&str; 4] = [
+const FEATURES: [&str; 5] = [
     "session-authority-v1",
     "native-action-allowlist-v1",
     "read-grants-v1",
     "guarded-file-mutations-v1",
+    "command-admission-v1",
 ];
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]

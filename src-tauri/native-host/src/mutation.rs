@@ -2,7 +2,7 @@
 //! methods is registered as a Tauri command before native UI qualification.
 use crate::{
     authority::Authority,
-    review::{canonical_prepared, digest, ProposalInput, ReviewScope},
+    review::{canonical_operation, digest, ProposalInput, ReviewScope},
     workspace::MAX_TEXT_BYTES,
     HostError, RpcSession,
 };
@@ -22,14 +22,14 @@ pub(crate) struct ObjectIdentity {
     pub(crate) volume: String,
     pub(crate) file: String,
 }
-fn hex(value: &str, len: usize) -> bool {
+pub(crate) fn hex(value: &str, len: usize) -> bool {
     value.len() == len
         && value
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 impl ObjectIdentity {
-    fn valid(&self) -> bool {
+    pub(crate) fn valid(&self) -> bool {
         hex(&self.volume, 16)
             && (hex(&self.file, 16) || hex(&self.file, 32))
             && self.file.bytes().any(|b| b != b'0')
@@ -79,7 +79,8 @@ pub(crate) struct ProposalMaterial {
     read_only: bool,
     ttl_ms: u32,
     operation: ProposalInput,
-    pub(crate) precondition: FilePrecondition,
+    pub(crate) precondition: Option<FilePrecondition>,
+    pub(crate) command_precondition: Option<crate::command::CommandPrecondition>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -101,8 +102,24 @@ impl PreparedMutation {
             || p.read_only != scope.read_only
             || p.ttl_ms != 300000
             || p.operation != *input
-            || !p.precondition.valid_for(input)
-            || self.digest != digest(&canonical_prepared(id, scope, input, Some(&p.precondition)))
+            || if input.is_command() {
+                p.precondition.is_some()
+                    || !p
+                        .command_precondition
+                        .as_ref()
+                        .is_some_and(|c| c.valid_for(input))
+            } else {
+                p.command_precondition.is_some()
+                    || !p.precondition.as_ref().is_some_and(|p| p.valid_for(input))
+            }
+            || self.digest
+                != digest(&canonical_operation(
+                    id,
+                    scope,
+                    input,
+                    p.precondition.as_ref(),
+                    p.command_precondition.as_ref(),
+                ))
         {
             return Err(HostError::InvalidResponse);
         };
@@ -119,6 +136,9 @@ pub enum OperationState {
     Denied,
     Cancelled,
     OutcomeUnknown,
+    Failed,
+    TimedOut,
+    OutputLimited,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -128,6 +148,8 @@ pub struct OperationStatus {
     pub status: OperationState,
     pub code: String,
     pub may_have_changed: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cleanup_pending: bool,
 }
 impl OperationStatus {
     fn unknown(id: &str, digest: &str) -> Self {
@@ -137,11 +159,17 @@ impl OperationStatus {
             status: OperationState::OutcomeUnknown,
             code: "LOCAL_OUTCOME_UNKNOWN".into(),
             may_have_changed: true,
+            cleanup_pending: false,
         }
     }
     fn valid(&self, id: &str, digest: &str) -> bool {
         if self.proposal_id != id || self.digest != digest {
             return false;
+        }
+        if self.cleanup_pending {
+            return self.status == OperationState::OutcomeUnknown
+                && self.code == "LOCAL_CLEANUP_UNCONFIRMED"
+                && self.may_have_changed;
         }
         match self.status {
             OperationState::Running => self.code.is_empty() && !self.may_have_changed,
@@ -151,15 +179,26 @@ impl OperationStatus {
             }
             OperationState::Cancelled => {
                 self.code == "LOCAL_OPERATION_CANCELLED" && !self.may_have_changed
+                    || self.code == "LOCAL_COMMAND_CANCELLED" && self.may_have_changed
             }
             OperationState::OutcomeUnknown => {
                 self.code == "LOCAL_OUTCOME_UNKNOWN" && self.may_have_changed
+            }
+            OperationState::Failed => {
+                self.code == "LOCAL_COMMAND_EXIT_NONZERO" && self.may_have_changed
+            }
+            OperationState::TimedOut => {
+                self.code == "LOCAL_COMMAND_TIMEOUT" && self.may_have_changed
+            }
+            OperationState::OutputLimited => {
+                self.code == "LOCAL_COMMAND_OUTPUT_LIMIT" && self.may_have_changed
             }
             OperationState::Denied => {
                 !self.may_have_changed
                     && matches!(
                         self.code.as_str(),
-                        "LOCAL_GRANT_DENIED"
+                        "LOCAL_SANDBOX_REQUIRED"
+                            | "LOCAL_GRANT_DENIED"
                             | "LOCAL_WRITE_GRANT_REQUIRED"
                             | "LOCAL_WORKSPACE_BLOCKED"
                             | "LOCAL_REVIEW_DENIED"
@@ -178,19 +217,34 @@ impl OperationStatus {
         )
     }
 }
+#[derive(Clone)]
+struct CommandScope {
+    authority: Authority,
+    grant_id: String,
+}
 pub(crate) struct MutationBook {
     slot: Arc<Semaphore>,
     results: Mutex<HashMap<String, OperationStatus>>,
+    commands: Mutex<HashMap<String, CommandScope>>,
 }
 impl Default for MutationBook {
     fn default() -> Self {
         Self {
             slot: Arc::new(Semaphore::new(1)),
             results: Mutex::new(HashMap::new()),
+            commands: Mutex::new(HashMap::new()),
         }
     }
 }
 impl MutationBook {
+    fn command(&self, id: &str) -> Result<Option<CommandScope>, HostError> {
+        Ok(self
+            .commands
+            .lock()
+            .map_err(|_| HostError::StateUnavailable)?
+            .get(id)
+            .cloned())
+    }
     fn update(&self, status: OperationStatus) -> Result<OperationStatus, HostError> {
         let mut results = self
             .results
@@ -208,7 +262,8 @@ impl MutationBook {
 fn definite_denial(error: HostError) -> bool {
     matches!(
         error,
-        HostError::GrantDenied
+        HostError::SandboxRequired
+            | HostError::GrantDenied
             | HostError::WriteGrantRequired
             | HostError::WorkspaceBlocked
             | HostError::ReviewDenied
@@ -247,6 +302,20 @@ impl RpcSession {
             let scope = self.review_scope(&grants, candidate.grant_id())?;
             book.consume(id, &scope, candidate)?
         };
+        let command = approved.command;
+        if command {
+            self.mutations
+                .commands
+                .lock()
+                .map_err(|_| HostError::StateUnavailable)?
+                .insert(
+                    id.into(),
+                    CommandScope {
+                        authority: approved.authority.clone(),
+                        grant_id: approved.grant_id.clone(),
+                    },
+                );
+        }
         let unknown = OperationStatus::unknown(approved.proposal_id(), approved.digest());
         self.mutations.update(unknown.clone())?;
         let session = self.clone();
@@ -259,7 +328,11 @@ impl RpcSession {
             // This is the only dispatch. Everything below reconciles this ID.
             let response = session
                 .request_authority(
-                    "native_dispatch_mutation",
+                    if command {
+                        "native_dispatch_command"
+                    } else {
+                        "native_dispatch_mutation"
+                    },
                     serde_json::json!({"proposal_id":id,"digest":digest}),
                     Some(&approved.authority),
                 )
@@ -283,12 +356,20 @@ impl RpcSession {
                     }
                     .into(),
                     may_have_changed: false,
+                    cleanup_pending: false,
                 },
                 _ => unknown.clone(),
             };
+            if initial.cleanup_pending {
+                session
+                    .workspace_blocked
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
             let initial = session.mutations.update(initial).unwrap_or(unknown);
             let done = initial.observed_terminal()
-                || observed && initial.status == OperationState::OutcomeUnknown;
+                || observed
+                    && initial.status == OperationState::OutcomeUnknown
+                    && !initial.cleanup_pending;
             let _ = send.send(initial);
             if done {
                 return;
@@ -301,7 +382,11 @@ impl RpcSession {
                 tokio::select! {_=closed.changed()=>break,_=tokio::time::sleep(Duration::from_millis(100))=>{}}
                 let response = session
                     .request_authority(
-                        "native_mutation_status",
+                        if command {
+                            "native_command_status"
+                        } else {
+                            "native_mutation_status"
+                        },
                         serde_json::json!({"proposal_id":id}),
                         Some(&approved.authority),
                     )
@@ -309,7 +394,13 @@ impl RpcSession {
                 if let Ok(value) = response {
                     if let Ok(status) = serde_json::from_value::<OperationStatus>(value) {
                         if status.valid(id, digest) {
-                            let done = status.status != OperationState::Running;
+                            let done =
+                                status.status != OperationState::Running && !status.cleanup_pending;
+                            if status.cleanup_pending {
+                                session
+                                    .workspace_blocked
+                                    .store(true, std::sync::atomic::Ordering::Release);
+                            }
                             let _ = session.mutations.update(status);
                             if done {
                                 break;
@@ -322,7 +413,9 @@ impl RpcSession {
         receive.await.map_err(|_| HostError::OutcomeUnknown)
     }
     pub async fn operation_status(&self, id: &str) -> Result<OperationStatus, HostError> {
-        self.ensure_workspace()?;
+        if *self.closed.borrow() || self.authority.get().is_none() {
+            return Err(HostError::Closed);
+        }
         self.mutations
             .results
             .lock()
@@ -332,7 +425,6 @@ impl RpcSession {
             .ok_or(HostError::OperationUnavailable)
     }
     pub async fn cancel_operation(&self, id: &str) -> Result<OperationStatus, HostError> {
-        self.ensure_workspace()?;
         let known = self.operation_status(id).await?;
         if known.observed_terminal() {
             return Ok(known);
@@ -345,17 +437,56 @@ impl RpcSession {
             .with_grant_revision(grants.revision);
         let response = self
             .request_authority(
-                "native_cancel_mutation",
+                if self.mutations.command(id)?.is_some() {
+                    "native_cancel_command"
+                } else {
+                    "native_cancel_mutation"
+                },
                 serde_json::json!({"proposal_id":id}),
                 Some(&authority),
             )
             .await;
-        self.ensure_workspace()?;
+        if *self.closed.borrow() {
+            return Err(HostError::Closed);
+        }
         let next = response
             .ok()
             .and_then(|v| serde_json::from_value::<OperationStatus>(v).ok())
             .filter(|s| s.valid(id, &known.digest))
             .unwrap_or_else(|| OperationStatus::unknown(id, &known.digest));
         self.mutations.update(next)
+    }
+    pub async fn command_output(
+        &self,
+        id: &str,
+    ) -> Result<crate::command::CommandOutput, HostError> {
+        self.ensure_workspace()?;
+        let scope = self
+            .mutations
+            .command(id)?
+            .ok_or(HostError::OperationUnavailable)?;
+        let grants = self.grants.try_read().map_err(|_| HostError::Busy)?;
+        let authority = self
+            .authority
+            .get()
+            .ok_or(HostError::Closed)?
+            .with_grant_revision(grants.revision);
+        if authority != scope.authority || grants.review_grant(&scope.grant_id).is_none() {
+            return Err(HostError::GrantDenied);
+        }
+        let value = self
+            .request_authority(
+                "native_command_output",
+                serde_json::json!({"proposal_id":id}),
+                Some(&authority),
+            )
+            .await?;
+        self.ensure_workspace()?;
+        let result: crate::command::CommandOutput =
+            serde_json::from_value(value).map_err(|_| HostError::InvalidResponse)?;
+        if !result.valid() {
+            return Err(HostError::InvalidResponse);
+        };
+        Ok(result)
     }
 }

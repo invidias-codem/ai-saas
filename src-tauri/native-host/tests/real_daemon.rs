@@ -1,3 +1,4 @@
+use lattice_native_host::command::CommandInput;
 use lattice_native_host::mutation::{OperationState, OperationStatus};
 use lattice_native_host::review::{
     Decision, DisplayAcknowledgement, ProposalInput, ProposalState, ReviewDecision,
@@ -92,6 +93,179 @@ async fn observed(session: &RpcSession, id: &str) -> OperationStatus {
     })
     .await
     .expect("owned status reconciles")
+}
+
+#[tokio::test]
+async fn every_native_command_mode_refuses_launch_without_a_qualified_provider() {
+    let binary = binary().expect("command admission regression requires the CI daemon");
+    let dir = tempfile::tempdir().unwrap();
+    let selected = dir.path().join("project");
+    std::fs::create_dir(&selected).unwrap();
+    let (mut child, session) = native_session(binary, dir.path()).await;
+    let session = Arc::new(session);
+    let grant = session
+        .select_folder(&DirectoryPicker {
+            path: selected.clone(),
+            replace: false,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(grant.read_only);
+    let direct = if cfg!(windows) {
+        CommandInput::Direct {
+            executable: "cmd.exe".into(),
+            argv: vec![
+                "/d".into(),
+                "/s".into(),
+                "/c".into(),
+                "echo must-not-run>executed.txt".into(),
+            ],
+        }
+    } else {
+        CommandInput::Direct {
+            executable: "sh".into(),
+            argv: vec!["-c".into(), "printf must-not-run > executed.txt".into()],
+        }
+    };
+    let commands = [
+        direct,
+        CommandInput::Cmd {
+            script: "echo must-not-run>executed.txt".into(),
+        },
+        CommandInput::Powershell {
+            script: "[IO.File]::WriteAllText('executed.txt','must-not-run')".into(),
+        },
+        CommandInput::Pwsh {
+            script: "[IO.File]::WriteAllText('executed.txt','must-not-run')".into(),
+        },
+        CommandInput::Sh {
+            script: "printf must-not-run > executed.txt".into(),
+        },
+    ];
+    for command in commands {
+        let op = ProposalInput::ExecuteCommand {
+            grant_id: grant.grant_id.clone(),
+            relative_path: ".".into(),
+            command: command.clone(),
+            timeout_seconds: Some(999),
+        };
+        let proposed = session.propose_operation(op).await;
+        let supported = cfg!(windows) && !matches!(command, CommandInput::Sh { .. })
+            || cfg!(target_os = "linux")
+                && matches!(
+                    command,
+                    CommandInput::Direct { .. } | CommandInput::Sh { .. }
+                );
+        let p = match proposed {
+            Ok(p) => {
+                assert!(supported);
+                p
+            }
+            Err(HostError::ShellUnavailable) => {
+                assert!(!supported || matches!(command, CommandInput::Pwsh { .. }));
+                assert!(!selected.join("executed.txt").exists());
+                continue;
+            }
+            Err(e) => panic!("unexpected command preparation: {e}"),
+        };
+        let lease = session.begin_review(&p.proposal_id).await.unwrap();
+        let doc = session.review_document(&lease).await.unwrap();
+        let scope: serde_json::Value =
+            serde_json::from_str(&doc.precondition_details_json).unwrap();
+        assert_eq!(scope["provider"]["id"], "unavailable");
+        assert_eq!(scope["timeout_ms"], 120000);
+        assert_eq!(scope["output_limit"], 10240);
+        assert_eq!(scope["requires_sandbox"], true);
+        assert!(!doc.execution_available);
+        session
+            .acknowledge_review(
+                &lease,
+                DisplayAcknowledgement {
+                    proposal_id: p.proposal_id.clone(),
+                    digest: p.digest.clone(),
+                },
+            )
+            .await
+            .unwrap();
+        session
+            .decide_review(
+                &lease,
+                ReviewDecision {
+                    proposal_id: p.proposal_id.clone(),
+                    digest: p.digest,
+                    decision: Decision::Accept,
+                },
+            )
+            .await
+            .unwrap();
+        let result = session.dispatch_operation(&p.proposal_id).await.unwrap();
+        assert_eq!(result.status, OperationState::Denied);
+        assert_eq!(result.code, "LOCAL_SANDBOX_REQUIRED");
+        assert!(!result.may_have_changed);
+        assert!(!result.cleanup_pending);
+        assert_eq!(
+            session.operation_status(&p.proposal_id).await.unwrap().code,
+            "LOCAL_SANDBOX_REQUIRED"
+        );
+        assert!(session.dispatch_operation(&p.proposal_id).await.is_err());
+        assert!(matches!(
+            session.command_output(&p.proposal_id).await,
+            Err(HostError::OperationUnavailable)
+        ));
+        assert!(!selected.join("executed.txt").exists());
+    }
+    assert!(session.workspace_grants().await.unwrap()[0].read_only);
+    session.shutdown().await.unwrap();
+    assert!(child.wait().await.unwrap().success());
+}
+
+#[tokio::test]
+async fn native_command_cancellation_releases_preparations_without_any_launch() {
+    let binary = binary().expect("command admission regression requires the CI daemon");
+    let dir = tempfile::tempdir().unwrap();
+    let selected = dir.path().join("project");
+    std::fs::create_dir(&selected).unwrap();
+    let (mut child, session) = native_session(binary, dir.path()).await;
+    let grant = session
+        .select_folder(&DirectoryPicker {
+            path: selected,
+            replace: false,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    for _ in 0..40 {
+        let command = if cfg!(windows) {
+            CommandInput::Cmd {
+                script: "echo no-launch".into(),
+            }
+        } else {
+            CommandInput::Sh {
+                script: "printf no-launch".into(),
+            }
+        };
+        let p = session
+            .propose_operation(ProposalInput::ExecuteCommand {
+                grant_id: grant.grant_id.clone(),
+                relative_path: ".".into(),
+                command,
+                timeout_seconds: None,
+            })
+            .await
+            .unwrap();
+        session.cancel_proposal(&p.proposal_id).await.unwrap();
+        assert_eq!(
+            session
+                .proposal_status(&p.proposal_id)
+                .await
+                .unwrap()
+                .status,
+            ProposalState::Denied
+        );
+    }
+    session.shutdown().await.unwrap();
+    assert!(child.wait().await.unwrap().success());
 }
 
 #[tokio::test]

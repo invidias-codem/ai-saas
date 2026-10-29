@@ -51,6 +51,18 @@ describe('Native workspace client', () => {
     }
     expect(invoke).not.toHaveBeenCalled();
   });
+  test('command proposals preserve literal argv and refuse caller execution policy', async () => {
+    const summary = { proposal_id: `local-proposal-${'c'.repeat(32)}`, digest: 'd'.repeat(64), status: 'pending', kind: 'execute_command', grant_id: grantId, relative_path: '.', execution_available: false };
+    const invoke = jest.fn().mockResolvedValue(summary); const client = createNativeWorkspaceClient(invoke);
+    const input = { kind: 'execute_command' as const, grant_id: grantId, relative_path: '.', command: { shell: 'direct' as const, executable: 'tool', argv: ['literal;not-shell', '', '资料'] }, timeout_seconds: 999 };
+    expect(await client.proposeOperation(input)).toEqual(summary);
+    expect(invoke.mock.calls).toEqual([['native_propose_operation', { input }]]); invoke.mockClear();
+    for (const command of [{ ...input.command, env: {} }, { ...input.command, provider: 'claimed' }, { ...input.command, requires_sandbox: false }, { shell: 'sh', script: 'x'.repeat(65537) }, { shell: 'direct', executable: '/bin/sh', argv: [] }]) {
+      await expect(client.proposeOperation({ ...input, command } as never)).rejects.toMatchObject({ code: 'LOCAL_INPUT_INVALID' });
+    }
+    expect(invoke).not.toHaveBeenCalled();
+    expect(Object.keys(client)).not.toContain('dispatchOperation');
+  });
   test('requires the desktop runtime without a network fallback', async () => {
     await expect(nativeWorkspace.grants()).rejects.toMatchObject({ code: 'LOCAL_DESKTOP_REQUIRED' });
   });

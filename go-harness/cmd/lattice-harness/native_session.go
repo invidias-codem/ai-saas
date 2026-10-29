@@ -84,6 +84,57 @@ func nativeDispatch(w http.ResponseWriter, ctx context.Context, req nativeFrame,
 		} else {
 			result = nativeData(data)
 		}
+	case "native_prepare_command":
+		var input nativeprotocol.PrepareMutationRequest
+		if nativeprotocol.Decode(req.Inputs, &input) != nil {
+			sendErrorResponse(w, req.ID, -32602, "Invalid native command inputs")
+			return
+		}
+		if data, code := session.Native.PrepareCommand(req.Authority, input); code != "" {
+			result = nativeFailure(code)
+		} else {
+			result = nativeData(data)
+		}
+	case "native_dispatch_command":
+		var input nativeprotocol.DispatchMutationRequest
+		if nativeprotocol.Decode(req.Inputs, &input) != nil {
+			sendErrorResponse(w, req.ID, -32602, "Invalid native command dispatch")
+			return
+		}
+		if data, code := session.Native.DispatchCommand(req.Authority, input); code != "" {
+			result = nativeFailure(code)
+		} else {
+			result = nativeData(data)
+		}
+	case "native_command_status", "native_cancel_command":
+		var input nativeprotocol.OperationReference
+		if nativeprotocol.Decode(req.Inputs, &input) != nil {
+			sendErrorResponse(w, req.ID, -32602, "Invalid native command reference")
+			return
+		}
+		var data nativeprotocol.OperationStatus
+		var code string
+		if req.Action == "native_command_status" {
+			data, code = session.Native.CommandStatus(req.Authority, input)
+		} else {
+			data, code = session.Native.CancelCommand(req.Authority, input)
+		}
+		if code != "" {
+			result = nativeFailure(code)
+		} else {
+			result = nativeData(data)
+		}
+	case "native_command_output":
+		var input nativeprotocol.OperationReference
+		if nativeprotocol.Decode(req.Inputs, &input) != nil {
+			sendErrorResponse(w, req.ID, -32602, "Invalid native output reference")
+			return
+		}
+		if data, code := session.Native.CommandOutput(req.Authority, input); code != "" {
+			result = nativeFailure(code)
+		} else {
+			result = nativeData(data)
+		}
 	case "native_prepare_mutation":
 		var input nativeprotocol.PrepareMutationRequest
 		if nativeprotocol.Decode(req.Inputs, &input) != nil {

@@ -1,0 +1,364 @@
+[
+  {
+    "material": {
+      "proposal_id": "local-proposal-00000000000000000000000000000001",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 3
+      },
+      "display_root": "/selected/project",
+      "read_only": true,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "execute_command",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": ".",
+        "command": {
+          "shell": "direct",
+          "executable": "tool",
+          "argv": [
+            "literal;not-shell",
+            "",
+            "资料"
+          ]
+        },
+        "timeout_seconds": 30
+      },
+      "command_precondition": {
+        "platform": "linux",
+        "shell": "direct",
+        "cwd_identity": {
+          "volume": "000000000000001a",
+          "file": "000000000000002b"
+        },
+        "executable": {
+          "path": "/usr/bin/tool",
+          "identity": {
+            "volume": "000000000000001a",
+            "file": "000000000000003c"
+          },
+          "content_sha3": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "byte_count": 4096
+        },
+        "argv": [
+          "literal;not-shell",
+          "",
+          "资料"
+        ],
+        "timeout_ms": 30000,
+        "output_limit": 10240,
+        "environment_policy": "native-clean-v1",
+        "requirements": "native-local-sandbox-v1",
+        "provider": {
+          "id": "unavailable",
+          "revision": 0,
+          "qualification": ""
+        },
+        "requires_sandbox": true
+      }
+    },
+    "digest": "6b2e8b301c42e471492f01f4fb5f2618d0c022b4533ffdbe09c598658fa71423"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-00000000000000000000000000000002",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 3
+      },
+      "display_root": "/selected/project",
+      "read_only": true,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "execute_command",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": ".",
+        "command": {
+          "shell": "sh",
+          "script": "literal 'quoted'\n资料‮😀"
+        },
+        "timeout_seconds": 30
+      },
+      "command_precondition": {
+        "platform": "linux",
+        "shell": "sh",
+        "cwd_identity": {
+          "volume": "000000000000001a",
+          "file": "000000000000002b"
+        },
+        "executable": {
+          "path": "/usr/bin/tool",
+          "identity": {
+            "volume": "000000000000001a",
+            "file": "000000000000003c"
+          },
+          "content_sha3": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "byte_count": 4096
+        },
+        "argv": [
+          "-c",
+          "literal 'quoted'\n资料‮😀"
+        ],
+        "timeout_ms": 30000,
+        "output_limit": 10240,
+        "environment_policy": "native-clean-v1",
+        "requirements": "native-local-sandbox-v1",
+        "provider": {
+          "id": "unavailable",
+          "revision": 0,
+          "qualification": ""
+        },
+        "requires_sandbox": true
+      }
+    },
+    "digest": "c123dc15eeab38f5196017e32ce67e3d9d1a45b88e423092510b37676ea902ee"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-00000000000000000000000000000003",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 3
+      },
+      "display_root": "/selected/project",
+      "read_only": true,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "execute_command",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": ".",
+        "command": {
+          "shell": "direct",
+          "executable": "tool.exe",
+          "argv": [
+            "literal;not-shell",
+            "",
+            "资料"
+          ]
+        },
+        "timeout_seconds": 30
+      },
+      "command_precondition": {
+        "platform": "windows",
+        "shell": "direct",
+        "cwd_identity": {
+          "volume": "000000000000001a",
+          "file": "0123456789abcdef0123456789abcdef"
+        },
+        "executable": {
+          "path": "C:\\Windows\\tool.exe",
+          "identity": {
+            "volume": "000000000000001a",
+            "file": "fedcba9876543210fedcba9876543210"
+          },
+          "content_sha3": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "byte_count": 4096
+        },
+        "argv": [
+          "literal;not-shell",
+          "",
+          "资料"
+        ],
+        "timeout_ms": 30000,
+        "output_limit": 10240,
+        "environment_policy": "native-clean-v1",
+        "requirements": "native-local-sandbox-v1",
+        "provider": {
+          "id": "unavailable",
+          "revision": 0,
+          "qualification": ""
+        },
+        "requires_sandbox": true
+      }
+    },
+    "digest": "a1b74c3d43cf239f141a47cd6c014610205e90c66d9fe0e9b513e11c1a2ad8f0"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-00000000000000000000000000000004",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 3
+      },
+      "display_root": "/selected/project",
+      "read_only": true,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "execute_command",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": ".",
+        "command": {
+          "shell": "cmd",
+          "script": "literal 'quoted'\n资料‮😀"
+        },
+        "timeout_seconds": 30
+      },
+      "command_precondition": {
+        "platform": "windows",
+        "shell": "cmd",
+        "cwd_identity": {
+          "volume": "000000000000001a",
+          "file": "0123456789abcdef0123456789abcdef"
+        },
+        "executable": {
+          "path": "C:\\Windows\\tool.exe",
+          "identity": {
+            "volume": "000000000000001a",
+            "file": "fedcba9876543210fedcba9876543210"
+          },
+          "content_sha3": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "byte_count": 4096
+        },
+        "argv": [
+          "/d",
+          "/s",
+          "/c",
+          "literal 'quoted'\n资料‮😀"
+        ],
+        "timeout_ms": 30000,
+        "output_limit": 10240,
+        "environment_policy": "native-clean-v1",
+        "requirements": "native-local-sandbox-v1",
+        "provider": {
+          "id": "unavailable",
+          "revision": 0,
+          "qualification": ""
+        },
+        "requires_sandbox": true
+      }
+    },
+    "digest": "377905d7ad434f3a3bdb8efddc287bdb8bb376e422ef49ba810455a572cc1ad0"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-00000000000000000000000000000005",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 3
+      },
+      "display_root": "/selected/project",
+      "read_only": true,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "execute_command",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": ".",
+        "command": {
+          "shell": "powershell",
+          "script": "literal 'quoted'\n资料‮😀"
+        },
+        "timeout_seconds": 30
+      },
+      "command_precondition": {
+        "platform": "windows",
+        "shell": "powershell",
+        "cwd_identity": {
+          "volume": "000000000000001a",
+          "file": "0123456789abcdef0123456789abcdef"
+        },
+        "executable": {
+          "path": "C:\\Windows\\tool.exe",
+          "identity": {
+            "volume": "000000000000001a",
+            "file": "fedcba9876543210fedcba9876543210"
+          },
+          "content_sha3": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "byte_count": 4096
+        },
+        "argv": [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-EncodedCommand",
+          "bABpAHQAZQByAGEAbAAgACcAcQB1AG8AdABlAGQAJwAKAESNmWUuID3YAN4="
+        ],
+        "timeout_ms": 30000,
+        "output_limit": 10240,
+        "environment_policy": "native-clean-v1",
+        "requirements": "native-local-sandbox-v1",
+        "provider": {
+          "id": "unavailable",
+          "revision": 0,
+          "qualification": ""
+        },
+        "requires_sandbox": true
+      }
+    },
+    "digest": "add01b53e3cccf2cc0a13edd2859f2bb6ebc9f10ea46283dbc93003cde1685c9"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-00000000000000000000000000000006",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 3
+      },
+      "display_root": "/selected/project",
+      "read_only": true,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "execute_command",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": ".",
+        "command": {
+          "shell": "pwsh",
+          "script": "literal 'quoted'\n资料‮😀"
+        },
+        "timeout_seconds": 120
+      },
+      "command_precondition": {
+        "platform": "windows",
+        "shell": "pwsh",
+        "cwd_identity": {
+          "volume": "000000000000001a",
+          "file": "0123456789abcdef0123456789abcdef"
+        },
+        "executable": {
+          "path": "C:\\Windows\\tool.exe",
+          "identity": {
+            "volume": "000000000000001a",
+            "file": "fedcba9876543210fedcba9876543210"
+          },
+          "content_sha3": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "byte_count": 4096
+        },
+        "argv": [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-EncodedCommand",
+          "bABpAHQAZQByAGEAbAAgACcAcQB1AG8AdABlAGQAJwAKAESNmWUuID3YAN4="
+        ],
+        "timeout_ms": 120000,
+        "output_limit": 10240,
+        "environment_policy": "native-clean-v1",
+        "requirements": "native-local-sandbox-v1",
+        "provider": {
+          "id": "test-provider",
+          "revision": 2,
+          "qualification": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        },
+        "requires_sandbox": true
+      }
+    },
+    "digest": "a8c19259a08ff17abbf0418d849c57224cb5618ad4a8aef7cbb7ba08059a4fca"
+  }
+]

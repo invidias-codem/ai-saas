@@ -86,6 +86,14 @@ impl Default for NativeHost {
 }
 
 impl NativeHost {
+    pub async fn command_output(
+        self: &Arc<Self>,
+        id: &str,
+    ) -> Result<crate::command::CommandOutput, HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.command_output(id).await;
+        self.workspace_result(g, &s, r)
+    }
     pub async fn request_write_access<C: crate::workspace::WriteConsent + 'static>(
         self: &Arc<Self>,
         id: String,

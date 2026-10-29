@@ -96,3 +96,48 @@ test('incomplete base bytes cancel without acknowledging display',async()=>{
     assert.equal(await page.locator('#accept').isDisabled(),true);
   });
 });
+
+const commandRecord = (script, direct = false) => {
+  const args = direct ? ['literal;not-shell', '', '资料'] : ['-c', script];
+  const record = makeRecord(direct ? JSON.stringify(args) : script);
+  return { ...record, kind: 'execute_command', relative_path_json: JSON.stringify('.'), precondition: 'matches_command_scope', precondition_details_json: JSON.stringify({ platform: 'linux', shell: direct ? 'direct' : 'sh', cwd_identity: { volume: '000000000000001a', file: '000000000000002b' }, executable: { path: '/usr/bin/tool', identity: { volume: '000000000000001a', file: '000000000000003c' }, content_sha3: 'd'.repeat(64), byte_count: 4096 }, argv: args, timeout_ms: 30000, output_limit: 10240, environment_policy: 'native-clean-v1', requirements: 'native-local-sandbox-v1', provider: { id: 'unavailable', revision: 0, qualification: '' }, requires_sandbox: true }) };
+};
+
+test('command review displays literal script and exact sandbox scope without dispatch authority', async () => {
+  const script = '<img src=x onerror=execute()> literal; data';
+  await fixture(commandRecord(script), async page => {
+    await page.waitForFunction(() => globalThis.calls.some(c => c.command === 'native_review_ready'));
+    assert.equal(await page.locator('#content-json').textContent(), JSON.stringify(script));
+    assert.equal(await page.locator('img').count(), 0);
+    assert.match(await page.locator('#precondition-details').textContent(), /native-clean-v1/);
+    await page.locator('#confirmed').check(); await page.locator('#accept').click();
+    await page.waitForFunction(() => globalThis.calls.some(c => c.command === 'native_review_decide'));
+    assert.equal(await page.evaluate(() => globalThis.calls.some(c => /dispatch|execute/.test(c.command))), false);
+  });
+});
+
+test('direct command review preserves structured argument boundaries', async () => {
+  const record = commandRecord('', true);
+  await fixture(record, async page => {
+    await page.waitForFunction(() => globalThis.calls.some(c => c.command === 'native_review_ready'));
+    const shown = JSON.parse(await page.locator('#content-json').textContent());
+    assert.deepEqual(JSON.parse(shown), ['literal;not-shell', '', '资料']);
+    assert.match(await page.locator('#content-note').textContent(), /Structured argv/);
+  });
+});
+
+for (const fault of ['requires_sandbox', 'timeout_ms', 'environment_policy', 'executable']) {
+  test(`changed command ${fault} refuses acknowledgement`, async () => {
+    const record = commandRecord('printf data'); const scope = JSON.parse(record.precondition_details_json);
+    if (fault === 'requires_sandbox') scope.requires_sandbox = false;
+    if (fault === 'timeout_ms') scope.timeout_ms = 120001;
+    if (fault === 'environment_policy') scope.environment_policy = 'inherit-host';
+    if (fault === 'executable') scope.executable.identity.file = 'invalid';
+    record.precondition_details_json = JSON.stringify(scope);
+    await fixture(record, async page => {
+      await page.waitForFunction(() => globalThis.calls.some(c => c.command === 'native_review_cancel'));
+      assert.equal(await page.evaluate(() => globalThis.calls.some(c => c.command === 'native_review_ready')), false);
+      assert.equal(await page.locator('#accept').isDisabled(), true);
+    });
+  });
+}

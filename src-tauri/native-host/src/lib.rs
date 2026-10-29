@@ -2,6 +2,7 @@
 //! Only typed local status and scoped read data cross IPC; credentials never do.
 
 mod authority;
+pub mod command;
 pub mod lifecycle;
 pub mod mutation;
 pub mod review;
@@ -87,6 +88,9 @@ pub enum HostError {
     OperationUnavailable,
     OperationReplayed,
     OutcomeUnknown,
+    SandboxRequired,
+    CommandInvalid,
+    ShellUnavailable,
 }
 
 impl HostError {
@@ -128,6 +132,9 @@ impl HostError {
             Self::OperationUnavailable => "LOCAL_OPERATION_UNAVAILABLE",
             Self::OperationReplayed => "LOCAL_OPERATION_REPLAYED",
             Self::OutcomeUnknown => "LOCAL_OUTCOME_UNKNOWN",
+            Self::SandboxRequired => "LOCAL_SANDBOX_REQUIRED",
+            Self::CommandInvalid => "LOCAL_COMMAND_INVALID",
+            Self::ShellUnavailable => "LOCAL_SHELL_UNAVAILABLE",
         }
     }
     pub fn message(self) -> &'static str {
@@ -153,6 +160,9 @@ impl HostError {
             Self::OperationUnavailable => "This operation is unavailable in the current local session.",
             Self::OperationReplayed => "This operation has already been attempted. Check its existing status.",
             Self::OutcomeUnknown => "The outcome could not be confirmed. Check the existing operation without retrying it.",
+            Self::SandboxRequired => "A qualified execution sandbox is required. This command was not launched.",
+            Self::CommandInvalid => "This command proposal is invalid or exceeds its limits.",
+            Self::ShellUnavailable => "The selected executable or shell is unavailable. Choose an installed supported executable.",
             Self::StorageUnavailable => {
                 "Local storage is unavailable. Check your device's storage permissions."
             }
@@ -532,6 +542,9 @@ impl RpcSession {
                 Some("LOCAL_PROPOSAL_INVALID") => HostError::ProposalInvalid,
                 Some("LOCAL_PROPOSAL_CAPACITY") => HostError::ProposalCapacity,
                 Some("LOCAL_OPERATION_BUSY") => HostError::Busy,
+                Some("LOCAL_SANDBOX_REQUIRED") => HostError::SandboxRequired,
+                Some("LOCAL_COMMAND_INVALID") => HostError::CommandInvalid,
+                Some("LOCAL_SHELL_UNAVAILABLE") => HostError::ShellUnavailable,
                 _ => HostError::RpcRejected,
             });
         }

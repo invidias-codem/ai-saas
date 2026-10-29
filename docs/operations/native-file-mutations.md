@@ -70,3 +70,5 @@ Use `.github/workflows/native-host.yml`, `windows-command-harness.yml` and `buil
 New regressions cover separate consent/revision invalidation, successful create/directory/overwrite, external-content and same-content replacement conflicts, hard links, symlink/junction parents, nested read-only roots, replaced parents, root/missing-parent refusal, complete before/after display, stale/malformed/authenticated endpoint admission, concurrent one-use dispatch, capacity/replay retention, revocation/cancellation ownership and observed partial unknowns. The real-daemon lost-response proxy drops a dispatch response after Go admission and abandons the initiating Rust caller, then requires one actual write and status reconciliation with exactly one dispatch.
 
 Full native UI and clean-machine installer qualification remain outstanding. Passing headless, MockRuntime or Chromium tests must not enable file-changing UI or activate downloads.
+
+S2c.5 adds [typed command admission](native-command-admission.md) sharing the same attempt/preparation limits and one dispatch slot. Production commands are denied without a qualified sandbox; file-changing UI remains gated on S2c.6.
