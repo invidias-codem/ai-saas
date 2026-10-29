@@ -1,18 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "enables the default permissions",
-  "windows": [
+  "description": "Local main webview lifecycle control and event subscriptions only",
+  "webviews": [
     "main"
   ],
   "permissions": [
-    "core:default",
-    "stronghold:allow-initialize",
-    "stronghold:allow-load-client",
-    "stronghold:allow-create-client",
-    "stronghold:allow-save",
-    "stronghold:allow-save-store-record",
-    "stronghold:allow-get-store-record",
-    "stronghold:allow-remove-store-record"
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "native-host-control"
   ]
 }

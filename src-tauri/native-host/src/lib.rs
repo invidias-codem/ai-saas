@@ -1,13 +1,17 @@
 //! Native-only startup/authentication protocol, independent of a webview runtime.
 //! Only typed heartbeat data crosses the IPC boundary; credentials never do.
 
+mod authority;
 pub mod lifecycle;
+
+use authority::{Authority, Binding, Protocol};
 
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     sync::atomic::{AtomicU64, Ordering},
     sync::Arc,
+    sync::OnceLock,
     time::Duration,
 };
 use tokio::sync::{watch, Semaphore};
@@ -58,6 +62,7 @@ pub enum HostError {
     StorageUnavailable,
     StateUnavailable,
     CleanupUncertain,
+    ProtocolIncompatible,
 }
 
 impl HostError {
@@ -79,6 +84,7 @@ impl HostError {
             Self::StorageUnavailable => "LOCAL_STORAGE_UNAVAILABLE",
             Self::StateUnavailable => "LOCAL_STATE_UNAVAILABLE",
             Self::CleanupUncertain => "LOCAL_CLEANUP_UNCONFIRMED",
+            Self::ProtocolIncompatible => "LOCAL_PROTOCOL_INCOMPATIBLE",
         }
     }
     pub fn message(self) -> &'static str {
@@ -88,6 +94,7 @@ impl HostError {
             Self::StorageUnavailable => {
                 "Local storage is unavailable. Check your device's storage permissions."
             }
+            Self::ProtocolIncompatible => "The local service protocol is incompatible. Reinstall a matching desktop build.",
             Self::CleanupUncertain => "Local task cleanup could not be confirmed. Close Lattice OS and check running tasks before reopening.",
             _ => "The local service could not connect securely. Try restarting the local service.",
         }
@@ -206,6 +213,8 @@ struct StatusRequest<'a> {
     auth_token: &'a str,
     action: &'static str,
     inputs: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    authority: Option<&'a Authority>,
 }
 
 #[derive(Deserialize)]
@@ -237,6 +246,8 @@ pub struct RpcSession {
     closed: watch::Sender<bool>,
     permits: Semaphore,
     shutdown_sent: std::sync::atomic::AtomicBool,
+    authority: OnceLock<Authority>,
+    enrollment: tokio::sync::Mutex<()>,
 }
 
 impl RpcSession {
@@ -260,10 +271,48 @@ impl RpcSession {
             closed,
             permits: Semaphore::new(4),
             shutdown_sent: std::sync::atomic::AtomicBool::new(false),
+            authority: OnceLock::new(),
+            enrollment: tokio::sync::Mutex::new(()),
         })
     }
     pub fn close(&self) {
         self.closed.send_replace(true);
+    }
+    /// Trusted native startup only. There is no caller-supplied identity and
+    /// no matching Tauri command. An ambiguous/failed bind closes this session.
+    pub async fn bind_native(&self) -> Result<(), HostError> {
+        let _enrollment = self.enrollment.try_lock().map_err(|_| HostError::Busy)?;
+        let mut cancellation = self.closed.subscribe();
+        if *cancellation.borrow() || self.authority.get().is_some() {
+            return Err(HostError::Closed);
+        }
+        let result = tokio::select! {
+            _ = cancellation.changed() => Err(HostError::Closed),
+            result = self.bind_native_inner() => result,
+        };
+        if result.is_err() {
+            self.close();
+        }
+        result
+    }
+    async fn bind_native_inner(&self) -> Result<(), HostError> {
+        let protocol: Protocol = serde_json::from_value(self.request("native_protocol").await?)
+            .map_err(|_| HostError::ProtocolIncompatible)?;
+        if !protocol.compatible() {
+            return Err(HostError::ProtocolIncompatible);
+        }
+        let authority = Authority::generate()?;
+        let expected = Binding::new(authority.clone());
+        let inputs = serde_json::to_value(&expected).map_err(|_| HostError::InvalidResponse)?;
+        let acknowledged: Binding =
+            serde_json::from_value(self.request_inputs("bind_native_session", inputs).await?)
+                .map_err(|_| HostError::InvalidResponse)?;
+        if acknowledged != expected {
+            return Err(HostError::InvalidResponse);
+        }
+        self.authority
+            .set(authority)
+            .map_err(|_| HostError::StateUnavailable)
     }
     pub async fn status(&self) -> Result<Status, HostError> {
         let mut cancellation = self.closed.subscribe();
@@ -308,6 +357,13 @@ impl RpcSession {
         Ok(Status { events })
     }
     async fn request(&self, action: &'static str) -> Result<serde_json::Value, HostError> {
+        self.request_inputs(action, serde_json::json!({})).await
+    }
+    async fn request_inputs(
+        &self,
+        action: &'static str,
+        inputs: serde_json::Value,
+    ) -> Result<serde_json::Value, HostError> {
         let id = format!(
             "native-status-{}",
             self.sequence.fetch_add(1, Ordering::Relaxed)
@@ -317,7 +373,8 @@ impl RpcSession {
             jsonrpc: "2.0",
             auth_token: self.credential.child_env_value(),
             action,
-            inputs: serde_json::json!({}),
+            inputs,
+            authority: self.authority.get(),
         };
         let mut response = self
             .client

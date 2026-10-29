@@ -34,6 +34,7 @@ struct Snapshot {
 }
 #[derive(Clone)]
 struct RealLauncher {
+    native: bool,
     binary: PathBuf,
     dir: PathBuf,
     launches: Arc<Mutex<Vec<Arc<Snapshot>>>>,
@@ -47,8 +48,12 @@ impl RealLauncher {
 }
 impl Launcher for RealLauncher {
     fn spawn(&self, credential: &LaunchCredential) -> Result<SpawnedProcess, HostError> {
-        let mut child = Command::new(&self.binary)
-            .args(["--parent-stdio"])
+        let mut command = Command::new(&self.binary);
+        command.arg("--parent-stdio");
+        if self.native {
+            command.arg("--native-host");
+        }
+        let mut child = command
             .env_clear()
             .envs(child_environment())
             .env("LATTICE_AUTH_TOKEN", credential.child_env_value())
@@ -132,6 +137,7 @@ fn fixture(dir: &Path) -> Option<(RealLauncher, PathBuf)> {
         .expect("build this revision's executil process helper");
     Some((
         RealLauncher {
+            native: true,
             binary: binary.into(),
             dir: dir.into(),
             launches: Arc::new(Mutex::new(Vec::new())),
@@ -155,6 +161,33 @@ async fn until(mut condition: impl FnMut() -> bool) {
     })
     .await
     .expect("bounded lifecycle observation");
+}
+
+// Command ownership remains tested through the explicitly standalone adapter.
+// The desktop's native allowlist must not be relaxed to start a test command.
+async fn standalone(launcher: &RealLauncher) -> (RealLauncher, SpawnedProcess) {
+    let mut launcher = launcher.clone();
+    launcher.native = false;
+    let process = launcher
+        .spawn(&LaunchCredential::generate().unwrap())
+        .unwrap();
+    until(|| launcher.latest().port.load(Ordering::Acquire) != 0).await;
+    (launcher, process)
+}
+
+async fn clean_standalone_exit(mut process: SpawnedProcess) {
+    tokio::time::timeout(Duration::from_secs(8), async {
+        while let Some(event) = process.events.recv().await {
+            if let ProcessEvent::Exited(clean) = event {
+                assert!(clean, "standalone cleanup was not confirmed");
+                process.control.release();
+                return;
+            }
+        }
+        panic!("missing standalone exit receipt");
+    })
+    .await
+    .unwrap();
 }
 async fn start_tree(
     launcher: &RealLauncher,
@@ -206,16 +239,20 @@ async fn repeated_restart_rotates_auth_and_never_overlaps_generations() {
 }
 
 #[tokio::test]
-async fn restart_joins_a_granted_command_tree_and_drops_its_grants() {
+async fn standalone_shutdown_joins_command_tree_before_native_launch() {
     let dir = tempfile::tempdir().unwrap();
     let Some((launcher, helper)) = fixture(dir.path()) else {
         return;
     };
     let workspace = dir.path().join("workspace");
-    let host = Arc::new(NativeHost::default());
-    host.start(launcher.clone()).await.unwrap();
-    let request = start_tree(&launcher, &helper, &workspace).await;
-    host.restart(launcher.clone()).await.unwrap();
+    let (standalone, process) = standalone(&launcher).await;
+    let request = start_tree(&standalone, &helper, &workspace).await;
+    let snapshot = standalone.latest();
+    let stopped = rpc(&snapshot, "shutdown", json!({}), &snapshot.token)
+        .await
+        .unwrap();
+    assert_eq!(stopped["result"]["ok"], true);
+    clean_standalone_exit(process).await;
     let _ = tokio::time::timeout(Duration::from_secs(2), request)
         .await
         .unwrap()
@@ -225,6 +262,8 @@ async fn restart_joins_a_granted_command_tree_and_drops_its_grants() {
         !workspace.join("escaped").exists(),
         "descendant outlived restart"
     );
+    let host = Arc::new(NativeHost::default());
+    host.start(launcher.clone()).await.unwrap();
     let snapshot = launcher.latest();
     let denied = rpc(
         &snapshot,
@@ -249,10 +288,9 @@ async fn parent_lifeline_loss_cancels_active_descendants() {
         return;
     };
     let workspace = dir.path().join("workspace");
-    let host = Arc::new(NativeHost::default());
-    host.start(launcher.clone()).await.unwrap();
-    let request = start_tree(&launcher, &helper, &workspace).await;
-    launcher
+    let (standalone, process) = standalone(&launcher).await;
+    let request = start_tree(&standalone, &helper, &workspace).await;
+    standalone
         .latest()
         .control
         .0
@@ -262,8 +300,7 @@ async fn parent_lifeline_loss_cancels_active_descendants() {
         .unwrap()
         .stdin
         .take();
-    until(|| launcher.active.load(Ordering::Acquire) == 0).await;
-    host.shutdown().await.unwrap();
+    clean_standalone_exit(process).await;
     let _ = request.await.unwrap();
     tokio::time::sleep(Duration::from_millis(1800)).await;
     assert!(
