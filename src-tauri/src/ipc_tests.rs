@@ -27,6 +27,7 @@ fn app_with_host(host: Arc<NativeHost>) -> tauri::App<MockRuntime> {
             workspace::native_select_folder,
             workspace::native_workspace_grants,
             workspace::native_revoke_grant,
+            workspace::native_request_write_access,
             workspace::native_list,
             workspace::native_stat,
             workspace::native_read_text,
@@ -37,7 +38,11 @@ fn app_with_host(host: Arc<NativeHost>) -> tauri::App<MockRuntime> {
             review::native_review_document,
             review::native_review_ready,
             review::native_review_decide,
-            review::native_review_cancel
+            review::native_review_cancel,
+            review::native_dispatch_operation,
+            review::native_operation_status,
+            review::native_cancel_operation,
+            review::native_command_output,
         ])
         .build(tauri::generate_context!())
         .unwrap()
