@@ -1,8 +1,8 @@
-# S2c.6: Native integration verification
+# S2c.6: Native integration verification — acceptance criteria
 
-This document records the verified end-to-end flows through the actual Tauri desktop UI on Windows and Linux.
+This document defines the acceptance criteria for S2c.6. These flows must be verified through the actual Tauri desktop UI on Windows and Linux before the slice is complete. Current CI validates Rust/Go unit tests, MockRuntime IPC, CSP headers (Playwright Chromium), and review renderer (Node.js DOM) — **not** the end-to-end WebView flows below.
 
-## Verified flows
+## Acceptance criteria
 
 ### 1. Folder selection and revocation
 
@@ -107,18 +107,22 @@ This document records the verified end-to-end flows through the actual Tauri des
 - No multi-device sync
 - No durable task recovery across restarts
 
-## Evidence locations
+## Current evidence (not WebView end-to-end)
 
 | Evidence | Path |
 |---|---|
-| Real daemon integration tests | `src-tauri/native-host/tests/real_daemon.rs` |
+| Real daemon integration tests (Rust IPC, not WebView) | `src-tauri/native-host/tests/real_daemon.rs` |
 | Real lifecycle tests | `src-tauri/native-host/tests/real_lifecycle.rs` |
-| Tauri lib IPC/permission tests | `src-tauri/src/ipc_tests.rs` |
-| CSP header tests | `scripts/native-host/csp.test.mjs` |
-| Review renderer tests | `scripts/native-host/review.test.mjs` |
+| Tauri lib IPC/permission tests (MockRuntime) | `src-tauri/src/ipc_tests.rs` |
+| CSP header tests (Playwright Chromium, not WebView) | `scripts/native-host/csp.test.mjs` |
+| Review renderer tests (Node.js DOM, not WebView) | `scripts/native-host/review.test.mjs` |
 | Go protocol fixtures | `testdata/native-*.json` |
 | Go daemon tests | `go-harness/internal/.../*_test.go` |
 | Windows unit test runner | `scripts/native-host/test-shell-windows.ps1` |
+
+## Missing: WebView smoke test (S2c.6 gate)
+
+A Tauri WebView test that launches the real app, opens the native folder picker, confirms read access, reads a file, proposes a mutation, opens the review window, accepts it, and verifies the file on disk — all through the actual `tauri::WebviewWindow` and IPC layer.
 
 ## CI verification commands
 

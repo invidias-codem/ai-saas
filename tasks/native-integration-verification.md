@@ -1,4 +1,4 @@
-# S2c.6: Native integration verification
+# S2c.6: Native integration verification — acceptance criteria defined, WebView smoke test pending
 
 Verify the complete S2c stack through actual native UI on Windows and Linux. This slice does not add new capabilities; it proves the existing S2c.1–S2c.5 flows compose correctly through the Tauri webview.
 
@@ -13,9 +13,9 @@ Prove the following user-visible flows work in the real desktop app:
 5. **Restart clears authority** — `restart_daemon` invalidates all grants, proposals and review leases; a fresh bind is required.
 6. **Commands fail closed** — Every supported command mode returns `LOCAL_SANDBOX_REQUIRED` without launching a process.
 
-## Acceptance evidence
+## Acceptance evidence (not yet met)
 
-| Platform | Evidence |
+| Platform | Required evidence |
 |---|---|
 | Linux | Full Tauri app launch with bundled review assets; real `go-harness` daemon; folder picker, read, mutation, restart and command-denial flows exercise the actual webview and IPC. |
 | Windows | Same flows on Windows with native file dialogs, PowerShell/cmd/sh availability checks, and the Common Controls v6 manifest for unit tests. |
@@ -40,17 +40,18 @@ Current CI validates:
 
 **Missing**: A Tauri WebView smoke test that launches the real app, opens the native folder picker, confirms read access, reads a file, proposes a mutation, opens the review window, accepts it, and verifies the file on disk — all through the actual `tauri::Window`/`WebviewWindow` and IPC layer. This is the S2c.6 gate.
 
-## Files to change
+## Files changed (integration wiring complete)
 
-1. `src-tauri/src/workspace.rs` — Ensure `write_consent` adapter is registered for the webview (currently gated behind S2c.6 comment)
-2. `src-tauri/src/lib.rs` — Register the write-consent capability if not already
-3. `src-tauri/native-host/src/workspace.rs` — Verify `WriteConsent` trait usage matches the Tauri adapter
-3. `docs/operations/native-integration-verification.md` — Document the verified flows and limitations
-4. `tasks/native-integration-verification.md` — This file
-5. `plan.md` — Update current slice
-6. Test additions: Native UI smoke test (Tauri WebView) — may require a new test binary or Playwright+Tauri integration
+1. `src-tauri/src/workspace.rs` — `native_request_write_access` command registered
+2. `src-tauri/src/review.rs` — `native_dispatch_operation`, `native_operation_status`, `native_cancel_operation`, `native_command_output` commands registered
+3. `src-tauri/src/lib.rs` — All 5 new commands registered in invoke handler
+4. `src-tauri/native-host/src/command.rs` — `CommandOutput` exported publicly
+5. `lib/harness/nativeWorkspace.ts` — Client methods + schemas added
+6. `src-tauri/src/ipc_tests.rs` — Tests updated for new command permissions
+7. `docs/operations/native-integration-verification.md` — Acceptance criteria documented
+8. `plan.md` — S2c.6 as current slice
 
-## Bounded acceptance cases (will be tested)
+## Bounded acceptance cases (will be tested via WebView smoke test)
 
 - Folder selection → confirmation → grant recorded → revocation clears grant
 - Read text/list/stat on granted folder → exact content/metadata

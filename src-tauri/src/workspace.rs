@@ -185,7 +185,7 @@ pub(crate) async fn native_request_write_access<R: tauri::Runtime>(
 ) -> Result<GrantInfo, NativeIpcError> {
     require_workspace_window(&window)?;
     state
-        .request_write_access(NativeFolderPicker { window }, input.grant_id)
+        .request_write_access(input.grant_id, NativeFolderPicker { window })
         .await
         .map_err(Into::into)
 }

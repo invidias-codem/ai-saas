@@ -4,7 +4,7 @@ use crate::workspace::NativeIpcError;
 use lattice_native_host::{
     command::CommandOutput,
     lifecycle::NativeHost,
-    mutation::{OperationState, OperationStatus},
+    mutation::OperationStatus,
     review::{
         DisplayAcknowledgement, ProposalInput, ProposalReference, ProposalState, ProposalSummary,
         ReviewDecision, ReviewDocument, ReviewLease,
