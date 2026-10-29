@@ -238,7 +238,7 @@ func main() {
 		Work:      work,
 	}
 	if *nativeHost {
-		session.Native = nativeprotocol.NewSession()
+		session.Native = nativeprotocol.NewSessionWithWork(work)
 		defer session.Native.Close()
 	}
 

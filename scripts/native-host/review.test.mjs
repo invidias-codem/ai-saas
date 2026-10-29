@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 const assets = new URL('../../src-tauri/review-assets/', import.meta.url);
 const [html, script, css, policy] = await Promise.all(['index.html','review.js','review.css','policy.json'].map(async name => readFile(new URL(name, assets), 'utf8')));
 const csp = Object.entries(JSON.parse(policy)).map(([key,value]) => `${key} ${value}`).join('; ');
-const makeRecord = content => ({ schema_version:1, proposal_id:`local-proposal-${'a'.repeat(32)}`,digest:'b'.repeat(64),kind:'create_file',display_root_json:JSON.stringify('/selected/project'),relative_path_json:JSON.stringify('draft.txt'),precondition:'must_be_absent',content_json:JSON.stringify(content),content_hex:Buffer.from(content).toString('hex'),byte_count:Buffer.byteLength(content),read_only:true,execution_available:false,expires_in_ms:300000 });
+const makeRecord = content => ({ schema_version:2, proposal_id:`local-proposal-${'a'.repeat(32)}`,digest:'b'.repeat(64),kind:'create_file',display_root_json:JSON.stringify('/selected/project'),relative_path_json:JSON.stringify('draft.txt'),precondition:'must_be_absent',precondition_details_json:JSON.stringify({parent_identity:{volume:'000000000000001a',file:'000000000000002b'},base:null}),base_content_json:null,base_content_hex:null,base_byte_count:0,content_json:JSON.stringify(content),content_hex:Buffer.from(content).toString('hex'),byte_count:Buffer.byteLength(content),read_only:true,execution_available:false,expires_in_ms:300000 });
 
 const fixture = async (record, run) => {
   const bootstrap = `globalThis.calls=[];globalThis.__TAURI__={core:{invoke:async(command,args)=>{calls.push({command,input:args.input});if(command==='native_review_document')return ${JSON.stringify(record)};return null;}}};`;
@@ -62,3 +62,37 @@ for(const fault of ['byte_count','content_hex','extra','digest']){
     });
   });
 }
+
+const writeRecord = (before,after) => ({...makeRecord(after),kind:'write_text',precondition:'matches_base',base_content_json:JSON.stringify(before),base_content_hex:Buffer.from(before).toString('hex'),base_byte_count:Buffer.byteLength(before),precondition_details_json:JSON.stringify({parent_identity:{volume:'000000000000001a',file:'000000000000002b'},base:{identity:{volume:'000000000000001a',file:'000000000000003c'},content_sha3:'c'.repeat(64),byte_count:Buffer.byteLength(before)}})});
+
+test('overwrite review displays the complete before and after as literal text',async()=>{
+  const before='<img src=x onerror=execute()> before';const after='<script>after</script>资料';const record=writeRecord(before,after);
+  await fixture(record,async page=>{
+    await page.waitForFunction(()=>globalThis.calls.some(c=>c.command==='native_review_ready'));
+    assert.equal(await page.locator('#base-content-json').textContent(),JSON.stringify(before));
+    assert.equal(await page.locator('#content-json').textContent(),JSON.stringify(after));
+    assert.equal(await page.locator('img').count(),0);
+    await page.locator('#confirmed').check();await page.locator('#accept').click();
+    await page.waitForFunction(()=>globalThis.calls.some(c=>c.command==='native_review_decide'));
+    assert.equal(await page.evaluate(()=>globalThis.calls.filter(c=>c.command==='native_review_decide').length),1);
+  });
+});
+
+test('overwrite review requires scrolling the entire base as well as new content',async()=>{
+  await fixture(writeRecord('complete base bytes\n'.repeat(4000),'after'),async page=>{
+    await page.waitForFunction(()=>globalThis.calls.some(c=>c.command==='native_review_ready'));
+    assert.equal(await page.locator('#confirmed').isDisabled(),true);
+    await page.locator('#base-bytes-view').evaluate(element=>{element.scrollTop=element.scrollHeight;});
+    await page.waitForFunction(()=>!document.getElementById('confirmed').disabled);
+    assert.equal(await page.locator('#accept').isDisabled(),true);
+  });
+});
+
+test('incomplete base bytes cancel without acknowledging display',async()=>{
+  const record=writeRecord('before','after');record.base_content_hex='00';
+  await fixture(record,async page=>{
+    await page.waitForFunction(()=>globalThis.calls.some(c=>c.command==='native_review_cancel'));
+    assert.equal(await page.evaluate(()=>globalThis.calls.some(c=>c.command==='native_review_ready')),false);
+    assert.equal(await page.locator('#accept').isDisabled(),true);
+  });
+});

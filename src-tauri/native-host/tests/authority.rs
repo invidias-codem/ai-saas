@@ -31,7 +31,14 @@ async fn enrollment_binds_native_generated_identity_and_scopes_heartbeats() {
 
 #[tokio::test]
 async fn incompatible_protocols_fail_closed_before_binding() {
-    for fault in ["version", "mode", "features", "old-grants", "unknown"] {
+    for fault in [
+        "version",
+        "mode",
+        "features",
+        "old-grants",
+        "old-mutations",
+        "unknown",
+    ] {
         let (port, requests, task) = fixture(fault).await;
         let session =
             RpcSession::new(port, Arc::new(LaunchCredential::generate().unwrap())).unwrap();

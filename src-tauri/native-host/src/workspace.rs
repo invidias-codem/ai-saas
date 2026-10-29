@@ -23,6 +23,10 @@ pub trait FolderPicker: Send + Sync {
     fn pick_folder(&self) -> DialogFuture<'_, Option<PathBuf>>;
     fn confirm_read_access(&self, path: String) -> DialogFuture<'_, bool>;
 }
+/// Separate trusted native consent, never a frontend boolean or permission flag.
+pub trait WriteConsent: Send + Sync {
+    fn confirm_write_access(&self, grant: GrantInfo) -> DialogFuture<'_, bool>;
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -77,7 +81,7 @@ pub struct DirectoryList {
     pub entries: Vec<DirectoryEntry>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 struct DirectoryIdentity {
     volume: String,
     file: String,
@@ -87,13 +91,15 @@ struct DaemonGrant {
     grant_id: String,
     path: String,
     directory_identity: DirectoryIdentity,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    writable: bool,
 }
 impl DaemonGrant {
     fn info(&self) -> GrantInfo {
         GrantInfo {
             grant_id: self.grant_id.clone(),
             display_path: self.path.clone(),
-            read_only: true,
+            read_only: !self.writable,
         }
     }
 }
@@ -367,12 +373,75 @@ impl RpcSession {
             grant_id: format!("local-grant-{}", random_id()?),
             path: selected.path.clone(),
             directory_identity: selected.identity.clone(),
+            writable: false,
         };
         let info = grant.info();
         let mut next = state.grants.clone();
         next.push(grant);
         self.install_grants(&mut state, next).await?;
         Ok(Some(info))
+    }
+    pub async fn request_write_access<C: WriteConsent>(
+        &self,
+        id: &str,
+        consent: &C,
+    ) -> Result<GrantInfo, HostError> {
+        self.ensure_workspace()?;
+        let _selection = self.selection.try_lock().map_err(|_| HostError::Busy)?;
+        let (grant, revision) = {
+            let state = self.grants.try_read().map_err(|_| HostError::Busy)?;
+            (
+                state
+                    .grants
+                    .iter()
+                    .find(|g| g.grant_id == id)
+                    .cloned()
+                    .ok_or(HostError::GrantDenied)?,
+                state.revision,
+            )
+        };
+        if grant.writable {
+            return Ok(grant.info());
+        }
+        let path = PathBuf::from(&grant.path);
+        let selected = tokio::task::spawn_blocking(move || SelectedDirectory::open(&path))
+            .await
+            .map_err(|_| HostError::SelectionInvalid)??;
+        if selected.path != grant.path || selected.identity != grant.directory_identity {
+            return Err(HostError::GrantDenied);
+        }
+        let mut cancelled = self.closed.subscribe();
+        if *cancelled.borrow() {
+            return Err(HostError::Closed);
+        }
+        let allowed = tokio::select! {
+            _ = cancelled.changed() => return Err(HostError::Closed),
+            result = consent.confirm_write_access(grant.info()) => result?,
+        };
+        if !allowed {
+            return Err(HostError::ReviewDenied);
+        }
+        let path = PathBuf::from(&grant.path);
+        let current = tokio::task::spawn_blocking(move || SelectedDirectory::open(&path))
+            .await
+            .map_err(|_| HostError::SelectionInvalid)??;
+        if current.path != selected.path || current.identity != selected.identity {
+            return Err(HostError::GrantDenied);
+        }
+        let mut state = self.grants.write().await;
+        self.ensure_workspace()?;
+        if state.revision != revision {
+            return Err(HostError::GrantDenied);
+        }
+        let mut next = state.grants.clone();
+        let grant = next
+            .iter_mut()
+            .find(|g| g.grant_id == id)
+            .ok_or(HostError::GrantDenied)?;
+        grant.writable = true;
+        let info = grant.info();
+        self.install_grants(&mut state, next).await?;
+        Ok(info)
     }
     pub async fn revoke_grant(&self, id: &str) -> Result<(), HostError> {
         self.ensure_workspace()?;

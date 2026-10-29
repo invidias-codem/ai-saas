@@ -4,7 +4,7 @@ use lattice_native_host::{
     lifecycle::NativeHost,
     workspace::{
         DialogFuture, DirectoryList, EmptyInput, FileStat, FolderPicker, GrantInfo, GrantReference,
-        ReadInput, TextRead,
+        ReadInput, TextRead, WriteConsent,
     },
     HostError,
 };
@@ -34,6 +34,25 @@ fn require_workspace_window<R: tauri::Runtime>(
 
 struct NativeFolderPicker<R: tauri::Runtime> {
     window: tauri::WebviewWindow<R>,
+}
+// Adapter only. No write-consent command is registered or granted to a webview
+// until S2c.6 qualifies the actual native picker/review flow on both platforms.
+impl<R: tauri::Runtime> WriteConsent for NativeFolderPicker<R> {
+    fn confirm_write_access(&self, grant: GrantInfo) -> DialogFuture<'_, bool> {
+        Box::pin(async move {
+            super::require_local_window(&self.window).map_err(|_| HostError::GrantDenied)?;
+            let (send, receive) = tokio::sync::oneshot::channel();
+            self.window.app_handle().dialog()
+                .message(lattice_native_host::workspace::native_dialog_text(&format!("Allow individually reviewed file creation and text replacement in this folder?\n\n{}\n\nEvery change still requires its own exact review. This does not permit deletion, moving files or running commands. Other applications can edit files concurrently; conflicts require a new review.", grant.display_path)))
+                .title("Confirm reviewed file changes").parent(&self.window)
+                .kind(MessageDialogKind::Warning)
+                .buttons(MessageDialogButtons::OkCancelCustom("Allow reviewed changes".into(), "Cancel".into()))
+                .show(move |allowed| { let _ = send.send(allowed); });
+            let allowed = receive.await.map_err(|_| HostError::SelectionInvalid)?;
+            super::require_local_window(&self.window).map_err(|_| HostError::GrantDenied)?;
+            Ok(allowed)
+        })
+    }
 }
 impl<R: tauri::Runtime> FolderPicker for NativeFolderPicker<R> {
     fn pick_folder(&self) -> DialogFuture<'_, Option<PathBuf>> {

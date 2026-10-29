@@ -37,6 +37,20 @@ describe('Native workspace client', () => {
     }
     expect(invoke).not.toHaveBeenCalled();
   });
+  test('write proposals cannot supply trusted base, write permission or an approval', async () => {
+    const proposalId = `local-proposal-${'c'.repeat(32)}`;
+    const summary = { proposal_id: proposalId, digest: 'd'.repeat(64), status: 'pending', kind: 'write_text', grant_id: grantId, relative_path: 'note.txt', execution_available: false };
+    const invoke = jest.fn().mockResolvedValue(summary);
+    const client = createNativeWorkspaceClient(invoke);
+    const input = { kind: 'write_text' as const, grant_id: grantId, relative_path: 'note.txt', content: 'new bytes' };
+    expect(await client.proposeOperation(input)).toEqual(summary);
+    expect(invoke.mock.calls).toEqual([['native_propose_operation', { input }]]);
+    invoke.mockClear();
+    for (const extra of [{ approved: true }, { writable: true }, { base: 'forged' }, { precondition: {} }]) {
+      await expect(client.proposeOperation({ ...input, ...extra })).rejects.toMatchObject({ code: 'LOCAL_INPUT_INVALID' });
+    }
+    expect(invoke).not.toHaveBeenCalled();
+  });
   test('requires the desktop runtime without a network fallback', async () => {
     await expect(nativeWorkspace.grants()).rejects.toMatchObject({ code: 'LOCAL_DESKTOP_REQUIRED' });
   });

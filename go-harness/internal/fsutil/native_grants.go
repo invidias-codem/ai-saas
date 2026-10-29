@@ -20,6 +20,7 @@ type ReadGrant struct {
 	ID       string            `json:"grant_id"`
 	Path     string            `json:"path"`
 	Identity DirectoryIdentity `json:"directory_identity"`
+	Writable bool              `json:"writable,omitempty"`
 }
 
 // NativeRelativePath uses portable forward-slash paths. Reject ambiguous
@@ -59,6 +60,17 @@ func NativeRelativePath(name string) (string, error) {
 // their pinned handles, including after a root is renamed or replaced. Failed
 // preparation changes no registry state; the native session then blocks access.
 func (r *RootRegistry) UpdateReadGrants(user, workspace string, grants []ReadGrant) error {
+	for _, g := range grants {
+		if g.Writable {
+			return errors.New("read-only snapshot required")
+		}
+	}
+	return r.UpdateNativeGrants(user, workspace, grants)
+}
+
+// UpdateNativeGrants accepts permissions only from the private native control
+// plane. Existing IDs retain the same pinned directory through permission changes.
+func (r *RootRegistry) UpdateNativeGrants(user, workspace string, grants []ReadGrant) error {
 	if user == "" || workspace == "" || len(grants) > 32 {
 		return errors.New("invalid native grants")
 	}
@@ -84,7 +96,7 @@ func (r *RootRegistry) UpdateReadGrants(user, workspace string, grants []ReadGra
 		var root *os.Root
 		for i, old := range r.grants {
 			if old.ID == grant.ID {
-				if old.UserID != user || old.WorkspaceID != workspace || old.Path != grant.Path || !old.ReadOnly || old.AllowDestructive {
+				if old.UserID != user || old.WorkspaceID != workspace || old.Path != grant.Path || old.AllowDestructive {
 					return errors.New("native grant replacement denied")
 				}
 				root = r.roots[i]
@@ -103,7 +115,7 @@ func (r *RootRegistry) UpdateReadGrants(user, workspace string, grants []ReadGra
 		if err != nil || identity != grant.Identity {
 			return errors.New("native directory identity changed")
 		}
-		prepared = append(prepared, RootGrant{ID: grant.ID, UserID: user, WorkspaceID: workspace, Path: grant.Path, ReadOnly: true})
+		prepared = append(prepared, RootGrant{ID: grant.ID, UserID: user, WorkspaceID: workspace, Path: grant.Path, ReadOnly: !grant.Writable})
 		roots = append(roots, root)
 	}
 	retained := make(map[*os.Root]bool, len(roots))

@@ -3,6 +3,7 @@
 
 mod authority;
 pub mod lifecycle;
+pub mod mutation;
 pub mod review;
 #[cfg(test)]
 mod review_tests;
@@ -82,6 +83,10 @@ pub enum HostError {
     ProposalUnknown,
     ReviewDenied,
     WriteGrantRequired,
+    FileConflict,
+    OperationUnavailable,
+    OperationReplayed,
+    OutcomeUnknown,
 }
 
 impl HostError {
@@ -119,6 +124,10 @@ impl HostError {
             Self::ProposalUnknown => "LOCAL_PROPOSAL_UNAVAILABLE",
             Self::ReviewDenied => "LOCAL_REVIEW_DENIED",
             Self::WriteGrantRequired => "LOCAL_WRITE_GRANT_REQUIRED",
+            Self::FileConflict => "LOCAL_FILE_CONFLICT",
+            Self::OperationUnavailable => "LOCAL_OPERATION_UNAVAILABLE",
+            Self::OperationReplayed => "LOCAL_OPERATION_REPLAYED",
+            Self::OutcomeUnknown => "LOCAL_OUTCOME_UNKNOWN",
         }
     }
     pub fn message(self) -> &'static str {
@@ -139,7 +148,11 @@ impl HostError {
             Self::ProposalCapacity => "The native proposal or attempt limit has been reached.",
             Self::ProposalUnknown => "This proposal is unavailable in the current local session.",
             Self::ReviewDenied => "This review is denied, expired or no longer current.",
-            Self::WriteGrantRequired => "A separately authorized writable grant is required. This build keeps folder access read only.",
+            Self::WriteGrantRequired => "Separately confirmed writable folder access is required.",
+            Self::FileConflict => "The target changed or cannot meet the reviewed precondition. Prepare a new review.",
+            Self::OperationUnavailable => "This operation is unavailable in the current local session.",
+            Self::OperationReplayed => "This operation has already been attempted. Check its existing status.",
+            Self::OutcomeUnknown => "The outcome could not be confirmed. Check the existing operation without retrying it.",
             Self::StorageUnavailable => {
                 "Local storage is unavailable. Check your device's storage permissions."
             }
@@ -297,10 +310,11 @@ pub struct RpcSession {
     shutdown_sent: std::sync::atomic::AtomicBool,
     authority: OnceLock<Authority>,
     enrollment: tokio::sync::Mutex<()>,
-    grants: tokio::sync::RwLock<workspace::GrantState>,
+    grants: Arc<tokio::sync::RwLock<workspace::GrantState>>,
     selection: tokio::sync::Mutex<()>,
     workspace_blocked: std::sync::atomic::AtomicBool,
     reviews: std::sync::Mutex<review::ReviewBook>,
+    mutations: mutation::MutationBook,
 }
 
 impl RpcSession {
@@ -326,10 +340,11 @@ impl RpcSession {
             shutdown_sent: std::sync::atomic::AtomicBool::new(false),
             authority: OnceLock::new(),
             enrollment: tokio::sync::Mutex::new(()),
-            grants: tokio::sync::RwLock::new(workspace::GrantState::default()),
+            grants: Arc::new(tokio::sync::RwLock::new(workspace::GrantState::default())),
             selection: tokio::sync::Mutex::new(()),
             workspace_blocked: std::sync::atomic::AtomicBool::new(false),
             reviews: std::sync::Mutex::new(review::ReviewBook::default()),
+            mutations: mutation::MutationBook::default(),
         })
     }
     pub fn close(&self) {
@@ -392,6 +407,7 @@ impl RpcSession {
         if self.shutdown_sent.swap(true, Ordering::AcqRel) {
             return Err(HostError::Closed);
         }
+        self.close();
         let data = self.request("shutdown").await?;
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
@@ -507,6 +523,15 @@ impl RpcSession {
                 Some("LOCAL_DIRECTORY_TOO_LARGE") => HostError::DirectoryTooLarge,
                 Some("LOCAL_TEXT_UNSUPPORTED") => HostError::TextUnsupported,
                 Some("LOCAL_READ_FAILED") => HostError::ReadFailed,
+                Some("LOCAL_FILE_CONFLICT") => HostError::FileConflict,
+                Some("LOCAL_WRITE_GRANT_REQUIRED") => HostError::WriteGrantRequired,
+                Some("LOCAL_REVIEW_DENIED") => HostError::ReviewDenied,
+                Some("LOCAL_OPERATION_REPLAYED") => HostError::OperationReplayed,
+                Some("LOCAL_OPERATION_UNAVAILABLE") => HostError::OperationUnavailable,
+                Some("LOCAL_PROPOSAL_UNAVAILABLE") => HostError::ProposalUnknown,
+                Some("LOCAL_PROPOSAL_INVALID") => HostError::ProposalInvalid,
+                Some("LOCAL_PROPOSAL_CAPACITY") => HostError::ProposalCapacity,
+                Some("LOCAL_OPERATION_BUSY") => HostError::Busy,
                 _ => HostError::RpcRejected,
             });
         }
