@@ -418,13 +418,8 @@ fn main_has_no_shell_secret_store_or_generic_rpc_permission() {
         "native_dispatch_command",
         "native_command_status",
         "native_cancel_command",
-        "native_command_output",
         "native_register_provider",
-        "native_request_write_access",
-        "native_dispatch_operation",
         "native_dispatch_mutation",
-        "native_operation_status",
-        "native_cancel_operation",
         "plugin:shell|execute",
         "plugin:stronghold|initialize",
         "plugin:event|emit",
@@ -506,5 +501,46 @@ fn workspace_ipc_cannot_accept_path_grant_or_identity_setters() {
             .unwrap()
             .to_string();
         assert!(denied.contains("unknown field"), "{command}: {denied}");
+    }
+}
+
+#[test]
+fn main_can_invoke_native_operation_dispatch_and_status() {
+    let app = app();
+    let main = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+    let url = main.url().unwrap().to_string();
+    // These commands should be available to the main window (not "not allowed")
+    // They return LOCAL_SERVICE_STOPPED because the daemon isn't running in tests
+    for (command, input) in [
+        (
+            "native_dispatch_operation",
+            json!({"proposal_id": "local-proposal-00000000000000000000000000000000"}),
+        ),
+        (
+            "native_operation_status",
+            json!({"proposal_id": "local-proposal-00000000000000000000000000000000"}),
+        ),
+        (
+            "native_cancel_operation",
+            json!({"proposal_id": "local-proposal-00000000000000000000000000000000"}),
+        ),
+        (
+            "native_command_output",
+            json!({"proposal_id": "local-proposal-00000000000000000000000000000000"}),
+        ),
+        (
+            "native_request_write_access",
+            json!({"grant_id": "local-grant-00000000000000000000000000000000"}),
+        ),
+    ] {
+        let result = call_input(&main, command, &url, input);
+        // Should not be "not allowed" - the command exists
+        // It may return LOCAL_SERVICE_STOPPED or other runtime errors
+        if let Err(e) = &result {
+            let err_str = e.to_string();
+            assert!(!err_str.contains("not allowed"), "{command}: {err_str}");
+        }
     }
 }

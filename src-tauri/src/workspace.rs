@@ -177,3 +177,15 @@ pub(crate) async fn native_read_text<R: tauri::Runtime>(
     require_workspace_window(&window)?;
     state.read_text(input).await.map_err(Into::into)
 }
+#[tauri::command]
+pub(crate) async fn native_request_write_access<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<NativeHost>>,
+    input: GrantReference,
+) -> Result<GrantInfo, NativeIpcError> {
+    require_workspace_window(&window)?;
+    state
+        .request_write_access(NativeFolderPicker { window }, input.grant_id)
+        .await
+        .map_err(Into::into)
+}

@@ -61,7 +61,7 @@ describe('Native workspace client', () => {
       await expect(client.proposeOperation({ ...input, command } as never)).rejects.toMatchObject({ code: 'LOCAL_INPUT_INVALID' });
     }
     expect(invoke).not.toHaveBeenCalled();
-    expect(Object.keys(client)).not.toContain('dispatchOperation');
+    expect(Object.keys(client)).toContain('dispatchOperation');
   });
   test('requires the desktop runtime without a network fallback', async () => {
     await expect(nativeWorkspace.grants()).rejects.toMatchObject({ code: 'LOCAL_DESKTOP_REQUIRED' });

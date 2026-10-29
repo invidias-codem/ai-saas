@@ -259,7 +259,7 @@ pub struct CommandOutput {
     pub truncated: bool,
 }
 impl CommandOutput {
-    pub(crate) fn valid(&self) -> bool {
+    pub fn valid(&self) -> bool {
         self.output.len() <= MAX_OUTPUT_BYTES && (-1..=u32::MAX as i64).contains(&self.exit_code)
     }
 }

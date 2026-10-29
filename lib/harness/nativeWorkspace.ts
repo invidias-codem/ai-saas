@@ -22,6 +22,22 @@ const listSchema = z.object({
 const statSchema = z.object({ kind: kindSchema, size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict();
 const proposalIdSchema = z.string().regex(/^local-proposal-[a-f0-9]{32}$/);
 const proposalReferenceSchema = z.object({ proposal_id: proposalIdSchema }).strict();
+const operationStateSchema = z.enum(['running', 'succeeded', 'conflict', 'denied', 'cancelled', 'outcome_unknown', 'failed', 'timed_out', 'output_limited']);
+const operationStatusSchema = z.object({
+  proposal_id: proposalIdSchema,
+  digest: z.string().regex(/^[a-f0-9]{64}$/),
+  status: operationStateSchema,
+  code: z.string(),
+  may_have_changed: z.boolean(),
+  cleanup_pending: z.boolean().optional().default(false),
+}).strict();
+const commandOutputSchema = z.object({
+  output: z.string().max(10 * 1024),
+  exit_code: z.number().int().min(-1).max(4294967295),
+  timed_out: z.boolean(),
+  cancelled: z.boolean(),
+  truncated: z.boolean(),
+}).strict();
 const proposalPath = z.string().min(1).max(4096).refine(path => path !== '.');
 const commandScriptSchema = z.string().refine(script => byteLength(script) <= 64 * 1024 && script.trim().length > 0 && !script.includes('\0'));
 const commandSchema = z.discriminatedUnion('shell', [
@@ -116,6 +132,10 @@ export function createNativeWorkspaceClient(invokeNative: NativeInvoke) {
     cancelProposal: async (proposalId: string) => {
       await request('native_cancel_proposal', proposalReferenceSchema, z.null(), { proposal_id: proposalId });
     },
+    dispatchOperation: (proposalId: string) => request('native_dispatch_operation', proposalReferenceSchema, operationStatusSchema, { proposal_id: proposalId }),
+    operationStatus: (proposalId: string) => request('native_operation_status', proposalReferenceSchema, operationStatusSchema, { proposal_id: proposalId }),
+    cancelOperation: (proposalId: string) => request('native_cancel_operation', proposalReferenceSchema, operationStatusSchema, { proposal_id: proposalId }),
+    commandOutput: (proposalId: string) => request('native_command_output', proposalReferenceSchema, commandOutputSchema, { proposal_id: proposalId }),
     selectFolder: () => request('native_select_folder', empty, grantSchema.nullable(), {}),
     grants: () => request('native_workspace_grants', empty, z.array(grantSchema).max(32), {}),
     readText: (input: NativeReadInput) => request('native_read_text', readInputSchema, textSchema, input),
@@ -124,6 +144,7 @@ export function createNativeWorkspaceClient(invokeNative: NativeInvoke) {
     revoke: async (grantId: string) => {
       await request('native_revoke_grant', z.object({ grant_id: grantIdSchema }).strict(), z.null(), { grant_id: grantId });
     },
+    requestWriteAccess: (grantId: string) => request('native_request_write_access', z.object({ grant_id: grantIdSchema }).strict(), grantSchema, { grant_id: grantId }),
   };
 }
 
