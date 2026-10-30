@@ -1,0 +1,30 @@
+name: Resolve desktop dependency lock
+on:
+  push:
+    branches: [feat/desktop-test-downloads]
+    paths: [.github/workflows/desktop-dependency-lock.yml]
+permissions:
+  contents: read
+jobs:
+  lockfile:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+        with:
+          version: 11.6.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+      - name: Resolve compatible exact JavaScript package versions
+        run: pnpm add -w --lockfile-only --ignore-scripts @tauri-apps/api@2.12.4 @tauri-apps/plugin-shell@2.6.0 @tauri-apps/plugin-stronghold@2.4.0
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: proposed-desktop-lockfile
+          path: |
+            package.json
+            pnpm-lock.yaml
+          if-no-files-found: error
