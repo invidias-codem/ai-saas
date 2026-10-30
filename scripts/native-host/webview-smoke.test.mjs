@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // S2c.6 WebView smoke test — verifies Tauri app launches, daemon connects,
 // and native IPC commands are callable end-to-end.
-// This runs in CI with Xvfb on Linux. Windows requires manual verification.
+// Runs in CI with Xvfb on Linux. Windows requires manual verification.
 
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
-const APP_PATH = path.join(process.cwd(), 'src-tauri/target/release/lattice-os');
-const DAEMON_PATH = process.env.LATTICE_TEST_DAEMON_PATH;
+const APP_PATH = path.join(process.cwd(), 'src-tauri/target/release/app');
+const SIDECAR_DIR = path.join(process.cwd(), 'src-tauri/binaries');
 const TEST_DIR = path.join(process.cwd(), 'testdata/smoke-test-workspace');
 const TEST_FILE = path.join(TEST_DIR, 'note.md');
 const TEST_CONTENT = 'smoke test content\n资料';
@@ -33,7 +33,7 @@ async function waitForAppReady(proc, timeoutMs = 30000) {
     const timer = setTimeout(() => reject(new Error('App startup timeout')), timeoutMs);
     proc.stdout.on('data', (data) => {
       const msg = data.toString();
-      if (msg.includes('Lattice OS') || msg.includes('NativeHost') || msg.includes('startup')) {
+      if (msg.includes('NativeHost') || msg.includes('startup') || msg.includes('daemon')) {
         clearTimeout(timer);
         resolve();
       }
@@ -49,15 +49,17 @@ async function main() {
   console.log(`Commit: ${await getCommitHash()}`);
   console.log(`Platform: ${process.platform} (${process.arch})`);
   console.log(`App: ${APP_PATH}`);
-  console.log(`Daemon: ${DAEMON_PATH}`);
+  console.log(`Sidecar dir: ${SIDECAR_DIR}`);
   console.log(`Test dir: ${TEST_DIR}`);
 
   // Prerequisites
-  if (!DAEMON_PATH || !fs.existsSync(DAEMON_PATH)) {
-    throw new Error(`LATTICE_TEST_DAEMON_PATH not found: ${DAEMON_PATH}`);
-  }
   if (!fs.existsSync(APP_PATH)) {
     throw new Error(`Tauri app not found: ${APP_PATH}. Run 'cargo build --release' first.`);
+  }
+  const sidecarName = process.platform === 'win32' ? 'lattice-harness.exe' : 'lattice-harness';
+  const sidecarPath = path.join(SIDECAR_DIR, sidecarName);
+  if (!fs.existsSync(sidecarPath)) {
+    throw new Error(`Sidecar not found: ${sidecarPath}. Build go-harness first.`);
   }
 
   // Setup test workspace
@@ -65,12 +67,11 @@ async function main() {
   fs.writeFileSync(TEST_FILE, TEST_CONTENT);
   console.log('✓ Test workspace ready');
 
-  // Launch Tauri app
+  // Launch Tauri app (uses sidecar via tauri-plugin-shell)
   console.log('Launching Tauri app...');
   const appProcess = spawn(APP_PATH, [], {
     env: {
       ...process.env,
-      LATTICE_TEST_DAEMON_PATH: DAEMON_PATH,
       DISPLAY: ':99',
       WEBKIT_DISABLE_DMABUF_RENDERER: '1',
       WEBKIT_DISABLE_COMPOSITING_MODE: '1',
@@ -78,27 +79,37 @@ async function main() {
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
+  let daemonPort = null;
+  let authToken = null;
+
   try {
     await waitForAppReady(appProcess);
-    console.log('✓ Tauri app started and daemon connected');
+    console.log('✓ Tauri app started');
 
-    // Give the WebView time to fully initialize
-    await new Promise(r => setTimeout(r, 5000));
+    // Parse daemon port from stdout (format: {"status":"ready","port":12345})
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Daemon handshake timeout')), 10000);
+      appProcess.stdout.on('data', (data) => {
+        const msg = data.toString();
+        const match = msg.match(/"status":"ready","port":(\d+)/);
+        if (match) {
+          daemonPort = parseInt(match[1], 10);
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+    });
+    console.log(`✓ Daemon handshake complete on port ${daemonPort}`);
 
-    // Verify the app process is still alive
+    // The auth token is passed via LATTICE_AUTH_TOKEN env var to the sidecar
+    // We can't easily intercept it, but we can verify the daemon is responsive
+    // by making an authenticated status call through the Rust IPC layer
+    // For this smoke test, we verify the app process stays alive
+    await new Promise(r => setTimeout(r, 3000));
     if (appProcess.killed || appProcess.exitCode !== null) {
-      throw new Error('App process died unexpectedly');
+      throw new Error('App process died after daemon handshake');
     }
-    console.log('✓ App process stable after 5s');
-
-    // Test IPC by invoking a simple command via the Tauri CLI or direct RPC
-    // Since we can't easily call Tauri IPC from outside without a WebView,
-    // we verify the daemon is responsive by checking its RPC endpoint.
-    // The daemon port is written to stdout during startup - we'd need to parse it.
-    // For now, the fact that the app started without errors proves the
-    // daemon handshake completed (7-second timeout in Rust).
-
-    console.log('✓ Basic launch verification passed');
+    console.log('✓ App process stable after daemon handshake');
 
     // Test results summary
     const results = {
@@ -107,16 +118,18 @@ async function main() {
       arch: process.arch,
       timestamp: new Date().toISOString(),
       appPath: APP_PATH,
-      daemonPath: DAEMON_PATH,
+      sidecarPath: sidecarPath,
       testDir: TEST_DIR,
+      daemonPort: daemonPort,
       launchOk: true,
-      daemonConnectOk: true,
+      daemonHandshakeOk: true,
+      appStable: true,
       ipcCommandsWired: true, // Verified by build-tauri lib tests
       permissionsManifestOk: true, // Verified by build-tauri lib tests
       nativeDialogsTested: false, // Requires manual verification
       reviewWindowTested: false, // Requires manual verification
       notes: [
-        'App launches and daemon handshake completes',
+        'App launches and daemon handshake completes (port parsed from stdout)',
         'Tauri lib tests (MockRuntime) verify IPC permissions and command wiring',
         'Real native dialogs (GTK file picker, review window) require manual test on Linux/Windows',
         'Windows verification needs Windows runner with display',

@@ -68,15 +68,19 @@ Prove the following user-visible flows work in the real desktop app:
 # Prerequisites
 sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev xvfb
 
-# Build
+# Build Go sidecar (placed where Tauri's sidecar launcher expects it)
 go -C go-harness build -o ./src-tauri/binaries/lattice-harness-x86_64-unknown-linux-gnu ./cmd/lattice-harness
+
+# Build Next.js frontend to ../out (required by tauri.conf.json frontendDist)
+pnpm build
+
+# Build Tauri app (release) - produces `app` executable
 cargo build --locked --manifest-path src-tauri/Cargo.toml --release
 
-# Run with Xvfb (headless)
+# Run with Xvfb (headless) - Tauri launches sidecar automatically
 Xvfb :99 -screen 0 1280x720x24 &
 export DISPLAY=:99
-LATTICE_TEST_DAEMON_PATH=./src-tauri/binaries/lattice-harness-x86_64-unknown-linux-gnu \
-  ./src-tauri/target/release/lattice-os
+./src-tauri/target/release/app
 ```
 
 **Verify in running app:**
@@ -94,19 +98,27 @@ LATTICE_TEST_DAEMON_PATH=./src-tauri/binaries/lattice-harness-x86_64-unknown-lin
 ### Windows 11 x64
 ```powershell
 # Prerequisites: Visual Studio C++ Build Tools, WebView2 Runtime, Windows SDK (mt.exe)
+
+# Build Go sidecar (placed where Tauri's sidecar launcher expects it)
 go -C go-harness build -o ./src-tauri/binaries/lattice-harness-x86_64-pc-windows-msvc.exe ./cmd/lattice-harness
+
+# Build Next.js frontend to ../out (required by tauri.conf.json frontendDist)
+pnpm build
+
+# Build Tauri app (release) - produces `app.exe` executable
 cargo build --locked --manifest-path src-tauri/Cargo.toml --release
 
-# Run
-$env:LATTICE_TEST_DAEMON_PATH = "./src-tauri/binaries/lattice-harness-x86_64-pc-windows-msvc.exe"
-./src-tauri/target/release/lattice-os.exe
+# Run - Tauri launches sidecar automatically via tauri-plugin-shell
+./src-tauri/target/release/app.exe
 ```
 
 **Verify in running app:**
 1. Same flow as Linux, using Win32 `IFileOpenDialog` for folder picker
-2. PowerShell/cmd/sh availability: `pwsh` returns `LOCAL_SHELL_UNAVAILABLE` if PowerShell 7 not installed; `sh` returns `LOCAL_SHELL_UNAVAILABLE` on Windows
+2. PowerShell/cmd/sh availability: `pwsh` returns `LOCAL_SHELL_UNAVAILABLE` if PowerShell 7 not installed; when `pwsh.exe` IS found, dispatch returns `LOCAL_SANDBOX_REQUIRED`. `sh` returns `LOCAL_SHELL_UNAVAILABLE` on Windows.
 3. WebView2 review window renders correctly
 4. Disk verification same as Linux
+
+**Note for manual verification:** Xvfb runs headless; use `x11vnc` or `vncviewer` to interact with GTK dialogs on Linux. On Windows, run directly on a desktop session.
 
 ## Bounded acceptance cases (to be verified manually)
 
