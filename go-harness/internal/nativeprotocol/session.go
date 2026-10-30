@@ -5,11 +5,13 @@ package nativeprotocol
 import (
 	"regexp"
 	"sync"
+
+	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
 )
 
 const Version = 1
 
-var Features = [...]string{"session-authority-v1", "native-action-allowlist-v1"}
+var Features = [...]string{"session-authority-v1", "native-action-allowlist-v1", "read-grants-v1"}
 var localID = regexp.MustCompile(`^[a-f0-9]{32}$`)
 
 type Authority struct {
@@ -41,12 +43,14 @@ type Binding struct {
 }
 
 type Session struct {
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	negotiated bool
 	bound      *Authority
+	blocked    bool
+	registry   *fsutil.RootRegistry
 }
 
-func NewSession() *Session { return &Session{} }
+func NewSession() *Session { return &Session{registry: fsutil.NewRootRegistry()} }
 
 func (s *Session) Negotiate() Protocol {
 	s.mu.Lock()
@@ -76,14 +80,21 @@ func (s *Session) Bind(binding Binding) string {
 }
 
 func (s *Session) Check(candidate *Authority) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.check(candidate)
+}
+
+func (s *Session) check(candidate *Authority) string {
 	if s.bound == nil {
 		return "LOCAL_SESSION_UNBOUND"
 	}
 	// These are nonsecret scope identifiers/revisions, never auth credentials.
 	if candidate == nil || *candidate != *s.bound {
 		return "LOCAL_AUTHORITY_MISMATCH"
+	}
+	if s.blocked {
+		return "LOCAL_WORKSPACE_BLOCKED"
 	}
 	return ""
 }

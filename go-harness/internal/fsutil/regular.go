@@ -8,6 +8,8 @@ import (
 
 const MaxLocalReadBytes = 256 * 1024
 
+var ErrLocalFileTooLarge = errors.New("file too large for local tool read")
+
 // OpenRegularFile never truncates before checking the opened descriptor.
 // Nonblocking opens keep a workspace FIFO from hanging grant revocation.
 func OpenRegularFile(root *os.Root, name string, flags int) (*os.File, error) {
@@ -34,7 +36,7 @@ func ReadRegularFile(root *os.Root, name string, limit int64) ([]byte, error) {
 		return nil, err
 	}
 	if int64(len(content)) > limit {
-		return nil, errors.New("file too large for local tool read")
+		return nil, ErrLocalFileTooLarge
 	}
 	return content, nil
 }

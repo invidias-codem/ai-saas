@@ -1,4 +1,5 @@
 mod native_host;
+mod workspace;
 
 #[cfg(test)]
 mod ipc_tests;
@@ -130,6 +131,8 @@ async fn flush_telemetry<R: tauri::Runtime>(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(workspace::boundary())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(
@@ -169,7 +172,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ping_daemon,
             restart_daemon,
-            flush_telemetry
+            flush_telemetry,
+            workspace::native_select_folder,
+            workspace::native_workspace_grants,
+            workspace::native_revoke_grant,
+            workspace::native_list,
+            workspace::native_stat,
+            workspace::native_read_text
         ])
         .build(tauri::generate_context!())
         .expect("error while building Tauri application");

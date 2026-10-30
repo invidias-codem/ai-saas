@@ -239,6 +239,7 @@ func main() {
 	}
 	if *nativeHost {
 		session.Native = nativeprotocol.NewSession()
+		defer session.Native.Close()
 	}
 
 	mux := http.NewServeMux()
@@ -394,7 +395,7 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 		ctx = workCtx
 	}
 	if session.Native != nil {
-		nativeDispatch(w, native, session)
+		nativeDispatch(w, ctx, native, session)
 		return
 	}
 

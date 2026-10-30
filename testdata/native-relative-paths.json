@@ -1,0 +1,4 @@
+{
+  "valid": [".", "notes.md", "src/hello world.txt", "资料/文档.md", "🦎/notes.md", "literal%2Fname", "CONTEXT.md", "com10.txt"],
+  "invalid": ["", "..", "../secret", "a/../b", "/etc/passwd", "C:\\secret", "C:secret", "\\\\server\\share", "\\\\?\\C:\\secret", "a\\b", "file:stream", "https://host/file", "a//b", "a/./b", "file.", "dir /file", "CON", "aux.txt", "com1.log", "COM¹.txt", "LPT²", "NUL .txt", "CONIN$", "CONOUT$", "a\u0000b", "a\nb", "a\u202eb", "a\u2066b"]
+}

@@ -1,5 +1,6 @@
 //! Serialized native process ownership. Platform adapters only spawn, terminate,
 //! and report confirmed exits; protocol and lifecycle policy live here.
+use crate::workspace::{DirectoryList, FileStat, FolderPicker, GrantInfo, ReadInput, TextRead};
 use crate::{HostError, LaunchCredential, RpcSession, StartupHandshake, Status, STARTUP_TIMEOUT};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -81,6 +82,91 @@ impl Default for NativeHost {
 }
 
 impl NativeHost {
+    fn workspace_session(&self) -> Result<(u64, Arc<RpcSession>), HostError> {
+        let s = self.state.lock().map_err(|_| HostError::StateUnavailable)?;
+        if s.phase != Phase::Ready || self.exiting.load(Ordering::Acquire) {
+            return Err(HostError::Closed);
+        }
+        Ok((
+            s.generation,
+            s.session.clone().ok_or(HostError::StateUnavailable)?,
+        ))
+    }
+
+    fn workspace_result<T>(
+        self: &Arc<Self>,
+        generation: u64,
+        session: &RpcSession,
+        result: Result<T, HostError>,
+    ) -> Result<T, HostError> {
+        if !self
+            .state
+            .lock()
+            .map(|s| s.generation == generation && s.phase == Phase::Ready)
+            .unwrap_or(false)
+        {
+            return Err(HostError::Closed);
+        }
+        if session.is_workspace_blocked() {
+            self.fail(generation, HostError::WorkspaceBlocked);
+            return Err(HostError::WorkspaceBlocked);
+        }
+        result
+    }
+
+    /// Permission transitions retain ownership if their IPC caller disappears.
+    pub async fn select_folder<P: FolderPicker + 'static>(
+        self: &Arc<Self>,
+        picker: P,
+    ) -> Result<Option<GrantInfo>, HostError> {
+        let (generation, session) = self.workspace_session()?;
+        let host = self.clone();
+        tokio::spawn(async move {
+            let result = session.select_folder(&picker).await;
+            host.workspace_result(generation, &session, result)
+        })
+        .await
+        .map_err(|_| HostError::StateUnavailable)?
+    }
+
+    pub async fn revoke_grant(self: &Arc<Self>, grant_id: String) -> Result<(), HostError> {
+        let (generation, session) = self.workspace_session()?;
+        let host = self.clone();
+        tokio::spawn(async move {
+            let result = session.revoke_grant(&grant_id).await;
+            host.workspace_result(generation, &session, result)
+        })
+        .await
+        .map_err(|_| HostError::StateUnavailable)?
+    }
+
+    pub async fn workspace_grants(self: &Arc<Self>) -> Result<Vec<GrantInfo>, HostError> {
+        let (generation, session) = self.workspace_session()?;
+        let result = session.workspace_grants().await;
+        self.workspace_result(generation, &session, result)
+    }
+
+    pub async fn read_text(self: &Arc<Self>, input: ReadInput) -> Result<TextRead, HostError> {
+        let (generation, session) = self.workspace_session()?;
+        let result = session.read_text(input).await;
+        self.workspace_result(generation, &session, result)
+    }
+
+    pub async fn list_directory(
+        self: &Arc<Self>,
+        input: ReadInput,
+    ) -> Result<DirectoryList, HostError> {
+        let (generation, session) = self.workspace_session()?;
+        let result = session.list_directory(input).await;
+        self.workspace_result(generation, &session, result)
+    }
+
+    pub async fn stat_path(self: &Arc<Self>, input: ReadInput) -> Result<FileStat, HostError> {
+        let (generation, session) = self.workspace_session()?;
+        let result = session.stat_path(input).await;
+        self.workspace_result(generation, &session, result)
+    }
+
     pub fn phase(&self) -> Phase {
         self.state
             .lock()

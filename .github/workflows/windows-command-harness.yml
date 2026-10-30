@@ -2,10 +2,10 @@ name: Windows command harness
 
 on:
   pull_request:
-    paths: ['go-harness/**', 'lib/harness/**', '.github/workflows/windows-command-harness.yml']
+    paths: ['go-harness/**', 'lib/harness/**', 'testdata/native-relative-paths.json', '.github/workflows/windows-command-harness.yml']
   push:
     branches: [main]
-    paths: ['go-harness/**', 'lib/harness/**', '.github/workflows/windows-command-harness.yml']
+    paths: ['go-harness/**', 'lib/harness/**', 'testdata/native-relative-paths.json', '.github/workflows/windows-command-harness.yml']
 
 permissions:
   contents: read
@@ -58,4 +58,4 @@ jobs:
       - name: Host lifecycle and real daemon restart tests
         env:
           LATTICE_TEST_DAEMON_PATH: ${{ github.workspace }}/go-harness/bin/lattice-test-daemon.exe
-        run: pnpm exec jest --runInBand lib/harness/GoIOHarness.test.ts lib/harness/IOHarness.stability.test.ts lib/harness/nativeDaemonClient.integration.test.ts lib/harness/commandShell.test.ts __tests__/harness/router.test.ts __tests__/security/ToolRouter.test.ts
+        run: pnpm exec jest --runInBand lib/harness/GoIOHarness.test.ts lib/harness/IOHarness.stability.test.ts lib/harness/nativeDaemonClient.integration.test.ts lib/harness/nativeWorkspace.test.ts lib/harness/commandShell.test.ts __tests__/harness/router.test.ts __tests__/security/ToolRouter.test.ts

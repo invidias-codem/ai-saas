@@ -7,6 +7,7 @@ import (
 	"io"
 	"reflect"
 	"strings"
+	"unicode/utf8"
 )
 
 var errSchema = errors.New("invalid native protocol object")
@@ -15,7 +16,7 @@ var errSchema = errors.New("invalid native protocol object")
 // and excessive nesting before typed decoding. Native inputs are closed schemas.
 func Decode(raw []byte, target any) error {
 	t := reflect.TypeOf(target)
-	if t == nil || t.Kind() != reflect.Pointer {
+	if t == nil || t.Kind() != reflect.Pointer || !utf8.Valid(raw) {
 		return errSchema
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -90,6 +91,18 @@ func exactFields(raw []byte, t reflect.Type) error {
 			return nil
 		}
 		return exactFields(raw, t.Elem())
+	}
+	if t.Kind() == reflect.Slice || t.Kind() == reflect.Array {
+		var values []json.RawMessage
+		if json.Unmarshal(raw, &values) != nil {
+			return errSchema
+		}
+		for _, value := range values {
+			if err := exactFields(value, t.Elem()); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	if t.Kind() != reflect.Struct {
 		return nil

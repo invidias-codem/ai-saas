@@ -1,13 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Local main webview lifecycle control and event subscriptions only",
+  "description": "Local main webview lifecycle and native-confirmed read-only workspace access",
   "webviews": [
     "main"
   ],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
-    "native-host-control"
+    "native-host-control",
+    "native-workspace-read"
   ]
 }

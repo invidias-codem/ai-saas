@@ -1,6 +1,6 @@
 # Native desktop host: authenticated startup and lifecycle
 
-S2a/S2b establish the Rust-owned authenticated session and lifecycle. S2c.1 adds versioned local authority and a closed native action allowlist. This builds on [S1](native-capability-security.md); it does not qualify a downloadable installer.
+S2a/S2b establish the Rust-owned authenticated session and lifecycle. S2c.1 adds versioned local authority and a closed native action allowlist; S2c.2 adds [native-confirmed read-only folder grants](native-workspace-reads.md). This builds on [S1](native-capability-security.md); it does not qualify a downloadable installer.
 
 ## Startup contract
 
@@ -12,15 +12,15 @@ The raw stdout parser accepts one newline-terminated JSON object with exactly `s
 
 ## Native authority protocol
 
-The launcher always supplies `--native-host`, separately from `--parent-stdio`. Native protocol version 1 requires mode `local` and features `session-authority-v1` and `native-action-allowlist-v1`. These are separate from JSON-RPC `2.0`. A standalone daemon cannot satisfy this contract; no native-to-standalone fallback exists.
+The launcher always supplies `--native-host`, separately from `--parent-stdio`. Native protocol version 1 requires mode `local` and features `session-authority-v1`, `native-action-allowlist-v1` and `read-grants-v1`. These are separate from JSON-RPC `2.0`. A standalone or earlier two-feature daemon cannot satisfy this contract; no native-to-standalone fallback exists.
 
 Rust generates independent 128-bit random local principal, workspace and generation identifiers for each launch, with initial policy revision 1 and grant revision 0. This is ephemeral authority under the current OS user, not a verified company/Clerk account. No frontend command accepts these values. Go permits one binding after negotiation, atomically, and rejects rebinding, company namespaces and noninitial revisions. A failed/ambiguous bind closes the Rust session; it is never automatically retried.
 
 Native frames use closed schemas: required/exact fields, no duplicates or case aliases, no null primitive authority fields, no trailing JSON and a maximum nesting depth of 64. Authentication remains mandatory before control or capability dispatch. Bound heartbeats and `native_session_status` require exactly matching identity, generation and policy/grant revisions. Lifecycle shutdown remains available with launch authentication even before binding or when authority is uncertain.
 
-This slice allows only `status`, `native_protocol`, `bind_native_session`, `native_session_status` and `shutdown`. Every legacy file/command route and every memory, cloud, ingestion, repository, network or unknown action is denied before the standalone dispatcher. Native status returns no global telemetry backlog. S2c.2 will introduce grant snapshots and typed file reads; no folder selection, file operation or shell execution is exposed here. Standalone clients retain their existing authenticated routes and tests.
+The native allowlist contains `status`, `native_protocol`, `bind_native_session`, `native_session_status`, `shutdown`, private `native_update_grants`, and typed `native_read_text`/`native_list`/`native_stat`. Only Rust can install complete identity-matching snapshots at the next grant revision. Every legacy file/command route and every memory, cloud, ingestion, repository, network or unknown action is denied before the standalone dispatcher. Native status returns no global telemetry backlog. No file mutation or shell execution is exposed. Standalone clients retain their existing authenticated routes and tests.
 
-Tauri application commands are declared through `AppManifest::commands` and a specific `native-host-control` permission. Only the exact local `main` webview receives lifecycle controls and event listen/unlisten; it has no shell, generic RPC, grant/identity setter, event emit or Stronghold permission. The earlier browser-owned Stronghold/cloud-login path is not enrolled by this local surface. Company/native credential custody and production desktop login remain separate work.
+Tauri application commands are declared through `AppManifest::commands` with `native-host-control` and `native-workspace-read` permissions. Only the exact local `main` webview receives lifecycle controls, typed read/picker/revoke operations and event listen/unlisten; it has no generic dialog/filesystem plugin, shell, generic RPC, grant/identity setter, event emit or Stronghold permission. A navigation hook rejects destinations outside the approved local main origins. The earlier browser-owned Stronghold/cloud-login path is not enrolled by this local surface. Company/native credential custody and production desktop login remain separate work.
 
 Release and development CSPs restrict scripts, frames, objects, forms and connections to the declared local sources/IPC transport. Development additionally permits the configured HMR websocket and eval needed by development tooling, without allowing inline scripts. These policies do not turn the connected Next.js dashboard into a packaged/offline client. S3 must reconcile the actual production assets and verify native enforcement before data-bearing UI qualification.
 
