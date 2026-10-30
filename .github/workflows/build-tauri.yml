@@ -180,7 +180,7 @@ jobs:
         run: go build -o "../src-tauri/binaries/lattice-harness-x86_64-unknown-linux-gnu" ./cmd/lattice-harness
 
       - name: Build the real app and bundled sidecar (release)
-        run: pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json
+        run: pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json -- --locked
 
       - name: Install the native WebView driver
         run: cargo install tauri-driver --locked

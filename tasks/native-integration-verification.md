@@ -75,7 +75,7 @@ go -C go-harness build -o ./src-tauri/binaries/lattice-harness-x86_64-unknown-li
 pnpm desktop:frontend
 
 # Build Tauri app (release) - produces `app` executable
-pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json
+pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json -- --locked
 
 # Run with Xvfb (headless) - Tauri launches sidecar automatically
 Xvfb :99 -screen 0 1280x720x24 &
@@ -106,7 +106,7 @@ go -C go-harness build -o ./src-tauri/binaries/lattice-harness-x86_64-pc-windows
 pnpm desktop:frontend
 
 # Build Tauri app (release) - produces `app.exe` executable
-pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json
+pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json -- --locked
 
 # Run - Tauri launches sidecar automatically via tauri-plugin-shell
 ./src-tauri/target/release/app.exe

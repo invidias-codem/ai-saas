@@ -24,7 +24,7 @@ Prerequisites: Node 22+, the pinned pnpm version, Go matching `go-harness/go.mod
 pnpm install --frozen-lockfile
 pnpm desktop:check
 pnpm desktop:sidecar
-pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json
+pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json -- --locked
 ```
 
 Run `src-tauri/target/release/app` on Linux or `src-tauri/target/release/app.exe` on Windows. Run from a visible desktop session, or attach a viewer to Xvfb. The Tauri CLI runs the desktop frontend hook, embeds `desktop/dist`, and handles the sidecar; the SaaS `pnpm build` and `../out` are not part of this desktop path. No development server or cloud credentials are needed.
@@ -34,11 +34,11 @@ For installers:
 ```sh
 # Windows, on Windows x64
 pnpm desktop:sidecar
-pnpm exec tauri build --config src-tauri/tauri.preview.conf.json --bundles nsis
+pnpm exec tauri build --config src-tauri/tauri.preview.conf.json --bundles nsis -- --locked
 
 # Linux, on Linux x64
 pnpm desktop:sidecar
-pnpm exec tauri build --config src-tauri/tauri.preview.conf.json --bundles appimage,deb
+pnpm exec tauri build --config src-tauri/tauri.preview.conf.json --bundles appimage,deb -- --locked
 ```
 
 Native bundles are under `src-tauri/target/release/bundle/`. The CI collector renames them to the fixed names above and writes checksums to `dist/desktop/<platform>-x64/`. It refuses ambiguous outputs, rather than choosing an old binary. Preview packages are unsigned evaluation builds.

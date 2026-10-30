@@ -64,7 +64,7 @@ jobs:
       - name: Build evaluation installers with bundled service
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
-        run: pnpm exec tauri build --config src-tauri/tauri.preview.conf.json --bundles ${{ matrix.bundles }}
+        run: pnpm exec tauri build --config src-tauri/tauri.preview.conf.json --bundles ${{ matrix.bundles }} -- --locked
       - name: Collect fixed package names, source identity and checksums
         run: node scripts/desktop/collect-packages.mjs ${{ matrix.platform }} ${{ github.sha }}
       - name: Upload evaluation packages (not a public release)
