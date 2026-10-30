@@ -1,8 +1,11 @@
-name: CLI release CodeQL
+name: CLI and desktop release CodeQL
 on:
   pull_request:
     paths:
       - 'scripts/lattice-cli/**'
+      - 'scripts/desktop/**'
+      - 'desktop/**'
+      - 'components/desktop-downloads.tsx'
       - 'lib/releases/**'
       - 'app/**/downloads/**'
       - 'components/landing/**'
@@ -12,6 +15,9 @@ on:
     branches: [main]
     paths:
       - 'scripts/lattice-cli/**'
+      - 'scripts/desktop/**'
+      - 'desktop/**'
+      - 'components/desktop-downloads.tsx'
       - 'lib/releases/**'
       - 'app/**/downloads/**'
       - 'components/landing/**'
@@ -41,6 +47,9 @@ jobs:
           config: |
             paths:
               - scripts/lattice-cli
+              - scripts/desktop
+              - desktop
+              - components/desktop-downloads.tsx
               - lib/releases
               - components/landing
               - app/**/downloads/**

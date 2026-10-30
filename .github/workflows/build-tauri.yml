@@ -13,6 +13,10 @@ on:
     branches: [ main ]
     paths:
       - "src-tauri/**"
+      - "desktop/**"
+      - "scripts/desktop/**"
+      - "scripts/native-host/webview-smoke.test.mjs"
+      - "lib/harness/nativeWorkspace.ts"
       - "testdata/native-*.json"
       - "scripts/native-host/test-shell-windows.ps1"
       - "package.json"
@@ -22,6 +26,10 @@ on:
   pull_request:
     paths:
       - "src-tauri/**"
+      - "desktop/**"
+      - "scripts/desktop/**"
+      - "scripts/native-host/webview-smoke.test.mjs"
+      - "lib/harness/nativeWorkspace.ts"
       - "testdata/native-*.json"
       - "scripts/native-host/test-shell-windows.ps1"
       - "package.json"
@@ -95,6 +103,9 @@ jobs:
         working-directory: go-harness
         run: go build -o "../src-tauri/binaries/${{ matrix.sidecar }}" ./cmd/lattice-harness
 
+      - name: Build the bundled desktop interface
+        run: node scripts/desktop/build.mjs
+
       - name: Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
@@ -119,7 +130,6 @@ jobs:
 
   webview-smoke-test:
     name: WebView smoke test (Linux)
-    if: runner.os == 'Linux'
     runs-on: ubuntu-22.04
     needs: build-tauri
     timeout-minutes: 15
@@ -133,7 +143,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
-            xvfb libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
+            webkit2gtk-driver xvfb libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libxcomposite1 \
             libxdamage1 libxrandr2 libgbm1 libasound2
 
       - name: Setup Rust
@@ -169,29 +179,19 @@ jobs:
         working-directory: go-harness
         run: go build -o "../src-tauri/binaries/lattice-harness-x86_64-unknown-linux-gnu" ./cmd/lattice-harness
 
-      - name: Build Tauri app (release)
-        run: cargo build --locked --manifest-path src-tauri/Cargo.toml --release
+      - name: Build the real app and bundled sidecar (release)
+        run: pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json
 
-      - name: Install Playwright
-        run: |
-          cd src-tauri
-          pnpm exec playwright install --with-deps chromium
+      - name: Install the native WebView driver
+        run: cargo install tauri-driver --locked
 
-      - name: Run WebView smoke test
-        env:
-          LATTICE_TEST_DAEMON_PATH: ${{ github.workspace }}/src-tauri/binaries/lattice-harness-x86_64-unknown-linux-gnu
-          DISPLAY: ":99"
-        run: |
-          # Start Xvfb
-          Xvfb :99 -screen 0 1280x720x24 &
-          XVFB_PID=$!
-          sleep 2
+      - name: Exercise authenticated status through real WebView IPC
+        run: xvfb-run -a node --test scripts/native-host/webview-smoke.test.mjs
 
-          # Run the smoke test script
-          cd ${{ github.workspace }}
-          node --test scripts/native-host/webview-smoke.test.mjs
-
-          # Cleanup
-          kill $XVFB_PID
-
-
+      - name: Preserve measured WebView evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-webview-smoke-${{ github.sha }}
+          path: webview-smoke-results.json
+          if-no-files-found: warn

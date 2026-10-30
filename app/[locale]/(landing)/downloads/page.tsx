@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { DesktopDownloads } from '@/components/desktop-downloads';
 import { CLI_TARGETS, CLI_REPOSITORY, getCliRelease, cliAssetUrl, verificationCommand } from '@/lib/releases/cli';
 
 export const metadata: Metadata = {
-  title: 'Download Lattice OS CLI',
-  description: 'Platform-specific Lattice OS command-line tools, checksums, build provenance, and installation instructions.',
+  title: 'Download Lattice OS',
+  description: 'Lattice OS desktop packages and command-line tools for Windows, Linux and macOS, with release status and verification instructions.',
 };
 
 export default function DownloadsPage() {
@@ -12,10 +13,12 @@ export default function DownloadsPage() {
   return (
     <main className="min-h-screen bg-[#080a0d] px-6 pb-24 pt-32 text-slate-100">
       <div className="mx-auto max-w-6xl">
+        <h1 className="mb-8 text-5xl font-semibold tracking-tight">Download Lattice OS</h1>
+        <DesktopDownloads />
         <div className="mb-7 flex items-center gap-3 font-mono text-xs uppercase tracking-[0.2em] text-emerald-300">
           <span className="h-2 w-2 rounded-full bg-emerald-300" aria-hidden="true" /> Lattice OS / Developer tools
         </div>
-        <h1 className="max-w-3xl text-5xl font-semibold tracking-tight sm:text-7xl">Your infrastructure.<br /><span className="text-slate-500">One command line.</span></h1>
+        <h2 className="max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">Your infrastructure.<br /><span className="text-slate-500">One command line.</span></h2>
         <p className="mt-7 max-w-2xl text-lg leading-relaxed text-slate-400">Install the Lattice OS CLI to manage your Docker appliance, inspect deployment health, and prepare your development environment. Choose your operating system and processor below.</p>
         <div className="mt-8 flex flex-wrap gap-3 text-sm">
           <span className="rounded-full border border-slate-700 px-4 py-2">{release ? `${release.channel === 'stable' ? 'Stable' : 'Release candidate'} · ${release.version}` : 'First verified release in preparation'}</span>

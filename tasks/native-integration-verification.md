@@ -71,11 +71,11 @@ sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev xvfb
 # Build Go sidecar (placed where Tauri's sidecar launcher expects it)
 go -C go-harness build -o ./src-tauri/binaries/lattice-harness-x86_64-unknown-linux-gnu ./cmd/lattice-harness
 
-# Build Next.js frontend to ../out (required by tauri.conf.json frontendDist)
-pnpm build
+# Build the bundled local desktop interface (no SaaS static export)
+pnpm desktop:frontend
 
 # Build Tauri app (release) - produces `app` executable
-cargo build --locked --manifest-path src-tauri/Cargo.toml --release
+pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json
 
 # Run with Xvfb (headless) - Tauri launches sidecar automatically
 Xvfb :99 -screen 0 1280x720x24 &
@@ -102,11 +102,11 @@ export DISPLAY=:99
 # Build Go sidecar (placed where Tauri's sidecar launcher expects it)
 go -C go-harness build -o ./src-tauri/binaries/lattice-harness-x86_64-pc-windows-msvc.exe ./cmd/lattice-harness
 
-# Build Next.js frontend to ../out (required by tauri.conf.json frontendDist)
-pnpm build
+# Build the bundled local desktop interface (no SaaS static export)
+pnpm desktop:frontend
 
 # Build Tauri app (release) - produces `app.exe` executable
-cargo build --locked --manifest-path src-tauri/Cargo.toml --release
+pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json
 
 # Run - Tauri launches sidecar automatically via tauri-plugin-shell
 ./src-tauri/target/release/app.exe

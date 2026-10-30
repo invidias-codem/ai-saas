@@ -7,6 +7,7 @@ fn main() {
             "native_select_folder",
             "native_workspace_grants",
             "native_revoke_grant",
+            "native_request_write_access",
             "native_list",
             "native_stat",
             "native_read_text",
@@ -18,6 +19,10 @@ fn main() {
             "native_review_ready",
             "native_review_decide",
             "native_review_cancel",
+            "native_dispatch_operation",
+            "native_operation_status",
+            "native_cancel_operation",
+            "native_command_output",
         ]),
     ))
     .expect("native command permissions must compile");
