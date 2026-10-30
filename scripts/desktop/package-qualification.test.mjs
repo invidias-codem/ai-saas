@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, mkdir, symlink, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { verifyPackage, assertWindowsInstallPath } from './package-qualification.mjs';
+import { verifyPackage, assertWindowsInstallPath, canonicalWindowsApplication } from './package-qualification.mjs';
 
 const source = 'a'.repeat(40);
 const fixture = async (change = value => value) => {
@@ -34,6 +34,18 @@ test('Windows install path comparison accepts drive-letter case while rejecting 
   assertWindowsInstallPath('C:\\Users\\Tester\\Preview', 'c:\\Users\\Tester\\Preview\\app.exe');
   assert.throws(() => assertWindowsInstallPath('C:\\Users\\Tester\\Preview', 'C:\\Users\\Tester\\Other\\app.exe'));
   assert.throws(() => assertWindowsInstallPath('C:\\Users\\Tester\\Preview', 'C:\\Users\\Tester\\Preview\\other.exe'));
+});
+test('a directory alias resolves to the installed Windows application without accepting another directory', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'lattice-install-path-'));
+  try {
+    const directory = path.join(root, 'application'); await mkdir(directory);
+    const application = path.join(directory, 'app.exe'); await writeFile(application, 'not executed');
+    const alias = path.join(root, 'alias'); await symlink(directory, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    const canonical = await canonicalWindowsApplication(alias, application);
+    assert.equal(canonical.directory, await realpath(directory));
+    assert.equal(canonical.application, await realpath(application));
+    await assert.rejects(canonicalWindowsApplication(root, application));
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
 test('oversized manifests and checksum files fail before parsing or execution', async () => {
   for (const [filename, size] of [['desktop-build-manifest.json', 65537], ['SHA256SUMS', 8193]]) {

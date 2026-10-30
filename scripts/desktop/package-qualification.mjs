@@ -75,6 +75,15 @@ export function assertWindowsInstallPath(directory, application) {
   assert.equal(path.win32.relative(path.win32.resolve(directory), path.win32.dirname(application)), '',
     'Installed application must belong to the requested test directory');
 }
+export async function canonicalWindowsApplication(directory, application) {
+  assert.ok(typeof application === 'string' && path.win32.isAbsolute(application));
+  const canonicalDirectory = await realpath(directory);
+  const canonicalApplication = await realpath(application);
+  // NSIS/.NET can expand an 8.3 temporary-directory alias. Compare filesystem
+  // identities after resolving both spellings, then track the canonical paths.
+  assertWindowsInstallPath(canonicalDirectory, canonicalApplication);
+  return { directory: canonicalDirectory, application: canonicalApplication };
+}
 export async function installPackage(verified, directory) {
   if (verified.platform === 'windows') {
     assert.equal(process.platform, 'win32');
@@ -82,9 +91,8 @@ export async function installPackage(verified, directory) {
       '-Action', 'install', '-Installer', verified.installer, '-Directory', path.resolve(directory)],
     { encoding: 'utf8', timeout: 180000 });
     const state = JSON.parse(result.trim());
-    assertWindowsInstallPath(directory, state.application);
-    assertWindowsInstallPath(await realpath(directory), await realpath(state.application));
-    return { ...verified, ...state, directory: path.resolve(directory) };
+    const canonical = await canonicalWindowsApplication(directory, state.application);
+    return { ...verified, ...canonical };
   }
   assert.equal(process.platform, 'linux');
   const packageId = execFileSync('dpkg-deb', ['--field', verified.installer, 'Package'], { encoding: 'utf8' }).trim();

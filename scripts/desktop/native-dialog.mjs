@@ -34,11 +34,12 @@ export async function nativeDialog(kind, action, folder, screenshot) {
   if (action === 'cancel') { await run('key', 'Escape'); return; }
   if (kind === 'folder') {
     await run('key', 'ctrl+l'); await pause(200);
-    await run('type', '--clearmodifiers', '--delay', '1', `${folder}/`); await run('key', 'Return');
+    await run('type', '--clearmodifiers', '--delay', '1', `${folder}/`);
+    // GTK validates the location asynchronously; do not submit while it is
+    // still processing the last keystroke. Every response stays on this dialog.
     await pause(1000);
-    if ((await visible()).includes(id)) {
-      // Folder selection can navigate first and require the default Select response.
-      await run('windowfocus', '--sync', id); await run('key', 'alt+o');
+    for (let response = 0; response < 3 && (await visible()).includes(id); response += 1) {
+      await run('key', '--clearmodifiers', 'Return'); await pause(1000);
     }
   } else await run('key', 'Return');
 }

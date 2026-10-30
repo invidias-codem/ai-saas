@@ -19,9 +19,9 @@ $condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.
 $deadline = [DateTime]::UtcNow.AddSeconds(25)
 $window = $null
 while ([DateTime]::UtcNow -lt $deadline) {
-  $matches = @([System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $condition))
-  if ($matches.Count -eq 1) { $window = $matches[0]; break }
-  if ($matches.Count -gt 1) { throw 'Native dialog identity is ambiguous' }
+  $nativeWindows = @([System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $condition))
+  if ($nativeWindows.Count -eq 1) { $window = $nativeWindows[0]; break }
+  if ($nativeWindows.Count -gt 1) { throw 'Native dialog identity is ambiguous' }
   Start-Sleep -Milliseconds 200
 }
 if ($null -eq $window) { throw "Expected native dialog did not appear: $Title" }
