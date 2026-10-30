@@ -127,5 +127,6 @@ dist-electron/
 /src-tauri/binaries/lattice-harness-*-unknown-linux-gnu
 /src-tauri/binaries/lattice-harness-*-pc-windows-msvc.exe
 /desktop/dist/
+/desktop/evidence/
 /dist/desktop/
 /webview-smoke-results.json
