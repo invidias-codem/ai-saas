@@ -86,6 +86,8 @@ export async function nativeUiFlow(application, fixture, evidence, record) {
 
     await until(() => client.invoke('ping_daemon'), v => v.ok && v.value?.status === 'ok');
     measured('installed-app-authenticated-readiness');
+    assert.ok((await client.text('#build-info')).includes(record.sourceCommit), 'Installed frontend source must match the package manifest');
+    measured('installed-frontend-source-identity');
     await choose({ folder: 'cancel' }); measured('native-picker-cancel-no-grant');
     await choose({ read: 'cancel' }); measured('native-read-consent-denial-no-grant');
     const [grant] = await choose(); assert.equal(grant.read_only, true);
@@ -127,6 +129,7 @@ export async function nativeUiFlow(application, fixture, evidence, record) {
 
     const [beforeRestart] = await choose();
     // Keep a real review window open across restart and require its authority to retire.
+    await client.click('.commands summary');
     await client.fill('#relative-path', '.'); await select('#shell', process.platform === 'win32' ? 'cmd' : 'sh');
     await client.fill('#script', 'echo never-start > command-marker.txt');
     const retired = await openReview('#command-propose'); await client.switchTo(client.mainWindow);
