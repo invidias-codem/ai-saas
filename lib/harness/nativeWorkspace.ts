@@ -38,6 +38,21 @@ const commandOutputSchema = z.object({
   cancelled: z.boolean(),
   truncated: z.boolean(),
 }).strict();
+const telemetryEventSchema = z.object({
+  id: z.string().optional(),
+  workspace_id: z.string().optional(),
+  user_id: z.string(),
+  event_type: z.string(),
+  path_accessed: z.string().optional(),
+  success: z.boolean(),
+  error_message: z.string().optional(),
+  duration_ms: z.number().int().optional(),
+  operation_type: z.string().optional(),
+  timestamp: z.string(),
+}).strict();
+const daemonStatusSchema = z.object({
+  events: z.array(telemetryEventSchema),
+}).strict().nullable();
 const proposalPath = z.string().min(1).max(4096).refine(path => path !== '.');
 const commandScriptSchema = z.string().refine(script => byteLength(script) <= 64 * 1024 && script.trim().length > 0 && !script.includes('\0'));
 const commandSchema = z.discriminatedUnion('shell', [
@@ -145,6 +160,7 @@ export function createNativeWorkspaceClient(invokeNative: NativeInvoke) {
       await request('native_revoke_grant', z.object({ grant_id: grantIdSchema }).strict(), z.null(), { grant_id: grantId });
     },
     requestWriteAccess: (grantId: string) => request('native_request_write_access', z.object({ grant_id: grantIdSchema }).strict(), grantSchema, { grant_id: grantId }),
+    daemonStatus: () => request('native_daemon_status', empty, daemonStatusSchema, {}),
   };
 }
 
