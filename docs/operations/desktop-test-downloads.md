@@ -16,6 +16,12 @@ Localized paths use the existing supported locale prefixes. Only these exact pag
 
 The preview uses a distinct app identifier (`xyz.gen1e.lattice-os.preview`) and product name. It does not enroll the device into a company or upload local files. Windows installs for the current user; WebView2 bootstrapping can require network access. Linux packages bundle the local service but still require their platform WebView/system libraries.
 
+## First Windows install
+
+The Windows artifact includes `START-HERE-WINDOWS.txt`, a disposable `Lattice Test Workspace/welcome.txt`, and `TEST-NOTES.txt`, alongside the installer, source manifest and checksums. The guide covers interactive per-user installation, first launch, native folder/read/write consent, a reviewed file creation, restart and uninstall. It explains the unsigned package and expected command-denial behavior. It requires no developer tools or cloud credentials on the test machine. The source guide is [first-run-windows.txt](../../scripts/desktop/first-run-windows.txt).
+
+The app shows an expandable first-run guide and its exact compiled source in the footer. Use this ID, the installer hash and the actual Windows version when reporting a problem. The feedback form is shared manually; no reporting endpoint or automatic local-file upload is added. Windows Server CI evidence remains separate from the user's manual Windows 11 first-install results.
+
 ## Build and run
 
 Prerequisites: Node 22+, the pinned pnpm version, Go matching `go-harness/go.mod`, Rust matching the locked crates, and the Tauri platform dependencies. Windows requires Visual Studio C++ Build Tools and WebView2. Linux requires WebKitGTK 4.1, GTK, and the packaging dependencies listed in the workflow.

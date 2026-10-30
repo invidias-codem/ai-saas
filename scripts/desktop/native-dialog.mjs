@@ -20,18 +20,25 @@ export async function nativeDialog(kind, action, folder, screenshot) {
     try { return (await run('search', '--onlyvisible', '--name', `^${titles[kind]}$`)).stdout.trim().split('\n').filter(Boolean); }
     catch (error) { if (error.code === 1) return []; throw error; }
   };
-  const ids = await until(visible, values => values.length > 0);
+  let ids;
+  try { ids = await until(visible, values => values.length > 0); }
+  catch (error) {
+    await execute('import', ['-window', 'root', screenshot], { timeout: 8000 }).catch(() => {});
+    throw new Error(`Native ${kind} dialog did not appear`, { cause: error });
+  }
   if (ids.length !== 1 || !/^\d+$/.test(ids[0])) throw new Error('Native dialog identity is ambiguous');
   const id = ids[0];
   await execute('import', ['-window', 'root', screenshot], { timeout: 8000 });
+  await run('windowactivate', '--sync', id);
   await run('windowfocus', '--sync', id);
   if (action === 'cancel') { await run('key', 'Escape'); return; }
   if (kind === 'folder') {
-    await run('key', 'ctrl+l'); await run('type', '--clearmodifiers', '--delay', '1', folder); await run('key', 'Return');
-    await pause(300);
+    await run('key', 'ctrl+l'); await pause(200);
+    await run('type', '--clearmodifiers', '--delay', '1', `${folder}/`); await run('key', 'Return');
+    await pause(1000);
     if ((await visible()).includes(id)) {
       // Folder selection can navigate first and require the default Select response.
-      await run('windowfocus', '--sync', id); await run('key', 'Return');
+      await run('windowfocus', '--sync', id); await run('key', 'alt+o');
     }
   } else await run('key', 'Return');
 }

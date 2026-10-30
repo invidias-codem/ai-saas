@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { verifyPackage } from './package-qualification.mjs';
+import { verifyPackage, assertWindowsInstallPath } from './package-qualification.mjs';
 
 const source = 'a'.repeat(40);
 const fixture = async (change = value => value) => {
@@ -29,6 +29,18 @@ test('tampered package bytes fail before any installer executes', async () => {
   const { root, filename } = await fixture();
   try { await writeFile(path.join(root, filename), 'tampered'); await assert.rejects(verifyPackage(root, 'windows', source)); }
   finally { await rm(root, { recursive: true, force: true }); }
+});
+test('Windows install path comparison accepts drive-letter case while rejecting a different directory', () => {
+  assertWindowsInstallPath('C:\\Users\\Tester\\Preview', 'c:\\Users\\Tester\\Preview\\app.exe');
+  assert.throws(() => assertWindowsInstallPath('C:\\Users\\Tester\\Preview', 'C:\\Users\\Tester\\Other\\app.exe'));
+  assert.throws(() => assertWindowsInstallPath('C:\\Users\\Tester\\Preview', 'C:\\Users\\Tester\\Preview\\other.exe'));
+});
+test('oversized manifests and checksum files fail before parsing or execution', async () => {
+  for (const [filename, size] of [['desktop-build-manifest.json', 65537], ['SHA256SUMS', 8193]]) {
+    const { root } = await fixture();
+    try { await writeFile(path.join(root, filename), ' '.repeat(size)); await assert.rejects(verifyPackage(root, 'windows', source)); }
+    finally { await rm(root, { recursive: true, force: true }); }
+  }
 });
 test('a source mismatch or arbitrary manifest path cannot select executable content', async () => {
   for (const change of [m => ({ ...m, sourceCommit: 'b'.repeat(40) }), m => ({ ...m, artifacts: [{ ...m.artifacts[0], filename: '../untrusted.exe' }] })]) {

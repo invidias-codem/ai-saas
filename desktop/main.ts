@@ -2,6 +2,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { z } from 'zod';
 import { nativeWorkspace, type NativeGrant, type NativeProposalInput } from '../lib/harness/nativeWorkspace';
 
+declare const __LATTICE_BUILD__: { version: string; source: string };
 const element = <T extends HTMLElement>(id: string) => {
   const found = document.getElementById(id);
   if (!found) throw new Error('Desktop interface is incomplete');
@@ -10,6 +11,7 @@ const element = <T extends HTMLElement>(id: string) => {
 const text = (id: string, value: string) => { element(id).textContent = value; };
 const field = (id: string) => element<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(id).value;
 const button = (id: string) => element<HTMLButtonElement>(id);
+text('build-info', `Lattice OS Preview ${__LATTICE_BUILD__.version}\nSource: ${__LATTICE_BUILD__.source}\nChannel: evaluation`);
 const statusSchema = z.object({ status: z.enum(['ok', 'booting', 'stopping', 'stopped', 'error']),
   error: z.object({ code: z.string(), message: z.string() }).optional() }).passthrough();
 let selected: NativeGrant | undefined;

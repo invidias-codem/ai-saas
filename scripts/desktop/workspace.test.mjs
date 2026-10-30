@@ -48,6 +48,7 @@ const fixture = async ({ loseDispatch = false } = {}) => {
 
 test('folder access starts read only, and write controls need separate native consent', async () => {
   const ui = await fixture(); assert.equal(ui.node('read').disabled, true);
+  assert.match(ui.node('build-info').textContent, /Source: [a-f0-9]{40}/);
   await ui.click('select-folder');
   assert.equal(ui.node('read').disabled, false); assert.equal(ui.node('propose').disabled, true);
   assert.match(ui.node('grants').children[0].textContent, /<img src=x>/);

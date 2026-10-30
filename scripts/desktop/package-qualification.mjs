@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { lstat, readFile, access, readdir, readlink } from 'node:fs/promises';
+import { createReadStream, constants } from 'node:fs';
+import { lstat, open, access, readdir, readlink, realpath } from 'node:fs/promises';
 import { execFileSync, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,10 +15,25 @@ export async function sha256File(filename) {
   for await (const bytes of createReadStream(filename)) hash.update(bytes);
   return hash.digest('hex');
 }
-async function boundedJson(filename) {
-  const info = await lstat(filename);
-  assert.ok(info.isFile() && !info.isSymbolicLink() && info.size <= 65536, 'Invalid evidence manifest');
-  return JSON.parse(await readFile(filename, 'utf8'));
+async function readEvidence(filename, limit) {
+  const handle = await open(filename, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const info = await handle.stat();
+    const original = await lstat(filename);
+    assert.ok(original.isFile() && !original.isSymbolicLink(), 'Evidence must be a regular file');
+    assert.ok(info.isFile() && info.dev === original.dev && info.ino === original.ino && info.size <= limit,
+      'Evidence changed or exceeded its size limit');
+    // Validate and read the same handle. A replaced path cannot redirect this read.
+    const bytes = Buffer.alloc(limit + 1);
+    let count = 0;
+    while (count < bytes.length) {
+      const result = await handle.read(bytes, count, bytes.length - count, null);
+      if (!result.bytesRead) break;
+      count += result.bytesRead;
+    }
+    assert.ok(count <= limit, 'Evidence exceeded its size limit');
+    return bytes.subarray(0, count).toString('utf8');
+  } finally { await handle.close(); }
 }
 export async function verifyPackage(directory, platform, expectedSource) {
   assert.ok(/^[a-f0-9]{40}$/.test(expectedSource), 'An exact source commit is required');
@@ -26,7 +41,7 @@ export async function verifyPackage(directory, platform, expectedSource) {
   const root = path.resolve(directory);
   const rootInfo = await lstat(root);
   assert.ok(rootInfo.isDirectory() && !rootInfo.isSymbolicLink(), 'Artifact root must be a directory');
-  const manifest = await boundedJson(path.join(root, 'desktop-build-manifest.json'));
+  const manifest = JSON.parse(await readEvidence(path.join(root, 'desktop-build-manifest.json'), 65536));
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.channel, 'evaluation');
   assert.equal(manifest.sourceCommit, expectedSource, 'The installer must match the tested source');
@@ -35,9 +50,7 @@ export async function verifyPackage(directory, platform, expectedSource) {
   assert.ok(Array.isArray(manifest.artifacts));
   assert.deepEqual(manifest.artifacts.map(a => a.filename).sort(), [...filenames[platform]].sort(), 'Unexpected package set');
   const sumsPath = path.join(root, 'SHA256SUMS');
-  const sumsInfo = await lstat(sumsPath);
-  assert.ok(sumsInfo.isFile() && !sumsInfo.isSymbolicLink() && sumsInfo.size <= 8192);
-  const sums = (await readFile(sumsPath, 'utf8')).trim().split(/\r?\n/);
+  const sums = (await readEvidence(sumsPath, 8192)).trim().split(/\r?\n/);
   assert.equal(sums.length, manifest.artifacts.length);
   for (const artifact of manifest.artifacts) {
     assert.ok(/^[a-f0-9]{64}$/.test(artifact.sha256));
@@ -55,6 +68,13 @@ export async function verifyPackage(directory, platform, expectedSource) {
 }
 
 const windowsHelper = fileURLToPath(new URL('./windows-package.ps1', import.meta.url));
+export function assertWindowsInstallPath(directory, application) {
+  assert.ok(typeof application === 'string' && path.win32.isAbsolute(application));
+  assert.equal(path.win32.basename(application).toLowerCase(), 'app.exe');
+  // Windows paths compare without case sensitivity, including the drive letter.
+  assert.equal(path.win32.relative(path.win32.resolve(directory), path.win32.dirname(application)), '',
+    'Installed application must belong to the requested test directory');
+}
 export async function installPackage(verified, directory) {
   if (verified.platform === 'windows') {
     assert.equal(process.platform, 'win32');
@@ -62,8 +82,8 @@ export async function installPackage(verified, directory) {
       '-Action', 'install', '-Installer', verified.installer, '-Directory', path.resolve(directory)],
     { encoding: 'utf8', timeout: 180000 });
     const state = JSON.parse(result.trim());
-    assert.ok(path.isAbsolute(state.application) && path.dirname(state.application) === path.resolve(directory));
-    await access(state.application);
+    assertWindowsInstallPath(directory, state.application);
+    assertWindowsInstallPath(await realpath(directory), await realpath(state.application));
     return { ...verified, ...state, directory: path.resolve(directory) };
   }
   assert.equal(process.platform, 'linux');

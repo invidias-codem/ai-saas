@@ -2,6 +2,7 @@ import { readdir, readFile, mkdir, rm, copyFile, writeFile } from 'node:fs/promi
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeFirstRunKit } from './first-run-kit.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const platform = process.argv[2];
@@ -27,5 +28,6 @@ await writeFile(path.join(output, 'SHA256SUMS'), artifacts.map(a => `${a.sha256}
 const manifest = { schemaVersion: 1, channel: 'evaluation', sourceCommit: commit, platform: `${platform}-x64`,
   artifacts, qualification: { nativeUi: 'pending', cleanMachineInstall: 'pending', stableRelease: false } };
 await writeFile(path.join(output, 'desktop-build-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+await writeFirstRunKit(output, platform, commit);
 await writeFile(path.join(output, 'READ-ME.txt'), `Lattice OS Preview — evaluation packages\nSource commit: ${commit}\n\nCompare SHA256SUMS before installation. These are unsigned test packages, not a stable release.\nWindows: run lattice-desktop-windows-x64-setup.exe (WebView2 bootstrap may require network).\nLinux: install the .deb on Ubuntu 22.04+, or chmod +x the AppImage before opening it.\nThe native dialogs and clean-machine install still require platform verification.\nFolder authorization expires on restart. Task recovery and durable project memory are not yet qualified.\nCommands remain disabled without a qualified sandbox.\n`);
 console.log(`Evaluation packages and checksums: ${path.relative(root, output)}`);
