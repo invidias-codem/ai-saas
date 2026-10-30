@@ -138,7 +138,9 @@ fn main_and_forged_review_windows_cannot_submit_decisions() {
         let denied = call_input(&main, command, main.url().unwrap().as_str(), input.clone())
             .err()
             .unwrap();
-        let message = denied.as_str().expect("main review calls must fail at the ACL");
+        let message = denied
+            .as_str()
+            .expect("main review calls must fail at the ACL");
         assert!(message.contains("not allowed"), "{command}: {denied}");
         // Forged review window always gets LOCAL_REVIEW_DENIED
         let denied = call_input(&fake, command, &fake_origin, input)
