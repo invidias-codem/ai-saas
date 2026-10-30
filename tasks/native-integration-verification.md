@@ -139,3 +139,31 @@ pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json -- 
 - Installers (S5), signed downloads (S6)
 - Production frontend bundling (S3)
 - ARM64, macOS, iOS, Android
+
+
+## Reconciled packaged verification checklist
+
+Use the exact Windows/Linux build commands, sidecar placement and executable names in
+[desktop-test-downloads.md](../docs/operations/desktop-test-downloads.md). The packaged
+frontend is `desktop/dist`; do not build the SaaS static export for this flow.
+
+The smoke entrypoint delegates to `scripts/desktop/webview-smoke.mjs`. It invokes
+`ping_daemon` through the actual WebView/Rust/daemon path and measures grant denial
+and authenticated restart. Preserve this driver; stdout parsing is not IPC evidence.
+
+Record separately for Windows 11 x64 and Ubuntu 22.04/24.04:
+- Exact commit, OS/version, executable/package SHA-256, date and verifier.
+- Authenticated WebView readiness; fresh session has no grants.
+- Native folder picker and read consent; exact bounded list/stat/text results.
+- Separate write consent; create-file proposal; isolated review with complete byte
+  views, scrolling and explicit acceptance; separate dispatch; exact bytes on disk.
+- External-edit conflict without overwriting the external bytes, one-use acceptance,
+  replay/response-loss status reconciliation without redispatch, and revocation.
+- Restart clears grants/proposals; supported commands return
+  `LOCAL_SANDBOX_REQUIRED` with no process launch. Missing shells remain unavailable.
+- Daemon failure causes authenticated IPC failure, never a stdout-derived pass.
+
+Attach screenshots/logs and actual disk observations to each case, marking failures
+and unexecuted checks explicitly. The readiness smoke does not qualify native dialogs,
+reviewed mutations, clean-machine installation or stable publication. Both platform
+checklists must pass on the tested integration revision before S2c.6 closure.

@@ -186,6 +186,7 @@ pub fn run() {
             workspace::native_list,
             workspace::native_stat,
             workspace::native_read_text,
+            workspace::native_daemon_status,
             review::native_propose_operation,
             review::native_proposal_status,
             review::native_cancel_proposal,
