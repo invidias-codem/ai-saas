@@ -2,6 +2,7 @@
 //! reference, never a bearer approval. No execution endpoint is exposed here.
 use crate::{
     authority::{random_id, Authority},
+    mutation::{FilePrecondition, PreparedMutation},
     workspace::{valid_relative_path, GrantState, MAX_TEXT_BYTES},
     HostError, RpcSession,
 };
@@ -24,10 +25,15 @@ const MAX_PENDING: usize = 32;
 const MAX_ATTEMPTS: usize = 4096;
 const MAX_DOCUMENT: usize = 2 * 1024 * 1024;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProposalInput {
     CreateFile {
+        grant_id: String,
+        relative_path: String,
+        content: String,
+    },
+    WriteText {
         grant_id: String,
         relative_path: String,
         content: String,
@@ -40,26 +46,30 @@ pub enum ProposalInput {
 impl ProposalInput {
     pub fn grant_id(&self) -> &str {
         match self {
-            Self::CreateFile { grant_id, .. } | Self::CreateDirectory { grant_id, .. } => grant_id,
+            Self::CreateFile { grant_id, .. }
+            | Self::WriteText { grant_id, .. }
+            | Self::CreateDirectory { grant_id, .. } => grant_id,
         }
     }
     fn path(&self) -> &str {
         match self {
             Self::CreateFile { relative_path, .. }
+            | Self::WriteText { relative_path, .. }
             | Self::CreateDirectory { relative_path, .. } => relative_path,
         }
     }
     fn kind(&self) -> &'static str {
         match self {
             Self::CreateFile { .. } => "create_file",
+            Self::WriteText { .. } => "write_text",
             Self::CreateDirectory { .. } => "create_directory",
         }
     }
-    fn validate(&self) -> Result<(), HostError> {
+    pub(crate) fn validate(&self) -> Result<(), HostError> {
         if self.path() == "." || !valid_relative_path(self.path()) {
             return Err(HostError::PathInvalid);
         }
-        if let Self::CreateFile { content, .. } = self {
+        if let Self::CreateFile { content, .. } | Self::WriteText { content, .. } = self {
             if content.len() > MAX_TEXT_BYTES || content.contains('\0') {
                 return Err(HostError::ProposalInvalid);
             }
@@ -129,6 +139,10 @@ pub struct ReviewDocument {
     pub display_root_json: String,
     pub relative_path_json: String,
     pub precondition: String,
+    pub precondition_details_json: String,
+    pub base_content_json: Option<String>,
+    pub base_content_hex: Option<String>,
+    pub base_byte_count: usize,
     pub content_json: Option<String>,
     pub content_hex: Option<String>,
     pub byte_count: usize,
@@ -141,8 +155,20 @@ fn field(bytes: &mut Vec<u8>, value: &str) {
     bytes.extend_from_slice(&(value.len() as u32).to_be_bytes());
     bytes.extend_from_slice(value.as_bytes());
 }
+#[cfg(test)]
 pub(crate) fn canonical(id: &str, scope: &ReviewScope, op: &ProposalInput) -> Vec<u8> {
+    canonical_prepared(id, scope, op, None)
+}
+pub(crate) fn canonical_prepared(
+    id: &str,
+    scope: &ReviewScope,
+    op: &ProposalInput,
+    pre: Option<&FilePrecondition>,
+) -> Vec<u8> {
     let mut bytes = b"LATTICE_NATIVE_PROPOSAL\0\x01".to_vec();
+    if pre.is_some() {
+        *bytes.last_mut().unwrap() = 2;
+    }
     for value in [
         id,
         &scope.authority.principal_id,
@@ -157,19 +183,34 @@ pub(crate) fn canonical(id: &str, scope: &ReviewScope, op: &ProposalInput) -> Ve
     field(&mut bytes, &scope.display_root);
     bytes.push(u8::from(scope.read_only));
     bytes.extend_from_slice(&300000u32.to_be_bytes());
-    bytes.push(if matches!(op, ProposalInput::CreateFile { .. }) {
-        1
-    } else {
-        2
+    bytes.push(match op {
+        ProposalInput::CreateFile { .. } => 1,
+        ProposalInput::CreateDirectory { .. } => 2,
+        ProposalInput::WriteText { .. } => 3,
     });
     field(&mut bytes, op.path());
-    if let ProposalInput::CreateFile { content, .. } = op {
+    if let ProposalInput::CreateFile { content, .. } | ProposalInput::WriteText { content, .. } = op
+    {
         field(&mut bytes, content)
     }
-    field(&mut bytes, "must_be_absent");
+    if let Some(pre) = pre {
+        field(&mut bytes, &pre.parent_identity.volume);
+        field(&mut bytes, &pre.parent_identity.file);
+        if let Some(base) = &pre.base {
+            field(&mut bytes, "matches_base");
+            field(&mut bytes, &base.identity.volume);
+            field(&mut bytes, &base.identity.file);
+            field(&mut bytes, &base.content_sha3);
+            bytes.extend_from_slice(&(base.byte_count as u64).to_be_bytes());
+        } else {
+            field(&mut bytes, "must_be_absent");
+        }
+    } else {
+        field(&mut bytes, "must_be_absent");
+    }
     bytes
 }
-fn digest(bytes: &[u8]) -> String {
+pub(crate) fn digest(bytes: &[u8]) -> String {
     Sha3_256::digest(bytes)
         .iter()
         .map(|b| format!("{b:02x}"))
@@ -244,6 +285,7 @@ struct Entry {
     deadline: Instant,
     state: ProposalState,
     displayed: bool,
+    precondition: Option<FilePrecondition>,
 }
 impl Entry {
     fn summary(&self) -> ProposalSummary {
@@ -259,17 +301,36 @@ impl Entry {
     }
     fn document(&self) -> Result<ReviewDocument, HostError> {
         let content = match &self.op {
-            ProposalInput::CreateFile { content, .. } => Some(content),
+            ProposalInput::CreateFile { content, .. }
+            | ProposalInput::WriteText { content, .. } => Some(content),
             _ => None,
         };
+        let base = self.precondition.as_ref().and_then(|p| p.base.as_ref());
+        let metadata = self.precondition.as_ref().map(|p|serde_json::json!({"parent_identity":p.parent_identity,"base":p.base.as_ref().map(|b|serde_json::json!({"identity":b.identity,"content_sha3":b.content_sha3,"byte_count":b.byte_count}))}));
         let doc = ReviewDocument {
-            schema_version: 1,
+            schema_version: 2,
             proposal_id: self.id.clone(),
             digest: self.digest.clone(),
             kind: self.op.kind().into(),
             display_root_json: display_json(&self.scope.display_root)?,
             relative_path_json: display_json(self.op.path())?,
-            precondition: "must_be_absent".into(),
+            precondition: if base.is_some() {
+                "matches_base"
+            } else {
+                "must_be_absent"
+            }
+            .into(),
+            precondition_details_json: serde_json::to_string(&metadata)
+                .map_err(|_| HostError::InvalidResponse)?,
+            base_content_json: base.map(|b| display_json(&b.content)).transpose()?,
+            base_content_hex: base.map(|b| {
+                b.content
+                    .as_bytes()
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect()
+            }),
+            base_byte_count: base.map_or(0, |b| b.byte_count),
             content_json: content.map(|s| display_json(s)).transpose()?,
             content_hex: content.map(|s| s.as_bytes().iter().map(|b| format!("{b:02x}")).collect()),
             byte_count: content.map_or(0, |s| s.len()),
@@ -298,6 +359,7 @@ pub struct ApprovedOperation {
     proposal_id: String,
     digest: String,
     canonical: Vec<u8>,
+    pub(crate) authority: Authority,
 }
 impl ApprovedOperation {
     pub fn proposal_id(&self) -> &str {
@@ -367,10 +429,27 @@ impl ReviewBook {
             self.retire(&id, ProposalState::Stale)
         }
     }
+    #[cfg(test)]
     pub(crate) fn propose(
         &mut self,
         scope: ReviewScope,
         op: ProposalInput,
+    ) -> Result<ProposalSummary, HostError> {
+        self.propose_prepared(
+            format!("local-proposal-{}", random_id()?),
+            scope,
+            op,
+            None,
+            Instant::now() + REVIEW_LIFETIME,
+        )
+    }
+    pub(crate) fn propose_prepared(
+        &mut self,
+        id: String,
+        scope: ReviewScope,
+        op: ProposalInput,
+        pre: Option<FilePrecondition>,
+        deadline: Instant,
     ) -> Result<ProposalSummary, HostError> {
         self.sweep();
         op.validate()?;
@@ -380,23 +459,35 @@ impl ReviewBook {
         if self.entries.len() >= MAX_PENDING {
             return Err(HostError::ProposalCapacity);
         }
-        let id = format!("local-proposal-{}", random_id()?);
         if self.entries.contains_key(&id) || self.consumed.contains(&id) {
             return Err(HostError::RandomUnavailable);
         }
+        if deadline <= Instant::now()
+            || pre.as_ref().is_some_and(|p| !p.valid_for(&op))
+            || matches!(op, ProposalInput::WriteText { .. }) && pre.is_none()
+        {
+            return Err(HostError::ProposalInvalid);
+        }
         let entry = Entry {
-            digest: digest(&canonical(&id, &scope, &op)),
+            digest: digest(&canonical_prepared(&id, &scope, &op, pre.as_ref())),
             id: id.clone(),
             scope,
             op,
-            deadline: Instant::now() + REVIEW_LIFETIME,
+            deadline,
             state: ProposalState::Pending,
             displayed: false,
+            precondition: pre,
         };
         entry.document()?;
         let summary = entry.summary();
         self.entries.insert(id, entry);
         Ok(summary)
+    }
+    pub(crate) fn candidate(&self, id: &str) -> Result<ProposalInput, HostError> {
+        self.entries
+            .get(id)
+            .map(|e| e.op.clone())
+            .ok_or(HostError::ProposalUnknown)
     }
     pub(crate) fn status(&mut self, id: &str) -> Result<ProposalSummary, HostError> {
         self.sweep();
@@ -415,6 +506,15 @@ impl ReviewBook {
     pub(crate) fn cancel(&mut self, id: &str) -> Result<(), HostError> {
         self.sweep();
         if !self.entries.contains_key(id) {
+            if self.history.iter().any(|s| {
+                s.proposal_id == id
+                    && matches!(
+                        s.status,
+                        ProposalState::Denied | ProposalState::Expired | ProposalState::Stale
+                    )
+            }) {
+                return Ok(());
+            }
             return Err(HostError::ProposalUnknown);
         }
         self.retire(id, ProposalState::Denied);
@@ -529,7 +629,12 @@ impl ReviewBook {
         if e.state != ProposalState::Accepted
             || &e.scope != scope
             || candidate.grant_id() != scope.grant_id
-            || digest(&canonical(id, scope, &candidate)) != e.digest
+            || digest(&canonical_prepared(
+                id,
+                scope,
+                &candidate,
+                e.precondition.as_ref(),
+            )) != e.digest
         {
             self.retire(id, ProposalState::Stale);
             return Err(HostError::ReviewDenied);
@@ -546,7 +651,8 @@ impl ReviewBook {
         let output = ApprovedOperation {
             proposal_id: id.into(),
             digest: e.digest.clone(),
-            canonical: canonical(id, scope, &e.op),
+            canonical: canonical_prepared(id, scope, &e.op, e.precondition.as_ref()),
+            authority: scope.authority.clone(),
         };
         self.retire(id, ProposalState::Consumed);
         Ok(output)
@@ -559,7 +665,11 @@ impl RpcSession {
             book.invalidate();
         }
     }
-    fn review_scope(&self, grants: &GrantState, grant_id: &str) -> Result<ReviewScope, HostError> {
+    pub(crate) fn review_scope(
+        &self,
+        grants: &GrantState,
+        grant_id: &str,
+    ) -> Result<ReviewScope, HostError> {
         self.ensure_workspace()?;
         let grant = grants
             .review_grant(grant_id)
@@ -581,10 +691,42 @@ impl RpcSession {
     ) -> Result<ProposalSummary, HostError> {
         let grants = self.grants.try_read().map_err(|_| HostError::Busy)?;
         let scope = self.review_scope(&grants, input.grant_id())?;
-        self.reviews
+        input.validate()?;
+        let _permit = self.permits.try_acquire().map_err(|_| HostError::Busy)?;
+        let id = format!("local-proposal-{}", random_id()?);
+        let deadline = Instant::now() + REVIEW_LIFETIME;
+        let reply = self
+            .request_authority(
+                "native_prepare_mutation",
+                serde_json::json!({"proposal_id":id,"operation":input}),
+                Some(&scope.authority),
+            )
+            .await?;
+        let prepared: PreparedMutation =
+            serde_json::from_value(reply).map_err(|_| HostError::InvalidResponse)?;
+        self.ensure_workspace()?;
+        prepared.verify(&id, &scope, &input)?;
+        let result = self
+            .reviews
             .lock()
             .map_err(|_| HostError::StateUnavailable)?
-            .propose(scope, input)
+            .propose_prepared(
+                id.clone(),
+                scope.clone(),
+                input,
+                Some(prepared.material.precondition),
+                deadline,
+            );
+        if result.is_err() {
+            let _ = self
+                .request_authority(
+                    "native_cancel_mutation",
+                    serde_json::json!({"proposal_id":id}),
+                    Some(&scope.authority),
+                )
+                .await;
+        }
+        result
     }
     pub async fn proposal_status(&self, id: &str) -> Result<ProposalSummary, HostError> {
         self.ensure_workspace()?;
@@ -595,10 +737,25 @@ impl RpcSession {
     }
     pub async fn cancel_proposal(&self, id: &str) -> Result<(), HostError> {
         self.ensure_workspace()?;
+        let grants = self.grants.try_read().map_err(|_| HostError::Busy)?;
+        let authority = self
+            .authority
+            .get()
+            .ok_or(HostError::Closed)?
+            .with_grant_revision(grants.revision);
         self.reviews
             .lock()
             .map_err(|_| HostError::StateUnavailable)?
-            .cancel(id)
+            .cancel(id)?;
+        // Local denial is final even if best-effort remote ticket cleanup fails.
+        let _ = self
+            .request_authority(
+                "native_cancel_mutation",
+                serde_json::json!({"proposal_id":id}),
+                Some(&authority),
+            )
+            .await;
+        Ok(())
     }
     pub async fn begin_review(&self, id: &str) -> Result<ReviewLease, HostError> {
         let grants = self.grants.try_read().map_err(|_| HostError::Busy)?;
@@ -658,7 +815,7 @@ impl RpcSession {
             input.decision,
         )
     }
-    /// Native-only future dispatch boundary. No matching Tauri/Go action exists.
+    /// Native-only consumption boundary; no matching Tauri command exists.
     pub async fn consume_approval(
         &self,
         id: &str,

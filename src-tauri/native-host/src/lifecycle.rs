@@ -86,6 +86,44 @@ impl Default for NativeHost {
 }
 
 impl NativeHost {
+    pub async fn request_write_access<C: crate::workspace::WriteConsent + 'static>(
+        self: &Arc<Self>,
+        id: String,
+        consent: C,
+    ) -> Result<crate::workspace::GrantInfo, HostError> {
+        let (g, s) = self.workspace_session()?;
+        let host = self.clone();
+        tokio::spawn(async move {
+            let r = s.request_write_access(&id, &consent).await;
+            host.workspace_result(g, &s, r)
+        })
+        .await
+        .map_err(|_| HostError::StateUnavailable)?
+    }
+    pub async fn dispatch_operation(
+        self: &Arc<Self>,
+        id: &str,
+    ) -> Result<crate::mutation::OperationStatus, HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.dispatch_operation(id).await;
+        self.workspace_result(g, &s, r)
+    }
+    pub async fn operation_status(
+        self: &Arc<Self>,
+        id: &str,
+    ) -> Result<crate::mutation::OperationStatus, HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.operation_status(id).await;
+        self.workspace_result(g, &s, r)
+    }
+    pub async fn cancel_operation(
+        self: &Arc<Self>,
+        id: &str,
+    ) -> Result<crate::mutation::OperationStatus, HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.cancel_operation(id).await;
+        self.workspace_result(g, &s, r)
+    }
     pub async fn propose_operation(
         self: &Arc<Self>,
         input: ProposalInput,

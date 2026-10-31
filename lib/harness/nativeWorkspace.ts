@@ -5,7 +5,7 @@ const grantIdSchema = z.string().regex(/^local-grant-[a-f0-9]{32}$/);
 const grantSchema = z.object({
   grant_id: grantIdSchema,
   display_path: z.string().min(1).max(32768),
-  read_only: z.literal(true),
+  read_only: z.boolean(),
 }).strict();
 const readInputSchema = z.object({
   grant_id: grantIdSchema,
@@ -29,13 +29,17 @@ const proposalInputSchema = z.discriminatedUnion('kind', [
     content: z.string().refine(content => byteLength(content) <= 256 * 1024 && !content.includes('\0')),
   }).strict(),
   z.object({
+    kind: z.literal('write_text'), grant_id: grantIdSchema, relative_path: proposalPath,
+    content: z.string().refine(content => byteLength(content) <= 256 * 1024 && !content.includes('\0')),
+  }).strict(),
+  z.object({
     kind: z.literal('create_directory'), grant_id: grantIdSchema, relative_path: proposalPath,
   }).strict(),
 ]);
 const proposalSummarySchema = z.object({
   proposal_id: proposalIdSchema, digest: z.string().regex(/^[a-f0-9]{64}$/),
   status: z.enum(['pending', 'reviewing', 'accepted', 'denied', 'expired', 'stale', 'consumed']),
-  kind: z.enum(['create_file', 'create_directory']), grant_id: grantIdSchema,
+  kind: z.enum(['create_file', 'create_directory', 'write_text']), grant_id: grantIdSchema,
   relative_path: proposalPath, execution_available: z.literal(false),
 }).strict();
 export type NativeProposalInput = z.infer<typeof proposalInputSchema>;
@@ -47,7 +51,8 @@ const errorCodes = [
   'LOCAL_SERVICE_BUSY', 'LOCAL_SERVICE_STOPPED', 'LOCAL_SERVICE_EXITED',
   'LOCAL_SERVICE_UNAVAILABLE', 'LOCAL_REQUEST_TIMEOUT', 'LOCAL_CLEANUP_UNCONFIRMED',
   'LOCAL_STATE_UNAVAILABLE', 'LOCAL_STORAGE_UNAVAILABLE', 'LOCAL_PROTOCOL_INCOMPATIBLE',
-  'LOCAL_DESKTOP_REQUIRED',
+  'LOCAL_DESKTOP_REQUIRED', 'LOCAL_FILE_CONFLICT', 'LOCAL_OPERATION_UNAVAILABLE',
+  'LOCAL_OPERATION_REPLAYED', 'LOCAL_OUTCOME_UNKNOWN',
   'LOCAL_PROPOSAL_INVALID', 'LOCAL_PROPOSAL_TOO_LARGE', 'LOCAL_PROPOSAL_CAPACITY',
   'LOCAL_PROPOSAL_UNAVAILABLE', 'LOCAL_REVIEW_DENIED', 'LOCAL_WRITE_GRANT_REQUIRED',
 ] as const;

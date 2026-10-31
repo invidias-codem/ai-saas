@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"time"
 	"unicode/utf8"
 
 	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
@@ -44,9 +45,18 @@ type DirectoryList struct {
 }
 
 func (s *Session) Close() error {
+	if s.ownWork {
+		s.work.Stop()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.work.Wait(ctx); err != nil {
+			return err
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.blocked = true
+	s.invalidatePrepared()
 	return s.registry.Close()
 }
 
@@ -59,6 +69,7 @@ func (s *Session) RejectGrantUpdate(candidate *Authority) string {
 		return code
 	}
 	s.blocked = true
+	s.invalidatePrepared()
 	_ = s.registry.Close()
 	return "LOCAL_GRANT_UPDATE_FAILED"
 }
@@ -73,7 +84,8 @@ func (s *Session) UpdateGrants(candidate *Authority, snapshot GrantSnapshot) (Gr
 	for _, grant := range snapshot.Grants {
 		valid = valid && validID(grant.ID, "local-grant-") && len(grant.Path) <= 32768 && utf8.ValidString(grant.Path)
 	}
-	if !valid || s.registry.UpdateReadGrants(s.bound.PrincipalID, s.bound.WorkspaceID, snapshot.Grants) != nil {
+	s.invalidatePrepared()
+	if !valid || s.registry.UpdateNativeGrants(s.bound.PrincipalID, s.bound.WorkspaceID, snapshot.Grants) != nil {
 		s.blocked = true
 		_ = s.registry.Close()
 		return GrantAcknowledgement{}, "LOCAL_GRANT_UPDATE_FAILED"

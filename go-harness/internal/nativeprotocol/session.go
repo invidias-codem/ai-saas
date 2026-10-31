@@ -3,15 +3,18 @@
 package nativeprotocol
 
 import (
+	"context"
 	"regexp"
 	"sync"
+	"time"
 
 	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/lifecycle"
 )
 
 const Version = 1
 
-var Features = [...]string{"session-authority-v1", "native-action-allowlist-v1", "read-grants-v1"}
+var Features = [...]string{"session-authority-v1", "native-action-allowlist-v1", "read-grants-v1", "guarded-file-mutations-v1"}
 var localID = regexp.MustCompile(`^[a-f0-9]{32}$`)
 
 type Authority struct {
@@ -48,9 +51,22 @@ type Session struct {
 	bound      *Authority
 	blocked    bool
 	registry   *fsutil.RootRegistry
+	operations mutationBook
+	work       *lifecycle.Group
+	ownWork    bool
+	now        func() time.Time
+	apply      func(context.Context, string, string, string, string, string, string, fsutil.FilePrecondition) fsutil.MutationResult
 }
 
-func NewSession() *Session { return &Session{registry: fsutil.NewRootRegistry()} }
+func NewSession() *Session {
+	s := NewSessionWithWork(lifecycle.New(context.Background()))
+	s.ownWork = true
+	return s
+}
+func NewSessionWithWork(work *lifecycle.Group) *Session {
+	r := fsutil.NewRootRegistry()
+	return &Session{registry: r, work: work, now: time.Now, apply: r.ApplyNativeMutation, operations: mutationBook{prepared: make(map[string]*preparedMutation), attempts: make(map[string]*mutationAttempt)}}
+}
 
 func (s *Session) Negotiate() Protocol {
 	s.mu.Lock()

@@ -327,3 +327,49 @@ async fn complete_display_preserves_bytes_escapes_controls_and_rejects_oversize(
         assert!(serde_json::from_value::<ProposalInput>(input).is_err());
     }
 }
+
+#[test]
+fn independent_prepared_v2_fixtures_bind_parent_and_complete_base() {
+    #[derive(serde::Deserialize)]
+    struct Fixture {
+        material: crate::mutation::ProposalMaterial,
+        digest: String,
+    }
+    let fixtures: Vec<Fixture> = serde_json::from_str(include_str!(
+        "../../../testdata/native-prepared-digests.json"
+    ))
+    .unwrap();
+    for f in fixtures {
+        let value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/native-prepared-digests.json"
+        ))
+        .unwrap();
+        let raw = value
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["digest"] == f.digest)
+            .unwrap();
+        let scope = ReviewScope {
+            authority: serde_json::from_value(raw["material"]["authority"].clone()).unwrap(),
+            grant_id: raw["material"]["operation"]["grant_id"]
+                .as_str()
+                .unwrap()
+                .into(),
+            display_root: raw["material"]["display_root"].as_str().unwrap().into(),
+            read_only: false,
+        };
+        let op: ProposalInput =
+            serde_json::from_value(raw["material"]["operation"].clone()).unwrap();
+        assert!(f.material.precondition.valid_for(&op));
+        assert_eq!(
+            digest(&canonical_prepared(
+                &f.material.proposal_id,
+                &scope,
+                &op,
+                Some(&f.material.precondition)
+            )),
+            f.digest
+        );
+    }
+}

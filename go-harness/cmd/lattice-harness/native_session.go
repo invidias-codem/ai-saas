@@ -84,6 +84,46 @@ func nativeDispatch(w http.ResponseWriter, ctx context.Context, req nativeFrame,
 		} else {
 			result = nativeData(data)
 		}
+	case "native_prepare_mutation":
+		var input nativeprotocol.PrepareMutationRequest
+		if nativeprotocol.Decode(req.Inputs, &input) != nil {
+			sendErrorResponse(w, req.ID, -32602, "Invalid native proposal inputs")
+			return
+		}
+		if data, code := session.Native.PrepareMutation(req.Authority, input); code != "" {
+			result = nativeFailure(code)
+		} else {
+			result = nativeData(data)
+		}
+	case "native_dispatch_mutation":
+		var input nativeprotocol.DispatchMutationRequest
+		if nativeprotocol.Decode(req.Inputs, &input) != nil {
+			sendErrorResponse(w, req.ID, -32602, "Invalid native dispatch inputs")
+			return
+		}
+		if data, code := session.Native.DispatchMutation(req.Authority, input); code != "" {
+			result = nativeFailure(code)
+		} else {
+			result = nativeData(data)
+		}
+	case "native_mutation_status", "native_cancel_mutation":
+		var input nativeprotocol.OperationReference
+		if nativeprotocol.Decode(req.Inputs, &input) != nil {
+			sendErrorResponse(w, req.ID, -32602, "Invalid native operation reference")
+			return
+		}
+		var data nativeprotocol.OperationStatus
+		var code string
+		if req.Action == "native_mutation_status" {
+			data, code = session.Native.MutationStatus(req.Authority, input)
+		} else {
+			data, code = session.Native.CancelMutation(req.Authority, input)
+		}
+		if code != "" {
+			result = nativeFailure(code)
+		} else {
+			result = nativeData(data)
+		}
 	default:
 		code := session.Native.Check(req.Authority)
 		if code == "" {
