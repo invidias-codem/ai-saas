@@ -2,6 +2,7 @@
 //! reference, never a bearer approval. No execution endpoint is exposed here.
 use crate::{
     authority::{random_id, Authority},
+    command::{canonical_command, timeout_ms, CommandInput, CommandPrecondition},
     mutation::{FilePrecondition, PreparedMutation},
     workspace::{valid_relative_path, GrantState, MAX_TEXT_BYTES},
     HostError, RpcSession,
@@ -28,6 +29,13 @@ const MAX_DOCUMENT: usize = 2 * 1024 * 1024;
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProposalInput {
+    ExecuteCommand {
+        grant_id: String,
+        relative_path: String,
+        command: CommandInput,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        timeout_seconds: Option<u32>,
+    },
     CreateFile {
         grant_id: String,
         relative_path: String,
@@ -46,27 +54,30 @@ pub enum ProposalInput {
 impl ProposalInput {
     pub fn grant_id(&self) -> &str {
         match self {
-            Self::CreateFile { grant_id, .. }
+            Self::ExecuteCommand { grant_id, .. }
+            | Self::CreateFile { grant_id, .. }
             | Self::WriteText { grant_id, .. }
             | Self::CreateDirectory { grant_id, .. } => grant_id,
         }
     }
     fn path(&self) -> &str {
         match self {
-            Self::CreateFile { relative_path, .. }
+            Self::ExecuteCommand { relative_path, .. }
+            | Self::CreateFile { relative_path, .. }
             | Self::WriteText { relative_path, .. }
             | Self::CreateDirectory { relative_path, .. } => relative_path,
         }
     }
     fn kind(&self) -> &'static str {
         match self {
+            Self::ExecuteCommand { .. } => "execute_command",
             Self::CreateFile { .. } => "create_file",
             Self::WriteText { .. } => "write_text",
             Self::CreateDirectory { .. } => "create_directory",
         }
     }
     pub(crate) fn validate(&self) -> Result<(), HostError> {
-        if self.path() == "." || !valid_relative_path(self.path()) {
+        if self.path() == "." && !self.is_command() || !valid_relative_path(self.path()) {
             return Err(HostError::PathInvalid);
         }
         if let Self::CreateFile { content, .. } | Self::WriteText { content, .. } = self {
@@ -74,7 +85,24 @@ impl ProposalInput {
                 return Err(HostError::ProposalInvalid);
             }
         }
+        if let Self::ExecuteCommand { command, .. } = self {
+            if !command.valid() {
+                return Err(HostError::CommandInvalid);
+            }
+        }
         Ok(())
+    }
+    pub(crate) fn is_command(&self) -> bool {
+        matches!(self, Self::ExecuteCommand { .. })
+    }
+    pub(crate) fn normalized(mut self) -> Self {
+        if let Self::ExecuteCommand {
+            timeout_seconds, ..
+        } = &mut self
+        {
+            *timeout_seconds = Some(timeout_ms(*timeout_seconds) / 1000)
+        };
+        self
     }
 }
 #[derive(Clone, Deserialize)]
@@ -151,7 +179,7 @@ pub struct ReviewDocument {
     pub expires_in_ms: u64,
 }
 
-fn field(bytes: &mut Vec<u8>, value: &str) {
+pub(crate) fn field(bytes: &mut Vec<u8>, value: &str) {
     bytes.extend_from_slice(&(value.len() as u32).to_be_bytes());
     bytes.extend_from_slice(value.as_bytes());
 }
@@ -186,6 +214,7 @@ pub(crate) fn canonical_prepared(
     bytes.push(match op {
         ProposalInput::CreateFile { .. } => 1,
         ProposalInput::CreateDirectory { .. } => 2,
+        ProposalInput::ExecuteCommand { .. } => 4,
         ProposalInput::WriteText { .. } => 3,
     });
     field(&mut bytes, op.path());
@@ -210,13 +239,26 @@ pub(crate) fn canonical_prepared(
     }
     bytes
 }
+pub(crate) fn canonical_operation(
+    id: &str,
+    scope: &ReviewScope,
+    op: &ProposalInput,
+    pre: Option<&FilePrecondition>,
+    command: Option<&CommandPrecondition>,
+) -> Vec<u8> {
+    if let Some(command) = command {
+        canonical_command(id, scope, op, command)
+    } else {
+        canonical_prepared(id, scope, op, pre)
+    }
+}
 pub(crate) fn digest(bytes: &[u8]) -> String {
     Sha3_256::digest(bytes)
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect()
 }
-fn display_json(value: &str) -> Result<String, HostError> {
+fn display_json<T: Serialize + ?Sized>(value: &T) -> Result<String, HostError> {
     let text = serde_json::to_string(value).map_err(|_| HostError::InvalidResponse)?;
     Ok(text
         .chars()
@@ -286,6 +328,7 @@ struct Entry {
     state: ProposalState,
     displayed: bool,
     precondition: Option<FilePrecondition>,
+    command_precondition: Option<CommandPrecondition>,
 }
 impl Entry {
     fn summary(&self) -> ProposalSummary {
@@ -300,13 +343,23 @@ impl Entry {
         }
     }
     fn document(&self) -> Result<ReviewDocument, HostError> {
-        let content = match &self.op {
+        let command_content = if let ProposalInput::ExecuteCommand { command, .. } = &self.op {
+            Some(command.review_content()?)
+        } else {
+            None
+        };
+        let content: Option<&str> = match &self.op {
             ProposalInput::CreateFile { content, .. }
-            | ProposalInput::WriteText { content, .. } => Some(content),
+            | ProposalInput::WriteText { content, .. } => Some(content.as_str()),
+            ProposalInput::ExecuteCommand { .. } => command_content.as_deref(),
             _ => None,
         };
         let base = self.precondition.as_ref().and_then(|p| p.base.as_ref());
-        let metadata = self.precondition.as_ref().map(|p|serde_json::json!({"parent_identity":p.parent_identity,"base":p.base.as_ref().map(|b|serde_json::json!({"identity":b.identity,"content_sha3":b.content_sha3,"byte_count":b.byte_count}))}));
+        let metadata = if let Some(command) = &self.command_precondition {
+            Some(serde_json::to_value(command).map_err(|_| HostError::InvalidResponse)?)
+        } else {
+            self.precondition.as_ref().map(|p|serde_json::json!({"parent_identity":p.parent_identity,"base":p.base.as_ref().map(|b|serde_json::json!({"identity":b.identity,"content_sha3":b.content_sha3,"byte_count":b.byte_count}))}))
+        };
         let doc = ReviewDocument {
             schema_version: 2,
             proposal_id: self.id.clone(),
@@ -314,14 +367,15 @@ impl Entry {
             kind: self.op.kind().into(),
             display_root_json: display_json(&self.scope.display_root)?,
             relative_path_json: display_json(self.op.path())?,
-            precondition: if base.is_some() {
+            precondition: if self.command_precondition.is_some() {
+                "matches_command_scope"
+            } else if base.is_some() {
                 "matches_base"
             } else {
                 "must_be_absent"
             }
             .into(),
-            precondition_details_json: serde_json::to_string(&metadata)
-                .map_err(|_| HostError::InvalidResponse)?,
+            precondition_details_json: display_json(&metadata)?,
             base_content_json: base.map(|b| display_json(&b.content)).transpose()?,
             base_content_hex: base.map(|b| {
                 b.content
@@ -331,7 +385,7 @@ impl Entry {
                     .collect()
             }),
             base_byte_count: base.map_or(0, |b| b.byte_count),
-            content_json: content.map(|s| display_json(s)).transpose()?,
+            content_json: content.map(display_json).transpose()?,
             content_hex: content.map(|s| s.as_bytes().iter().map(|b| format!("{b:02x}")).collect()),
             byte_count: content.map_or(0, |s| s.len()),
             read_only: self.scope.read_only,
@@ -360,6 +414,8 @@ pub struct ApprovedOperation {
     digest: String,
     canonical: Vec<u8>,
     pub(crate) authority: Authority,
+    pub(crate) command: bool,
+    pub(crate) grant_id: String,
 }
 impl ApprovedOperation {
     pub fn proposal_id(&self) -> &str {
@@ -440,6 +496,7 @@ impl ReviewBook {
             scope,
             op,
             None,
+            None,
             Instant::now() + REVIEW_LIFETIME,
         )
     }
@@ -449,6 +506,7 @@ impl ReviewBook {
         scope: ReviewScope,
         op: ProposalInput,
         pre: Option<FilePrecondition>,
+        command: Option<CommandPrecondition>,
         deadline: Instant,
     ) -> Result<ProposalSummary, HostError> {
         self.sweep();
@@ -465,11 +523,20 @@ impl ReviewBook {
         if deadline <= Instant::now()
             || pre.as_ref().is_some_and(|p| !p.valid_for(&op))
             || matches!(op, ProposalInput::WriteText { .. }) && pre.is_none()
+            || op.is_command()
+                && (pre.is_some() || !command.as_ref().is_some_and(|c| c.valid_for(&op)))
+            || !op.is_command() && command.is_some()
         {
             return Err(HostError::ProposalInvalid);
         }
         let entry = Entry {
-            digest: digest(&canonical_prepared(&id, &scope, &op, pre.as_ref())),
+            digest: digest(&canonical_operation(
+                &id,
+                &scope,
+                &op,
+                pre.as_ref(),
+                command.as_ref(),
+            )),
             id: id.clone(),
             scope,
             op,
@@ -477,6 +544,7 @@ impl ReviewBook {
             state: ProposalState::Pending,
             displayed: false,
             precondition: pre,
+            command_precondition: command,
         };
         entry.document()?;
         let summary = entry.summary();
@@ -629,17 +697,21 @@ impl ReviewBook {
         if e.state != ProposalState::Accepted
             || &e.scope != scope
             || candidate.grant_id() != scope.grant_id
-            || digest(&canonical_prepared(
+            || e.command_precondition
+                .as_ref()
+                .is_some_and(|p| !p.valid_for(&candidate))
+            || digest(&canonical_operation(
                 id,
                 scope,
                 &candidate,
                 e.precondition.as_ref(),
+                e.command_precondition.as_ref(),
             )) != e.digest
         {
             self.retire(id, ProposalState::Stale);
             return Err(HostError::ReviewDenied);
         }
-        if scope.read_only {
+        if scope.read_only && !e.op.is_command() {
             return Err(HostError::WriteGrantRequired);
         }
         if self.consumed.len() >= MAX_ATTEMPTS {
@@ -651,7 +723,15 @@ impl ReviewBook {
         let output = ApprovedOperation {
             proposal_id: id.into(),
             digest: e.digest.clone(),
-            canonical: canonical_prepared(id, scope, &e.op, e.precondition.as_ref()),
+            canonical: canonical_operation(
+                id,
+                scope,
+                &e.op,
+                e.precondition.as_ref(),
+                e.command_precondition.as_ref(),
+            ),
+            command: e.op.is_command(),
+            grant_id: scope.grant_id.clone(),
             authority: scope.authority.clone(),
         };
         self.retire(id, ProposalState::Consumed);
@@ -689,6 +769,7 @@ impl RpcSession {
         &self,
         input: ProposalInput,
     ) -> Result<ProposalSummary, HostError> {
+        let input = input.normalized();
         let grants = self.grants.try_read().map_err(|_| HostError::Busy)?;
         let scope = self.review_scope(&grants, input.grant_id())?;
         input.validate()?;
@@ -697,7 +778,11 @@ impl RpcSession {
         let deadline = Instant::now() + REVIEW_LIFETIME;
         let reply = self
             .request_authority(
-                "native_prepare_mutation",
+                if input.is_command() {
+                    "native_prepare_command"
+                } else {
+                    "native_prepare_mutation"
+                },
                 serde_json::json!({"proposal_id":id,"operation":input}),
                 Some(&scope.authority),
             )
@@ -706,6 +791,7 @@ impl RpcSession {
             serde_json::from_value(reply).map_err(|_| HostError::InvalidResponse)?;
         self.ensure_workspace()?;
         prepared.verify(&id, &scope, &input)?;
+        let command = input.is_command();
         let result = self
             .reviews
             .lock()
@@ -714,13 +800,18 @@ impl RpcSession {
                 id.clone(),
                 scope.clone(),
                 input,
-                Some(prepared.material.precondition),
+                prepared.material.precondition,
+                prepared.material.command_precondition,
                 deadline,
             );
         if result.is_err() {
             let _ = self
                 .request_authority(
-                    "native_cancel_mutation",
+                    if command {
+                        "native_cancel_command"
+                    } else {
+                        "native_cancel_mutation"
+                    },
                     serde_json::json!({"proposal_id":id}),
                     Some(&scope.authority),
                 )
@@ -743,14 +834,23 @@ impl RpcSession {
             .get()
             .ok_or(HostError::Closed)?
             .with_grant_revision(grants.revision);
-        self.reviews
-            .lock()
-            .map_err(|_| HostError::StateUnavailable)?
-            .cancel(id)?;
+        let command = {
+            let mut book = self
+                .reviews
+                .lock()
+                .map_err(|_| HostError::StateUnavailable)?;
+            let command = book.status(id)?.kind == "execute_command";
+            book.cancel(id)?;
+            command
+        };
         // Local denial is final even if best-effort remote ticket cleanup fails.
         let _ = self
             .request_authority(
-                "native_cancel_mutation",
+                if command {
+                    "native_cancel_command"
+                } else {
+                    "native_cancel_mutation"
+                },
                 serde_json::json!({"proposal_id":id}),
                 Some(&authority),
             )

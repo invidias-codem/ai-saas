@@ -34,10 +34,12 @@ type OperationStatus struct {
 	Status         string `json:"status"`
 	Code           string `json:"code"`
 	MayHaveChanged bool   `json:"may_have_changed"`
+	CleanupPending bool   `json:"cleanup_pending,omitempty"`
 }
 type preparedMutation struct {
 	prepared PreparedMutation
 	target   *fsutil.PreparedTarget
+	command  *commandPins
 	deadline time.Time
 	timer    *time.Timer
 }
@@ -46,13 +48,20 @@ func (p *preparedMutation) close() {
 	if p.timer != nil {
 		p.timer.Stop()
 	}
-	p.target.Close()
+	if p.target != nil {
+		p.target.Close()
+	}
+	if p.command != nil {
+		p.command.close()
+	}
 }
 
 type mutationAttempt struct {
 	authority Authority
 	status    OperationStatus
 	cancel    context.CancelFunc
+	command   bool
+	output    *CommandOutput
 }
 type mutationBook struct {
 	mu       sync.Mutex
@@ -72,6 +81,31 @@ func (s *Session) invalidatePrepared() {
 	}
 }
 func cloneMaterial(p ProposalMaterial) ProposalMaterial {
+	if p.Operation.Command != nil {
+		c := *p.Operation.Command
+		if c.Executable != nil {
+			value := *c.Executable
+			c.Executable = &value
+		}
+		if c.Script != nil {
+			value := *c.Script
+			c.Script = &value
+		}
+		if c.Argv != nil {
+			value := append([]string{}, (*c.Argv)...)
+			c.Argv = &value
+		}
+		p.Operation.Command = &c
+	}
+	if p.Operation.TimeoutSeconds != nil {
+		value := *p.Operation.TimeoutSeconds
+		p.Operation.TimeoutSeconds = &value
+	}
+	if p.CommandPrecondition != nil {
+		value := *p.CommandPrecondition
+		value.Argv = append([]string{}, value.Argv...)
+		p.CommandPrecondition = &value
+	}
 	if p.Operation.Content != nil {
 		content := *p.Operation.Content
 		p.Operation.Content = &content
@@ -87,6 +121,9 @@ func cloneMaterial(p ProposalMaterial) ProposalMaterial {
 	return p
 }
 func validMutation(op ProposalOperation) bool {
+	if op.Command != nil || op.TimeoutSeconds != nil {
+		return false
+	}
 	if !validID(op.GrantID, "local-grant-") || op.RelativePath == "." {
 		return false
 	}
@@ -163,6 +200,9 @@ func (s *Session) DispatchMutation(candidate *Authority, req DispatchMutationReq
 	if p == nil {
 		return reject("LOCAL_PROPOSAL_UNAVAILABLE")
 	}
+	if p.command != nil {
+		return reject("LOCAL_REVIEW_DENIED")
+	}
 	if p.prepared.Digest != req.Digest || p.prepared.Material.Authority != *candidate {
 		return reject("LOCAL_REVIEW_DENIED")
 	}
@@ -238,7 +278,7 @@ func (s *Session) MutationStatus(candidate *Authority, req OperationReference) (
 	s.operations.mu.Lock()
 	defer s.operations.mu.Unlock()
 	a := s.operations.attempts[req.ProposalID]
-	if a == nil || !sameOperationScope(a.authority, *candidate) {
+	if a == nil || a.command || !sameOperationScope(a.authority, *candidate) {
 		return OperationStatus{}, "LOCAL_OPERATION_UNAVAILABLE"
 	}
 	return a.status, ""
@@ -251,14 +291,14 @@ func (s *Session) CancelMutation(candidate *Authority, req OperationReference) (
 	}
 	s.operations.mu.Lock()
 	defer s.operations.mu.Unlock()
-	if p := s.operations.prepared[req.ProposalID]; p != nil && p.prepared.Material.Authority == *candidate {
+	if p := s.operations.prepared[req.ProposalID]; p != nil && p.command == nil && p.prepared.Material.Authority == *candidate {
 		status := OperationStatus{ProposalID: req.ProposalID, Digest: p.prepared.Digest, Status: "cancelled", Code: "LOCAL_OPERATION_CANCELLED"}
 		p.close()
 		delete(s.operations.prepared, req.ProposalID)
 		return status, ""
 	}
 	a := s.operations.attempts[req.ProposalID]
-	if a == nil || !sameOperationScope(a.authority, *candidate) {
+	if a == nil || a.command || !sameOperationScope(a.authority, *candidate) {
 		return OperationStatus{}, "LOCAL_OPERATION_UNAVAILABLE"
 	}
 	if a.status.Status == "running" {

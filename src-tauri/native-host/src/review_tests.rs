@@ -361,15 +361,139 @@ fn independent_prepared_v2_fixtures_bind_parent_and_complete_base() {
         };
         let op: ProposalInput =
             serde_json::from_value(raw["material"]["operation"].clone()).unwrap();
-        assert!(f.material.precondition.valid_for(&op));
+        assert!(f.material.precondition.as_ref().unwrap().valid_for(&op));
         assert_eq!(
             digest(&canonical_prepared(
                 &f.material.proposal_id,
                 &scope,
                 &op,
-                Some(&f.material.precondition)
+                f.material.precondition.as_ref()
             )),
             f.digest
         );
     }
+}
+
+fn command_fixture(
+    index: usize,
+) -> (
+    String,
+    ReviewScope,
+    ProposalInput,
+    crate::command::CommandPrecondition,
+    String,
+) {
+    let fixtures: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+        "../../../testdata/native-command-digests.json"
+    ))
+    .unwrap();
+    let f = &fixtures[index];
+    let m = &f["material"];
+    let op: ProposalInput = serde_json::from_value(m["operation"].clone()).unwrap();
+    let scope = ReviewScope {
+        authority: serde_json::from_value(m["authority"].clone()).unwrap(),
+        grant_id: op.grant_id().into(),
+        display_root: m["display_root"].as_str().unwrap().into(),
+        read_only: m["read_only"].as_bool().unwrap(),
+    };
+    (
+        m["proposal_id"].as_str().unwrap().into(),
+        scope,
+        op,
+        serde_json::from_value(m["command_precondition"].clone()).unwrap(),
+        f["digest"].as_str().unwrap().into(),
+    )
+}
+#[test]
+fn independent_command_v3_fixtures_bind_scripts_argv_platforms_and_effective_policy() {
+    for i in 0..6 {
+        let (id, scope, op, pre, expected) = command_fixture(i);
+        assert!(pre.valid_for(&op));
+        assert_eq!(
+            digest(&crate::command::canonical_command(&id, &scope, &op, &pre)),
+            expected
+        );
+    }
+}
+#[tokio::test]
+async fn exact_command_acceptance_does_not_need_write_permission_and_cannot_change_options() {
+    for change in 0..4 {
+        let (id, scope, op, pre, _) = command_fixture(0);
+        assert!(scope.read_only);
+        let mut book = ReviewBook::default();
+        let summary = book
+            .propose_prepared(
+                id.clone(),
+                scope.clone(),
+                op.clone(),
+                None,
+                Some(pre),
+                tokio::time::Instant::now() + REVIEW_LIFETIME,
+            )
+            .unwrap();
+        let lease = book.begin(&id, &scope).unwrap();
+        let doc = book.document(&lease, &scope).unwrap();
+        assert_eq!(doc.precondition, "matches_command_scope");
+        assert!(!doc.execution_available);
+        book.displayed(&lease, &scope, &id, &summary.digest)
+            .unwrap();
+        book.decide(&lease, &scope, &id, &summary.digest, Decision::Accept)
+            .unwrap();
+        let mut candidate = op.clone();
+        if let ProposalInput::ExecuteCommand {
+            command,
+            timeout_seconds,
+            ..
+        } = &mut candidate
+        {
+            match change {
+                0 => {}
+                1 => *timeout_seconds = Some(120),
+                2 => {
+                    if let crate::command::CommandInput::Direct { argv, .. } = command {
+                        argv[0] = "changed".into()
+                    }
+                }
+                _ => {
+                    *command = crate::command::CommandInput::Sh {
+                        script: "changed".into(),
+                    }
+                }
+            }
+        }
+        if change == 0 {
+            let approved = book.consume(&id, &scope, candidate).unwrap();
+            assert!(approved.command);
+            assert!(book.consume(&id, &scope, op).is_err())
+        } else {
+            assert!(book.consume(&id, &scope, candidate).is_err())
+        }
+    }
+}
+#[tokio::test]
+async fn command_review_escapes_script_and_effective_metadata_without_truncation() {
+    let (id, scope, op, pre, _) = command_fixture(4);
+    let mut book = ReviewBook::default();
+    book.propose_prepared(
+        id.clone(),
+        scope.clone(),
+        op.clone(),
+        None,
+        Some(pre),
+        tokio::time::Instant::now() + REVIEW_LIFETIME,
+    )
+    .unwrap();
+    let lease = book.begin(&id, &scope).unwrap();
+    let doc = book.document(&lease, &scope).unwrap();
+    let ProposalInput::ExecuteCommand { command, .. } = op else {
+        panic!("command fixture")
+    };
+    let script = command.script().unwrap();
+    assert_eq!(
+        serde_json::from_str::<String>(doc.content_json.as_ref().unwrap()).unwrap(),
+        script
+    );
+    assert_eq!(doc.byte_count, script.len());
+    assert!(doc.content_json.unwrap().contains("\\u202e"));
+    assert!(!doc.precondition_details_json.contains('\u{202e}'));
 }

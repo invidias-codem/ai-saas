@@ -3,6 +3,7 @@ package nativeprotocol
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -70,6 +71,48 @@ func TestPreparedV2FixturesBindTrustedBaseAndParent(t *testing.T) {
 			if _, err := ProposalDigest(changed); err == nil {
 				t.Fatal("base content/hash mismatch accepted")
 			}
+		}
+	}
+}
+
+func TestCommandV3FixturesBindEffectiveLaunchPolicyAndRequestedBytes(t *testing.T) {
+	raw, err := os.ReadFile("../../../testdata/native-command-digests.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures []struct {
+		Material ProposalMaterial `json:"material"`
+		Digest   string           `json:"digest"`
+	}
+	if err := Decode(raw, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range fixtures {
+		actual, err := ProposalDigest(f.Material)
+		if err != nil || actual != f.Digest {
+			t.Fatal("v3 canonical mismatch", err)
+		}
+		changed := cloneMaterial(f.Material)
+		changed.CommandPrecondition.CwdIdentity.File = "0000000000000001"
+		next, err := ProposalDigest(changed)
+		if err != nil || next == actual {
+			t.Fatal("cwd identity not bound")
+		}
+		changed = cloneMaterial(f.Material)
+		changed.CommandPrecondition.RequiresSandbox = false
+		if _, err := ProposalDigest(changed); err == nil {
+			t.Fatal("sandbox requirement was optional")
+		}
+		changed = cloneMaterial(f.Material)
+		changed.CommandPrecondition.TimeoutMS++
+		if _, err := ProposalDigest(changed); err == nil {
+			t.Fatal("effective timeout mismatch accepted")
+		}
+		changed = cloneMaterial(f.Material)
+		changed.CommandPrecondition.Executable.ContentSHA3 = strings.Repeat("a", 64)
+		next, err = ProposalDigest(changed)
+		if err != nil || next == actual {
+			t.Fatal("executable hash not bound")
 		}
 	}
 }

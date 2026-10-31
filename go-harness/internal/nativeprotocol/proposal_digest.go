@@ -13,24 +13,33 @@ import (
 
 // ProposalMaterial is integrity data, not a bearer authorization envelope.
 type ProposalMaterial struct {
-	ProposalID   string                   `json:"proposal_id"`
-	Authority    Authority                `json:"authority"`
-	DisplayRoot  string                   `json:"display_root"`
-	ReadOnly     bool                     `json:"read_only"`
-	TTLMillis    uint32                   `json:"ttl_ms"`
-	Operation    ProposalOperation        `json:"operation"`
-	Precondition *fsutil.FilePrecondition `json:"precondition,omitempty"`
+	ProposalID          string                   `json:"proposal_id"`
+	Authority           Authority                `json:"authority"`
+	DisplayRoot         string                   `json:"display_root"`
+	ReadOnly            bool                     `json:"read_only"`
+	TTLMillis           uint32                   `json:"ttl_ms"`
+	Operation           ProposalOperation        `json:"operation"`
+	Precondition        *fsutil.FilePrecondition `json:"precondition,omitempty"`
+	CommandPrecondition *CommandPrecondition     `json:"command_precondition,omitempty"`
 }
 type ProposalOperation struct {
-	Kind         string  `json:"kind"`
-	GrantID      string  `json:"grant_id"`
-	RelativePath string  `json:"relative_path"`
-	Content      *string `json:"content,omitempty"`
+	Kind           string        `json:"kind"`
+	GrantID        string        `json:"grant_id"`
+	RelativePath   string        `json:"relative_path"`
+	Content        *string       `json:"content,omitempty"`
+	Command        *CommandInput `json:"command,omitempty"`
+	TimeoutSeconds *uint32       `json:"timeout_seconds,omitempty"`
 }
 
 func ProposalDigest(p ProposalMaterial) (string, error) {
 	if !validID(p.ProposalID, "local-proposal-") || !validID(p.Authority.PrincipalID, "local-user-") || !validID(p.Authority.WorkspaceID, "local-workspace-") || !localID.MatchString(p.Authority.Generation) || p.Authority.PolicyRevision == 0 || p.TTLMillis != 300000 || !validID(p.Operation.GrantID, "local-grant-") || len(p.DisplayRoot) > 32768 || !utf8.ValidString(p.DisplayRoot) {
 		return "", errors.New("invalid proposal material")
+	}
+	if p.Operation.Kind == "execute_command" {
+		return commandDigest(p)
+	}
+	if p.Operation.Command != nil || p.Operation.TimeoutSeconds != nil || p.CommandPrecondition != nil {
+		return "", errors.New("unexpected command fields")
 	}
 	if _, err := fsutil.NativeRelativePath(p.Operation.RelativePath); err != nil || p.Operation.RelativePath == "." {
 		return "", errors.New("invalid proposal path")

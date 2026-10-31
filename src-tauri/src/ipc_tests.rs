@@ -142,6 +142,12 @@ fn main_and_forged_review_windows_cannot_submit_decisions() {
         "native_select_folder",
         "native_open_review",
         "native_propose_operation",
+        "native_prepare_command",
+        "native_dispatch_command",
+        "native_command_status",
+        "native_cancel_command",
+        "native_command_output",
+        "native_register_provider",
         "native_request_write_access",
         "native_dispatch_operation",
         "native_dispatch_mutation",
@@ -408,6 +414,12 @@ fn main_has_no_shell_secret_store_or_generic_rpc_permission() {
         .unwrap();
     let url = main.url().unwrap().to_string();
     for command in [
+        "native_prepare_command",
+        "native_dispatch_command",
+        "native_command_status",
+        "native_cancel_command",
+        "native_command_output",
+        "native_register_provider",
         "native_request_write_access",
         "native_dispatch_operation",
         "native_dispatch_mutation",

@@ -6,6 +6,7 @@ import (
 	"context"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
@@ -14,7 +15,7 @@ import (
 
 const Version = 1
 
-var Features = [...]string{"session-authority-v1", "native-action-allowlist-v1", "read-grants-v1", "guarded-file-mutations-v1"}
+var Features = [...]string{"session-authority-v1", "native-action-allowlist-v1", "read-grants-v1", "guarded-file-mutations-v1", "command-admission-v1"}
 var localID = regexp.MustCompile(`^[a-f0-9]{32}$`)
 
 type Authority struct {
@@ -56,6 +57,10 @@ type Session struct {
 	ownWork    bool
 	now        func() time.Time
 	apply      func(context.Context, string, string, string, string, string, string, fsutil.FilePrecondition) fsutil.MutationResult
+	// Deliberately nil in every production constructor. Qualification is never
+	// accepted from JSON, environment, CLI, grant flags or provider self-report.
+	commandProvider      *qualifiedCommandProvider
+	unsafeCommandCleanup atomic.Bool
 }
 
 func NewSession() *Session {
@@ -109,7 +114,7 @@ func (s *Session) check(candidate *Authority) string {
 	if candidate == nil || *candidate != *s.bound {
 		return "LOCAL_AUTHORITY_MISMATCH"
 	}
-	if s.blocked {
+	if s.blocked || s.unsafeCommandCleanup.Load() {
 		return "LOCAL_WORKSPACE_BLOCKED"
 	}
 	return ""

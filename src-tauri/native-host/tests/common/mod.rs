@@ -45,7 +45,7 @@ pub async fn fixture(
             capture.lock().unwrap().push(request.clone());
             let mut data = match request["action"].as_str().unwrap() {
                 "native_protocol" => {
-                    json!({"protocol_version":1,"mode":"local","features":["session-authority-v1","native-action-allowlist-v1","read-grants-v1","guarded-file-mutations-v1"]})
+                    json!({"protocol_version":1,"mode":"local","features":["session-authority-v1","native-action-allowlist-v1","read-grants-v1","guarded-file-mutations-v1","command-admission-v1"]})
                 }
                 "bind_native_session" => request["inputs"].clone(),
                 "status" => json!({"status":"ok","recent_events":[],"event_count":0}),
@@ -64,6 +64,14 @@ pub async fn fixture(
                     "version" => data["protocol_version"] = json!(2),
                     "mode" => data["mode"] = json!("standalone"),
                     "features" => data["features"] = json!([]),
+                    "old-commands" => {
+                        data["features"] = json!([
+                            "session-authority-v1",
+                            "native-action-allowlist-v1",
+                            "read-grants-v1",
+                            "guarded-file-mutations-v1"
+                        ])
+                    }
                     "old-mutations" => {
                         data["features"] = json!([
                             "session-authority-v1",

@@ -1,3 +1,4 @@
+use lattice_native_host::command::CommandInput;
 use lattice_native_host::mutation::{OperationState, OperationStatus};
 use lattice_native_host::review::{
     Decision, DisplayAcknowledgement, ProposalInput, ProposalState, ReviewDecision,
@@ -92,6 +93,179 @@ async fn observed(session: &RpcSession, id: &str) -> OperationStatus {
     })
     .await
     .expect("owned status reconciles")
+}
+
+#[tokio::test]
+async fn every_native_command_mode_refuses_launch_without_a_qualified_provider() {
+    let binary = binary().expect("command admission regression requires the CI daemon");
+    let dir = tempfile::tempdir().unwrap();
+    let selected = dir.path().join("project");
+    std::fs::create_dir(&selected).unwrap();
+    let (mut child, session) = native_session(binary, dir.path()).await;
+    let session = Arc::new(session);
+    let grant = session
+        .select_folder(&DirectoryPicker {
+            path: selected.clone(),
+            replace: false,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(grant.read_only);
+    let direct = if cfg!(windows) {
+        CommandInput::Direct {
+            executable: "cmd.exe".into(),
+            argv: vec![
+                "/d".into(),
+                "/s".into(),
+                "/c".into(),
+                "echo must-not-run>executed.txt".into(),
+            ],
+        }
+    } else {
+        CommandInput::Direct {
+            executable: "sh".into(),
+            argv: vec!["-c".into(), "printf must-not-run > executed.txt".into()],
+        }
+    };
+    let commands = [
+        direct,
+        CommandInput::Cmd {
+            script: "echo must-not-run>executed.txt".into(),
+        },
+        CommandInput::Powershell {
+            script: "[IO.File]::WriteAllText('executed.txt','must-not-run')".into(),
+        },
+        CommandInput::Pwsh {
+            script: "[IO.File]::WriteAllText('executed.txt','must-not-run')".into(),
+        },
+        CommandInput::Sh {
+            script: "printf must-not-run > executed.txt".into(),
+        },
+    ];
+    for command in commands {
+        let op = ProposalInput::ExecuteCommand {
+            grant_id: grant.grant_id.clone(),
+            relative_path: ".".into(),
+            command: command.clone(),
+            timeout_seconds: Some(999),
+        };
+        let proposed = session.propose_operation(op).await;
+        let supported = cfg!(windows) && !matches!(command, CommandInput::Sh { .. })
+            || cfg!(target_os = "linux")
+                && matches!(
+                    command,
+                    CommandInput::Direct { .. } | CommandInput::Sh { .. }
+                );
+        let p = match proposed {
+            Ok(p) => {
+                assert!(supported);
+                p
+            }
+            Err(HostError::ShellUnavailable) => {
+                assert!(!supported || matches!(command, CommandInput::Pwsh { .. }));
+                assert!(!selected.join("executed.txt").exists());
+                continue;
+            }
+            Err(e) => panic!("unexpected command preparation: {e}"),
+        };
+        let lease = session.begin_review(&p.proposal_id).await.unwrap();
+        let doc = session.review_document(&lease).await.unwrap();
+        let scope: serde_json::Value =
+            serde_json::from_str(&doc.precondition_details_json).unwrap();
+        assert_eq!(scope["provider"]["id"], "unavailable");
+        assert_eq!(scope["timeout_ms"], 120000);
+        assert_eq!(scope["output_limit"], 10240);
+        assert_eq!(scope["requires_sandbox"], true);
+        assert!(!doc.execution_available);
+        session
+            .acknowledge_review(
+                &lease,
+                DisplayAcknowledgement {
+                    proposal_id: p.proposal_id.clone(),
+                    digest: p.digest.clone(),
+                },
+            )
+            .await
+            .unwrap();
+        session
+            .decide_review(
+                &lease,
+                ReviewDecision {
+                    proposal_id: p.proposal_id.clone(),
+                    digest: p.digest,
+                    decision: Decision::Accept,
+                },
+            )
+            .await
+            .unwrap();
+        let result = session.dispatch_operation(&p.proposal_id).await.unwrap();
+        assert_eq!(result.status, OperationState::Denied);
+        assert_eq!(result.code, "LOCAL_SANDBOX_REQUIRED");
+        assert!(!result.may_have_changed);
+        assert!(!result.cleanup_pending);
+        assert_eq!(
+            session.operation_status(&p.proposal_id).await.unwrap().code,
+            "LOCAL_SANDBOX_REQUIRED"
+        );
+        assert!(session.dispatch_operation(&p.proposal_id).await.is_err());
+        assert!(matches!(
+            session.command_output(&p.proposal_id).await,
+            Err(HostError::OperationUnavailable)
+        ));
+        assert!(!selected.join("executed.txt").exists());
+    }
+    assert!(session.workspace_grants().await.unwrap()[0].read_only);
+    session.shutdown().await.unwrap();
+    assert!(child.wait().await.unwrap().success());
+}
+
+#[tokio::test]
+async fn native_command_cancellation_releases_preparations_without_any_launch() {
+    let binary = binary().expect("command admission regression requires the CI daemon");
+    let dir = tempfile::tempdir().unwrap();
+    let selected = dir.path().join("project");
+    std::fs::create_dir(&selected).unwrap();
+    let (mut child, session) = native_session(binary, dir.path()).await;
+    let grant = session
+        .select_folder(&DirectoryPicker {
+            path: selected,
+            replace: false,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    for _ in 0..40 {
+        let command = if cfg!(windows) {
+            CommandInput::Cmd {
+                script: "echo no-launch".into(),
+            }
+        } else {
+            CommandInput::Sh {
+                script: "printf no-launch".into(),
+            }
+        };
+        let p = session
+            .propose_operation(ProposalInput::ExecuteCommand {
+                grant_id: grant.grant_id.clone(),
+                relative_path: ".".into(),
+                command,
+                timeout_seconds: None,
+            })
+            .await
+            .unwrap();
+        session.cancel_proposal(&p.proposal_id).await.unwrap();
+        assert_eq!(
+            session
+                .proposal_status(&p.proposal_id)
+                .await
+                .unwrap()
+                .status,
+            ProposalState::Denied
+        );
+    }
+    session.shutdown().await.unwrap();
+    assert!(child.wait().await.unwrap().success());
 }
 
 #[tokio::test]
@@ -267,8 +441,7 @@ async fn overwrite_review_binds_complete_base_and_preserves_external_edits_on_co
     assert!(child.wait().await.unwrap().success());
 }
 
-#[tokio::test]
-async fn abandoned_caller_and_lost_dispatch_reply_reconcile_existing_id_without_retry() {
+async fn reconcile_dropped_dispatch_reply(command: bool) {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::{io::AsyncWriteExt, net::TcpListener, sync::oneshot};
     let binary = binary().expect("real mutation regression requires the CI daemon");
@@ -328,7 +501,12 @@ async fn abandoned_caller_and_lost_dispatch_reply_reconcile_existing_id_without_
             }
             let request: serde_json::Value =
                 serde_json::from_slice(&bytes[start..start + len]).unwrap();
-            let is_dispatch = request["action"] == "native_dispatch_mutation";
+            let is_dispatch = request["action"]
+                == if command {
+                    "native_dispatch_command"
+                } else {
+                    "native_dispatch_mutation"
+                };
             let response = client
                 .post(format!("http://127.0.0.1:{daemon_port}/rpc"))
                 .json(&request)
@@ -366,19 +544,34 @@ async fn abandoned_caller_and_lost_dispatch_reply_reconcile_existing_id_without_
         .await
         .unwrap()
         .unwrap();
-    session
-        .request_write_access(&g.grant_id, &NativeWriteConsent(true))
-        .await
-        .unwrap();
-    let id = accept_exact(
-        &session,
+    let op = if command {
+        let command = if cfg!(windows) {
+            CommandInput::Cmd {
+                script: "echo must-not-run>one.txt".into(),
+            }
+        } else {
+            CommandInput::Sh {
+                script: "printf must-not-run > one.txt".into(),
+            }
+        };
+        ProposalInput::ExecuteCommand {
+            grant_id: g.grant_id,
+            relative_path: ".".into(),
+            command,
+            timeout_seconds: None,
+        }
+    } else {
+        session
+            .request_write_access(&g.grant_id, &NativeWriteConsent(true))
+            .await
+            .unwrap();
         ProposalInput::CreateFile {
             grant_id: g.grant_id,
             relative_path: "one.txt".into(),
             content: "one attempt".into(),
-        },
-    )
-    .await;
+        }
+    };
+    let id = accept_exact(&session, op).await;
     let s = session.clone();
     let dispatch_id = id.clone();
     let caller = tokio::spawn(async move { s.dispatch_operation(&dispatch_id).await });
@@ -386,21 +579,34 @@ async fn abandoned_caller_and_lost_dispatch_reply_reconcile_existing_id_without_
     caller.abort();
     let _ = caller.await;
     release.send(()).unwrap();
-    assert_eq!(
-        observed(&session, &id).await.status,
-        OperationState::Succeeded
-    );
+    let result = observed(&session, &id).await;
+    if command {
+        assert_eq!(result.status, OperationState::Denied);
+        assert_eq!(result.code, "LOCAL_SANDBOX_REQUIRED");
+        assert!(!selected.join("one.txt").exists());
+    } else {
+        assert_eq!(result.status, OperationState::Succeeded);
+        assert_eq!(
+            std::fs::read_to_string(selected.join("one.txt")).unwrap(),
+            "one attempt"
+        );
+    }
     assert_eq!(dispatches.load(Ordering::SeqCst), 1);
-    assert_eq!(
-        std::fs::read_to_string(selected.join("one.txt")).unwrap(),
-        "one attempt"
-    );
     assert!(session.dispatch_operation(&id).await.is_err());
     assert_eq!(dispatches.load(Ordering::SeqCst), 1);
     session.shutdown().await.unwrap();
     assert!(child.wait().await.unwrap().success());
     proxy.abort();
     let _ = proxy.await;
+}
+
+#[tokio::test]
+async fn abandoned_caller_and_lost_dispatch_reply_reconcile_existing_id_without_retry() {
+    reconcile_dropped_dispatch_reply(false).await;
+}
+#[tokio::test]
+async fn lost_command_denial_reply_reconciles_without_redispatch_or_launch() {
+    reconcile_dropped_dispatch_reply(true).await;
 }
 
 #[tokio::test]

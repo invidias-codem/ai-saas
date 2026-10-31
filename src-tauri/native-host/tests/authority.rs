@@ -37,6 +37,7 @@ async fn incompatible_protocols_fail_closed_before_binding() {
         "features",
         "old-grants",
         "old-mutations",
+        "old-commands",
         "unknown",
     ] {
         let (port, requests, task) = fixture(fault).await;

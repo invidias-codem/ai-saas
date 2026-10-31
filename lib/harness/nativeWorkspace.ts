@@ -23,7 +23,16 @@ const statSchema = z.object({ kind: kindSchema, size: z.number().int().nonnegati
 const proposalIdSchema = z.string().regex(/^local-proposal-[a-f0-9]{32}$/);
 const proposalReferenceSchema = z.object({ proposal_id: proposalIdSchema }).strict();
 const proposalPath = z.string().min(1).max(4096).refine(path => path !== '.');
+const commandScriptSchema = z.string().refine(script => byteLength(script) <= 64 * 1024 && script.trim().length > 0 && !script.includes('\0'));
+const commandSchema = z.discriminatedUnion('shell', [
+  z.object({ shell: z.literal('direct'), executable: z.string().min(1).max(255).regex(/^[A-Za-z0-9_.-]+$/).refine(name => name !== '.' && name !== '..'), argv: z.array(z.string().refine(arg => !arg.includes('\0'))).max(256) }).strict(),
+  z.object({ shell: z.literal('cmd'), script: commandScriptSchema }).strict(),
+  z.object({ shell: z.literal('powershell'), script: commandScriptSchema }).strict(),
+  z.object({ shell: z.literal('pwsh'), script: commandScriptSchema }).strict(),
+  z.object({ shell: z.literal('sh'), script: commandScriptSchema }).strict(),
+]).refine(command => command.shell !== 'direct' || byteLength(command.executable) + command.argv.reduce((total, arg) => total + byteLength(arg) + 1, 0) <= 64 * 1024);
 const proposalInputSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('execute_command'), grant_id: grantIdSchema, relative_path: z.string().min(1).max(4096), command: commandSchema, timeout_seconds: z.number().int().min(0).max(4294967295).optional() }).strict(),
   z.object({
     kind: z.literal('create_file'), grant_id: grantIdSchema, relative_path: proposalPath,
     content: z.string().refine(content => byteLength(content) <= 256 * 1024 && !content.includes('\0')),
@@ -39,9 +48,9 @@ const proposalInputSchema = z.discriminatedUnion('kind', [
 const proposalSummarySchema = z.object({
   proposal_id: proposalIdSchema, digest: z.string().regex(/^[a-f0-9]{64}$/),
   status: z.enum(['pending', 'reviewing', 'accepted', 'denied', 'expired', 'stale', 'consumed']),
-  kind: z.enum(['create_file', 'create_directory', 'write_text']), grant_id: grantIdSchema,
-  relative_path: proposalPath, execution_available: z.literal(false),
-}).strict();
+  kind: z.enum(['create_file', 'create_directory', 'write_text', 'execute_command']), grant_id: grantIdSchema,
+  relative_path: z.string().min(1).max(4096), execution_available: z.literal(false),
+}).strict().refine(value => value.kind === 'execute_command' || value.relative_path !== '.');
 export type NativeProposalInput = z.infer<typeof proposalInputSchema>;
 
 const errorCodes = [
@@ -51,6 +60,7 @@ const errorCodes = [
   'LOCAL_SERVICE_BUSY', 'LOCAL_SERVICE_STOPPED', 'LOCAL_SERVICE_EXITED',
   'LOCAL_SERVICE_UNAVAILABLE', 'LOCAL_REQUEST_TIMEOUT', 'LOCAL_CLEANUP_UNCONFIRMED',
   'LOCAL_STATE_UNAVAILABLE', 'LOCAL_STORAGE_UNAVAILABLE', 'LOCAL_PROTOCOL_INCOMPATIBLE',
+  'LOCAL_SANDBOX_REQUIRED', 'LOCAL_COMMAND_INVALID', 'LOCAL_SHELL_UNAVAILABLE',
   'LOCAL_DESKTOP_REQUIRED', 'LOCAL_FILE_CONFLICT', 'LOCAL_OPERATION_UNAVAILABLE',
   'LOCAL_OPERATION_REPLAYED', 'LOCAL_OUTCOME_UNKNOWN',
   'LOCAL_PROPOSAL_INVALID', 'LOCAL_PROPOSAL_TOO_LARGE', 'LOCAL_PROPOSAL_CAPACITY',
