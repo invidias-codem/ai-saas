@@ -414,8 +414,9 @@ async fn load_profile_config<R: tauri::Runtime>(
 ) -> Result<Option<serde_json::Value>, String> {
     require_local_window(&window)?;
     // Validate profile ID
-    if !profile_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') 
-        || profile_id.is_empty() || profile_id.len() > 64 {
+    if !profile_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        || profile_id.is_empty() || profile_id.len() > 64
+    {
         return Err("Invalid profile ID".to_string());
     }
     let is_preview = channel == "preview";
@@ -469,8 +470,9 @@ async fn save_profile_config<R: tauri::Runtime>(
 ) -> Result<(), String> {
     require_local_window(&window)?;
     // Validate profile ID
-    if !profile_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') 
-        || profile_id.is_empty() || profile_id.len() > 64 {
+    if !profile_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        || profile_id.is_empty() || profile_id.len() > 64
+    {
         return Err("Invalid profile ID".to_string());
     }
     let is_preview = channel == "preview";
