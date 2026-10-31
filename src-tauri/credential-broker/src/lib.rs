@@ -191,8 +191,8 @@ mod windows {
         CredReadW, CredWriteW, CredDeleteW, CredEnumerateW, CredFree,
         CREDENTIALW, CRED_TYPE_GENERIC, CRED_PERSIST_LOCAL_MACHINE,
     };
-    use windows_sys::Win32::Foundation::{ERROR_NOT_FOUND, WIN32_ERROR};
-    use windows_sys::Win32::Foundation::{PWSTR, PCWSTR};
+    use windows_sys::Win32::Foundation::{ERROR_NOT_FOUND};
+    use windows_sys::core::{PWSTR, PCWSTR};
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
 
@@ -224,7 +224,7 @@ mod windows {
                 }
                 let cred = &*cred_ptr;
                 let secret = if !cred.CredentialBlob.is_null() && cred.CredentialBlobSize > 0 {
-                    let slice = std::slice::from_raw_parts(cred.CredentialBlob, cred.CredentialBlobSize as usize / 2);
+                    let slice = std::slice::from_raw_parts(cred.CredentialBlob as *const u16, cred.CredentialBlobSize as usize / 2);
                     from_wide(slice)
                 } else {
                     String::new()
@@ -271,7 +271,7 @@ mod windows {
             let mut count = 0u32;
             let mut results = Vec::new();
             unsafe {
-                let result = CredEnumerateW(PCWSTR(filter.as_ptr()), std::ptr::null_mut(), &mut count, &mut cred_ptr);
+                let result = CredEnumerateW(PCWSTR(filter.as_ptr()), 0, &mut count, &mut cred_ptr);
                 if result != 0 {
                     return Ok(vec![]);
                 }
@@ -281,8 +281,8 @@ mod windows {
                         if !cred_ptr.is_null() {
                             let cred = &**cred_ptr;
                             let target = from_wide(std::slice::from_raw_parts(
-                                cred.TargetName.0,
-                                (0..).take_while(|&i| *cred.TargetName.0.add(i) != 0).count()
+                                cred.TargetName,
+                                (0..).take_while(|&i| *cred.TargetName.add(i) != 0).count()
                             ));
                             if let Some(key) = target.strip_prefix(&format!("{}/", SERVICE_NAME)) {
                                 results.push(key.to_string());
@@ -309,11 +309,11 @@ mod linux {
     use secret_service::{SecretService, Collection, EncryptionType};
     use std::sync::Arc;
 
-    pub struct LinuxStore {
-        service: Arc<SecretService>,
+    pub struct LinuxStore<'a> {
+        service: Arc<SecretService<'a>>,
     }
 
-    impl LinuxStore {
+    impl<'a> LinuxStore<'a> {
         pub async fn new() -> Result<Self> {
             let service = Arc::new(SecretService::connect(EncryptionType::Dh).await
                 .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?);
@@ -325,7 +325,7 @@ mod linux {
             Ok(Self { service })
         }
 
-        async fn get_collection(&self) -> Result<Collection> {
+        async fn get_collection(&self) -> Result<Collection<'_>> {
             let collection = self.service.get_default_collection().await
                 .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?;
             collection.unlock().await
