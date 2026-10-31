@@ -222,7 +222,11 @@ async fn credential_store_refresh_token<R: tauri::Runtime>(
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
-    let cmd = BrokerCommand::StoreRefreshToken { provider: provider_kind, token, label };
+    let cmd = BrokerCommand::StoreRefreshToken {
+        provider: provider_kind,
+        token,
+        label,
+    };
     Ok(state.handle_command(cmd).await)
 }
 
@@ -235,7 +239,9 @@ async fn credential_get_refresh_token_status<R: tauri::Runtime>(
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
-    let cmd = BrokerCommand::GetRefreshTokenStatus { provider: provider_kind };
+    let cmd = BrokerCommand::GetRefreshTokenStatus {
+        provider: provider_kind,
+    };
     Ok(state.handle_command(cmd).await)
 }
 
@@ -248,7 +254,9 @@ async fn credential_delete_refresh_token<R: tauri::Runtime>(
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
-    let cmd = BrokerCommand::DeleteRefreshToken { provider: provider_kind };
+    let cmd = BrokerCommand::DeleteRefreshToken {
+        provider: provider_kind,
+    };
     Ok(state.handle_command(cmd).await)
 }
 
@@ -264,7 +272,12 @@ async fn credential_store_local_endpoint<R: tauri::Runtime>(
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
-    let cmd = BrokerCommand::StoreLocalEndpoint { provider: provider_kind, endpoint_url, model_id, label };
+    let cmd = BrokerCommand::StoreLocalEndpoint {
+        provider: provider_kind,
+        endpoint_url,
+        model_id,
+        label,
+    };
     Ok(state.handle_command(cmd).await)
 }
 
@@ -277,7 +290,9 @@ async fn credential_get_local_endpoint_status<R: tauri::Runtime>(
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
-    let cmd = BrokerCommand::GetLocalEndpointStatus { provider: provider_kind };
+    let cmd = BrokerCommand::GetLocalEndpointStatus {
+        provider: provider_kind,
+    };
     Ok(state.handle_command(cmd).await)
 }
 
@@ -290,7 +305,9 @@ async fn credential_delete_local_endpoint<R: tauri::Runtime>(
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
-    let cmd = BrokerCommand::DeleteLocalEndpoint { provider: provider_kind };
+    let cmd = BrokerCommand::DeleteLocalEndpoint {
+        provider: provider_kind,
+    };
     Ok(state.handle_command(cmd).await)
 }
 
@@ -416,9 +433,8 @@ pub fn run() {
             app.manage(host.clone());
 
             // Initialize credential broker (stable channel by default)
-            let broker = tauri::async_runtime::block_on(async {
-                init_credential_broker(false).await
-            })?;
+            let broker =
+                tauri::async_runtime::block_on(async { init_credential_broker(false).await })?;
             app.manage(broker);
 
             let handle = app.handle().clone();
