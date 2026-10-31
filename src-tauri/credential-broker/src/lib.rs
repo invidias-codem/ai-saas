@@ -301,42 +301,48 @@ mod windows {
 #[cfg(all(unix, not(target_os = "macos")))]
 mod linux {
     use super::*;
-    use secret_service::{SecretService, Collection, EncryptionType};
+    use secret_service::{SecretService, Collection, EncryptionType, ItemType};
     use std::sync::Arc;
 
-    pub struct LinuxStore<'a> {
-        service: Arc<SecretService<'a>>,
-        collection: Arc<Collection<'a>>,
+    pub struct LinuxStore {
+        service: Arc<SecretService>,
     }
 
-    impl<'a> LinuxStore<'a> {
+    impl LinuxStore {
         pub async fn new() -> Result<Self> {
             let service = Arc::new(SecretService::connect(EncryptionType::Dh).await
                 .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?);
+            // Verify we can access the default collection
             let collection = service.get_default_collection().await
                 .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?;
             collection.unlock().await
                 .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?;
-            Ok(Self {
-                service,
-                collection: Arc::new(collection),
-            })
+            Ok(Self { service })
+        }
+
+        async fn get_collection(&self) -> Result<Collection<'_>> {
+            let collection = self.service.get_default_collection().await
+                .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?;
+            collection.unlock().await
+                .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?;
+            Ok(collection)
         }
 
         fn make_attributes(&self, key: &str) -> HashMap<&str, &str> {
-                let mut attrs = HashMap::new();
-                attrs.insert("service", SERVICE_NAME);
-                attrs.insert("key", key);
-                attrs.insert("application", "lattice-os");
-                attrs
-            }
+            let mut attrs = HashMap::new();
+            attrs.insert("service", SERVICE_NAME);
+            attrs.insert("key", key);
+            attrs.insert("application", "lattice-os");
+            attrs
+        }
     }
 
     #[async_trait::async_trait]
-    impl<'a> CredentialStore for LinuxStore<'a> {
+    impl CredentialStore for LinuxStore {
         async fn get(&self, key: &str) -> Result<Option<Zeroizing<String>>> {
             let attrs = self.make_attributes(key);
-            match self.collection.search_items(attrs).await {
+            let collection = self.get_collection().await?;
+            match collection.search_items(attrs).await {
                 Ok(items) => {
                     if let Some(item) = items.first() {
                         let secret_bytes = item.get_secret().await
@@ -355,7 +361,8 @@ mod linux {
         async fn set(&self, key: &str, value: &str) -> Result<()> {
             let attrs = self.make_attributes(key);
             let label = format!("{}/{}", SERVICE_NAME, key);
-            self.collection.create_item(&label, attrs, value.as_bytes(), true, "application/octet-stream".into())
+            let collection = self.get_collection().await?;
+            collection.create_item(&label, attrs, value.as_bytes(), true, "application/octet-stream".into(), ItemType::Generic)
                 .await
                 .map_err(|e| CredentialError::Platform(e.to_string()))?;
             Ok(())
@@ -363,7 +370,8 @@ mod linux {
 
         async fn remove(&self, key: &str) -> Result<()> {
             let attrs = self.make_attributes(key);
-            let items = self.collection.search_items(attrs).await
+            let collection = self.get_collection().await?;
+            let items = collection.search_items(attrs).await
                 .map_err(|e| CredentialError::Platform(e.to_string()))?;
             for item in items {
                 item.delete().await
@@ -376,7 +384,8 @@ mod linux {
             let mut attrs = HashMap::new();
             attrs.insert("service", SERVICE_NAME);
             attrs.insert("application", "lattice-os");
-            let items = self.collection.search_items(attrs).await
+            let collection = self.get_collection().await?;
+            let items = collection.search_items(attrs).await
                 .map_err(|e| CredentialError::Platform(e.to_string()))?;
             let mut results = Vec::new();
             for item in items {
@@ -714,7 +723,7 @@ impl CredentialBroker {
             }
             GetApiKeyStatus { provider } => {
                 match self.get_status(provider, CredentialKind::ApiKey, None).await {
-                    Ok(s) => Status { status: s },
+                    Ok(s) => Status { status_value: s },
                     Err(e) => e.into(),
                 }
             }
@@ -738,7 +747,7 @@ impl CredentialBroker {
             }
             GetRefreshTokenStatus { provider } => {
                 match self.get_status(provider, CredentialKind::RefreshToken, None).await {
-                    Ok(s) => Status { status: s },
+                    Ok(s) => Status { status_value: s },
                     Err(e) => e.into(),
                 }
             }
@@ -758,7 +767,7 @@ impl CredentialBroker {
             }
             GetLocalEndpointStatus { provider } => {
                 match self.get_status(provider, CredentialKind::LocalEndpoint, None).await {
-                    Ok(s) => Status { status: s },
+                    Ok(s) => Status { status_value: s },
                     Err(e) => e.into(),
                 }
             }
