@@ -415,7 +415,8 @@ async fn load_profile_config<R: tauri::Runtime>(
     require_local_window(&window)?;
     // Validate profile ID
     if !profile_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        || profile_id.is_empty() || profile_id.len() > 64
+        || profile_id.is_empty()
+        || profile_id.len() > 64
     {
         return Err("Invalid profile ID".to_string());
     }
@@ -471,7 +472,8 @@ async fn save_profile_config<R: tauri::Runtime>(
     require_local_window(&window)?;
     // Validate profile ID
     if !profile_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        || profile_id.is_empty() || profile_id.len() > 64
+        || profile_id.is_empty()
+        || profile_id.len() > 64
     {
         return Err("Invalid profile ID".to_string());
     }
