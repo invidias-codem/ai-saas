@@ -31,7 +31,10 @@ impl From<InnerBrokerResponse> for BrokerResponse {
 }
 
 // Use a local wrapper function instead of foreign-type impl
-pub async fn handle_broker_command(broker: &CredentialBroker, cmd: BrokerCommand) -> BrokerResponse {
+pub async fn handle_broker_command(
+    broker: &CredentialBroker,
+    cmd: BrokerCommand,
+) -> BrokerResponse {
     broker.handle_command(cmd).await.into()
 }
 
