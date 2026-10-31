@@ -38,8 +38,8 @@ pub async fn handle_broker_command(
     broker.handle_command(cmd).await.into()
 }
 
-pub async fn init_credential_broker(preview: bool) -> Result<Arc<CredentialBroker>, String> {
-    CredentialBroker::new(preview)
+pub async fn init_credential_broker() -> Result<Arc<CredentialBroker>, String> {
+    CredentialBroker::new()
         .await
         .map(Arc::new)
         .map_err(|e| e.to_string())

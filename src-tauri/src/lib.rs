@@ -617,9 +617,9 @@ pub fn run() {
             let host = Arc::new(NativeHost::default());
             app.manage(host.clone());
 
-            // Initialize credential broker (stable channel by default)
+            // Initialize credential broker
             let broker =
-                tauri::async_runtime::block_on(async { init_credential_broker(false).await })?;
+                tauri::async_runtime::block_on(async { init_credential_broker().await })?;
             app.manage(broker);
 
             let handle = app.handle().clone();

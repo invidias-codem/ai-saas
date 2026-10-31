@@ -17,7 +17,6 @@ use thiserror::Error;
 use zeroize::Zeroizing;
 
 pub const SERVICE_NAME: &str = "xyz.gen1e.lattice-os";
-pub const PREVIEW_SERVICE_NAME: &str = "xyz.gen1e.lattice-os.preview";
 
 #[derive(Debug, Error)]
 pub enum CredentialError {
@@ -112,14 +111,6 @@ impl CredentialKind {
             Self::LocalEndpoint => "local-endpoint",
         }
     }
-}
-
-/// Internal credential record — never returned to callers.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CredentialRecord {
-    reference: CredentialRef,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    secret: Option<Zeroizing<String>>, // Only present in memory during operations
 }
 
 /// Trait for platform-specific credential storage.
@@ -236,7 +227,7 @@ mod windows {
         async fn set(&self, key: &str, value: &str) -> Result<()> {
             let mut target = to_wide(&format!("{}/{}", SERVICE_NAME, key));
             let value_wide = to_wide(value);
-            let mut cred = CREDENTIALW {
+            let cred = CREDENTIALW {
                 Type: CRED_TYPE_GENERIC,
                 TargetName: target.as_mut_ptr(),
                 CredentialBlobSize: (value_wide.len() * 2) as u32,
@@ -459,11 +450,10 @@ mod fallback {
 /// The credential broker — the single entry point for all credential operations.
 pub struct CredentialBroker {
     store: Box<dyn CredentialStore>,
-    preview: bool,
 }
 
 impl CredentialBroker {
-    pub async fn new(preview: bool) -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         let store: Box<dyn CredentialStore> = {
             #[cfg(target_os = "macos")]
             { Box::new(macos::MacOSStore) }
@@ -476,7 +466,7 @@ impl CredentialBroker {
             #[cfg(not(any(target_os = "macos", target_os = "windows", all(unix, not(target_os = "macos")), all(test, feature = "test-store"))))]
             { return Err(CredentialError::StoreUnavailable("Unsupported platform".into())); }
         };
-        Ok(Self { store, preview })
+        Ok(Self { store })
     }
 
     /// Generate a storage key from provider + kind + optional suffix.
