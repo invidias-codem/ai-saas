@@ -332,7 +332,7 @@ mod linux {
             Ok(collection)
         }
 
-        fn make_attributes(&self, key: &str) -> HashMap<&str, &str> {
+        fn make_attributes<'b>(&self, key: &'b str) -> HashMap<&'b str, &'b str> {
             let mut attrs = HashMap::new();
             attrs.insert("service", SERVICE_NAME);
             attrs.insert("key", key);
