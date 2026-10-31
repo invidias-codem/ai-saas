@@ -192,7 +192,6 @@ mod windows {
         CREDENTIALW, CRED_TYPE_GENERIC, CRED_PERSIST_LOCAL_MACHINE,
     };
     use windows_sys::Win32::Foundation::{ERROR_NOT_FOUND};
-    use windows_sys::core::{PWSTR, PCWSTR};
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
 
@@ -212,7 +211,7 @@ mod windows {
             let target = to_wide(&format!("{}/{}", SERVICE_NAME, key));
             let mut cred_ptr = std::ptr::null_mut();
             unsafe {
-                let result = CredReadW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, 0, &mut cred_ptr);
+                let result = CredReadW(target.as_ptr() as *const u16, CRED_TYPE_GENERIC, 0, &mut cred_ptr);
                 if result != 0 {
                     if result == ERROR_NOT_FOUND {
                         return Ok(None);
@@ -239,7 +238,7 @@ mod windows {
             let value_wide = to_wide(value);
             let mut cred = CREDENTIALW {
                 Type: CRED_TYPE_GENERIC,
-                TargetName: PWSTR(target.as_mut_ptr()),
+                TargetName: target.as_mut_ptr(),
                 CredentialBlobSize: (value_wide.len() * 2) as u32,
                 CredentialBlob: value_wide.as_ptr() as *mut u8,
                 Persist: CRED_PERSIST_LOCAL_MACHINE,
@@ -257,7 +256,7 @@ mod windows {
         async fn remove(&self, key: &str) -> Result<()> {
             let target = to_wide(&format!("{}/{}", SERVICE_NAME, key));
             unsafe {
-                let result = CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, 0);
+                let result = CredDeleteW(target.as_ptr() as *const u16, CRED_TYPE_GENERIC, 0);
                 if result != 0 {
                     return Err(CredentialError::Platform(format!("CredDeleteW failed: {}", result)));
                 }
@@ -271,7 +270,7 @@ mod windows {
             let mut count = 0u32;
             let mut results = Vec::new();
             unsafe {
-                let result = CredEnumerateW(PCWSTR(filter.as_ptr()), 0, &mut count, &mut cred_ptr);
+                let result = CredEnumerateW(filter.as_ptr() as *const u16, 0, &mut count, &mut cred_ptr);
                 if result != 0 {
                     return Ok(vec![]);
                 }
@@ -343,7 +342,7 @@ mod linux {
     }
 
     #[async_trait::async_trait]
-    impl CredentialStore for LinuxStore {
+    impl<'a> CredentialStore for LinuxStore<'a> {
         async fn get(&self, key: &str) -> Result<Option<Zeroizing<String>>> {
             let attrs = self.make_attributes(key);
             let collection = self.get_collection().await?;
