@@ -71,9 +71,9 @@ jobs:
         working-directory: go-harness
         run: go test -c -o bin/lattice-process-helper.exe ./internal/executil
       - name: Lint native protocol
-        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml -p lattice-native-host --all-targets -- -D warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -p lattice-native-host --all-targets -- -D warnings
       - name: Protocol and real daemon regressions
         env:
           LATTICE_TEST_DAEMON_PATH: ${{ github.workspace }}/go-harness/bin/lattice-rust-host-test.exe
           LATTICE_TEST_PROCESS_HELPER_PATH: ${{ github.workspace }}/go-harness/bin/lattice-process-helper.exe
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml -p lattice-native-host -- --nocapture
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p lattice-native-host -- --nocapture

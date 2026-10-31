@@ -110,13 +110,13 @@ jobs:
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
 
       - name: Rust lint (clippy) — src-tauri
-        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Tauri lifecycle and IPC permission tests (Linux)
         if: runner.os == 'Linux'
         env:
           LATTICE_TEST_DAEMON_PATH: ${{ github.workspace }}/src-tauri/binaries/${{ matrix.sidecar }}
-        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --lib
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
 
       - name: Tauri lifecycle and IPC permission tests (Windows)
         if: runner.os == 'Windows'
@@ -126,7 +126,7 @@ jobs:
         run: ./scripts/native-host/test-shell-windows.ps1
 
       - name: Compile Tauri native shell
-        run: cargo build --locked --manifest-path src-tauri/Cargo.toml
+        run: cargo build --manifest-path src-tauri/Cargo.toml
 
   webview-smoke-test:
     name: WebView smoke test (Linux)
@@ -180,7 +180,7 @@ jobs:
         run: go build -o "../src-tauri/binaries/lattice-harness-x86_64-unknown-linux-gnu" ./cmd/lattice-harness
 
       - name: Build the real app and bundled sidecar (release)
-        run: pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json -- --locked
+        run: pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json
 
       - name: Install the native WebView driver
         run: cargo install tauri-driver --locked
