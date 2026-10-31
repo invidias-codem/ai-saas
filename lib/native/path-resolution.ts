@@ -50,10 +50,10 @@ export function getChannelPaths(channel: Channel = 'stable'): ChannelPaths {
       channel: 'stable',
       root: paths.stableRoot,
       profilesRoot: paths.profilesRoot,
-      profileConfigTemplate: paths.profileConfig('{profileId}'),
-      profileStateTemplate: paths.profileState('{profileId}'),
-      profileLogsTemplate: paths.profileLogs('{profileId}'),
-      profileCacheTemplate: paths.profileCache('{profileId}'),
+      profileConfigTemplate: paths.profileConfigTemplate,
+      profileStateTemplate: paths.profileStateTemplate,
+      profileLogsTemplate: paths.profileLogsTemplate,
+      profileCacheTemplate: paths.profileCacheTemplate,
       credentialsRoot: '', // OS keychain
     };
   } else {
@@ -61,10 +61,10 @@ export function getChannelPaths(channel: Channel = 'stable'): ChannelPaths {
       channel: 'preview',
       root: paths.previewRoot,
       profilesRoot: paths.previewProfilesRoot,
-      profileConfigTemplate: paths.previewProfileConfig('{profileId}'),
-      profileStateTemplate: paths.previewProfileState('{profileId}'),
-      profileLogsTemplate: paths.previewProfileLogs('{profileId}'),
-      profileCacheTemplate: paths.previewProfileCache('{profileId}'),
+      profileConfigTemplate: paths.previewProfileConfigTemplate,
+      profileStateTemplate: paths.previewProfileStateTemplate,
+      profileLogsTemplate: paths.previewProfileLogsTemplate,
+      profileCacheTemplate: paths.previewProfileCacheTemplate,
       credentialsRoot: '', // OS keychain
     };
   }
