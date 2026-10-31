@@ -4,7 +4,7 @@ import path from 'node:path';
 import { withWebdriver, until } from './qualification-webdriver.mjs';
 import { nativeDialog } from './native-dialog.mjs';
 
-export async function nativeUiFlow(application, fixture, evidence, record) {
+export async function nativeUiFlow(application, fixture, evidence, record, driverOptions = {}) {
   const seed = 'Native workspace fixture\n资料 <script>literal</script>\n';
   await writeFile(path.join(fixture, 'seed.txt'), seed);
   await withWebdriver(application, async client => {
@@ -164,5 +164,6 @@ export async function nativeUiFlow(application, fixture, evidence, record) {
     measured('all-command-modes-unavailable-or-sandbox-denied-no-marker');
     assert.equal(await readFile(path.join(fixture, 'seed.txt'), 'utf8'), seed);
     await client.capture(captured('installed-main-final'));
-  });
+  }, { ...driverOptions, evidence });
 }
+

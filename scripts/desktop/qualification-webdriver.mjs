@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { requestWebdriver } from './webdriver-protocol.mjs';
 
 export const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function until(action, predicate, milliseconds = 25000) {
@@ -13,18 +15,15 @@ export async function until(action, predicate, milliseconds = 25000) {
   }
   throw lastError ?? new Error('Native UI condition was not reached');
 }
-export async function withWebdriver(application, action) {
-  const driver = spawn('tauri-driver', ['--port', '4444'], { stdio: 'ignore' });
+export async function withWebdriver(application, action, { nativeDriver, evidence } = {}) {
+  const driver = spawn('tauri-driver', ['--port', '4444', ...(nativeDriver ? ['--native-driver', nativeDriver] : [])], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let output = '';
+  const collect = bytes => { output = (output + bytes.toString()).slice(-65536); };
+  driver.stdout.on('data', collect); driver.stderr.on('data', collect);
   let driverError;
   driver.on('error', error => { driverError = error; });
   let session;
-  const request = async (route, method = 'GET', body) => {
-    const response = await fetch(`http://127.0.0.1:4444${route}`, { method, signal: AbortSignal.timeout(15000),
-      ...(body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) });
-    const result = await response.json();
-    if (!response.ok || result.value?.error) throw new Error(`WebDriver ${method} ${route}: ${result.value?.error ?? response.status}`);
-    return result.value;
-  };
+  const request = requestWebdriver;
   try {
     await until(() => { if (driverError) throw driverError; return request('/status'); }, () => true);
     const created = await request('/session', 'POST', { capabilities: { alwaysMatch: { 'tauri:options': { application } } } });
@@ -65,7 +64,11 @@ export async function withWebdriver(application, action) {
       switchTo: handle => rpc('/window', 'POST', { handle }),
       capture: async filename => writeFile(filename, Buffer.from(await rpc('/screenshot'), 'base64')),
     };
-    await action(client);
+    try { await action(client); }
+    catch (error) {
+      if (evidence) await client.capture(path.join(evidence, 'webdriver-failure.png')).catch(() => {});
+      throw error;
+    }
   } finally {
     if (session) await request(`/session/${session}`, 'DELETE').catch(() => {});
     if (driver.exitCode === null && driver.signalCode === null) {
@@ -73,5 +76,7 @@ export async function withWebdriver(application, action) {
       driver.kill('SIGTERM'); await Promise.race([exited, pause(1500)]);
       if (driver.exitCode === null && driver.signalCode === null) { driver.kill('SIGKILL'); await Promise.race([exited, pause(1500)]); }
     }
+    if (evidence) await writeFile(path.join(evidence, 'webdriver.log'), output);
   }
 }
+

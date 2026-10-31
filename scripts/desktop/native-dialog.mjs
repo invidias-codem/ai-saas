@@ -6,6 +6,7 @@ import { until, pause } from './qualification-webdriver.mjs';
 const execute = promisify(execFile);
 const titles = { folder: 'Select a folder for read access', read: 'Confirm folder read access', write: 'Confirm reviewed file changes' };
 const helper = fileURLToPath(new URL('./windows-native-dialog.ps1', import.meta.url));
+const gtkHelper = fileURLToPath(new URL('./gtk-native-dialog.py', import.meta.url));
 export async function nativeDialog(kind, action, folder, screenshot) {
   if (!Object.hasOwn(titles, kind) || !['accept', 'cancel'].includes(action)) throw new Error('Invalid native dialog test action');
   if (process.platform === 'win32') {
@@ -31,15 +32,12 @@ export async function nativeDialog(kind, action, folder, screenshot) {
   await execute('import', ['-window', 'root', screenshot], { timeout: 8000 });
   await run('windowactivate', '--sync', id);
   await run('windowfocus', '--sync', id);
-  if (action === 'cancel') { await run('key', 'Escape'); return; }
-  if (kind === 'folder') {
+  if (kind === 'folder' && action === 'accept') {
     await run('key', 'ctrl+l'); await pause(200);
-    await run('type', '--clearmodifiers', '--delay', '1', `${folder}/`);
-    // GTK validates the location asynchronously; do not submit while it is
-    // still processing the last keystroke. Every response stays on this dialog.
-    await pause(1000);
-    for (let response = 0; response < 3 && (await visible()).includes(id); response += 1) {
-      await run('key', '--clearmodifiers', 'Return'); await pause(1000);
-    }
-  } else await run('key', 'Return');
+  }
+  try {
+    await execute('/usr/bin/python3', [gtkHelper, '--title', titles[kind], '--kind', kind, '--action', action,
+      '--folder', folder ?? '', '--evidence', `${screenshot}.a11y.json`], { timeout: 35000 });
+  } finally { await execute('import', ['-window', 'root', `${screenshot}.after.png`], { timeout: 8000 }).catch(() => {}); }
 }
+
