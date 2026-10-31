@@ -1,14 +1,19 @@
+mod credential_broker;
 mod native_host;
 mod review;
 mod workspace;
-mod credential_broker;
 
 #[cfg(test)]
 mod ipc_tests;
 #[cfg(test)]
 mod review_test_support;
 
-use lattice_credential_broker::{CredentialBroker, BrokerCommand, BrokerResponse as InnerBrokerResponse, ProviderKind, CredentialKind};
+use chrono::Utc;
+use credential_broker::init_credential_broker;
+use lattice_credential_broker::{
+    BrokerCommand, BrokerResponse as InnerBrokerResponse, CredentialBroker, CredentialKind,
+    ProviderKind,
+};
 use lattice_native_host::lifecycle::{NativeHost, Phase};
 use lattice_native_host::{permits_window, TelemetryEvent};
 use native_host::TauriLauncher;
@@ -17,8 +22,6 @@ use serde_json::json;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::Manager;
-use chrono::Utc;
-use credential_broker::init_credential_broker;
 
 #[derive(Serialize)]
 struct HarnessEvent {
@@ -168,7 +171,10 @@ async fn credential_update_api_key<R: tauri::Runtime>(
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
-    let cmd = BrokerCommand::UpdateApiKey { provider: provider_kind, api_key };
+    let cmd = BrokerCommand::UpdateApiKey {
+        provider: provider_kind,
+        api_key,
+    };
     Ok(state.handle_command(cmd).await)
 }
 
@@ -181,7 +187,9 @@ async fn credential_get_api_key_status<R: tauri::Runtime>(
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
-    let cmd = BrokerCommand::GetApiKeyStatus { provider: provider_kind };
+    let cmd = BrokerCommand::GetApiKeyStatus {
+        provider: provider_kind,
+    };
     Ok(state.handle_command(cmd).await)
 }
 
@@ -194,7 +202,9 @@ async fn credential_delete_api_key<R: tauri::Runtime>(
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
-    let cmd = BrokerCommand::DeleteApiKey { provider: provider_kind };
+    let cmd = BrokerCommand::DeleteApiKey {
+        provider: provider_kind,
+    };
     Ok(state.handle_command(cmd).await)
 }
 
@@ -207,7 +217,9 @@ async fn credential_list_provider_credentials<R: tauri::Runtime>(
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
-    let cmd = BrokerCommand::ListProviderCredentials { provider: provider_kind };
+    let cmd = BrokerCommand::ListProviderCredentials {
+        provider: provider_kind,
+    };
     Ok(state.handle_command(cmd).await)
 }
 
