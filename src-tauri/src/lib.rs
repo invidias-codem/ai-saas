@@ -419,7 +419,6 @@ async fn load_profile_config<R: tauri::Runtime>(
         || profile_id.is_empty() || profile_id.len() > 64 {
         return Err("Invalid profile ID".to_string());
     }
-
     let is_preview = channel == "preview";
     let app_name = if is_preview {
         "xyz.gen1e.lattice-os.preview"
@@ -476,7 +475,6 @@ async fn save_profile_config<R: tauri::Runtime>(
         || profile_id.is_empty() || profile_id.len() > 64 {
         return Err("Invalid profile ID".to_string());
     }
-
     let is_preview = channel == "preview";
     let app_name = if is_preview {
         "xyz.gen1e.lattice-os.preview"
