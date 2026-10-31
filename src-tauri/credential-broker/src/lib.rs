@@ -192,6 +192,7 @@ mod windows {
         CREDENTIALW, CRED_TYPE_GENERIC, CRED_PERSIST_LOCAL_MACHINE,
     };
     use windows::Win32::Foundation::{ERROR_NOT_FOUND, WIN32_ERROR};
+    use windows::core::{PWSTR, PCWSTR};
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
 
@@ -211,13 +212,13 @@ mod windows {
             let target = to_wide(&format!("{}/{}", SERVICE_NAME, key));
             let mut cred_ptr = std::ptr::null_mut();
             unsafe {
-                let result = CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut cred_ptr);
+                let result = CredReadW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, 0, &mut cred_ptr);
                 if result.is_err() {
-                    let err = WIN32_ERROR(result.0);
-                    if err == ERROR_NOT_FOUND {
+                    let err_code = result.0;
+                    if err_code == ERROR_NOT_FOUND.0 {
                         return Ok(None);
                     }
-                    return Err(CredentialError::Platform(err.to_string()));
+                    return Err(CredentialError::Platform(format!("CredReadW failed: {}", err_code)));
                 }
                 if cred_ptr.is_null() {
                     return Ok(None);
@@ -237,9 +238,9 @@ mod windows {
         async fn set(&self, key: &str, value: &str) -> Result<()> {
             let target = to_wide(&format!("{}/{}", SERVICE_NAME, key));
             let value_wide = to_wide(value);
-            let cred = CREDENTIALW {
+            let mut cred = CREDENTIALW {
                 Type: CRED_TYPE_GENERIC,
-                TargetName: windows::core::PWSTR(target.as_mut_ptr()),
+                TargetName: PWSTR(target.as_mut_ptr()),
                 CredentialBlobSize: (value_wide.len() * 2) as u32,
                 CredentialBlob: value_wide.as_ptr() as *mut u8,
                 Persist: CRED_PERSIST_LOCAL_MACHINE,
@@ -254,7 +255,7 @@ mod windows {
         async fn remove(&self, key: &str) -> Result<()> {
             let target = to_wide(&format!("{}/{}", SERVICE_NAME, key));
             unsafe {
-                CredDeleteW(windows::core::PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, 0)
+                CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, 0)
                     .map_err(|e| CredentialError::Platform(e.to_string()))?;
             }
             Ok(())
@@ -266,7 +267,7 @@ mod windows {
             let mut count = 0u32;
             let mut results = Vec::new();
             unsafe {
-                let result = CredEnumerateW(windows::core::PCWSTR(filter.as_ptr()), None, &mut count, &mut cred_ptr);
+                let result = CredEnumerateW(PCWSTR(filter.as_ptr()), None, &mut count, &mut cred_ptr);
                 if result.is_err() {
                     return Ok(vec![]);
                 }
@@ -301,7 +302,7 @@ mod windows {
 #[cfg(all(unix, not(target_os = "macos")))]
 mod linux {
     use super::*;
-    use secret_service::{SecretService, Collection, EncryptionType, ItemType};
+    use secret_service::{SecretService, Collection, EncryptionType};
     use std::sync::Arc;
 
     pub struct LinuxStore {
@@ -320,7 +321,7 @@ mod linux {
             Ok(Self { service })
         }
 
-        async fn get_collection(&self) -> Result<Collection<'_>> {
+        async fn get_collection(&self) -> Result<Collection> {
             let collection = self.service.get_default_collection().await
                 .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?;
             collection.unlock().await
@@ -362,7 +363,7 @@ mod linux {
             let attrs = self.make_attributes(key);
             let label = format!("{}/{}", SERVICE_NAME, key);
             let collection = self.get_collection().await?;
-            collection.create_item(&label, attrs, value.as_bytes(), true, "application/octet-stream".into(), ItemType::Generic)
+            collection.create_item(&label, attrs, value.as_bytes(), true, "application/octet-stream")
                 .await
                 .map_err(|e| CredentialError::Platform(e.to_string()))?;
             Ok(())
