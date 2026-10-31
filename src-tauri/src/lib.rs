@@ -446,7 +446,6 @@ async fn load_profile_config<R: tauri::Runtime>(
     let canonical_path = config_path.canonicalize().or_else(|_| {
         config_path.parent().unwrap().canonicalize()
     }).map_err(|e| e.to_string())?;
-    
     if !canonical_path.starts_with(&canonical_root) {
         return Err("Path traversal attempt blocked".to_string());
     }
@@ -501,7 +500,6 @@ async fn save_profile_config<R: tauri::Runtime>(
     let canonical_path = config_path.canonicalize().or_else(|_| {
         config_path.parent().unwrap().canonicalize()
     }).map_err(|e| e.to_string())?;
-    
     if !canonical_path.starts_with(&canonical_root) {
         return Err("Path traversal attempt blocked".to_string());
     }
