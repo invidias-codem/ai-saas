@@ -27,9 +27,11 @@ fn app_with_host(host: Arc<NativeHost>) -> tauri::App<MockRuntime> {
             workspace::native_select_folder,
             workspace::native_workspace_grants,
             workspace::native_revoke_grant,
+            workspace::native_request_write_access,
             workspace::native_list,
             workspace::native_stat,
             workspace::native_read_text,
+            workspace::native_daemon_status,
             review::native_propose_operation,
             review::native_proposal_status,
             review::native_cancel_proposal,
@@ -37,7 +39,11 @@ fn app_with_host(host: Arc<NativeHost>) -> tauri::App<MockRuntime> {
             review::native_review_document,
             review::native_review_ready,
             review::native_review_decide,
-            review::native_review_cancel
+            review::native_review_cancel,
+            review::native_dispatch_operation,
+            review::native_operation_status,
+            review::native_cancel_operation,
+            review::native_command_output,
         ])
         .build(tauri::generate_context!())
         .unwrap()
@@ -128,11 +134,12 @@ fn main_and_forged_review_windows_cannot_submit_decisions() {
             }
             _ => json!({}),
         };
+        // Main window has permission but no active review lease -> LOCAL_REVIEW_DENIED
         let denied = call_input(&main, command, main.url().unwrap().as_str(), input.clone())
             .err()
-            .unwrap()
-            .to_string();
-        assert!(denied.contains("not allowed"), "{command}: {denied}");
+            .unwrap();
+        assert_eq!(denied["code"], "LOCAL_REVIEW_DENIED", "{command}: {denied}");
+        // Forged review window always gets LOCAL_REVIEW_DENIED
         let denied = call_input(&fake, command, &fake_origin, input)
             .err()
             .unwrap();
@@ -153,6 +160,7 @@ fn main_and_forged_review_windows_cannot_submit_decisions() {
         "native_dispatch_mutation",
         "native_operation_status",
         "native_cancel_operation",
+        "native_daemon_status",
         "plugin:shell|execute",
         "plugin:fs|read_text_file",
         "plugin:opener|open_url",
@@ -418,13 +426,8 @@ fn main_has_no_shell_secret_store_or_generic_rpc_permission() {
         "native_dispatch_command",
         "native_command_status",
         "native_cancel_command",
-        "native_command_output",
         "native_register_provider",
-        "native_request_write_access",
-        "native_dispatch_operation",
         "native_dispatch_mutation",
-        "native_operation_status",
-        "native_cancel_operation",
         "plugin:shell|execute",
         "plugin:stronghold|initialize",
         "plugin:event|emit",
@@ -506,5 +509,46 @@ fn workspace_ipc_cannot_accept_path_grant_or_identity_setters() {
             .unwrap()
             .to_string();
         assert!(denied.contains("unknown field"), "{command}: {denied}");
+    }
+}
+
+#[test]
+fn main_can_invoke_native_operation_dispatch_and_status() {
+    let app = app();
+    let main = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+    let url = main.url().unwrap().to_string();
+    // These commands should be available to the main window (not "not allowed")
+    // They return LOCAL_SERVICE_STOPPED because the daemon isn't running in tests
+    for (command, input) in [
+        (
+            "native_dispatch_operation",
+            json!({"proposal_id": "local-proposal-00000000000000000000000000000000"}),
+        ),
+        (
+            "native_operation_status",
+            json!({"proposal_id": "local-proposal-00000000000000000000000000000000"}),
+        ),
+        (
+            "native_cancel_operation",
+            json!({"proposal_id": "local-proposal-00000000000000000000000000000000"}),
+        ),
+        (
+            "native_command_output",
+            json!({"proposal_id": "local-proposal-00000000000000000000000000000000"}),
+        ),
+        (
+            "native_request_write_access",
+            json!({"grant_id": "local-grant-00000000000000000000000000000000"}),
+        ),
+    ] {
+        let result = call_input(&main, command, &url, input);
+        // Should not be "not allowed" - the command exists
+        // It may return LOCAL_SERVICE_STOPPED or other runtime errors
+        if let Err(e) = &result {
+            let err_str = e.to_string();
+            assert!(!err_str.contains("not allowed"), "{command}: {err_str}");
+        }
     }
 }

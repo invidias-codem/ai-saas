@@ -5,8 +5,8 @@ commands.allow = ["ping_daemon", "restart_daemon", "flush_telemetry"]
 
 [[permission]]
 identifier = "native-workspace-read"
-description = "Native-confirmed folder selection, opaque grant revocation and typed read-only file previews; no raw paths, grants, identity, mutation or execution setters."
-commands.allow = ["native_select_folder", "native_workspace_grants", "native_revoke_grant", "native_list", "native_stat", "native_read_text"]
+description = "Native-confirmed folder selection, opaque grant revocation, typed read-only file previews and write consent; no raw paths, grants, identity, mutation or execution setters."
+commands.allow = ["native_select_folder", "native_workspace_grants", "native_revoke_grant", "native_list", "native_stat", "native_read_text", "native_request_write_access"]
 
 [[permission]]
 identifier = "native-proposal-control"
@@ -17,3 +17,8 @@ commands.allow = ["native_propose_operation", "native_proposal_status", "native_
 identifier = "native-review-decision"
 description = "Fixed native-created review instance only: read immutable display, acknowledge it and submit one decision."
 commands.allow = ["native_review_document", "native_review_ready", "native_review_decide", "native_review_cancel"]
+
+[[permission]]
+identifier = "native-operation-control"
+description = "Dispatch accepted proposals, check status, cancel and retrieve command output; no propose, review or authority."
+commands.allow = ["native_dispatch_operation", "native_operation_status", "native_cancel_operation", "native_command_output"]

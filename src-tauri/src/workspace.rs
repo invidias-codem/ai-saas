@@ -6,7 +6,7 @@ use lattice_native_host::{
         DialogFuture, DirectoryList, EmptyInput, FileStat, FolderPicker, GrantInfo, GrantReference,
         ReadInput, TextRead, WriteConsent,
     },
-    HostError,
+    HostError, Status,
 };
 use serde::Serialize;
 use std::{path::PathBuf, sync::Arc};
@@ -176,4 +176,26 @@ pub(crate) async fn native_read_text<R: tauri::Runtime>(
 ) -> Result<TextRead, NativeIpcError> {
     require_workspace_window(&window)?;
     state.read_text(input).await.map_err(Into::into)
+}
+#[tauri::command]
+pub(crate) async fn native_request_write_access<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<NativeHost>>,
+    input: GrantReference,
+) -> Result<GrantInfo, NativeIpcError> {
+    require_workspace_window(&window)?;
+    state
+        .request_write_access(input.grant_id, NativeFolderPicker { window })
+        .await
+        .map_err(Into::into)
+}
+#[tauri::command]
+pub(crate) async fn native_daemon_status<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<NativeHost>>,
+    input: EmptyInput,
+) -> Result<Option<Status>, NativeIpcError> {
+    require_workspace_window(&window)?;
+    let EmptyInput {} = input;
+    state.status().await.map_err(Into::into)
 }

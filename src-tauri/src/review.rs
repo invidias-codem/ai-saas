@@ -2,7 +2,9 @@
 //! and are never reused; no caller can choose one or return a review lease.
 use crate::workspace::NativeIpcError;
 use lattice_native_host::{
+    command::CommandOutput,
     lifecycle::NativeHost,
+    mutation::OperationStatus,
     review::{
         DisplayAcknowledgement, ProposalInput, ProposalReference, ProposalState, ProposalSummary,
         ReviewDecision, ReviewDocument, ReviewLease,
@@ -362,4 +364,52 @@ pub(crate) async fn native_review_cancel<R: Runtime>(
     let EmptyInput {} = input;
     authorized(&window)?.deny();
     Ok(())
+}
+#[tauri::command]
+pub(crate) async fn native_dispatch_operation<R: Runtime>(
+    window: WebviewWindow<R>,
+    state: tauri::State<'_, Arc<NativeHost>>,
+    input: ProposalReference,
+) -> Result<OperationStatus, NativeIpcError> {
+    super::require_local_window(&window).map_err(|_| HostError::GrantDenied)?;
+    state
+        .dispatch_operation(&input.proposal_id)
+        .await
+        .map_err(Into::into)
+}
+#[tauri::command]
+pub(crate) async fn native_operation_status<R: Runtime>(
+    window: WebviewWindow<R>,
+    state: tauri::State<'_, Arc<NativeHost>>,
+    input: ProposalReference,
+) -> Result<OperationStatus, NativeIpcError> {
+    super::require_local_window(&window).map_err(|_| HostError::GrantDenied)?;
+    state
+        .operation_status(&input.proposal_id)
+        .await
+        .map_err(Into::into)
+}
+#[tauri::command]
+pub(crate) async fn native_cancel_operation<R: Runtime>(
+    window: WebviewWindow<R>,
+    state: tauri::State<'_, Arc<NativeHost>>,
+    input: ProposalReference,
+) -> Result<OperationStatus, NativeIpcError> {
+    super::require_local_window(&window).map_err(|_| HostError::GrantDenied)?;
+    state
+        .cancel_operation(&input.proposal_id)
+        .await
+        .map_err(Into::into)
+}
+#[tauri::command]
+pub(crate) async fn native_command_output<R: Runtime>(
+    window: WebviewWindow<R>,
+    state: tauri::State<'_, Arc<NativeHost>>,
+    input: ProposalReference,
+) -> Result<CommandOutput, NativeIpcError> {
+    super::require_local_window(&window).map_err(|_| HostError::GrantDenied)?;
+    state
+        .command_output(&input.proposal_id)
+        .await
+        .map_err(Into::into)
 }
