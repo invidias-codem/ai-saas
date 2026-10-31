@@ -304,21 +304,21 @@ mod linux {
     use secret_service::{SecretService, Collection, EncryptionType};
     use std::sync::Arc;
 
-    pub struct LinuxStore {
-        service: Arc<SecretService>,
-        collection: Arc<Collection>,
+    pub struct LinuxStore<'a> {
+        service: Arc<SecretService<'a>>,
+        collection: Arc<Collection<'a>>,
     }
 
-    impl LinuxStore {
+    impl<'a> LinuxStore<'a> {
         pub async fn new() -> Result<Self> {
-            let service = SecretService::new(EncryptionType::Dh).await
-                .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?;
+            let service = Arc::new(SecretService::connect(EncryptionType::Dh).await
+                .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?);
             let collection = service.get_default_collection().await
                 .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?;
             collection.unlock().await
                 .map_err(|e| CredentialError::StoreUnavailable(e.to_string()))?;
             Ok(Self {
-                service: Arc::new(service),
+                service,
                 collection: Arc::new(collection),
             })
         }
@@ -333,7 +333,7 @@ mod linux {
     }
 
     #[async_trait::async_trait]
-    impl CredentialStore for LinuxStore {
+    impl<'a> CredentialStore for LinuxStore<'a> {
         async fn get(&self, key: &str) -> Result<Option<Zeroizing<String>>> {
             let attrs = self.make_attributes(key);
             match self.collection.search_items(attrs).await {
@@ -669,7 +669,7 @@ pub enum BrokerCommand {
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum BrokerResponse {
     Ok { reference: CredentialRef },
-    Status { status: CredentialStatus },
+    Status { status_value: CredentialStatus },
     Config { endpoint_url: String, model_id: String },
     List { credentials: Vec<CredentialRef> },
     Deleted,
