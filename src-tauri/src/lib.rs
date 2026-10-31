@@ -568,7 +568,9 @@ async fn list_profiles<R: tauri::Runtime>(
         if path.is_dir() {
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                 // Only return valid profile IDs
-                if name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                if name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
                     && !name.is_empty()
                     && name.len() <= 64
                 {
