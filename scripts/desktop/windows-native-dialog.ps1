@@ -10,28 +10,55 @@ Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.For
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Collections.Generic;
 public static class QualificationWindow {
+  public delegate bool EnumWindowCallback(IntPtr handle, IntPtr data);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowCallback callback, IntPtr data);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr handle, StringBuilder text, int size);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr handle);
+  public static IntPtr[] FindVisible(string title) {
+    var matches = new List<IntPtr>();
+    EnumWindows((handle, data) => {
+      var text = new StringBuilder(1024);
+      GetWindowText(handle, text, text.Capacity);
+      if (IsWindowVisible(handle) && text.ToString() == title) matches.Add(handle);
+      return true;
+    }, IntPtr.Zero);
+    return matches.ToArray();
+  }
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr handle);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
 }
 '@
-$condition = [System.Windows.Automation.PropertyCondition]::new([System.Windows.Automation.AutomationElement]::NameProperty, $Title)
+function Save-DesktopEvidence {
+  $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+  $bitmap = [System.Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
+  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+  try {
+    $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+    $bitmap.Save($Screenshot, [System.Drawing.Imaging.ImageFormat]::Png)
+  } finally { $graphics.Dispose(); $bitmap.Dispose() }
+  $roots = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+    [System.Windows.Automation.TreeScope]::Children, [System.Windows.Automation.Condition]::TrueCondition)
+  @($roots | ForEach-Object { @{name=$_.Current.Name; processId=$_.Current.ProcessId;
+    handle=$_.Current.NativeWindowHandle; controlType=$_.Current.ControlType.ProgrammaticName} }) |
+    ConvertTo-Json -Depth 3 | Set-Content -LiteralPath "$Screenshot.windows.json" -Encoding UTF8
+}
 $deadline = [DateTime]::UtcNow.AddSeconds(25)
 $window = $null
 while ([DateTime]::UtcNow -lt $deadline) {
-  $nativeWindows = @([System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Children, $condition))
-  if ($nativeWindows.Count -eq 1) { $window = $nativeWindows[0]; break }
-  if ($nativeWindows.Count -gt 1) { throw 'Native dialog identity is ambiguous' }
+  # The common file dialog can expose a UIA name different from its WM title.
+  # Resolve the exact visible Win32 title first, then operate its UIA controls.
+  $handles = @([QualificationWindow]::FindVisible($Title))
+  if ($handles.Count -eq 1) {
+    $window = [System.Windows.Automation.AutomationElement]::FromHandle($handles[0]); break
+  }
+  if ($handles.Count -gt 1) { throw 'Native dialog identity is ambiguous' }
   Start-Sleep -Milliseconds 200
 }
+Save-DesktopEvidence
 if ($null -eq $window) { throw "Expected native dialog did not appear: $Title" }
-$bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-$bitmap = [System.Drawing.Bitmap]::new($bounds.Width, $bounds.Height)
-$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-try {
-  $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
-  $bitmap.Save($Screenshot, [System.Drawing.Imaging.ImageFormat]::Png)
-} finally { $graphics.Dispose(); $bitmap.Dispose() }
 $handle = [IntPtr]$window.Current.NativeWindowHandle
 [void][QualificationWindow]::SetForegroundWindow($handle)
 $window.SetFocus()
@@ -60,3 +87,4 @@ try {
   if ($Kind -ne 'folder' -or $Action -ne 'accept') { throw }
   # Enter can complete native folder selection. The caller separately verifies the read-consent dialog.
 }
+

@@ -29,6 +29,8 @@ export async function nativeDialog(kind, action, folder, screenshot) {
   }
   if (ids.length !== 1 || !/^\d+$/.test(ids[0])) throw new Error('Native dialog identity is ambiguous');
   const id = ids[0];
+  const pid = (await run('getwindowpid', id)).stdout.trim();
+  if (!/^[1-9]\d*$/.test(pid)) throw new Error('Native dialog process identity is unavailable');
   await execute('import', ['-window', 'root', screenshot], { timeout: 8000 });
   await run('windowactivate', '--sync', id);
   await run('windowfocus', '--sync', id);
@@ -39,7 +41,7 @@ export async function nativeDialog(kind, action, folder, screenshot) {
     await run('key', 'ctrl+l'); await pause(200);
   }
   try {
-    await execute('/usr/bin/python3', [gtkHelper, '--title', titles[kind], '--kind', kind, '--action', action,
+    await execute('/usr/bin/python3', [gtkHelper, '--pid', pid, '--title', titles[kind], '--kind', kind, '--action', action,
       '--folder', folder ?? '', '--evidence', `${screenshot}.a11y.json`], { timeout: 35000 });
   } finally { await execute('import', ['-window', 'root', `${screenshot}.after.png`], { timeout: 8000 }).catch(() => {}); }
 }

@@ -41,8 +41,19 @@ def run(args):
         candidates = []
         desktop = pyatspi.Registry.getDesktop(0)
         for app in desktop:
+            if app.get_process_id() != args.pid:
+                continue
             for child in app:
-                if child.name == args.title and showing(child):
+                if not showing(child):
+                    continue
+                # GtkMessageDialog's accessible name can be its message body,
+                # not the WM title already verified by xdotool. Bind consent
+                # to that process, dialog role, and the exact approval control.
+                consent = args.kind != 'folder' and child.getRole() in (pyatspi.ROLE_ALERT, pyatspi.ROLE_DIALOG)
+                approval = {'read': 'Allow read access', 'write': 'Allow reviewed changes'}.get(args.kind)
+                if child.name == args.title or (consent and any(
+                        node.getRole() == pyatspi.ROLE_PUSH_BUTTON and node.name == approval and showing(node)
+                        for node in descendants(child))):
                     candidates.append(child)
         if len(candidates) > 1:
             raise RuntimeError('Native GTK dialog identity is ambiguous')
@@ -105,6 +116,7 @@ def run(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--pid', type=int, required=True)
     parser.add_argument('--title', required=True)
     parser.add_argument('--kind', choices=['folder', 'read', 'write'], required=True)
     parser.add_argument('--action', choices=['accept', 'cancel'], required=True)
