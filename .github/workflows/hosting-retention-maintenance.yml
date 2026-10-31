@@ -1,0 +1,104 @@
+name: Approved Hosting retention maintenance
+on:
+  pull_request:
+    types: [opened]
+    paths: ['.github/workflows/hosting-retention-maintenance.yml']
+permissions:
+  contents: read
+concurrency:
+  group: hosting-retention-maintenance-genie-ai-1ca85
+  cancel-in-progress: false
+jobs:
+  retain-approved-history:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'ops/hosting-retention-20261031'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+        with:
+          version: 11.6.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GENIE_AI_1CA85 }}
+      - name: Preserve live plus ten rollback releases and apply approved retention
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { mkdir, writeFile } from 'node:fs/promises';
+          import { applicationDefault } from 'firebase-admin/app';
+          const root = 'https://firebasehosting.googleapis.com/v1beta1/sites/genie-ai-1ca85';
+          const token = await applicationDefault().getAccessToken();
+          async function request(route, method = 'GET', body) {
+            if (!/^(?:channels(?:\/live(?:\/releases)?)?|versions(?:\/[a-f0-9]+)?)(?:\?[^#]*)?$/.test(route)) throw new Error('Unexpected Hosting resource');
+            const response = await fetch(root + '/' + route, { method, headers: {
+              authorization: 'Bearer ' + token.access_token, ...(body ? {'content-type': 'application/json'} : {})
+            }, ...(body ? {body: JSON.stringify(body)} : {}), signal: AbortSignal.timeout(20000) });
+            if (!response.ok) throw new Error('Hosting request failed: ' + method + ' ' + response.status);
+            return response.json();
+          }
+          async function list(route, key) {
+            const values = []; const seen = new Set(); let pageToken = '';
+            for (let page = 0; page < 50; page++) {
+              const query = new URLSearchParams({pageSize: '100', ...(pageToken ? {pageToken} : {})});
+              const data = await request(route + '?' + query);
+              assert.ok(Array.isArray(data[key] ?? [])); values.push(...(data[key] ?? []));
+              if (!data.nextPageToken) return values;
+              assert.ok(typeof data.nextPageToken === 'string' && data.nextPageToken.length < 4096 && !seen.has(data.nextPageToken));
+              pageToken = data.nextPageToken; seen.add(pageToken);
+            }
+            throw new Error('Hosting page limit exceeded');
+          }
+          const before = await request('channels/live');
+          assert.equal(before.name, 'sites/genie-ai-1ca85/channels/live');
+          assert.ok(before.release?.version?.name);
+          const releases = (await list('channels/live/releases', 'releases'))
+            .sort((a,b) => Date.parse(b.releaseTime) - Date.parse(a.releaseTime));
+          assert.equal(releases[0]?.name, before.release.name, 'Live release must be the newest before maintenance');
+          const protectedReleases = releases.slice(0,11).map(r => ({name:r.name, version:r.version?.name, releaseTime:r.releaseTime}));
+          assert.equal(protectedReleases.length, 11);
+          for (const release of protectedReleases) {
+            assert.match(release.version, /^sites\/genie-ai-1ca85\/versions\/[a-f0-9]+$/);
+            const version = await request(release.version.split('/').slice(2).join('/'));
+            assert.equal(version.status, 'FINALIZED', 'All ten rollback versions must be usable before retention changes');
+          }
+          const report = {site: before.name, approvedKeepCount: 11, previousRetention: before.retainedReleaseCount,
+            liveRelease: before.release.name, liveVersion: before.release.version.name, protectedReleases,
+            releasesBefore: releases.length, startedAt: new Date().toISOString()};
+          await mkdir('maintenance-evidence', {recursive:true});
+          await writeFile('maintenance-evidence/retention-before.json', JSON.stringify(report,null,2));
+          // The sole write: change this site's live retention. Firebase schedules
+          // older content for deletion; no deployment, billing or channel changes.
+          const updated = await request('channels/live?updateMask=retainedReleaseCount', 'PATCH',
+            {name: before.name, retainedReleaseCount: 11});
+          assert.equal(updated.retainedReleaseCount, 11);
+          const after = await request('channels/live');
+          assert.equal(after.release.name, before.release.name, 'Maintenance must not change the live release');
+          assert.equal(after.release.version.name, before.release.version.name);
+          for (const release of protectedReleases) {
+            const version = await request(release.version.split('/').slice(2).join('/'));
+            assert.equal(version.status, 'FINALIZED', 'Protected rollback content must remain finalized');
+          }
+          const versions = await list('versions', 'versions');
+          const statuses = versions.reduce((counts,v) => {counts[v.status]=(counts[v.status]??0)+1; return counts;}, {});
+          await writeFile('maintenance-evidence/retention-after.json', JSON.stringify({...report,
+            retention:after.retainedReleaseCount, liveReleaseAfter:after.release.name,
+            liveVersionAfter:after.release.version.name, protectedVersionsVerified:true,
+            versionStatuses:statuses, completedAt:new Date().toISOString()},null,2));
+          console.log(JSON.stringify({retention:after.retainedReleaseCount, liveUnchanged:true,
+            protectedVersionsVerified:true, releasesBefore:releases.length, versionStatuses:statuses}));
+          NODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: hosting-retention-evidence
+          path: maintenance-evidence/
+          if-no-files-found: warn
+          retention-days: 30
