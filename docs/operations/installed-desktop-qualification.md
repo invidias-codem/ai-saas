@@ -19,7 +19,9 @@ Hosted CI contains development tools. These jobs provide installed-package evide
 
 ## Native UI flow
 
-The harness drives the same packaged interface that a tester sees. Native picker and consent responses use xdotool on Linux and Windows UI Automation/SendKeys on Windows. Review acceptance is performed by a trusted WebDriver click on the isolated review's button. It never calls `native_review_decide` to manufacture acceptance or supplies folder grants or daemon credentials.
+The harness drives the same packaged interface that a tester sees. On Linux, xdotool identifies and focuses the exact native window; AT-SPI operates its visible controls within that process. On Windows, the exact visible Win32 dialog title identifies the window, then UI Automation or a native child Button's `BM_CLICK` operates the response. SendKeys enters the fixture path only after verifying the expected foreground window. An ambiguous window or response fails the test. Review acceptance is performed by a trusted WebDriver click on the isolated review's button. The harness never calls `native_review_decide` to manufacture acceptance or supplies folder grants or daemon credentials.
+
+Windows driver selection occurs after installation, because the WebView2 bootstrapper can install a runtime independently of the Edge browser. The helper reads the installed WebView2 version from Microsoft's registry client, requires a matching driver build, and validates its Microsoft Authenticode signature before execution. A mismatched runner-provided Edge driver is not used.
 
 All file activity is confined to a synthetic temporary project created by the harness. The flow covers:
 
@@ -32,16 +34,19 @@ All file activity is confined to a synthetic temporary project created by the ha
 7. Every command mode is either unavailable before review or denied with `LOCAL_SANDBOX_REQUIRED`. No command marker is created and denied commands expose no output.
 8. The app and sidecar exit, uninstall removes the installed executables, and the project files remain intact.
 
-`installed-qualification.json` records only completed observations, the actual OS/WebView, installer and installed-component hashes, command outcomes, and failures. Screenshots are captured at native dialogs and the review window. A failed or incomplete run does not set native UI or mutation qualification to true. No installer manifest or public downloads catalog is automatically promoted by these tests.
+`installed-qualification.json` records only completed observations, package and harness source identities, the actual OS/WebView, installer and installed-component hashes, command outcomes, and failures. Screenshots are captured at native dialogs and the review window; failure evidence includes the current WebView, bounded driver logs, and native accessibility metadata. W3C errors retain the runtime's diagnostic message. Multiline fixture input is verified before opening review, and disk checks still require exact UTF-8 bytes. A failed or incomplete run does not set native UI or mutation qualification to true. No installer manifest or public downloads catalog is automatically promoted by these tests.
 
 ## Running locally
 
-Use a disposable test machine and an evaluation artifact from the exact source being tested. Install tauri-driver 2.1.0 and the platform's matching native WebDriver. Linux also needs xdotool, ImageMagick, Xvfb, xauth and a DBus session; Windows needs a visible interactive session and matching Edge/WebView2 tooling.
+Use a disposable test machine and an evaluation artifact from the exact source being tested. Install tauri-driver 2.1.0. Linux needs WebKitWebDriver, xdotool, ImageMagick, Xvfb, xauth, Openbox, a DBus session, and AT-SPI packages (`python3-pyatspi`, `at-spi2-core`, `libatk-adaptor`, `gsettings-desktop-schemas`). Windows needs PowerShell 7 for signed driver discovery/download, Windows PowerShell for native controls, and a visible interactive session.
 
 ```sh
 # Replace the SHA with the artifact manifest's exact source commit.
 node scripts/desktop/qualify-installed.mjs artifacts/windows SOURCE_SHA desktop/evidence/windows
-dbus-run-session -- xvfb-run -a node scripts/desktop/qualify-installed.mjs artifacts/linux SOURCE_SHA desktop/evidence/linux
+NO_AT_BRIDGE=0 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x1024x24' \
+  sh -c 'set -e; gsettings set org.gnome.desktop.interface toolkit-accessibility true; openbox >/dev/null 2>&1 & exec "$@"' lattice-ui \
+  node scripts/desktop/qualify-installed.mjs artifacts/linux SOURCE_SHA desktop/evidence/linux
 ```
 
 The Linux flow installs/removes its Debian package with sudo. Windows installs only under the harness's new temporary directory. The harness does not remove persistent application data or promote a public release. Retain the per-platform report and screenshots with the tested installer hash before completing the corresponding release gate.
+
