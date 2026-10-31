@@ -498,9 +498,10 @@ async fn save_profile_config<R: tauri::Runtime>(
     // Ensure path is within allowed root (prevent traversal)
     // If file doesn't exist, check parent directory
     let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
-    let canonical_path = config_path.canonicalize().or_else(|_| {
-        config_path.parent().unwrap().canonicalize()
-    }).map_err(|e| e.to_string())?;
+    let canonical_path = config_path
+        .canonicalize()
+        .or_else(|_| config_path.parent().unwrap().canonicalize())
+        .map_err(|e| e.to_string())?;
     if !canonical_path.starts_with(&canonical_root) {
         return Err("Path traversal attempt blocked".to_string());
     }
