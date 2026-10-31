@@ -553,6 +553,22 @@ impl CredentialBroker {
         })
     }
 
+    /// Retrieve a local endpoint configuration (endpoint_url and model_id).
+    /// Returns the config parsed from the stored secret.
+    pub async fn get_local_endpoint(
+        &self,
+        provider: ProviderKind,
+    ) -> Result<(String, String)> {
+        let key = self.storage_key(provider, CredentialKind::LocalEndpoint, None);
+        let secret = self.store.get(&key).await?
+            .ok_or_else(|| CredentialError::NotFound(key))?;
+        let parts: Vec<&str> = secret.split('|').collect();
+        if parts.len() != 2 {
+            return Err(CredentialError::InvalidData("Invalid local endpoint format".into()));
+        }
+        Ok((parts[0].to_string(), parts[1].to_string()))
+    }
+
     /// Delete a credential.
     pub async fn delete_credential(
         &self,
@@ -641,6 +657,9 @@ pub enum BrokerCommand {
     GetLocalEndpointStatus {
         provider: ProviderKind,
     },
+    GetLocalEndpoint {
+        provider: ProviderKind,
+    },
     DeleteLocalEndpoint {
         provider: ProviderKind,
     },
@@ -651,6 +670,7 @@ pub enum BrokerCommand {
 pub enum BrokerResponse {
     Ok { reference: CredentialRef },
     Status { status: CredentialStatus },
+    Config { endpoint_url: String, model_id: String },
     List { credentials: Vec<CredentialRef> },
     Deleted,
     Error { code: String, message: String },
@@ -727,10 +747,9 @@ impl CredentialBroker {
                 }
             }
             StoreLocalEndpoint { provider, endpoint_url, model_id, label } => {
-                let mut meta = HashMap::new();
-                meta.insert("endpoint_url".into(), endpoint_url);
-                meta.insert("model_id".into(), model_id);
-                match self.store_credential(provider, CredentialKind::LocalEndpoint, &format!("{}|{}", endpoint_url, model_id), &label, Some(meta), None).await {
+                // Store endpoint config as the secret (not a secret, but configuration that needs retrieval)
+                // Do NOT put sensitive URL params in metadata
+                match self.store_credential(provider, CredentialKind::LocalEndpoint, &format!("{}|{}", endpoint_url, model_id), &label, None, None).await {
                     Ok(r) => Ok { reference: r },
                     Err(e) => e.into(),
                 }
@@ -738,6 +757,12 @@ impl CredentialBroker {
             GetLocalEndpointStatus { provider } => {
                 match self.get_status(provider, CredentialKind::LocalEndpoint, None).await {
                     Ok(s) => Status { status: s },
+                    Err(e) => e.into(),
+                }
+            }
+            GetLocalEndpoint { provider } => {
+                match self.get_local_endpoint(provider).await {
+                    Ok((endpoint_url, model_id)) => Config { endpoint_url, model_id },
                     Err(e) => e.into(),
                 }
             }

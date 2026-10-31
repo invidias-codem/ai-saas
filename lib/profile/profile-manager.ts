@@ -61,25 +61,26 @@ export class ProfileManager {
 
   /** Load settings from disk (Tauri) or return defaults */
   async load(): Promise<ProfileSettings> {
-    try {
-      // Try to load from Tauri native side
-      const configPath = getProfileConfigPath(this._profileId, this._channel);
-      const result = await invoke<ProfileSettings | null>('load_profile_config', {
-        path: configPath,
-      });
+    const configPath = getProfileConfigPath(this._profileId, this._channel);
+    const result = await invoke<ProfileSettings | null>('load_profile_config', {
+      path: configPath,
+    });
 
-      if (result && validateProfileSettings(result)) {
-        this.settings = result;
-      } else {
-        this.settings = this.createDefaultSettings();
-      }
-    } catch {
-      // Fallback to defaults if native load fails
+    if (!result) {
+      // File not found — first run, create defaults
       this.settings = this.createDefaultSettings();
+      this.notify();
+      return this.settings;
     }
 
+    // Validate the loaded settings
+    if (!validateProfileSettings(result)) {
+      throw new Error(`Invalid profile configuration at ${configPath}: schema validation failed`);
+    }
+
+    this.settings = result;
     this.notify();
-    return this.settings!;
+    return this.settings;
   }
 
   /** Save settings to disk (Tauri) */

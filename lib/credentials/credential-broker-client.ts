@@ -92,6 +92,11 @@ export class CredentialBrokerClient {
           provider: cmd.provider,
         });
 
+      case 'get-local-endpoint':
+        return invoke('credential_get_local_endpoint', {
+          provider: cmd.provider,
+        });
+
       default:
         throw new Error(`Unknown broker command: ${(cmd as BrokerCommand).action}`);
     }
@@ -216,6 +221,17 @@ export class CredentialBrokerClient {
       provider,
     });
     if (response.status === 'status') return response.statusValue;
+    this.handleError(response);
+  }
+
+  async getLocalEndpoint(provider: ProviderKind): Promise<{ endpointUrl: string; modelId: string }> {
+    const response = await this.invokeCommand({
+      action: 'get-local-endpoint',
+      provider,
+    });
+    if (response.status === 'config') {
+      return { endpointUrl: response.endpointUrl, modelId: response.modelId };
+    }
     this.handleError(response);
   }
 

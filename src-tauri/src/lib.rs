@@ -297,6 +297,21 @@ async fn credential_get_local_endpoint_status<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+async fn credential_get_local_endpoint<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::GetLocalEndpoint {
+        provider: provider_kind,
+    };
+    Ok(state.handle_command(cmd).await)
+}
+
+#[tauri::command]
 async fn credential_delete_local_endpoint<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<CredentialBroker>>,
@@ -464,6 +479,7 @@ pub fn run() {
             credential_delete_refresh_token,
             credential_store_local_endpoint,
             credential_get_local_endpoint_status,
+            credential_get_local_endpoint,
             credential_delete_local_endpoint,
             resolve_native_paths,
             load_profile_config,

@@ -388,11 +388,13 @@ export type BrokerCommand =
   | { action: 'delete-refresh-token'; provider: ProviderKind }
   | { action: 'store-local-endpoint'; provider: ProviderKind; endpointUrl: string; modelId: string; label: string }
   | { action: 'get-local-endpoint-status'; provider: ProviderKind }
+  | { action: 'get-local-endpoint'; provider: ProviderKind }
   | { action: 'delete-local-endpoint'; provider: ProviderKind };
 
 export type BrokerResponse =
   | { status: 'ok'; reference: CredentialRef }
   | { status: 'status'; statusValue: CredentialStatus }
+  | { status: 'config'; endpointUrl: string; modelId: string }
   | { status: 'list'; credentials: CredentialRef[] }
   | { status: 'deleted' }
   | { status: 'error'; code: string; message: string };
