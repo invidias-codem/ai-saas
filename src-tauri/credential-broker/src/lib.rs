@@ -588,7 +588,7 @@ impl CredentialBroker {
     ) -> Result<(String, String)> {
         let key = self.storage_key(provider, CredentialKind::LocalEndpoint, suffix);
         let secret = self.store.get(&key).await?
-            .ok_or_else(|| CredentialError::NotFound(key))?;
+            .ok_or(CredentialError::NotFound(key))?;
         let parts: Vec<&str> = secret.split('|').collect();
         if parts.len() != 2 {
             return Err(CredentialError::InvalidData("Invalid local endpoint format".into()));
