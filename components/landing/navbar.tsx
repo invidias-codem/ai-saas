@@ -14,6 +14,7 @@ import { Rss, ShieldCheck as ShieldCheckIcon, Users as UsersIcon } from "lucide-
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { usePricingModal } from "@/lib/store/pricing-modal-store";
 import { BlogNavLink } from "@/components/landing/blog-nav-link";
+import { InstallButton } from "@/components/install/install-provider";
 
 export const LandingNavbar = () => {
     const t = useTranslations("Landing");
@@ -108,6 +109,7 @@ const itemVariants = {
                         <div className="flex items-center gap-6 text-sm font-medium">
                             <BlogNavLink href="/blog" label="Blog" />
                             {navLinks.filter(l => l.label !== "Blog").map((link) => (
+                                link.href === "/downloads" ? <InstallButton key={link.href} className="landing-nav-link min-h-[48px] inline-flex items-center transition">Install</InstallButton> :
                                 <Link
                                     key={link.href}
                                     href={link.href}
@@ -143,6 +145,7 @@ const itemVariants = {
                     </nav>
 
                     <div className="md:hidden flex items-center gap-2 z-50">
+                        <InstallButton className="landing-nav-link inline-flex min-h-[48px] items-center rounded-full border border-border px-4 text-sm font-medium">Install</InstallButton>
                         <button
                             onClick={() => setIsOpen(!isOpen)}
                             className="relative w-10 h-10 min-h-[48px] min-w-[48px] flex flex-col justify-center items-end gap-[5px] group"

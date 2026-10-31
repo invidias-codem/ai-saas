@@ -50,6 +50,8 @@ export async function generateMetadata({
     title: t.title,
     description: t.description,
     keywords: t.keywords,
+    manifest: '/lattice.webmanifest',
+    appleWebApp: { capable: true, title: 'Lattice OS', statusBarStyle: 'default' },
     alternates: {
       canonical: `/${locale}`,
       languages: Object.fromEntries(locales.map((l) => [l, `/${l}`])),

@@ -1,13 +1,14 @@
 import Link from 'next/link';
 import { DESKTOP_BUILDS_URL, DESKTOP_PACKAGES, DESKTOP_PLATFORMS, desktopAssetUrl, getDesktopRelease } from '@/lib/releases/desktop';
 
-export function DesktopDownloads({ platform }: { platform?: string }) {
+export function DesktopDownloads({ platform, compact = false }: { platform?: string; compact?: boolean }) {
   const release = getDesktopRelease();
   const platforms = DESKTOP_PLATFORMS.filter(p => !platform || p.id === platform);
-  return <section aria-labelledby="desktop-downloads" className="mb-16 rounded-2xl border border-emerald-300/20 bg-slate-900/50 p-6 sm:p-9">
+  const headingId = compact ? `install-desktop-${platform}` : 'desktop-downloads';
+  return <section aria-labelledby={headingId} className={compact ? 'rounded-2xl border border-slate-700 bg-slate-900/50 p-5' : 'mb-16 rounded-2xl border border-emerald-300/20 bg-slate-900/50 p-6 sm:p-9'}>
     <p className="font-mono text-xs uppercase tracking-widest text-emerald-300">Lattice OS Desktop</p>
-    <h2 id="desktop-downloads" className="mt-3 text-3xl font-semibold">Your local workspace</h2>
-    <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-400">A desktop application for native folder access, text previews and individually reviewed file changes. The interface and local service are bundled together. Command execution remains unavailable until a sandbox is qualified.</p>
+    <h2 id={headingId} className={compact ? 'mt-3 text-2xl font-semibold' : 'mt-3 text-3xl font-semibold'}>Your local workspace</h2>
+    <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-400">{compact ? 'Install the desktop app for local folder access and individually reviewed file changes.' : 'A desktop application for native folder access, text previews and individually reviewed file changes. The interface and local service are bundled together. Command execution remains unavailable until a sandbox is qualified.'}</p>
     <p role="status" className="mt-5 text-sm text-amber-200">{release ? `${release.channel === 'stable' ? 'Stable release' : 'Release candidate for testing'} · ${release.version}` : 'Test packages are being qualified. No public desktop release is available yet.'}</p>
     <div className={`mt-6 grid gap-4 ${platform ? '' : 'md:grid-cols-3'}`}>
       {platforms.map(p => <article key={p.id} className="flex flex-col rounded-xl border border-slate-700 p-5">
@@ -26,7 +27,10 @@ export function DesktopDownloads({ platform }: { platform?: string }) {
         </div>
       </article>)}
     </div>
-    <p className="mt-6 text-xs leading-6 text-slate-400">Developers with repository access can retrieve evaluation packages from <a className="text-emerald-300 underline" href={DESKTOP_BUILDS_URL} rel="noreferrer">desktop package builds</a> after a successful run. GitHub sign-in is required. These artifacts are not stable releases; compare the included SHA256SUMS before installation.</p>
-    <p className="mt-3 text-xs leading-6 text-slate-500">Project memory and interrupted-task recovery are still in development. Folder authorization expires when the local service restarts.</p>
+    <details className="mt-6 text-xs leading-6 text-slate-400" open={compact ? undefined : true}>
+      <summary className="min-h-11 cursor-pointer">Developer test packages</summary>
+      <p>Developers with repository access can retrieve evaluation packages from <a className="text-emerald-300 underline" href={DESKTOP_BUILDS_URL} rel="noreferrer">desktop package builds</a> after a successful run. GitHub sign-in is required. These artifacts are not stable releases; compare the included SHA256SUMS before installation.</p>
+    </details>
+    {!compact && <p className="mt-3 text-xs leading-6 text-slate-500">Project memory and interrupted-task recovery are still in development. Folder authorization expires when the local service restarts.</p>}
   </section>;
 }

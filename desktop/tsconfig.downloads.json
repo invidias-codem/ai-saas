@@ -3,6 +3,7 @@
   "compilerOptions": { "incremental": false },
   "include": [
     "../components/desktop-downloads.tsx",
+    "../components/install/**/*.tsx",
     "../app/[locale]/(landing)/downloads/**/*.tsx",
     "../lib/releases/desktop.ts",
     "../lib/releases/cli.ts"
