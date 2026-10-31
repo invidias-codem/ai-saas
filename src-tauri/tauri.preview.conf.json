@@ -1,0 +1,13 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Lattice OS Preview",
+  "version": "0.1.0-rc.1",
+  "identifier": "xyz.gen1e.lattice-os.preview",
+  "bundle": {
+    "shortDescription": "Lattice OS local workspace evaluation build",
+    "windows": {
+      "webviewInstallMode": { "type": "embedBootstrapper", "silent": true },
+      "nsis": { "installMode": "currentUser" }
+    }
+  }
+}

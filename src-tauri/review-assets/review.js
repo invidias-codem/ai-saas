@@ -77,7 +77,7 @@
       ready = true;
       viewed.after = value.kind === 'create_directory' || node('bytes-view').scrollHeight <= node('bytes-view').clientHeight + 2;
       viewed.before = value.kind !== 'write_text' || node('base-bytes-view').scrollHeight <= node('base-bytes-view').clientHeight + 2;
-      node('status').textContent = command ? 'Command launch requires a qualified sandbox. This desktop build records decisions without launching commands.' : value.read_only ? 'Current folder permission: read only. This decision cannot grant write access.' : 'Current folder permission: reviewed changes allowed. This desktop build records decisions without applying them.';
+      node('status').textContent = command ? 'Command launch requires a qualified sandbox. Accepting this proposal cannot bypass that requirement.' : value.read_only ? 'Current folder permission: read only. This decision cannot grant write access.' : 'Current folder permission: reviewed changes allowed. Acceptance records your decision; return to the workspace to apply it.';
       update();
       setTimeout(() => { ready = false; update(); node('status').textContent = 'This review has expired. Close it and request a new proposal.'; void cancel(); }, value.expires_in_ms);
     } catch { ready = false; update(); node('status').textContent = 'The complete native proposal could not be displayed. This review is denied.'; void cancel(); }

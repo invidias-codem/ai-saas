@@ -4,17 +4,18 @@
   "version": "0.1.0",
   "identifier": "xyz.gen1e.lattice-os",
   "build": {
-    "frontendDist": "../out",
-    "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "cross-env NEXT_PUBLIC_IS_DESKTOP=true pnpm dev",
-    "beforeBuildCommand": "cross-env NEXT_PUBLIC_IS_DESKTOP=true pnpm build"
+    "frontendDist": "../desktop/dist",
+    "beforeDevCommand": "node scripts/desktop/build.mjs",
+    "beforeBuildCommand": "node scripts/desktop/build.mjs"
   },
   "app": {
     "windows": [
       {
         "title": "Lattice OS",
-        "width": 800,
-        "height": 600,
+        "width": 1160,
+        "height": 820,
+        "minWidth": 520,
+        "minHeight": 600,
         "resizable": true,
         "fullscreen": false
       }
@@ -38,11 +39,11 @@
       },
       "devCsp": {
         "default-src": "'none'",
-        "script-src": "'self' 'unsafe-eval'",
+        "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data:",
         "font-src": "'self'",
-        "connect-src": "ipc: http://ipc.localhost ws://localhost:3000",
+        "connect-src": "ipc: http://ipc.localhost",
         "frame-src": "'none'",
         "object-src": "'none'",
         "base-uri": "'none'",

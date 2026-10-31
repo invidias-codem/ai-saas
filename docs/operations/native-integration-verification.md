@@ -99,8 +99,8 @@ This document defines the acceptance criteria for S2c.6. These flows must be ver
 
 - No qualified command sandbox — all commands return `LOCAL_SANDBOX_REQUIRED`
 - No persistent profiles/checkpoints — restart loses all grants (S4)
-- No production frontend bundle — `devUrl` used in development (S3)
-- No installer — runs from build artifacts only (S5)
+- Bundled evaluation workspace available; complete desktop product qualification remains S3
+- Evaluation installer workflow available; clean-machine installation/upgrade qualification remains S5
 - No signed downloads — distribution not qualified (S6)
 - No company enrollment, Copilot/Teams, local inference
 - No ARM64, macOS, iOS, Android
@@ -150,3 +150,7 @@ cargo build --locked --manifest-path src-tauri/Cargo.toml
 cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo clippy --locked --manifest-path src-tauri/native-host/Cargo.toml --all-targets -- -D warnings
 ```
+
+## Reproducible bundled UI and evaluation packages
+
+Use [desktop-test-downloads.md](desktop-test-downloads.md) for the current build commands, package paths, and remaining gates. The desktop now embeds its own local interface from `desktop/dist`; the SaaS `pnpm build` and `../out` do not prepare this application. Real-WebView IPC evidence and native-dialog/mutation qualification remain distinct.

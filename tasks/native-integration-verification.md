@@ -34,18 +34,17 @@ Prove the following user-visible flows work in the real desktop app:
 
 ## Integration wiring complete (files changed)
 
-1. `src-tauri/src/workspace.rs` — `native_request_write_access` command registered (fixed argument order), added `native_daemon_status`
+1. `src-tauri/src/workspace.rs` — `native_request_write_access` command registered (fixed argument order)
 2. `src-tauri/src/review.rs` — `native_dispatch_operation`, `native_operation_status`, `native_cancel_operation`, `native_command_output` commands registered (removed unused `OperationState` import)
-3. `src-tauri/src/lib.rs` — All 6 new commands registered in invoke handler
+3. `src-tauri/src/lib.rs` — All 5 new commands registered in invoke handler
 4. `src-tauri/native-host/src/command.rs` — `CommandOutput` exported publicly
-5. `lib/harness/nativeWorkspace.ts` — Client methods + schemas added (`dispatchOperation`, `operationStatus`, `cancelOperation`, `commandOutput`, `requestWriteAccess`, `daemonStatus`)
+5. `lib/harness/nativeWorkspace.ts` — Client methods + schemas added (`dispatchOperation`, `operationStatus`, `cancelOperation`, `commandOutput`, `requestWriteAccess`)
 6. `src-tauri/src/ipc_tests.rs` — Tests updated for new command permissions (MockRuntime ACL verification)
 7. `src-tauri/permissions/native-host.toml` — Added `native-operation-control` permission, updated `native-workspace-read`
-8. `src-tauri/capabilities/default.json` — Added `native-operation-control` (removed `native-review-decision` from main webview)
+8. `src-tauri/capabilities/default.json` — Added `native-review-decision`, `native-operation-control`
 9. `docs/operations/native-integration-verification.md` — Acceptance criteria documented (not "verified")
 10. `plan.md` — S2c.6 as current slice
 11. `.github/workflows/build-tauri.yml` — Added `webview-smoke-test` job (Linux Xvfb + Playwright)
-12. `scripts/native-host/webview-smoke.test.mjs` — Updated to verify daemon handshake, note manual IPC verification
 
 ## CI verification results (commit 9fa030ea)
 
@@ -72,11 +71,11 @@ sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev xvfb
 # Build Go sidecar (placed where Tauri's sidecar launcher expects it)
 go -C go-harness build -o ./src-tauri/binaries/lattice-harness-x86_64-unknown-linux-gnu ./cmd/lattice-harness
 
-# Build Next.js frontend to ../out (required by tauri.conf.json frontendDist)
-pnpm build
+# Build the bundled local desktop interface (no SaaS static export)
+pnpm desktop:frontend
 
 # Build Tauri app (release) - produces `app` executable
-cargo build --locked --manifest-path src-tauri/Cargo.toml --release
+pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json -- --locked
 
 # Run with Xvfb (headless) - Tauri launches sidecar automatically
 Xvfb :99 -screen 0 1280x720x24 &
@@ -103,11 +102,11 @@ export DISPLAY=:99
 # Build Go sidecar (placed where Tauri's sidecar launcher expects it)
 go -C go-harness build -o ./src-tauri/binaries/lattice-harness-x86_64-pc-windows-msvc.exe ./cmd/lattice-harness
 
-# Build Next.js frontend to ../out (required by tauri.conf.json frontendDist)
-pnpm build
+# Build the bundled local desktop interface (no SaaS static export)
+pnpm desktop:frontend
 
 # Build Tauri app (release) - produces `app.exe` executable
-cargo build --locked --manifest-path src-tauri/Cargo.toml --release
+pnpm exec tauri build --no-bundle --config src-tauri/tauri.preview.conf.json -- --locked
 
 # Run - Tauri launches sidecar automatically via tauri-plugin-shell
 ./src-tauri/target/release/app.exe
@@ -141,105 +140,30 @@ cargo build --locked --manifest-path src-tauri/Cargo.toml --release
 - Production frontend bundling (S3)
 - ARM64, macOS, iOS, Android
 
----
 
-## Verification Checklist (per platform)
+## Reconciled packaged verification checklist
 
-**Platform**: Linux (Ubuntu 22.04/24.04) / Windows 11 x64
-**Commit**: `____`
-**OS/Version**: `____`
-**Executable hash (SHA256)**: `____`
-**Date**: `____`
-**Verifier**: `____`
+Use the exact Windows/Linux build commands, sidecar placement and executable names in
+[desktop-test-downloads.md](../docs/operations/desktop-test-downloads.md). The packaged
+frontend is `desktop/dist`; do not build the SaaS static export for this flow.
 
-### Prerequisites Built
-- [ ] Go sidecar built to `src-tauri/binaries/lattice-harness-<target>`
-- [ ] Next.js frontend built to `../out` (`pnpm build`)
-- [ ] Tauri app built release (`cargo build --locked --manifest-path src-tauri/Cargo.toml --release`)
-- [ ] Executable produced: `app` (Linux) / `app.exe` (Windows)
+The smoke entrypoint delegates to `scripts/desktop/webview-smoke.mjs`. It invokes
+`ping_daemon` through the actual WebView/Rust/daemon path and measures grant denial
+and authenticated restart. Preserve this driver; stdout parsing is not IPC evidence.
 
-### Launch & Handshake
-- [ ] App launches without error
-- [ ] Daemon handshake completes: stdout shows `{"status":"ready","port":N}`
-- [ ] Daemon port parsed: `____`
-- [ ] App process stable after handshake (30s)
+Record separately for Windows 11 x64 and Ubuntu 22.04/24.04:
+- Exact commit, OS/version, executable/package SHA-256, date and verifier.
+- Authenticated WebView readiness; fresh session has no grants.
+- Native folder picker and read consent; exact bounded list/stat/text results.
+- Separate write consent; create-file proposal; isolated review with complete byte
+  views, scrolling and explicit acceptance; separate dispatch; exact bytes on disk.
+- External-edit conflict without overwriting the external bytes, one-use acceptance,
+  replay/response-loss status reconciliation without redispatch, and revocation.
+- Restart clears grants/proposals; supported commands return
+  `LOCAL_SANDBOX_REQUIRED` with no process launch. Missing shells remain unavailable.
+- Daemon failure causes authenticated IPC failure, never a stdout-derived pass.
 
-### Authenticated IPC Verification (via WebView)
-- [ ] Call `native_daemon_status` from main window → returns `Status { events: [...] }` (non-null)
-- [ ] Response contains valid `TelemetryEvent` array
-- [ ] Reject: timeout, malformed response, stale session all fail appropriately
-
-### Folder Selection & Consent
-- [ ] `native_select_folder` opens native picker (GTK / Win32 `IFileOpenDialog`)
-- [ ] Pick `testdata/smoke-test-workspace`
-- [ ] Read-access confirmation dialog shows exact absolute path
-- [ ] Confirm → grant recorded: `local-grant-<32hex>`, `read_only: true`
-- [ ] `native_workspace_grants` returns the grant
-
-### Permitted Reads
-- [ ] `native_read_text` on granted file → exact UTF-8 content returned
-- [ ] `native_list` on granted folder → exact entries with correct kinds
-- [ ] `native_stat` on granted file → exact kind and size
-
-### Write Consent
-- [ ] `native_request_write_access` → warning dialog shown
-- [ ] Confirm → grant updated to `read_only: false`
-- [ ] `native_workspace_grants` reflects writable grant
-
-### File Mutation (create_file)
-- [ ] Propose `create_file` (`note.md`, "test content") → `native_propose_operation`
-- [ ] `native_open_review` opens review window at `lattice-review://localhost/index.html`
-- [ ] Review window renders complete byte views (original, proposed, diff)
-- [ ] Scroll to bottom → acknowledge checkbox enables
-- [ ] Acknowledge → Accept → `native_dispatch_operation`
-- [ ] Returns `OperationStatus { status: "succeeded", ... }`
-- [ ] **Disk verification**: File exists at `testdata/smoke-test-workspace/note.md` with exact content "test content"
-
-### Conflict Detection (write_text)
-- [ ] External edit: modify `note.md` to "external edit"
-- [ ] Propose `write_text` with base "test content" → `native_propose_operation`
-- [ ] `native_open_review` → review shows conflict
-- [ ] Dispatch → returns `OperationStatus { status: "conflict", ... }`
-- [ ] Re-propose with base "external edit" → dispatch → `Succeeded`
-- [ ] **Disk verification**: File contains "external edit"
-
-### Restart Clears Authority
-- [ ] Call `restart_daemon`
-- [ ] `native_workspace_grants` returns empty
-- [ ] Previous grant IDs rejected (`LOCAL_GRANT_DENIED`)
-- [ ] Previous proposals rejected (`LOCAL_PROPOSAL_UNAVAILABLE`)
-- [ ] New `native_select_folder` + consent required for any access
-
-### Command Execution (fail closed)
-- [ ] Propose `execute_command` (mode: direct/pwsh/cmd/sh)
-- [ ] Review shows `requires_sandbox: true`, `provider.id: "unavailable"`
-- [ ] Accept → dispatch → returns `OperationStatus { status: "failed", code: "LOCAL_SANDBOX_REQUIRED" }`
-- [ ] **Windows pwsh**: If `pwsh.exe` absent → `LOCAL_SHELL_UNAVAILABLE`; if present → `LOCAL_SANDBOX_REQUIRED`
-- [ ] **Windows cmd/sh**: `cmd` → `LOCAL_SANDBOX_REQUIRED`; `sh` → `LOCAL_SHELL_UNAVAILABLE`
-- [ ] No process launched, no files created
-
-### Regression: Stdout Readiness Alone Cannot Pass
-- [ ] Kill daemon process while app running
-- [ ] `native_daemon_status` returns error (`LOCAL_SERVICE_EXITED` / `LOCAL_SERVICE_UNAVAILABLE`)
-- [ ] App does not report false readiness
-
-### Results
-| Step | Result | Evidence (screenshot/log path) |
-|------|--------|-------------------------------|
-| Launch & Handshake | | |
-| Authenticated IPC | | |
-| Folder Selection & Consent | | |
-| Permitted Reads | | |
-| Write Consent | | |
-| create_file Mutation | | |
-| Conflict Detection | | |
-| Restart Clears Authority | | |
-| Command Fail Closed | | |
-| Stdout Regression | | |
-
-**Overall**: PASS / FAIL / PARTIAL
-**Failures/Skipped**: `____`
-
----
-
-**S2c.6 Closure Criteria**: Both Linux and Windows checklists completed with PASS, all evidence recorded, commit pinned to integration branch head.
+Attach screenshots/logs and actual disk observations to each case, marking failures
+and unexecuted checks explicitly. The readiness smoke does not qualify native dialogs,
+reviewed mutations, clean-machine installation or stable publication. Both platform
+checklists must pass on the tested integration revision before S2c.6 closure.

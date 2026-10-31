@@ -63,6 +63,30 @@ describe('Native workspace client', () => {
     expect(invoke).not.toHaveBeenCalled();
     expect(Object.keys(client)).toContain('dispatchOperation');
   });
+  test('accepts serialized native status with nullable optional event fields', async () => {
+    const status = { events: [{
+      id: null, workspace_id: null, user_id: 'local-user', event_type: 'read',
+      path_accessed: 'literal/<script>.txt', success: true, error_message: null,
+      duration_ms: 3, operation_type: null, timestamp: '2026-10-31T00:00:00Z',
+    }] };
+    const invoke = jest.fn().mockResolvedValueOnce(status).mockResolvedValueOnce(null);
+    const client = createNativeWorkspaceClient(invoke);
+    expect(await client.daemonStatus()).toEqual(status);
+    expect(await client.daemonStatus()).toBeNull();
+    expect(invoke.mock.calls).toEqual([
+      ['native_daemon_status', { input: {} }], ['native_daemon_status', { input: {} }],
+    ]);
+  });
+  test('rejects malformed status and transport credentials without exposing the payload', async () => {
+    const invoke = jest.fn().mockResolvedValueOnce({ events: [], authToken: 'must-not-cross' })
+      .mockResolvedValueOnce({ events: [{ user_id: 'private' }] });
+    const client = createNativeWorkspaceClient(invoke);
+    for (let i = 0; i < 2; i += 1) {
+      await expect(client.daemonStatus()).rejects.toMatchObject({
+        code: 'LOCAL_RESPONSE_INVALID', message: 'The local service returned an invalid workspace response.',
+      });
+    }
+  });
   test('requires the desktop runtime without a network fallback', async () => {
     await expect(nativeWorkspace.grants()).rejects.toMatchObject({ code: 'LOCAL_DESKTOP_REQUIRED' });
   });

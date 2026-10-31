@@ -273,6 +273,7 @@ struct StatusData {
     event_count: usize,
 }
 
+#[derive(Serialize)]
 pub struct Status {
     pub events: Vec<TelemetryEvent>,
 }

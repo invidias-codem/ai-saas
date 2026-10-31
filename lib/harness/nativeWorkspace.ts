@@ -39,15 +39,15 @@ const commandOutputSchema = z.object({
   truncated: z.boolean(),
 }).strict();
 const telemetryEventSchema = z.object({
-  id: z.string().optional(),
-  workspace_id: z.string().optional(),
+  id: z.string().nullish(),
+  workspace_id: z.string().nullish(),
   user_id: z.string(),
   event_type: z.string(),
-  path_accessed: z.string().optional(),
+  path_accessed: z.string().nullish(),
   success: z.boolean(),
-  error_message: z.string().optional(),
-  duration_ms: z.number().int().optional(),
-  operation_type: z.string().optional(),
+  error_message: z.string().nullish(),
+  duration_ms: z.number().int().nullish(),
+  operation_type: z.string().nullish(),
   timestamp: z.string(),
 }).strict();
 const daemonStatusSchema = z.object({

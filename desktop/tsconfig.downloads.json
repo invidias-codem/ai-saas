@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": [
+    "../components/desktop-downloads.tsx",
+    "../app/[locale]/(landing)/downloads/**/*.tsx",
+    "../lib/releases/desktop.ts",
+    "../lib/releases/cli.ts"
+  ],
+  "exclude": ["../node_modules"]
+}
