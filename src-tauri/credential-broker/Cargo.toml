@@ -23,7 +23,7 @@ security-framework = "2.11"
 security-framework-sys = "2.11"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.62", features = ["Win32_Security_Credentials", "Win32_Foundation", "Win32_Security_Cryptography"] }
+windows-sys = { version = "0.61", features = ["Win32_Security_Credentials", "Win32_Foundation", "Win32_Security_Cryptography"] }
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 secret-service = { version = "5.2", features = ["crypto-rust"] }

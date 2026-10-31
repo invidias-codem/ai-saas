@@ -187,12 +187,12 @@ mod macos {
 #[cfg(target_os = "windows")]
 mod windows {
     use super::*;
-    use windows::Win32::Security::Credentials::{
+    use windows_sys::Win32::Security::Credentials::{
         CredReadW, CredWriteW, CredDeleteW, CredEnumerateW, CredFree,
         CREDENTIALW, CRED_TYPE_GENERIC, CRED_PERSIST_LOCAL_MACHINE,
     };
-    use windows::Win32::Foundation::{ERROR_NOT_FOUND, WIN32_ERROR};
-    use windows::core::{PWSTR, PCWSTR};
+    use windows_sys::Win32::Foundation::{ERROR_NOT_FOUND, WIN32_ERROR};
+    use windows_sys::Win32::Foundation::{PWSTR, PCWSTR};
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
 
@@ -213,12 +213,11 @@ mod windows {
             let mut cred_ptr = std::ptr::null_mut();
             unsafe {
                 let result = CredReadW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, 0, &mut cred_ptr);
-                if result.is_err() {
-                    let err_code = result.0;
-                    if err_code == ERROR_NOT_FOUND.0 {
+                if result != 0 {
+                    if result == ERROR_NOT_FOUND {
                         return Ok(None);
                     }
-                    return Err(CredentialError::Platform(format!("CredReadW failed: {}", err_code)));
+                    return Err(CredentialError::Platform(format!("CredReadW failed: {}", result)));
                 }
                 if cred_ptr.is_null() {
                     return Ok(None);
@@ -236,7 +235,7 @@ mod windows {
         }
 
         async fn set(&self, key: &str, value: &str) -> Result<()> {
-            let target = to_wide(&format!("{}/{}", SERVICE_NAME, key));
+            let mut target = to_wide(&format!("{}/{}", SERVICE_NAME, key));
             let value_wide = to_wide(value);
             let mut cred = CREDENTIALW {
                 Type: CRED_TYPE_GENERIC,
@@ -247,7 +246,10 @@ mod windows {
                 ..Default::default()
             };
             unsafe {
-                CredWriteW(&cred, 0).map_err(|e| CredentialError::Platform(e.to_string()))?;
+                let result = CredWriteW(&cred, 0);
+                if result != 0 {
+                    return Err(CredentialError::Platform(format!("CredWriteW failed: {}", result)));
+                }
             }
             Ok(())
         }
@@ -255,8 +257,10 @@ mod windows {
         async fn remove(&self, key: &str) -> Result<()> {
             let target = to_wide(&format!("{}/{}", SERVICE_NAME, key));
             unsafe {
-                CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, 0)
-                    .map_err(|e| CredentialError::Platform(e.to_string()))?;
+                let result = CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, 0);
+                if result != 0 {
+                    return Err(CredentialError::Platform(format!("CredDeleteW failed: {}", result)));
+                }
             }
             Ok(())
         }
@@ -267,8 +271,8 @@ mod windows {
             let mut count = 0u32;
             let mut results = Vec::new();
             unsafe {
-                let result = CredEnumerateW(PCWSTR(filter.as_ptr()), None, &mut count, &mut cred_ptr);
-                if result.is_err() {
+                let result = CredEnumerateW(PCWSTR(filter.as_ptr()), std::ptr::null_mut(), &mut count, &mut cred_ptr);
+                if result != 0 {
                     return Ok(vec![]);
                 }
                 if count > 0 && !cred_ptr.is_null() {
