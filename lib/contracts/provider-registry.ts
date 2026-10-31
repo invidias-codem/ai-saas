@@ -324,18 +324,18 @@ export interface DevicePaths {
   // Stable channel
   stableRoot: string;              // e.g., %LOCALAPPDATA%\xyz.gen1e.lattice-os\
   profilesRoot: string;            // stableRoot\profiles\
-  profileConfig: (profileId: string) => string;   // profilesRoot\<id>\config.json
-  profileState: (profileId: string) => string;    // profilesRoot\<id>\state.sqlite
-  profileLogs: (profileId: string) => string;     // profilesRoot\<id>\logs\
-  profileCache: (profileId: string) => string;    // profilesRoot\<id>\cache\
+  profileConfigTemplate: string;   // profilesRoot\<id>\config.json (with {profileId} placeholder)
+  profileStateTemplate: string;    // profilesRoot\<id>\state.sqlite (with {profileId} placeholder)
+  profileLogsTemplate: string;     // profilesRoot\<id>\logs\ (with {profileId} placeholder)
+  profileCacheTemplate: string;    // profilesRoot\<id>\cache\ (with {profileId} placeholder)
 
   // Preview channel (separate root)
   previewRoot: string;             // e.g., %LOCALAPPDATA%\xyz.gen1e.lattice-os.preview\
   previewProfilesRoot: string;
-  previewProfileConfig: (profileId: string) => string;
-  previewProfileState: (profileId: string) => string;
-  previewProfileLogs: (profileId: string) => string;
-  previewProfileCache: (profileId: string) => string;
+  previewProfileConfigTemplate: string;
+  previewProfileStateTemplate: string;
+  previewProfileLogsTemplate: string;
+  previewProfileCacheTemplate: string;
 }
 
 export function resolveDevicePaths(appName: string = 'xyz.gen1e.lattice-os'): DevicePaths {
@@ -355,10 +355,10 @@ export function resolveDevicePaths(appName: string = 'xyz.gen1e.lattice-os'): De
   const makePaths = (root: string) => ({
     root,
     profilesRoot: `${root}profiles/`,
-    profileConfig: (profileId: string) => `${root}profiles/${profileId}/config.json`,
-    profileState: (profileId: string) => `${root}profiles/${profileId}/state.sqlite`,
-    profileLogs: (profileId: string) => `${root}profiles/${profileId}/logs/`,
-    profileCache: (profileId: string) => `${root}profiles/${profileId}/cache/`,
+    profileConfigTemplate: `${root}profiles/{profileId}/config.json`,
+    profileStateTemplate: `${root}profiles/{profileId}/state.sqlite`,
+    profileLogsTemplate: `${root}profiles/{profileId}/logs/`,
+    profileCacheTemplate: `${root}profiles/{profileId}/cache/`,
   });
 
   return {
@@ -366,10 +366,10 @@ export function resolveDevicePaths(appName: string = 'xyz.gen1e.lattice-os'): De
     ...makePaths(stableRoot),
     previewRoot,
     previewProfilesRoot: `${previewRoot}profiles/`,
-    previewProfileConfig: (profileId: string) => `${previewRoot}profiles/${profileId}/config.json`,
-    previewProfileState: (profileId: string) => `${previewRoot}profiles/${profileId}/state.sqlite`,
-    previewProfileLogs: (profileId: string) => `${previewRoot}profiles/${profileId}/logs/`,
-    previewProfileCache: (profileId: string) => `${previewRoot}profiles/${profileId}/cache/`,
+    previewProfileConfigTemplate: `${previewRoot}profiles/{profileId}/config.json`,
+    previewProfileStateTemplate: `${previewRoot}profiles/{profileId}/state.sqlite`,
+    previewProfileLogsTemplate: `${previewRoot}profiles/{profileId}/logs/`,
+    previewProfileCacheTemplate: `${previewRoot}profiles/{profileId}/cache/`,
   };
 }
 
@@ -378,18 +378,18 @@ export function resolveDevicePaths(appName: string = 'xyz.gen1e.lattice-os'): De
 // ============================================================================
 
 export type BrokerCommand =
-  | { action: 'store-api-key'; provider: ProviderKind; apiKey: string; label: string; metadata?: Record<string, string> }
-  | { action: 'update-api-key'; provider: ProviderKind; apiKey: string }
-  | { action: 'get-api-key-status'; provider: ProviderKind }
-  | { action: 'delete-api-key'; provider: ProviderKind }
+  | { action: 'store-api-key'; provider: ProviderKind; apiKey: string; label: string; metadata?: Record<string, string>; suffix?: string }
+  | { action: 'update-api-key'; provider: ProviderKind; apiKey: string; suffix?: string }
+  | { action: 'get-api-key-status'; provider: ProviderKind; suffix?: string }
+  | { action: 'delete-api-key'; provider: ProviderKind; suffix?: string }
   | { action: 'list-provider-credentials'; provider: ProviderKind }
-  | { action: 'store-refresh-token'; provider: ProviderKind; token: string; label: string }
-  | { action: 'get-refresh-token-status'; provider: ProviderKind }
-  | { action: 'delete-refresh-token'; provider: ProviderKind }
-  | { action: 'store-local-endpoint'; provider: ProviderKind; endpointUrl: string; modelId: string; label: string }
-  | { action: 'get-local-endpoint-status'; provider: ProviderKind }
-  | { action: 'get-local-endpoint'; provider: ProviderKind }
-  | { action: 'delete-local-endpoint'; provider: ProviderKind };
+  | { action: 'store-refresh-token'; provider: ProviderKind; token: string; label: string; suffix?: string }
+  | { action: 'get-refresh-token-status'; provider: ProviderKind; suffix?: string }
+  | { action: 'delete-refresh-token'; provider: ProviderKind; suffix?: string }
+  | { action: 'store-local-endpoint'; provider: ProviderKind; endpointUrl: string; modelId: string; label: string; suffix?: string }
+  | { action: 'get-local-endpoint-status'; provider: ProviderKind; suffix?: string }
+  | { action: 'get-local-endpoint'; provider: ProviderKind; suffix?: string }
+  | { action: 'delete-local-endpoint'; provider: ProviderKind; suffix?: string };
 
 export type BrokerResponse =
   | { status: 'ok'; reference: CredentialRef }

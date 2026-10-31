@@ -30,10 +30,10 @@ export interface ChannelPaths {
   channel: Channel;
   root: string;
   profilesRoot: string;
-  profileConfig: (profileId: string) => string;
-  profileState: (profileId: string) => string;
-  profileLogs: (profileId: string) => string;
-  profileCache: (profileId: string) => string;
+  profileConfigTemplate: string;
+  profileStateTemplate: string;
+  profileLogsTemplate: string;
+  profileCacheTemplate: string;
   credentialsRoot: string;  // Not used — credentials go to OS keychain
 }
 
@@ -50,10 +50,10 @@ export function getChannelPaths(channel: Channel = 'stable'): ChannelPaths {
       channel: 'stable',
       root: paths.stableRoot,
       profilesRoot: paths.profilesRoot,
-      profileConfig: paths.profileConfig,
-      profileState: paths.profileState,
-      profileLogs: paths.profileLogs,
-      profileCache: paths.profileCache,
+      profileConfigTemplate: paths.profileConfig('{profileId}'),
+      profileStateTemplate: paths.profileState('{profileId}'),
+      profileLogsTemplate: paths.profileLogs('{profileId}'),
+      profileCacheTemplate: paths.profileCache('{profileId}'),
       credentialsRoot: '', // OS keychain
     };
   } else {
@@ -61,10 +61,10 @@ export function getChannelPaths(channel: Channel = 'stable'): ChannelPaths {
       channel: 'preview',
       root: paths.previewRoot,
       profilesRoot: paths.previewProfilesRoot,
-      profileConfig: paths.previewProfileConfig,
-      profileState: paths.previewProfileState,
-      profileLogs: paths.previewProfileLogs,
-      profileCache: paths.previewProfileCache,
+      profileConfigTemplate: paths.previewProfileConfig('{profileId}'),
+      profileStateTemplate: paths.previewProfileState('{profileId}'),
+      profileLogsTemplate: paths.previewProfileLogs('{profileId}'),
+      profileCacheTemplate: paths.previewProfileCache('{profileId}'),
       credentialsRoot: '', // OS keychain
     };
   }
@@ -74,28 +74,28 @@ export function getChannelPaths(channel: Channel = 'stable'): ChannelPaths {
  * Get the profile config path for a given profile ID and channel.
  */
 export function getProfileConfigPath(profileId: string, channel: Channel = 'stable'): string {
-  return getChannelPaths(channel).profileConfig(profileId);
+  return getChannelPaths(channel).profileConfigTemplate.replace('{profileId}', profileId);
 }
 
 /**
  * Get the profile state (SQLite) path for a given profile ID and channel.
  */
 export function getProfileStatePath(profileId: string, channel: Channel = 'stable'): string {
-  return getChannelPaths(channel).profileState(profileId);
+  return getChannelPaths(channel).profileStateTemplate.replace('{profileId}', profileId);
 }
 
 /**
  * Get the profile logs directory for a given profile ID and channel.
  */
 export function getProfileLogsPath(profileId: string, channel: Channel = 'stable'): string {
-  return getChannelPaths(channel).profileLogs(profileId);
+  return getChannelPaths(channel).profileLogsTemplate.replace('{profileId}', profileId);
 }
 
 /**
  * Get the profile cache directory for a given profile ID and channel.
  */
 export function getProfileCachePath(profileId: string, channel: Channel = 'stable'): string {
-  return getChannelPaths(channel).profileCache(profileId);
+  return getChannelPaths(channel).profileCacheTemplate.replace('{profileId}', profileId);
 }
 
 /**

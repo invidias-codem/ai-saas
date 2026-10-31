@@ -61,9 +61,9 @@ export class ProfileManager {
 
   /** Load settings from disk (Tauri) or return defaults */
   async load(): Promise<ProfileSettings> {
-    const configPath = getProfileConfigPath(this._profileId, this._channel);
     const result = await invoke<ProfileSettings | null>('load_profile_config', {
-      path: configPath,
+      profileId: this._profileId,
+      channel: this._channel,
     });
 
     if (!result) {
@@ -75,7 +75,7 @@ export class ProfileManager {
 
     // Validate the loaded settings
     if (!validateProfileSettings(result)) {
-      throw new Error(`Invalid profile configuration at ${configPath}: schema validation failed`);
+      throw new Error(`Invalid profile configuration for ${this._profileId}: schema validation failed`);
     }
 
     this.settings = result;
@@ -100,9 +100,9 @@ export class ProfileManager {
       // updatedAt doesn't exist in ProfileSettings, it's on connections
     };
 
-    const configPath = getProfileConfigPath(this._profileId, this._channel);
     await invoke('save_profile_config', {
-      path: configPath,
+      profileId: this._profileId,
+      channel: this._channel,
       settings: this.settings,
     });
 
@@ -194,10 +194,12 @@ export class ProfileManager {
         if (parts.length >= 2) {
           const provider = parts[0] as ProviderKind;
           const kind = parts[1] as 'api-key' | 'refresh-token' | 'local-endpoint';
+          // Use connection ID as suffix to target exact credential
+          const suffix = connection.id;
           try {
-            if (kind === 'api-key') await credentialBroker.deleteApiKey(provider);
-            else if (kind === 'refresh-token') await credentialBroker.deleteRefreshToken(provider);
-            else if (kind === 'local-endpoint') await credentialBroker.deleteLocalEndpoint(provider);
+            if (kind === 'api-key') await credentialBroker.deleteApiKey(provider, suffix);
+            else if (kind === 'refresh-token') await credentialBroker.deleteRefreshToken(provider, suffix);
+            else if (kind === 'local-endpoint') await credentialBroker.deleteLocalEndpoint(provider, suffix);
           } catch {
             // Credential might not exist; continue cleanup
           }
@@ -236,17 +238,17 @@ export class ProfileManager {
     const now = new Date().toISOString();
     const credentialRefs: CredentialRef[] = [];
 
-    // Store credentials in the broker
+    // Store credentials in the broker with connection ID as suffix
     if (credentials.apiKey) {
-      const ref = await credentialBroker.storeApiKey(kind, credentials.apiKey, `${label} API Key`);
+      const ref = await credentialBroker.storeApiKey(kind, credentials.apiKey, `${label} API Key`, undefined, connectionId);
       credentialRefs.push(ref);
     }
     if (credentials.refreshToken) {
-      const ref = await credentialBroker.storeRefreshToken(kind, credentials.refreshToken, `${label} Refresh Token`);
+      const ref = await credentialBroker.storeRefreshToken(kind, credentials.refreshToken, `${label} Refresh Token`, connectionId);
       credentialRefs.push(ref);
     }
     if (credentials.endpointUrl && credentials.modelId) {
-      const ref = await credentialBroker.storeLocalEndpoint(kind, credentials.endpointUrl, credentials.modelId, `${label} Local Endpoint`);
+      const ref = await credentialBroker.storeLocalEndpoint(kind, credentials.endpointUrl, credentials.modelId, `${label} Local Endpoint`, connectionId);
       credentialRefs.push(ref);
     }
 
@@ -310,9 +312,7 @@ export async function createProfile(channel: 'stable' | 'preview' = 'stable'): P
 /** List all profile IDs for a channel */
 export async function listProfiles(channel: 'stable' | 'preview' = 'stable'): Promise<string[]> {
   try {
-    const { getChannelPaths } = await import('@/lib/native/path-resolution');
-    const paths = getChannelPaths(channel);
-    const result = await invoke<string[]>('list_profiles', { profilesRoot: paths.profilesRoot });
+    const result = await invoke<string[]>('list_profiles', { channel });
     return result.filter(isValidProfileId);
   } catch {
     return [];

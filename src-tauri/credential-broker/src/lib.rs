@@ -254,7 +254,7 @@ mod windows {
         async fn remove(&self, key: &str) -> Result<()> {
             let target = to_wide(&format!("{}/{}", SERVICE_NAME, key));
             unsafe {
-                CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0)
+                CredDeleteW(windows::core::PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, 0)
                     .map_err(|e| CredentialError::Platform(e.to_string()))?;
             }
             Ok(())
@@ -266,7 +266,7 @@ mod windows {
             let mut count = 0u32;
             let mut results = Vec::new();
             unsafe {
-                let result = CredEnumerateW(filter.as_ptr(), None, &mut count, &mut cred_ptr);
+                let result = CredEnumerateW(windows::core::PCWSTR(filter.as_ptr()), None, &mut count, &mut cred_ptr);
                 if result.is_err() {
                     return Ok(vec![]);
                 }
@@ -407,7 +407,8 @@ mod linux {
 }
 
 /// Fallback store for testing or unsupported platforms — ALWAYS fails closed.
-#[cfg(any(test, not(any(target_os = "macos", target_os = "windows", all(unix, not(target_os = "macos"))))))]
+/// Only compiled when explicitly enabled via `test-store` feature or on truly unsupported platforms.
+#[cfg(all(test, feature = "test-store"))]
 mod fallback {
     use super::*;
     use std::sync::Mutex;
@@ -466,8 +467,10 @@ impl CredentialBroker {
             { Box::new(windows::WindowsStore) }
             #[cfg(all(unix, not(target_os = "macos")))]
             { Box::new(linux::LinuxStore::new().await?) }
-            #[cfg(any(test, not(any(target_os = "macos", target_os = "windows", all(unix, not(target_os = "macos"))))))]
+            #[cfg(all(test, feature = "test-store"))]
             { Box::new(fallback::FallbackStore::new()) }
+            #[cfg(not(any(target_os = "macos", target_os = "windows", all(unix, not(target_os = "macos")), all(test, feature = "test-store"))))]
+            { return Err(CredentialError::StoreUnavailable("Unsupported platform".into())); }
         };
         Ok(Self { store, preview })
     }
@@ -570,7 +573,16 @@ impl CredentialBroker {
         &self,
         provider: ProviderKind,
     ) -> Result<(String, String)> {
-        let key = self.storage_key(provider, CredentialKind::LocalEndpoint, None);
+        self.get_local_endpoint_with_suffix(provider, None).await
+    }
+
+    /// Retrieve a local endpoint configuration with optional suffix.
+    pub async fn get_local_endpoint_with_suffix(
+        &self,
+        provider: ProviderKind,
+        suffix: Option<&str>,
+    ) -> Result<(String, String)> {
+        let key = self.storage_key(provider, CredentialKind::LocalEndpoint, suffix);
         let secret = self.store.get(&key).await?
             .ok_or_else(|| CredentialError::NotFound(key))?;
         let parts: Vec<&str> = secret.split('|').collect();
@@ -634,16 +646,20 @@ pub enum BrokerCommand {
         api_key: String,
         label: String,
         metadata: Option<HashMap<String, String>>,
+        suffix: Option<String>,
     },
     UpdateApiKey {
         provider: ProviderKind,
         api_key: String,
+        suffix: Option<String>,
     },
     GetApiKeyStatus {
         provider: ProviderKind,
+        suffix: Option<String>,
     },
     DeleteApiKey {
         provider: ProviderKind,
+        suffix: Option<String>,
     },
     ListProviderCredentials {
         provider: ProviderKind,
@@ -652,27 +668,34 @@ pub enum BrokerCommand {
         provider: ProviderKind,
         token: String,
         label: String,
+        suffix: Option<String>,
     },
     GetRefreshTokenStatus {
         provider: ProviderKind,
+        suffix: Option<String>,
     },
     DeleteRefreshToken {
         provider: ProviderKind,
+        suffix: Option<String>,
     },
     StoreLocalEndpoint {
         provider: ProviderKind,
         endpoint_url: String,
         model_id: String,
         label: String,
+        suffix: Option<String>,
     },
     GetLocalEndpointStatus {
         provider: ProviderKind,
+        suffix: Option<String>,
     },
     GetLocalEndpoint {
         provider: ProviderKind,
+        suffix: Option<String>,
     },
     DeleteLocalEndpoint {
         provider: ProviderKind,
+        suffix: Option<String>,
     },
 }
 
@@ -709,26 +732,26 @@ impl CredentialBroker {
         use BrokerResponse::*;
 
         match cmd {
-            StoreApiKey { provider, api_key, label, metadata } => {
-                match self.store_credential(provider, CredentialKind::ApiKey, &api_key, &label, metadata, None).await {
+            StoreApiKey { provider, api_key, label, metadata, suffix } => {
+                match self.store_credential(provider, CredentialKind::ApiKey, &api_key, &label, metadata, suffix.as_deref()).await {
                     Ok(r) => Ok { reference: r },
                     Err(e) => e.into(),
                 }
             }
-            UpdateApiKey { provider, api_key } => {
-                match self.update_credential(provider, CredentialKind::ApiKey, &api_key, None).await {
+            UpdateApiKey { provider, api_key, suffix } => {
+                match self.update_credential(provider, CredentialKind::ApiKey, &api_key, suffix.as_deref()).await {
                     Ok(r) => Ok { reference: r },
                     Err(e) => e.into(),
                 }
             }
-            GetApiKeyStatus { provider } => {
-                match self.get_status(provider, CredentialKind::ApiKey, None).await {
+            GetApiKeyStatus { provider, suffix } => {
+                match self.get_status(provider, CredentialKind::ApiKey, suffix.as_deref()).await {
                     Ok(s) => Status { status_value: s },
                     Err(e) => e.into(),
                 }
             }
-            DeleteApiKey { provider } => {
-                match self.delete_credential(provider, CredentialKind::ApiKey, None).await {
+            DeleteApiKey { provider, suffix } => {
+                match self.delete_credential(provider, CredentialKind::ApiKey, suffix.as_deref()).await {
                     Ok(_) => Deleted,
                     Err(e) => e.into(),
                 }
@@ -739,46 +762,46 @@ impl CredentialBroker {
                     Err(e) => e.into(),
                 }
             }
-            StoreRefreshToken { provider, token, label } => {
-                match self.store_credential(provider, CredentialKind::RefreshToken, &token, &label, None, None).await {
+            StoreRefreshToken { provider, token, label, suffix } => {
+                match self.store_credential(provider, CredentialKind::RefreshToken, &token, &label, None, suffix.as_deref()).await {
                     Ok(r) => Ok { reference: r },
                     Err(e) => e.into(),
                 }
             }
-            GetRefreshTokenStatus { provider } => {
-                match self.get_status(provider, CredentialKind::RefreshToken, None).await {
+            GetRefreshTokenStatus { provider, suffix } => {
+                match self.get_status(provider, CredentialKind::RefreshToken, suffix.as_deref()).await {
                     Ok(s) => Status { status_value: s },
                     Err(e) => e.into(),
                 }
             }
-            DeleteRefreshToken { provider } => {
-                match self.delete_credential(provider, CredentialKind::RefreshToken, None).await {
+            DeleteRefreshToken { provider, suffix } => {
+                match self.delete_credential(provider, CredentialKind::RefreshToken, suffix.as_deref()).await {
                     Ok(_) => Deleted,
                     Err(e) => e.into(),
                 }
             }
-            StoreLocalEndpoint { provider, endpoint_url, model_id, label } => {
+            StoreLocalEndpoint { provider, endpoint_url, model_id, label, suffix } => {
                 // Store endpoint config as the secret (not a secret, but configuration that needs retrieval)
                 // Do NOT put sensitive URL params in metadata
-                match self.store_credential(provider, CredentialKind::LocalEndpoint, &format!("{}|{}", endpoint_url, model_id), &label, None, None).await {
+                match self.store_credential(provider, CredentialKind::LocalEndpoint, &format!("{}|{}", endpoint_url, model_id), &label, None, suffix.as_deref()).await {
                     Ok(r) => Ok { reference: r },
                     Err(e) => e.into(),
                 }
             }
-            GetLocalEndpointStatus { provider } => {
-                match self.get_status(provider, CredentialKind::LocalEndpoint, None).await {
+            GetLocalEndpointStatus { provider, suffix } => {
+                match self.get_status(provider, CredentialKind::LocalEndpoint, suffix.as_deref()).await {
                     Ok(s) => Status { status_value: s },
                     Err(e) => e.into(),
                 }
             }
-            GetLocalEndpoint { provider } => {
-                match self.get_local_endpoint(provider).await {
+            GetLocalEndpoint { provider, suffix } => {
+                match self.get_local_endpoint_with_suffix(provider, suffix.as_deref()).await {
                     Ok((endpoint_url, model_id)) => Config { endpoint_url, model_id },
                     Err(e) => e.into(),
                 }
             }
-            DeleteLocalEndpoint { provider } => {
-                match self.delete_credential(provider, CredentialKind::LocalEndpoint, None).await {
+            DeleteLocalEndpoint { provider, suffix } => {
+                match self.delete_credential(provider, CredentialKind::LocalEndpoint, suffix.as_deref()).await {
                     Ok(_) => Deleted,
                     Err(e) => e.into(),
                 }

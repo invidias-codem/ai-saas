@@ -12,7 +12,7 @@ use std::sync::Arc;
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum BrokerResponse {
     Ok { reference: CredentialRef },
-    Status { status: CredentialStatus },
+    Status { status_value: CredentialStatus },
     List { credentials: Vec<CredentialRef> },
     Deleted,
     Error { code: String, message: String },
@@ -22,7 +22,7 @@ impl From<InnerBrokerResponse> for BrokerResponse {
     fn from(r: InnerBrokerResponse) -> Self {
         match r {
             InnerBrokerResponse::Ok { reference } => BrokerResponse::Ok { reference },
-            InnerBrokerResponse::Status { status } => BrokerResponse::Status { status },
+            InnerBrokerResponse::Status { status_value } => BrokerResponse::Status { status_value },
             InnerBrokerResponse::List { credentials } => BrokerResponse::List { credentials },
             InnerBrokerResponse::Deleted => BrokerResponse::Deleted,
             InnerBrokerResponse::Error { code, message } => BrokerResponse::Error { code, message },
@@ -30,10 +30,9 @@ impl From<InnerBrokerResponse> for BrokerResponse {
     }
 }
 
-impl CredentialBroker {
-    pub async fn handle_command(&self, cmd: BrokerCommand) -> BrokerResponse {
-        self.handle_command(cmd).await.into()
-    }
+// Use a local wrapper function instead of foreign-type impl
+pub async fn handle_broker_command(broker: &CredentialBroker, cmd: BrokerCommand) -> BrokerResponse {
+    broker.handle_command(cmd).await.into()
 }
 
 pub async fn init_credential_broker(preview: bool) -> Result<Arc<CredentialBroker>, String> {

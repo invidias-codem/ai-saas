@@ -9,7 +9,7 @@ mod ipc_tests;
 mod review_test_support;
 
 use chrono::Utc;
-use credential_broker::init_credential_broker;
+use credential_broker::{handle_broker_command, init_credential_broker};
 use lattice_credential_broker::{
     BrokerCommand, BrokerResponse as InnerBrokerResponse, CredentialBroker, CredentialKind,
     ProviderKind,
@@ -148,6 +148,7 @@ async fn credential_store_api_key<R: tauri::Runtime>(
     api_key: String,
     label: String,
     metadata: Option<serde_json::Value>,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
@@ -157,8 +158,9 @@ async fn credential_store_api_key<R: tauri::Runtime>(
         api_key,
         label,
         metadata: metadata.and_then(|v| serde_json::from_value(v).ok()),
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -167,6 +169,7 @@ async fn credential_update_api_key<R: tauri::Runtime>(
     state: tauri::State<'_, Arc<CredentialBroker>>,
     provider: String,
     api_key: String,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
@@ -174,8 +177,9 @@ async fn credential_update_api_key<R: tauri::Runtime>(
     let cmd = BrokerCommand::UpdateApiKey {
         provider: provider_kind,
         api_key,
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -183,14 +187,16 @@ async fn credential_get_api_key_status<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<CredentialBroker>>,
     provider: String,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
     let cmd = BrokerCommand::GetApiKeyStatus {
         provider: provider_kind,
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -198,14 +204,16 @@ async fn credential_delete_api_key<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<CredentialBroker>>,
     provider: String,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
     let cmd = BrokerCommand::DeleteApiKey {
         provider: provider_kind,
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -220,7 +228,7 @@ async fn credential_list_provider_credentials<R: tauri::Runtime>(
     let cmd = BrokerCommand::ListProviderCredentials {
         provider: provider_kind,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -230,6 +238,7 @@ async fn credential_store_refresh_token<R: tauri::Runtime>(
     provider: String,
     token: String,
     label: String,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
@@ -238,8 +247,9 @@ async fn credential_store_refresh_token<R: tauri::Runtime>(
         provider: provider_kind,
         token,
         label,
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -247,14 +257,16 @@ async fn credential_get_refresh_token_status<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<CredentialBroker>>,
     provider: String,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
     let cmd = BrokerCommand::GetRefreshTokenStatus {
         provider: provider_kind,
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -262,14 +274,16 @@ async fn credential_delete_refresh_token<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<CredentialBroker>>,
     provider: String,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
     let cmd = BrokerCommand::DeleteRefreshToken {
         provider: provider_kind,
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -280,6 +294,7 @@ async fn credential_store_local_endpoint<R: tauri::Runtime>(
     endpoint_url: String,
     model_id: String,
     label: String,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
@@ -289,8 +304,9 @@ async fn credential_store_local_endpoint<R: tauri::Runtime>(
         endpoint_url,
         model_id,
         label,
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -298,14 +314,16 @@ async fn credential_get_local_endpoint_status<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<CredentialBroker>>,
     provider: String,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
     let cmd = BrokerCommand::GetLocalEndpointStatus {
         provider: provider_kind,
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -313,14 +331,16 @@ async fn credential_get_local_endpoint<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<CredentialBroker>>,
     provider: String,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
     let cmd = BrokerCommand::GetLocalEndpoint {
         provider: provider_kind,
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -328,14 +348,16 @@ async fn credential_delete_local_endpoint<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<CredentialBroker>>,
     provider: String,
+    suffix: Option<String>,
 ) -> Result<BrokerResponse, String> {
     require_local_window(&window)?;
     let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
         .map_err(|_| "Invalid provider".to_string())?;
     let cmd = BrokerCommand::DeleteLocalEndpoint {
         provider: provider_kind,
+        suffix,
     };
-    Ok(state.handle_command(cmd).await)
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
@@ -361,66 +383,195 @@ async fn resolve_native_paths(channel: String) -> Result<serde_json::Value, Stri
             .join(".local/share")
     };
 
-    let root = base_dir.join(app_name);
-    let profiles_root = root.join("profiles");
+    let stable_root = base_dir.join("xyz.gen1e.lattice-os");
+    let preview_root = base_dir.join("xyz.gen1e.lattice-os.preview");
 
-    let make_paths = |root: &PathBuf| {
+    let make_paths = |root: &PathBuf| -> serde_json::Value {
+        let root_str = root.to_string_lossy().to_string();
+        let profiles_root_str = root.join("profiles").to_string_lossy().to_string();
         serde_json::json!({
-            "root": root.to_string_lossy().to_string() + "/",
-            "profilesRoot": root.join("profiles").to_string_lossy().to_string() + "/",
-            "profileConfig": move |profile_id: String| root.join("profiles").join(profile_id).join("config.json").to_string_lossy().to_string(),
-            "profileState": move |profile_id: String| root.join("profiles").join(profile_id).join("state.sqlite").to_string_lossy().to_string(),
-            "profileLogs": move |profile_id: String| root.join("profiles").join(profile_id).join("logs").to_string_lossy().to_string() + "/",
-            "profileCache": move |profile_id: String| root.join("profiles").join(profile_id).join("cache").to_string_lossy().to_string() + "/",
-            "credentialsRoot": "",
+            "root": root_str + "/",
+            "profilesRoot": profiles_root_str + "/",
+            "profileConfigTemplate": profiles_root_str + "/{profileId}/config.json",
+            "profileStateTemplate": profiles_root_str + "/{profileId}/state.sqlite",
+            "profileLogsTemplate": profiles_root_str + "/{profileId}/logs/",
+            "profileCacheTemplate": profiles_root_str + "/{profileId}/cache/",
         })
     };
 
     Ok(serde_json::json!({
         "channel": channel,
-        "stable": make_paths(&root),
-        "preview": make_paths(&base_dir.join("xyz.gen1e.lattice-os.preview")),
+        "stable": make_paths(&stable_root),
+        "preview": make_paths(&preview_root),
     }))
 }
 
 #[tauri::command]
-async fn load_profile_config(path: String) -> Result<Option<serde_json::Value>, String> {
-    use std::path::Path;
-    let path = Path::new(&path);
-    if !path.exists() {
-        return Ok(None);
+async fn load_profile_config<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    profile_id: String,
+    channel: String,
+) -> Result<Option<serde_json::Value>, String> {
+    require_local_window(&window)?;
+    
+    // Validate profile ID
+    if !profile_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') 
+        || profile_id.is_empty() || profile_id.len() > 64 {
+        return Err("Invalid profile ID".to_string());
     }
-    let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+
+    let is_preview = channel == "preview";
+    let app_name = if is_preview {
+        "xyz.gen1e.lattice-os.preview"
+    } else {
+        "xyz.gen1e.lattice-os"
+    };
+
+    let base_dir = if cfg!(target_os = "windows") {
+        std::env::var("LOCALAPPDATA")
+            .or_else(|_| std::env::var("APPDATA"))
+            .map(std::path::PathBuf::from)
+            .map_err(|_| "Could not determine app data directory".to_string())?
+    } else {
+        std::env::var("HOME")
+            .map(std::path::PathBuf::from)
+            .map_err(|_| "Could not determine home directory".to_string())?
+            .join(".local/share")
+    };
+
+    let root = base_dir.join(app_name);
+    let config_path = root.join("profiles").join(&profile_id).join("config.json");
+
+    // Ensure path is within allowed root (prevent traversal)
+    let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_path = config_path.canonicalize().or_else(|_| {
+        // If file doesn't exist, check parent directory
+        config_path.parent().unwrap().canonicalize()
+    }).map_err(|e| e.to_string())?;
+    
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err("Path traversal attempt blocked".to_string());
+    }
+
+    if !config_path.exists() {
+        return Ok(None); // First run - caller will create defaults
+    }
+
+    let content = std::fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
     let value: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
     Ok(Some(value))
 }
 
 #[tauri::command]
-async fn save_profile_config(path: String, settings: serde_json::Value) -> Result<(), String> {
-    use std::path::Path;
-    let path = Path::new(&path);
-    if let Some(parent) = path.parent() {
+async fn save_profile_config<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    profile_id: String,
+    channel: String,
+    settings: serde_json::Value,
+) -> Result<(), String> {
+    require_local_window(&window)?;
+    
+    // Validate profile ID
+    if !profile_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') 
+        || profile_id.is_empty() || profile_id.len() > 64 {
+        return Err("Invalid profile ID".to_string());
+    }
+
+    let is_preview = channel == "preview";
+    let app_name = if is_preview {
+        "xyz.gen1e.lattice-os.preview"
+    } else {
+        "xyz.gen1e.lattice-os"
+    };
+
+    let base_dir = if cfg!(target_os = "windows") {
+        std::env::var("LOCALAPPDATA")
+            .or_else(|_| std::env::var("APPDATA"))
+            .map(std::path::PathBuf::from)
+            .map_err(|_| "Could not determine app data directory".to_string())?
+    } else {
+        std::env::var("HOME")
+            .map(std::path::PathBuf::from)
+            .map_err(|_| "Could not determine home directory".to_string())?
+            .join(".local/share")
+    };
+
+    let root = base_dir.join(app_name);
+    let config_path = root.join("profiles").join(&profile_id).join("config.json");
+
+    // Ensure path is within allowed root (prevent traversal)
+    let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_path = config_path.canonicalize().or_else(|_| {
+        config_path.parent().unwrap().canonicalize()
+    }).map_err(|e| e.to_string())?;
+    
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err("Path traversal attempt blocked".to_string());
+    }
+
+    // Atomic write: write to temp file then rename
+    let temp_path = config_path.with_extension("json.tmp");
+    if let Some(parent) = config_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
-    std::fs::write(path, content).map_err(|e| e.to_string())?;
+    std::fs::write(&temp_path, content).map_err(|e| e.to_string())?;
+    std::fs::rename(&temp_path, &config_path).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-async fn list_profiles(profiles_root: String) -> Result<Vec<String>, String> {
-    use std::path::Path;
-    let root = Path::new(&profiles_root);
-    if !root.exists() {
+async fn list_profiles<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    channel: String,
+) -> Result<Vec<String>, String> {
+    require_local_window(&window)?;
+    
+    let is_preview = channel == "preview";
+    let app_name = if is_preview {
+        "xyz.gen1e.lattice-os.preview"
+    } else {
+        "xyz.gen1e.lattice-os"
+    };
+
+    let base_dir = if cfg!(target_os = "windows") {
+        std::env::var("LOCALAPPDATA")
+            .or_else(|_| std::env::var("APPDATA"))
+            .map(std::path::PathBuf::from)
+            .map_err(|_| "Could not determine app data directory".to_string())?
+    } else {
+        std::env::var("HOME")
+            .map(std::path::PathBuf::from)
+            .map_err(|_| "Could not determine home directory".to_string())?
+            .join(".local/share")
+    };
+
+    let root = base_dir.join(app_name);
+    let profiles_root = root.join("profiles");
+
+    // Ensure path is within allowed root
+    let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
+    let canonical_profiles = profiles_root.canonicalize().map_err(|e| e.to_string())?;
+    
+    if !canonical_profiles.starts_with(&canonical_root) {
+        return Err("Path traversal attempt blocked".to_string());
+    }
+
+    if !profiles_root.exists() {
         return Ok(vec![]);
     }
+
     let mut profiles = Vec::new();
-    for entry in std::fs::read_dir(root).map_err(|e| e.to_string())? {
+    for entry in std::fs::read_dir(&profiles_root).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
         if path.is_dir() {
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                profiles.push(name.to_string());
+                // Only return valid profile IDs
+                if name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') 
+                    && !name.is_empty() && name.len() <= 64 {
+                    profiles.push(name.to_string());
+                }
             }
         }
     }
