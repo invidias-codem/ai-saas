@@ -413,7 +413,6 @@ async fn load_profile_config<R: tauri::Runtime>(
     channel: String,
 ) -> Result<Option<serde_json::Value>, String> {
     require_local_window(&window)?;
-    
     // Validate profile ID
     if !profile_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') 
         || profile_id.is_empty() || profile_id.len() > 64 {
@@ -469,7 +468,6 @@ async fn save_profile_config<R: tauri::Runtime>(
     settings: serde_json::Value,
 ) -> Result<(), String> {
     require_local_window(&window)?;
-    
     // Validate profile ID
     if !profile_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') 
         || profile_id.is_empty() || profile_id.len() > 64 {
@@ -525,7 +523,6 @@ async fn list_profiles<R: tauri::Runtime>(
     channel: String,
 ) -> Result<Vec<String>, String> {
     require_local_window(&window)?;
-    
     let is_preview = channel == "preview";
     let app_name = if is_preview {
         "xyz.gen1e.lattice-os.preview"
