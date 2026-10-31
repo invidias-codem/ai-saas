@@ -59,9 +59,10 @@ test('the probe can execute scripts, frame content and outbound calls without CS
   for (const path of ['/fetch', '/script', '/frame']) assert.ok(result.hits.includes(path));
 });
 
-for (const field of ['csp', 'devCsp']) {
+const reviewPolicy=JSON.parse(await readFile(new URL('../../src-tauri/review-assets/policy.json',import.meta.url)));
+for (const field of ['csp', 'devCsp', 'review']) {
   test(`${field} blocks injected scripts, foreign frames and outbound calls`, async () => {
-    const policy = config.app.security[field];
+    const policy = field==='review'?reviewPolicy:config.app.security[field];
     assert.ok(policy, 'A missing policy cannot qualify local IPC');
     const result = await exercise(policy);
     assert.equal(result.inline, false);

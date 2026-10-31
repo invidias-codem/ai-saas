@@ -2,10 +2,10 @@ name: Windows command harness
 
 on:
   pull_request:
-    paths: ['go-harness/**', 'lib/harness/**', 'testdata/native-relative-paths.json', '.github/workflows/windows-command-harness.yml']
+    paths: ['go-harness/**', 'lib/harness/**', 'testdata/native-*.json', '.github/workflows/windows-command-harness.yml']
   push:
     branches: [main]
-    paths: ['go-harness/**', 'lib/harness/**', 'testdata/native-relative-paths.json', '.github/workflows/windows-command-harness.yml']
+    paths: ['go-harness/**', 'lib/harness/**', 'testdata/native-*.json', '.github/workflows/windows-command-harness.yml']
 
 permissions:
   contents: read

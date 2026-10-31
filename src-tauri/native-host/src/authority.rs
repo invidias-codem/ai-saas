@@ -13,11 +13,11 @@ const FEATURES: [&str; 3] = [
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Authority {
-    principal_id: String,
-    workspace_id: String,
-    generation: String,
-    policy_revision: u64,
-    grant_revision: u64,
+    pub(crate) principal_id: String,
+    pub(crate) workspace_id: String,
+    pub(crate) generation: String,
+    pub(crate) policy_revision: u64,
+    pub(crate) grant_revision: u64,
 }
 
 pub(crate) fn random_id() -> Result<String, HostError> {

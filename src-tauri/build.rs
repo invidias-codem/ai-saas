@@ -10,6 +10,14 @@ fn main() {
             "native_list",
             "native_stat",
             "native_read_text",
+            "native_propose_operation",
+            "native_proposal_status",
+            "native_cancel_proposal",
+            "native_open_review",
+            "native_review_document",
+            "native_review_ready",
+            "native_review_decide",
+            "native_review_cancel",
         ]),
     ))
     .expect("native command permissions must compile");

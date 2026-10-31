@@ -95,7 +95,7 @@ func TestNativeBindingRequiresNegotiationAndExactAuthority(t *testing.T) {
 
 func TestNativeModeNeverDispatchesLegacyCapabilities(t *testing.T) {
 	s, a := nativeFixture(t)
-	actions := []string{"sync_root_grants", "read_file_secure", "list_directory_secure", "stat_path_secure", "create_file_secure", "write_file_secure", "create_directory_secure", "delete_path_secure", "move_path_secure", "read_file", "write_file", "patch_file", "run_command", "execute_command_secure", "discover_documents_secure", "extract_text_secure", "summarize_repo_secure", "start_workspace_ingestion", "semantic_search_secure", "insert_episodic_event", "search_episodic_events", "github_request", "ingest_repository", "semantic_search", "get_file_contents", "list_workspace", "future_unreviewed_action"}
+	actions := []string{"sync_root_grants", "read_file_secure", "list_directory_secure", "stat_path_secure", "create_file_secure", "write_file_secure", "create_directory_secure", "delete_path_secure", "move_path_secure", "read_file", "write_file", "patch_file", "run_command", "execute_command_secure", "discover_documents_secure", "extract_text_secure", "summarize_repo_secure", "start_workspace_ingestion", "semantic_search_secure", "insert_episodic_event", "search_episodic_events", "github_request", "ingest_repository", "semantic_search", "get_file_contents", "list_workspace", "future_unreviewed_action", "native_execute_approved", "consume_approval", "approve_operation", "dispatch_operation"}
 	for _, action := range actions {
 		requireNativeCode(t, nativeCall(t, s, action, map[string]any{}, nil), "LOCAL_SESSION_UNBOUND")
 	}

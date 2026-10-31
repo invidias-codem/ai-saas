@@ -20,7 +20,10 @@
       }
     ],
     "security": {
-      "capabilities": ["default"],
+      "capabilities": [
+        "default",
+        "native-review"
+      ],
       "csp": {
         "default-src": "'none'",
         "script-src": "'self'",
@@ -45,7 +48,8 @@
         "base-uri": "'none'",
         "form-action": "'none'"
       }
-    }
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,

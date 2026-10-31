@@ -1,5 +1,9 @@
 //! Serialized native process ownership. Platform adapters only spawn, terminate,
 //! and report confirmed exits; protocol and lifecycle policy live here.
+use crate::review::{
+    DisplayAcknowledgement, ProposalInput, ProposalSummary, ReviewDecision, ReviewDocument,
+    ReviewLease,
+};
 use crate::workspace::{DirectoryList, FileStat, FolderPicker, GrantInfo, ReadInput, TextRead};
 use crate::{HostError, LaunchCredential, RpcSession, StartupHandshake, Status, STARTUP_TIMEOUT};
 use std::sync::{
@@ -82,6 +86,55 @@ impl Default for NativeHost {
 }
 
 impl NativeHost {
+    pub async fn propose_operation(
+        self: &Arc<Self>,
+        input: ProposalInput,
+    ) -> Result<ProposalSummary, HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.propose_operation(input).await;
+        self.workspace_result(g, &s, r)
+    }
+    pub async fn proposal_status(self: &Arc<Self>, id: &str) -> Result<ProposalSummary, HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.proposal_status(id).await;
+        self.workspace_result(g, &s, r)
+    }
+    pub async fn cancel_proposal(self: &Arc<Self>, id: &str) -> Result<(), HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.cancel_proposal(id).await;
+        self.workspace_result(g, &s, r)
+    }
+    pub async fn begin_review(self: &Arc<Self>, id: &str) -> Result<ReviewLease, HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.begin_review(id).await;
+        self.workspace_result(g, &s, r)
+    }
+    pub async fn review_document(
+        self: &Arc<Self>,
+        lease: &ReviewLease,
+    ) -> Result<ReviewDocument, HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.review_document(lease).await;
+        self.workspace_result(g, &s, r)
+    }
+    pub async fn acknowledge_review(
+        self: &Arc<Self>,
+        lease: &ReviewLease,
+        input: DisplayAcknowledgement,
+    ) -> Result<(), HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.acknowledge_review(lease, input).await;
+        self.workspace_result(g, &s, r)
+    }
+    pub async fn decide_review(
+        self: &Arc<Self>,
+        lease: &ReviewLease,
+        input: ReviewDecision,
+    ) -> Result<(), HostError> {
+        let (g, s) = self.workspace_session()?;
+        let r = s.decide_review(lease, input).await;
+        self.workspace_result(g, &s, r)
+    }
     fn workspace_session(&self) -> Result<(u64, Arc<RpcSession>), HostError> {
         let s = self.state.lock().map_err(|_| HostError::StateUnavailable)?;
         if s.phase != Phase::Ready || self.exiting.load(Ordering::Acquire) {

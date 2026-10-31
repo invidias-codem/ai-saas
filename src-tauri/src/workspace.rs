@@ -87,6 +87,9 @@ impl<R: tauri::Runtime> FolderPicker for NativeFolderPicker<R> {
 pub(crate) fn boundary<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("local-workspace")
         .on_navigation(|webview, url| {
+            if webview.label().starts_with("native-review-") {
+                return crate::review::allow_navigation(webview.app_handle(), webview.label(), url);
+            }
             lattice_native_host::permits_window(
                 webview.label(),
                 url.as_str(),

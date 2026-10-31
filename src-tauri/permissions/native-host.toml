@@ -7,3 +7,13 @@ commands.allow = ["ping_daemon", "restart_daemon", "flush_telemetry"]
 identifier = "native-workspace-read"
 description = "Native-confirmed folder selection, opaque grant revocation and typed read-only file previews; no raw paths, grants, identity, mutation or execution setters."
 commands.allow = ["native_select_folder", "native_workspace_grants", "native_revoke_grant", "native_list", "native_stat", "native_read_text"]
+
+[[permission]]
+identifier = "native-proposal-control"
+description = "Propose, inspect, cancel and request native review only; no approval or dispatch authority."
+commands.allow = ["native_propose_operation", "native_proposal_status", "native_cancel_proposal", "native_open_review"]
+
+[[permission]]
+identifier = "native-review-decision"
+description = "Fixed native-created review instance only: read immutable display, acknowledge it and submit one decision."
+commands.allow = ["native_review_document", "native_review_ready", "native_review_decide", "native_review_cancel"]

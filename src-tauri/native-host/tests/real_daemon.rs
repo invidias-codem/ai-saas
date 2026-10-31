@@ -1,3 +1,6 @@
+use lattice_native_host::review::{
+    Decision, DisplayAcknowledgement, ProposalInput, ProposalState, ReviewDecision,
+};
 use lattice_native_host::workspace::{DialogFuture, FolderPicker, ReadInput};
 use lattice_native_host::{
     child_environment, HostError, LaunchCredential, RpcSession, StartupHandshake, STARTUP_TIMEOUT,
@@ -33,6 +36,77 @@ fn binary() -> Option<std::ffi::OsString> {
         );
     }
     path
+}
+
+#[tokio::test]
+async fn native_review_records_exact_acceptance_without_granting_write_or_dispatch_authority() {
+    let Some(binary) = binary() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let selected = dir.path().join("project");
+    std::fs::create_dir(&selected).unwrap();
+    let (mut child, session) = native_session(binary, dir.path()).await;
+    let grant = session
+        .select_folder(&DirectoryPicker {
+            path: selected.clone(),
+            replace: false,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let op = ProposalInput::CreateFile {
+        grant_id: grant.grant_id.clone(),
+        relative_path: "proposed.txt".into(),
+        content: "exact new bytes\n<script>literal</script>".into(),
+    };
+    let p = session.propose_operation(op.clone()).await.unwrap();
+    let lease = session.begin_review(&p.proposal_id).await.unwrap();
+    let doc = session.review_document(&lease).await.unwrap();
+    session
+        .acknowledge_review(
+            &lease,
+            DisplayAcknowledgement {
+                proposal_id: doc.proposal_id.clone(),
+                digest: doc.digest.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    session
+        .decide_review(
+            &lease,
+            ReviewDecision {
+                proposal_id: doc.proposal_id.clone(),
+                digest: doc.digest,
+                decision: Decision::Accept,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        session
+            .proposal_status(&p.proposal_id)
+            .await
+            .unwrap()
+            .status,
+        ProposalState::Accepted
+    );
+    assert!(matches!(
+        session.consume_approval(&p.proposal_id, op.clone()).await,
+        Err(HostError::WriteGrantRequired)
+    ));
+    assert!(!selected.join("proposed.txt").exists());
+    session.revoke_grant(&grant.grant_id).await.unwrap();
+    assert_eq!(
+        session
+            .proposal_status(&p.proposal_id)
+            .await
+            .unwrap()
+            .status,
+        ProposalState::Stale
+    );
+    assert!(session.consume_approval(&p.proposal_id, op).await.is_err());
+    session.shutdown().await.unwrap();
+    assert!(child.wait().await.unwrap().success());
 }
 
 struct DirectoryPicker {

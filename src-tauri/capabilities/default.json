@@ -9,6 +9,7 @@
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "native-host-control",
-    "native-workspace-read"
+    "native-workspace-read",
+    "native-proposal-control"
   ]
 }

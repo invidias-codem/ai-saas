@@ -1,8 +1,11 @@
 mod native_host;
+mod review;
 mod workspace;
 
 #[cfg(test)]
 mod ipc_tests;
+#[cfg(test)]
+mod review_test_support;
 
 use lattice_native_host::lifecycle::{NativeHost, Phase};
 use lattice_native_host::{permits_window, TelemetryEvent};
@@ -131,6 +134,9 @@ async fn flush_telemetry<R: tauri::Runtime>(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .manage(review::ReviewWindows::<tauri::Wry>::default())
+        .register_uri_scheme_protocol("lattice-review", |_, request| review::resource(request))
+        .on_window_event(review::window_event)
         .plugin(workspace::boundary())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
@@ -178,7 +184,15 @@ pub fn run() {
             workspace::native_revoke_grant,
             workspace::native_list,
             workspace::native_stat,
-            workspace::native_read_text
+            workspace::native_read_text,
+            review::native_propose_operation,
+            review::native_proposal_status,
+            review::native_cancel_proposal,
+            review::native_open_review,
+            review::native_review_document,
+            review::native_review_ready,
+            review::native_review_decide,
+            review::native_review_cancel
         ])
         .build(tauri::generate_context!())
         .expect("error while building Tauri application");
