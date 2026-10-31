@@ -111,7 +111,13 @@ export async function nativeUiFlow(application, fixture, evidence, record, drive
     await decide(id, 'accept', { content: created }); await apply(id, 'succeeded');
     assert.equal(await readFile(path.join(fixture, filename), 'utf8'), created); measured('native-reviewed-create-exact-disk-bytes');
     const replay = await client.invoke('native_dispatch_operation', { proposal_id: id });
-    assert.equal(replay.ok, false); assert.equal(replay.code, 'LOCAL_OPERATION_REPLAYED'); measured('installed-dispatch-replay-denied');
+    // Consuming a review removes it from the native proposal book. The public
+    // dispatch boundary rejects that retired proposal before daemon replay checks.
+    assert.equal(replay.ok, false); assert.equal(replay.code, 'LOCAL_PROPOSAL_UNAVAILABLE');
+    assert.equal(await readFile(path.join(fixture, filename), 'utf8'), created);
+    const afterReplay = await client.invoke('native_operation_status', { proposal_id: id });
+    assert.equal(afterReplay.ok, true); assert.equal(afterReplay.value.status, 'succeeded');
+    measured('installed-dispatch-replay-denied');
 
     const replacement = 'Approved replacement\n资料\n';
     id = await proposeFile('write_text', filename, replacement);

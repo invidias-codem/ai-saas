@@ -10,8 +10,9 @@ permissions:
   contents: read
 concurrency:
   group: desktop-packages-${{ github.ref }}
-  # Finish the active installer build for testers; queue the newest revision.
-  cancel-in-progress: false
+  # Main builds remain available to testers. PR revisions replace outdated
+  # qualification runs so fixes are checked against the current source.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   package:
     name: Evaluation installer (${{ matrix.platform }})

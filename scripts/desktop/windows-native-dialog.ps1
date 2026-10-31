@@ -17,6 +17,29 @@ public static class QualificationWindow {
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowCallback callback, IntPtr data);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr handle, StringBuilder text, int size);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr handle);
+  [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr handle);
+  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr handle);
+  [DllImport("user32.dll")] public static extern bool EnumChildWindows(IntPtr parent, EnumWindowCallback callback, IntPtr data);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr handle, StringBuilder text, int size);
+  [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SendMessageTimeout(IntPtr handle, uint message, UIntPtr wParam, IntPtr lParam, uint flags, uint timeout, out UIntPtr result);
+  public static IntPtr[] FindButtons(IntPtr parent, string name) {
+    var matches = new List<IntPtr>();
+    EnumChildWindows(parent, (handle, data) => {
+      var text = new StringBuilder(1024);
+      var kind = new StringBuilder(256);
+      GetWindowText(handle, text, text.Capacity);
+      GetClassName(handle, kind, kind.Capacity);
+      if (kind.ToString() == "Button" && text.ToString().Replace("&", "").Trim() == name &&
+          IsWindowVisible(handle) && IsWindowEnabled(handle)) matches.Add(handle);
+      return true;
+    }, IntPtr.Zero);
+    return matches.ToArray();
+  }
+  public static void ClickButton(IntPtr handle) {
+    UIntPtr result;
+    if (SendMessageTimeout(handle, 0x00F5, UIntPtr.Zero, IntPtr.Zero, 2, 2000, out result) == IntPtr.Zero)
+      throw new InvalidOperationException("Native button did not respond to BM_CLICK");
+  }
   public static IntPtr[] FindVisible(string title) {
     var matches = new List<IntPtr>();
     EnumWindows((handle, data) => {
@@ -81,7 +104,17 @@ try {
       $pattern.Invoke()
       exit 0
     }
+    # Some common dialogs expose only a blank UIA pane on hosted Windows.
+    # BM_CLICK still operates the real, visible native child Button, identified
+    # by exact text within the title-verified dialog. Never invoke app IPC here.
+    $nativeButtons = @([QualificationWindow]::FindButtons($handle, $name))
+    if ($nativeButtons.Count -gt 1) { throw 'Native response identity is ambiguous' }
+    if ($nativeButtons.Count -eq 1) {
+      [QualificationWindow]::ClickButton($nativeButtons[0])
+      exit 0
+    }
   }
+  if ($Kind -eq 'folder' -and $Action -eq 'accept' -and -not [QualificationWindow]::IsWindow($handle)) { exit 0 }
   throw 'Expected native consent button was not found'
 } catch [System.Windows.Automation.ElementNotAvailableException] {
   if ($Kind -ne 'folder' -or $Action -ne 'accept') { throw }
