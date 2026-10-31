@@ -552,7 +552,6 @@ async fn list_profiles<R: tauri::Runtime>(
     // Ensure path is within allowed root
     let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
     let canonical_profiles = profiles_root.canonicalize().map_err(|e| e.to_string())?;
-    
     if !canonical_profiles.starts_with(&canonical_root) {
         return Err("Path traversal attempt blocked".to_string());
     }
