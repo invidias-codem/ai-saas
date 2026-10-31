@@ -323,13 +323,13 @@ mod linux {
             })
         }
 
-        fn make_attributes(&self, key: &str) -> HashMap<String, String> {
-            let mut attrs = HashMap::new();
-            attrs.insert("service".into(), SERVICE_NAME.into());
-            attrs.insert("key".into(), key.into());
-            attrs.insert("application".into(), "lattice-os".into());
-            attrs
-        }
+        fn make_attributes(&self, key: &str) -> HashMap<&str, &str> {
+                let mut attrs = HashMap::new();
+                attrs.insert("service", SERVICE_NAME);
+                attrs.insert("key", key);
+                attrs.insert("application", "lattice-os");
+                attrs
+            }
     }
 
     #[async_trait::async_trait]
@@ -339,8 +339,10 @@ mod linux {
             match self.collection.search_items(attrs).await {
                 Ok(items) => {
                     if let Some(item) = items.first() {
-                        let secret = item.get_secret().await
+                        let secret_bytes = item.get_secret().await
                             .map_err(|e| CredentialError::Platform(e.to_string()))?;
+                        let secret = String::from_utf8(secret_bytes)
+                            .map_err(|e| CredentialError::InvalidData(e.to_string()))?;
                         Ok(Some(Zeroizing::new(secret)))
                     } else {
                         Ok(None)
@@ -372,8 +374,8 @@ mod linux {
 
         async fn list(&self, prefix: &str) -> Result<Vec<String>> {
             let mut attrs = HashMap::new();
-            attrs.insert("service".into(), SERVICE_NAME.into());
-            attrs.insert("application".into(), "lattice-os".into());
+            attrs.insert("service", SERVICE_NAME);
+            attrs.insert("application", "lattice-os");
             let items = self.collection.search_items(attrs).await
                 .map_err(|e| CredentialError::Platform(e.to_string()))?;
             let mut results = Vec::new();
@@ -382,7 +384,7 @@ mod linux {
                     .map_err(|e| CredentialError::Platform(e.to_string()))?;
                 if let Some(key) = item_attrs.get("key") {
                     if key.starts_with(prefix) {
-                        results.push(key.clone());
+                        results.push(key.to_string());
                     }
                 }
             }
