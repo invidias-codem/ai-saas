@@ -213,7 +213,7 @@ mod windows {
             unsafe {
                 let result = CredReadW(target.as_ptr() as *const u16, CRED_TYPE_GENERIC, 0, &mut cred_ptr);
                 if result != 0 {
-                    if result == ERROR_NOT_FOUND {
+                    if result as u32 == ERROR_NOT_FOUND {
                         return Ok(None);
                     }
                     return Err(CredentialError::Platform(format!("CredReadW failed: {}", result)));
