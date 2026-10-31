@@ -6,6 +6,8 @@ on:
       - 'scripts/desktop/**'
       - 'desktop/**'
       - 'components/desktop-downloads.tsx'
+      - 'components/install/**'
+      - 'lib/install/**'
       - 'lib/releases/**'
       - 'app/**/downloads/**'
       - 'components/landing/**'
@@ -18,6 +20,8 @@ on:
       - 'scripts/desktop/**'
       - 'desktop/**'
       - 'components/desktop-downloads.tsx'
+      - 'components/install/**'
+      - 'lib/install/**'
       - 'lib/releases/**'
       - 'app/**/downloads/**'
       - 'components/landing/**'
@@ -50,6 +54,8 @@ jobs:
               - scripts/desktop
               - desktop
               - components/desktop-downloads.tsx
+              - components/install
+              - lib/install
               - lib/releases
               - components/landing
               - app/**/downloads/**

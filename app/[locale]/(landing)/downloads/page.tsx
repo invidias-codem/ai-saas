@@ -1,19 +1,21 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { DesktopDownloads } from '@/components/desktop-downloads';
+import { InstallEntry } from '@/components/install/install-provider';
 import { CLI_TARGETS, CLI_REPOSITORY, getCliRelease, cliAssetUrl, verificationCommand } from '@/lib/releases/cli';
 
 export const metadata: Metadata = {
   title: 'Download Lattice OS',
-  description: 'Lattice OS desktop packages and command-line tools for Windows, Linux and macOS, with release status and verification instructions.',
+  description: 'Install Lattice OS on iPhone, iPad or Android, or choose desktop packages and command-line tools for Windows, Linux and macOS.',
 };
 
 export default function DownloadsPage() {
   const release = getCliRelease();
   return (
-    <main className="min-h-screen bg-[#080a0d] px-6 pb-24 pt-32 text-slate-100">
+    <main className="min-h-screen bg-[#080a0d] px-6 pb-24 pt-32 text-slate-100 [&_h1]:text-slate-100 [&_h2]:text-slate-100 [&_h3]:text-slate-100">
       <div className="mx-auto max-w-6xl">
         <h1 className="mb-8 text-5xl font-semibold tracking-tight">Download Lattice OS</h1>
+        <InstallEntry />
         <DesktopDownloads />
         <div className="mb-7 flex items-center gap-3 font-mono text-xs uppercase tracking-[0.2em] text-emerald-300">
           <span className="h-2 w-2 rounded-full bg-emerald-300" aria-hidden="true" /> Lattice OS / Developer tools
