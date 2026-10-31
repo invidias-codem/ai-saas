@@ -2,8 +2,8 @@
 // Re-exports types and provides Tauri state initialization.
 
 use lattice_credential_broker::{
-    CredentialBroker, BrokerCommand, BrokerResponse as InnerBrokerResponse,
-    ProviderKind, CredentialKind, CredentialRef, CredentialStatus,
+    BrokerCommand, BrokerResponse as InnerBrokerResponse, CredentialBroker, CredentialKind,
+    CredentialRef, CredentialStatus, ProviderKind,
 };
 use serde::Serialize;
 use std::sync::Arc;
