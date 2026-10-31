@@ -54,7 +54,11 @@ export async function withWebdriver(application, action, { nativeDriver, evidenc
       fill: async (selector, value) => {
         const id = await element(selector);
         await rpc(`/element/${id}/clear`, 'POST', {});
-        await rpc(`/element/${id}/value`, 'POST', { text: value });
+        // WebKitGTK's key endpoint drops literal LF characters. Use W3C's
+        // Enter key for textarea newlines and verify the fixture before review.
+        await rpc(`/element/${id}/value`, 'POST', { text: value.replaceAll('\n', '\uE007') });
+        assert.equal(await script('return document.querySelector(arguments[0]).value;', [selector]), value,
+          `WebDriver must enter the exact fixture into ${selector}`);
       },
       text: selector => script('return document.querySelector(arguments[0])?.textContent;', [selector]),
       value: selector => script('return document.querySelector(arguments[0])?.value;', [selector]),

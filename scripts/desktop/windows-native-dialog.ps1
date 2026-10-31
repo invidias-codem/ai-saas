@@ -61,7 +61,7 @@ Save-DesktopEvidence
 if ($null -eq $window) { throw "Expected native dialog did not appear: $Title" }
 $handle = [IntPtr]$window.Current.NativeWindowHandle
 [void][QualificationWindow]::SetForegroundWindow($handle)
-$window.SetFocus()
+if ($window.Current.IsKeyboardFocusable) { $window.SetFocus() }
 if ([QualificationWindow]::GetForegroundWindow() -ne $handle) { throw 'Refusing to type outside the expected native dialog' }
 if ($Kind -eq 'folder' -and $Action -eq 'accept') {
   [System.Windows.Forms.SendKeys]::SendWait('^l')
