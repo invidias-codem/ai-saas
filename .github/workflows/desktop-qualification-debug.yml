@@ -63,3 +63,32 @@ jobs:
           path: desktop/evidence/${{ matrix.platform }}/
           if-no-files-found: warn
           retention-days: 7
+
+  hosting-inventory:
+    name: Read-only Firebase quota inventory
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+        with:
+          version: 11.6.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_GENIE_AI_1CA85 }}
+      - name: Read channels and versions without changing resources
+        run: node scripts/desktop/hosting-storage-inventory.mjs desktop/evidence/hosting
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hosting-quota-inventory-${{ github.sha }}
+          path: desktop/evidence/hosting/
+          if-no-files-found: error
+          retention-days: 7

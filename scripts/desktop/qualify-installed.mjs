@@ -41,7 +41,7 @@ try {
   const driverOptions = {};
   if (platform === 'windows') {
     const helper = fileURLToPath(new URL('./windows-webdriver.ps1', import.meta.url));
-    const driver = JSON.parse(execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', helper,
+    const driver = JSON.parse(execFileSync('pwsh.exe', ['-NoProfile', '-NonInteractive', '-File', helper,
       '-Directory', path.join(temporary, 'webdriver')], { encoding: 'utf8', timeout: 180000 }).trim());
     assert.ok(path.isAbsolute(driver.path));
     driverOptions.nativeDriver = driver.path;

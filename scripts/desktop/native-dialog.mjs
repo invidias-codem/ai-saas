@@ -33,6 +33,9 @@ export async function nativeDialog(kind, action, folder, screenshot) {
   await run('windowactivate', '--sync', id);
   await run('windowfocus', '--sync', id);
   if (kind === 'folder' && action === 'accept') {
+    // GTK's initial Recent view has no current folder and disables Open.
+    // Navigate through its native Home shortcut before entering an absolute path.
+    await run('key', 'alt+Home'); await pause(500);
     await run('key', 'ctrl+l'); await pause(200);
   }
   try {

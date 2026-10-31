@@ -71,12 +71,17 @@ def run(args):
             if not entry.queryEditableText().setTextContents(args.folder):
                 raise RuntimeError('Native GTK location entry refused the fixture path')
             invoke(entry, {'activate'})
+            time.sleep(0.2)
         labels = {'Cancel'} if args.action == 'cancel' else {
             'folder': {'Open', 'Select', 'Select Folder'},
             'read': {'Allow read access', 'OK'},
             'write': {'Allow reviewed changes', 'OK'},
         }[args.kind]
         while time.monotonic() < deadline:
+            if args.kind == 'folder' and (window.getState().contains(pyatspi.STATE_DEFUNCT) or not showing(window)):
+                # Activating the location can select the folder immediately.
+                # The caller still requires the separate consent and exact grant.
+                return
             buttons = [node for node in descendants(window) if node.name in labels
                        and node.getRole() == pyatspi.ROLE_PUSH_BUTTON and showing(node)
                        and node.getState().contains(pyatspi.STATE_SENSITIVE)]
