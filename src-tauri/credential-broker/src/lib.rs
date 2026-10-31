@@ -229,7 +229,7 @@ mod windows {
                 } else {
                     String::new()
                 };
-                CredFree(cred_ptr);
+                CredFree(cred_ptr as *const std::ffi::c_void);
                 Ok(Some(Zeroizing::new(secret)))
             }
         }
@@ -266,7 +266,7 @@ mod windows {
             let mut count = 0u32;
             let mut results = Vec::new();
             unsafe {
-                let result = CredEnumerateW(filter.as_ptr(), 0, &mut count, &mut cred_ptr);
+                let result = CredEnumerateW(filter.as_ptr(), None, &mut count, &mut cred_ptr);
                 if result.is_err() {
                     return Ok(vec![]);
                 }
@@ -286,7 +286,7 @@ mod windows {
                     }
                 }
                 if !cred_ptr.is_null() {
-                    CredFree(cred_ptr);
+                    CredFree(cred_ptr as *const std::ffi::c_void);
                 }
             }
             Ok(results)
