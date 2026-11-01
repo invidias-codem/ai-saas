@@ -13,6 +13,7 @@ use std::sync::Arc;
 pub enum BrokerResponse {
     Ok { reference: CredentialRef },
     Status { status_value: CredentialStatus },
+    Config { endpoint_url: String, model_id: String },
     List { credentials: Vec<CredentialRef> },
     Deleted,
     Error { code: String, message: String },
@@ -23,6 +24,7 @@ impl From<InnerBrokerResponse> for BrokerResponse {
         match r {
             InnerBrokerResponse::Ok { reference } => BrokerResponse::Ok { reference },
             InnerBrokerResponse::Status { status_value } => BrokerResponse::Status { status_value },
+            InnerBrokerResponse::Config { endpoint_url, model_id } => BrokerResponse::Config { endpoint_url, model_id },
             InnerBrokerResponse::List { credentials } => BrokerResponse::List { credentials },
             InnerBrokerResponse::Deleted => BrokerResponse::Deleted,
             InnerBrokerResponse::Error { code, message } => BrokerResponse::Error { code, message },

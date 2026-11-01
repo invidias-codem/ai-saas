@@ -11,7 +11,7 @@ mod review_test_support;
 use chrono::Utc;
 use credential_broker::{handle_broker_command, init_credential_broker};
 use lattice_credential_broker::{
-    BrokerCommand, BrokerResponse as InnerBrokerResponse, CredentialBroker, CredentialKind,
+    BrokerCommand, BrokerResponse, BrokerResponse as InnerBrokerResponse, CredentialBroker, CredentialKind,
     ProviderKind,
 };
 use lattice_native_host::lifecycle::{NativeHost, Phase};
@@ -388,14 +388,14 @@ async fn resolve_native_paths(channel: String) -> Result<serde_json::Value, Stri
 
     let make_paths = |root: &PathBuf| -> serde_json::Value {
         let root_str = root.to_string_lossy().to_string();
-        let profiles_root_str = root.join("profiles").to_string_lossy().to_string();
+        let profiles_root = root.join("profiles").to_string_lossy().to_string();
         serde_json::json!({
             "root": root_str + "/",
-            "profilesRoot": profiles_root_str + "/",
-            "profileConfigTemplate": profiles_root_str + "/{profileId}/config.json",
-            "profileStateTemplate": profiles_root_str + "/{profileId}/state.sqlite",
-            "profileLogsTemplate": profiles_root_str + "/{profileId}/logs/",
-            "profileCacheTemplate": profiles_root_str + "/{profileId}/cache/",
+            "profilesRoot": profiles_root.clone() + "/",
+            "profileConfigTemplate": profiles_root.clone() + "/{profileId}/config.json",
+            "profileStateTemplate": profiles_root.clone() + "/{profileId}/state.sqlite",
+            "profileLogsTemplate": profiles_root.clone() + "/{profileId}/logs/",
+            "profileCacheTemplate": profiles_root + "/{profileId}/cache/",
         })
     };
 
