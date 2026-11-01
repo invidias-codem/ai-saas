@@ -517,23 +517,31 @@ impl AgentLoop {
             {
                 return Err(AgentLoopError::Cancelled);
             }
-            let formatted = chunk.replace("{:?}", &format!("{:?}", provider_kind)).replace("{}", &session_id);
-            event_tx.send(AgentEvent::MessageChunk {
-                session_id: session_id.clone(),
-                message_id: message_id.clone(),
-                chunk: formatted,
-            }).ok();
+            let formatted = chunk
+                .replace("{:?}", &format!("{:?}", provider_kind))
+                .replace("{}", &session_id);
+            event_tx
+                .send(AgentEvent::MessageChunk {
+                    session_id: session_id.clone(),
+                    message_id: message_id.clone(),
+                    chunk: formatted,
+                })
+                .ok();
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
 
-        event_tx.send(AgentEvent::MessageCompleted {
-            session_id: session_id.clone(),
-            message_id: message_id.clone(),
-        }).ok();
+        event_tx
+            .send(AgentEvent::MessageCompleted {
+                session_id: session_id.clone(),
+                message_id: message_id.clone(),
+            })
+            .ok();
 
-        event_tx.send(AgentEvent::TurnCompleted {
-            session_id: session_id.clone(),
-        }).ok();
+        event_tx
+            .send(AgentEvent::TurnCompleted {
+                session_id: session_id.clone(),
+            })
+            .ok();
 
         // Update session state
         session_manager.update_session_state(&session_id, SessionState::WaitingForInput).await?;

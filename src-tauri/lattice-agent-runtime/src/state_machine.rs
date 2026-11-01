@@ -49,7 +49,10 @@ impl RuntimeState {
 #[derive(Debug, Error)]
 pub enum StateTransitionError {
     #[error("Invalid state transition: {from:?} -> {to:?}")]
-    InvalidTransition { from: RuntimeState, to: RuntimeState },
+    InvalidTransition {
+        from: RuntimeState,
+        to: RuntimeState,
+    },
     #[error("State machine is locked")]
     Locked,
     #[error("Timeout waiting for state transition")]
