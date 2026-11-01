@@ -68,8 +68,5 @@ pub async fn handle_broker_command(
 }
 
 pub async fn init_credential_broker() -> Result<Arc<CredentialBroker>, String> {
-    CredentialBroker::new()
-        .await
-        .map(Arc::new)
-        .map_err(|e| e.to_string())
+    CredentialBroker::new().await.map(Arc::new).map_err(|e| e.to_string())
 }
