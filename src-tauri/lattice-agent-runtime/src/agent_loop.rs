@@ -112,14 +112,33 @@ pub struct Attachment {
 /// Agent response to IPC.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AgentResponse {
-    SessionStarted { session_id: String },
-    MessageAcknowledged { message_id: String },
-    OperationCancelled { operation_id: String },
-    SessionStatus { session_id: String, status: SessionStatus },
-    SessionList { sessions: Vec<SessionSummary> },
-    ProviderStatus { providers: Vec<ProviderStatus> },
-    ProviderSwitched { session_id: String, provider_connection_id: String },
-    Error { code: String, message: String },
+    SessionStarted {
+        session_id: String,
+    },
+    MessageAcknowledged {
+        message_id: String,
+    },
+    OperationCancelled {
+        operation_id: String,
+    },
+    SessionStatus {
+        session_id: String,
+        status: SessionStatus,
+    },
+    SessionList {
+        sessions: Vec<SessionSummary>,
+    },
+    ProviderStatus {
+        providers: Vec<ProviderStatus>,
+    },
+    ProviderSwitched {
+        session_id: String,
+        provider_connection_id: String,
+    },
+    Error {
+        code: String,
+        message: String,
+    },
 }
 
 /// Session status for responses.
@@ -185,18 +204,56 @@ pub struct AgentLoop {
 /// Agent events for streaming to clients.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AgentEvent {
-    SessionStarted { session_id: String },
-    SessionStateChanged { session_id: String, state: SessionState },
-    MessageStarted { session_id: String, message_id: String },
-    MessageChunk { session_id: String, message_id: String, chunk: String },
-    MessageCompleted { session_id: String, message_id: String },
-    ToolCallStarted { session_id: String, tool_id: String, tool_name: String },
-    ToolCallCompleted { session_id: String, tool_id: String, result: serde_json::Value },
-    ToolCallFailed { session_id: String, tool_id: String, error: String },
-    TurnCompleted { session_id: String },
-    TurnFailed { session_id: String, error: String },
-    OperationCancelled { session_id: String, operation_id: String },
-    ProviderStatusChanged { connection_id: String, status: ProviderConnectionStatus },
+    SessionStarted {
+        session_id: String,
+    },
+    SessionStateChanged {
+        session_id: String,
+        state: SessionState,
+    },
+    MessageStarted {
+        session_id: String,
+        message_id: String,
+    },
+    MessageChunk {
+        session_id: String,
+        message_id: String,
+        chunk: String,
+    },
+    MessageCompleted {
+        session_id: String,
+        message_id: String,
+    },
+    ToolCallStarted {
+        session_id: String,
+        tool_id: String,
+        tool_name: String,
+    },
+    ToolCallCompleted {
+        session_id: String,
+        tool_id: String,
+        result: serde_json::Value,
+    },
+    ToolCallFailed {
+        session_id: String,
+        tool_id: String,
+        error: String,
+    },
+    TurnCompleted {
+        session_id: String,
+    },
+    TurnFailed {
+        session_id: String,
+        error: String,
+    },
+    OperationCancelled {
+        session_id: String,
+        operation_id: String,
+    },
+    ProviderStatusChanged {
+        connection_id: String,
+        status: ProviderConnectionStatus,
+    },
 }
 
 impl AgentLoop {
