@@ -618,8 +618,7 @@ pub fn run() {
             app.manage(host.clone());
 
             // Initialize credential broker
-            let broker =
-                tauri::async_runtime::block_on(async { init_credential_broker().await })?;
+            let broker = tauri::async_runtime::block_on(async { init_credential_broker().await })?;
             app.manage(broker);
 
             let handle = app.handle().clone();
