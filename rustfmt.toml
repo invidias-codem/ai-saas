@@ -1,0 +1,8 @@
+# rustfmt configuration for consistent formatting across platforms
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+reorder_imports = true
+imports_layout = "Vertical"
+format_strings = true
+condense_wildcard_suffixes = true
+use_small_heuristics = "Off"
