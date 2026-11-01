@@ -11,7 +11,7 @@ mod ipc_tests;
 mod review_test_support;
 
 use agent_runtime::{
-    agent_start, agent_stop, agent_status, agent_health, AgentRuntimeConfig, RuntimeSupervisor,
+    agent_health, agent_start, agent_status, agent_stop, AgentRuntimeConfig, RuntimeSupervisor,
 };
 use credential_broker::{handle_broker_command, init_credential_broker, BrokerResponse};
 use lattice_agent_runtime::{AgentLoopConfig, ProviderRouter, SessionConfig, SessionManager};

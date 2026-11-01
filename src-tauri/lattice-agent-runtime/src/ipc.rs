@@ -61,9 +61,7 @@ pub enum IpcMessage {
         reason: Option<String>,
     },
     /// Authenticate request (for future extensibility).
-    Authenticate {
-        token: String,
-    },
+    Authenticate { token: String },
     /// Authentication response.
     AuthenticateResponse {
         success: bool,
@@ -90,10 +88,7 @@ pub enum IpcMessage {
     /// Pong response.
     Pong { timestamp: SystemTime },
     /// Error notification.
-    Error {
-        code: String,
-        message: String,
-    },
+    Error { code: String, message: String },
     /// Goodbye/disconnect.
     Goodbye { reason: String },
 }
@@ -130,18 +125,14 @@ pub enum AgentCommand {
         operation_id: String,
     },
     /// Get session status.
-    GetSessionStatus {
-        session_id: String,
-    },
+    GetSessionStatus { session_id: String },
     /// List sessions.
     ListSessions {
         limit: Option<usize>,
         offset: Option<usize>,
     },
     /// Resume a session.
-    ResumeSession {
-        session_id: String,
-    },
+    ResumeSession { session_id: String },
     /// Get provider status.
     GetProviderStatus,
     /// Switch provider for a session.
@@ -155,40 +146,27 @@ pub enum AgentCommand {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum AgentResponse {
     /// Session started successfully.
-    SessionStarted {
-        session_id: String,
-    },
+    SessionStarted { session_id: String },
     /// Message acknowledged.
-    MessageAcknowledged {
-        message_id: String,
-    },
+    MessageAcknowledged { message_id: String },
     /// Operation cancelled.
-    OperationCancelled {
-        operation_id: String,
-    },
+    OperationCancelled { operation_id: String },
     /// Session status.
     SessionStatus {
         session_id: String,
         status: SessionStatus,
     },
     /// Session list.
-    SessionList {
-        sessions: Vec<SessionSummary>,
-    },
+    SessionList { sessions: Vec<SessionSummary> },
     /// Provider status.
-    ProviderStatus {
-        providers: Vec<ProviderStatus>,
-    },
+    ProviderStatus { providers: Vec<ProviderStatus> },
     /// Provider switched.
     ProviderSwitched {
         session_id: String,
         provider_connection_id: String,
     },
     /// Error response.
-    Error {
-        code: String,
-        message: String,
-    },
+    Error { code: String, message: String },
 }
 
 /// Attachment for messages.
@@ -392,9 +370,8 @@ impl IpcServer {
                 .map(PathBuf::from)
                 .ok_or("Could not determine app data directory")?
         } else {
-            PathBuf::from(
-                std::env::var_os("HOME").ok_or("Could not determine home directory")?,
-            ).join(".local/share")
+            PathBuf::from(std::env::var_os("HOME").ok_or("Could not determine home directory")?)
+                .join(".local/share")
         };
 
         let runtime_root = if self.config.client_identity.contains("preview") {
@@ -434,8 +411,11 @@ impl IpcServer {
             client_identity,
             client_type,
             capabilities,
-        } = hello else {
-            return Err(IpcError::InvalidMessage("Expected hello message".to_string()));
+        } = hello
+        else {
+            return Err(IpcError::InvalidMessage(
+                "Expected hello message".to_string(),
+            ));
         };
 
         // Check protocol version
@@ -500,7 +480,9 @@ impl IpcServer {
                         &clients,
                         &state_machine,
                         &agent_loop,
-                    ).await {
+                    )
+                    .await
+                    {
                         error!("Message processing error: {}", e);
                     }
                 }
@@ -597,26 +579,26 @@ impl IpcServer {
                         let _ = client.tx.send(response);
                     }
                     return Ok(());
-                                    }
+                }
 
-                                    // Forward to agent loop
-                                    let response = agent_loop.handle_command(command).await;
-                                    let ipc_response = IpcMessage::CommandResponse {
-                                        request_id,
-                                        response,
-                                    };
-                                    if let Some(client) = clients.read().await.get(client_id) {
-                                        let _ = client.tx.send(ipc_response);
-                                    }
-                                }
-                                IpcMessage::Ping { timestamp } => {
-                                let response = IpcMessage::Pong {
-                                    timestamp: SystemTime::now(),
-                                };
-                                if let Some(client) = clients.read().await.get(client_id) {
-                                    let _ = client.tx.send(response);
-                                }
-                            }
+                // Forward to agent loop
+                let response = agent_loop.handle_command(command).await;
+                let ipc_response = IpcMessage::CommandResponse {
+                    request_id,
+                    response,
+                };
+                if let Some(client) = clients.read().await.get(client_id) {
+                    let _ = client.tx.send(ipc_response);
+                }
+            }
+            IpcMessage::Ping { timestamp } => {
+                let response = IpcMessage::Pong {
+                    timestamp: SystemTime::now(),
+                };
+                if let Some(client) = clients.read().await.get(client_id) {
+                    let _ = client.tx.send(response);
+                }
+            }
             IpcMessage::Goodbye { .. } => {
                 // Client initiated disconnect
             }
@@ -695,14 +677,20 @@ impl IpcClient {
         // Read hello response
         let response = Self::read_message(self.stream.as_mut().unwrap()).await?;
         match response {
-            IpcMessage::HelloResponse { accepted, reason, .. } => {
+            IpcMessage::HelloResponse {
+                accepted, reason, ..
+            } => {
                 if !accepted {
                     return Err(IpcError::AuthenticationFailed(
                         reason.unwrap_or("Unknown reason".to_string()),
                     ));
                 }
             }
-            _ => return Err(IpcError::InvalidMessage("Expected hello response".to_string())),
+            _ => {
+                return Err(IpcError::InvalidMessage(
+                    "Expected hello response".to_string(),
+                ))
+            }
         }
 
         // Spawn reader
@@ -728,14 +716,20 @@ impl IpcClient {
     /// Send a command and wait for response.
     pub async fn send_command(&mut self, command: AgentCommand) -> IpcResult<AgentResponse> {
         let request_id = self.next_request_id();
-        let msg = IpcMessage::Command { request_id: request_id.clone(), command };
+        let msg = IpcMessage::Command {
+            request_id: request_id.clone(),
+            command,
+        };
         Self::write_message(self.stream.as_mut().unwrap(), &msg).await?;
 
         // Wait for response
         let mut rx = self.rx.take().unwrap();
         while let Some(msg) = rx.recv().await {
             match msg {
-                IpcMessage::CommandResponse { request_id: resp_id, response } => {
+                IpcMessage::CommandResponse {
+                    request_id: resp_id,
+                    response,
+                } => {
                     if resp_id == request_id {
                         self.rx = Some(rx);
                         return Ok(response);
@@ -782,7 +776,9 @@ impl IpcClient {
             base.join("xyz.gen1e.lattice-os")
         };
 
-        Ok(runtime_root.join("runtime").join(format!("{}.sock", self.config.client_identity)))
+        Ok(runtime_root
+            .join("runtime")
+            .join(format!("{}.sock", self.config.client_identity)))
     }
 
     async fn read_message(stream: &mut UnixStream) -> IpcResult<IpcMessage> {

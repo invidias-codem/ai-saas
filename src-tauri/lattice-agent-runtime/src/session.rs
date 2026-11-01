@@ -3,7 +3,7 @@
 //! Persists conversations and task events in profile-local SQLite.
 //! Handles session reconciliation and crash recovery.
 
-use crate::{ProviderKind, ProviderConnectionStatus, RuntimeError};
+use crate::{ProviderConnectionStatus, ProviderKind, RuntimeError};
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -268,7 +268,7 @@ impl SessionManager {
             "#,
         )
         .execute(&self.pool)
-            .await?;
+        .await?;
 
         Ok(())
     }
@@ -329,7 +329,10 @@ impl SessionManager {
                 .execute(&self.pool)
                 .await?;
 
-                info!("Marked session {} as failed due to incomplete tasks", session_id);
+                info!(
+                    "Marked session {} as failed due to incomplete tasks",
+                    session_id
+                );
             } else {
                 // No incomplete tasks, mark as waiting for input
                 sqlx::query(
@@ -437,7 +440,10 @@ impl SessionManager {
         .execute(&self.pool)
         .await?;
 
-        if state == SessionState::Completed || state == SessionState::Failed || state == SessionState::Cancelled {
+        if state == SessionState::Completed
+            || state == SessionState::Failed
+            || state == SessionState::Cancelled
+        {
             self.active_sessions.write().await.remove(session_id);
         }
 
@@ -534,7 +540,11 @@ impl SessionManager {
     }
 
     /// Get messages for a session.
-    pub async fn get_messages(&self, session_id: &str, limit: Option<usize>) -> SessionResult<Vec<MessageRecord>> {
+    pub async fn get_messages(
+        &self,
+        session_id: &str,
+        limit: Option<usize>,
+    ) -> SessionResult<Vec<MessageRecord>> {
         let limit = limit.unwrap_or(100);
         let rows = sqlx::query(
             r#"
@@ -547,7 +557,10 @@ impl SessionManager {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().map(|row| self.row_to_message(row)).collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| self.row_to_message(row))
+            .collect())
     }
 
     /// Create a task record.
@@ -669,10 +682,10 @@ impl SessionManager {
         .fetch_all(&self.pool)
         .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| self.row_to_session(row))
-        .collect())
+        Ok(rows
+            .into_iter()
+            .map(|row| self.row_to_session(row))
+            .collect())
     }
 
     /// Get active session count.
@@ -682,7 +695,10 @@ impl SessionManager {
 
     /// Mark session as active.
     pub async fn mark_active(&self, session_id: &str) {
-        self.active_sessions.write().await.insert(session_id.to_string());
+        self.active_sessions
+            .write()
+            .await
+            .insert(session_id.to_string());
     }
 
     /// Mark session as inactive.
@@ -731,7 +747,9 @@ impl SessionManager {
             },
             content: row.get("content"),
             attachments: serde_json::from_str(row.get("attachments")).unwrap_or_default(),
-            provider_kind: row.get::<Option<String>, _>("provider_kind").map(|s| ProviderKind::from_str(&s)),
+            provider_kind: row
+                .get::<Option<String>, _>("provider_kind")
+                .map(|s| ProviderKind::from_str(&s)),
             model_id: row.get("model_id"),
             tokens_used: row.get::<Option<i64>, _>("tokens_used").map(|v| v as u32),
             latency_ms: row.get::<Option<i64>, _>("latency_ms").map(|v| v as u64),
@@ -777,7 +795,9 @@ fn parse_datetime(s: String) -> SystemTime {
 
 /// Parse optional datetime string.
 fn parse_datetime_opt(s: String) -> Option<SystemTime> {
-    chrono::DateTime::parse_from_rfc3339(&s).ok().map(|dt| dt.into())
+    chrono::DateTime::parse_from_rfc3339(&s)
+        .ok()
+        .map(|dt| dt.into())
 }
 
 #[cfg(test)]
@@ -797,13 +817,16 @@ mod tests {
 
         let manager = SessionManager::new(db_path, config).await.unwrap();
 
-        let session = manager.create_session(
-            "test-profile".to_string(),
-            Some("Test Session".to_string()),
-            None,
-            Some("gpt-4".to_string()),
-            None,
-        ).await.unwrap();
+        let session = manager
+            .create_session(
+                "test-profile".to_string(),
+                Some("Test Session".to_string()),
+                None,
+                Some("gpt-4".to_string()),
+                None,
+            )
+            .await
+            .unwrap();
 
         assert_eq!(session.profile_id, "test-profile");
         assert_eq!(session.state, SessionState::Created);
@@ -823,39 +846,47 @@ mod tests {
             auto_reconcile: false,
         };
 
-        let manager = SessionManager::new(config.db_path.clone(), config).await.unwrap();
+        let manager = SessionManager::new(config.db_path.clone(), config)
+            .await
+            .unwrap();
 
-        let session = manager.create_session(
-            "test-profile".to_string(),
-            None,
-            None,
-            None,
-            None,
-        ).await.unwrap();
+        let session = manager
+            .create_session("test-profile".to_string(), None, None, None, None)
+            .await
+            .unwrap();
 
-        manager.add_message(
-            &session.session_id,
-            MessageRole::User,
-            "Hello".to_string(),
-            vec![],
-            None,
-            None,
-            None,
-            None,
-        ).await.unwrap();
+        manager
+            .add_message(
+                &session.session_id,
+                MessageRole::User,
+                "Hello".to_string(),
+                vec![],
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
 
-        manager.add_message(
-            &session.session_id,
-            MessageRole::Assistant,
-            "Hi there!".to_string(),
-            vec![],
-            None,
-            Some("gpt-4".to_string()),
-            Some(10),
-            Some(500),
-        ).await.unwrap();
+        manager
+            .add_message(
+                &session.session_id,
+                MessageRole::Assistant,
+                "Hi there!".to_string(),
+                vec![],
+                None,
+                Some("gpt-4".to_string()),
+                Some(10),
+                Some(500),
+            )
+            .await
+            .unwrap();
 
-        let messages = manager.get_messages(&session.session_id, None).await.unwrap();
+        let messages = manager
+            .get_messages(&session.session_id, None)
+            .await
+            .unwrap();
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, MessageRole::User);
         assert_eq!(messages[1].role, MessageRole::Assistant);
@@ -874,24 +905,30 @@ mod tests {
         let manager = SessionManager::new(db_path.clone(), config).await.unwrap();
 
         // Create a session in running state
-        let session = manager.create_session(
-            "test-profile".to_string(),
-            None,
-            None,
-            None,
-            None,
-        ).await.unwrap();
+        let session = manager
+            .create_session("test-profile".to_string(), None, None, None, None)
+            .await
+            .unwrap();
 
-        manager.update_session_state(&session.session_id, SessionState::Running).await.unwrap();
+        manager
+            .update_session_state(&session.session_id, SessionState::Running)
+            .await
+            .unwrap();
 
         // Create an incomplete task
-        let task = manager.create_task(
-            &session.session_id,
-            "tool_call".to_string(),
-            serde_json::json!({"tool": "read_file"}),
-        ).await.unwrap();
+        let task = manager
+            .create_task(
+                &session.session_id,
+                "tool_call".to_string(),
+                serde_json::json!({"tool": "read_file"}),
+            )
+            .await
+            .unwrap();
 
-        manager.update_task(&task.task_id, TaskState::Running, None, None).await.unwrap();
+        manager
+            .update_task(&task.task_id, TaskState::Running, None, None)
+            .await
+            .unwrap();
 
         // Drop manager and create new one with auto_reconcile
         drop(manager);

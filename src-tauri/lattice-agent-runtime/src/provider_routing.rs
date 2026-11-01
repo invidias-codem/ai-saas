@@ -6,9 +6,11 @@
 //! - Routing inference requests to the appropriate provider
 //! - Handling provider-specific configurations
 
-use crate::ProviderKind;
 use crate::ProviderConnectionStatus;
-use lattice_credential_broker::{CredentialBroker, CredentialKind, CredentialRef, ProviderKind as BrokerProviderKind};
+use crate::ProviderKind;
+use lattice_credential_broker::{
+    CredentialBroker, CredentialKind, CredentialRef, ProviderKind as BrokerProviderKind,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -69,21 +71,50 @@ struct CachedProvider {
 #[serde(tag = "kind")]
 pub enum ProviderConfig {
     #[serde(rename = "nvidia-nim-managed")]
-    NvidiaNimManaged { workspace_id: Option<String>, entitlements: Option<Vec<String>> },
+    NvidiaNimManaged {
+        workspace_id: Option<String>,
+        entitlements: Option<Vec<String>>,
+    },
     #[serde(rename = "nvidia-nim-personal")]
-    NvidiaNimPersonal { base_url: Option<String>, model_id: Option<String> },
+    NvidiaNimPersonal {
+        base_url: Option<String>,
+        model_id: Option<String>,
+    },
     #[serde(rename = "openai")]
-    OpenAI { base_url: Option<String>, organization_id: Option<String>, model_id: Option<String> },
+    OpenAI {
+        base_url: Option<String>,
+        organization_id: Option<String>,
+        model_id: Option<String>,
+    },
     #[serde(rename = "anthropic")]
-    Anthropic { base_url: Option<String>, model_id: Option<String> },
+    Anthropic {
+        base_url: Option<String>,
+        model_id: Option<String>,
+    },
     #[serde(rename = "google")]
-    Google { base_url: Option<String>, model_id: Option<String> },
+    Google {
+        base_url: Option<String>,
+        model_id: Option<String>,
+    },
     #[serde(rename = "openrouter")]
-    OpenRouter { base_url: Option<String>, model_id: Option<String>, referer: Option<String>, title: Option<String> },
+    OpenRouter {
+        base_url: Option<String>,
+        model_id: Option<String>,
+        referer: Option<String>,
+        title: Option<String>,
+    },
     #[serde(rename = "huggingface")]
-    HuggingFace { base_url: Option<String>, model_id: Option<String> },
+    HuggingFace {
+        base_url: Option<String>,
+        model_id: Option<String>,
+    },
     #[serde(rename = "local")]
-    LocalEndpoint { endpoint_url: String, model_id: String, compatible_models: Option<Vec<String>>, strict_local_mode: bool },
+    LocalEndpoint {
+        endpoint_url: String,
+        model_id: String,
+        compatible_models: Option<Vec<String>>,
+        strict_local_mode: bool,
+    },
 }
 
 impl ProviderConfig {
@@ -210,20 +241,28 @@ impl ProviderRouter {
         cache: &mut HashMap<String, CachedProvider>,
     ) -> ProviderResult<()> {
         // Find API key credential
-        let api_key_ref = conn.credentials.iter().find(|c| {
-            // In a real implementation, we'd check the credential kind
-            c.metadata.get("kind") == Some(&"api-key".to_string())
-        }).cloned();
+        let api_key_ref = conn
+            .credentials
+            .iter()
+            .find(|c| {
+                // In a real implementation, we'd check the credential kind
+                c.metadata.get("kind") == Some(&"api-key".to_string())
+            })
+            .cloned();
 
         // Find refresh token credential
-        let refresh_token_ref = conn.credentials.iter().find(|c| {
-            c.metadata.get("kind") == Some(&"refresh-token".to_string())
-        }).cloned();
+        let refresh_token_ref = conn
+            .credentials
+            .iter()
+            .find(|c| c.metadata.get("kind") == Some(&"refresh-token".to_string()))
+            .cloned();
 
         // Find local endpoint credential
-        let local_endpoint_ref = conn.credentials.iter().find(|c| {
-            c.metadata.get("kind") == Some(&"local-endpoint".to_string())
-        }).cloned();
+        let local_endpoint_ref = conn
+            .credentials
+            .iter()
+            .find(|c| c.metadata.get("kind") == Some(&"local-endpoint".to_string()))
+            .cloned();
 
         let cached = CachedProvider {
             connection_id: conn.id.clone(),
@@ -248,7 +287,12 @@ impl ProviderRouter {
     /// Set the default provider connection.
     pub async fn set_default_connection(&self, connection_id: String) -> ProviderResult<()> {
         // Verify connection exists
-        if self.provider_cache.read().await.contains_key(&connection_id) {
+        if self
+            .provider_cache
+            .read()
+            .await
+            .contains_key(&connection_id)
+        {
             *self.default_connection.write().await = Some(connection_id);
             // TODO: persist to profile config
             Ok(())
@@ -260,14 +304,21 @@ impl ProviderRouter {
     /// Get API key for a provider connection.
     pub async fn get_api_key(&self, connection_id: &str) -> ProviderResult<Option<String>> {
         let cache = self.provider_cache.read().await;
-        let provider = cache.get(connection_id).ok_or_else(|| {
-            ProviderRouterError::NotConfigured(connection_id.to_string())
-        })?;
+        let provider = cache
+            .get(connection_id)
+            .ok_or_else(|| ProviderRouterError::NotConfigured(connection_id.to_string()))?;
 
         if let Some(ref cred_ref) = provider.api_key_ref {
             // Get the actual secret from the credential broker
-            let key = format!("{}:api-key:{}", provider.provider_kind.as_str(), connection_id);
-            let secret = self.credential_broker.get(&key).await?
+            let key = format!(
+                "{}:api-key:{}",
+                provider.provider_kind.as_str(),
+                connection_id
+            );
+            let secret = self
+                .credential_broker
+                .get(&key)
+                .await?
                 .ok_or_else(|| ProviderRouterError::CredentialNotFound(key))?;
             Ok(Some(secret.to_string()))
         } else {
@@ -278,13 +329,20 @@ impl ProviderRouter {
     /// Get refresh token for a provider connection.
     pub async fn get_refresh_token(&self, connection_id: &str) -> ProviderResult<Option<String>> {
         let cache = self.provider_cache.read().await;
-        let provider = cache.get(connection_id).ok_or_else(|| {
-            ProviderRouterError::NotConfigured(connection_id.to_string())
-        })?;
+        let provider = cache
+            .get(connection_id)
+            .ok_or_else(|| ProviderRouterError::NotConfigured(connection_id.to_string()))?;
 
         if let Some(ref cred_ref) = provider.refresh_token_ref {
-            let key = format!("{}:refresh-token:{}", provider.provider_kind.as_str(), connection_id);
-            let secret = self.credential_broker.get(&key).await?
+            let key = format!(
+                "{}:refresh-token:{}",
+                provider.provider_kind.as_str(),
+                connection_id
+            );
+            let secret = self
+                .credential_broker
+                .get(&key)
+                .await?
                 .ok_or_else(|| ProviderRouterError::CredentialNotFound(key))?;
             Ok(Some(secret.to_string()))
         } else {
@@ -293,22 +351,34 @@ impl ProviderRouter {
     }
 
     /// Get local endpoint config for a provider connection.
-    pub async fn get_local_endpoint(&self, connection_id: &str) -> ProviderResult<Option<(String, String)>> {
+    pub async fn get_local_endpoint(
+        &self,
+        connection_id: &str,
+    ) -> ProviderResult<Option<(String, String)>> {
         let cache = self.provider_cache.read().await;
-        let provider = cache.get(connection_id).ok_or_else(|| {
-            ProviderRouterError::NotConfigured(connection_id.to_string())
-        })?;
+        let provider = cache
+            .get(connection_id)
+            .ok_or_else(|| ProviderRouterError::NotConfigured(connection_id.to_string()))?;
 
         if let Some(ref cred_ref) = provider.local_endpoint_ref {
-            let key = format!("{}:local-endpoint:{}", provider.provider_kind.as_str(), connection_id);
-            let secret = self.credential_broker.get(&key).await?
+            let key = format!(
+                "{}:local-endpoint:{}",
+                provider.provider_kind.as_str(),
+                connection_id
+            );
+            let secret = self
+                .credential_broker
+                .get(&key)
+                .await?
                 .ok_or_else(|| ProviderRouterError::CredentialNotFound(key))?;
             // Secret format: "url|model_id"
             let parts: Vec<&str> = secret.split('|').collect();
             if parts.len() == 2 {
                 Ok(Some((parts[0].to_string(), parts[1].to_string())))
             } else {
-                Err(ProviderRouterError::InvalidConfig("Invalid local endpoint format".to_string()))
+                Err(ProviderRouterError::InvalidConfig(
+                    "Invalid local endpoint format".to_string(),
+                ))
             }
         } else {
             Ok(None)
@@ -318,9 +388,9 @@ impl ProviderRouter {
     /// Get provider config for a connection.
     pub async fn get_config(&self, connection_id: &str) -> ProviderResult<ProviderConfig> {
         let cache = self.provider_cache.read().await;
-        let provider = cache.get(connection_id).ok_or_else(|| {
-            ProviderRouterError::NotConfigured(connection_id.to_string())
-        })?;
+        let provider = cache
+            .get(connection_id)
+            .ok_or_else(|| ProviderRouterError::NotConfigured(connection_id.to_string()))?;
         Ok(provider.config.clone())
     }
 
@@ -331,12 +401,25 @@ impl ProviderRouter {
 
         for conn in connections {
             // Check credential availability
-            let has_api_key = conn.credentials.iter().any(|c| c.metadata.get("kind") == Some(&"api-key".to_string()));
-            let has_refresh = conn.credentials.iter().any(|c| c.metadata.get("kind") == Some(&"refresh-token".to_string()));
-            let has_endpoint = conn.credentials.iter().any(|c| c.metadata.get("kind") == Some(&"local-endpoint".to_string()));
+            let has_api_key = conn
+                .credentials
+                .iter()
+                .any(|c| c.metadata.get("kind") == Some(&"api-key".to_string()));
+            let has_refresh = conn
+                .credentials
+                .iter()
+                .any(|c| c.metadata.get("kind") == Some(&"refresh-token".to_string()));
+            let has_endpoint = conn
+                .credentials
+                .iter()
+                .any(|c| c.metadata.get("kind") == Some(&"local-endpoint".to_string()));
 
             let status = if conn.kind == BrokerProviderKind::Local {
-                if has_endpoint { ProviderConnectionStatus::Connected } else { ProviderConnectionStatus::Disconnected }
+                if has_endpoint {
+                    ProviderConnectionStatus::Connected
+                } else {
+                    ProviderConnectionStatus::Disconnected
+                }
             } else if has_api_key || has_refresh {
                 ProviderConnectionStatus::Connected
             } else {
@@ -366,7 +449,9 @@ impl ProviderRouter {
         let connection_id = session_connection_id
             .map(|s| s.to_string())
             .or_else(|| self.get_default_connection().await)
-            .ok_or(ProviderRouterError::NotConfigured("No provider configured".to_string()))?;
+            .ok_or(ProviderRouterError::NotConfigured(
+                "No provider configured".to_string(),
+            ))?;
 
         let config = self.get_config(&connection_id).await?;
         let provider_kind = config.kind();
@@ -375,7 +460,9 @@ impl ProviderRouter {
 
         // Determine the actual credential to use
         let credential = match (&provider_kind, api_key, local_endpoint) {
-            (BrokerProviderKind::Local, _, Some((url, model))) => Some(format!("local:{}:{}", url, model)),
+            (BrokerProviderKind::Local, _, Some((url, model))) => {
+                Some(format!("local:{}:{}", url, model))
+            }
             (_, Some(key), _) => Some(key),
             _ => None,
         };
@@ -426,6 +513,9 @@ mod tests {
             strict_local_mode: true,
         };
         assert_eq!(config.kind(), BrokerProviderKind::Local);
-        assert_eq!(config.base_url(), Some("http://localhost:11434".to_string()));
+        assert_eq!(
+            config.base_url(),
+            Some("http://localhost:11434".to_string())
+        );
     }
 }

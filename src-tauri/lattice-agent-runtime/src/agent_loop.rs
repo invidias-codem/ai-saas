@@ -297,15 +297,26 @@ impl AgentLoop {
     /// Handle a command from IPC.
     pub async fn handle_command(&self, command: AgentCommand) -> AgentResponse {
         match command {
-            AgentCommand::StartSession { session_id, provider_connection_id, model_id } => {
-                self.handle_start_session(session_id, provider_connection_id, model_id).await
+            AgentCommand::StartSession {
+                session_id,
+                provider_connection_id,
+                model_id,
+            } => {
+                self.handle_start_session(session_id, provider_connection_id, model_id)
+                    .await
             }
-            AgentCommand::SendMessage { session_id, content, attachments } => {
-                self.handle_send_message(session_id, content, attachments).await
+            AgentCommand::SendMessage {
+                session_id,
+                content,
+                attachments,
+            } => {
+                self.handle_send_message(session_id, content, attachments)
+                    .await
             }
-            AgentCommand::CancelOperation { session_id, operation_id } => {
-                self.handle_cancel_operation(session_id, operation_id).await
-            }
+            AgentCommand::CancelOperation {
+                session_id,
+                operation_id,
+            } => self.handle_cancel_operation(session_id, operation_id).await,
             AgentCommand::GetSessionStatus { session_id } => {
                 self.handle_get_session_status(session_id).await
             }
@@ -315,11 +326,13 @@ impl AgentLoop {
             AgentCommand::ResumeSession { session_id } => {
                 self.handle_resume_session(session_id).await
             }
-            AgentCommand::GetProviderStatus => {
-                self.handle_get_provider_status().await
-            }
-            AgentCommand::SwitchProvider { session_id, provider_connection_id } => {
-                self.handle_switch_provider(session_id, provider_connection_id).await
+            AgentCommand::GetProviderStatus => self.handle_get_provider_status().await,
+            AgentCommand::SwitchProvider {
+                session_id,
+                provider_connection_id,
+            } => {
+                self.handle_switch_provider(session_id, provider_connection_id)
+                    .await
             }
         }
     }
@@ -343,13 +356,25 @@ impl AgentLoop {
                 session.provider_connection_id = provider_connection_id;
                 session.model_id = model_id;
                 session.state = SessionState::Running;
-                self.session_manager.update_session_state(&session_id, SessionState::Running).await.ok();
-                self.session_manager.update_session_metadata(&session_id, serde_json::json!({
-                    "provider_connection_id": session.provider_connection_id,
-                    "model_id": session.model_id,
-                })).await.ok();
+                self.session_manager
+                    .update_session_state(&session_id, SessionState::Running)
+                    .await
+                    .ok();
+                self.session_manager
+                    .update_session_metadata(
+                        &session_id,
+                        serde_json::json!({
+                            "provider_connection_id": session.provider_connection_id,
+                            "model_id": session.model_id,
+                        }),
+                    )
+                    .await
+                    .ok();
 
-                self.emit_event(AgentEvent::SessionStarted { session_id: session_id.clone() }).await;
+                self.emit_event(AgentEvent::SessionStarted {
+                    session_id: session_id.clone(),
+                })
+                .await;
 
                 AgentResponse::SessionStarted { session_id }
             }
@@ -371,15 +396,23 @@ impl AgentLoop {
 
         // Check session exists and is in valid state
         let session = match self.session_manager.get_session(&session_id).await {
-            Ok(s) if s.state == SessionState::Running || s.state == SessionState::WaitingForInput => s,
-            Ok(_) => return AgentResponse::Error {
-                code: "INVALID_STATE".to_string(),
-                message: "Session not in running state".to_string(),
-            },
-            Err(_) => return AgentResponse::Error {
-                code: "SESSION_NOT_FOUND".to_string(),
-                message: format!("Session not found: {}", session_id),
-            },
+            Ok(s)
+                if s.state == SessionState::Running || s.state == SessionState::WaitingForInput =>
+            {
+                s
+            }
+            Ok(_) => {
+                return AgentResponse::Error {
+                    code: "INVALID_STATE".to_string(),
+                    message: "Session not in running state".to_string(),
+                }
+            }
+            Err(_) => {
+                return AgentResponse::Error {
+                    code: "SESSION_NOT_FOUND".to_string(),
+                    message: format!("Session not found: {}", session_id),
+                }
+            }
         };
 
         // Check concurrent session limit
@@ -399,25 +432,35 @@ impl AgentLoop {
             tool_depth: 0,
             started_at: SystemTime::now(),
         };
-        self.active_turns.write().await.insert(operation_id.clone(), turn);
+        self.active_turns
+            .write()
+            .await
+            .insert(operation_id.clone(), turn);
 
         // Add user message
         let message_id = Uuid::new_v4().to_string();
-        self.session_manager.add_message(
-            &session_id,
-            crate::session::MessageRole::User,
-            content,
-            attachments.into_iter().map(|a| serde_json::to_value(a).unwrap()).collect(),
-            None,
-            session.model_id.clone(),
-            None,
-            None,
-        ).await.ok();
+        self.session_manager
+            .add_message(
+                &session_id,
+                crate::session::MessageRole::User,
+                content,
+                attachments
+                    .into_iter()
+                    .map(|a| serde_json::to_value(a).unwrap())
+                    .collect(),
+                None,
+                session.model_id.clone(),
+                None,
+                None,
+            )
+            .await
+            .ok();
 
         self.emit_event(AgentEvent::MessageStarted {
             session_id: session_id.clone(),
             message_id: message_id.clone(),
-        }).await;
+        })
+        .await;
 
         // Process turn in background
         let session_manager = self.session_manager.clone();
@@ -439,7 +482,8 @@ impl AgentLoop {
                 event_tx,
                 active_turns,
                 config,
-            ).await;
+            )
+            .await;
 
             if let Err(e) = result {
                 error!("Turn processing error: {}", e);
@@ -665,14 +709,21 @@ impl AgentLoop {
         match self.session_manager.get_session(&session_id).await {
             Ok(mut session) => {
                 session.provider_connection_id = Some(provider_connection_id.clone());
-                self.session_manager.update_session_metadata(&session_id, serde_json::json!({
-                    "provider_connection_id": provider_connection_id,
-                })).await.ok();
+                self.session_manager
+                    .update_session_metadata(
+                        &session_id,
+                        serde_json::json!({
+                            "provider_connection_id": provider_connection_id,
+                        }),
+                    )
+                    .await
+                    .ok();
 
                 self.emit_event(AgentEvent::SessionStateChanged {
                     session_id: session_id.clone(),
                     state: session.state,
-                }).await;
+                })
+                .await;
 
                 AgentResponse::ProviderSwitched {
                     session_id,

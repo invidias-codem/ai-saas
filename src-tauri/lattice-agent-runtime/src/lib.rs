@@ -33,7 +33,7 @@ pub mod session;
 pub mod state_machine;
 
 pub use agent_loop::{AgentLoop, AgentLoopConfig, AgentLoopError};
-pub use ipc::{IpcServer, IpcClient, IpcError, ProtocolVersion};
+pub use ipc::{IpcClient, IpcError, IpcServer, ProtocolVersion};
 pub use provider_routing::{ProviderRouter, ProviderRouterError};
 pub use session::{SessionManager, SessionManagerError, SessionRecord};
 pub use state_machine::{RuntimeState, RuntimeStateMachine, StateTransitionError};
@@ -156,7 +156,10 @@ pub async fn agent_start(
     channel: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
 ) -> Result<RuntimeStatusResponse, String> {
-    state.start_runtime(profile_id, channel).await.map_err(|e| e.to_string())
+    state
+        .start_runtime(profile_id, channel)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Tauri command: Stop the agent runtime for a profile.
@@ -165,7 +168,10 @@ pub async fn agent_stop(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
 ) -> Result<RuntimeStatusResponse, String> {
-    state.stop_runtime(profile_id).await.map_err(|e| e.to_string())
+    state
+        .stop_runtime(profile_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Tauri command: Get the agent runtime status for a profile.
@@ -174,7 +180,10 @@ pub async fn agent_status(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
 ) -> Result<RuntimeStatusResponse, String> {
-    state.get_status(profile_id).await.map_err(|e| e.to_string())
+    state
+        .get_status(profile_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Tauri command: Get the agent runtime health for a profile.
@@ -183,7 +192,10 @@ pub async fn agent_health(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
 ) -> Result<RuntimeHealth, String> {
-    state.get_health(profile_id).await.map_err(|e| e.to_string())
+    state
+        .get_health(profile_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Response for runtime status commands.
@@ -247,10 +259,15 @@ impl RuntimeSupervisor {
         }
 
         // Create runtime instance
-        let instance = self.create_instance(profile_id.clone(), channel.clone()).await?;
+        let instance = self
+            .create_instance(profile_id.clone(), channel.clone())
+            .await?;
 
         // Start the state machine
-        instance.state_machine.transition_to(RuntimeState::Starting).await?;
+        instance
+            .state_machine
+            .transition_to(RuntimeState::Starting)
+            .await?;
 
         // Initialize components
         let agent_loop = Arc::new(
@@ -280,19 +297,25 @@ impl RuntimeSupervisor {
         agent_loop.start().await?;
 
         // Transition to healthy
-        instance.state_machine.transition_to(RuntimeState::Healthy).await?;
+        instance
+            .state_machine
+            .transition_to(RuntimeState::Healthy)
+            .await?;
 
         // Store runtime instance
-        runtimes.insert(profile_id.clone(), RuntimeInstance {
-            profile_id: profile_id.clone(),
-            channel,
-            state_machine: instance.state_machine,
-            agent_loop: Some(agent_loop),
-            ipc_server: Some(ipc_server),
-            session_manager: instance.session_manager,
-            provider_router: instance.provider_router,
-            started_at: SystemTime::now(),
-        });
+        runtimes.insert(
+            profile_id.clone(),
+            RuntimeInstance {
+                profile_id: profile_id.clone(),
+                channel,
+                state_machine: instance.state_machine,
+                agent_loop: Some(agent_loop),
+                ipc_server: Some(ipc_server),
+                session_manager: instance.session_manager,
+                provider_router: instance.provider_router,
+                started_at: SystemTime::now(),
+            },
+        );
 
         Ok(RuntimeStatusResponse {
             profile_id,
@@ -310,7 +333,10 @@ impl RuntimeSupervisor {
             .ok_or_else(|| RuntimeError::ProfileNotFound(profile_id.clone()))?;
 
         // Transition to stopping
-        instance.state_machine.transition_to(RuntimeState::Stopping).await?;
+        instance
+            .state_machine
+            .transition_to(RuntimeState::Stopping)
+            .await?;
 
         // Stop agent loop
         if let Some(agent_loop) = instance.agent_loop.take() {
@@ -323,7 +349,10 @@ impl RuntimeSupervisor {
         }
 
         // Transition to stopped
-        instance.state_machine.transition_to(RuntimeState::Stopped).await?;
+        instance
+            .state_machine
+            .transition_to(RuntimeState::Stopped)
+            .await?;
 
         Ok(RuntimeStatusResponse {
             profile_id,
@@ -358,7 +387,11 @@ impl RuntimeSupervisor {
 
         if let Some(instance) = runtimes.get(&profile_id) {
             let state = instance.state_machine.current_state();
-            let uptime = instance.started_at.elapsed().unwrap_or_default().as_millis() as u64;
+            let uptime = instance
+                .started_at
+                .elapsed()
+                .unwrap_or_default()
+                .as_millis() as u64;
 
             // Get provider health
             let mut provider_status = HashMap::new();
@@ -389,16 +422,18 @@ impl RuntimeSupervisor {
         let profile_path = profile_root.join("profiles").join(&profile_id);
 
         // Create session manager
-        let session_manager = Arc::new(SessionManager::new(
-            profile_path.join("state.sqlite"),
-            self.config_defaults.session_config.clone(),
-        ).await?);
+        let session_manager = Arc::new(
+            SessionManager::new(
+                profile_path.join("state.sqlite"),
+                self.config_defaults.session_config.clone(),
+            )
+            .await?,
+        );
 
         // Create provider router
-        let provider_router = Arc::new(ProviderRouter::new(
-            self.credential_broker.clone(),
-            profile_path.clone(),
-        ).await?);
+        let provider_router = Arc::new(
+            ProviderRouter::new(self.credential_broker.clone(), profile_path.clone()).await?,
+        );
 
         // Create state machine
         let state_machine = Arc::new(RuntimeStateMachine::new());
