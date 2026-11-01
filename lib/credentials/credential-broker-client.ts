@@ -1,6 +1,6 @@
 /**
  * Credential Broker Client — TypeScript wrapper for the native credential broker.
- * Communicates via Tauri IPC; never handles raw secrets in JS.
+ * Sends secret inputs through Tauri IPC; native responses never return stored keys or tokens.
  */
 
 import { invoke } from '@tauri-apps/api/core';
@@ -31,7 +31,7 @@ export class CredentialBrokerClient {
       case 'store-api-key':
         return invoke('credential_store_api_key', {
           provider: cmd.provider,
-          api_key: cmd.apiKey,
+          apiKey: cmd.apiKey,
           label: cmd.label,
           metadata: cmd.metadata,
           suffix: cmd.suffix,
@@ -40,7 +40,7 @@ export class CredentialBrokerClient {
       case 'update-api-key':
         return invoke('credential_update_api_key', {
           provider: cmd.provider,
-          api_key: cmd.apiKey,
+          apiKey: cmd.apiKey,
           suffix: cmd.suffix,
         });
 
@@ -84,8 +84,8 @@ export class CredentialBrokerClient {
       case 'store-local-endpoint':
         return invoke('credential_store_local_endpoint', {
           provider: cmd.provider,
-          endpoint_url: cmd.endpointUrl,
-          model_id: cmd.modelId,
+          endpointUrl: cmd.endpointUrl,
+          modelId: cmd.modelId,
           label: cmd.label,
           suffix: cmd.suffix,
         });

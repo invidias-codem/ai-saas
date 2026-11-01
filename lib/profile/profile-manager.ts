@@ -13,7 +13,7 @@ import {
   validateProviderConnection,
 } from '@/lib/contracts/provider-registry';
 import { credentialBroker } from '@/lib/credentials/credential-broker-client';
-import { getProfileConfigPath, isValidProfileId, generateProfileId } from '@/lib/native/path-resolution';
+import { isValidProfileId, generateProfileId } from '@/lib/native/path-resolution';
 import { invoke } from '@tauri-apps/api/core';
 
 export interface ProfileManagerOptions {
@@ -306,15 +306,12 @@ export async function createProfile(channel: 'stable' | 'preview' = 'stable'): P
   const profileId = generateProfileId();
   const manager = new ProfileManager({ profileId, channel });
   await manager.load(); // Creates default settings
+  await manager.save();
   return manager;
 }
 
 /** List all profile IDs for a channel */
 export async function listProfiles(channel: 'stable' | 'preview' = 'stable'): Promise<string[]> {
-  try {
-    const result = await invoke<string[]>('list_profiles', { channel });
-    return result.filter(isValidProfileId);
-  } catch {
-    return [];
-  }
+  const result = await invoke<string[]>('list_profiles', { channel });
+  return result.filter(isValidProfileId);
 }

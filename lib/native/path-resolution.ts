@@ -127,12 +127,6 @@ export async function resolveNativePaths(channel: Channel = 'stable'): Promise<C
     return getChannelPaths(channel);
   }
 
-  try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    const paths = await invoke('resolve_native_paths', { channel });
-    return paths as ChannelPaths;
-  } catch {
-    // Fallback to computed paths
-    return getChannelPaths(channel);
-  }
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<ChannelPaths>('resolve_native_paths', { channel });
 }

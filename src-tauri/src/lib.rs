@@ -1,5 +1,6 @@
 mod credential_broker;
 mod native_host;
+mod profiles;
 mod review;
 mod workspace;
 
@@ -8,16 +9,8 @@ mod ipc_tests;
 #[cfg(test)]
 mod review_test_support;
 
-use chrono::Utc;
-use credential_broker::{handle_broker_command, init_credential_broker};
-use lattice_credential_broker::{
-    BrokerCommand,
-    BrokerResponse,
-    BrokerResponse as InnerBrokerResponse,
-    CredentialBroker,
-    CredentialKind,
-    ProviderKind,
-};
+use credential_broker::{handle_broker_command, init_credential_broker, BrokerResponse};
+use lattice_credential_broker::{BrokerCommand, CredentialBroker, ProviderKind};
 use lattice_native_host::lifecycle::{NativeHost, Phase};
 use lattice_native_host::{permits_window, TelemetryEvent};
 use native_host::TauriLauncher;
@@ -365,49 +358,12 @@ async fn credential_delete_local_endpoint<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-async fn resolve_native_paths(channel: String) -> Result<serde_json::Value, String> {
-    use std::path::PathBuf;
-
-    let is_preview = channel == "preview";
-    let app_name = if is_preview {
-        "xyz.gen1e.lattice-os.preview"
-    } else {
-        "xyz.gen1e.lattice-os"
-    };
-
-    let base_dir = if cfg!(target_os = "windows") {
-        std::env::var("LOCALAPPDATA")
-            .or_else(|_| std::env::var("APPDATA"))
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("."))
-    } else {
-        std::env::var("HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(".local/share")
-    };
-
-    let stable_root = base_dir.join("xyz.gen1e.lattice-os");
-    let preview_root = base_dir.join("xyz.gen1e.lattice-os.preview");
-
-    let make_paths = |root: &PathBuf| -> serde_json::Value {
-        let root_str = root.to_string_lossy().to_string();
-        let profiles_root = root.join("profiles").to_string_lossy().to_string();
-        serde_json::json!({
-            "root": root_str + "/",
-            "profilesRoot": profiles_root.clone() + "/",
-            "profileConfigTemplate": profiles_root.clone() + "/{profileId}/config.json",
-            "profileStateTemplate": profiles_root.clone() + "/{profileId}/state.sqlite",
-            "profileLogsTemplate": profiles_root.clone() + "/{profileId}/logs/",
-            "profileCacheTemplate": profiles_root + "/{profileId}/cache/",
-        })
-    };
-
-    Ok(serde_json::json!({
-        "channel": channel,
-        "stable": make_paths(&stable_root),
-        "preview": make_paths(&preview_root),
-    }))
+async fn resolve_native_paths<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    channel: String,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    Ok(profiles::paths(&profiles::native_root(&channel)?))
 }
 
 #[tauri::command]
@@ -417,55 +373,7 @@ async fn load_profile_config<R: tauri::Runtime>(
     channel: String,
 ) -> Result<Option<serde_json::Value>, String> {
     require_local_window(&window)?;
-    // Validate profile ID
-    if !profile_id
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        || profile_id.is_empty()
-        || profile_id.len() > 64
-    {
-        return Err("Invalid profile ID".to_string());
-    }
-    let is_preview = channel == "preview";
-    let app_name = if is_preview {
-        "xyz.gen1e.lattice-os.preview"
-    } else {
-        "xyz.gen1e.lattice-os"
-    };
-
-    let base_dir = if cfg!(target_os = "windows") {
-        std::env::var("LOCALAPPDATA")
-            .or_else(|_| std::env::var("APPDATA"))
-            .map(std::path::PathBuf::from)
-            .map_err(|_| "Could not determine app data directory".to_string())?
-    } else {
-        std::env::var("HOME")
-            .map(std::path::PathBuf::from)
-            .map_err(|_| "Could not determine home directory".to_string())?
-            .join(".local/share")
-    };
-
-    let root = base_dir.join(app_name);
-    let config_path = root.join("profiles").join(&profile_id).join("config.json");
-
-    // Ensure path is within allowed root (prevent traversal)
-    let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
-    // If file doesn't exist, check parent directory
-    let canonical_path = config_path
-        .canonicalize()
-        .or_else(|_| config_path.parent().unwrap().canonicalize())
-        .map_err(|e| e.to_string())?;
-    if !canonical_path.starts_with(&canonical_root) {
-        return Err("Path traversal attempt blocked".to_string());
-    }
-
-    if !config_path.exists() {
-        return Ok(None); // First run - caller will create defaults
-    }
-
-    let content = std::fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
-    let value: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-    Ok(Some(value))
+    profiles::load(&profiles::native_root(&channel)?, &profile_id)
 }
 
 #[tauri::command]
@@ -476,57 +384,7 @@ async fn save_profile_config<R: tauri::Runtime>(
     settings: serde_json::Value,
 ) -> Result<(), String> {
     require_local_window(&window)?;
-    // Validate profile ID
-    if !profile_id
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        || profile_id.is_empty()
-        || profile_id.len() > 64
-    {
-        return Err("Invalid profile ID".to_string());
-    }
-    let is_preview = channel == "preview";
-    let app_name = if is_preview {
-        "xyz.gen1e.lattice-os.preview"
-    } else {
-        "xyz.gen1e.lattice-os"
-    };
-
-    let base_dir = if cfg!(target_os = "windows") {
-        std::env::var("LOCALAPPDATA")
-            .or_else(|_| std::env::var("APPDATA"))
-            .map(std::path::PathBuf::from)
-            .map_err(|_| "Could not determine app data directory".to_string())?
-    } else {
-        std::env::var("HOME")
-            .map(std::path::PathBuf::from)
-            .map_err(|_| "Could not determine home directory".to_string())?
-            .join(".local/share")
-    };
-
-    let root = base_dir.join(app_name);
-    let config_path = root.join("profiles").join(&profile_id).join("config.json");
-
-    // Ensure path is within allowed root (prevent traversal)
-    // If file doesn't exist, check parent directory
-    let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
-    let canonical_path = config_path
-        .canonicalize()
-        .or_else(|_| config_path.parent().unwrap().canonicalize())
-        .map_err(|e| e.to_string())?;
-    if !canonical_path.starts_with(&canonical_root) {
-        return Err("Path traversal attempt blocked".to_string());
-    }
-
-    // Atomic write: write to temp file then rename
-    let temp_path = config_path.with_extension("json.tmp");
-    if let Some(parent) = config_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
-    std::fs::write(&temp_path, content).map_err(|e| e.to_string())?;
-    std::fs::rename(&temp_path, &config_path).map_err(|e| e.to_string())?;
-    Ok(())
+    profiles::save(&profiles::native_root(&channel)?, &profile_id, &settings)
 }
 
 #[tauri::command]
@@ -535,58 +393,7 @@ async fn list_profiles<R: tauri::Runtime>(
     channel: String,
 ) -> Result<Vec<String>, String> {
     require_local_window(&window)?;
-    let is_preview = channel == "preview";
-    let app_name = if is_preview {
-        "xyz.gen1e.lattice-os.preview"
-    } else {
-        "xyz.gen1e.lattice-os"
-    };
-
-    let base_dir = if cfg!(target_os = "windows") {
-        std::env::var("LOCALAPPDATA")
-            .or_else(|_| std::env::var("APPDATA"))
-            .map(std::path::PathBuf::from)
-            .map_err(|_| "Could not determine app data directory".to_string())?
-    } else {
-        std::env::var("HOME")
-            .map(std::path::PathBuf::from)
-            .map_err(|_| "Could not determine home directory".to_string())?
-            .join(".local/share")
-    };
-
-    let root = base_dir.join(app_name);
-    let profiles_root = root.join("profiles");
-
-    // Ensure path is within allowed root
-    let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
-    let canonical_profiles = profiles_root.canonicalize().map_err(|e| e.to_string())?;
-    if !canonical_profiles.starts_with(&canonical_root) {
-        return Err("Path traversal attempt blocked".to_string());
-    }
-
-    if !profiles_root.exists() {
-        return Ok(vec![]);
-    }
-
-    let mut profiles = Vec::new();
-    for entry in std::fs::read_dir(&profiles_root).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-        if path.is_dir() {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                // Only return valid profile IDs
-                if name
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-                    && !name.is_empty()
-                    && name.len() <= 64
-                {
-                    profiles.push(name.to_string());
-                }
-            }
-        }
-    }
-    Ok(profiles)
+    profiles::list(&profiles::native_root(&channel)?)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

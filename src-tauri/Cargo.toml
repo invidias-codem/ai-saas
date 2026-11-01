@@ -37,8 +37,7 @@ sha2 = "0.10.8"
 lattice-native-host = { path = "native-host" }
 lattice-credential-broker = { path = "credential-broker" }
 tokio = { version = "1", features = ["sync", "time"] }
-chrono = { version = "0.4", features = ["serde"] }
+tempfile = "3"
 
 [dev-dependencies]
-tempfile = "3"
 tauri = { version = "2.11.2", features = ["test"] }
