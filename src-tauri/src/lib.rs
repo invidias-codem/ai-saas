@@ -1,4 +1,6 @@
+mod credential_broker;
 mod native_host;
+mod profiles;
 mod review;
 mod workspace;
 
@@ -7,6 +9,8 @@ mod ipc_tests;
 #[cfg(test)]
 mod review_test_support;
 
+use credential_broker::{handle_broker_command, init_credential_broker, BrokerResponse};
+use lattice_credential_broker::{BrokerCommand, CredentialBroker, ProviderKind};
 use lattice_native_host::lifecycle::{NativeHost, Phase};
 use lattice_native_host::{permits_window, TelemetryEvent};
 use native_host::TauriLauncher;
@@ -131,6 +135,267 @@ async fn flush_telemetry<R: tauri::Runtime>(
     Ok(json!({"status":"trigger_ok"}))
 }
 
+// Credential Broker commands
+
+#[tauri::command]
+async fn credential_store_api_key<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    api_key: String,
+    label: String,
+    metadata: Option<serde_json::Value>,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::StoreApiKey {
+        provider: provider_kind,
+        api_key,
+        label,
+        metadata: metadata.and_then(|v| serde_json::from_value(v).ok()),
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_update_api_key<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    api_key: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::UpdateApiKey {
+        provider: provider_kind,
+        api_key,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_get_api_key_status<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::GetApiKeyStatus {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_delete_api_key<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::DeleteApiKey {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_list_provider_credentials<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::ListProviderCredentials {
+        provider: provider_kind,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_store_refresh_token<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    token: String,
+    label: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::StoreRefreshToken {
+        provider: provider_kind,
+        token,
+        label,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_get_refresh_token_status<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::GetRefreshTokenStatus {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_delete_refresh_token<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::DeleteRefreshToken {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_store_local_endpoint<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    endpoint_url: String,
+    model_id: String,
+    label: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::StoreLocalEndpoint {
+        provider: provider_kind,
+        endpoint_url,
+        model_id,
+        label,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_get_local_endpoint_status<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::GetLocalEndpointStatus {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_get_local_endpoint<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::GetLocalEndpoint {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_delete_local_endpoint<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::DeleteLocalEndpoint {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn resolve_native_paths<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    channel: String,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    Ok(profiles::paths(&profiles::native_root(&channel)?))
+}
+
+#[tauri::command]
+async fn load_profile_config<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    profile_id: String,
+    channel: String,
+) -> Result<Option<serde_json::Value>, String> {
+    require_local_window(&window)?;
+    profiles::load(&profiles::native_root(&channel)?, &profile_id)
+}
+
+#[tauri::command]
+async fn save_profile_config<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    profile_id: String,
+    channel: String,
+    settings: serde_json::Value,
+) -> Result<(), String> {
+    require_local_window(&window)?;
+    profiles::save(&profiles::native_root(&channel)?, &profile_id, &settings)
+}
+
+#[tauri::command]
+async fn list_profiles<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    channel: String,
+) -> Result<Vec<String>, String> {
+    require_local_window(&window)?;
+    profiles::list(&profiles::native_root(&channel)?)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -162,6 +427,11 @@ pub fn run() {
         .setup(|app| {
             let host = Arc::new(NativeHost::default());
             app.manage(host.clone());
+
+            // Initialize credential broker
+            let broker = tauri::async_runtime::block_on(async { init_credential_broker().await })?;
+            app.manage(broker);
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let _ = host.start(TauriLauncher(handle)).await;
@@ -179,6 +449,22 @@ pub fn run() {
             ping_daemon,
             restart_daemon,
             flush_telemetry,
+            credential_store_api_key,
+            credential_update_api_key,
+            credential_get_api_key_status,
+            credential_delete_api_key,
+            credential_list_provider_credentials,
+            credential_store_refresh_token,
+            credential_get_refresh_token_status,
+            credential_delete_refresh_token,
+            credential_store_local_endpoint,
+            credential_get_local_endpoint_status,
+            credential_get_local_endpoint,
+            credential_delete_local_endpoint,
+            resolve_native_paths,
+            load_profile_config,
+            save_profile_config,
+            list_profiles,
             workspace::native_select_folder,
             workspace::native_workspace_grants,
             workspace::native_revoke_grant,

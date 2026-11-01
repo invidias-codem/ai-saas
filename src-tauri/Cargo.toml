@@ -1,3 +1,7 @@
+[workspace]
+members = ["native-host", "credential-broker"]
+resolver = "2"
+
 [package]
 name = "app"
 version = "0.1.0"
@@ -31,8 +35,9 @@ tauri-plugin-stronghold = "2"
 tauri-plugin-dialog = "=2.8.4"
 sha2 = "0.10.8"
 lattice-native-host = { path = "native-host" }
+lattice-credential-broker = { path = "credential-broker" }
 tokio = { version = "1", features = ["sync", "time"] }
+tempfile = "3"
 
 [dev-dependencies]
-tempfile = "3"
 tauri = { version = "2.11.2", features = ["test"] }

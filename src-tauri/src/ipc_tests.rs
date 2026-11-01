@@ -14,6 +14,7 @@ fn app() -> tauri::App<MockRuntime> {
 fn app_with_host(host: Arc<NativeHost>) -> tauri::App<MockRuntime> {
     mock_builder()
         .manage(host)
+        .manage(tauri::async_runtime::block_on(init_credential_broker()).unwrap())
         .manage(review::ReviewWindows::<MockRuntime>::default())
         .register_uri_scheme_protocol("lattice-review", |_, request| review::resource(request))
         .on_window_event(review::window_event)
@@ -24,6 +25,12 @@ fn app_with_host(host: Arc<NativeHost>) -> tauri::App<MockRuntime> {
             ping_daemon,
             restart_daemon,
             flush_telemetry,
+            credential_store_api_key,
+            credential_store_local_endpoint,
+            resolve_native_paths,
+            load_profile_config,
+            save_profile_config,
+            list_profiles,
             workspace::native_select_folder,
             workspace::native_workspace_grants,
             workspace::native_revoke_grant,
@@ -381,6 +388,15 @@ fn call_input(
     url: &str,
     input: serde_json::Value,
 ) -> Result<tauri::ipc::InvokeResponseBody, serde_json::Value> {
+    call_args(window, command, url, json!({"input":input}))
+}
+
+fn call_args(
+    window: &tauri::WebviewWindow<MockRuntime>,
+    command: &str,
+    url: &str,
+    args: serde_json::Value,
+) -> Result<tauri::ipc::InvokeResponseBody, serde_json::Value> {
     get_ipc_response(
         window,
         InvokeRequest {
@@ -388,7 +404,7 @@ fn call_input(
             callback: CallbackFn(0),
             error: CallbackFn(1),
             url: url.parse().unwrap(),
-            body: InvokeBody::Json(json!({"input":input})),
+            body: InvokeBody::Json(args),
             headers: Default::default(),
             invoke_key: INVOKE_KEY.into(),
         },
@@ -554,5 +570,70 @@ fn main_can_invoke_native_operation_dispatch_and_status() {
             let err_str = e.to_string();
             assert!(!err_str.contains("not allowed"), "{command}: {err_str}");
         }
+    }
+}
+
+#[test]
+fn credential_and_profile_commands_are_local_main_only() {
+    let app = app();
+    let main = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+        .build()
+        .unwrap();
+    let review = tauri::WebviewWindowBuilder::new(
+        &app,
+        "native-review-forged-credentials",
+        tauri::WebviewUrl::CustomProtocol("lattice-review://localhost/index.html".parse().unwrap()),
+    )
+    .build()
+    .unwrap();
+    for (command, args) in [
+        (
+            "credential_store_api_key",
+            json!({"provider":"invalid-provider","apiKey":"synthetic test value","label":"Test","metadata":{},"suffix":"test"}),
+        ),
+        (
+            "credential_store_local_endpoint",
+            json!({"provider":"invalid-provider","endpointUrl":"http://127.0.0.1:8000","modelId":"example-model","label":"Test","suffix":"test"}),
+        ),
+    ] {
+        let error = call_args(&main, command, main.url().unwrap().as_str(), args.clone())
+            .err()
+            .unwrap();
+        assert_eq!(
+            error.as_str(),
+            Some("Invalid provider"),
+            "native camelCase arguments must reach the handler: {error}"
+        );
+        for (window, url) in [
+            (&main, "https://untrusted.invalid/".to_string()),
+            (&review, review_ipc_origin(&review)),
+        ] {
+            let error = call_args(window, command, &url, args.clone())
+                .err()
+                .unwrap();
+            assert!(
+                error.as_str().unwrap().contains("not allowed"),
+                "{command}: {error}"
+            );
+        }
+    }
+    for command in [
+        "resolve_native_paths",
+        "load_profile_config",
+        "save_profile_config",
+        "list_profiles",
+    ] {
+        let error = call_args(
+            &review,
+            command,
+            &review_ipc_origin(&review),
+            json!({"channel":"stable","profileId":"test","settings":{}}),
+        )
+        .err()
+        .unwrap();
+        assert!(
+            error.as_str().unwrap().contains("not allowed"),
+            "{command}: {error}"
+        );
     }
 }

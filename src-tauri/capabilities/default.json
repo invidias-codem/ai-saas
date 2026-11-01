@@ -11,6 +11,8 @@
     "native-host-control",
     "native-workspace-read",
     "native-proposal-control",
-    "native-operation-control"
+    "native-operation-control",
+    "native-credentials",
+    "native-profiles"
   ]
 }
