@@ -6,6 +6,8 @@ pub mod command;
 pub mod lifecycle;
 pub mod mutation;
 pub mod review;
+pub mod session_store;
+pub mod supervisor;
 #[cfg(test)]
 mod review_tests;
 pub mod workspace;
