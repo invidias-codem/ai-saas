@@ -540,8 +540,16 @@ impl IpcServer {
 
                     let response = IpcMessage::AuthenticateResponse {
                         success,
-                        session_id: if success { Some(Uuid::new_v4().to_string()) } else { None },
-                        reason: if success { None } else { Some("Invalid token".to_string()) },
+                        session_id: if success {
+                            Some(Uuid::new_v4().to_string())
+                        } else {
+                            None
+                        },
+                        reason: if success {
+                            None
+                        } else {
+                            Some("Invalid token".to_string())
+                        },
                     };
                     if let Some(client) = clients_lock.get(client_id) {
                         let _ = client.tx.send(response);

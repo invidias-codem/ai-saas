@@ -463,14 +463,20 @@ impl AgentLoop {
         // Check for cancellation
         {
             let turns = active_turns.read().await;
-            if turns.get(&operation_id).map(|t| t.cancelled).unwrap_or(false) {
+            if turns
+                .get(&operation_id)
+                .map(|t| t.cancelled)
+                .unwrap_or(false)
+            {
                 return Err(AgentLoopError::Cancelled);
             }
         }
 
         // Check runtime state
         if state_machine.current_state().await != RuntimeState::Healthy {
-            return Err(AgentLoopError::ProviderError("Runtime not healthy".to_string()));
+            return Err(AgentLoopError::ProviderError(
+                "Runtime not healthy".to_string(),
+            ));
         }
 
         // Resolve provider
@@ -497,7 +503,13 @@ impl AgentLoop {
         // Emit message chunk events (simulated streaming)
         let chunks = ["Response ", "from ", "{:?} ", "for ", "session ", "{}"];
         for chunk in chunks {
-            if active_turns.read().await.get(&operation_id).map(|t| t.cancelled).unwrap_or(false) {
+            if active_turns
+                .read()
+                .await
+                .get(&operation_id)
+                .map(|t| t.cancelled)
+                .unwrap_or(false)
+            {
                 return Err(AgentLoopError::Cancelled);
             }
             let formatted = chunk.replace("{:?}", &format!("{:?}", provider_kind)).replace("{}", &session_id);
