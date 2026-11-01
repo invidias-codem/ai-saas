@@ -13,12 +13,14 @@ use credential_broker::{handle_broker_command, init_credential_broker, BrokerRes
 use lattice_credential_broker::{BrokerCommand, CredentialBroker, ProviderKind};
 use lattice_native_host::lifecycle::{NativeHost, Phase};
 use lattice_native_host::{permits_window, TelemetryEvent};
+use lattice_native_host::supervisor::{serve, Supervisor};
 use native_host::TauriLauncher;
 use serde::Serialize;
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::Manager;
+use tokio::net::TcpListener;
 
 #[derive(Serialize)]
 struct HarnessEvent {
@@ -133,6 +135,71 @@ async fn flush_telemetry<R: tauri::Runtime>(
     require_local_window(&window)?;
     // Existing frontend trigger only; no generic native RPC or cloud credential.
     Ok(json!({"status":"trigger_ok"}))
+}
+
+// Supervisor commands — the desktop reaches the same Supervisor state the CLI
+// reaches over TCP, so both clients observe one consistent session journal.
+
+#[tauri::command]
+async fn supervisor_status(
+    state: tauri::State<'_, Arc<Supervisor>>,
+) -> Result<serde_json::Value, String> {
+    Ok(state.status().await)
+}
+
+#[tauri::command]
+async fn supervisor_ensure_host<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, Arc<Supervisor>>,
+) -> Result<(), String> {
+    state
+        .ensure_host(TauriLauncher(app))
+        .await
+        .map_err(|e| e.message().to_string())
+}
+
+#[tauri::command]
+async fn supervisor_session_create(
+    state: tauri::State<'_, Arc<Supervisor>>,
+) -> Result<serde_json::Value, String> {
+    state
+        .session_create("desktop")
+        .await
+        .map(|s| json!({ "session": s }))
+        .map_err(|e| e.message().to_string())
+}
+
+#[tauri::command]
+async fn supervisor_session_list(
+    state: tauri::State<'_, Arc<Supervisor>>,
+) -> Result<serde_json::Value, String> {
+    Ok(json!({ "sessions": state.list_sessions().await }))
+}
+
+#[tauri::command]
+async fn supervisor_event_append(
+    state: tauri::State<'_, Arc<Supervisor>>,
+    session_id: String,
+    kind: String,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    state
+        .append_event("desktop", &session_id, kind, payload.unwrap_or(json!({})))
+        .await
+        .map(|e| json!({ "event": e }))
+        .map_err(|e| e.message().to_string())
+}
+
+#[tauri::command]
+async fn supervisor_cancel(
+    state: tauri::State<'_, Arc<Supervisor>>,
+    session_id: String,
+) -> Result<serde_json::Value, String> {
+    state
+        .cancel_session("desktop", &session_id)
+        .await
+        .map(|s| json!({ "session_id": s }))
+        .map_err(|e| e.message().to_string())
 }
 
 // Credential Broker commands
@@ -432,6 +499,22 @@ pub fn run() {
             let broker = tauri::async_runtime::block_on(async { init_credential_broker().await })?;
             app.manage(broker);
 
+            // Supervisor: owns the profile's durable session journal and the
+            // NativeHost lifecycle, and serves the TCP JSON-RPC transport shared
+            // with the CLI. One writer per profile.
+            let profile_root = profiles::native_root("stable")?;
+            let profile_dir = profile_root.join("profiles/default");
+            let supervisor = Arc::new(Supervisor::new("default".to_string(), &profile_dir)?);
+            app.manage(supervisor.clone());
+            let profile_dir_owned = profile_dir.clone();
+            let sup = supervisor.clone();
+            tauri::async_runtime::spawn(async move {
+                let Ok(listener) = TcpListener::bind("127.0.0.1:0").await else { return };
+                let port = listener.local_addr().unwrap().port();
+                let _ = std::fs::write(profile_dir_owned.join(".supervisor.addr"), format!("127.0.0.1:{}", port));
+                let _ = serve(listener, sup).await;
+            });
+
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let _ = host.start(TauriLauncher(handle)).await;
@@ -449,6 +532,12 @@ pub fn run() {
             ping_daemon,
             restart_daemon,
             flush_telemetry,
+            supervisor_status,
+            supervisor_ensure_host,
+            supervisor_session_create,
+            supervisor_session_list,
+            supervisor_event_append,
+            supervisor_cancel,
             credential_store_api_key,
             credential_update_api_key,
             credential_get_api_key_status,
