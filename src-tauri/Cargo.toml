@@ -1,5 +1,5 @@
 [workspace]
-members = ["native-host", "credential-broker"]
+members = ["native-host", "credential-broker", "lattice-agent-runtime"]
 resolver = "2"
 
 [package]
@@ -36,6 +36,7 @@ tauri-plugin-dialog = "=2.8.4"
 sha2 = "0.10.8"
 lattice-native-host = { path = "native-host" }
 lattice-credential-broker = { path = "credential-broker" }
+lattice-agent-runtime = { path = "lattice-agent-runtime" }
 tokio = { version = "1", features = ["sync", "time"] }
 tempfile = "3"
 

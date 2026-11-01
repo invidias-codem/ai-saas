@@ -1,3 +1,4 @@
+mod agent_runtime;
 mod credential_broker;
 mod native_host;
 mod profiles;
@@ -9,15 +10,21 @@ mod ipc_tests;
 #[cfg(test)]
 mod review_test_support;
 
+use agent_runtime::{
+    agent_start, agent_stop, agent_status, agent_health, AgentRuntimeConfig, RuntimeSupervisor,
+};
 use credential_broker::{handle_broker_command, init_credential_broker, BrokerResponse};
+use lattice_agent_runtime::{AgentLoopConfig, ProviderRouter, SessionConfig, SessionManager};
 use lattice_credential_broker::{BrokerCommand, CredentialBroker, ProviderKind};
 use lattice_native_host::lifecycle::{NativeHost, Phase};
 use lattice_native_host::{permits_window, TelemetryEvent};
 use native_host::TauriLauncher;
 use serde::Serialize;
 use serde_json::json;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::Manager;
 
 #[derive(Serialize)]
@@ -430,7 +437,31 @@ pub fn run() {
 
             // Initialize credential broker
             let broker = tauri::async_runtime::block_on(async { init_credential_broker().await })?;
-            app.manage(broker);
+            app.manage(broker.clone());
+
+            // Initialize agent runtime supervisor
+            let runtime_config = AgentRuntimeConfig {
+                profile_id: String::new(), // Will be set per-runtime
+                channel: String::new(),
+                default_connection_id: None,
+                loop_config: AgentLoopConfig::default(),
+                ipc_config: lattice_agent_runtime::IpcConfig {
+                    protocol_version: lattice_agent_runtime::PROTOCOL_VERSION,
+                    socket_path: None,
+                    client_identity: "desktop".to_string(),
+                    require_auth: false,
+                    connect_timeout_ms: 5000,
+                },
+                session_config: SessionConfig {
+                    db_path: PathBuf::from("state.sqlite"),
+                    max_session_age: Duration::from_secs(86400 * 30),
+                    auto_reconcile: true,
+                },
+            };
+            let supervisor = tauri::async_runtime::block_on(async {
+                RuntimeSupervisor::new(broker.clone(), runtime_config).await
+            })?;
+            app.manage(supervisor);
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -465,6 +496,10 @@ pub fn run() {
             load_profile_config,
             save_profile_config,
             list_profiles,
+            agent_start,
+            agent_stop,
+            agent_status,
+            agent_health,
             workspace::native_select_folder,
             workspace::native_workspace_grants,
             workspace::native_revoke_grant,

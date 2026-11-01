@@ -1,0 +1,33 @@
+[package]
+name = "lattice-agent-runtime"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Local agent runtime supervisor for Lattice OS"
+repository = "https://github.com/invidias-codem/ai-saas"
+categories = ["system", "os"]
+rust-version = "1.90"
+
+[dependencies]
+lattice-credential-broker = { path = "../credential-broker" }
+lattice-native-host = { path = "../native-host" }
+tokio = { version = "1.40", features = ["sync", "time", "macros", "rt-multi-thread"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+uuid = { version = "1.8", features = ["serde", "v4", "v7"] }
+chrono = { version = "0.4", features = ["serde"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "uuid", "migrate"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tauri = { version = "2.11", features = ["ipc"] }
+anyhow = "1.0"
+zeroize = "1.8"
+
+[dev-dependencies]
+tempfile = "3.10"
+tokio-test = "0.4"
+
+[features]
+default = []
+test-runtime = []
