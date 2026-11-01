@@ -597,19 +597,19 @@ impl IpcServer {
                         let _ = client.tx.send(response);
                     }
                     return Ok(());
-                                }
+                                    }
 
-                                // Forward to agent loop
-                                let response = agent_loop.handle_command(command).await;
-                                let ipc_response = IpcMessage::CommandResponse {
-                                    request_id,
-                                    response,
-                                };
-                                if let Some(client) = clients.read().await.get(client_id) {
-                                    let _ = client.tx.send(ipc_response);
+                                    // Forward to agent loop
+                                    let response = agent_loop.handle_command(command).await;
+                                    let ipc_response = IpcMessage::CommandResponse {
+                                        request_id,
+                                        response,
+                                    };
+                                    if let Some(client) = clients.read().await.get(client_id) {
+                                        let _ = client.tx.send(ipc_response);
+                                    }
                                 }
-                            }
-                            IpcMessage::Ping { timestamp } => {
+                                IpcMessage::Ping { timestamp } => {
                                 let response = IpcMessage::Pong {
                                     timestamp: SystemTime::now(),
                                 };

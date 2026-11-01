@@ -544,7 +544,9 @@ impl AgentLoop {
             .ok();
 
         // Update session state
-        session_manager.update_session_state(&session_id, SessionState::WaitingForInput).await?;
+        session_manager
+            .update_session_state(&session_id, SessionState::WaitingForInput)
+            .await?;
         session_manager.mark_inactive(&session_id).await;
 
         // Clean up turn
@@ -565,7 +567,8 @@ impl AgentLoop {
             self.emit_event(AgentEvent::OperationCancelled {
                 session_id: session_id.clone(),
                 operation_id: operation_id.clone(),
-            }).await;
+            })
+            .await;
             AgentResponse::OperationCancelled { operation_id }
         } else {
             AgentResponse::Error {
