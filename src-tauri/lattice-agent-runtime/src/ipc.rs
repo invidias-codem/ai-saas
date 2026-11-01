@@ -556,11 +556,17 @@ impl IpcServer {
                     }
                 }
             }
-            IpcMessage::Command { request_id, command } => {
+            IpcMessage::Command {
+                request_id,
+                command,
+            } => {
                 // Check authentication
                 let authenticated = {
                     let clients_lock = clients.read().await;
-                    clients_lock.get(client_id).map(|c| c.authenticated).unwrap_or(false)
+                    clients_lock
+                        .get(client_id)
+                        .map(|c| c.authenticated)
+                        .unwrap_or(false)
                 };
 
                 if !authenticated {

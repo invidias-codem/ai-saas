@@ -604,8 +604,11 @@ impl SessionManager {
         error: Option<String>,
     ) -> SessionResult<()> {
         let now = SystemTime::now();
-        let completed_at = matches!(state, TaskState::Completed | TaskState::Failed | TaskState::Cancelled)
-            .then(|| chrono::DateTime::<chrono::Utc>::from(now).to_rfc3339());
+        let completed_at = matches!(
+            state,
+            TaskState::Completed | TaskState::Failed | TaskState::Cancelled
+        )
+        .then(|| chrono::DateTime::<chrono::Utc>::from(now).to_rfc3339());
 
         sqlx::query(
             r#"
@@ -666,7 +669,10 @@ impl SessionManager {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().map(|row| self.row_to_session(row)).collect())
+    Ok(rows
+        .into_iter()
+        .map(|row| self.row_to_session(row))
+        .collect())
     }
 
     /// Get active session count.
@@ -749,10 +755,14 @@ impl SessionManager {
                 _ => TaskState::Pending,
             },
             input: serde_json::from_str(row.get("input")).unwrap_or_default(),
-            output: row.get::<Option<String>, _>("output").and_then(|s| serde_json::from_str(&s).ok()),
+            output: row
+                .get::<Option<String>, _>("output")
+                .and_then(|s| serde_json::from_str(&s).ok()),
             error: row.get("error"),
             started_at: parse_datetime(row.get("started_at")),
-            completed_at: row.get::<Option<String>, _>("completed_at").and_then(|s| parse_datetime_opt(s)),
+            completed_at: row
+                .get::<Option<String>, _>("completed_at")
+                .and_then(|s| parse_datetime_opt(s)),
             metadata: serde_json::from_str(row.get("metadata")).unwrap_or_default(),
         }
     }

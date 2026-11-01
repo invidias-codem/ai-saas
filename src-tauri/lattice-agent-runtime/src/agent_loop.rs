@@ -485,20 +485,25 @@ impl AgentLoop {
 
         // For now, simulate provider response
         // In a real implementation, this would call the actual provider API
-        let response_content = format!("Response from {:?} for session {}", provider_kind, session_id);
+        let response_content = format!(
+            "Response from {:?} for session {}",
+            provider_kind, session_id
+        );
 
         // Add assistant message
         let message_id = Uuid::new_v4().to_string();
-        session_manager.add_message(
-            &session_id,
-            crate::session::MessageRole::Assistant,
-            response_content,
-            vec![],
-            Some(provider_kind),
-            provider_config.model_id(),
-            None,
-            None,
-        ).await?;
+        session_manager
+            .add_message(
+                &session_id,
+                crate::session::MessageRole::Assistant,
+                response_content,
+                vec![],
+                Some(provider_kind),
+                provider_config.model_id(),
+                None,
+                None,
+            )
+            .await?;
 
         // Emit message chunk events (simulated streaming)
         let chunks = ["Response ", "from ", "{:?} ", "for ", "session ", "{}"];
