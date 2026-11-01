@@ -16,7 +16,10 @@ pub enum BrokerResponse {
     Config { endpoint_url: String, model_id: String },
     List { credentials: Vec<CredentialRef> },
     Deleted,
-    Error { code: String, message: String },
+    Error {
+        code: String,
+        message: String,
+    },
 }
 
 impl From<InnerBrokerResponse> for BrokerResponse {

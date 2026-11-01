@@ -11,7 +11,11 @@ mod review_test_support;
 use chrono::Utc;
 use credential_broker::{handle_broker_command, init_credential_broker};
 use lattice_credential_broker::{
-    BrokerCommand, BrokerResponse, BrokerResponse as InnerBrokerResponse, CredentialBroker, CredentialKind,
+    BrokerCommand,
+    BrokerResponse,
+    BrokerResponse as InnerBrokerResponse,
+    CredentialBroker,
+    CredentialKind,
     ProviderKind,
 };
 use lattice_native_host::lifecycle::{NativeHost, Phase};
