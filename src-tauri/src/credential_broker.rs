@@ -25,8 +25,16 @@ pub enum BrokerResponse {
 impl From<InnerBrokerResponse> for BrokerResponse {
     fn from(r: InnerBrokerResponse) -> Self {
         match r {
-            InnerBrokerResponse::Ok { reference } => BrokerResponse::Ok { reference },
-            InnerBrokerResponse::Status { status_value } => BrokerResponse::Status { status_value },
+            InnerBrokerResponse::Ok {
+                reference,
+            } => BrokerResponse::Ok {
+                reference,
+            },
+            InnerBrokerResponse::Status {
+                status_value,
+            } => BrokerResponse::Status {
+                status_value,
+            },
             InnerBrokerResponse::Config {
                 endpoint_url,
                 model_id,
@@ -34,9 +42,19 @@ impl From<InnerBrokerResponse> for BrokerResponse {
                 endpoint_url,
                 model_id,
             },
-            InnerBrokerResponse::List { credentials } => BrokerResponse::List { credentials },
+            InnerBrokerResponse::List {
+                credentials,
+            } => BrokerResponse::List {
+                credentials,
+            },
             InnerBrokerResponse::Deleted => BrokerResponse::Deleted,
-            InnerBrokerResponse::Error { code, message } => BrokerResponse::Error { code, message },
+            InnerBrokerResponse::Error {
+                code,
+                message,
+            } => BrokerResponse::Error {
+                code,
+                message,
+            },
         }
     }
 }
