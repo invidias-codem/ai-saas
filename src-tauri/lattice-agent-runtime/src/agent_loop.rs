@@ -613,11 +613,15 @@ impl AgentLoop {
     async fn handle_resume_session(&self, session_id: String) -> AgentResponse {
         match self.session_manager.get_session(&session_id).await {
             Ok(session) if session.state == SessionState::WaitingForInput => {
-                self.session_manager.update_session_state(&session_id, SessionState::Running).await.ok();
+                self.session_manager
+                    .update_session_state(&session_id, SessionState::Running)
+                    .await
+                    .ok();
                 self.emit_event(AgentEvent::SessionStateChanged {
                     session_id: session_id.clone(),
                     state: SessionState::Running,
-                }).await;
+                })
+                .await;
                 AgentResponse::SessionStatus {
                     session_id: session.session_id.clone(),
                     status: SessionStatus {

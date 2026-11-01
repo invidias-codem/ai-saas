@@ -2,13 +2,13 @@
 // and provides Tauri command handlers.
 
 use lattice_agent_runtime::{
-    agent_start, agent_stop, agent_status, agent_health,
     AgentLoopConfig, AgentRuntimeConfig, ProviderRouter, RuntimeSupervisor,
     SessionConfig, SessionManager,
+    agent_health, agent_start, agent_status, agent_stop,
 };
 
 pub use lattice_agent_runtime::{
-    agent_start, agent_stop, agent_status, agent_health,
     AgentLoopConfig, AgentRuntimeConfig, ProviderRouter, RuntimeSupervisor,
     SessionConfig, SessionManager,
+    agent_health, agent_start, agent_status, agent_stop,
 };
