@@ -12,8 +12,8 @@ mod review_test_support;
 use credential_broker::{handle_broker_command, init_credential_broker, BrokerResponse};
 use lattice_credential_broker::{BrokerCommand, CredentialBroker, ProviderKind};
 use lattice_native_host::lifecycle::{NativeHost, Phase};
-use lattice_native_host::{permits_window, TelemetryEvent};
 use lattice_native_host::supervisor::{serve, Supervisor};
+use lattice_native_host::{permits_window, TelemetryEvent};
 use native_host::TauriLauncher;
 use serde::Serialize;
 use serde_json::json;
@@ -509,9 +509,14 @@ pub fn run() {
             let profile_dir_owned = profile_dir.clone();
             let sup = supervisor.clone();
             tauri::async_runtime::spawn(async move {
-                let Ok(listener) = TcpListener::bind("127.0.0.1:0").await else { return };
+                let Ok(listener) = TcpListener::bind("127.0.0.1:0").await else {
+                    return;
+                };
                 let port = listener.local_addr().unwrap().port();
-                let _ = std::fs::write(profile_dir_owned.join(".supervisor.addr"), format!("127.0.0.1:{}", port));
+                let _ = std::fs::write(
+                    profile_dir_owned.join(".supervisor.addr"),
+                    format!("127.0.0.1:{}", port),
+                );
                 let _ = serve(listener, sup).await;
             });
 

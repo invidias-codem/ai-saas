@@ -6,10 +6,10 @@ pub mod command;
 pub mod lifecycle;
 pub mod mutation;
 pub mod review;
-pub mod session_store;
-pub mod supervisor;
 #[cfg(test)]
 mod review_tests;
+pub mod session_store;
+pub mod supervisor;
 pub mod workspace;
 
 use authority::{Authority, Binding, Protocol};

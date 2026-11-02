@@ -55,7 +55,11 @@ enum JournalEntry {
     Event(TaskEvent),
     /// Idempotency record: client-scoped request key -> cached result.
     /// Survives restart so a retried request never re-executes.
-    Idempotency { client_id: String, key: String, result: Value },
+    Idempotency {
+        client_id: String,
+        key: String,
+        result: Value,
+    },
 }
 
 struct StoreInner {
@@ -90,9 +94,9 @@ impl SessionStore {
             loop {
                 let pos = reader.stream_position()?;
                 let mut line = String::new();
-                let n = reader.read_line(&mut line).map_err(|e| {
-                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-                })?;
+                let n = reader
+                    .read_line(&mut line)
+                    .map_err(|e| std::io::Error::other(e.to_string()))?;
                 if n == 0 {
                     break;
                 }
@@ -151,7 +155,10 @@ impl SessionStore {
     }
 
     pub fn create_session(&self, id: String, client_id: String) -> Result<Session, String> {
-        let mut inner = self.inner.lock().map_err(|_| "store lock poisoned".to_string())?;
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "store lock poisoned".to_string())?;
         if inner.sessions.contains_key(&id) {
             return Err(format!("session {id} already exists"));
         }
@@ -180,7 +187,10 @@ impl SessionStore {
     }
 
     pub fn close_session(&self, id: &str, status: SessionStatus) -> Result<(), String> {
-        let mut inner = self.inner.lock().map_err(|_| "store lock poisoned".to_string())?;
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "store lock poisoned".to_string())?;
         let session = inner.sessions.get_mut(id).ok_or("session not found")?;
         if session.status != SessionStatus::Open {
             return Err("session is not open".to_string());
@@ -202,7 +212,10 @@ impl SessionStore {
         kind: String,
         payload: serde_json::Value,
     ) -> Result<TaskEvent, String> {
-        let mut inner = self.inner.lock().map_err(|_| "store lock poisoned".to_string())?;
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| "store lock poisoned".to_string())?;
         let owned = inner
             .sessions
             .get(session_id)
@@ -255,9 +268,10 @@ impl SessionStore {
     ) -> std::io::Result<()> {
         // Update in-memory first so get_idempotency sees it immediately.
         {
-            let mut inner = self.inner.lock().map_err(|_| {
-                std::io::Error::new(std::io::ErrorKind::Other, "store lock poisoned")
-            })?;
+            let mut inner = self
+                .inner
+                .lock()
+                .map_err(|_| std::io::Error::other("store lock poisoned"))?;
             inner
                 .idempotency
                 .insert(format!("{}:{}", client_id, key), result.clone());
@@ -279,10 +293,12 @@ impl SessionStore {
     }
 
     fn append_entry(&self, entry: &JournalEntry) -> std::io::Result<()> {
-        let mut file = OpenOptions::new().create(true).append(true).open(&self.path)?;
-        let line = serde_json::to_string(entry).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
-        })?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
+        let line =
+            serde_json::to_string(entry).map_err(|e| std::io::Error::other(e.to_string()))?;
         writeln!(file, "{line}")?;
         // Durable acknowledgment: the write is on disk before we return Ok,
         // so a crash after this point never loses a journaled session or event.

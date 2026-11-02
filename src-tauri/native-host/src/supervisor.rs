@@ -9,15 +9,17 @@
 //! access. JSONL journal with fsync durable ack; torn-tail truncation on
 //! replay. Idempotency keys are client-scoped and journal-persisted.
 
-use crate::{HostError, lifecycle::NativeHost};
 use crate::lifecycle::Launcher;
 use crate::mutation::OperationStatus;
 use crate::review::ProposalInput;
 use crate::review::ProposalSummary;
 use crate::session_store::{SessionStatus, SessionStore};
+use crate::{lifecycle::NativeHost, HostError};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
-use std::fs::{self, OpenOptions};
+use std::fs;
+#[cfg(any(unix, windows))]
+use std::fs::OpenOptions;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -52,9 +54,8 @@ fn load_server_secret() -> std::io::Result<String> {
         }
     }
     let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).map_err(|_| {
-        std::io::Error::new(std::io::ErrorKind::Other, "failed to generate server secret")
-    })?;
+    getrandom::getrandom(&mut bytes)
+        .map_err(|_| std::io::Error::other("failed to generate server secret"))?;
     let secret: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -69,7 +70,6 @@ fn load_server_secret() -> std::io::Result<String> {
 /// releases it on crash, so a restarted supervisor can never be blocked by a
 /// stale lock. Two supervisor processes for the same profile cannot both
 /// hold it — the second fails fast instead of racing on shared state.
-#[cfg(unix)]
 struct LockFile {
     _file: std::fs::File,
 }
@@ -80,6 +80,7 @@ impl LockFile {
         use libc::{flock, LOCK_EX, LOCK_NB};
         let file = OpenOptions::new()
             .create(true)
+            .truncate(false)
             .read(true)
             .write(true)
             .open(path)?;
@@ -98,19 +99,45 @@ impl LockFile {
     }
 }
 
-#[cfg(not(unix))]
-struct LockFile {
-    _path: PathBuf,
-}
-
-#[cfg(not(unix))]
+#[cfg(windows)]
 impl LockFile {
     fn acquire(path: &Path) -> std::io::Result<Self> {
-        // Best-effort on non-unix platforms: touch the lock file so it exists,
-        // without blocking. Unix `flock` is the required mutual-exclusion
-        // path; other platforms add real locking when needed.
-        std::fs::File::create(path)?;
-        Ok(Self { _path: path.to_path_buf() })
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Foundation::ERROR_SHARING_VIOLATION;
+
+        // Deny concurrent opens and deletion while this handle owns the
+        // profile. Windows releases the handle on process exit or crash.
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .share_mode(0)
+            .open(path)
+            .map_err(|error| {
+                if error.raw_os_error() == Some(ERROR_SHARING_VIOLATION as i32) {
+                    std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        format!(
+                            "profile {} is owned by another supervisor process",
+                            path.display()
+                        ),
+                    )
+                } else {
+                    error
+                }
+            })?;
+        Ok(Self { _file: file })
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+impl LockFile {
+    fn acquire(_path: &Path) -> std::io::Result<Self> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "exclusive profile ownership is unavailable on this platform",
+        ))
     }
 }
 
@@ -173,7 +200,12 @@ impl Supervisor {
         let mut state = self.state.lock().await;
         let principal_id = format!("local-user-{:x}", state.clients.len() + 1);
         let owner = state.clients.is_empty();
-        state.clients.insert(client_id.to_string(), ClientIdentity { principal_id: principal_id.clone() });
+        state.clients.insert(
+            client_id.to_string(),
+            ClientIdentity {
+                principal_id: principal_id.clone(),
+            },
+        );
         Ok(json!({
             "session_id": principal_id,
             "server_version": PROTOCOL_VERSION,
@@ -209,7 +241,11 @@ impl Supervisor {
         state.host = Some(host);
     }
 
-    pub async fn handle_request(&self, client_id: &str, request: Value) -> Result<Value, HostError> {
+    pub async fn handle_request(
+        &self,
+        client_id: &str,
+        request: Value,
+    ) -> Result<Value, HostError> {
         let action = request
             .get("action")
             .and_then(Value::as_str)
@@ -225,7 +261,13 @@ impl Supervisor {
         // journal-persisted so it survives restart, and client-scoped so one
         // client cannot replay another's key.
         if let Some(key) = &idempotency_key {
-            if let Some(cached) = self.state.lock().await.store.get_idempotency(client_id, key) {
+            if let Some(cached) = self
+                .state
+                .lock()
+                .await
+                .store
+                .get_idempotency(client_id, key)
+            {
                 return Ok(cached);
             }
         }
@@ -252,7 +294,8 @@ impl Supervisor {
                 let session_id = session_id(&inputs)?;
                 let kind = kind(&inputs)?;
                 let payload = inputs.get("payload").cloned().unwrap_or(json!({}));
-                self.append_event(client_id, session_id, kind, payload).await
+                self.append_event(client_id, session_id, kind, payload)
+                    .await
             }
             "session.cancel" => {
                 let id = session_id(&inputs)?;
@@ -261,11 +304,11 @@ impl Supervisor {
             "agent.turn" => self.agent_turn(client_id, &inputs).await,
             "agent.status" => {
                 let id = session_id(&inputs)?;
-                self.agent_status(&id).await
+                self.agent_status(id).await
             }
             "agent.cancel" => {
                 let id = session_id(&inputs)?;
-                self.agent_cancel(client_id, &id).await
+                self.agent_cancel(client_id, id).await
             }
             "status" => Ok(self.status().await),
             _ => Err(HostError::CommandInvalid),
@@ -276,7 +319,11 @@ impl Supervisor {
         if let (Ok(ref data), Some(key)) = (&result, idempotency_key) {
             let mutates = matches!(
                 action,
-                "session.create" | "event.append" | "session.cancel" | "agent.turn" | "agent.cancel"
+                "session.create"
+                    | "event.append"
+                    | "session.cancel"
+                    | "agent.turn"
+                    | "agent.cancel"
             );
             if mutates {
                 let _ = self
@@ -295,22 +342,31 @@ impl Supervisor {
     /// validated and persisted by NativeHost, then handed to the native
     /// process for execution. Streaming progress and cancellation are
     /// surfaced through agent.status / agent.cancel.
-    async fn agent_turn(
-        &self,
-        client_id: &str,
-        inputs: &Value,
-    ) -> Result<Value, HostError> {
+    async fn agent_turn(&self, client_id: &str, inputs: &Value) -> Result<Value, HostError> {
         self.require_client(client_id).await?;
-        let host = self.state.lock().await.host.clone().ok_or(HostError::Closed)?;
-        let proposal: ProposalInput = serde_json::from_value(inputs.get("proposal").cloned().unwrap_or(Value::Null))
-            .map_err(|_| HostError::ProposalInvalid)?;
+        let host = self
+            .state
+            .lock()
+            .await
+            .host
+            .clone()
+            .ok_or(HostError::Closed)?;
+        let proposal: ProposalInput =
+            serde_json::from_value(inputs.get("proposal").cloned().unwrap_or(Value::Null))
+                .map_err(|_| HostError::ProposalInvalid)?;
         let summary: ProposalSummary = host.propose_operation(proposal).await?;
         Ok(serde_json::to_value(&summary).unwrap_or(json!({})))
     }
 
     /// Return the status of an in-flight or completed operation.
     async fn agent_status(&self, operation_id: &str) -> Result<Value, HostError> {
-        let host = self.state.lock().await.host.clone().ok_or(HostError::Closed)?;
+        let host = self
+            .state
+            .lock()
+            .await
+            .host
+            .clone()
+            .ok_or(HostError::Closed)?;
         let status: OperationStatus = host.operation_status(operation_id).await?;
         Ok(serde_json::to_value(&status).unwrap_or(json!({})))
     }
@@ -319,7 +375,13 @@ impl Supervisor {
     /// the NativeHost boundary.
     async fn agent_cancel(&self, client_id: &str, operation_id: &str) -> Result<Value, HostError> {
         self.require_client(client_id).await?;
-        let host = self.state.lock().await.host.clone().ok_or(HostError::Closed)?;
+        let host = self
+            .state
+            .lock()
+            .await
+            .host
+            .clone()
+            .ok_or(HostError::Closed)?;
         let status: OperationStatus = host.cancel_operation(operation_id).await?;
         Ok(serde_json::to_value(&status).unwrap_or(json!({})))
     }
@@ -329,13 +391,21 @@ impl Supervisor {
         let mut state = self.state.lock().await;
         state.next_session += 1;
         let id = format!("session-{:x}", state.next_session);
-        let session = state.store.create_session(id.clone(), client_id.to_string()).map_err(store_error)?;
+        let session = state
+            .store
+            .create_session(id.clone(), client_id.to_string())
+            .map_err(store_error)?;
         Ok(json!({ "session": session }))
     }
 
     pub async fn list_sessions(&self) -> Vec<Value> {
         let state = self.state.lock().await;
-        state.store.list_sessions().into_iter().map(|s| json!({ "id": s.id, "status": s.status, "client_id": s.client_id })).collect()
+        state
+            .store
+            .list_sessions()
+            .into_iter()
+            .map(|s| json!({ "id": s.id, "status": s.status, "client_id": s.client_id }))
+            .collect()
     }
 
     pub async fn get_session(&self, id: &str) -> Option<Value> {
@@ -344,21 +414,41 @@ impl Supervisor {
         Some(json!({ "id": session.id, "status": session.status, "client_id": session.client_id }))
     }
 
-    pub async fn append_event(&self, client_id: &str, session_id: &str, kind: String, payload: Value) -> Result<Value, HostError> {
+    pub async fn append_event(
+        &self,
+        client_id: &str,
+        session_id: &str,
+        kind: String,
+        payload: Value,
+    ) -> Result<Value, HostError> {
         self.require_client(client_id).await?;
-        let event = self.state.lock().await.store.append_event(session_id, client_id, kind, payload).map_err(store_error)?;
+        let event = self
+            .state
+            .lock()
+            .await
+            .store
+            .append_event(session_id, client_id, kind, payload)
+            .map_err(store_error)?;
         Ok(json!({ "event": event }))
     }
 
     pub async fn cancel_session(&self, client_id: &str, id: &str) -> Result<Value, HostError> {
         self.require_client(client_id).await?;
         let state = self.state.lock().await;
-        let session = state.store.get_session(id).ok_or(HostError::SelectionInvalid)?;
+        let session = state
+            .store
+            .get_session(id)
+            .ok_or(HostError::SelectionInvalid)?;
         if session.client_id != client_id {
             return Err(HostError::GrantDenied);
         }
         drop(state);
-        self.state.lock().await.store.close_session(id, SessionStatus::Cancelled).map_err(store_error)?;
+        self.state
+            .lock()
+            .await
+            .store
+            .close_session(id, SessionStatus::Cancelled)
+            .map_err(store_error)?;
         Ok(json!({ "session_id": id, "status": "cancelled" }))
     }
 
@@ -381,11 +471,18 @@ impl Supervisor {
 }
 
 fn session_id(inputs: &Value) -> Result<&str, HostError> {
-    inputs.get("session_id").and_then(Value::as_str).ok_or(HostError::SelectionInvalid)
+    inputs
+        .get("session_id")
+        .and_then(Value::as_str)
+        .ok_or(HostError::SelectionInvalid)
 }
 
 fn kind(inputs: &Value) -> Result<String, HostError> {
-    inputs.get("kind").and_then(Value::as_str).ok_or(HostError::SelectionInvalid).map(|s| s.to_string())
+    inputs
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or(HostError::SelectionInvalid)
+        .map(|s| s.to_string())
 }
 
 fn store_error(msg: String) -> HostError {
@@ -399,7 +496,10 @@ fn store_error(msg: String) -> HostError {
 
 /// Serve one TCP connection: read newline-delimited JSON-RPC frames, run the
 /// first `hello` to authenticate + version-check the client, then dispatch.
-pub async fn serve_connection(stream: TcpStream, supervisor: Arc<Supervisor>) -> Result<(), HostError> {
+pub async fn serve_connection(
+    stream: TcpStream,
+    supervisor: Arc<Supervisor>,
+) -> Result<(), HostError> {
     let (read, write) = stream.into_split();
     let mut reader = tokio::io::BufReader::new(read);
     let mut writer = write;
@@ -407,7 +507,9 @@ pub async fn serve_connection(stream: TcpStream, supervisor: Arc<Supervisor>) ->
     let mut client_id: Option<String> = None;
     loop {
         line.clear();
-        let n = tokio::io::AsyncBufReadExt::read_line(&mut reader, &mut line).await.map_err(|_| HostError::Closed)?;
+        let n = tokio::io::AsyncBufReadExt::read_line(&mut reader, &mut line)
+            .await
+            .map_err(|_| HostError::Closed)?;
         if n == 0 {
             break;
         }
@@ -418,21 +520,42 @@ pub async fn serve_connection(stream: TcpStream, supervisor: Arc<Supervisor>) ->
         let request: Value = match serde_json::from_str(trimmed) {
             Ok(v) => v,
             Err(_) => {
-                let _ = write_frame(&mut writer, &error_frame(None, HostError::InvalidResponse)).await;
+                let _ =
+                    write_frame(&mut writer, &error_frame(None, HostError::InvalidResponse)).await;
                 continue;
             }
         };
-        let id = request.get("id").and_then(Value::as_str).map(|s| s.to_string());
+        let id = request
+            .get("id")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string());
 
         if client_id.is_none() {
             let action = request.get("action").and_then(Value::as_str).unwrap_or("");
             if action != HELLO_ACTION {
-                let _ = write_frame(&mut writer, &error_frame(id.as_deref(), HostError::InvalidHandshake)).await;
+                let _ = write_frame(
+                    &mut writer,
+                    &error_frame(id.as_deref(), HostError::InvalidHandshake),
+                )
+                .await;
                 continue;
             }
-            let cid = request.get("inputs").and_then(|i| i.get("client_id")).and_then(Value::as_str).unwrap_or("anonymous").to_string();
-            let version = request.get("inputs").and_then(|i| i.get("protocol_version")).and_then(Value::as_u64).unwrap_or(0) as u32;
-            let secret = request.get("inputs").and_then(|i| i.get("client_secret")).and_then(Value::as_str).map(|s| s.to_string());
+            let cid = request
+                .get("inputs")
+                .and_then(|i| i.get("client_id"))
+                .and_then(Value::as_str)
+                .unwrap_or("anonymous")
+                .to_string();
+            let version = request
+                .get("inputs")
+                .and_then(|i| i.get("protocol_version"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as u32;
+            let secret = request
+                .get("inputs")
+                .and_then(|i| i.get("client_secret"))
+                .and_then(Value::as_str)
+                .map(|s| s.to_string());
             match supervisor.hello(&cid, version, secret.as_deref()).await {
                 Ok(data) => {
                     client_id = Some(cid.clone());

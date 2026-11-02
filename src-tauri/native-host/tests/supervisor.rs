@@ -5,7 +5,7 @@
 
 use lattice_native_host::{
     lifecycle::{Launcher, NativeHost, ProcessControl, SpawnedProcess},
-    session_store::{SessionStore, SessionStatus},
+    session_store::{SessionStatus, SessionStore},
     supervisor::{serve, Supervisor},
     HostError, LaunchCredential,
 };
@@ -30,7 +30,10 @@ impl Launcher for MockLauncher {
     fn spawn(&self, _credential: &LaunchCredential) -> Result<SpawnedProcess, HostError> {
         self.called.store(true, Ordering::SeqCst);
         let (_, rx) = mpsc::channel(1);
-        Ok(SpawnedProcess { control: Arc::new(MockControl), events: rx })
+        Ok(SpawnedProcess {
+            control: Arc::new(MockControl),
+            events: rx,
+        })
     }
 }
 
@@ -65,10 +68,18 @@ impl Client {
         serde_json::from_str(resp.trim()).map_err(|e| e.to_string())
     }
 
-    async fn hello(&mut self, client_id: &str, version: u32, secret: Option<&str>) -> Result<Value, String> {
+    async fn hello(
+        &mut self,
+        client_id: &str,
+        version: u32,
+        secret: Option<&str>,
+    ) -> Result<Value, String> {
         let mut inputs = serde_json::json!({ "client_id": client_id, "protocol_version": version });
         if let Some(s) = secret {
-            inputs.as_object_mut().unwrap().insert("client_secret".to_string(), Value::String(s.to_string()));
+            inputs
+                .as_object_mut()
+                .unwrap()
+                .insert("client_secret".to_string(), Value::String(s.to_string()));
         }
         self.send(&json!({
             "id": "1",
@@ -101,7 +112,9 @@ async fn hello_rejects_unknown_protocol_and_accepts_matching() {
     let resp = c.hello("client-a", 9, Some(secret)).await.unwrap();
     assert_eq!(resp.get("ok"), Some(&json!(false)));
     assert_eq!(
-        resp.get("error").and_then(|e| e.get("code")).and_then(Value::as_str),
+        resp.get("error")
+            .and_then(|e| e.get("code"))
+            .and_then(Value::as_str),
         Some("LOCAL_PROTOCOL_INCOMPATIBLE"),
         "unexpected: {resp:?}"
     );
@@ -111,7 +124,9 @@ async fn hello_rejects_unknown_protocol_and_accepts_matching() {
     let resp = c.hello("client-a", 1, None).await.unwrap();
     assert_eq!(resp.get("ok"), Some(&json!(false)));
     assert_eq!(
-        resp.get("error").and_then(|e| e.get("code")).and_then(Value::as_str),
+        resp.get("error")
+            .and_then(|e| e.get("code"))
+            .and_then(Value::as_str),
         Some("LOCAL_HANDSHAKE_INVALID")
     );
 
@@ -133,23 +148,43 @@ async fn session_lifecycle_and_client_isolation() {
 
     // Client A: hello + create session
     let mut a = Client::connect(port).await.unwrap();
-    assert!(a.hello("client-a", 1, Some(secret)).await.unwrap().get("ok").and_then(Value::as_bool) == Some(true));
+    assert!(
+        a.hello("client-a", 1, Some(secret))
+            .await
+            .unwrap()
+            .get("ok")
+            .and_then(Value::as_bool)
+            == Some(true)
+    );
     let created = a
         .send(&json!({ "id": "2", "action": "session.create", "inputs": {} }))
         .await
         .unwrap();
     assert!(created.get("ok").and_then(Value::as_bool) == Some(true));
-    let session_id = created["data"]["session"]["id"].as_str().unwrap().to_string();
+    let session_id = created["data"]["session"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
     // Client B: hello with a distinct identity, then tries to cancel A's session -> GrantDenied
     let mut b = Client::connect(port).await.unwrap();
-    assert!(b.hello("client-b", 1, Some(secret)).await.unwrap().get("ok").and_then(Value::as_bool) == Some(true));
+    assert!(
+        b.hello("client-b", 1, Some(secret))
+            .await
+            .unwrap()
+            .get("ok")
+            .and_then(Value::as_bool)
+            == Some(true)
+    );
     let cancel_b = b
         .send(&json!({ "id": "3", "action": "session.cancel", "inputs": { "session_id": &session_id } }))
         .await
         .unwrap();
     assert_eq!(
-        cancel_b.get("error").and_then(|e| e.get("code")).and_then(Value::as_str),
+        cancel_b
+            .get("error")
+            .and_then(|e| e.get("code"))
+            .and_then(Value::as_str),
         Some("LOCAL_GRANT_DENIED")
     );
 
@@ -159,7 +194,7 @@ async fn session_lifecycle_and_client_isolation() {
         .await
         .unwrap();
     assert!(list.get("ok").and_then(Value::as_bool) == Some(true));
-    assert!(list["data"]["sessions"].as_array().unwrap().len() >= 1);
+    assert!(!list["data"]["sessions"].as_array().unwrap().is_empty());
 
     let appended = a
         .send(&json!({
@@ -180,7 +215,9 @@ async fn session_lifecycle_and_client_isolation() {
 
     // The cancelled session is no longer open
     let got = a
-        .send(&json!({ "id": "7", "action": "session.get", "inputs": { "session_id": &session_id } }))
+        .send(
+            &json!({ "id": "7", "action": "session.get", "inputs": { "session_id": &session_id } }),
+        )
         .await
         .unwrap();
     assert_eq!(got["data"]["status"], json!("Cancelled"));
@@ -199,11 +236,15 @@ async fn journal_replays_after_reopen_without_replaying_mutations() {
     let dir = tempdir().unwrap();
     {
         let store = SessionStore::open(dir.path()).unwrap();
-        store.create_session("s-1".to_string(), "client-a".to_string()).unwrap();
+        store
+            .create_session("s-1".to_string(), "client-a".to_string())
+            .unwrap();
         store
             .append_event("s-1", "client-a", "turn".to_string(), json!({ "k": "v" }))
             .unwrap();
-        store.close_session("s-1", SessionStatus::Cancelled).unwrap();
+        store
+            .close_session("s-1", SessionStatus::Cancelled)
+            .unwrap();
     }
     // Reopen from the same directory: journal is the source of truth.
     let store = SessionStore::open(dir.path()).unwrap();
@@ -224,7 +265,9 @@ async fn ensure_host_is_idempotent_and_does_not_restart() {
     let sup = Arc::new(Supervisor::new("profile-3".to_string(), dir.path()).unwrap());
     sup.set_host_for_test(Arc::new(NativeHost::default())).await;
     let called = Arc::new(AtomicBool::new(false));
-    let mock = MockLauncher { called: called.clone() };
+    let mock = MockLauncher {
+        called: called.clone(),
+    };
     let result = sup.ensure_host(mock).await;
     assert!(result.is_ok(), "{result:?}");
     assert!(
@@ -240,19 +283,28 @@ async fn unknown_action_is_rejected() {
     let port = spawn_server(sup.clone()).await;
     let secret = sup.server_secret();
     let mut c = Client::connect(port).await.unwrap();
-    assert!(c.hello("client-a", 1, Some(secret)).await.unwrap().get("ok").and_then(Value::as_bool) == Some(true));
+    assert!(
+        c.hello("client-a", 1, Some(secret))
+            .await
+            .unwrap()
+            .get("ok")
+            .and_then(Value::as_bool)
+            == Some(true)
+    );
     let resp = c
         .send(&json!({ "id": "9", "action": "no.such.action", "inputs": {} }))
         .await
         .unwrap();
     assert_eq!(
-        resp.get("error").and_then(|e| e.get("code")).and_then(Value::as_str),
+        resp.get("error")
+            .and_then(|e| e.get("code"))
+            .and_then(Value::as_str),
         Some("LOCAL_COMMAND_INVALID")
     );
 }
 
 #[tokio::test]
-async fn competing_processes_cannot_own_same_profile() {
+async fn competing_owners_in_one_process_are_rejected() {
     let dir = tempdir().unwrap();
     let _first = Supervisor::new("profile-compete".to_string(), dir.path()).unwrap();
     // A second supervisor for the same profile dir must fail fast — the OS
@@ -262,6 +314,65 @@ async fn competing_processes_cannot_own_same_profile() {
         Err(e) => assert_eq!(e.kind(), std::io::ErrorKind::AlreadyExists),
         Ok(_) => panic!("second supervisor must not acquire the profile lock"),
     }
+}
+
+// Executed in a separate test process so killing it cannot run the owner's
+// Rust destructors. The parent keeps stdin open until it terminates the child.
+#[test]
+fn profile_lock_child() {
+    let Some(path) = std::env::var_os("LATTICE_SUPERVISOR_LOCK_TEST_PATH") else {
+        return;
+    };
+    let path = std::path::PathBuf::from(path);
+    let _owner = Supervisor::new("profile-process".to_string(), &path).unwrap();
+    std::fs::write(path.join("lock-owner-ready"), b"ready").unwrap();
+    let mut byte = [0];
+    let _ = std::io::Read::read_exact(&mut std::io::stdin(), &mut byte);
+}
+
+#[test]
+fn competing_process_is_rejected_and_crash_releases_ownership() {
+    struct ChildOwner(std::process::Child);
+    impl Drop for ChildOwner {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    let dir = tempdir().unwrap();
+    let mut child = ChildOwner(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "profile_lock_child", "--nocapture"])
+            .env("LATTICE_SUPERVISOR_LOCK_TEST_PATH", dir.path())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !dir.path().join("lock-owner-ready").exists() {
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "lock owner exited before becoming ready"
+        );
+        assert!(
+            std::time::Instant::now() < deadline,
+            "lock owner did not become ready"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    let conflict = Supervisor::new("profile-process".to_string(), dir.path());
+    match conflict {
+        Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists),
+        Ok(_) => panic!("another process already owns this profile"),
+    }
+
+    child.0.kill().unwrap();
+    child.0.wait().unwrap();
+    assert!(dir.path().join(".supervisor.lock").exists());
+    let _recovered = Supervisor::new("profile-process".to_string(), dir.path()).unwrap();
 }
 
 #[tokio::test]
@@ -294,7 +405,14 @@ async fn idempotent_retry_returns_cached_result() {
     let secret = sup.server_secret();
 
     let mut c = Client::connect(port).await.unwrap();
-    assert!(c.hello("client-a", 1, Some(secret)).await.unwrap().get("ok").and_then(Value::as_bool) == Some(true));
+    assert!(
+        c.hello("client-a", 1, Some(secret))
+            .await
+            .unwrap()
+            .get("ok")
+            .and_then(Value::as_bool)
+            == Some(true)
+    );
 
     let request = json!({
         "id": "1",
@@ -354,7 +472,11 @@ async fn idempotency_survives_restart() {
         // Second supervisor on the same profile dir: retry with the same key
         // must return the cached result (no duplicate session).
         let sup2 = Arc::new(Supervisor::new("profile-restart".to_string(), dir.path()).unwrap());
-        assert_eq!(sup2.server_secret(), secret.as_str(), "server secret must be stable across restart");
+        assert_eq!(
+            sup2.server_secret(),
+            secret.as_str(),
+            "server secret must be stable across restart"
+        );
         // Re-register client on the new supervisor.
         sup2.handle_request(
             "client-a",
@@ -383,7 +505,10 @@ async fn idempotency_survives_restart() {
 
         // Only one session exists across the restart.
         let list = sup2
-            .handle_request("client-a", json!({ "action": "session.list", "inputs": {} }))
+            .handle_request(
+                "client-a",
+                json!({ "action": "session.list", "inputs": {} }),
+            )
             .await
             .unwrap();
         assert_eq!(list["sessions"].as_array().unwrap().len(), 1);
@@ -398,9 +523,23 @@ async fn idempotency_is_client_scoped() {
     let secret = sup.server_secret();
 
     let mut a = Client::connect(port).await.unwrap();
-    assert!(a.hello("client-a", 1, Some(secret)).await.unwrap().get("ok").and_then(Value::as_bool) == Some(true));
+    assert!(
+        a.hello("client-a", 1, Some(secret))
+            .await
+            .unwrap()
+            .get("ok")
+            .and_then(Value::as_bool)
+            == Some(true)
+    );
     let mut b = Client::connect(port).await.unwrap();
-    assert!(b.hello("client-b", 1, Some(secret)).await.unwrap().get("ok").and_then(Value::as_bool) == Some(true));
+    assert!(
+        b.hello("client-b", 1, Some(secret))
+            .await
+            .unwrap()
+            .get("ok")
+            .and_then(Value::as_bool)
+            == Some(true)
+    );
 
     // Client A creates a session with key "shared-key".
     let req_a = json!({
@@ -461,7 +600,11 @@ async fn session_ids_do_not_collide_after_restart() {
 
         // Second supervisor on the same dir: next session ID must not collide.
         let sup2 = Arc::new(Supervisor::new("profile-collide".to_string(), dir.path()).unwrap());
-        assert_eq!(sup2.server_secret(), secret.as_str(), "server secret must be stable across restart");
+        assert_eq!(
+            sup2.server_secret(),
+            secret.as_str(),
+            "server secret must be stable across restart"
+        );
         sup2.handle_request(
             "client-a",
             json!({
@@ -494,7 +637,14 @@ async fn agent_turn_requires_started_host() {
     let secret = sup.server_secret();
 
     let mut c = Client::connect(port).await.unwrap();
-    assert!(c.hello("client-a", 1, Some(secret)).await.unwrap().get("ok").and_then(Value::as_bool) == Some(true));
+    assert!(
+        c.hello("client-a", 1, Some(secret))
+            .await
+            .unwrap()
+            .get("ok")
+            .and_then(Value::as_bool)
+            == Some(true)
+    );
 
     // No host has been started — agent.turn must surface Closed, not panic.
     let resp = c
@@ -509,7 +659,9 @@ async fn agent_turn_requires_started_host() {
         .await
         .unwrap();
     assert_eq!(
-        resp.get("error").and_then(|e| e.get("code")).and_then(Value::as_str),
+        resp.get("error")
+            .and_then(|e| e.get("code"))
+            .and_then(Value::as_str),
         Some("LOCAL_SERVICE_STOPPED")
     );
 }
