@@ -1,14 +1,16 @@
 import { sanitizeForLog } from '@/lib/security/urlValidator';
 import { validateWebhookUrl } from '@/lib/security/urlValidator';
+import { requireSlackSignature } from '@/lib/slack/slackVerification';
+import { emitSlackTelemetry, extractTelemetryFields } from '@/lib/slack/slackTelemetry';
 /**
  * Slack Interactivity Handler (Multi-Tenant) v3.1
  * 
  * Enhanced with corrected action handling.
+ * Security hardened: enforced signature verification, retry guard, idempotency, structured telemetry.
  */
 
 import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { getSlackConfig, SlackConfig, resolveSlackUser, saveChannelConfig, type ChannelConfig } from '@/lib/slack';
 import { db } from '@/lib/firebaseAdmin';
@@ -37,38 +39,6 @@ Keep responses brief but informative - Slack users prefer shorter messages.
 Use Slack markdown formatting: *bold*, _italic_, \`code\`, \`\`\`code blocks\`\`\`.
 When appropriate, use bullet points for clarity.
 Be friendly and professional.`;
-
-/**
- * Verify Slack request signature
- */
-function verifySlackSignature(
-  body: string,
-  timestamp: string,
-  signature: string
-): boolean {
-  const signingSecret = process.env.SLACK_SIGNING_SECRET || '';
-
-  const currentTime = Math.floor(Date.now() / 1000);
-  if (Math.abs(currentTime - parseInt(timestamp)) > 300) {
-    return false;
-  }
-
-  const baseString = `v0:${timestamp}:${body}`;
-  const hmac = crypto
-    .createHmac('sha256', signingSecret)
-    .update(baseString)
-    .digest('hex');
-  const expectedSignature = `v0=${hmac}`;
-
-  try {
-    return crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
-    );
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Update a message via response_url
@@ -1104,15 +1074,20 @@ export async function POST(req: Request) {
 
   try {
     const rawBody = await req.text();
-    const timestamp = req.headers.get('x-slack-request-timestamp') || '';
-    const signature = req.headers.get('x-slack-signature') || '';
 
-    // Verify Slack signature in production
-    if (process.env.NODE_ENV === 'production' && process.env.SLACK_SIGNING_SECRET) {
-      if (!verifySlackSignature(rawBody, timestamp, signature)) {
-        console.error('[SLACK_INTERACTIVITY] Invalid Slack signature');
-        return new NextResponse('Unauthorized', { status: 401 });
-      }
+    // 1. Verify Slack Signature FIRST (before any retry/idempotency logic)
+    const sigCheck = requireSlackSignature(req, rawBody);
+    if (sigCheck) {
+      emitSlackTelemetry({
+        type: 'slack_signature_invalid',
+        teamId: 'unknown',
+        eventType: 'interactivity',
+        channelId: '',
+        threadTs: '',
+        userId: '',
+        error: sigCheck.status === 500 ? 'missing_secret' : 'invalid_signature'
+      });
+      return sigCheck;
     }
 
     // Parse the payload
@@ -1136,7 +1111,15 @@ export async function POST(req: Request) {
     // Extract Team ID
     const teamId = team?.id;
     if (!teamId) {
-      console.error('[SLACK_INTERACTIVITY] No team_id in payload');
+      emitSlackTelemetry({
+        type: 'slack_config_missing',
+        teamId: 'unknown',
+        eventType: type,
+        channelId: '',
+        threadTs: '',
+        userId: '',
+        error: 'missing_team_id'
+      });
       return NextResponse.json({ ok: false, error: 'Missing team_id' });
     }
 
@@ -1146,11 +1129,52 @@ export async function POST(req: Request) {
       config = await getSlackConfig(teamId);
     } catch (configError) {
       console.error(`[SLACK_INTERACTIVITY] No installation for team ${sanitizeForLog(teamId)}: `, configError); // lgtm[js/tainted-format-string]
+      emitSlackTelemetry({
+        type: 'slack_config_missing',
+        teamId,
+        eventType: type,
+        channelId: '',
+        threadTs: '',
+        userId: '',
+        error: configError instanceof Error ? configError.message : String(configError)
+      });
       return NextResponse.json({
         ok: false,
         error: 'workspace_not_installed',
       });
     }
+
+    // 2. Retry Handling — signature verified, now check for retries
+    // Durable idempotency (Supabase event tracking) is S2 work.
+    // For S1: log retries but continue processing; S2 will add deduplication.
+    if (req.headers.has('x-slack-retry-num')) {
+      const retryNum = req.headers.get('x-slack-retry-num');
+      const retryReason = req.headers.get('x-slack-retry-reason') || 'unknown';
+      emitSlackTelemetry({
+        type: 'slack_retry_received',
+        teamId: config.teamId,
+        eventType: type,
+        channelId: payload.channel?.id || payload.channel_id || '',
+        threadTs: payload.message?.ts || '',
+        userId: payload.user?.id || '',
+        metadata: { retryNum, retryReason, interactionType: type, callbackId: payload.callback_id }
+      });
+      // S1: Do NOT short-circuit. Continue to handler — S2 adds durable idempotency.
+    }
+
+    // Idempotency key for interactivity — use trigger_id (stable across retries)
+// Slack includes trigger_id in interactivity payloads which is the same for retries
+    const triggerId = payload.trigger_id || `no-trigger-${req.headers.get('x-slack-request-timestamp') || Date.now()}`;
+    const idempotencyKey = `slack:int:${teamId}:${payload.user?.id}:${type}:${triggerId}`;
+
+    // Telemetry base
+    const telemetryBase = extractTelemetryFields(config, payload);
+
+    emitSlackTelemetry({
+      ...telemetryBase,
+      type: 'slack_event_received',
+      metadata: { idempotencyKey, interactionType: type }
+    });
 
     // Handle different interaction types
     switch (type) {

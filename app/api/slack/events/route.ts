@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { randomUUID } from "crypto";
 import { waitUntil } from "@vercel/functions";
 import { getSlackConfig } from "@/lib/slack/tokenManager";
@@ -9,39 +8,27 @@ import { TrajectoryStep } from "@/lib/agents/core/types";
 import { SlackTraceFormatter } from "@/lib/slack/slackTraceFormatter";
 import { exportTaskTraceToOpik, OpikTracePayload } from "@/lib/telemetry/opikExporter";
 import { recordThreadTerminated } from "@/lib/telemetry/evaluation";
+import { verifySlackSignature, requireSlackSignature } from "@/lib/slack/slackVerification";
+import { emitSlackTelemetry, extractTelemetryFields } from "@/lib/slack/slackTelemetry";
 
 export const maxDuration = 300;
 
-function verifySlackSignature(req: NextRequest, body: string): boolean {
-    const signature = req.headers.get("x-slack-signature");
-    const timestamp = req.headers.get("x-slack-request-timestamp");
-    const secret = process.env.SLACK_SIGNING_SECRET;
-
-    if (!signature || !timestamp || !secret) return false;
-
-    const fiveMinutes = 5 * 60;
-    if (Math.abs(Math.floor(Date.now() / 1000) - parseInt(timestamp, 10)) > fiveMinutes) return false;
-
-    const sigBaseString = `v0:${timestamp}:${body}`;
-    const mySignature = "v0=" + crypto.createHmac("sha256", secret).update(sigBaseString, "utf8").digest("hex");
-    
-    try {
-        return crypto.timingSafeEqual(Buffer.from(mySignature, 'utf8'), Buffer.from(signature, 'utf8'));
-    } catch {
-        return false;
-    }
-}
-
 export async function POST(req: NextRequest) {
-    // 2. Idempotency & Retry Storm Prevention
-    if (req.headers.has("x-slack-retry-num")) {
-        return NextResponse.json({ ok: true });
-    }
-
     const bodyText = await req.text();
-    
-    if (!verifySlackSignature(req, bodyText)) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    // 1. Verify Slack Signature FIRST (before any retry/idempotency logic)
+    const sigCheck = requireSlackSignature(req, bodyText);
+    if (sigCheck) {
+        emitSlackTelemetry({
+            type: 'slack_signature_invalid',
+            teamId: 'unknown',
+            eventType: 'unknown',
+            channelId: '',
+            threadTs: '',
+            userId: '',
+            error: sigCheck.status === 500 ? 'missing_secret' : 'invalid_signature'
+        });
+        return sigCheck;
     }
 
     const payload = JSON.parse(bodyText);
@@ -54,14 +41,82 @@ export async function POST(req: NextRequest) {
         const event = payload.event;
         const teamId = payload.team_id;
 
+        if (!teamId) {
+            emitSlackTelemetry({
+                type: 'slack_config_missing',
+                teamId: 'unknown',
+                eventType: payload.type,
+                channelId: '',
+                threadTs: '',
+                userId: '',
+                error: 'missing_team_id'
+            });
+            return NextResponse.json({ error: "Missing team_id" }, { status: 400 });
+        }
+
+        // Resolve config early for telemetry
+        let slackConfig;
+        try {
+            slackConfig = await getSlackConfig(teamId);
+        } catch (configError) {
+            emitSlackTelemetry({
+                type: 'slack_config_missing',
+                teamId,
+                eventType: payload.type,
+                channelId: '',
+                threadTs: '',
+                userId: '',
+                error: configError instanceof Error ? configError.message : String(configError)
+            });
+            return NextResponse.json({ error: "Workspace not installed" }, { status: 404 });
+        }
+
+        // 2. Retry Handling — signature verified, now check for retries
+        // Durable idempotency (Supabase event_id tracking) is S2 work.
+        // For S1: log retries but continue processing; S2 will add deduplication.
+        if (req.headers.has("x-slack-retry-num")) {
+            const retryNum = req.headers.get("x-slack-retry-num");
+            const retryReason = req.headers.get("x-slack-retry-reason") || 'unknown';
+            emitSlackTelemetry({
+                type: 'slack_retry_received',
+                teamId: slackConfig.teamId,
+                eventType: payload.type,
+                channelId: '',
+                threadTs: '',
+                userId: '',
+                metadata: { retryNum, retryReason, eventId: event.event_id }
+            });
+            // S1: Do NOT short-circuit. Continue to handler — S2 adds durable idempotency.
+        }
+
         if (event.type === "app_mention" || (event.type === "message" && !event.bot_id)) {
+            // Ignore bot's own messages
+            if (event.user === slackConfig.botUserId || event.bot_id) {
+                return NextResponse.json({ ok: true });
+            }
+
+            // Idempotency key
+            const idempotencyKey = `slack:${teamId}:${event.event_id || 'none'}:${event.event_time || 'none'}`;
+
+            // Telemetry base
+            const telemetryBase = extractTelemetryFields({ teamId: slackConfig.teamId, botUserId: slackConfig.botUserId }, event);
+
+            emitSlackTelemetry({
+                ...telemetryBase,
+                type: 'slack_event_received',
+                metadata: { idempotencyKey }
+            });
+
             const processEvent = async () => {
                 try {
-                    const slackConfig = await getSlackConfig(teamId);
-                    
                     if (!slackConfig.workspacePath) {
                         console.error(`[Slack] No workspace path mapped for team ${teamId}`);
-                        return; // Strict tenant resolution: reject without fallback.
+                        emitSlackTelemetry({
+                            ...telemetryBase,
+                            type: 'slack_handler_error',
+                            error: 'missing_workspace_path'
+                        });
+                        return;
                     }
 
                     const postRes = await fetch("https://slack.com/api/chat.postMessage", {
@@ -218,10 +273,22 @@ export async function POST(req: NextRequest) {
                     }
                 } catch (err: any) {
                     console.error("[Slack Event Error]", err);
+                    emitSlackTelemetry({
+                        ...telemetryBase,
+                        type: 'slack_stream_failed',
+                        error: err instanceof Error ? err.message : String(err)
+                    });
                 }
             };
 
-            waitUntil(processEvent());
+            waitUntil(processEvent().catch((err) => {
+                console.error("[Slack Event Error] waitUntil:", err);
+                emitSlackTelemetry({
+                    ...telemetryBase,
+                    type: 'slack_stream_failed',
+                    error: err instanceof Error ? err.message : String(err)
+                });
+            }));
         }
     }
 
