@@ -1342,8 +1342,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
 
-      // Idempotency key: Slack event_id + event_time (unique per event)
-      const idempotencyKey = `slack:${teamId}:${event.event_id || 'none'}:${event.event_time || 'none'}`;
+      // Idempotency key: Slack event_id + event_time from outer envelope (unique per event)
+      // Per Slack Events API spec: event_id and event_time are on the outer callback, not inside event
+      const idempotencyKey = `slack:event:${teamId}:${body.event_id || 'none'}:${body.event_time || 'none'}`;
 
       // Telemetry base fields
       const telemetryBase = extractTelemetryFields(config, event);

@@ -308,7 +308,8 @@ async function buildResponse(
   userId: string,
   channelId: string,
   teamId: string,
-  channelName: string
+  channelName: string,
+  botToken: string
 ): Promise<Record<string, any>> {
   // Handle help command
   if (command === 'help' || fullText === '') {
@@ -459,12 +460,12 @@ async function buildResponse(
       break;
 
     case 'index':
-      // Enable auto-indexing for this channel
-      return handleIndexCommand(channelId, teamId, userId, channelName, args);
+      // Enable auto-indexing for this channel (requires admin)
+      return handleIndexCommand(channelId, teamId, userId, channelName, args, botToken);
 
     case 'stop-indexing':
-      // Disable auto-indexing for this channel
-      return handleStopIndexCommand(channelId, teamId, userId);
+      // Disable auto-indexing for this channel (requires admin)
+      return handleStopIndexCommand(channelId, teamId, userId, botToken);
 
     default:
       // Treat the entire text as a question - auto-detect if code-related
@@ -590,6 +591,8 @@ export async function POST(req: Request) {
         text: '❌ This workspace is not connected to Genie. Please reinstall the app.',
       });
     }
+    // Definite assignment assertion for TypeScript
+    const cfg = config!;
 
     // 2. Retry Handling — signature verified, now check for retries
     // Durable idempotency (Supabase event tracking) is S2 work.
@@ -599,9 +602,9 @@ export async function POST(req: Request) {
       const retryReason = req.headers.get('x-slack-retry-reason') || 'unknown';
       emitSlackTelemetry({
         type: 'slack_retry_received',
-        teamId: config.teamId,
+        teamId: cfg.teamId,
         eventType: 'command',
-        channelId: config.teamId, // slack teamId as channel scope for commands
+        channelId: cfg.teamId, // slack teamId as channel scope for commands
         threadTs: '',
         userId: userId,
         metadata: { retryNum, retryReason, command: text.split(' ')[0] }
@@ -614,7 +617,7 @@ export async function POST(req: Request) {
     const args = parts.slice(1).join(' ');
 
     // Telemetry base
-    const telemetryBase = extractTelemetryFields(config, { type: 'command', channel: channelId, channel_id: channelId, user: userId, ts: '' });
+    const telemetryBase = extractTelemetryFields(cfg, { type: 'command', channel: channelId, channel_id: channelId, user: userId, ts: '' });
 
     // Handle help immediately
     if (command === 'help' || text.trim() === '') {
@@ -635,7 +638,13 @@ export async function POST(req: Request) {
 
     // Idempotency key for commands — use Slack request timestamp (stable across retries)
 // Slack includes x-slack-request-timestamp which is the same for retries of the same request
-    const slackTimestamp = req.headers.get('x-slack-request-timestamp') || Date.now().toString();
+    const slackTimestamp = req.headers.get('x-slack-request-timestamp');
+    if (!slackTimestamp) {
+      return NextResponse.json({
+        response_type: 'ephemeral',
+        text: '❌ Missing x-slack-request-timestamp header.',
+      });
+    }
     const idempotencyKey = `slack:cmd:${teamId}:${userId}:${command}:${slackTimestamp}`;
 
     emitSlackTelemetry({
@@ -672,7 +681,7 @@ export async function POST(req: Request) {
     waitUntil((async () => {
       try {
         console.log('[SLACK_COMMAND] Async processing started for:', command);
-        const response = await buildResponse(command, args, text, userId, channelId, teamId, channelName);
+        const response = await buildResponse(command, args, text, userId, channelId, teamId, channelName, cfg.botToken);
 
         // Send to response_url
         await sendToResponseUrl(responseUrl, response);
@@ -717,15 +726,62 @@ export async function POST(req: Request) {
 }
 
 /**
- * Handle /genie index command - enable auto-indexing for a channel
+ * Check if a Slack user is an admin in the workspace
+ */
+async function isSlackAdmin(botToken: string, teamId: string, userId: string): Promise<boolean> {
+  try {
+    // Check if user is in admin usergroup or is workspace owner/admin
+    // First try to get user info
+    const userInfoRes = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
+      headers: { 'Authorization': `Bearer ${botToken}` }
+    });
+    const userInfo = await userInfoRes.json();
+    if (userInfo.ok && userInfo.user?.is_admin) return true;
+    if (userInfo.ok && userInfo.user?.is_owner) return true;
+    if (userInfo.ok && userInfo.user?.is_primary_owner) return true;
+
+    // Also check if user is in the admin usergroup (ID usually starts with SUP)
+    const usergroupsRes = await fetch(`https://slack.com/api/usergroups.list`, {
+      headers: { 'Authorization': `Bearer ${botToken}` }
+    });
+    const usergroups = await usergroupsRes.json();
+    if (usergroups.ok && usergroups.usergroups) {
+      for (const ug of usergroups.usergroups) {
+        if (ug.name === 'admin' || ug.name === 'administrators') {
+          const membersRes = await fetch(`https://slack.com/api/usergroups.users.list?usergroup=${ug.id}`, {
+            headers: { 'Authorization': `Bearer ${botToken}` }
+          });
+          const members = await membersRes.json();
+          if (members.ok && members.users?.includes(userId)) return true;
+        }
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('[SLACK_COMMAND] Admin check failed:', error);
+    return false;
+  }
+}
+
+/**
+ * Handle /genie index command - enable auto-indexing for a channel (requires admin)
  */
 async function handleIndexCommand(
   channelId: string,
   teamId: string,
   userId: string,
   channelName: string,
-  args: string
+  args: string,
+  botToken: string
 ): Promise<Record<string, any>> {
+  // Require admin permission
+  const isAdmin = await isSlackAdmin(botToken, teamId, userId);
+  if (!isAdmin) {
+    return {
+      response_type: 'ephemeral',
+      text: '❌ Only workspace admins can enable auto-indexing.',
+    };
+  }
   try {
     const { enableIndexingChannel } = await import('@/lib/slack/channelIndexer');
     await enableIndexingChannel(teamId, channelId, channelName, userId);
@@ -762,13 +818,22 @@ async function handleIndexCommand(
 }
 
 /**
- * Handle /genie stop-indexing command - disable auto-indexing for a channel
+ * Handle /genie stop-indexing command - disable auto-indexing for a channel (requires admin)
  */
 async function handleStopIndexCommand(
   channelId: string,
   teamId: string,
-  userId: string
+  userId: string,
+  botToken: string
 ): Promise<Record<string, any>> {
+  // Require admin permission
+  const isAdmin = await isSlackAdmin(botToken, teamId, userId);
+  if (!isAdmin) {
+    return {
+      response_type: 'ephemeral',
+      text: '❌ Only workspace admins can disable auto-indexing.',
+    };
+  }
   try {
     const { stopIndexingChannel } = await import('@/lib/slack/channelIndexer');
     await stopIndexingChannel(teamId, channelId);

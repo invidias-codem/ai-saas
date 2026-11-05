@@ -32,22 +32,51 @@ export interface SlackTelemetryEvent {
   metadata?: Record<string, unknown>
 }
 
-const REDACTED_FIELDS = new Set(['text', 'content', 'prompt', 'response', 'message'])
+const REDACTED_FIELDS = new Set([
+  'text', 'content', 'prompt', 'response', 'message',
+  'body', 'payload', 'user', 'email', 'password',
+  'token', 'secret', 'key', 'authorization', 'cookie',
+  'headers', 'authorization', 'x-slack-signature', 'x-slack-request-timestamp'
+])
+
+const REDACTED_NESTED_PATHS = new Set([
+  'event.text', 'event.content', 'event.prompt', 'event.response', 'event.message',
+  'event.body', 'event.payload', 'event.event', 'event.user', 'event.email',
+  'event.user.id', 'event.user.email',
+  'metadata.text', 'metadata.content', 'metadata.prompt', 'metadata.response', 'metadata.message',
+  'metadata.event.text', 'metadata.event.user', 'metadata.event.email', 'metadata.event.id'
+])
+
+function deepRedact(obj: unknown, path = ''): unknown {
+  if (obj === null || obj === undefined) return obj
+  if (typeof obj === 'string') {
+    if (obj.length > 500) return obj.slice(0, 497) + '…'
+    return obj
+  }
+  if (typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) {
+    return obj.map((item, idx) => deepRedact(item, `${path}[${idx}]`))
+  }
+  const clean: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    const fullPath = path ? `${path}.${key}` : key
+    if (REDACTED_FIELDS.has(key.toLowerCase()) || REDACTED_NESTED_PATHS.has(fullPath.toLowerCase())) {
+      clean[key] = '[REDACTED]'
+    } else {
+      clean[key] = deepRedact(value, fullPath)
+    }
+  }
+  return clean
+}
 
 function redactEvent(event: SlackTelemetryEvent): SlackTelemetryEvent {
   const clean: SlackTelemetryEvent = { ...event }
+  // Redact error message if present
+  if (clean.error) {
+    clean.error = String(clean.error).slice(0, 200)
+  }
   if (clean.metadata) {
-    const cleanMeta: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(clean.metadata)) {
-      if (REDACTED_FIELDS.has(key.toLowerCase())) {
-        cleanMeta[key] = '[REDACTED]'
-      } else if (typeof value === 'string' && value.length > 500) {
-        cleanMeta[key] = value.slice(0, 500) + '…'
-      } else {
-        cleanMeta[key] = value
-      }
-    }
-    clean.metadata = cleanMeta
+    clean.metadata = deepRedact(clean.metadata, 'metadata') as Record<string, unknown>
   }
   return clean
 }

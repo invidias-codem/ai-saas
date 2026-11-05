@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
                 channelId: '',
                 threadTs: '',
                 userId: '',
-                metadata: { retryNum, retryReason, eventId: event.event_id }
+                metadata: { retryNum, retryReason, eventId: payload.event_id }
             });
             // S1: Do NOT short-circuit. Continue to handler — S2 adds durable idempotency.
         }
@@ -95,8 +95,8 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ ok: true });
             }
 
-            // Idempotency key
-            const idempotencyKey = `slack:${teamId}:${event.event_id || 'none'}:${event.event_time || 'none'}`;
+            // Idempotency key: use outer envelope event_id/event_time per Slack Events API spec
+            const idempotencyKey = `slack:event:${teamId}:${payload.event_id || 'none'}:${payload.event_time || 'none'}`;
 
             // Telemetry base
             const telemetryBase = extractTelemetryFields({ teamId: slackConfig.teamId, botUserId: slackConfig.botUserId }, event);
@@ -109,6 +109,47 @@ export async function POST(req: NextRequest) {
 
             const processEvent = async () => {
                 try {
+                    // 1. Resolve actual Slack sender (not installation owner)
+                    // The signature verified Slack sent the event; we must resolve who sent the message
+                    const slackUserId = event.user;
+                    if (!slackUserId) {
+                        emitSlackTelemetry({
+                            ...telemetryBase,
+                            type: 'slack_handler_error',
+                            error: 'missing_slack_user_id'
+                        });
+                        return;
+                    }
+
+                    // Resolve to internal user ID (Clerk/Lattice)
+                    const { resolveSlackUser } = await import('@/lib/slack/userResolver');
+                    const internalUserId = await resolveSlackUser(teamId, slackUserId);
+
+                    // If no internal user resolved, require account linking
+                    if (!internalUserId) {
+                        emitSlackTelemetry({
+                            ...telemetryBase,
+                            type: 'slack_handler_error',
+                            error: 'slack_user_not_linked',
+                            metadata: { slackUserId }
+                        });
+                        // Send ephemeral message to user to link account
+                        await fetch("https://slack.com/api/chat.postEphemeral", {
+                            method: "POST",
+                            headers: {
+                                "Authorization": `Bearer ${slackConfig.botToken}`,
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({
+                                channel: event.channel,
+                                user: slackUserId,
+                                text: "Your Slack account is not linked to Lattice. Please run `/genie link` or contact your admin."
+                            })
+                        });
+                        return;
+                    }
+
+                    // 2. Check workspace path for harness
                     if (!slackConfig.workspacePath) {
                         console.error(`[Slack] No workspace path mapped for team ${teamId}`);
                         emitSlackTelemetry({
@@ -185,14 +226,14 @@ export async function POST(req: NextRequest) {
                       env: 'local',
                       workspaceRoot: slackConfig.workspacePath,
                       workspaceId: slackConfig.workspaceId || undefined,
-                      userId: slackConfig.userId || undefined,
+                      userId: internalUserId,
                       traceId,
                     });
 
                     const userQuery = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
 
                     const agentRes = await generateConversationReply({
-                        userId: slackConfig.userId || `slack-${teamId}`,
+                        userId: internalUserId,
                         clerkUser: null as any,
                         request: {
                             messages: [{ role: 'user', text: userQuery }],

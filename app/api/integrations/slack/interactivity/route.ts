@@ -679,57 +679,22 @@ async function handleBlockActions(
     }
 
     if (action_id === 'engineer_approve') {
-      if (response_url && value) {
-        const { task, plan } = JSON.parse(value);
-
+      // DISABLED: Engineer approval requires Relay-backed approval system (S3+)
+      // This action is disabled until proper authorization and audit trail are implemented
+      if (response_url) {
         await updateMessageViaResponseUrl(response_url, {
-          text: '🚀 *Execution approved!* GenieBot is now working on the codebase...',
+          text: '⚠️ Engineer approval is currently disabled pending Relay-backed authorization (S3+).',
           blocks: [
             {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `🚀 *Approved!* GenieBot is executing the plan for: "${task}"`
+                text: '⚠️ *Engineer Approval Disabled*\n\nThis feature requires Relay-backed authorization with proper audit trail. Not yet implemented in S1.'
               }
             }
           ],
           replace_original: true,
         });
-
-        // Run execution in the background
-        waitUntil((async () => {
-          try {
-            // Dynamic path construction to bypass Turbopack static analysis
-    const scriptSegments = ['.agent', 'skills', 'genie-context', 'scripts', 'engineer.mjs'];
-    const scriptPath = path.join(/*turbopackIgnore: true*/ process.cwd(), ...scriptSegments);
-            // Security fix (CodeQL #31, #23): use execFileSync with array args —
-            // never interpolate user-controlled values into a shell command string.
-            execFileSync('node', [scriptPath, task, '--execute-plan', JSON.stringify(plan)], {
-              cwd: process.cwd(),
-              env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
-            });
-
-            await updateMessageViaResponseUrl(response_url, {
-              text: `✅ *Task Completed!* GenieBot has finished: "${task}"`,
-              blocks: [
-                {
-                  type: 'section',
-                  text: {
-                    type: 'mrkdwn',
-                    text: `✅ *Engineering Task Completed!*\n\n*Task:* ${task}\n\nGenieBot has successfully modified the codebase and verified the changes.`
-                  }
-                }
-              ],
-              replace_original: true
-            });
-          } catch (error: any) {
-            console.error('[SLACK_INTERACTIVITY] Engineering execution failed:', error.message);
-            await updateMessageViaResponseUrl(response_url, {
-              text: `❌ *Execution Failed:* ${error.message}`,
-              replace_original: false // Don't replace the status message, just add an error
-            });
-          }
-        })());
       }
       continue;
     }
@@ -1164,7 +1129,10 @@ export async function POST(req: Request) {
 
     // Idempotency key for interactivity — use trigger_id (stable across retries)
 // Slack includes trigger_id in interactivity payloads which is the same for retries
-    const triggerId = payload.trigger_id || `no-trigger-${req.headers.get('x-slack-request-timestamp') || Date.now()}`;
+    const triggerId = payload.trigger_id;
+    if (!triggerId) {
+      return NextResponse.json({ ok: false, error: 'Missing trigger_id' });
+    }
     const idempotencyKey = `slack:int:${teamId}:${payload.user?.id}:${type}:${triggerId}`;
 
     // Telemetry base
