@@ -12,7 +12,7 @@ import { emitSlackTelemetry, extractTelemetryFields } from '@/lib/slack/slackTel
 import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { getSlackConfig, SlackConfig, resolveSlackUser, saveChannelConfig, type ChannelConfig } from '@/lib/slack';
+import { getSlackConfig, SlackConfig, resolveSlackUser, saveChannelConfig, type ChannelConfig, verifySlackAdmin } from '@/lib/slack';
 import { db } from '@/lib/firebaseAdmin';
 import { createFeedbackBlocks, createStreamer } from '@/lib/slack/assistantHelpers';
 import { supabaseAdmin } from '@/lib/supabaseClient';
@@ -778,6 +778,25 @@ async function handleViewSubmission(
         const metadata = private_metadata ? JSON.parse(private_metadata) : {};
         const { channelId, teamId } = metadata;
 
+        // Verify the teamId matches the verified installation
+        if (teamId !== config.teamId) {
+          console.warn('[SLACK_INTERACTIVITY] Cross-tenant channel config attempt:', { payloadTeamId: teamId, configTeamId: config.teamId, userId: user.id });
+          return {
+            response_action: 'errors',
+            errors: { persona_block: 'Unauthorized: team mismatch.' },
+          };
+        }
+
+        // Verify admin permission using authoritative Slack admin flags
+        const adminCheck = await verifySlackAdmin(config.botToken, user.id);
+        if (!adminCheck.isAdmin) {
+          console.warn('[SLACK_INTERACTIVITY] Non-admin channel config attempt:', { userId: user.id, channelId, reason: adminCheck.reason });
+          return {
+            response_action: 'errors',
+            errors: { persona_block: 'Only workspace admins can modify channel configuration.' },
+          };
+        }
+
         const persona = values.persona_block?.persona_selection?.selected_option?.value;
         const responseStyle = values.style_block?.style_selection?.selected_option?.value;
         const proactiveEnabled = values.proactive_block?.proactive_checkbox?.selected_options?.some((o: any) => o.value === 'enabled') || false;
@@ -789,7 +808,7 @@ async function handleViewSubmission(
             proactiveEnabled
           } as ChannelConfig);
 
-          console.log(`[SLACK_INTERACTIVITY] Saved config for channel ${channelId}`);
+          console.log(`[SLACK_INTERACTIVITY] Saved config for channel ${channelId} by admin ${user.id}`);
         }
 
         return {};
@@ -1128,12 +1147,15 @@ export async function POST(req: Request) {
     }
 
     // Idempotency key for interactivity — use trigger_id (stable across retries)
-// Slack includes trigger_id in interactivity payloads which is the same for retries
+    // Slack includes trigger_id in most interactivity payloads but NOT in block_suggestion (options load requests)
     const triggerId = payload.trigger_id;
-    if (!triggerId) {
+    const requiresTriggerId = type !== 'block_suggestion';
+    if (requiresTriggerId && !triggerId) {
       return NextResponse.json({ ok: false, error: 'Missing trigger_id' });
     }
-    const idempotencyKey = `slack:int:${teamId}:${payload.user?.id}:${type}:${triggerId}`;
+    const idempotencyKey = triggerId
+      ? `slack:int:${teamId}:${payload.user?.id}:${type}:${triggerId}`
+      : `slack:int:${teamId}:${payload.user?.id}:${type}:${Date.now()}`; // fallback for block_suggestion only
 
     // Telemetry base
     const telemetryBase = extractTelemetryFields(config, payload);

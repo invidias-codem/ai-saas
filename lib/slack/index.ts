@@ -53,3 +53,10 @@ export {
   type SlackTelemetryEvent,
   type SlackTelemetryEventType,
 } from './slackTelemetry';
+
+// Admin Verification - Authoritative Slack admin checks
+export {
+  verifySlackAdmin,
+  isSlackAdmin,
+  type SlackAdminCheckResult,
+} from './adminVerification';

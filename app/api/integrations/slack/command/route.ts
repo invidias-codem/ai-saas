@@ -27,7 +27,7 @@ import { emitSlackTelemetry, extractTelemetryFields } from '@/lib/slack/slackTel
 import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
+import { getSlackConfig, SlackConfig, verifySlackAdmin } from '@/lib/slack';
 import { getRandomLoadingMessage } from '@/lib/slack/assistantHelpers';
 import {
   isCodeRelated,
@@ -726,44 +726,6 @@ export async function POST(req: Request) {
 }
 
 /**
- * Check if a Slack user is an admin in the workspace
- */
-async function isSlackAdmin(botToken: string, teamId: string, userId: string): Promise<boolean> {
-  try {
-    // Check if user is in admin usergroup or is workspace owner/admin
-    // First try to get user info
-    const userInfoRes = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
-      headers: { 'Authorization': `Bearer ${botToken}` }
-    });
-    const userInfo = await userInfoRes.json();
-    if (userInfo.ok && userInfo.user?.is_admin) return true;
-    if (userInfo.ok && userInfo.user?.is_owner) return true;
-    if (userInfo.ok && userInfo.user?.is_primary_owner) return true;
-
-    // Also check if user is in the admin usergroup (ID usually starts with SUP)
-    const usergroupsRes = await fetch(`https://slack.com/api/usergroups.list`, {
-      headers: { 'Authorization': `Bearer ${botToken}` }
-    });
-    const usergroups = await usergroupsRes.json();
-    if (usergroups.ok && usergroups.usergroups) {
-      for (const ug of usergroups.usergroups) {
-        if (ug.name === 'admin' || ug.name === 'administrators') {
-          const membersRes = await fetch(`https://slack.com/api/usergroups.users.list?usergroup=${ug.id}`, {
-            headers: { 'Authorization': `Bearer ${botToken}` }
-          });
-          const members = await membersRes.json();
-          if (members.ok && members.users?.includes(userId)) return true;
-        }
-      }
-    }
-    return false;
-  } catch (error) {
-    console.error('[SLACK_COMMAND] Admin check failed:', error);
-    return false;
-  }
-}
-
-/**
  * Handle /genie index command - enable auto-indexing for a channel (requires admin)
  */
 async function handleIndexCommand(
@@ -774,9 +736,9 @@ async function handleIndexCommand(
   args: string,
   botToken: string
 ): Promise<Record<string, any>> {
-  // Require admin permission
-  const isAdmin = await isSlackAdmin(botToken, teamId, userId);
-  if (!isAdmin) {
+  // Require admin permission using authoritative Slack admin flags
+  const adminCheck = await verifySlackAdmin(botToken, userId);
+  if (!adminCheck.isAdmin) {
     return {
       response_type: 'ephemeral',
       text: '❌ Only workspace admins can enable auto-indexing.',
@@ -826,9 +788,9 @@ async function handleStopIndexCommand(
   userId: string,
   botToken: string
 ): Promise<Record<string, any>> {
-  // Require admin permission
-  const isAdmin = await isSlackAdmin(botToken, teamId, userId);
-  if (!isAdmin) {
+  // Require admin permission using authoritative Slack admin flags
+  const adminCheck = await verifySlackAdmin(botToken, userId);
+  if (!adminCheck.isAdmin) {
     return {
       response_type: 'ephemeral',
       text: '❌ Only workspace admins can disable auto-indexing.',

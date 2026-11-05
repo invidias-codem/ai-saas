@@ -1,6 +1,8 @@
 import { sanitizeForLog } from '@/lib/security/urlValidator';
-import { verifySlackSignature, requireSlackSignature } from '@/lib/slack/slackVerification';
-import { emitSlackTelemetry, extractTelemetryFields } from '@/lib/slack/slackTelemetry';
+import { verifySlackSignature, requireSlackSignature } from "@/lib/slack/slackVerification";
+import { emitSlackTelemetry, extractTelemetryFields } from "@/lib/slack/slackTelemetry";
+import { resolveSlackUser } from "@/lib/slack/userResolver";
+import { getWorkspaceAccess } from "@/lib/security/workspaceAccess";
 /**
  * Slack Events API Endpoint (Multi-Tenant) v3.2
  * 
@@ -1331,6 +1333,23 @@ export async function POST(req: Request) {
     }
 
     // ─────────────────────────────────────────────────────────────────
+    // Sender Resolution — map Slack user to internal user (Clerk/Lattice)
+    // ─────────────────────────────────────────────────────────────────
+    let internalUserId: string | null = null;
+    if (body.type === 'event_callback' && body.event?.user) {
+      const slackUserId = body.event.user;
+      internalUserId = await resolveSlackUser(teamId, slackUserId);
+      
+      // Verify workspace authorization if we have a workspaceId
+      if (internalUserId && config.workspaceId) {
+        const workspaceAccess = await getWorkspaceAccess(internalUserId, config.workspaceId);
+        if (!workspaceAccess) {
+          internalUserId = null; // Treat as unlinked
+        }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
     // Handle Events
     // ─────────────────────────────────────────────────────────────────
     if (body.type === 'event_callback') {
@@ -1342,12 +1361,22 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
 
+      // Telemetry base (needs to be available for early error emission)
+      const telemetryBase = extractTelemetryFields(config, event);
+
       // Idempotency key: Slack event_id + event_time from outer envelope (unique per event)
       // Per Slack Events API spec: event_id and event_time are on the outer callback, not inside event
-      const idempotencyKey = `slack:event:${teamId}:${body.event_id || 'none'}:${body.event_time || 'none'}`;
-
-      // Telemetry base fields
-      const telemetryBase = extractTelemetryFields(config, event);
+      // Require both fields - no fallback to "none" (S2 will persist keys)
+      if (!body.event_id || !body.event_time) {
+        emitSlackTelemetry({
+          ...telemetryBase,
+          type: 'slack_handler_error',
+          error: 'missing_event_id_or_time',
+          metadata: { hasEventId: !!body.event_id, hasEventTime: !!body.event_time }
+        });
+        return NextResponse.json({ ok: true });
+      }
+      const idempotencyKey = `slack:event:${teamId}:${body.event_id}:${body.event_time}`;
 
       // Process event asynchronously
       const responsePromise = (async () => {

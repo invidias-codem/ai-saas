@@ -10,6 +10,7 @@ import { exportTaskTraceToOpik, OpikTracePayload } from "@/lib/telemetry/opikExp
 import { recordThreadTerminated } from "@/lib/telemetry/evaluation";
 import { verifySlackSignature, requireSlackSignature } from "@/lib/slack/slackVerification";
 import { emitSlackTelemetry, extractTelemetryFields } from "@/lib/slack/slackTelemetry";
+import { getWorkspaceAccess } from "@/lib/security/workspaceAccess";
 
 export const maxDuration = 300;
 
@@ -95,11 +96,21 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ ok: true });
             }
 
-            // Idempotency key: use outer envelope event_id/event_time per Slack Events API spec
-            const idempotencyKey = `slack:event:${teamId}:${payload.event_id || 'none'}:${payload.event_time || 'none'}`;
-
-            // Telemetry base
+            // Telemetry base (needs to be available for early error emission)
             const telemetryBase = extractTelemetryFields({ teamId: slackConfig.teamId, botUserId: slackConfig.botUserId }, event);
+
+            // Idempotency key: use outer envelope event_id/event_time per Slack Events API spec
+            // Require both fields - no fallback to "none" (S2 will persist keys)
+            if (!payload.event_id || !payload.event_time) {
+                emitSlackTelemetry({
+                    ...telemetryBase,
+                    type: 'slack_handler_error',
+                    error: 'missing_event_id_or_time',
+                    metadata: { hasEventId: !!payload.event_id, hasEventTime: !!payload.event_time }
+                });
+                return NextResponse.json({ ok: true });
+            }
+            const idempotencyKey = `slack:event:${teamId}:${payload.event_id}:${payload.event_time}`;
 
             emitSlackTelemetry({
                 ...telemetryBase,
@@ -149,7 +160,33 @@ export async function POST(req: NextRequest) {
                         return;
                     }
 
-                    // 2. Check workspace path for harness
+                    // 2. Verify workspace authorization for resolved internal user
+                    // Fail closed if user is not a member of the workspace associated with this Slack installation
+                    if (slackConfig.workspaceId) {
+                        const workspaceAccess = await getWorkspaceAccess(internalUserId, slackConfig.workspaceId);
+                        if (!workspaceAccess) {
+                            emitSlackTelemetry({
+                                ...telemetryBase,
+                                type: 'slack_handler_error',
+                                error: 'workspace_access_denied',
+                                metadata: { internalUserId, workspaceId: slackConfig.workspaceId }
+                            });
+                            // Send ephemeral message to user
+                            await fetch("https://slack.com/api/chat.postEphemeral", {
+                                method: "POST",
+                                headers: {
+                                    "Authorization": `Bearer ${slackConfig.botToken}`,
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify({
+                                    channel: event.channel,
+                                    user: slackUserId,
+                                    text: "You don't have access to this workspace. Contact your admin."
+                                })
+                            });
+                            return;
+                        }
+                    }
                     if (!slackConfig.workspacePath) {
                         console.error(`[Slack] No workspace path mapped for team ${teamId}`);
                         emitSlackTelemetry({

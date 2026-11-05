@@ -45,11 +45,35 @@ jest.mock('next/server', () => {
     };
 });
 
-// Mock dependencies
-jest.mock('@/lib/slack/tokenManager', () => ({
-    getSlackConfig: jest.fn(),
+// Mock the shared Slack verification to always pass in tests
+jest.mock('@/lib/slack/slackVerification', () => ({
+  requireSlackSignature: jest.fn().mockReturnValue(null),
+  verifySlackSignature: jest.fn().mockReturnValue({ valid: true }),
 }));
 
+// Mock the shared Slack telemetry
+jest.mock('@/lib/slack/slackTelemetry', () => ({
+  emitSlackTelemetry: jest.fn(),
+  extractTelemetryFields: jest.fn().mockReturnValue({
+    teamId: 'T123ABC456',
+    eventType: 'interactivity',
+    channelId: 'C_CHANNEL_123',
+    threadTs: '',
+    userId: 'U_USER_123'
+  }),
+}));
+
+// Mock the token manager
+jest.mock('@/lib/slack/tokenManager', () => ({
+  getSlackConfig: jest.fn(),
+}));
+
+// Mock admin verification
+jest.mock('@/lib/slack/adminVerification', () => ({
+  verifySlackAdmin: jest.fn().mockResolvedValue({ isAdmin: true, reason: 'workspace_admin' }),
+}));
+
+// Mock Google Generative AI
 jest.mock('@google/generative-ai', () => {
     // Return a mock class
     return {
@@ -62,8 +86,15 @@ jest.mock('@google/generative-ai', () => {
                 }),
             }),
         })),
-        HarmCategory: {},
-        HarmBlockThreshold: {},
+        HarmCategory: {
+            HARM_CATEGORY_HARASSMENT: 'HARM_CATEGORY_HARASSMENT',
+            HARM_CATEGORY_HATE_SPEECH: 'HARM_CATEGORY_HATE_SPEECH',
+            HARM_CATEGORY_SEXUALLY_EXPLICIT: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
+            HARM_CATEGORY_DANGEROUS_CONTENT: 'HARM_CATEGORY_DANGEROUS_CONTENT',
+        },
+        HarmBlockThreshold: {
+            BLOCK_MEDIUM_AND_ABOVE: 'BLOCK_MEDIUM_AND_ABOVE',
+        },
     };
 });
 
@@ -77,7 +108,7 @@ import { POST as POST_INTERACTIVITY } from '@/app/api/integrations/slack/interac
 describe('Slack Engineering Integration', () => {
     const mockSlackConfig = {
         teamId: 'T123ABC456',
-        botToken: 'xoxb-test-token',
+        botToken: '«redacted:xox…»',
     };
 
     beforeEach(() => {
@@ -120,15 +151,33 @@ describe('Slack Engineering Integration', () => {
         });
     };
 
-    // Helper to bypass signature verification in tests
-    const bypassSignature = () => {
-        const crypto = require('crypto');
-        jest.spyOn(crypto, 'timingSafeEqual').mockReturnValue(true);
+    const createInteractivityRequest = (actionId: string, value: string) => {
+        const payload = {
+            type: 'block_actions',
+            team: { id: 'T123ABC456' },
+            user: { id: 'U_TEST' },
+            trigger_id: 'trg_TEST',
+            response_url: 'https://hooks.slack.com/actions/test',
+            actions: [{ action_id: actionId, value: value }],
+        };
+
+        const body = new URLSearchParams({
+            payload: JSON.stringify(payload)
+        }).toString();
+
+        return new Request('http://localhost/api/integrations/slack/interactivity', {
+            method: 'POST',
+            body,
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'x-slack-request-timestamp': Math.floor(Date.now() / 1000).toString(),
+                'x-slack-signature': 'v0=test-signature',
+            }
+        });
     };
 
     describe('/genie engineer', () => {
         it('should calculate a plan and return blocks with approval buttons', async () => {
-            bypassSignature();
             const request = createCommandRequest('engineer Add login page');
             const response = await POST_COMMAND(request);
             const data = await response.json();
@@ -160,7 +209,6 @@ describe('Slack Engineering Integration', () => {
         });
 
         it('should return ephemeral error if task is missing', async () => {
-            bypassSignature();
             const request = createCommandRequest('engineer'); // no task
             const response = await POST_COMMAND(request);
             const data = await response.json();
@@ -187,62 +235,29 @@ describe('Slack Engineering Integration', () => {
     });
 
     describe('Interactivity', () => {
-        const createInteractivityRequest = (actionId: string, value: string) => {
-            const payload = {
-                type: 'block_actions',
-                team: { id: 'T123ABC456' },
-                user: { id: 'U_TEST', },
-                response_url: 'https://hooks.slack.com/actions/test',
-                actions: [{ action_id: actionId, value: value }],
-            };
-
-            const body = new URLSearchParams({
-                payload: JSON.stringify(payload)
-            }).toString();
-
-            return new Request('http://localhost/api/integrations/slack/interactivity', {
-                method: 'POST',
-                body,
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'x-slack-request-timestamp': Math.floor(Date.now() / 1000).toString(),
-                    'x-slack-signature': 'v0=test-signature',
-                }
-            });
-        };
-
-        it('should execute the plan when approved', async () => {
-            bypassSignature();
+        it('should return disabled message for engineer_approve (S3+ Relay-backed approval required)', async () => {
             const plan = { task: 'test', plan: { steps: [] } };
             const request = createInteractivityRequest('engineer_approve', JSON.stringify(plan));
 
             const response = await POST_INTERACTIVITY(request);
             expect(response.status).toBe(200);
 
-            // Immediate update to "Approved"
-            // Wait for async
-            await new Promise(r => setTimeout(r, 200));
+            await new Promise(r => setTimeout(r, 100));
 
-            // 1. fetch called to update to "Approved..."
-            // 2. fetch called to update to "Completed..." (after async exec)
-
+            // Should return disabled message, NOT execute plan
             expect(global.fetch).toHaveBeenCalledWith(
                 'https://hooks.slack.com/actions/test',
                 expect.objectContaining({
-                    body: expect.stringContaining('Approved!'),
+                    body: expect.stringContaining('Engineer Approval Disabled'),
                 })
             );
 
+            // execFileSync should NOT be called
             const { execFileSync } = require('child_process');
-            expect(execFileSync).toHaveBeenCalledWith(
-                'node',
-                expect.arrayContaining(['--execute-plan']),
-                expect.anything()
-            );
+            expect(execFileSync).not.toHaveBeenCalled();
         });
 
         it('should cancel the task when cancelled', async () => {
-            bypassSignature();
             const request = createInteractivityRequest('engineer_cancel', 'test task');
             const response = await POST_INTERACTIVITY(request);
             expect(response.status).toBe(200);
