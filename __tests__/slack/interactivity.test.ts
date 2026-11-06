@@ -155,6 +155,7 @@ describe('Slack Interactivity Handler', () => {
           channel: { id: 'C_CHANNEL_123' },
           message: { ts: '1234567890.123456', text: 'Original message' },
           response_url: 'https://hooks.slack.com/actions/test',
+          trigger_id: 'trigger_123',
           actions: [
             {
               action_id: 'feedback_helpful',
@@ -207,6 +208,7 @@ describe('Slack Interactivity Handler', () => {
           team: { id: 'T123ABC456' },
           user: { id: 'U_USER_123' },
           response_url: 'https://hooks.slack.com/actions/test',
+          trigger_id: 'trigger_123',
           actions: [
             {
               action_id: 'regenerate_response',
@@ -263,6 +265,7 @@ describe('Slack Interactivity Handler', () => {
           channel: { id: 'C_CHANNEL_123' },
           message: { ts: '1234567890.123456' },
           response_url: 'https://hooks.slack.com/actions/test',
+          trigger_id: 'trigger_123',
           actions: [
             {
               action_id: 'save_to_memory',
@@ -324,6 +327,7 @@ describe('Slack Interactivity Handler', () => {
         type: 'view_submission',
         team: { id: 'T123ABC456' },
         user: { id: 'U_USER_123' },
+        trigger_id: 'trigger_123',
         view: {
           callback_id: 'settings_modal',
           state: {
@@ -364,6 +368,7 @@ describe('Slack Interactivity Handler', () => {
         type: 'view_submission',
         team: { id: 'T123ABC456' },
         user: { id: 'U_USER_123' },
+        trigger_id: 'trigger_123',
         view: {
           callback_id: 'settings_modal',
           state: { values: {} },
@@ -411,6 +416,7 @@ describe('Slack Interactivity Handler', () => {
         callback_id: 'summarize_message',
         team: { id: 'T123ABC456' },
         user: { id: 'U_USER_123' },
+        trigger_id: 'trigger_123',
         channel: { id: 'C_CHANNEL_123' },
         message: {
           text: 'This is a long message that needs to be summarized.',

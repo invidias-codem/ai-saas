@@ -1364,6 +1364,26 @@ export async function POST(req: Request) {
       // Telemetry base (needs to be available for early error emission)
       const telemetryBase = extractTelemetryFields(config, event);
 
+      // Fail closed: protected features require linked internal user + workspace access
+      // file_shared reads file content; app_mention/message read history/memory;
+      // workflow_step_execute executes actions. Deny if not linked or no workspace.
+      if (
+        ['app_mention', 'message', 'file_shared', 'workflow_step_execute'].includes(event.type) &&
+        (!internalUserId || !config.workspaceId)
+      ) {
+        emitSlackTelemetry({
+          ...telemetryBase,
+          type: 'slack_handler_error',
+          error: 'unauthorized_protected_feature',
+          metadata: {
+            eventType: event.type,
+            hasInternalUser: !!internalUserId,
+            hasWorkspaceId: !!config.workspaceId,
+          },
+        });
+        return NextResponse.json({ ok: true });
+      }
+
       // Idempotency key: Slack event_id + event_time from outer envelope (unique per event)
       // Per Slack Events API spec: event_id and event_time are on the outer callback, not inside event
       // Require both fields - no fallback to "none" (S2 will persist keys)
@@ -1431,11 +1451,11 @@ export async function POST(req: Request) {
               console.log('[SLACK_EVENTS] Unhandled event type:', event.type);
           }
         } catch (handlerError) {
-          console.error('[SLACK_EVENTS] Event handler error:', handlerError);
+          console.error('[SLACK_EVENTS] Event handler error: handler_error');
           emitSlackTelemetry({
             ...telemetryBase,
             type: 'slack_handler_error',
-            error: handlerError instanceof Error ? handlerError.message : String(handlerError)
+            error: 'handler_error',
           });
         }
       })();
@@ -1450,7 +1470,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
-    console.error('[SLACK_EVENTS_ERROR]', error);
+    console.error('[SLACK_EVENTS_ERROR]', 'internal_error');
     return new NextResponse(
       JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }

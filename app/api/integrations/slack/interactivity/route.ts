@@ -65,7 +65,7 @@ async function updateMessageViaResponseUrl(
       body: JSON.stringify(payload),
     });
   } catch (error) {
-    console.error('[SLACK_INTERACTIVITY] Failed to update message:', error);
+    console.error('[SLACK_INTERACTIVITY] Failed to update message: update_failed');
   }
 }
 
@@ -856,7 +856,7 @@ async function handleViewSubmission(
           });
         }
       } catch (e) {
-        console.error('[WORKFLOW] Error updating step:', e);
+        console.error('[WORKFLOW] Error updating step: update_failed');
       }
       return {};
 

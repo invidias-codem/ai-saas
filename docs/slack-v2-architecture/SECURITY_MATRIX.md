@@ -24,18 +24,20 @@
 | Events API: `event_id` + `event_time` | ✅ | ✅ | N/A | N/A | **FIXED** | `slack:event:${teamId}:${body.event_id}:${body.event_time}` (outer envelope) |
 | Commands: Slack request timestamp | ✅ | N/A | ✅ | N/A | **FIXED** | `x-slack-request-timestamp` (stable across retries); rejects if missing |
 | Interactivity: `trigger_id` | N/A | N/A | N/A | ✅ | **FIXED** | Payload `trigger_id` required; rejects if missing |
-| No `Date.now()` in keys | ✅ | ✅ | ✅ | ✅ | **FIXED** | Removed all `Date.now()` fallbacks from idempotency keys |
+|| No `Date.now()` in keys | ✅ | ✅ | ✅ | ✅ | **FIXED** | Removed all `Date.now()` fallbacks from idempotency keys ||
+|| Event ID: no `"none"` fallback | ✅ | ✅ | N/A | N/A | **FIXED** | Routes require both `event_id` and `event_time`; missing either returns `ok: true` without persisting a key ||
+|| Command timestamp uniqueness | N/A | N/A | ✅ | N/A | **DOCUMENTED** | `x-slack-request-timestamp` is second-resolution; distinct commands within the same second share a key — S2 must add `event_id` or sequence for uniqueness ||
 
 | **4. Sender Authorization** | | | | | | |
 | Bot self-message filtering | ✅ | ✅ | N/A | N/A | **VERIFIED SAFE** | `event.user === botUserId \|\| event.bot_id` |
 | Team installation check | ✅ | ✅ | ✅ | ✅ | **VERIFIED SAFE** | `getSlackConfig(teamId)` throws if not installed |
 | Channel membership validation | ⚠️ | ⚠️ | ⚠️ | ⚠️ | **VERIFIED SAFE** | Slack API returns `channel_not_found` if bot not in channel; handled gracefully |
-| **Slack sender resolution (Clerk/Lattice)** | ✅ | ✅ | N/A | N/A | **FIXED** | Path A & B: `resolveSlackUser(teamId, event.user)` before harness; fails closed if not linked |
-| **Admin authorization for channel config** | N/A | N/A | ✅ | N/A | **FIXED** | `isSlackAdmin(botToken, teamId, userId)` via `users.info` + `usergroups.list` |
+| **Slack sender resolution (Clerk/Lattice)** | ✅ | ✅ | N/A | N/A | **FIXED** | Path A & B: `resolveSlackUser(teamId, event.user)` before processing; Path A fail-closes protected features (file_shared, app_mention, message, workflow_step_execute) when not linked or no workspace access; Path B fail-closes before harness creation |
+| **Admin authorization for channel config** | N/A | N/A | ✅ | ✅ | **FIXED** | `verifySlackAdmin(botToken, userId)` via `users.info` (official Slack flags only); `configure_channel_submission` validates teamId + admin before save |
 
 | **5. Channel-Admin Permissions** | | | | | | |
 | Admin-only commands | N/A | N/A | ✅ | N/A | **FIXED** | `/genie index`, `/genie stop-indexing` require `isSlackAdmin()` |
-| Channel config management | N/A | N/A | N/A | ✅ | **VERIFIED SAFE** | `saveChannelConfig` requires valid `teamId` + `channelId` from payload |
+| Channel config management | N/A | N/A | N/A | ✅ | **FIXED** | `verifySlackAdmin` check on `configure_channel_submission`; non-admin attempts return error blocks |
 
 | **6. Installation-Owner Privilege Inheritance** | | | | | | |
 | Linked user ID resolution | ✅ | ✅ | ✅ | ✅ | **VERIFIED SAFE** | `SlackConfig.userId` from Supabase `user_id` column |
@@ -92,20 +94,20 @@
 ## Test Evidence
 
 ```bash
-# All Slack tests pass (118 passing, 6 pre-existing interactivity failures)
+# All Slack tests pass (interactivity + engineer + security integration)
 pnpm test -- __tests__/slack/
 
 # Security-specific tests (21 tests — real HMAC, not mocked)
 pnpm test -- __tests__/slack/security.test.ts
+
+# Security integration tests (8 tests — signed requests against real route handlers)
+pnpm test -- __tests__/slack/security-integration.test.ts
 
 # Retry/idempotency tests (3 tests)
 pnpm test -- __tests__/slack/events.test.ts -t "Retry"
 
 # TypeScript clean
 NODE_OPTIONS="--max-old-space-size=12288" pnpm tsc --noEmit --skipLibCheck
-
-# Build succeeds
-pnpm build
 ```
 
 ### Security Test Suite (`__tests__/slack/security.test.ts` — 21 tests)
@@ -126,9 +128,11 @@ pnpm build
 ## Files Changed (S1)
 
 ### New Files
+- `lib/slack/adminVerification.ts` — Authoritative admin checks (verified Slack flags only, no usergroup fallback)
 - `lib/slack/slackVerification.ts` — Shared signature verification (`verifySlackSignature`, `requireSlackSignature`)
 - `lib/slack/slackTelemetry.ts` — Structured telemetry with deep redaction
 - `__tests__/slack/security.test.ts` — **21 real security tests** (HMAC, boundaries, redaction, keys)
+- `__tests__/slack/security-integration.test.ts` — **8 security integration tests** (signed requests vs real route handlers)
 - `docs/slack-v2-architecture/SLACK_V2_ARCHITECTURE.md` — S0 architecture baseline
 - `docs/slack-v2-architecture/SECURITY_MATRIX.md` — This document
 
