@@ -1,6 +1,8 @@
 import { execFileSync } from 'child_process';
 import path from 'path';
 import { validateWebhookUrl } from '@/lib/security/urlValidator';
+import { requireSlackSignature } from '@/lib/slack/slackVerification';
+import { emitSlackTelemetry, extractTelemetryFields } from '@/lib/slack/slackTelemetry';
 /**
  * Slack Slash Command Handler (Multi-Tenant) v3.1
  * 
@@ -19,13 +21,13 @@ import { validateWebhookUrl } from '@/lib/security/urlValidator';
  * - /genie explain [topic/code] - Get an explanation
  * - /genie summarize [text] - Summarize text
  * - /genie [anything] - Treat as a question (auto-detects code)
+ * Security hardened: enforced signature verification, retry guard, idempotency, structured telemetry.
  */
 
 import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import crypto from 'crypto';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
-import { getSlackConfig, SlackConfig } from '@/lib/slack/tokenManager';
+import { getSlackConfig, SlackConfig, verifySlackAdmin } from '@/lib/slack';
 import { getRandomLoadingMessage } from '@/lib/slack/assistantHelpers';
 import {
   isCodeRelated,
@@ -78,38 +80,6 @@ Keep responses brief but informative - Slack users prefer shorter messages.
 Use Slack markdown formatting: *bold*, _italic_, \`code\`, \`\`\`code blocks\`\`\`.
 When appropriate, use bullet points for clarity.
 Be friendly and professional.`;
-
-/**
- * Verify Slack request signature
- */
-function verifySlackSignature(
-  body: string,
-  timestamp: string,
-  signature: string
-): boolean {
-  const signingSecret = process.env.SLACK_SIGNING_SECRET || '';
-
-  const currentTime = Math.floor(Date.now() / 1000);
-  if (Math.abs(currentTime - parseInt(timestamp)) > 300) {
-    return false;
-  }
-
-  const baseString = `v0:${timestamp}:${body}`;
-  const hmac = crypto
-    .createHmac('sha256', signingSecret)
-    .update(baseString)
-    .digest('hex');
-  const expectedSignature = `v0=${hmac}`;
-
-  try {
-    return crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expectedSignature)
-    );
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Send response to Slack via response_url
@@ -338,7 +308,8 @@ async function buildResponse(
   userId: string,
   channelId: string,
   teamId: string,
-  channelName: string
+  channelName: string,
+  botToken: string
 ): Promise<Record<string, any>> {
   // Handle help command
   if (command === 'help' || fullText === '') {
@@ -489,12 +460,12 @@ async function buildResponse(
       break;
 
     case 'index':
-      // Enable auto-indexing for this channel
-      return handleIndexCommand(channelId, teamId, userId, channelName, args);
+      // Enable auto-indexing for this channel (requires admin)
+      return handleIndexCommand(channelId, teamId, userId, channelName, args, botToken);
 
     case 'stop-indexing':
-      // Disable auto-indexing for this channel
-      return handleStopIndexCommand(channelId, teamId, userId);
+      // Disable auto-indexing for this channel (requires admin)
+      return handleStopIndexCommand(channelId, teamId, userId, botToken);
 
     default:
       // Treat the entire text as a question - auto-detect if code-related
@@ -558,15 +529,20 @@ export async function POST(req: Request) {
 
   try {
     const rawBody = await req.text();
-    const timestamp = req.headers.get('x-slack-request-timestamp') || '';
-    const signature = req.headers.get('x-slack-signature') || '';
 
-    // Verify signature in production
-    if (process.env.NODE_ENV === 'production' && process.env.SLACK_SIGNING_SECRET) {
-      if (!verifySlackSignature(rawBody, timestamp, signature)) {
-        console.error('[SLACK_COMMAND] Invalid signature');
-        return new NextResponse('Unauthorized', { status: 401 });
-      }
+    // 1. Verify Slack Signature FIRST (before any retry/idempotency logic)
+    const sigCheck = requireSlackSignature(req, rawBody);
+    if (sigCheck) {
+      emitSlackTelemetry({
+        type: 'slack_signature_invalid',
+        teamId: 'unknown',
+        eventType: 'command',
+        channelId: '',
+        threadTs: '',
+        userId: '',
+        error: sigCheck.status === 500 ? 'missing_secret' : 'invalid_signature'
+      });
+      return sigCheck;
     }
 
     // Parse form data
@@ -580,6 +556,15 @@ export async function POST(req: Request) {
 
     // Validate team_id
     if (!teamId) {
+      emitSlackTelemetry({
+        type: 'slack_config_missing',
+        teamId: 'unknown',
+        eventType: 'command',
+        channelId: '',
+        threadTs: '',
+        userId: '',
+        error: 'missing_team_id'
+      });
       return NextResponse.json({
         response_type: 'ephemeral',
         text: '❌ Missing team information.',
@@ -592,18 +577,55 @@ export async function POST(req: Request) {
       config = await getSlackConfig(teamId);
     } catch (error: any) {
       console.error('[SLACK_COMMAND] Config error:', error.message);
+      emitSlackTelemetry({
+        type: 'slack_config_missing',
+        teamId,
+        eventType: 'command',
+        channelId,
+        threadTs: '',
+        userId,
+        error: error.message
+      });
       return NextResponse.json({
         response_type: 'ephemeral',
         text: '❌ This workspace is not connected to Genie. Please reinstall the app.',
       });
+    }
+    // Definite assignment assertion for TypeScript
+    const cfg = config!;
+
+    // 2. Retry Handling — signature verified, now check for retries
+    // Durable idempotency (Supabase event tracking) is S2 work.
+    // For S1: log retries but continue processing; S2 will add deduplication.
+    if (req.headers.has('x-slack-retry-num')) {
+      const retryNum = req.headers.get('x-slack-retry-num');
+      const retryReason = req.headers.get('x-slack-retry-reason') || 'unknown';
+      emitSlackTelemetry({
+        type: 'slack_retry_received',
+        teamId: cfg.teamId,
+        eventType: 'command',
+        channelId: cfg.teamId, // slack teamId as channel scope for commands
+        threadTs: '',
+        userId: userId,
+        metadata: { retryNum, retryReason, command: text.split(' ')[0] }
+      });
+      // S1: Do NOT short-circuit. Continue to handler — S2 adds durable idempotency.
     }
 
     const parts = text.trim().split(/\s+/);
     const command = parts[0] || '';
     const args = parts.slice(1).join(' ');
 
+    // Telemetry base
+    const telemetryBase = extractTelemetryFields(cfg, { type: 'command', channel: channelId, channel_id: channelId, user: userId, ts: '' });
+
     // Handle help immediately
     if (command === 'help' || text.trim() === '') {
+      emitSlackTelemetry({
+        ...telemetryBase,
+        type: 'slack_event_received',
+        metadata: { command: 'help' }
+      });
       return NextResponse.json(getHelpMessage());
     }
 
@@ -613,6 +635,23 @@ export async function POST(req: Request) {
         text: '❌ Unable to process request. Please try again.',
       });
     }
+
+    // Idempotency key for commands — use Slack request timestamp (stable across retries)
+// Slack includes x-slack-request-timestamp which is the same for retries of the same request
+    const slackTimestamp = req.headers.get('x-slack-request-timestamp');
+    if (!slackTimestamp) {
+      return NextResponse.json({
+        response_type: 'ephemeral',
+        text: '❌ Missing x-slack-request-timestamp header.',
+      });
+    }
+    const idempotencyKey = `slack:cmd:${teamId}:${userId}:${command}:${slackTimestamp}`;
+
+    emitSlackTelemetry({
+      ...telemetryBase,
+      type: 'slack_event_received',
+      metadata: { idempotencyKey, command, argsLength: args.length }
+    });
 
     // Determine loading message
     let loadingMessage: string;
@@ -625,7 +664,7 @@ export async function POST(req: Request) {
         review: 'review',
         test: 'testing',
         optimize: 'optimization',
-        engineer: 'generation', // Treat engineer as generation or add new intent
+        engineer: 'generation',
       };
       loadingMessage = command === 'engineer'
         ? '🦞 Planning engineering task...'
@@ -642,16 +681,31 @@ export async function POST(req: Request) {
     waitUntil((async () => {
       try {
         console.log('[SLACK_COMMAND] Async processing started for:', command);
-        const response = await buildResponse(command, args, text, userId, channelId, teamId, channelName);
+        const response = await buildResponse(command, args, text, userId, channelId, teamId, channelName, cfg.botToken);
 
         // Send to response_url
         await sendToResponseUrl(responseUrl, response);
         console.log('[SLACK_COMMAND] Async response sent successfully');
+        
+        emitSlackTelemetry({
+          ...telemetryBase,
+          type: 'slack_stream_completed',
+          durationMs: Date.now() - startTime,
+          metadata: { command, idempotencyKey }
+        });
       } catch (error: any) {
         console.error('[SLACK_COMMAND] Async processing error:', error.message);
         await sendToResponseUrl(responseUrl, {
           response_type: 'ephemeral',
           text: `❌ Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`,
+        });
+        
+        emitSlackTelemetry({
+          ...telemetryBase,
+          type: 'slack_stream_failed',
+          durationMs: Date.now() - startTime,
+          error: error.message,
+          metadata: { command, idempotencyKey }
         });
       }
     })());
@@ -672,15 +726,24 @@ export async function POST(req: Request) {
 }
 
 /**
- * Handle /genie index command - enable auto-indexing for a channel
+ * Handle /genie index command - enable auto-indexing for a channel (requires admin)
  */
 async function handleIndexCommand(
   channelId: string,
   teamId: string,
   userId: string,
   channelName: string,
-  args: string
+  args: string,
+  botToken: string
 ): Promise<Record<string, any>> {
+  // Require admin permission using authoritative Slack admin flags
+  const adminCheck = await verifySlackAdmin(botToken, userId);
+  if (!adminCheck.isAdmin) {
+    return {
+      response_type: 'ephemeral',
+      text: '❌ Only workspace admins can enable auto-indexing.',
+    };
+  }
   try {
     const { enableIndexingChannel } = await import('@/lib/slack/channelIndexer');
     await enableIndexingChannel(teamId, channelId, channelName, userId);
@@ -717,13 +780,22 @@ async function handleIndexCommand(
 }
 
 /**
- * Handle /genie stop-indexing command - disable auto-indexing for a channel
+ * Handle /genie stop-indexing command - disable auto-indexing for a channel (requires admin)
  */
 async function handleStopIndexCommand(
   channelId: string,
   teamId: string,
-  userId: string
+  userId: string,
+  botToken: string
 ): Promise<Record<string, any>> {
+  // Require admin permission using authoritative Slack admin flags
+  const adminCheck = await verifySlackAdmin(botToken, userId);
+  if (!adminCheck.isAdmin) {
+    return {
+      response_type: 'ephemeral',
+      text: '❌ Only workspace admins can disable auto-indexing.',
+    };
+  }
   try {
     const { stopIndexingChannel } = await import('@/lib/slack/channelIndexer');
     await stopIndexingChannel(teamId, channelId);

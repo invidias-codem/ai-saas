@@ -5,6 +5,24 @@
 
 // NextResponse is mocked globally in jest.setup.js
 
+// Mock the shared Slack verification to always pass in tests
+jest.mock('@/lib/slack/slackVerification', () => ({
+  requireSlackSignature: jest.fn().mockReturnValue(null),
+  verifySlackSignature: jest.fn().mockReturnValue({ valid: true }),
+}));
+
+// Mock the shared Slack telemetry
+jest.mock('@/lib/slack/slackTelemetry', () => ({
+  emitSlackTelemetry: jest.fn(),
+  extractTelemetryFields: jest.fn().mockReturnValue({
+    teamId: 'T123ABC456',
+    eventType: 'event_callback',
+    channelId: 'C_CHANNEL_123',
+    threadTs: '1234567890.123',
+    userId: 'U_USER_123'
+  }),
+}));
+
 // Mock the token manager
 jest.mock('@/lib/slack/tokenManager', () => ({
   getSlackConfig: jest.fn(),
@@ -283,7 +301,12 @@ describe('Slack Events API', () => {
           get: (key: string) => {
             if (key === 'x-slack-request-timestamp') return Math.floor(Date.now() / 1000).toString();
             if (key === 'x-slack-signature') return 'v0=mock_signature';
+            if (key === 'x-slack-retry-num') return null;
+            if (key === 'x-slack-retry-reason') return null;
             return null;
+          },
+          has: (key: string) => {
+            return key === 'x-slack-request-timestamp' || key === 'x-slack-signature';
           },
         },
       } as any;
@@ -478,6 +501,113 @@ describe('Slack Events API', () => {
       // Should not throw, should return ok
       const response = await POST(request);
       expect(response.status).toBe(200);
+    });
+  });
+
+  describe('Retry & Idempotency', () => {
+    const createEventRequest = (event: any, teamId = 'T123ABC456', headers: Record<string, string> = {}, topLevelFields: Record<string, any> = {}) => {
+      const payload = {
+        type: 'event_callback',
+        team_id: teamId,
+        event,
+        ...topLevelFields,
+      };
+
+      return new Request('http://localhost/api/integrations/slack/events', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: {
+          'Content-Type': 'application/json',
+          'x-slack-request-timestamp': Math.floor(Date.now() / 1000).toString(),
+          'x-slack-signature': 'v0=test-signature',
+          ...headers,
+        },
+      });
+    };
+
+    it('should log retry_received telemetry for retried events (not short-circuit)', async () => {
+      const event = {
+        type: 'app_mention',
+        user: 'U_USER_123',
+        text: '<@U_BOT_123> Hello',
+        channel: 'C_CHANNEL_123',
+        ts: '1234567890.123456',
+      };
+
+      const request = createEventRequest(event, 'T123ABC456', {
+        'x-slack-retry-num': '1',
+        'x-slack-retry-reason': 'http_timeout',
+      }, { event_id: 'EvSame123', event_time: 1234567890 });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Verify slack_retry_received was emitted (not slack_retry_ignored)
+      const { emitSlackTelemetry } = require('@/lib/slack/slackTelemetry');
+      const retryCalls = (emitSlackTelemetry as jest.Mock).mock.calls.filter(
+        (call: any[]) => call[0]?.type === 'slack_retry_received'
+      );
+      expect(retryCalls.length).toBe(1);
+      expect(retryCalls[0][0].metadata).toMatchObject({
+        retryNum: '1',
+        retryReason: 'http_timeout',
+        eventId: 'EvSame123',
+      });
+    });
+
+    it('should process duplicate event_id as separate request in S1 (S2 adds deduplication)', async () => {
+      // S1 does NOT deduplicate - it processes each request
+      // S2 will add Supabase-based idempotency using event_id
+      const event = {
+        type: 'app_mention',
+        user: 'U_USER_123',
+        text: '<@U_BOT_123> Hello',
+        channel: 'C_CHANNEL_123',
+        ts: '1234567890.123456',
+      };
+
+      // First request
+      const request1 = createEventRequest(event, 'T123ABC456', {}, { event_id: 'EvDuplicate123', event_time: 1234567890 });
+      const response1 = await POST(request1);
+      expect(response1.status).toBe(200);
+
+      // Second request with same event_id (simulating duplicate delivery)
+      const request2 = createEventRequest(event, 'T123ABC456', {}, { event_id: 'EvDuplicate123', event_time: 1234567890 });
+      const response2 = await POST(request2);
+      expect(response2.status).toBe(200);
+
+      // Both should be processed (S1 behavior - S2 will deduplicate)
+      const { emitSlackTelemetry } = require('@/lib/slack/slackTelemetry');
+      const receivedCalls = (emitSlackTelemetry as jest.Mock).mock.calls.filter(
+        (call: any[]) => call[0]?.type === 'slack_event_received'
+      );
+      expect(receivedCalls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should not short-circuit on retry and continue to handler', async () => {
+      const event = {
+        type: 'app_mention',
+        user: 'U_USER_123',
+        text: '<@U_BOT_123> Hello',
+        channel: 'C_CHANNEL_123',
+        ts: '1234567890.123456',
+      };
+
+      const request = createEventRequest(event, 'T123ABC456', {
+        'x-slack-retry-num': '1',
+        'x-slack-retry-reason': 'http_error',
+      }, { event_id: 'EvRetryContinue', event_time: 1234567890 });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Verify slack_retry_received was emitted (proving retry was not short-circuited)
+      const { emitSlackTelemetry } = require('@/lib/slack/slackTelemetry');
+      const retryCalls = (emitSlackTelemetry as jest.Mock).mock.calls.filter(
+        (call: any[]) => call[0]?.type === 'slack_retry_received'
+      );
+      expect(retryCalls.length).toBe(1);
+      expect(retryCalls[0][0].metadata.retryNum).toBe('1');
     });
   });
 

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { randomUUID } from "crypto";
 import { waitUntil } from "@vercel/functions";
 import { getSlackConfig } from "@/lib/slack/tokenManager";
@@ -9,39 +8,28 @@ import { TrajectoryStep } from "@/lib/agents/core/types";
 import { SlackTraceFormatter } from "@/lib/slack/slackTraceFormatter";
 import { exportTaskTraceToOpik, OpikTracePayload } from "@/lib/telemetry/opikExporter";
 import { recordThreadTerminated } from "@/lib/telemetry/evaluation";
+import { verifySlackSignature, requireSlackSignature } from "@/lib/slack/slackVerification";
+import { emitSlackTelemetry, extractTelemetryFields } from "@/lib/slack/slackTelemetry";
+import { getWorkspaceAccess } from "@/lib/security/workspaceAccess";
 
 export const maxDuration = 300;
 
-function verifySlackSignature(req: NextRequest, body: string): boolean {
-    const signature = req.headers.get("x-slack-signature");
-    const timestamp = req.headers.get("x-slack-request-timestamp");
-    const secret = process.env.SLACK_SIGNING_SECRET;
-
-    if (!signature || !timestamp || !secret) return false;
-
-    const fiveMinutes = 5 * 60;
-    if (Math.abs(Math.floor(Date.now() / 1000) - parseInt(timestamp, 10)) > fiveMinutes) return false;
-
-    const sigBaseString = `v0:${timestamp}:${body}`;
-    const mySignature = "v0=" + crypto.createHmac("sha256", secret).update(sigBaseString, "utf8").digest("hex");
-    
-    try {
-        return crypto.timingSafeEqual(Buffer.from(mySignature, 'utf8'), Buffer.from(signature, 'utf8'));
-    } catch {
-        return false;
-    }
-}
-
 export async function POST(req: NextRequest) {
-    // 2. Idempotency & Retry Storm Prevention
-    if (req.headers.has("x-slack-retry-num")) {
-        return NextResponse.json({ ok: true });
-    }
-
     const bodyText = await req.text();
-    
-    if (!verifySlackSignature(req, bodyText)) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    // 1. Verify Slack Signature FIRST (before any retry/idempotency logic)
+    const sigCheck = requireSlackSignature(req, bodyText);
+    if (sigCheck) {
+        emitSlackTelemetry({
+            type: 'slack_signature_invalid',
+            teamId: 'unknown',
+            eventType: 'unknown',
+            channelId: '',
+            threadTs: '',
+            userId: '',
+            error: sigCheck.status === 500 ? 'missing_secret' : 'invalid_signature'
+        });
+        return sigCheck;
     }
 
     const payload = JSON.parse(bodyText);
@@ -54,14 +42,159 @@ export async function POST(req: NextRequest) {
         const event = payload.event;
         const teamId = payload.team_id;
 
+        if (!teamId) {
+            emitSlackTelemetry({
+                type: 'slack_config_missing',
+                teamId: 'unknown',
+                eventType: payload.type,
+                channelId: '',
+                threadTs: '',
+                userId: '',
+                error: 'missing_team_id'
+            });
+            return NextResponse.json({ error: "Missing team_id" }, { status: 400 });
+        }
+
+        // Resolve config early for telemetry
+        let slackConfig;
+        try {
+            slackConfig = await getSlackConfig(teamId);
+        } catch (configError) {
+            emitSlackTelemetry({
+                type: 'slack_config_missing',
+                teamId,
+                eventType: payload.type,
+                channelId: '',
+                threadTs: '',
+                userId: '',
+                error: configError instanceof Error ? configError.message : String(configError)
+            });
+            return NextResponse.json({ error: "Workspace not installed" }, { status: 404 });
+        }
+
+        // 2. Retry Handling — signature verified, now check for retries
+        // Durable idempotency (Supabase event_id tracking) is S2 work.
+        // For S1: log retries but continue processing; S2 will add deduplication.
+        if (req.headers.has("x-slack-retry-num")) {
+            const retryNum = req.headers.get("x-slack-retry-num");
+            const retryReason = req.headers.get("x-slack-retry-reason") || 'unknown';
+            emitSlackTelemetry({
+                type: 'slack_retry_received',
+                teamId: slackConfig.teamId,
+                eventType: payload.type,
+                channelId: '',
+                threadTs: '',
+                userId: '',
+                metadata: { retryNum, retryReason, eventId: payload.event_id }
+            });
+            // S1: Do NOT short-circuit. Continue to handler — S2 adds durable idempotency.
+        }
+
         if (event.type === "app_mention" || (event.type === "message" && !event.bot_id)) {
+            // Ignore bot's own messages
+            if (event.user === slackConfig.botUserId || event.bot_id) {
+                return NextResponse.json({ ok: true });
+            }
+
+            // Telemetry base (needs to be available for early error emission)
+            const telemetryBase = extractTelemetryFields({ teamId: slackConfig.teamId, botUserId: slackConfig.botUserId }, event);
+
+            // Idempotency key: use outer envelope event_id/event_time per Slack Events API spec
+            // Require both fields - no fallback to "none" (S2 will persist keys)
+            if (!payload.event_id || !payload.event_time) {
+                emitSlackTelemetry({
+                    ...telemetryBase,
+                    type: 'slack_handler_error',
+                    error: 'missing_event_id_or_time',
+                    metadata: { hasEventId: !!payload.event_id, hasEventTime: !!payload.event_time }
+                });
+                return NextResponse.json({ ok: true });
+            }
+            const idempotencyKey = `slack:event:${teamId}:${payload.event_id}:${payload.event_time}`;
+
+            emitSlackTelemetry({
+                ...telemetryBase,
+                type: 'slack_event_received',
+                metadata: { idempotencyKey }
+            });
+
             const processEvent = async () => {
                 try {
-                    const slackConfig = await getSlackConfig(teamId);
-                    
+                    // 1. Resolve actual Slack sender (not installation owner)
+                    // The signature verified Slack sent the event; we must resolve who sent the message
+                    const slackUserId = event.user;
+                    if (!slackUserId) {
+                        emitSlackTelemetry({
+                            ...telemetryBase,
+                            type: 'slack_handler_error',
+                            error: 'missing_slack_user_id'
+                        });
+                        return;
+                    }
+
+                    // Resolve to internal user ID (Clerk/Lattice)
+                    const { resolveSlackUser } = await import('@/lib/slack/userResolver');
+                    const internalUserId = await resolveSlackUser(teamId, slackUserId);
+
+                    // If no internal user resolved, require account linking
+                    if (!internalUserId) {
+                        emitSlackTelemetry({
+                            ...telemetryBase,
+                            type: 'slack_handler_error',
+                            error: 'slack_user_not_linked',
+                            metadata: { slackUserId }
+                        });
+                        // Send ephemeral message to user to link account
+                        await fetch("https://slack.com/api/chat.postEphemeral", {
+                            method: "POST",
+                            headers: {
+                                "Authorization": `Bearer ${slackConfig.botToken}`,
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({
+                                channel: event.channel,
+                                user: slackUserId,
+                                text: "Your Slack account is not linked to Lattice. Please run `/genie link` or contact your admin."
+                            })
+                        });
+                        return;
+                    }
+
+                    // 2. Verify workspace authorization for resolved internal user
+                    // Fail closed if user is not a member of the workspace associated with this Slack installation
+                    if (slackConfig.workspaceId) {
+                        const workspaceAccess = await getWorkspaceAccess(internalUserId, slackConfig.workspaceId);
+                        if (!workspaceAccess) {
+                            emitSlackTelemetry({
+                                ...telemetryBase,
+                                type: 'slack_handler_error',
+                                error: 'workspace_access_denied',
+                                metadata: { internalUserId, workspaceId: slackConfig.workspaceId }
+                            });
+                            // Send ephemeral message to user
+                            await fetch("https://slack.com/api/chat.postEphemeral", {
+                                method: "POST",
+                                headers: {
+                                    "Authorization": `Bearer ${slackConfig.botToken}`,
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify({
+                                    channel: event.channel,
+                                    user: slackUserId,
+                                    text: "You don't have access to this workspace. Contact your admin."
+                                })
+                            });
+                            return;
+                        }
+                    }
                     if (!slackConfig.workspacePath) {
                         console.error(`[Slack] No workspace path mapped for team ${teamId}`);
-                        return; // Strict tenant resolution: reject without fallback.
+                        emitSlackTelemetry({
+                            ...telemetryBase,
+                            type: 'slack_handler_error',
+                            error: 'missing_workspace_path'
+                        });
+                        return;
                     }
 
                     const postRes = await fetch("https://slack.com/api/chat.postMessage", {
@@ -130,14 +263,14 @@ export async function POST(req: NextRequest) {
                       env: 'local',
                       workspaceRoot: slackConfig.workspacePath,
                       workspaceId: slackConfig.workspaceId || undefined,
-                      userId: slackConfig.userId || undefined,
+                      userId: internalUserId,
                       traceId,
                     });
 
                     const userQuery = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
 
                     const agentRes = await generateConversationReply({
-                        userId: slackConfig.userId || `slack-${teamId}`,
+                        userId: internalUserId,
                         clerkUser: null as any,
                         request: {
                             messages: [{ role: 'user', text: userQuery }],
@@ -218,10 +351,22 @@ export async function POST(req: NextRequest) {
                     }
                 } catch (err: any) {
                     console.error("[Slack Event Error]", err);
+                    emitSlackTelemetry({
+                        ...telemetryBase,
+                        type: 'slack_stream_failed',
+                        error: err instanceof Error ? err.message : String(err)
+                    });
                 }
             };
 
-            waitUntil(processEvent());
+            waitUntil(processEvent().catch((err) => {
+                console.error("[Slack Event Error] waitUntil:", err);
+                emitSlackTelemetry({
+                    ...telemetryBase,
+                    type: 'slack_stream_failed',
+                    error: err instanceof Error ? err.message : String(err)
+                });
+            }));
         }
     }
 

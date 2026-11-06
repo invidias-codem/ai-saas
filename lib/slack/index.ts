@@ -26,7 +26,6 @@ export {
 } from './tokenManager';
 
 // User Resolver - Map Slack IDs to Internal IDs
-// User Resolver - Map Slack IDs to Internal IDs
 export {
   resolveSlackUser,
   linkSlackUser,
@@ -38,3 +37,26 @@ export {
   saveChannelConfig,
   type ChannelConfig,
 } from './configManager';
+
+// Verification - Shared Slack signature verification
+export {
+  verifySlackSignature,
+  requireSlackSignature,
+  type SlackVerificationResult,
+} from './slackVerification';
+
+// Telemetry - Structured Slack event telemetry
+export {
+  emitSlackTelemetry,
+  extractTelemetryFields,
+  withSlackTelemetry,
+  type SlackTelemetryEvent,
+  type SlackTelemetryEventType,
+} from './slackTelemetry';
+
+// Admin Verification - Authoritative Slack admin checks
+export {
+  verifySlackAdmin,
+  isSlackAdmin,
+  type SlackAdminCheckResult,
+} from './adminVerification';
