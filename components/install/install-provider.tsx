@@ -124,7 +124,7 @@ export function InstallProvider({ children, desktopPanels, terminalPanels }: {
           {desktop ? mode === 'desktop' ? desktopPanels[desktop] : terminalPanels[desktop] : <p className="py-5 text-sm leading-6 text-slate-400">Choose an operating system above. You can download for another computer.</p>}
         </>}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4 text-sm">
-          <a href="/dashboard" className="inline-flex min-h-11 items-center text-emerald-300 hover:underline">Continue in browser →</a>
+          <button type="button" onClick={() => setOpen(false)} className="inline-flex min-h-11 items-center text-emerald-300 hover:underline">Continue in browser →</button>
           <a href="/downloads" className="inline-flex min-h-11 items-center text-slate-400 hover:text-white">All downloads &amp; requirements</a>
         </div>
       </DialogContent>
