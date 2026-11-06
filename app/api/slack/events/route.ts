@@ -350,21 +350,21 @@ export async function POST(req: NextRequest) {
                         ioHarness.shutdown();
                     }
                 } catch (err: any) {
-                    console.error("[Slack Event Error]", err);
+                    console.error("[Slack Event Error]", "stream_error");
                     emitSlackTelemetry({
                         ...telemetryBase,
                         type: 'slack_stream_failed',
-                        error: err instanceof Error ? err.message : String(err)
+                        error: 'stream_failed'
                     });
                 }
             };
 
             waitUntil(processEvent().catch((err) => {
-                console.error("[Slack Event Error] waitUntil:", err);
+                console.error("[Slack Event Error] waitUntil:", "stream_error");
                 emitSlackTelemetry({
                     ...telemetryBase,
                     type: 'slack_stream_failed',
-                    error: err instanceof Error ? err.message : String(err)
+                    error: 'stream_failed'
                 });
             }));
         }

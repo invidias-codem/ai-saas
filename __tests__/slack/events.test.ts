@@ -28,6 +28,21 @@ jest.mock('@/lib/slack/tokenManager', () => ({
   getSlackConfig: jest.fn(),
 }));
 
+// Mock user resolution and workspace access
+jest.mock('@/lib/slack/userResolver', () => ({
+  resolveSlackUser: jest.fn().mockResolvedValue('U_INTERNAL_123'),
+}));
+
+jest.mock('@/lib/security/workspaceAccess', () => ({
+  getWorkspaceAccess: jest.fn().mockResolvedValue({
+    workspaceId: 'WS_123',
+    userId: 'U_INTERNAL_123',
+    role: 'member',
+    permissions: ['workspace:read', 'memory:read'],
+    source: 'workspace_members',
+  }),
+}));
+
 // Mock Firebase Admin
 // Mock @/lib/firebaseAdmin to bypass initialization
 jest.mock('@/lib/firebaseAdmin', () => ({
@@ -118,6 +133,8 @@ describe('Slack Events API', () => {
     teamName: 'Test Workspace',
     botToken: 'xoxb-test-token-123',
     botUserId: 'U_BOT_123',
+    workspaceId: 'WS_123',
+    workspacePath: '/workspace/123',
     scopes: ['chat:write', 'app_mentions:read'],
   };
 
@@ -288,6 +305,7 @@ describe('Slack Events API', () => {
           api_app_id: 'A_APP_123',
           event: {
             type: 'file_shared',
+            user: 'U_USER_123',
             file_id: 'F_FILE_123',
             user_id: 'U_USER_123',
             channel_id: 'C_CHANNEL_123',
