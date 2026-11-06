@@ -37,7 +37,7 @@ sha2 = "0.10.8"
 lattice-native-host = { path = "native-host" }
 lattice-credential-broker = { path = "credential-broker" }
 lattice-agent-runtime = { path = "lattice-agent-runtime" }
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["sync", "time", "net"] }
 tempfile = "3"
 
 [dev-dependencies]

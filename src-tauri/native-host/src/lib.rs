@@ -8,6 +8,8 @@ pub mod mutation;
 pub mod review;
 #[cfg(test)]
 mod review_tests;
+pub mod session_store;
+pub mod supervisor;
 pub mod workspace;
 
 use authority::{Authority, Binding, Protocol};

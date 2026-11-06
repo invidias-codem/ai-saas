@@ -9,7 +9,7 @@ import argparse
 import sys
 
 from . import __version__
-from . import auth, deploy, license, health, upgrade, backup, crypto_license, org, task, doctor
+from . import auth, deploy, license, health, upgrade, backup, crypto_license, org, task, doctor, agent
 
 
 BANNER = f"""
@@ -140,6 +140,24 @@ Built by JJEM Global Technology, Inc.
             p.add_argument(*flags, **kwargs)
         p.set_defaults(handler=spec["handler"])
 
+    # ── Agent ───────────────────────────────────────────────────────────
+    agent_parser = sub.add_parser("agent", help="Local agent runtime (supervisor client)")
+    agent_sub = agent_parser.add_subparsers(dest="subcommand")
+    for name, spec in agent.get_subcommands().items():
+        if spec.get("sub"):
+            nested = agent_sub.add_parser(name, help=spec["help"])
+            nested_sub = nested.add_subparsers(dest="subcommand2")
+            for nname, nspec in spec["sub"].items():
+                np = nested_sub.add_parser(nname, help=nspec["help"])
+                for flags, kwargs in nspec["args"]:
+                    np.add_argument(*flags, **kwargs)
+                np.set_defaults(handler=nspec["handler"])
+        else:
+            p = agent_sub.add_parser(name, help=spec["help"])
+            for flags, kwargs in spec["args"]:
+                p.add_argument(*flags, **kwargs)
+            p.set_defaults(handler=spec["handler"])
+
     args = parser.parse_args()
 
     # No command given — show banner + help
@@ -163,6 +181,7 @@ Built by JJEM Global Technology, Inc.
             "dev": crypto_parser,
             "org": org_parser,
             "task": task_parser,
+            "agent": agent_parser,
             }
         if args.command in sub_parsers:
             sub_parsers[args.command].print_help()
