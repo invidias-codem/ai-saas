@@ -43,7 +43,9 @@ export async function GET(request: Request) {
     try {
       const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
       const { error } = await supabase.from('users').select('id').limit(1);
-      db_reachable = true;
+      // A PostgREST authentication/configuration error resolves without throwing.
+      // Presence of a client is not proof of a valid service-role key.
+      db_reachable = !error;
     } catch (e) {
       db_reachable = false;
     }
