@@ -694,17 +694,17 @@ export async function POST(req: Request) {
           metadata: { command, idempotencyKey }
         });
       } catch (error: any) {
-        console.error('[SLACK_COMMAND] Async processing error:', error.message);
+        console.error('[SLACK_COMMAND] Async processing error: processing_failed');
         await sendToResponseUrl(responseUrl, {
           response_type: 'ephemeral',
-          text: `❌ Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`,
+          text: '❌ Sorry, I encountered an error processing your request. Please try again.',
         });
         
         emitSlackTelemetry({
           ...telemetryBase,
           type: 'slack_stream_failed',
           durationMs: Date.now() - startTime,
-          error: error.message,
+          error: 'processing_failed',
           metadata: { command, idempotencyKey }
         });
       }

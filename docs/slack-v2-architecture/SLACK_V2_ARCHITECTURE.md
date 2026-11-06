@@ -75,12 +75,12 @@ interface SlackEventIngestion {
   POST(req: Request): Promise<NextResponse>
 
   // Mandatory guards (execute in order):
-  1. Reject if x-slack-retry-num present (idempotent ack)
+  1. Verify Slack signature (timing-safe HMAC, 5min window); 401 on failure — always first, before any retry or callback processing
   2. Parse JSON body; 400 on failure
   3. Handle url_verification challenge immediately (200 + challenge)
   4. Extract team_id; 400 if missing
   5. Resolve SlackConfig via getSlackConfig(teamId); 404 if not installed
-  6. Verify Slack signature (timing-safe HMAC, 5min window); 401 on failure
+  6. Log x-slack-retry-num if present; do NOT short-circuit (S1) — durable dedup is S2
   7. Filter bot messages (event.user === botUserId || event.bot_id)
   8. Dispatch to handler registry by event.type
   9. Return 200 OK immediately; processing via waitUntil()

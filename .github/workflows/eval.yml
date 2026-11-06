@@ -68,6 +68,27 @@ jobs:
         if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
         run: pnpm --filter @lattice-os/core... run build
 
+      # Guard: skip gracefully if Supabase credentials are not configured.
+      # Never print credential values; a skip is a recorded decision, never silent green.
+      - name: Check Supabase credentials
+        if: steps.changes.outputs.memory == 'true' || steps.changes.outputs.prompts == 'true' || steps.changes.outputs.conversation == 'true'
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "${NEXT_PUBLIC_SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            echo "⚠️  Supabase credentials not configured — skipping dataset curation and eval."
+            echo "    Add NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to repository secrets to enable."
+            mkdir -p attestations
+            npx tsx scripts/attestation-cli.ts write \
+              --suite decision-plane-eval \
+              --executed false \
+              --skip-reason supabase_credentials_not_configured \
+              --out attestations/decision-plane-eval.json
+            cat attestations/decision-plane-eval.json
+            exit 0
+          fi
+
       # Option 1: download curated dataset artifact from nightly workflow.
       # For now we re-run curation in the PR job for determinism.
       - name: Curate dataset (PR)
