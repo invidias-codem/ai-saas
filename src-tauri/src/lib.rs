@@ -1,3 +1,4 @@
+mod agent_runtime;
 mod credential_broker;
 mod native_host;
 mod profiles;
@@ -9,7 +10,11 @@ mod ipc_tests;
 #[cfg(test)]
 mod review_test_support;
 
+use agent_runtime::{
+    agent_health, agent_start, agent_status, agent_stop, AgentRuntimeConfig, RuntimeSupervisor,
+};
 use credential_broker::{handle_broker_command, init_credential_broker, BrokerResponse};
+use lattice_agent_runtime::{AgentLoopConfig, ProviderRouter, SessionConfig, SessionManager};
 use lattice_credential_broker::{BrokerCommand, CredentialBroker, ProviderKind};
 use lattice_native_host::lifecycle::{NativeHost, Phase};
 use lattice_native_host::supervisor::{serve, Supervisor};
@@ -17,8 +22,10 @@ use lattice_native_host::{permits_window, TelemetryEvent};
 use native_host::TauriLauncher;
 use serde::Serialize;
 use serde_json::json;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::Manager;
 use tokio::net::TcpListener;
 
@@ -141,17 +148,21 @@ async fn flush_telemetry<R: tauri::Runtime>(
 // reaches over TCP, so both clients observe one consistent session journal.
 
 #[tauri::command]
-async fn supervisor_status(
+async fn supervisor_status<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<Supervisor>>,
 ) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
     Ok(state.status().await)
 }
 
 #[tauri::command]
 async fn supervisor_ensure_host<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, Arc<Supervisor>>,
 ) -> Result<(), String> {
+    require_local_window(&window)?;
     state
         .ensure_host(TauriLauncher(app))
         .await
@@ -159,9 +170,11 @@ async fn supervisor_ensure_host<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-async fn supervisor_session_create(
+async fn supervisor_session_create<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<Supervisor>>,
 ) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
     state
         .session_create("desktop")
         .await
@@ -170,19 +183,23 @@ async fn supervisor_session_create(
 }
 
 #[tauri::command]
-async fn supervisor_session_list(
+async fn supervisor_session_list<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<Supervisor>>,
 ) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
     Ok(json!({ "sessions": state.list_sessions().await }))
 }
 
 #[tauri::command]
-async fn supervisor_event_append(
+async fn supervisor_event_append<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<Supervisor>>,
     session_id: String,
     kind: String,
     payload: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
     state
         .append_event("desktop", &session_id, kind, payload.unwrap_or(json!({})))
         .await
@@ -191,10 +208,12 @@ async fn supervisor_event_append(
 }
 
 #[tauri::command]
-async fn supervisor_cancel(
+async fn supervisor_cancel<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
     state: tauri::State<'_, Arc<Supervisor>>,
     session_id: String,
 ) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
     state
         .cancel_session("desktop", &session_id)
         .await
@@ -497,17 +516,46 @@ pub fn run() {
 
             // Initialize credential broker
             let broker = tauri::async_runtime::block_on(async { init_credential_broker().await })?;
-            app.manage(broker);
+            app.manage(broker.clone());
+
+            // Initialize agent runtime supervisor
+            let runtime_config = AgentRuntimeConfig {
+                profile_id: String::new(), // Will be set per-runtime
+                channel: String::new(),
+                default_connection_id: None,
+                loop_config: AgentLoopConfig::default(),
+                ipc_config: lattice_agent_runtime::IpcConfig {
+                    protocol_version: lattice_agent_runtime::PROTOCOL_VERSION,
+                    socket_path: None,
+                    client_identity: "desktop".to_string(),
+                    require_auth: false,
+                    connect_timeout_ms: 5000,
+                },
+                session_config: SessionConfig {
+                    db_path: PathBuf::from("state.sqlite"),
+                    max_session_age: Duration::from_secs(86400 * 30),
+                    auto_reconcile: true,
+                },
+            };
+            let supervisor = tauri::async_runtime::block_on(async {
+                RuntimeSupervisor::new(broker.clone(), runtime_config).await
+            })?;
+            app.manage(supervisor);
 
             // Supervisor: owns the profile's durable session journal and the
             // NativeHost lifecycle, and serves the TCP JSON-RPC transport shared
             // with the CLI. One writer per profile.
             let profile_root = profiles::native_root("stable")?;
             let profile_dir = profile_root.join("profiles/default");
-            let supervisor = Arc::new(Supervisor::new("default".to_string(), &profile_dir)?);
-            app.manage(supervisor.clone());
+            let native_supervisor = Arc::new(Supervisor::new("default".to_string(), &profile_dir)?);
+            // Register the in-process desktop identity before session commands run.
+            tauri::async_runtime::block_on(native_supervisor.hello(
+                "desktop", 1, Some(native_supervisor.server_secret()),
+            ))
+            .map_err(|e| e.message().to_string())?;
+            app.manage(native_supervisor.clone());
             let profile_dir_owned = profile_dir.clone();
-            let sup = supervisor.clone();
+            let sup = native_supervisor.clone();
             tauri::async_runtime::spawn(async move {
                 let Ok(listener) = TcpListener::bind("127.0.0.1:0").await else {
                     return;
@@ -519,6 +567,8 @@ pub fn run() {
                 );
                 let _ = serve(listener, sup).await;
             });
+
+
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -559,6 +609,10 @@ pub fn run() {
             load_profile_config,
             save_profile_config,
             list_profiles,
+            agent_start,
+            agent_stop,
+            agent_status,
+            agent_health,
             workspace::native_select_folder,
             workspace::native_workspace_grants,
             workspace::native_revoke_grant,
