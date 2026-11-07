@@ -124,6 +124,18 @@ jest.mock('@google/generative-ai', () => ({
 // Mock fetch for Slack API calls
 global.fetch = jest.fn();
 
+// Wait (bounded) until fetch is called with a given URL substring — replaces
+// flaky fixed setTimeout delays with deterministic completion.
+async function waitForFetch(urlContains: string, timeoutMs = 5000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const calls = (global.fetch as jest.Mock).mock.calls;
+    if (calls.some(([url]) => String(url).includes(urlContains))) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`fetch not called with "${urlContains}" within ${timeoutMs}ms`);
+}
+
 // Import after mocks
 import { POST, GET } from '@/app/api/integrations/slack/events/route';
 
@@ -175,10 +187,17 @@ describe('Slack Events API', () => {
   });
 
   describe('Event Handling', () => {
-    const createEventRequest = (event: any, teamId = 'T123ABC456') => {
+    const createEventRequest = (
+      event: any,
+      teamId = 'T123ABC456',
+      headers: Record<string, string> = {},
+      envelope: { event_id?: string; event_time?: number | string } = {}
+    ) => {
       const payload = {
         type: 'event_callback',
         team_id: teamId,
+        ...(envelope.event_id ? { event_id: envelope.event_id } : {}),
+        ...(envelope.event_time ? { event_time: envelope.event_time } : {}),
         event,
       };
 
@@ -187,6 +206,7 @@ describe('Slack Events API', () => {
         body: JSON.stringify(payload),
         headers: {
           'Content-Type': 'application/json',
+          ...headers,
         },
       });
     };
@@ -276,15 +296,20 @@ describe('Slack Events API', () => {
         team_id: 'T123ABC456',
       };
 
-      const request = createEventRequest(event);
+      const request = createEventRequest(
+        { ...event },
+        'T123ABC456',
+        {},
+        { event_id: 'EvAppHome123', event_time: 1234567890 }
+      );
       const response = await POST(request);
       const data = await response.json();
 
       expect(response.status).toBe(200);
       expect(data.ok).toBe(true);
 
-      // Wait for async background processing
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait for async background processing to publish the App Home view
+      await waitForFetch('views.publish');
 
       // Verify views.publish was called
       expect(global.fetch).toHaveBeenCalledWith(
