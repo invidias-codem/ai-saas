@@ -1,0 +1,144 @@
+diff --git a/dist/commonjs/v3/streams/asyncIterableStream.js b/dist/commonjs/v3/streams/asyncIterableStream.js
+--- a/dist/commonjs/v3/streams/asyncIterableStream.js
++++ b/dist/commonjs/v3/streams/asyncIterableStream.js
+@@ -20,24 +20,57 @@
+     return transformedStream;
+ }
+ function createAsyncIterableReadable(source, transformer, signal) {
++    let reader;
++    let closed = false;
++    let onAbort;
++    const dispose = () => {
++        closed = true;
++        signal.removeEventListener("abort", onAbort);
++    };
+     return new ReadableStream({
+         async start(controller) {
+             const transformedStream = source.pipeThrough(new TransformStream(transformer));
+-            const reader = transformedStream.getReader();
+-            signal.addEventListener("abort", () => {
++            reader = transformedStream.getReader();
++            const close = () => {
++                if (closed) return;
++                dispose();
++                controller.close();
++            };
++            onAbort = () => {
++                // Preserve delivery of the terminal snapshot, but never close
++                // again after consumer cancellation or natural completion.
+                 queueMicrotask(() => {
+-                    reader.cancel();
+-                    controller.close();
++                    if (closed) return;
++                    close();
++                    void reader.cancel().catch(() => {});
+                 });
+-            });
+-            while (true) {
+-                const { done, value } = await reader.read();
+-                if (done) {
+-                    controller.close();
+-                    break;
++            };
++            signal.addEventListener("abort", onAbort, { once: true });
++            if (signal.aborted) onAbort();
++            try {
++                while (!closed) {
++                    const { done, value } = await reader.read();
++                    if (closed) break;
++                    if (done) {
++                        close();
++                        break;
++                    }
++                    controller.enqueue(value);
+                 }
+-                controller.enqueue(value);
++            } catch (error) {
++                if (!closed) {
++                    dispose();
++                    controller.error(error);
++                }
++            } finally {
++                signal.removeEventListener("abort", onAbort);
++                reader.releaseLock();
+             }
++        },
++        cancel(reason) {
++            if (closed) return;
++            dispose();
++            return reader.cancel(reason);
+         },
+     });
+ }
+diff --git a/dist/esm/v3/streams/asyncIterableStream.js b/dist/esm/v3/streams/asyncIterableStream.js
+--- a/dist/esm/v3/streams/asyncIterableStream.js
++++ b/dist/esm/v3/streams/asyncIterableStream.js
+@@ -12,24 +12,57 @@
+     return transformedStream;
+ }
+ export function createAsyncIterableReadable(source, transformer, signal) {
++    let reader;
++    let closed = false;
++    let onAbort;
++    const dispose = () => {
++        closed = true;
++        signal.removeEventListener("abort", onAbort);
++    };
+     return new ReadableStream({
+         async start(controller) {
+             const transformedStream = source.pipeThrough(new TransformStream(transformer));
+-            const reader = transformedStream.getReader();
+-            signal.addEventListener("abort", () => {
++            reader = transformedStream.getReader();
++            const close = () => {
++                if (closed) return;
++                dispose();
++                controller.close();
++            };
++            onAbort = () => {
++                // Preserve delivery of the terminal snapshot, but never close
++                // again after consumer cancellation or natural completion.
+                 queueMicrotask(() => {
+-                    reader.cancel();
+-                    controller.close();
++                    if (closed) return;
++                    close();
++                    void reader.cancel().catch(() => {});
+                 });
+-            });
+-            while (true) {
+-                const { done, value } = await reader.read();
+-                if (done) {
+-                    controller.close();
+-                    break;
++            };
++            signal.addEventListener("abort", onAbort, { once: true });
++            if (signal.aborted) onAbort();
++            try {
++                while (!closed) {
++                    const { done, value } = await reader.read();
++                    if (closed) break;
++                    if (done) {
++                        close();
++                        break;
++                    }
++                    controller.enqueue(value);
+                 }
+-                controller.enqueue(value);
++            } catch (error) {
++                if (!closed) {
++                    dispose();
++                    controller.error(error);
++                }
++            } finally {
++                signal.removeEventListener("abort", onAbort);
++                reader.releaseLock();
+             }
++        },
++        cancel(reason) {
++            if (closed) return;
++            dispose();
++            return reader.cancel(reason);
+         },
+     });
+ }

@@ -10,6 +10,9 @@ overrides:
   uuid@<11.1.1: ^11.1.1
   ws: ^8.21.0
 
+patchedDependencies:
+  '@trigger.dev/core@4.5.16': 1d19b369ce5febe40e88e2b17f9bf22efcd876522e880607f6648ec3e6e17d8e
+
 importers:
 
   .:
@@ -18383,7 +18386,7 @@ snapshots:
   '@trigger.dev/build@4.5.16(bufferutil@4.1.0)(magicast@0.3.5)(supports-color@10.2.2)(typescript@5.9.3)(utf-8-validate@6.0.6)':
     dependencies:
       '@prisma/config': 6.19.3(magicast@0.3.5)
-      '@trigger.dev/core': 4.5.16(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@6.0.6)
+      '@trigger.dev/core': 4.5.16(patch_hash=1d19b369ce5febe40e88e2b17f9bf22efcd876522e880607f6648ec3e6e17d8e)(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@6.0.6)
       mlly: 1.8.2
       pkg-types: 1.3.1
       tinyglobby: 0.2.17
@@ -18396,7 +18399,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@trigger.dev/core@4.5.16(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@6.0.6)':
+  '@trigger.dev/core@4.5.16(patch_hash=1d19b369ce5febe40e88e2b17f9bf22efcd876522e880607f6648ec3e6e17d8e)(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@6.0.6)':
     dependencies:
       '@bugsnag/cuid': 3.2.2
       '@electric-sql/client': 1.0.14
@@ -18437,7 +18440,7 @@ snapshots:
   '@trigger.dev/schema-to-json@4.5.16(@sinclair/typebox@0.34.49)(bufferutil@4.1.0)(superstruct@2.0.2)(supports-color@10.2.2)(utf-8-validate@6.0.6)':
     dependencies:
       '@sodaru/yup-to-json-schema': 2.0.1
-      '@trigger.dev/core': 4.5.16(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@6.0.6)
+      '@trigger.dev/core': 4.5.16(patch_hash=1d19b369ce5febe40e88e2b17f9bf22efcd876522e880607f6648ec3e6e17d8e)(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@6.0.6)
       effect: 3.22.1
       zod: 3.25.76
       zod-to-json-schema: 3.25.2(zod@3.25.76)
@@ -18453,7 +18456,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/semantic-conventions': 1.41.1
-      '@trigger.dev/core': 4.5.16(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@6.0.6)
+      '@trigger.dev/core': 4.5.16(patch_hash=1d19b369ce5febe40e88e2b17f9bf22efcd876522e880607f6648ec3e6e17d8e)(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@6.0.6)
       uncrypto: 0.1.3
       zod: 3.25.76
     optionalDependencies:
@@ -26519,7 +26522,7 @@ snapshots:
       '@opentelemetry/instrumentation': 0.218.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
       '@s2-dev/streamstore': 0.25.0(supports-color@10.2.2)
       '@trigger.dev/build': 4.5.16(bufferutil@4.1.0)(magicast@0.3.5)(supports-color@10.2.2)(typescript@5.9.3)(utf-8-validate@6.0.6)
-      '@trigger.dev/core': 4.5.16(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@6.0.6)
+      '@trigger.dev/core': 4.5.16(patch_hash=1d19b369ce5febe40e88e2b17f9bf22efcd876522e880607f6648ec3e6e17d8e)(bufferutil@4.1.0)(supports-color@10.2.2)(utf-8-validate@6.0.6)
       '@trigger.dev/schema-to-json': 4.5.16(@sinclair/typebox@0.34.49)(bufferutil@4.1.0)(superstruct@2.0.2)(supports-color@10.2.2)(utf-8-validate@6.0.6)
       ansi-escapes: 7.3.0
       braces: 3.0.3
