@@ -10,19 +10,22 @@ import { encodeProviderErrorEvent } from "@/lib/media/envelope";
  *
  * One shared HTTP/SSE client backs both chat and code roles:
  *   - Chat / deep-thought → deepseek-ai/deepseek-v4-pro-0813
- *   - Code engine        → moonshotai/kimi-k3
+ *   - Code / agentic     → nvidia/nemotron-3-ultra-550b-a55b
  *
  * Model selection is driven by `options.model` (see the model constants below).
  * The endpoint is fixed to https://integrate.api.nvidia.com/v1 (overridable
  * via NVIDIA_NIM_BASE_URL) and authenticated with NVIDIA_API_KEY.
  */
-export const NIM_MODEL_DEEPSEEK_V4_PRO = "nvidia/nemotron-3-ultra-550b-a55b";
-export const NIM_MODEL_KIMI_K3 = "moonshotai/kimi-k3";
+// Keep the legacy quality-mode export for existing call sites.
+export const NIM_MODEL_NEMOTRON_ULTRA = "nvidia/nemotron-3-ultra-550b-a55b";
+export const NIM_MODEL_DEEPSEEK_V4_PRO = NIM_MODEL_NEMOTRON_ULTRA;
+// One shared code/agentic default; do not route to end-of-life Kimi K3.
+export const NIM_MODEL_CODE = NIM_MODEL_NEMOTRON_ULTRA;
 
 export interface NvidiaNimCallOptions extends CompletionOptions {
   /** Emit reasoning_content / thinking trace into the stream (default: false). */
   includeReasoning?: boolean;
-  /** Kimi K3 reasoning effort passthrough ("low" | "medium" | "high" | "max"). */
+  /** Reasoning effort passthrough for models that support it. */
   reasoningEffort?: 'low' | 'medium' | 'high' | 'max';
   /** Per-request timeout override (ms). Falls back to NIM_REQUEST_TIMEOUT_MS env or 120s. */
   timeoutMs?: number;
@@ -69,7 +72,7 @@ export class NvidiaNimProvider implements LLMProvider {
     } = {}
   ): Promise<{ content: string; toolCalls: NimToolCall[]; model: string }> {
     this.assertConfigured();
-    const modelId = params.model || NIM_MODEL_KIMI_K3;
+    const modelId = params.model || NIM_MODEL_CODE;
 
     // Pass messages through as-is (they already follow the OpenAI shape:
     // role/content/tool_calls/tool_call_id). Normalize a `text` field if present.

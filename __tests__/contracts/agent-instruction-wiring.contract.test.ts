@@ -13,7 +13,7 @@ jest.mock('@/lib/llm/providers/nvidiaNim', () => ({
   NvidiaNimProvider: class {
     chatWithTools = chatWithToolsMock;
   },
-  NIM_MODEL_KIMI_K3: 'kimi-k3-mock',
+  NIM_MODEL_CODE: 'nim-code-mock',
 }));
 
 let startChatOptions: Record<string, unknown> | undefined;
@@ -76,14 +76,14 @@ describe('instruction reaches the actual provider input — NIM path (#440)', ()
   beforeEach(() => chatWithToolsMock.mockClear());
 
   it('chatWithTools receives the manifest-derived system instruction', async () => {
-    await runNimReactLoop('q', ctx, emptyRegistry, 'kimi-k3-mock', instruction);
+    await runNimReactLoop('q', ctx, emptyRegistry, 'nim-code-mock', instruction);
     const options = chatWithToolsMock.mock.calls[0][1] as Record<string, unknown>;
     expect(options.systemInstruction).toBe(instruction);
     expect(String(options.systemInstruction)).toContain('You are Weaver');
   });
 
   it('an absent instruction stays absent at the provider boundary', async () => {
-    await runNimReactLoop('q', ctx, emptyRegistry, 'kimi-k3-mock');
+    await runNimReactLoop('q', ctx, emptyRegistry, 'nim-code-mock');
     const options = chatWithToolsMock.mock.calls[0][1] as Record<string, unknown>;
     expect(options.systemInstruction).toBeUndefined();
   });

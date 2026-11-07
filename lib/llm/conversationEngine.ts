@@ -16,7 +16,7 @@ import { env } from "@/lib/env";
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
 import { GeminiProvider, AGENTIC_MODEL } from "./providers/gemini";
 import { DeepSeekProvider } from "./providers/deepseek";
-import { NIM_MODEL_KIMI_K3 } from "./providers/nvidiaNim";
+import { NIM_MODEL_CODE } from "./providers/nvidiaNim";
 import {
   captureMemory,
   extractTags,
@@ -223,7 +223,7 @@ export async function generateConversationReply(
   const nativeProviderKeys = await withAbort((await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys), options.signal);
 
   // ---------------------------------------------------------
-  // UCOL AGENTIC MODE — Kimi K3 (NVIDIA NIM) + ReAct Loop
+  // UCOL AGENTIC MODE — Nemotron 3 Ultra (NVIDIA NIM) + ReAct Loop
   // Tools: web_search, write_research_paper, write_creative_content
   // ---------------------------------------------------------
   if (agentMode === 'agentic') {
@@ -367,7 +367,7 @@ export async function generateConversationReply(
     }
     // ------------------------------------
 
-    // Agentic execution uses the NVIDIA NIM Kimi K3 model (see providerResolver.ts).
+    // Agentic execution uses the NVIDIA NIM Nemotron 3 Ultra model (see providerResolver.ts).
     const onReasoning = (text: string) => {
       console.log(`[AgenticReasoning] ${String(text).slice(0, 400)}`);
     };
@@ -450,7 +450,7 @@ export async function generateConversationReply(
                 conversationId: conversationId ?? undefined,
                 requestId: options.requestId,
                 userQuery: sanitizedQuery,
-                modelName: NIM_MODEL_KIMI_K3,
+                modelName: NIM_MODEL_CODE,
                 mode: 'agentic',
               });
               if (triggerRunId) {
@@ -474,7 +474,7 @@ export async function generateConversationReply(
           // ─────────────────────────────────────────────────────────────────────
 
           // ── Tool-calling route: NIM (OpenAI-compatible) vs Gemini Vertex ──────
-          // NIM (Kimi K3) is the resolved agentic provider. Use the NIM ReAct
+          // NIM (Nemotron 3 Ultra) is the resolved agentic provider. Use the NIM ReAct
           // loop for text queries when NIM is configured; fall back to the
           // Gemini Vertex loop for multimodal (attachment-bearing) queries,
           // which NIM's text-only models cannot serve.
@@ -492,7 +492,7 @@ export async function generateConversationReply(
               sanitizedQuery,
               agentContext,
               registry,
-              NIM_MODEL_KIMI_K3,
+              NIM_MODEL_CODE,
               getSystemInstruction(capabilityManifest),
             );
           } else {
@@ -544,7 +544,7 @@ export async function generateConversationReply(
       stream,
       sources: [],
       debug: {
-        model: `nvidia-nim/${NIM_MODEL_KIMI_K3}`,
+        model: `nvidia-nim/${NIM_MODEL_CODE}`,
         userQuery,
       }
     };

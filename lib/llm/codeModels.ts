@@ -1,5 +1,5 @@
 import { CodeModelConfig } from './types';
-import { NIM_MODEL_DEEPSEEK_V4_PRO, NIM_MODEL_KIMI_K3 } from './providers/nvidiaNim';
+import { NIM_MODEL_DEEPSEEK_V4_PRO, NIM_MODEL_CODE } from './providers/nvidiaNim';
 
 export const CODE_MODELS: Record<string, CodeModelConfig> = {
     fast: {
@@ -22,8 +22,8 @@ export const CODE_MODELS: Record<string, CodeModelConfig> = {
         id: 'agentic',
         name: 'Agentic',
         provider: 'nvidia-nim',
-        modelId: NIM_MODEL_KIMI_K3,
-        description: 'Kimi K3 on NVIDIA NIM — autonomous code execution and tool use',
+        modelId: NIM_MODEL_CODE,
+        description: 'Nemotron 3 Ultra on NVIDIA NIM — autonomous code execution and tool use',
         maxTokens: 16384,
         supportsCodeExecution: true,
     },

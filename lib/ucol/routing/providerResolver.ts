@@ -1,13 +1,13 @@
 import type { AgentMode, LLMProvider } from '@/lib/llm/types';
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
-import { NvidiaNimProvider, NIM_MODEL_DEEPSEEK_V4_PRO, NIM_MODEL_KIMI_K3 } from '@/lib/llm/providers/nvidiaNim';
+import { NvidiaNimProvider, NIM_MODEL_DEEPSEEK_V4_PRO, NIM_MODEL_CODE } from '@/lib/llm/providers/nvidiaNim';
 import type { UcolProviderPlan } from './types';
 import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 import type { PersonaSession } from '@/lib/consultant/personaSession';
 
 const QUALITY_MODEL = NIM_MODEL_DEEPSEEK_V4_PRO;
-const AGENTIC_MODEL = NIM_MODEL_KIMI_K3;
+const AGENTIC_MODEL = NIM_MODEL_CODE;
 const REASONING_MODEL = NIM_MODEL_DEEPSEEK_V4_PRO;
 const FAST_MODEL = NIM_MODEL_DEEPSEEK_V4_PRO;
 
@@ -46,7 +46,7 @@ export type ProviderResolution = {
  *
  * NVIDIA NIM is the primary inference layer:
  *   - DeepSeek V4 Pro  → chat / deep-thought / quality / reasoning
- *   - Kimi K3          → agentic (tool use)
+ *   - Nemotron 3 Ultra          → agentic (tool use)
  *   - Gemini           → multimodal attachments ONLY + embeddings
  *
  * When a persona session is active, the persona's minimumModelTier acts as
@@ -100,7 +100,7 @@ function resolveBaseProvider(
   _providerKeys: ProviderApiKeys
 ): ProviderResolution {
 
-  // Attachments always route to Gemini — DeepSeek/Kimi on NIM are text-only.
+  // Attachments always route to Gemini — Nemotron on NIM are text-only.
   if (hasAttachments) {
     return {
       providerId: 'gemini',
@@ -131,7 +131,7 @@ function resolveBaseProvider(
         fallbackModelRefs: ['gemini.quality'],
         embeddingLanePreference: ['primary_768', 'secondary_3072'],
       },
-      reason: 'agentic mode routes to Kimi K3 on NVIDIA NIM',
+      reason: 'agentic mode routes to Nemotron 3 Ultra on NVIDIA NIM',
     };
   }
 
