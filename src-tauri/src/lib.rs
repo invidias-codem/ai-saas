@@ -550,7 +550,9 @@ pub fn run() {
             let native_supervisor = Arc::new(Supervisor::new("default".to_string(), &profile_dir)?);
             // Register the in-process desktop identity before session commands run.
             tauri::async_runtime::block_on(native_supervisor.hello(
-                "desktop", 1, Some(native_supervisor.server_secret()),
+                "desktop",
+                1,
+                Some(native_supervisor.server_secret()),
             ))
             .map_err(|e| e.message().to_string())?;
             app.manage(native_supervisor.clone());
@@ -567,8 +569,6 @@ pub fn run() {
                 );
                 let _ = serve(listener, sup).await;
             });
-
-
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
