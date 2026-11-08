@@ -4,6 +4,9 @@
 // Every request checks Clerk auth + preview ownership. The raw sandbox URL is
 // returned to the share page (which embeds it in an iframe) — it is never
 // handed out directly as a shareable link.
+//
+// ENABLE_PREVIEW_SHARING is separate from ENABLE_PREVIEW_SANDBOX. Sharing
+// remains disabled until Issue #479 enforcement is closed.
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { resolveShareLink } from '@/lib/code-builder/shareLink';
@@ -21,9 +24,9 @@ export async function GET(
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    if (process.env.ENABLE_PREVIEW_SANDBOX !== 'true') {
+    if (process.env.ENABLE_PREVIEW_SHARING !== 'true') {
       return NextResponse.json(
-        { error: 'Preview sandbox is not enabled' },
+        { error: 'Preview sharing is not enabled' },
         { status: 403 }
       );
     }

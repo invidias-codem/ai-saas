@@ -1,10 +1,13 @@
 // app/api/preview/share/route.ts
 // Phase 8D: Create a stable, Lattice-controlled share link for a sandbox
-// preview. Owner-only; feature-flagged via ENABLE_PREVIEW_SANDBOX.
+// preview. Owner-only; feature-flagged via ENABLE_PREVIEW_SHARING.
 //
 // The share link is the only way to access a preview. The raw sandbox URL is
 // never handed out — consumers receive a share token that resolves through an
 // authorization-checked route.
+//
+// ENABLE_PREVIEW_SHARING is separate from ENABLE_PREVIEW_SANDBOX. Sharing
+// remains disabled until Issue #479 enforcement is closed.
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createShareLink } from '@/lib/code-builder/shareLink';
@@ -19,9 +22,9 @@ export async function POST(req: Request) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    if (process.env.ENABLE_PREVIEW_SANDBOX !== 'true') {
+    if (process.env.ENABLE_PREVIEW_SHARING !== 'true') {
       return NextResponse.json(
-        { error: 'Preview sandbox is not enabled' },
+        { error: 'Preview sharing is not enabled' },
         { status: 403 }
       );
     }
