@@ -19,6 +19,8 @@ interface CodePanelProps {
     /** Owner-authorized preview backed by a completed durable build. */
     onSandboxPreview?: () => Promise<void>;
     sandboxPreviewPending?: boolean;
+    /** User-facing reason when no authorized isolated sandbox is available. */
+    previewUnavailableReason?: string | null;
     /** Never execute generated HTML/JS on the Lattice application origin. */
     disableLegacyBackendPreview?: boolean;
 }
@@ -70,7 +72,7 @@ function mapLanguage(lang: string): string {
 
 export function CodePanel({
     files, loading, onSandboxPreview, sandboxPreviewPending = false,
-    disableLegacyBackendPreview = true,
+    previewUnavailableReason = null, disableLegacyBackendPreview = true,
 }: CodePanelProps) {
     const [activeFile, setActiveFile] = useState<string | null>(null);
     const clipboard = useClipboard({ copiedTimeout: 2000 });
@@ -90,7 +92,12 @@ export function CodePanel({
 
     const selectedFile = files.find(f => f.path === activeFile) || codeFiles[0] || null;
 
-    const hasPreviewable = files.some(f => ['html','css','javascript','typescript','react'].includes(f.language));
+    // Model-generated language labels vary (e.g., "tsx" or "jsx"); do not
+    // hide a completed React project merely because it isn't labelled "react".
+    const hasPreviewable = files.some(f =>
+        ['html', 'css', 'javascript', 'js', 'typescript', 'ts', 'react', 'tsx', 'jsx'].includes(f.language.toLowerCase()) ||
+        /\.(tsx|jsx|ts|js|html|css)$/i.test(f.path)
+    );
 
     const frontendFastPath = isFrontendOnly(files);
 
@@ -222,13 +229,20 @@ root.render(React.createElement(App));
     }
 
     async function openPreview() {
-        if (!hasPreviewable) return;
         if (onSandboxPreview) {
             await onSandboxPreview();
             return;
         }
+        if (previewUnavailableReason) {
+            setPreviewError(previewUnavailableReason);
+            return;
+        }
+        if (!hasPreviewable) {
+            setPreviewError('This build has no previewable web files yet.');
+            return;
+        }
         if (disableLegacyBackendPreview) {
-            setPreviewError('Sandbox preview is not enabled for this build.');
+            setPreviewError('An isolated sandbox is required for previewing this app.');
             return;
         }
 
@@ -305,14 +319,17 @@ root.render(React.createElement(App));
                             >
                                 <Download className="h-3 w-3" />
                             </button>
-                            {hasPreviewable && (onSandboxPreview || (!disableLegacyBackendPreview && frontendFastPath)) && (
+                            {hasPreviewable && (
                                 <button
+                                    type="button"
                                     onClick={openPreview}
                                     disabled={creatingPreview || sandboxPreviewPending}
-                                    className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                                    aria-label={onSandboxPreview ? 'Open isolated app preview' : 'Check preview availability'}
+                                    title={previewUnavailableReason || 'Open isolated app preview'}
+                                    className="flex shrink-0 items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-300 hover:bg-violet-500/20 transition-colors"
                                 >
-                                    {creatingPreview || sandboxPreviewPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-                                    <span className="hidden sm:inline">Preview</span>
+                                    {creatingPreview || sandboxPreviewPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                                    <span>Preview</span>
                                 </button>
                             )}
                         </>
@@ -326,9 +343,6 @@ root.render(React.createElement(App));
                             Insufficient credits for preview · Upgrade
                         </button>
                     )}
-                    {previewError && !previewInsufficientCredits && (
-                        <div className="text-[10px] text-red-400 max-w-[180px] truncate" title={previewError}>{previewError}</div>
-                    )}
                     {previewMode && (
                         <span className="text-[10px] text-zinc-600 font-mono">
                             {previewMode === 'fast' ? 'fast-path' : 'backend'}
@@ -337,6 +351,11 @@ root.render(React.createElement(App));
                 </div>
             </div>
 
+            {previewError && !previewInsufficientCredits && (
+                <div role="status" className="shrink-0 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                    {previewError}
+                </div>
+            )}
             {/* Body */}
             <div className="flex-1 flex overflow-hidden">
                 {/* File tree sidebar (md+ only — mobile uses chip strip below) */}
