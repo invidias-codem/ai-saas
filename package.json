@@ -128,6 +128,7 @@
     "@vercel/blob": "^2.8.0",
     "@vercel/functions": "^3.3.5",
     "@vercel/og": "^0.8.6",
+    "@vercel/sandbox": "^3.9.1",
     "@zapier/zapier-sdk": "^0.93.0",
     "ai": "^6.0.193",
     "apify-client": "^2.25.0",
