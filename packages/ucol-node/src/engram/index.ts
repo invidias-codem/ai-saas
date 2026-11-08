@@ -182,13 +182,19 @@ export class EngramEngine {
     // ── Step 2 — Summarize each cluster ──────────────────────────────────────
     // Extract structured facts from each cluster via Gemini Flash
     const allRawFacts: Array<RawFact & { clusterId: number }> = [];
+    const successfulClusters = new Set<number>();
 
     for (let i = 0; i < clusters.length; i++) {
       const cluster = clusters[i];
       const clusterText = cluster.map((h) => `${h.role}: ${h.content}`).join('\n');
-      const facts = await this.extractFacts(clusterText);
-      for (const fact of facts) {
-        allRawFacts.push({ ...fact, clusterId: i });
+      try {
+        const facts = await this.extractFacts(clusterText);
+        for (const fact of facts) {
+          allRawFacts.push({ ...fact, clusterId: i });
+        }
+        successfulClusters.add(i);
+      } catch {
+        // Cluster extraction failed — its items remain undistilled for retry.
       }
     }
 
@@ -230,8 +236,13 @@ export class EngramEngine {
       persistedIds.push(kItem.id);
     }
 
-    // Mark H items as distilled
-    await this.store.markDistilled(hItems.map((h) => h.id));
+    // Mark H items as distilled only for clusters whose extraction succeeded.
+    // Items from failed clusters remain undistilled for retry.
+    const itemsPerCluster = Math.ceil(hItems.length / clusters.length);
+    const distilledIds = hItems
+      .filter((_, idx) => successfulClusters.has(Math.floor(idx / itemsPerCluster)))
+      .map((h) => h.id);
+    await this.store.markDistilled(distilledIds);
 
     // ── Step 5 — Report ───────────────────────────────────────────────────────
     const estimatedOutputBytes =
@@ -251,14 +262,13 @@ export class EngramEngine {
 
   /**
    * Extract structured facts from a cluster text using Gemini Flash.
-   * Falls back to an empty array on API error.
+   * Throws on API error — callers decide how to handle failures.
    *
    * @param clusterText - Concatenated history turns for a cluster
    * @returns Array of raw facts
    */
   private async extractFacts(clusterText: string): Promise<RawFact[]> {
-    try {
-      const genAI = new GoogleGenerativeAI(this.geminiApiKey);
+    const genAI = new GoogleGenerativeAI(this.geminiApiKey);
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
       const prompt = `Extract structured facts from this conversation segment.
@@ -282,9 +292,6 @@ ${clusterText.slice(0, 4000)}`;
 
       const parsed = JSON.parse(jsonMatch[0]) as unknown[];
       return parsed.filter(isValidRawFact).map((f) => f as RawFact);
-    } catch {
-      return [];
-    }
   }
 
   /**
