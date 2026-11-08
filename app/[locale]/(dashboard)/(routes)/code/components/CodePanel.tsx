@@ -16,6 +16,11 @@ import { transpileProject } from "@/lib/bundler";
 interface CodePanelProps {
     files: GeneratedFile[];
     loading: boolean;
+    /** Owner-authorized preview backed by a completed durable build. */
+    onSandboxPreview?: () => Promise<void>;
+    sandboxPreviewPending?: boolean;
+    /** Never execute generated HTML/JS on the Lattice application origin. */
+    disableLegacyBackendPreview?: boolean;
 }
 
 function isFrontendOnly(files: GeneratedFile[]): boolean {
@@ -63,7 +68,10 @@ function mapLanguage(lang: string): string {
     return map[lang.toLowerCase()] || lang;
 }
 
-export function CodePanel({ files, loading }: CodePanelProps) {
+export function CodePanel({
+    files, loading, onSandboxPreview, sandboxPreviewPending = false,
+    disableLegacyBackendPreview = false,
+}: CodePanelProps) {
     const [activeFile, setActiveFile] = useState<string | null>(null);
     const clipboard = useClipboard({ copiedTimeout: 2000 });
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -267,6 +275,14 @@ root.render(React.createElement(App));
 
     async function openPreview() {
         if (!hasPreviewable) return;
+        if (onSandboxPreview) {
+            await onSandboxPreview();
+            return;
+        }
+        if (disableLegacyBackendPreview) {
+            setPreviewError('Sandbox preview is not enabled for this build.');
+            return;
+        }
 
         // Default the preview frame to the viewer's actual form factor
         if (typeof window !== 'undefined') {
@@ -278,7 +294,7 @@ root.render(React.createElement(App));
         } else if (frontendFastPath && !isReady) {
             setPreviewError('Compiler engine not ready yet');
         } else {
-            await openBackendPreview();
+            setPreviewError('Backend previews now require an isolated Code Builder sandbox.');
         }
     }
 
@@ -341,13 +357,13 @@ root.render(React.createElement(App));
                             >
                                 <Download className="h-3 w-3" />
                             </button>
-                            {hasPreviewable && (
+                            {hasPreviewable && (onSandboxPreview || (!disableLegacyBackendPreview && frontendFastPath)) && (
                                 <button
                                     onClick={openPreview}
-                                    disabled={creatingPreview}
+                                    disabled={creatingPreview || sandboxPreviewPending}
                                     className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
                                 >
-                                    {creatingPreview ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                                    {creatingPreview || sandboxPreviewPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
                                     <span className="hidden sm:inline">Preview</span>
                                 </button>
                             )}
