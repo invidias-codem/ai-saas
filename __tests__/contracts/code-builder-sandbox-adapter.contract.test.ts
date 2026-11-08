@@ -65,9 +65,9 @@ import { supabaseAdmin } from '@/lib/supabaseClient';
 
 const mockSandboxCreate = Sandbox.create as jest.Mock;
 const mockSandboxGet = Sandbox.get as jest.Mock;
-const mockFrom = supabaseAdmin.from as jest.Mock;
-const mockInsert = supabaseAdmin.insert as jest.Mock;
-const mockUpdate = supabaseAdmin.update as jest.Mock;
+const mockFrom = (supabaseAdmin as any).from as jest.Mock;
+const mockInsert = (supabaseAdmin as any).insert as jest.Mock;
+const mockUpdate = (supabaseAdmin as any).update as jest.Mock;
 
 const buildId = '00000000-0000-4000-8000-000000000001';
 const userId = 'user_123';

@@ -27,7 +27,7 @@ jest.mock('@/lib/supabaseClient', () => {
 
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
-const mockFrom = supabaseAdmin.from as jest.Mock;
+const mockFrom = (supabaseAdmin as any).from as jest.Mock;
 
 let mockQB: {
   select: jest.Mock;
