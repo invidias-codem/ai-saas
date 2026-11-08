@@ -69,6 +69,7 @@ const RESERVED_FILES = new Set([
   '.npmrc', '.yarnrc', '.pnp.cjs', 'package.json', 'package-lock.json',
   'pnpm-lock.yaml', 'yarn.lock', 'bun.lockb', 'bun.lock', 'tsconfig.json',
   'vercel.json', 'dockerfile', 'docker-compose.yml', 'procfile',
+  'layout.tsx', 'globals.css',
 ]);
 
 const ENTRY_CANDIDATES = [

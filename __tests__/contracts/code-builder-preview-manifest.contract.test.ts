@@ -49,6 +49,7 @@ describe('code builder preview source manifest (Phase 8A)', () => {
   it.each([
     '.env', '.env.production', 'package.json', 'pnpm-lock.yaml',
     'next.config.js', 'node_modules/react/index.js', '.git/config',
+    'app/layout.tsx', 'app/globals.css',
   ])('rejects generated override of trusted environment %s', path => {
     rejects([generated('app/page.tsx'), generated(path)], 'RESERVED_PATH');
   });
