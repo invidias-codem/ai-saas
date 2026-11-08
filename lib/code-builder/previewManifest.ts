@@ -120,7 +120,7 @@ function normalizePath(value: unknown): string {
  */
 export function makePreviewManifest(
   buildId: string,
-  generatedFiles: readonly GeneratedFile[],
+  generatedFiles: readonly PreviewSourceFile[],
 ): PreviewManifest {
   if (!/^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i.test(buildId)) {
     throw new PreviewArtifactError('INVALID_BUILD_ID');

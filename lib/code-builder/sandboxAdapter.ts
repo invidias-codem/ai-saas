@@ -18,7 +18,6 @@ import type { PreviewManifest, PreviewSourceFile } from './previewManifest';
 import { assemblePreviewProject, projectFiles } from './previewAssembler';
 import { makePreviewManifest } from './previewManifest';
 import { supabaseAdmin } from '@/lib/supabaseClient';
-import { requireEnv } from '@/lib/env';
 
 const PREVIEW_PORT = 3000;
 const SANDBOX_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -143,9 +142,11 @@ export async function provisionSandbox(
     }
 
     // ── 6. npm install, next build, next start (detached) ─────────────
-    await sandbox.runCommand('npm', ['install'], { cwd: '/app' });
-    await sandbox.runCommand('npx', ['next', 'build'], { cwd: '/app' });
-    await sandbox.runCommand('npx', ['next', 'start', '-p', String(PREVIEW_PORT)], {
+    await sandbox.runCommand({ cmd: 'npm', args: ['install'], cwd: '/app' });
+    await sandbox.runCommand({ cmd: 'npx', args: ['next', 'build'], cwd: '/app' });
+    await sandbox.runCommand({
+      cmd: 'npx',
+      args: ['next', 'start', '-p', String(PREVIEW_PORT)],
       cwd: '/app',
       detached: true,
     });
@@ -164,7 +165,7 @@ export async function provisionSandbox(
     await sb
       .from('preview_sandboxes')
       .update({
-        sandbox_id: sandbox.metadata.id,
+        sandbox_id: sandbox.name,
         sandbox_url: sandboxUrl,
         status: 'ready',
         updated_at: new Date().toISOString(),
@@ -250,7 +251,7 @@ export async function destroySandbox(previewId: string, userId: string): Promise
 
   if (row.status === 'ready' || row.status === 'provisioning') {
     try {
-      const sandbox = await Sandbox.get({ sandboxId: row.sandbox_id });
+      const sandbox = await Sandbox.get({ name: row.sandbox_id });
       await (sandbox as unknown as AsyncDisposable)[Symbol.asyncDispose]?.();
     } catch {
       // Best-effort: sandbox may already be gone.
@@ -295,5 +296,7 @@ export function sandboxAdapterSelfCheck(): void {
     // Feature flag off is a valid configuration; not an error.
     return;
   }
-  requireEnv('VERCEL_OIDC_TOKEN');
+  if (!process.env.VERCEL_OIDC_TOKEN) {
+    throw new Error('[sandboxAdapter] VERCEL_OIDC_TOKEN is required');
+  }
 }

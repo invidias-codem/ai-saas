@@ -235,7 +235,7 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
     mockQB.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
 
     await destroySandbox('preview_1', userId);
-    expect(mockSandboxGet).toHaveBeenCalledWith({ sandboxId: 'sbx_123' });
+    expect(mockSandboxGet).toHaveBeenCalledWith({ name: 'sbx_123' });
     const updateCalls = mockQB.update.mock.calls;
     expect(updateCalls.some((call) => call[0]?.status === 'expired')).toBe(true);
   });
