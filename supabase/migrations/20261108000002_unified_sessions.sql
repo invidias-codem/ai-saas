@@ -46,10 +46,11 @@ CREATE TABLE IF NOT EXISTS public.unified_sessions (
     expires_at           TIMESTAMPTZ NOT NULL DEFAULT now() + interval '24 hours'
 );
 
--- One active session per workspace + artifact revision.
+-- Stable single session identity per workspace + artifact revision. Expired records
+-- must be reopened explicitly rather than inserting duplicate identities.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unified_sessions_workspace_revision
     ON public.unified_sessions(workspace_id, artifact_revision)
-    WHERE expires_at > now();
+;
 
 -- Lookup by resource for reconciliation.
 CREATE INDEX IF NOT EXISTS idx_unified_sessions_preview
@@ -59,18 +60,14 @@ CREATE INDEX IF NOT EXISTS idx_unified_sessions_desktop
 CREATE INDEX IF NOT EXISTS idx_unified_sessions_build
     ON public.unified_sessions(build_id);
 
--- RLS: workspace-scoped reads/writes.
+-- RLS: server-only data access. Clerk identities are not Supabase auth.uid()s;
+-- the service layer must verify workspace ownership/membership before reads or writes.
 ALTER TABLE public.unified_sessions ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE public.unified_sessions FROM PUBLIC, anon;
-REVOKE INSERT, UPDATE, DELETE ON TABLE public.unified_sessions FROM authenticated;
+REVOKE ALL ON TABLE public.unified_sessions FROM PUBLIC, anon, authenticated;
 
-GRANT SELECT ON TABLE public.unified_sessions TO authenticated;
-CREATE POLICY "workspace_members_read_sessions" ON public.unified_sessions
-    FOR SELECT
-    TO authenticated
-    USING (true); -- Workspace membership enforced at API layer; RLS defers to app
-
--- Service role owns all writes.
+-- Deliberately no authenticated/anon SELECT grant or permissive RLS policy:
+-- cross-workspace data can only be read via authorized, server-side service.
+-- Service role owns reads and writes.
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.unified_sessions TO service_role;
 
 -- updated_at maintenance.

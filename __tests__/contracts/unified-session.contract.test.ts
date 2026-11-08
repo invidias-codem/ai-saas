@@ -4,6 +4,7 @@
 const mockQB = {
   select: jest.fn().mockReturnThis(),
   eq: jest.fn().mockReturnThis(),
+  gt: jest.fn().mockReturnThis(),
   maybeSingle: jest.fn(),
   single: jest.fn().mockReturnThis(),
   insert: jest.fn().mockReturnThis(),
@@ -62,7 +63,11 @@ function configureInsert(data: unknown) {
 }
 
 function configureUpdate(data: unknown) {
-  mockQB.single.mockResolvedValueOnce({ data, error: null });
+  // A scoped update ends in .select('id').maybeSingle() and must return a row.
+  mockQB.maybeSingle.mockResolvedValueOnce({
+    data: data ? { id: (data as { id?: string }).id ?? sessionId } : null,
+    error: null,
+  });
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────
@@ -72,6 +77,7 @@ describe('unified session store (Phase 8F.0)', () => {
     jest.clearAllMocks();
     mockQB.select.mockReturnThis();
     mockQB.eq.mockReturnThis();
+    mockQB.gt.mockReturnThis();
     mockQB.insert.mockReturnThis();
     mockQB.update.mockReturnThis();
     mockQB.single.mockReturnThis();
@@ -158,6 +164,7 @@ describe('unified session store (Phase 8F.0)', () => {
   });
 
   it('grantInputControl for agent sets input authority', async () => {
+    configureGetSession(mockSession);
     configureUpdate(mockSession);
 
     await unifiedSessionStore.grantInputControl({
@@ -172,6 +179,7 @@ describe('unified session store (Phase 8F.0)', () => {
   });
 
   it('grantInputControl for human sets input authority', async () => {
+    configureGetSession(mockSession);
     configureUpdate(mockSession);
 
     await unifiedSessionStore.grantInputControl({
@@ -267,7 +275,68 @@ describe('unified session store (Phase 8F.0)', () => {
     expect(genEq![1]).toBe(5);
   });
 
+  it('honors a shorter bounded input lease', async () => {
+    configureGetSession(mockSession);
+    configureUpdate(mockSession);
+    await unifiedSessionStore.grantInputControl({
+      session_id: sessionId, holder_type: 'agent', holder_id: agentId, ttl_ms: 5_000,
+    });
+    expect(mockQB.gt).toHaveBeenCalledWith('expires_at', expect.any(String));
+    const patch = mockQB.update.mock.calls[0][0];
+    expect(Date.parse(patch.input_control_expires_at) - Date.parse(patch.input_control_granted_at))
+      .toBeGreaterThanOrEqual(4_500);
+    expect(Date.parse(patch.input_control_expires_at) - Date.parse(patch.input_control_granted_at))
+      .toBeLessThanOrEqual(5_500);
+  });
+
+  it('never revokes control on other sessions when granting a lease', async () => {
+    configureGetSession(mockSession);
+    configureUpdate(mockSession);
+
+    await unifiedSessionStore.grantInputControl({
+      session_id: sessionId,
+      holder_type: 'human',
+      holder_id: humanUserId,
+    });
+
+    expect(mockQB.update).toHaveBeenCalledTimes(1);
+    expect(mockQB.eq).toHaveBeenCalledWith('id', sessionId);
+    expect(mockQB.eq).toHaveBeenCalledWith('control_generation', 1);
+    const patch = mockQB.update.mock.calls[0][0];
+    expect(patch.control_generation).toBe(2);
+  });
+
+  it('reports a losing handoff CAS as a conflict instead of success', async () => {
+    configureGetSession(mockSession);
+    configureUpdate(null);
+    await expect(
+      unifiedSessionStore.takeControl({ session_id: sessionId, human_user_id: humanUserId })
+    ).rejects.toThrow('stale generation');
+  });
+
+  it('does not issue input control for an expired session', async () => {
+    configureGetSession({ ...mockSession, expires_at: new Date(0).toISOString() });
+    await expect(
+      unifiedSessionStore.grantInputControl({
+        session_id: sessionId, holder_type: 'agent', holder_id: agentId,
+      })
+    ).rejects.toThrow('session expired');
+    expect(mockQB.update).not.toHaveBeenCalled();
+  });
+
+  it('returns non-actionable state for expired session and control leases', async () => {
+    configureGetSession({
+      ...mockSession,
+      input_control_expires_at: new Date(0).toISOString(),
+      session_lease_expires_at: new Date(0).toISOString(),
+    });
+    const state = await unifiedSessionStore.getSessionState(sessionId);
+    expect(state?.canAct.agent).toBe(false);
+    expect(state?.canAct.observer).toBe(false);
+  });
+
   it('revokeInputControl clears input authority and resets to observer', async () => {
+    configureGetSession(mockSession);
     configureUpdate(mockSession);
 
     await unifiedSessionStore.revokeInputControl(sessionId);
@@ -287,6 +356,7 @@ describe('unified session store (Phase 8F.0)', () => {
   });
 
   it('expireSession sets expires_at to now', async () => {
+    configureGetSession(mockSession);
     configureUpdate(mockSession);
 
     await unifiedSessionStore.expireSession(sessionId);
