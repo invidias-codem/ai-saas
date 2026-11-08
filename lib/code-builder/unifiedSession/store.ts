@@ -59,6 +59,54 @@ function toSession(row: any): UnifiedSession {
   };
 }
 
+// All control changes use one scoped compare-and-swap. A zero-row update
+// means another actor changed the generation or the session disappeared.
+// Never report that a handoff succeeded unless the modified row is returned.
+async function setControlLease(
+  sessionId: string,
+  holder: string | null,
+  mode: ControlMode,
+  action: string,
+  expire = false
+): Promise<void> {
+  const sb = assertSupabase();
+  const { data: current, error: readError } = await sb
+    .from('unified_sessions')
+    .select('control_generation, expires_at')
+    .eq('id', sessionId)
+    .maybeSingle();
+
+  if (readError) throw new Error(`[unifiedSession] ${action} read failed: ${readError.message}`);
+  if (!current) throw new Error(`[unifiedSession] ${action} session not found: ${sessionId}`);
+  if (!Number.isSafeInteger(current.control_generation) || current.control_generation < 0) {
+    throw new Error(`[unifiedSession] ${action} invalid control generation`);
+  }
+  if (!expire && (!current.expires_at || Date.parse(current.expires_at) <= Date.now())) {
+    throw new Error(`[unifiedSession] ${action} session expired`);
+  }
+
+  const now = new Date().toISOString();
+  const next: Record<string, unknown> = {
+    input_control_holder: holder,
+    input_control_granted_at: holder ? now : null,
+    input_control_expires_at: holder ? new Date(Date.now() + DEFAULT_TTL_MS).toISOString() : null,
+    control_mode: mode,
+    control_generation: current.control_generation + 1,
+    updated_at: now,
+  };
+  if (expire) next.expires_at = now;
+
+  const { data: advanced, error: updateError } = await sb
+    .from('unified_sessions')
+    .update(next)
+    .eq('id', sessionId)
+    .eq('control_generation', current.control_generation)
+    .select('id')
+    .maybeSingle();
+  if (updateError) throw new Error(`[unifiedSession] ${action} failed: ${updateError.message}`);
+  if (!advanced) throw new Error(`[unifiedSession] ${action} stale generation or missing session`);
+}
+
 export const unifiedSessionStore: UnifiedSessionStore = {
   async createSession(input: CreateSessionInput): Promise<UnifiedSession> {
     const sb = assertSupabase();
@@ -112,6 +160,15 @@ export const unifiedSessionStore: UnifiedSessionStore = {
     const session = await this.getSession(sessionId);
     if (!session) return null;
 
+    const sessionLive = Date.parse(session.expires_at) > Date.now();
+    const controlLive = sessionLive &&
+      !!session.input_control_expires_at &&
+      Date.parse(session.input_control_expires_at) > Date.now();
+    const observerLive = sessionLive &&
+      !!session.session_lease_user &&
+      !!session.session_lease_expires_at &&
+      Date.parse(session.session_lease_expires_at) > Date.now();
+
     return {
       session,
       resources: {
@@ -127,14 +184,16 @@ export const unifiedSessionStore: UnifiedSessionStore = {
       },
       canAct: {
         agent:
+          controlLive &&
           session.control_mode === 'agent' &&
           !!session.input_control &&
           session.input_control.type === 'agent',
         human:
+          controlLive &&
           session.control_mode === 'human' &&
           !!session.input_control &&
           session.input_control.type === 'human',
-        observer: !!session.session_lease_user,
+        observer: observerLive,
       },
     };
   },
@@ -180,117 +239,27 @@ export const unifiedSessionStore: UnifiedSessionStore = {
   },
 
   async grantInputControl(input: GrantInputControlInput): Promise<void> {
-    const sb = assertSupabase();
-    const ttlMs = input.ttl_ms ?? DEFAULT_TTL_MS;
-    const now = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
-    const holder = `${input.holder_type}:${input.holder_id}`;
-
-    // Only one input controller at a time — revoke any existing holder first.
-    await sb.from('unified_sessions').update({
-      input_control_holder: null,
-      input_control_granted_at: null,
-      input_control_expires_at: null,
-      updated_at: now,
-    });
-
-    const { error } = await sb
-      .from('unified_sessions')
-      .update({
-        input_control_holder: holder,
-        input_control_granted_at: now,
-        input_control_expires_at: expiresAt,
-        control_mode: input.holder_type === 'agent' ? 'agent' : 'human',
-        updated_at: now,
-      })
-      .eq('id', input.session_id);
-
-    if (error) throw new Error(`[unifiedSession] grantInputControl failed: ${error.message}`);
+    if (!input.holder_id) throw new Error('[unifiedSession] missing controller identity');
+    await setControlLease(
+      input.session_id,
+      `${input.holder_type}:${input.holder_id}`,
+      input.holder_type === 'agent' ? 'agent' : 'human',
+      'grantInputControl'
+    );
   },
 
   async takeControl(input: TakeControlInput): Promise<void> {
-    const sb = assertSupabase();
-    const now = new Date().toISOString();
-
-    // Atomic: read current generation, then conditionally update with
-    // generation fencing. The WHERE clause ensures we only act if the
-    // generation hasn't changed since we read it (prevents stale takeovers).
-    const { data: current } = await sb
-      .from('unified_sessions')
-      .select('control_generation, input_control_holder, control_mode')
-      .eq('id', input.session_id)
-      .maybeSingle();
-
-    if (!current) {
-      throw new Error(`[unifiedSession] session not found: ${input.session_id}`);
-    }
-
-    // Revoke agent input control if active.
-    if (current.input_control_holder?.startsWith('agent:')) {
-      // Already handled below by setting input_control_holder to human.
-    }
-
-    const { error } = await sb
-      .from('unified_sessions')
-      .update({
-        input_control_holder: `human:${input.human_user_id}`,
-        input_control_granted_at: now,
-        input_control_expires_at: new Date(Date.now() + DEFAULT_TTL_MS).toISOString(),
-        control_mode: 'human',
-        control_generation: (current.control_generation ?? 0) + 1,
-        updated_at: now,
-      })
-      .eq('id', input.session_id)
-      .eq('control_generation', current.control_generation);
-
-    if (error) throw new Error(`[unifiedSession] takeControl failed: ${error.message}`);
+    if (!input.human_user_id) throw new Error('[unifiedSession] missing human identity');
+    await setControlLease(input.session_id, `human:${input.human_user_id}`, 'human', 'takeControl');
   },
 
   async handBackToAI(input: HandBackInput): Promise<void> {
-    const sb = assertSupabase();
-    const now = new Date().toISOString();
-
-    const { data: current } = await sb
-      .from('unified_sessions')
-      .select('control_generation, input_control_holder, control_mode')
-      .eq('id', input.session_id)
-      .maybeSingle();
-
-    if (!current) {
-      throw new Error(`[unifiedSession] session not found: ${input.session_id}`);
-    }
-
-    const { error } = await sb
-      .from('unified_sessions')
-      .update({
-        input_control_holder: `agent:${input.agent_id}`,
-        input_control_granted_at: now,
-        input_control_expires_at: new Date(Date.now() + DEFAULT_TTL_MS).toISOString(),
-        control_mode: 'agent',
-        control_generation: (current.control_generation ?? 0) + 1,
-        updated_at: now,
-      })
-      .eq('id', input.session_id)
-      .eq('control_generation', current.control_generation);
-
-    if (error) throw new Error(`[unifiedSession] handBackToAI failed: ${error.message}`);
+    if (!input.agent_id) throw new Error('[unifiedSession] missing agent identity');
+    await setControlLease(input.session_id, `agent:${input.agent_id}`, 'agent', 'handBackToAI');
   },
 
   async revokeInputControl(sessionId: string): Promise<void> {
-    const sb = assertSupabase();
-
-    const { error } = await sb
-      .from('unified_sessions')
-      .update({
-        input_control_holder: null,
-        input_control_granted_at: null,
-        input_control_expires_at: null,
-        control_mode: 'observer',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', sessionId);
-
-    if (error) throw new Error(`[unifiedSession] revokeInputControl failed: ${error.message}`);
+    await setControlLease(sessionId, null, 'observer', 'revokeInputControl');
   },
 
   async revokeObserver(sessionId: string): Promise<void> {
@@ -310,16 +279,7 @@ export const unifiedSessionStore: UnifiedSessionStore = {
   },
 
   async expireSession(sessionId: string): Promise<void> {
-    const sb = assertSupabase();
-
-    const { error } = await sb
-      .from('unified_sessions')
-      .update({
-        expires_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', sessionId);
-
-    if (error) throw new Error(`[unifiedSession] expireSession failed: ${error.message}`);
+    // Expiration also fences stale controllers, not merely the expiry timestamp.
+    await setControlLease(sessionId, null, 'observer', 'expireSession', true);
   },
 };
