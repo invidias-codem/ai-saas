@@ -23,6 +23,7 @@ import { AlertCircle } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { observeBuildProgress, type ProgressObservation } from '@/lib/code-builder/buildProgress';
 import { isTerminalRunStatus } from '@/lib/code-builder/runStatus';
+import { resolvePreviewAvailability } from '@/lib/code-builder/previewAvailability';
 
 type BuildPhase = 'idle' | 'planning' | 'coding' | 'done';
 
@@ -91,6 +92,17 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
     const [completedBuildId, setCompletedBuildId] = useState<string | null>(null);
     const [creatingSandboxPreview, setCreatingSandboxPreview] = useState(false);
     const [sandboxPreviewError, setSandboxPreviewError] = useState<string | null>(null);
+    // This is an owner-only launcher, not a public share feature.
+    // Keep the action visible even when the backend flag is off so mobile users
+    // get an accurate availability message rather than a missing button.
+    const previewAvailability = resolvePreviewAvailability({
+        enabled: sandboxPreviewEnabled,
+        durableExecution: DURABLE_EXECUTION,
+        buildId: completedBuildId,
+        phase,
+        hasFiles: files.length > 0,
+        hasError: !!error,
+    });
 
     // Durable-execution observability state (PR B1). Tracks polling health
     // separately from build progress so we can render "still running, updates
@@ -610,9 +622,8 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
                             files={files}
                             loading={phase === 'coding'}
                             disableLegacyBackendPreview={true}
-                            onSandboxPreview={DURABLE_EXECUTION && sandboxPreviewEnabled && completedBuildId && phase === 'done' && !error
-                                ? openSandboxPreview
-                                : undefined}
+                            onSandboxPreview={previewAvailability.canLaunch ? openSandboxPreview : undefined}
+                            previewUnavailableReason={previewAvailability.reason}
                             sandboxPreviewPending={creatingSandboxPreview}
                         />
                     </div>
