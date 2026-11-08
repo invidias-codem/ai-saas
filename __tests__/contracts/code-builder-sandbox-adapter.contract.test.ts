@@ -3,16 +3,15 @@ import type { PreviewSourceFile } from '@/lib/code-builder/previewManifest';
 // ─── Mocks ─────────────────────────────────────────────────────────────────
 
 // Mock @vercel/sandbox so tests never provision real VMs.
-const routes = [{ url: 'https://preview-xyz.vercel-sandbox.com', subdomain: 'preview-xyz', port: 3000 }];
-const metadata = { id: 'sbx_mock_123' };
 const mockRunCommand = jest.fn().mockResolvedValue({ exitCode: 0 });
-const mockAsyncDispose = jest.fn().mockResolvedValue(undefined);
+const mockStop = jest.fn().mockResolvedValue({ session: {} });
 const mockSandboxInstance = {
-  fs: { writeFile: jest.fn() },
+  fs: { writeFile: jest.fn(), writeFiles: jest.fn() },
   runCommand: mockRunCommand,
-  metadata,
-  routes,
-  [Symbol.asyncDispose]: mockAsyncDispose,
+  domain: jest.fn().mockReturnValue('https://preview-xyz.vercel-sandbox.com'),
+  name: 'lattice-preview-xyz',
+  [Symbol.asyncDispose]: jest.fn().mockResolvedValue(undefined),
+  stop: mockStop,
 };
 
 jest.mock('@vercel/sandbox', () => ({
@@ -33,6 +32,7 @@ export const mockQB = {
   maybeSingle: jest.fn(),
   insert: jest.fn().mockReturnThis(),
   update: jest.fn().mockReturnThis(),
+  single: jest.fn().mockReturnThis(),
 };
 
 // Mock fetch for health checks.
@@ -54,7 +54,6 @@ jest.mock('@/lib/supabaseClient', () => ({
 }));
 
 // ─── Imports (after mocks) ────────────────────────────────────────────────
-
 import {
   provisionSandbox,
   sandboxStatus,
@@ -110,18 +109,28 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
     mockInsert.mockClear();
     mockUpdate.mockClear();
     mockRunCommand.mockClear();
-    mockAsyncDispose.mockClear();
+    mockStop.mockClear();
+    mockSandboxCreate.mockClear();
+    mockSandboxGet.mockClear();
     mockSandboxInstance.fs.writeFile.mockClear();
-    // Clear maybeSingle's ResolvedValueOnce queue between tests
+    mockSandboxInstance.fs.writeFiles.mockClear();
+    mockSandboxInstance.domain.mockClear();
     mockQB.maybeSingle.mockReset();
-    // Re-establish mockReturnThis after reset
+    mockQB.single.mockReset();
+    mockQB.insert.mockReset();
+    mockQB.update.mockReset();
     mockQB.select.mockReturnThis();
     mockQB.eq.mockReturnThis();
+    mockQB.insert.mockReturnThis();
+    mockQB.update.mockReturnThis();
+    mockQB.single.mockReturnThis();
     process.env.ENABLE_PREVIEW_SANDBOX = 'true';
+    process.env.PREVIEW_SANDBOX_TIMEOUT_MS = '4500000'; // 75 min
   });
 
   afterEach(() => {
     delete process.env.ENABLE_PREVIEW_SANDBOX;
+    delete process.env.PREVIEW_SANDBOX_TIMEOUT_MS;
   });
 
   it('self-check passes when feature flag is off', () => {
@@ -148,7 +157,7 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
     expect(createCall.ports).toContain(3000);
     expect(createCall.name).toContain('lattice-preview');
 
-    // Verify files were written (template + generated)
+    // Verify files were written (template + generated) via individual writeFile calls
     expect(mockSandboxInstance.fs.writeFile).toHaveBeenCalledTimes(
       5 + generatedFiles.length // 5 template + 2 generated = 7
     );
@@ -158,6 +167,24 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
     );
     expect(pkgCall).toBeDefined();
     expect(pkgCall[1]).toContain('next');
+
+    // Verify all three commands ran with exitCode checking
+    expect(mockRunCommand).toHaveBeenCalledTimes(3);
+
+    // Verify domain() was used (not routes)
+    expect(mockSandboxInstance.domain).toHaveBeenCalledWith(3000);
+  });
+
+  it('respects configurable timeout capped at 24h', async () => {
+    mockBuildLookup('completed', generatedFiles);
+    mockPreviewRowInsert();
+    mockPreviewRowUpdate();
+
+    process.env.PREVIEW_SANDBOX_TIMEOUT_MS = '100000000'; // > 24h, should be capped
+    await provisionSandbox(buildId, userId, workspaceId);
+
+    const createCall = mockSandboxCreate.mock.calls[0][0];
+    expect(createCall.timeout).toBe(24 * 60 * 60 * 1000); // capped at max
   });
 
   it('throws when feature flag is off', async () => {
@@ -190,6 +217,32 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
     );
   });
 
+  it('fails when npm install exits non-zero and stops sandbox', async () => {
+    mockBuildLookup('completed', generatedFiles);
+    mockPreviewRowInsert();
+    // First command (npm install) fails
+    mockRunCommand.mockResolvedValueOnce({ exitCode: 1 });
+
+    await expect(provisionSandbox(buildId, userId)).rejects.toThrow(
+      'npm install failed'
+    );
+    // Sandbox should be stopped on failure
+    expect(mockStop).toHaveBeenCalled();
+  });
+
+  it('fails when next build exits non-zero', async () => {
+    mockBuildLookup('completed', generatedFiles);
+    mockPreviewRowInsert();
+    // npm install succeeds, next build fails
+    mockRunCommand.mockResolvedValueOnce({ exitCode: 0 });
+    mockRunCommand.mockResolvedValueOnce({ exitCode: 1 });
+
+    await expect(provisionSandbox(buildId, userId)).rejects.toThrow(
+      'next build failed'
+    );
+    expect(mockStop).toHaveBeenCalled();
+  });
+
   it('sandboxStatus returns ready with URL', async () => {
     mockQB.maybeSingle.mockResolvedValueOnce({
       data: {
@@ -220,24 +273,25 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
       },
       error: null,
     });
-    // The update() call from expiry marking also needs a maybeSingle
-    mockQB.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    // The update() call from expiry marking also needs a single()
+    mockQB.single.mockResolvedValueOnce({ data: null, error: null });
 
     const status = await sandboxStatus('preview_1', userId);
     expect(status.status).toBe('expired');
   });
 
-  it('destroySandbox cleans up and marks expired', async () => {
+  it('destroySandbox stops the VM and marks expired', async () => {
     mockQB.maybeSingle.mockResolvedValueOnce({
       data: { sandbox_id: 'sbx_123', status: 'ready', user_id: userId },
       error: null,
     });
-    mockQB.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    mockQB.single.mockResolvedValueOnce({ data: null, error: null });
 
     await destroySandbox('preview_1', userId);
     expect(mockSandboxGet).toHaveBeenCalledWith({ name: 'sbx_123' });
-    const updateCalls = mockQB.update.mock.calls;
-    expect(updateCalls.some((call) => call[0]?.status === 'expired')).toBe(true);
+    expect(mockStop).toHaveBeenCalled();
+    // update should be called with status expired
+    expect(mockQB.update.mock.calls[0][0]?.status).toBe('expired');
   });
 
   it('destroySandbox on ownership mismatch throws', async () => {

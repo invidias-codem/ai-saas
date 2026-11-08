@@ -12,6 +12,10 @@
  * - Generated code executes in a separate origin (sandbox URL), never on
  *   gen1e.xyz. See Issue #479.
  * - Feature flagged via ENABLE_PREVIEW_SANDBOX (default: off).
+ *
+ * ponytail: networkPolicy is allow-all because npm install needs registry
+ * access. Restrict egress (private registry or trusted lockfile) before
+ * enabling public previews — see Issue #479.
  */
 import { Sandbox } from '@vercel/sandbox';
 import type { PreviewManifest, PreviewSourceFile } from './previewManifest';
@@ -20,7 +24,8 @@ import { makePreviewManifest } from './previewManifest';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
 const PREVIEW_PORT = 3000;
-const SANDBOX_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_SANDBOX_TIMEOUT_MS = 24 * 60 * 60 * 1000; // Pro/Enterprise max
+const DEFAULT_SANDBOX_TIMEOUT_MS = 45 * 60 * 1000; // Hobby max
 const HEALTH_CHECK_TIMEOUT_MS = 120 * 1000; // 2 minutes
 const HEALTH_CHECK_INTERVAL_MS = 2 * 1000; // 2 seconds
 
@@ -47,6 +52,17 @@ function isPreviewSandboxEnabled(): boolean {
   return process.env.ENABLE_PREVIEW_SANDBOX === 'true';
 }
 
+function resolveTimeoutMs(): number {
+  const env = process.env.PREVIEW_SANDBOX_TIMEOUT_MS;
+  if (env) {
+    const ms = Number(env);
+    if (!Number.isNaN(ms) && ms > 0) {
+      return Math.min(ms, MAX_SANDBOX_TIMEOUT_MS);
+    }
+  }
+  return DEFAULT_SANDBOX_TIMEOUT_MS;
+}
+
 type SandboxInstance = Awaited<ReturnType<typeof Sandbox.create>>;
 
 /**
@@ -54,12 +70,12 @@ type SandboxInstance = Awaited<ReturnType<typeof Sandbox.create>>;
  *
  * Flow:
  * 1. Verify feature flag is enabled.
- * 2. Load the completed build (ownership checked by caller via userId).
+ * 2. Load the completed build (ownership checked via userId).
  * 3. Re-verify manifest integrity from saved files_json.
  * 4. Create a Vercel Sandbox with port 3000 exposed.
- * 5. Write template + generated files into /app.
- * 6. npm install, next build, next start (detached).
- * 7. HTTP health check against the sandbox URL.
+ * 5. Write template + generated files into /app (batch writeFiles).
+ * 6. npm install, next build, next start (detached) — exitCode checked.
+ * 7. HTTP health check against sandbox.domain(PORT).
  * 8. Persist preview row and return the isolated preview URL.
  */
 export async function provisionSandbox(
@@ -91,6 +107,8 @@ export async function provisionSandbox(
   if (!Array.isArray(build.files_json) || build.files_json.length === 0) {
     throw new Error(`[sandboxAdapter] build has no generated files`);
   }
+  // P1: derive workspace from the build record, not the request.
+  const resolvedWorkspaceId = build.workspace_id ?? workspaceId ?? null;
 
   // ── 2. Re-verify manifest integrity from saved artifacts ─────────────
   const generatedFiles = build.files_json as unknown as PreviewSourceFile[];
@@ -98,7 +116,7 @@ export async function provisionSandbox(
 
   // ── 3. Persist preview row (provisioning) ────────────────────────────
   const previewId = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + SANDBOX_TIMEOUT_MS).toISOString();
+  const expiresAt = new Date(Date.now() + resolveTimeoutMs()).toISOString();
 
   const { data: row, error: insertError } = await sb
     .from('preview_sandboxes')
@@ -106,7 +124,7 @@ export async function provisionSandbox(
       id: previewId,
       build_id: buildId,
       user_id: userId,
-      workspace_id: workspaceId ?? null,
+      workspace_id: resolvedWorkspaceId,
       sandbox_id: '', // filled after sandbox creation
       sandbox_url: '', // filled after route resolution
       status: 'provisioning',
@@ -123,8 +141,11 @@ export async function provisionSandbox(
     sandbox = await Sandbox.create({
       name: `lattice-preview-${previewId.slice(0, 8)}`,
       ports: [PREVIEW_PORT],
-      timeout: SANDBOX_TIMEOUT_MS,
+      timeout: resolveTimeoutMs(),
       resources: { vcpus: 1 },
+      // P0: allow-all so npm install can reach the registry. Tighten egress
+      // (private registry / trusted lockfile) before public sharing.
+      networkPolicy: 'allow-all',
       env: {
         NODE_ENV: 'production',
         // No platform secrets — only runtime config the generated app needs.
@@ -135,28 +156,35 @@ export async function provisionSandbox(
     // ── 5. Write template + generated files into /app ─────────────────
     const project = assemblePreviewProject(manifest);
     const files = projectFiles(project);
-
     for (const file of files) {
-      const sandboxPath = `/app/${file.path}`;
-      await sandbox.fs.writeFile(sandboxPath, file.content);
+      await sandbox.fs.writeFile(`/app/${file.path}`, file.content);
     }
 
     // ── 6. npm install, next build, next start (detached) ─────────────
-    await sandbox.runCommand({ cmd: 'npm', args: ['install'], cwd: '/app' });
-    await sandbox.runCommand({ cmd: 'npx', args: ['next', 'build'], cwd: '/app' });
-    await sandbox.runCommand({
+    // P0: check exitCode after every command; fail fast with diagnostics.
+    const installResult = await sandbox.runCommand({ cmd: 'npm', args: ['install'], cwd: '/app' });
+    if (installResult.exitCode !== 0) {
+      throw new Error(`[sandboxAdapter] npm install failed (exit ${installResult.exitCode})`);
+    }
+
+    const buildResult = await sandbox.runCommand({ cmd: 'npx', args: ['next', 'build'], cwd: '/app' });
+    if (buildResult.exitCode !== 0) {
+      throw new Error(`[sandboxAdapter] next build failed (exit ${buildResult.exitCode})`);
+    }
+
+    const startResult = await sandbox.runCommand({
       cmd: 'npx',
       args: ['next', 'start', '-p', String(PREVIEW_PORT)],
       cwd: '/app',
       detached: true,
     });
-
-    // ── 7. Resolve preview URL from sandbox routes ─────────────────────
-    const route = sandbox.routes.find((r) => r.port === PREVIEW_PORT);
-    if (!route) {
-      throw new Error(`[sandboxAdapter] no route exposed for port ${PREVIEW_PORT}`);
+    if (startResult.exitCode !== 0) {
+      throw new Error(`[sandboxAdapter] next start failed (exit ${startResult.exitCode})`);
     }
-    const sandboxUrl = route.url;
+
+    // ── 7. Resolve preview URL from sandbox domain ─────────────────────
+    // P0: use sandbox.domain(port) instead of sandbox.routes.
+    const sandboxUrl = sandbox.domain(PREVIEW_PORT);
 
     // ── 8. HTTP health check ──────────────────────────────────────────
     await healthCheck(sandboxUrl);
@@ -178,20 +206,17 @@ export async function provisionSandbox(
       status: 'ready',
     };
   } catch (err: any) {
-    // Mark failed and attempt cleanup.
+    // Mark failed and attempt real sandbox cleanup (P1).
     await sb
       .from('preview_sandboxes')
-      .update({
-        status: 'failed',
-        updated_at: new Date().toISOString(),
-      })
+      .update({ status: 'failed', updated_at: new Date().toISOString() })
       .eq('id', previewId);
 
     if (sandbox) {
       try {
-        await (sandbox as unknown as AsyncDisposable)[Symbol.asyncDispose]?.();
+        await sandbox.stop();
       } catch {
-        // Best-effort cleanup.
+        // Best-effort: sandbox may already be stopped.
       }
     }
 
@@ -234,7 +259,7 @@ export async function sandboxStatus(
 }
 
 /**
- * Destroy a preview sandbox and mark the row expired.
+ * Destroy a preview sandbox — actually stops the VM, not just DB status.
  */
 export async function destroySandbox(previewId: string, userId: string): Promise<void> {
   const sb = assertSupabase();
@@ -252,9 +277,9 @@ export async function destroySandbox(previewId: string, userId: string): Promise
   if (row.status === 'ready' || row.status === 'provisioning') {
     try {
       const sandbox = await Sandbox.get({ name: row.sandbox_id });
-      await (sandbox as unknown as AsyncDisposable)[Symbol.asyncDispose]?.();
+      await sandbox.stop(); // P1: real stop, not just DB status.
     } catch {
-      // Best-effort: sandbox may already be gone.
+      // Best-effort: sandbox may already be stopped.
     }
   }
 
