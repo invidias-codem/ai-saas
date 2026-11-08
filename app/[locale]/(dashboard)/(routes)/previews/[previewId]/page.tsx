@@ -75,6 +75,9 @@ export default async function PreviewOwnerPage({ params }: RouteParams) {
     .eq('build_id', (preview as PreviewRow).build_id)
     .maybeSingle();
 
+  // Defense in depth: never expose one owner's build to another preview record.
+  if (!build || (build as BuildRow).user_id !== userId) return notFound();
+
   return (
     <PreviewOwnerClient
       previewId={(preview as PreviewRow).id}

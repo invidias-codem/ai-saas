@@ -20,6 +20,7 @@ import { CodePanel } from '../components/CodePanel';
 import { ContextFlowVisualizer } from '../components/ContextFlowVisualizer';
 import type { ProjectPlan, GeneratedFile, ContextFlowEntry } from '@/lib/ucol/types';
 import { AlertCircle } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
 import { observeBuildProgress, type ProgressObservation } from '@/lib/code-builder/buildProgress';
 import { isTerminalRunStatus } from '@/lib/code-builder/runStatus';
 
@@ -67,13 +68,19 @@ function setActiveBuildId(buildId: string | null): void {
   } catch { }
 }
 
-export default function CodeBuilderIsland() {
+export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPreviewEnabled: boolean }) {
+    const router = useRouter();
+    const params = useParams();
+    const locale = typeof params?.locale === 'string' ? params.locale : 'en';
     const [phase, setPhase] = useState<BuildPhase>('idle');
     const [plan, setPlan] = useState<ProjectPlan | null>(null);
     const [files, setFiles] = useState<GeneratedFile[]>([]);
     const [contextFlow, setContextFlow] = useState<ContextFlowEntry[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [mobileTab, setMobileTab] = useState<'plan' | 'code'>('plan');
+    const [completedBuildId, setCompletedBuildId] = useState<string | null>(null);
+    const [creatingSandboxPreview, setCreatingSandboxPreview] = useState(false);
+    const [sandboxPreviewError, setSandboxPreviewError] = useState<string | null>(null);
 
     // Durable-execution observability state (PR B1). Tracks polling health
     // separately from build progress so we can render "still running, updates
@@ -173,14 +180,17 @@ export default function CodeBuilderIsland() {
             if (data.status === 'completed') {
                 stopPolling();
                 if (data.artifactsMissing) {
+                    setCompletedBuildId(null);
                     // Preserve the build reference for recovery after the
                     // worker result is restored; never claim empty success.
                     setError('Build finished, but its output was not saved. Your build reference has been retained for recovery.');
                 } else {
+                    setCompletedBuildId(buildId);
                     setActiveBuildId(null);
                     setError(null);
                 }
             } else if (data.status === 'failed' || data.status === 'cancelled') {
+                setCompletedBuildId(null);
                 stopPolling();
                 setActiveBuildId(null);
                 setError(data.error?.message || `Build ${data.status}`);
@@ -243,6 +253,8 @@ export default function CodeBuilderIsland() {
         isSubmittingRef.current = true;
 
         // Reset state
+        setCompletedBuildId(null);
+        setSandboxPreviewError(null);
         setPhase('planning');
         setPlan(null);
         setFiles([]);
@@ -367,6 +379,8 @@ export default function CodeBuilderIsland() {
         stopPolling();
         setActiveBuildId(null);
         setPhase('idle');
+        setCompletedBuildId(null);
+        setSandboxPreviewError(null);
         setPlan(null);
         setFiles([]);
         setContextFlow([]);
@@ -379,6 +393,39 @@ export default function CodeBuilderIsland() {
         setNowTick(null);
         progressObservationRef.current = null;
     };
+
+    // Reuse an existing owner-authorized preview if available. Provision only
+    // when none exists; the server authenticates the build owner in both cases.
+    const openSandboxPreview = useCallback(async () => {
+        if (!sandboxPreviewEnabled || !completedBuildId || creatingSandboxPreview) return;
+        setCreatingSandboxPreview(true);
+        setSandboxPreviewError(null);
+        try {
+            const existing = await fetch(`/api/preview/sandbox?buildId=${encodeURIComponent(completedBuildId)}`, {
+                cache: 'no-store',
+            });
+            const existingBody = await existing.json().catch(() => ({}));
+            if (!existing.ok) throw new Error(existingBody.error || 'Unable to look up preview');
+            let previewId: string | undefined = existingBody.preview?.previewId;
+            if (!previewId) {
+                const created = await fetch('/api/preview/sandbox', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ buildId: completedBuildId }),
+                });
+                const result = await created.json().catch(() => ({}));
+                if (!created.ok) throw new Error(result.error || 'Sandbox provisioning failed');
+                previewId = result.previewId;
+            }
+            if (!previewId) throw new Error('Preview server returned no preview identity');
+            router.push(`/${locale}/previews/${encodeURIComponent(previewId)}`);
+        } catch (e) {
+            setSandboxPreviewError(e instanceof Error ? e.message : 'Failed to launch preview');
+        } finally {
+            setCreatingSandboxPreview(false);
+        }
+    }, [sandboxPreviewEnabled, completedBuildId, creatingSandboxPreview, router, locale]);
 
     // Recover active build on mount (browser close/reopen).
     // durableBuildId/polling state intentionally not set here: both are
@@ -501,6 +548,14 @@ export default function CodeBuilderIsland() {
                 </div>
             )}
 
+            {sandboxPreviewError && (
+                <div role="alert" className="mx-4 mt-2 flex items-center gap-2 text-amber-300 bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-lg text-xs">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{sandboxPreviewError}</span>
+                    <button type="button" onClick={() => setSandboxPreviewError(null)} className="ml-auto">Dismiss</button>
+                </div>
+            )}
+
             {/* Mobile tab switcher (hidden on md+) */}
             {(plan || files.length > 0 || phase === 'planning' || phase === 'coding') && (
                 <div className="md:hidden flex-none flex gap-1 px-4 pt-3">
@@ -532,7 +587,15 @@ export default function CodeBuilderIsland() {
                         <PlanPanel plan={plan} loading={phase === 'planning'} />
                     </div>
                     <div className={`${mobileTab === 'code' ? 'flex' : 'hidden'} md:flex flex-1 min-w-0 min-h-0`}>
-                        <CodePanel files={files} loading={phase === 'coding'} />
+                        <CodePanel
+                            files={files}
+                            loading={phase === 'coding'}
+                            disableLegacyBackendPreview={true}
+                            onSandboxPreview={DURABLE_EXECUTION && sandboxPreviewEnabled && completedBuildId && phase === 'done' && !error
+                                ? openSandboxPreview
+                                : undefined}
+                            sandboxPreviewPending={creatingSandboxPreview}
+                        />
                     </div>
                 </div>
             )}

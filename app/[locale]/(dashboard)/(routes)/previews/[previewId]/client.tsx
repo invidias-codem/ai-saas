@@ -120,6 +120,14 @@ export default function PreviewOwnerClient({
         </div>
       </header>
 
+      {/* Raw sandbox URLs are isolated but not private/revocable yet. */}
+      {isReady && (
+        <p className="border-b border-amber-500/20 bg-amber-500/5 px-4 py-2 text-xs text-amber-700 dark:text-amber-300">
+          Development preview: do not enter credentials or sensitive client data.
+          The sandbox address is unlisted, not access-controlled at its own origin.
+          Sharing is disabled.
+        </p>
+      )}
       {/* Tabs */}
       <div className="border-b px-4">
         <div className="flex gap-1">
