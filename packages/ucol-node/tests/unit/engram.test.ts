@@ -5,29 +5,29 @@
 
 import { describe, it, expect, jest, beforeEach } from '@jest/globals';
 
+// Mock data accessible at test scope
+const mockText = jest.fn(() => JSON.stringify([
+  { content: 'The project uses TypeScript strict mode', type: 'FACT', confidence: 0.9 },
+  { content: 'Never commit API secrets to git', type: 'CONSTRAINT', confidence: 0.99 },
+  { content: 'Very uncertain low-quality observation', type: 'ASSERTION', confidence: 0.15 }, // below 0.3 — must be dropped
+]));
+
 // Mock Gemini BEFORE any module imports
-jest.mock('@google/generative-ai', () => {
-  const mockText = jest.fn(() => JSON.stringify([
-    { content: 'The project uses TypeScript strict mode', type: 'FACT', confidence: 0.9 },
-    { content: 'Never commit API secrets to git', type: 'CONSTRAINT', confidence: 0.99 },
-    { content: 'Very uncertain low-quality observation', type: 'ASSERTION', confidence: 0.15 }, // below 0.3 — must be dropped
-  ]));
-  return {
-    GoogleGenerativeAI: jest.fn(() => ({
-      getGenerativeModel: jest.fn(() => ({
-        generateContent: jest.fn(() => Promise.resolve({ response: { text: mockText } })),
-        embedContent: jest.fn(() => Promise.resolve({
-          embedding: { values: new Array(768).fill(0.1) },
-        })),
+jest.mock('@google/generative-ai', () => ({
+  GoogleGenerativeAI: jest.fn(() => ({
+    getGenerativeModel: jest.fn(() => ({
+      generateContent: jest.fn(() => Promise.resolve({ response: { text: mockText } })),
+      embedContent: jest.fn(() => Promise.resolve({
+        embedding: { values: new Array(768).fill(0.1) },
       })),
     })),
-  };
-});
+  })),
+}));
 
 // Mock ContextStore
 const mockGetSessionHistory = jest.fn();
-const mockInsertKnowledge = jest.fn().mockResolvedValue(undefined);
-const mockMarkDistilled = jest.fn().mockResolvedValue(undefined);
+const mockInsertKnowledge = jest.fn() as any;
+const mockMarkDistilled = jest.fn() as any;
 
 jest.mock('../../src/store/index.js', () => ({
   ContextStore: jest.fn(() => ({
@@ -66,9 +66,14 @@ describe('Engram Engine', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    store = new ContextStore('https://test.supabase.co', 'service-key', 'gemini-key');
+    mockText.mockImplementation(() => JSON.stringify([
+      { content: 'The project uses TypeScript strict mode', type: 'FACT', confidence: 0.9 },
+      { content: 'Never commit API secrets to git', type: 'CONSTRAINT', confidence: 0.99 },
+      { content: 'Very uncertain low-quality observation', type: 'ASSERTION', confidence: 0.15 },
+    ]));
+    store = new ContextStore({} as any);
     engine = new EngramEngine(store, 'test-gemini-key');
-    mockGetSessionHistory.mockResolvedValue(makeHistory(20));
+    (mockGetSessionHistory as any).mockResolvedValue(makeHistory(20));
   });
 
   it('CONF-060: distillation processes history and calls insertKnowledge', async () => {
@@ -88,9 +93,11 @@ describe('Engram Engine', () => {
     }
   });
 
-  it('marks all processed history items as distilled', async () => {
+  it('marks successfully processed history items as distilled', async () => {
     await engine.distill('sess-test', 'did:ucol:test-agent');
     expect(mockMarkDistilled).toHaveBeenCalled();
+    // All items marked distilled since extraction succeeds for all clusters
+    expect((mockMarkDistilled.mock.calls[0][0] as string[]).length).toBe(20);
   });
 
   it('returns EngramReport with required fields', async () => {
@@ -104,10 +111,26 @@ describe('Engram Engine', () => {
   });
 
   it('returns empty report when no history exists', async () => {
-    mockGetSessionHistory.mockResolvedValue([]);
+    (mockGetSessionHistory as any).mockResolvedValue([]);
     const result = await engine.distill('empty-session', 'did:ucol:test-agent');
     expect(result.output_k_items).toBe(0);
     expect(result.input_bytes).toBe(0);
+  });
+
+  it('does not mark history as distilled when extraction fails', async () => {
+    // Force Gemini to throw for all clusters
+    mockText.mockImplementation(() => {
+      throw new Error('Gemini API failure');
+    });
+
+    (mockGetSessionHistory as any).mockResolvedValue(makeHistory(20));
+    await engine.distill('sess-test', 'did:ucol:test-agent');
+
+    // No knowledge items persisted (extraction failed)
+    expect(mockInsertKnowledge).not.toHaveBeenCalled();
+
+    // markDistilled called with empty array — no items marked distilled
+    expect(mockMarkDistilled).toHaveBeenCalledWith([]);
   });
 
   it('DISTILLATION_THRESHOLD_BYTES constant is 50KB', () => {
