@@ -47,6 +47,16 @@ const DURABLE_EXECUTION = process.env.NEXT_PUBLIC_CODE_BUILDER_DURABLE_EXECUTION
 
 // localStorage key for active durable build recovery
 const ACTIVE_BUILD_KEY = 'lattice:code-builder:active-build-id';
+const COMPLETED_BUILD_KEY = 'lattice:code-builder:last-completed-build-id';
+
+function getLastCompletedBuildId(): string | null {
+    if (typeof window === 'undefined') return null;
+    try { return localStorage.getItem(COMPLETED_BUILD_KEY); } catch { return null; }
+}
+function saveCompletedBuildId(buildId: string) {
+    if (typeof window === 'undefined') return;
+    try { localStorage.setItem(COMPLETED_BUILD_KEY, buildId); } catch { /* optional */ }
+}
 
 function getActiveBuildId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -186,6 +196,7 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
                     setError('Build finished, but its output was not saved. Your build reference has been retained for recovery.');
                 } else {
                     setCompletedBuildId(buildId);
+                    saveCompletedBuildId(buildId);
                     setActiveBuildId(null);
                     setError(null);
                 }
@@ -443,6 +454,14 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
                 }, 1500);
                 // Deferred: setState happens in the async chain, not the effect body.
                 Promise.resolve().then(() => subscribeRealtime(activeBuildId));
+            } else {
+                // A completed build remains reopenable after refresh; the API
+                // re-verifies ownership before returning the stored artifacts.
+                const lastCompleted = getLastCompletedBuildId();
+                if (lastCompleted) {
+                    activeBuildRef.current = lastCompleted;
+                    Promise.resolve().then(() => pollDurableStatus(lastCompleted));
+                }
             }
         }
     }, [pollDurableStatus, subscribeRealtime]);

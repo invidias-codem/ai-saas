@@ -70,7 +70,7 @@ function mapLanguage(lang: string): string {
 
 export function CodePanel({
     files, loading, onSandboxPreview, sandboxPreviewPending = false,
-    disableLegacyBackendPreview = false,
+    disableLegacyBackendPreview = true,
 }: CodePanelProps) {
     const [activeFile, setActiveFile] = useState<string | null>(null);
     const clipboard = useClipboard({ copiedTimeout: 2000 });
@@ -219,58 +219,6 @@ root.render(React.createElement(App));
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
-    }
-
-    async function openBackendPreview() {
-        if (frontendFastPath) return;
-        try {
-            setCreatingPreview(true);
-            setPreviewError(null);
-            setPreviewMode('backend');
-            setPreviewInsufficientCredits(false);
-
-            // Send the WHOLE app, not one raw file: bundle all generated
-            // sources into a single executable module so the preview renders
-            // the running app instead of a placeholder.
-            let code: string;
-            let language: string;
-            try {
-                code = await transpileProject(
-                    files.map(f => ({ path: f.path, content: f.content }))
-                );
-                language = 'bundle';
-            } catch {
-                // Bundle failed (e.g. entry detection) — fall back to the
-                // primary file so at least something renders.
-                const primary = files.find(f => ['html','javascript','typescript','react','css'].includes(f.language)) || files[0];
-                code = primary.content;
-                language = primary.language;
-            }
-            const body: any = { code, language };
-            const res = await fetch('/api/preview/render', {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify(body),
-                credentials: 'include',
-            });
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                if (res.status === 402) {
-                    setPreviewInsufficientCredits(true);
-                    return;
-                }
-                setPreviewInsufficientCredits(false);
-                throw new Error(data?.error || `Preview creation failed: ${res.status}`);
-            }
-            setPreviewInsufficientCredits(false);
-            const data = await res.json();
-            setPreviewUrl(data.previewUrl || `/api/preview/render?id=${data.id}`);
-            setPreviewOpen(true);
-        } catch (err: any) {
-            setPreviewError(err.message || 'Failed to open preview');
-        } finally {
-            setCreatingPreview(false);
-        }
     }
 
     async function openPreview() {
