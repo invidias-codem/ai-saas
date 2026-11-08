@@ -286,8 +286,12 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
       },
       error: null,
     });
-    // The update() call from expiry marking also needs a single()
-    mockQB.single.mockResolvedValueOnce({ data: null, error: null });
+    // Expiry now executes a full provider stop, including a second DB lookup
+    // for the sandbox locator; a timestamp alone must not revoke access.
+    mockQB.maybeSingle.mockResolvedValueOnce({
+      data: { sandbox_id: 'sbx_123', status: 'ready', user_id: userId },
+      error: null,
+    });
 
     const status = await sandboxStatus('preview_1', userId);
     expect(status.status).toBe('expired');
