@@ -3,7 +3,7 @@ import { AgentContext, ToolResult, TrajectoryStep } from './types';
 import { ToolRegistry } from './registry';
 import { withPromotionGate, NeedsApprovalError } from '@/lib/cli/promotionPrompt';
 import type { QuarantineArtifact } from '@/lib/execution/sandboxManager';
-import { NvidiaNimProvider, NIM_MODEL_KIMI_K3 } from '@/lib/llm/providers/nvidiaNim';
+import { NvidiaNimProvider, NIM_MODEL_CODE } from '@/lib/llm/providers/nvidiaNim';
 import { buildToolChoice } from './openaiTools';
 import type { NimToolCall, NimToolSpec } from '@/lib/llm/toolCallTypes';
 
@@ -61,7 +61,7 @@ export async function runNimReactLoop(
   userQuery: string,
   context: AgentContext,
   registry: ToolRegistry,
-  modelName: string = NIM_MODEL_KIMI_K3,
+  modelName: string = NIM_MODEL_CODE,
   systemInstruction?: string,
 ): Promise<ReActResult> {
   const provider = new NvidiaNimProvider();

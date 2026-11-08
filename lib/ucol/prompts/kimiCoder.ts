@@ -1,9 +1,10 @@
 // lib/ucol/prompts/kimiCoder.ts
-// Kimi K3 code generation — replaces claudeCoder.ts / geminiCoder.ts /
+// NVIDIA NIM code generation — replaces claudeCoder.ts / geminiCoder.ts /
 // openRouterCoder.ts / huggingFaceCoder.ts. Preserves the stateful debate-loop
 // contract: ContextPackage in → GeneratedFile[] out, plus RefinementContext and
 // DiscoveredPattern[] handoffs across review rounds.
 import { nimChat } from './nimChat';
+import { NIM_MODEL_CODE } from '@/lib/llm/providers/nvidiaNim';
 import type { ContextPackage, GeneratedFile, RefinementContext, DiscoveredPattern } from '../types';
 import type { ProviderCallContext } from '@/lib/llm/providers/providerInterface';
 
@@ -96,7 +97,7 @@ function parseGeneratedFiles(text: string, componentName: string): GeneratedFile
             content: f.content || f.code || '',
             language: f.language || 'tsx',
             component: componentName,
-            model: 'kimi-k3',
+            model: NIM_MODEL_CODE,
         }));
         return files;
     } catch {
@@ -106,14 +107,14 @@ function parseGeneratedFiles(text: string, componentName: string): GeneratedFile
             content: text,
             language: 'tsx',
             component: componentName,
-            model: 'kimi-k3',
+            model: NIM_MODEL_CODE,
         }];
     }
 }
 
 export const kimiCoderProvider = {
-    id: 'kimi-k3',
-    label: 'Kimi K3 (NVIDIA NIM)',
+    id: 'nim-code',
+    label: 'Nemotron 3 Ultra (NVIDIA NIM)',
     tier: 'L1' as const,
 
     async generateCode(

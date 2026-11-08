@@ -1,6 +1,6 @@
 // lib/ucol/prompts/kimiPlanner.ts
-// Kimi K3 planning — generates a structured ProjectPlan from a user prompt.
-// Replaces geminiPlanner.ts. Routes through NVIDIA NIM (moonshotai/kimi-k3).
+// NVIDIA NIM planning — generates a structured ProjectPlan from a user prompt.
+// Replaces geminiPlanner.ts. Routes through NVIDIA NIM (Nemotron 3 Ultra).
 import { nimChat } from './nimChat';
 import type { ContextPackage, ProjectPlan } from '../types';
 import type { ProviderApiKeys } from '@/lib/userProviderKeys';
@@ -35,7 +35,7 @@ Output a single JSON object (NOT an array). No markdown fences, no explanation t
 
 export async function generatePlan(contextPackage: ContextPackage, providerKeys: ProviderApiKeys = {}): Promise<ProjectPlan> {
     // providerKeys retained in the signature for call-site compatibility;
-    // Kimi K3 uses the platform NVIDIA_API_KEY (no per-user override yet).
+    // NVIDIA NIM uses the platform NVIDIA_API_KEY (no per-user override yet).
     void providerKeys;
     const { prompt, userId, availableDependencies } = contextPackage.payload.content;
     void userId;

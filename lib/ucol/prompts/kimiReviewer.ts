@@ -1,5 +1,5 @@
 // lib/ucol/prompts/kimiReviewer.ts
-// Kimi K3 code reviewer — replaces geminiReviewer.ts. Preserves the DUAL/THREE-axis
+// NVIDIA NIM code reviewer — replaces geminiReviewer.ts. Preserves the DUAL/THREE-axis
 // evaluation contract (correctness / originality / pragmatism) and the stateful
 // previousReviews handoff across debate-loop rounds.
 import { nimChat } from './nimChat';

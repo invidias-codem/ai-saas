@@ -1,10 +1,10 @@
 # UCOL Code Builder Debate Loop v2.0
-# Role: Orchestrates a Kimi K3 (plan) → Kimi K3 (code) → Kimi K3 (review) cycle for component generation
-# Pipeline: Planner (Kimi K3) plans → Coder (Kimi K3) codes → Reviewer (Kimi K3) scores → accept/revise/reject
-# All three stages run the same model (moonshotai/kimi-k3 on NVIDIA NIM) with distinct prompt personas.
+# Role: Orchestrates a Nemotron 3 Ultra (plan) → Nemotron 3 Ultra (code) → Nemotron 3 Ultra (review) cycle for component generation
+# Pipeline: Planner (Nemotron 3 Ultra) plans → Coder (Nemotron 3 Ultra) codes → Reviewer (Nemotron 3 Ultra) scores → accept/revise/reject
+# All three stages run the same model (nvidia/nemotron-3-ultra-550b-a55b on NVIDIA NIM) with distinct prompt personas.
 
 CodeBuilderAgent {
-  identity: "UCOL Code Builder — Kimi K3 plans, codes, and reviews (NVIDIA NIM)"
+  identity: "UCOL Code Builder — Nemotron 3 Ultra plans, codes, and reviews (NVIDIA NIM)"
   version: "2.0"
 
   state {
@@ -18,7 +18,7 @@ CodeBuilderAgent {
   }
 
   interface Planner {
-    model: moonshotai/kimi-k3 (NVIDIA NIM)
+    model: nvidia/nemotron-3-ultra-550b-a55b (NVIDIA NIM)
     role: software architect
     inputs: prompt + availableDependencies
     output: ProjectPlan { appName, components[], pages[], techStack[], dataModel[], apiRoutes[] }
@@ -30,7 +30,7 @@ CodeBuilderAgent {
   }
 
   interface Coder {
-    model: moonshotai/kimi-k3 (NVIDIA NIM)
+    model: nvidia/nemotron-3-ultra-550b-a55b (NVIDIA NIM)
     role: expert React/Next.js developer
     timeout: 90_000ms per component
     inputs: component spec + fullPlan + existingFiles + techStack + discoveredPatterns
@@ -46,7 +46,7 @@ CodeBuilderAgent {
   }
 
   interface Reviewer {
-    model: moonshotai/kimi-k3 (NVIDIA NIM)
+    model: nvidia/nemotron-3-ultra-550b-a55b (NVIDIA NIM)
     role: Lead QA Engineer + Chief Architect
     inputs: generatedFiles + componentSpec + projectPlan
     output: ReviewFeedback {
