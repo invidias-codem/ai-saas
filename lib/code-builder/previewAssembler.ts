@@ -46,9 +46,9 @@ const TEMPLATE_FILES: ReadonlyMap<string, string> = new Map([
           start: 'next start',
         },
         dependencies: {
-          next: '15.0.0',
-          react: '19.0.0',
-          'react-dom': '19.0.0',
+          next: '16.2.9',
+          react: '18.3.1',
+          'react-dom': '18.3.1',
         },
         devDependencies: {
           typescript: '5.5.0',
@@ -111,7 +111,11 @@ export function assemblePreviewProject(manifest: PreviewManifest): PreviewProjec
   for (const [path, content] of TEMPLATE_FILES) {
     files.set(path, content);
   }
+  // Defense in depth: generated files never overwrite trusted template files,
+  // even if the validator (Phase 8A) somehow allows them.
+  const templatePaths = new Set(TEMPLATE_FILES.keys());
   for (const file of manifest.files) {
+    if (templatePaths.has(file.path)) continue;
     files.set(file.path, file.content);
   }
 

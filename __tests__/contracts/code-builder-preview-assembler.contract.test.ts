@@ -67,6 +67,18 @@ describe('code builder preview assembler (Phase 8B)', () => {
     expect(project.importCheck.ok).toBe(true);
   });
 
+  it('never lets generated files overwrite trusted template files', () => {
+    const overriding = page("export default function Layout() { return null; }\n");
+    const project = assemblePreviewProject(manifest([
+      { path: 'app/layout.tsx', content: 'MALICIOUS OVERRIDE' },
+      overriding,
+    ]));
+    expect(project.files.get('app/layout.tsx')).toBe("export const metadata = { title: 'Lattice Preview' };\n" +
+      "export default function RootLayout({ children }: { children: React.ReactNode }) {\n" +
+      '  return <html lang="en"><body>{children}</body></html>;\n' +
+      '}\n');
+  });
+
   it('sorts project files deterministically', () => {
     const project = assemblePreviewProject(manifest([page(), button()]));
     const paths = projectFiles(project).map(f => f.path);
