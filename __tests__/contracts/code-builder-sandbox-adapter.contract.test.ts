@@ -156,6 +156,8 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
     expect(createCall.env).not.toHaveProperty('NVIDIA_API_KEY');
     expect(createCall.ports).toContain(3000);
     expect(createCall.name).toContain('lattice-preview');
+    expect(createCall.networkPolicy).toEqual({ allow: ['registry.npmjs.org'] });
+    expect(createCall.persistent).toBe(false);
 
     // Verify files were written (template + generated) via individual writeFile calls
     expect(mockSandboxInstance.fs.writeFile).toHaveBeenCalledTimes(
@@ -170,6 +172,9 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
 
     // Verify all three commands ran with exitCode checking
     expect(mockRunCommand).toHaveBeenCalledTimes(3);
+    const installCall = mockRunCommand.mock.calls[0][0];
+    expect(installCall.cmd).toBe('npm');
+    expect(installCall.args).toContain('--ignore-scripts');
 
     // Verify domain() was used (not routes)
     expect(mockSandboxInstance.domain).toHaveBeenCalledWith(3000);
@@ -215,6 +220,14 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
     await expect(provisionSandbox(buildId, userId)).rejects.toThrow(
       'ownership mismatch'
     );
+  });
+
+  it('rejects a caller-supplied workspace inconsistent with the build', async () => {
+    mockBuildLookup('completed', generatedFiles);
+    await expect(provisionSandbox(buildId, userId, 'other-workspace')).rejects.toThrow(
+      'workspace ownership mismatch'
+    );
+    expect(mockSandboxCreate).not.toHaveBeenCalled();
   });
 
   it('fails when npm install exits non-zero and stops sandbox', async () => {

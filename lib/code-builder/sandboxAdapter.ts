@@ -13,9 +13,9 @@
  *   gen1e.xyz. See Issue #479.
  * - Feature flagged via ENABLE_PREVIEW_SANDBOX (default: off).
  *
- * ponytail: networkPolicy is allow-all because npm install needs registry
- * access. Restrict egress (private registry or trusted lockfile) before
- * enabling public previews — see Issue #479.
+ * Sandboxes may contact the npm registry for trusted template dependencies,
+ * but runtime code has no general outbound network access. Public sharing
+ * still requires independent ingress authorization (Issue #479).
  */
 import { Sandbox } from '@vercel/sandbox';
 import type { PreviewManifest, PreviewSourceFile } from './previewManifest';
@@ -108,7 +108,10 @@ export async function provisionSandbox(
     throw new Error(`[sandboxAdapter] build has no generated files`);
   }
   // P1: derive workspace from the build record, not the request.
-  const resolvedWorkspaceId = build.workspace_id ?? workspaceId ?? null;
+  if (workspaceId && workspaceId !== build.workspace_id) {
+    throw new Error('[sandboxAdapter] workspace ownership mismatch');
+  }
+  const resolvedWorkspaceId = build.workspace_id ?? null;
 
   // ── 2. Re-verify manifest integrity from saved artifacts ─────────────
   const generatedFiles = build.files_json as unknown as PreviewSourceFile[];
@@ -143,9 +146,10 @@ export async function provisionSandbox(
       ports: [PREVIEW_PORT],
       timeout: resolveTimeoutMs(),
       resources: { vcpus: 1 },
-      // P0: allow-all so npm install can reach the registry. Tighten egress
-      // (private registry / trusted lockfile) before public sharing.
-      networkPolicy: 'allow-all',
+      persistent: false,
+      // Only trusted dependencies can be downloaded. Generated code is not
+      // allowed to contact arbitrary network destinations or internal APIs.
+      networkPolicy: { allow: ['registry.npmjs.org'] },
       env: {
         NODE_ENV: 'production',
         // No platform secrets — only runtime config the generated app needs.
@@ -162,7 +166,11 @@ export async function provisionSandbox(
 
     // ── 6. npm install, next build, next start (detached) ─────────────
     // P0: check exitCode after every command; fail fast with diagnostics.
-    const installResult = await sandbox.runCommand({ cmd: 'npm', args: ['install'], cwd: '/app' });
+    const installResult = await sandbox.runCommand({
+      cmd: 'npm',
+      args: ['install', '--ignore-scripts', '--no-audit', '--no-fund'],
+      cwd: '/app',
+    });
     if (installResult.exitCode !== 0) {
       throw new Error(`[sandboxAdapter] npm install failed (exit ${installResult.exitCode})`);
     }
