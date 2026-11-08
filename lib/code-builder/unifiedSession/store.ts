@@ -67,7 +67,8 @@ async function setControlLease(
   holder: string | null,
   mode: ControlMode,
   action: string,
-  expire = false
+  expire = false,
+  ttlMs = DEFAULT_TTL_MS
 ): Promise<void> {
   const sb = assertSupabase();
   const { data: current, error: readError } = await sb
@@ -86,21 +87,27 @@ async function setControlLease(
   }
 
   const now = new Date().toISOString();
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0 || ttlMs > DEFAULT_TTL_MS) {
+    throw new Error(`[unifiedSession] ${action} invalid lease duration`);
+  }
   const next: Record<string, unknown> = {
     input_control_holder: holder,
     input_control_granted_at: holder ? now : null,
-    input_control_expires_at: holder ? new Date(Date.now() + DEFAULT_TTL_MS).toISOString() : null,
+    input_control_expires_at: holder ? new Date(Date.now() + ttlMs).toISOString() : null,
     control_mode: mode,
     control_generation: current.control_generation + 1,
     updated_at: now,
   };
   if (expire) next.expires_at = now;
 
-  const { data: advanced, error: updateError } = await sb
+  // Check expiry again at the atomic update boundary (TOCTOU protection).
+  const candidate = sb
     .from('unified_sessions')
     .update(next)
     .eq('id', sessionId)
-    .eq('control_generation', current.control_generation)
+    .eq('control_generation', current.control_generation);
+  const fenced = expire ? candidate : candidate.gt('expires_at', now);
+  const { data: advanced, error: updateError } = await fenced
     .select('id')
     .maybeSingle();
   if (updateError) throw new Error(`[unifiedSession] ${action} failed: ${updateError.message}`);
@@ -244,7 +251,9 @@ export const unifiedSessionStore: UnifiedSessionStore = {
       input.session_id,
       `${input.holder_type}:${input.holder_id}`,
       input.holder_type === 'agent' ? 'agent' : 'human',
-      'grantInputControl'
+      'grantInputControl',
+      false,
+      input.ttl_ms ?? DEFAULT_TTL_MS
     );
   },
 

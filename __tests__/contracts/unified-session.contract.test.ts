@@ -4,6 +4,7 @@
 const mockQB = {
   select: jest.fn().mockReturnThis(),
   eq: jest.fn().mockReturnThis(),
+  gt: jest.fn().mockReturnThis(),
   maybeSingle: jest.fn(),
   single: jest.fn().mockReturnThis(),
   insert: jest.fn().mockReturnThis(),
@@ -76,6 +77,7 @@ describe('unified session store (Phase 8F.0)', () => {
     jest.clearAllMocks();
     mockQB.select.mockReturnThis();
     mockQB.eq.mockReturnThis();
+    mockQB.gt.mockReturnThis();
     mockQB.insert.mockReturnThis();
     mockQB.update.mockReturnThis();
     mockQB.single.mockReturnThis();
@@ -271,6 +273,20 @@ describe('unified session store (Phase 8F.0)', () => {
     const genEq = eqCalls.find((c) => c[0] === 'control_generation');
     expect(genEq).toBeDefined();
     expect(genEq![1]).toBe(5);
+  });
+
+  it('honors a shorter bounded input lease', async () => {
+    configureGetSession(mockSession);
+    configureUpdate(mockSession);
+    await unifiedSessionStore.grantInputControl({
+      session_id: sessionId, holder_type: 'agent', holder_id: agentId, ttl_ms: 5_000,
+    });
+    expect(mockQB.gt).toHaveBeenCalledWith('expires_at', expect.any(String));
+    const patch = mockQB.update.mock.calls[0][0];
+    expect(Date.parse(patch.input_control_expires_at) - Date.parse(patch.input_control_granted_at))
+      .toBeGreaterThanOrEqual(4_500);
+    expect(Date.parse(patch.input_control_expires_at) - Date.parse(patch.input_control_granted_at))
+      .toBeLessThanOrEqual(5_500);
   });
 
   it('never revokes control on other sessions when granting a lease', async () => {
