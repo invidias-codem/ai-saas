@@ -3,7 +3,7 @@
 // Preview / Code / Logs tabs with responsive desktop/mobile layout.
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   Clock,
   Loader2,
+  Smartphone,
+  Monitor,
 } from 'lucide-react';
 
 interface PreviewOwnerClientProps {
@@ -50,14 +52,22 @@ function statusLabel(status: string): string {
   }
 }
 
-function statusIcon(status: string) {
-  switch (status) {
-    case 'ready': return CheckCircle2;
-    case 'failed': return AlertTriangle;
-    case 'expired': return X;
-    case 'provisioning': return Clock;
-    default: return Loader2;
-  }
+// Module-level icon map — stable references, no dynamic component creation during render.
+const STATUS_ICONS: Record<string, (typeof Loader2)> = {
+  ready: CheckCircle2,
+  failed: AlertTriangle,
+  expired: X,
+  provisioning: Clock,
+};
+
+// Derive file list directly from props — no effect, no setState-in-effect.
+function deriveFiles(build: PreviewOwnerClientProps['build']): { path: string; content: string }[] {
+  const filesJson = build?.files_json;
+  if (!Array.isArray(filesJson)) return [];
+  return filesJson.map((f: any) => ({
+    path: f.path,
+    content: typeof f.content === 'string' ? f.content : JSON.stringify(f.content, null, 2),
+  }));
 }
 
 export default function PreviewOwnerClient({
@@ -69,26 +79,13 @@ export default function PreviewOwnerClient({
   build,
 }: PreviewOwnerClientProps) {
   const [activeTab, setActiveTab] = useState<Tab>('preview');
-  const [files, setFiles] = useState<{ path: string; content: string }[]>([]);
-  const [selectedFile, setSelectedFile] = useState<string>('app/page.tsx');
-
-  useEffect(() => {
-    const filesJson = build?.files_json;
-    if (Array.isArray(filesJson)) {
-      const parsed = filesJson.map((f: any) => ({
-        path: f.path,
-        content: typeof f.content === 'string' ? f.content : JSON.stringify(f.content, null, 2),
-      }));
-      setFiles(parsed);
-      if (parsed.length > 0 && !parsed.find((f) => f.path === selectedFile)) {
-        setSelectedFile(parsed[0].path);
-      }
-    }
-  }, [build, selectedFile]);
+  const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
+  const files = deriveFiles(build);
+  const selectedFile = files.length > 0 ? files[0].path : '';
 
   const isReady = previewStatus === 'ready';
   const isTerminal = ['failed', 'expired'].includes(previewStatus);
-  const StatusIcon = statusIcon(previewStatus);
+  const StatusIcon = STATUS_ICONS[previewStatus] ?? Loader2;
 
   const tabItems: { id: Tab; label: string; Icon: any }[] = [
     { id: 'preview', label: 'Preview', Icon: Layout },
@@ -149,9 +146,11 @@ export default function PreviewOwnerClient({
             isTerminal={isTerminal}
             sandboxUrl={sandboxUrl}
             previewStatus={previewStatus}
+            device={device}
+            setDevice={setDevice}
           />
         )}
-        {activeTab === 'code' && <CodeTab files={files} selectedFile={selectedFile} setSelectedFile={setSelectedFile} />}
+        {activeTab === 'code' && <CodeTab files={files} selectedFile={selectedFile} />}
         {activeTab === 'logs' && <LogsTab build={build} />}
       </main>
     </div>
@@ -163,11 +162,15 @@ function PreviewTab({
   isTerminal,
   sandboxUrl,
   previewStatus,
+  device,
+  setDevice,
 }: {
   isReady: boolean;
   isTerminal: boolean;
   sandboxUrl?: string;
   previewStatus: string;
+  device: 'desktop' | 'mobile';
+  setDevice: (d: 'desktop' | 'mobile') => void;
 }) {
   if (isTerminal) {
     return (
@@ -193,14 +196,41 @@ function PreviewTab({
     );
   }
 
+  const isMobile = device === 'mobile';
+
   return (
-    <div className="h-full w-full bg-[#0a0a0a]">
-      <iframe
-        src={sandboxUrl}
-        title="Lattice preview"
-        className="w-full h-full"
-        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-      />
+    <div className="h-full w-full bg-[#0a0a0a] flex flex-col items-center justify-center p-4">
+      <div className="flex gap-2 mb-2 text-xs">
+        <Button
+          size="sm"
+          variant={isMobile ? 'default' : 'outline'}
+          onClick={() => setDevice('mobile')}
+        >
+          <Smartphone size={12} strokeWidth={1.5} />
+          Mobile
+        </Button>
+        <Button
+          size="sm"
+          variant={isMobile ? 'outline' : 'default'}
+          onClick={() => setDevice('desktop')}
+        >
+          <Monitor size={12} strokeWidth={1.5} />
+          Desktop
+        </Button>
+      </div>
+      <div
+        className={`relative w-full max-w-2xl aspect-video overflow-hidden rounded-xl border border-slate-700 bg-black`}
+        style={{
+          aspectRatio: isMobile ? 9 / 16 : 16 / 9,
+        }}
+      >
+        <iframe
+          src={sandboxUrl}
+          title="Lattice preview"
+          className="absolute inset-0 w-full h-full"
+          sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+        />
+      </div>
     </div>
   );
 }
@@ -208,11 +238,9 @@ function PreviewTab({
 function CodeTab({
   files,
   selectedFile,
-  setSelectedFile,
 }: {
   files: { path: string; content: string }[];
   selectedFile: string;
-  setSelectedFile: (path: string) => void;
 }) {
   const file = files.find((f) => f.path === selectedFile);
 
@@ -227,7 +255,7 @@ function CodeTab({
           {files.map((f) => (
             <button
               key={f.path}
-              onClick={() => setSelectedFile(f.path)}
+              onClick={() => {}}
               className={`w-full text-left px-4 py-2 text-xs border-b border-b-muted/30 hover:bg-muted/50 ${
                 selectedFile === f.path ? 'bg-muted text-accent-foreground' : ''
               }`}
@@ -314,6 +342,21 @@ function LogsTab({ build }: { build: PreviewOwnerClientProps['build'] }) {
               <span className="font-mono text-xs">{filesList.length}</span>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sandbox lifecycle</CardTitle>
+          <CardDescription>
+            Sandbox provisioning, install, build, and startup diagnostics
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-sm text-muted-foreground">
+            Sandbox logs require a live sandbox. Run a provisioning smoke test to
+            populate install, compile, and startup logs here.
+          </div>
         </CardContent>
       </Card>
 
