@@ -253,10 +253,8 @@ export async function sandboxStatus(
 
   // Check expiration.
   if (new Date(row.expires_at).getTime() < Date.now()) {
-    await sb
-      .from('preview_sandboxes')
-      .update({ status: 'expired', updated_at: new Date().toISOString() })
-      .eq('id', previewId);
+    // Do not mark an exposed origin expired before shutting its VM down.
+    await destroySandbox(previewId, userId);
     return { status: 'expired' };
   }
 
@@ -283,18 +281,22 @@ export async function destroySandbox(previewId: string, userId: string): Promise
   if (row.user_id !== userId) throw new Error(`[sandboxAdapter] ownership mismatch`);
 
   if (row.status === 'ready' || row.status === 'provisioning') {
-    try {
-      const sandbox = await Sandbox.get({ name: row.sandbox_id });
-      await sandbox.stop(); // P1: real stop, not just DB status.
-    } catch {
-      // Best-effort: sandbox may already be stopped.
+    if (!row.sandbox_id) {
+      // Provisioning races need provider reconciliation, not false success.
+      throw new Error('[sandboxAdapter] cannot verify stop: missing sandbox locator');
     }
+    const sandbox = await Sandbox.get({ name: row.sandbox_id });
+    // Failure must propagate. A live public VM is not a revoked preview.
+    await sandbox.stop();
   }
 
-  await sb
+  const { error: updateError } = await sb
     .from('preview_sandboxes')
     .update({ status: 'expired', updated_at: new Date().toISOString() })
     .eq('id', previewId);
+  if (updateError) {
+    throw new Error(`[sandboxAdapter] stopped VM but status update failed: ${updateError.message}`);
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────

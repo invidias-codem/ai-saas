@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { resolveShareLink } from '@/lib/code-builder/shareLink';
+import { isPreviewSharingSafe } from '@/lib/code-builder/previewIngressPolicy';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -24,7 +25,7 @@ export async function GET(
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    if (process.env.ENABLE_PREVIEW_SHARING !== 'true') {
+    if (!isPreviewSharingSafe()) {
       return NextResponse.json(
         { error: 'Preview sharing is not enabled' },
         { status: 403 }

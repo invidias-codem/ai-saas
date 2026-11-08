@@ -236,7 +236,8 @@ function PreviewTab({
           src={sandboxUrl}
           title="Lattice preview"
           className="absolute inset-0 w-full h-full"
-          sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+          referrerPolicy="no-referrer"
+          sandbox="allow-same-origin allow-scripts allow-forms"
         />
       </div>
     </div>

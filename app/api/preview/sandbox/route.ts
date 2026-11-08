@@ -85,11 +85,11 @@ export async function POST(req: Request) {
 
     const result = await provisionSandbox(buildId, userId, workspaceId);
 
+    // The preview ID is an owner-scoped app identity, not a public URL.
     return NextResponse.json({
       previewId: result.previewId,
-      previewUrl: result.sandboxUrl,
       status: result.status,
-    });
+    }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error: any) {
     const message = error?.message ?? String(error);
     if (message.includes('feature-flagged off')) {
