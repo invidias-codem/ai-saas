@@ -51,7 +51,7 @@ const TEMPLATE_FILES: ReadonlyMap<string, string> = new Map([
           'react-dom': '18.3.1',
         },
         devDependencies: {
-          typescript: '5.5.0',
+          typescript: '5.5.4',
           '@types/react': '19.0.0',
           '@types/node': '20.0.0',
         },
