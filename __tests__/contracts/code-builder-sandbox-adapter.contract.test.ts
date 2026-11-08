@@ -291,6 +291,7 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
 
     const status = await sandboxStatus('preview_1', userId);
     expect(status.status).toBe('expired');
+    expect(mockStop).toHaveBeenCalled();
   });
 
   it('destroySandbox stops the VM and marks expired', async () => {
@@ -305,6 +306,23 @@ describe('code builder sandbox adapter (Phase 8C)', () => {
     expect(mockStop).toHaveBeenCalled();
     // update should be called with status expired
     expect(mockQB.update.mock.calls[0][0]?.status).toBe('expired');
+  });
+
+  it('failed provider stop must not be recorded as expired', async () => {
+    mockQB.maybeSingle.mockResolvedValueOnce({
+      data: { sandbox_id: 'sbx_123', status: 'ready', user_id: userId }, error: null,
+    });
+    mockStop.mockRejectedValueOnce(new Error('provider unavailable'));
+    await expect(destroySandbox('preview_1', userId)).rejects.toThrow('provider unavailable');
+    expect(mockQB.update).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a provisioning record has no sandbox locator', async () => {
+    mockQB.maybeSingle.mockResolvedValueOnce({
+      data: { sandbox_id: '', status: 'provisioning', user_id: userId }, error: null,
+    });
+    await expect(destroySandbox('preview_1', userId)).rejects.toThrow('missing sandbox locator');
+    expect(mockQB.update).not.toHaveBeenCalled();
   });
 
   it('destroySandbox on ownership mismatch throws', async () => {
