@@ -1,33 +1,18 @@
-"use client";
+import type { Metadata } from "next";
+import { ProductHuntLaunch } from "@/components/landing/product-hunt-launch";
 
-import { HeroSection } from "@/components/landing/hero-section";
-import { ProblemGrid } from "@/components/marketing/problem-grid";
-import { SolutionMatrix } from "@/components/marketing/solution-matrix";
-import { RosterGrid } from "@/components/marketing/RosterGrid";
-
-function MechanicsSection() {
-  return (
-    <section id="mechanics">
-      <ProblemGrid />
-    </section>
-  );
-}
-
-function ExpertsSection() {
-  return (
-    <section id="roster">
-      <RosterGrid />
-    </section>
-  );
-}
+export const metadata: Metadata = {
+  title: "Lattice OS — Build software with AI. Keep it yours.",
+  description:
+    "Turn a software idea into code you can inspect and an isolated preview you can test. Explore Code Builder and collaborative AI workspaces in Lattice OS.",
+  openGraph: {
+    title: "Lattice OS — Build software with AI. Keep it yours.",
+    description:
+      "From an idea to reviewable code and a testable application, together with AI.",
+    type: "website",
+  },
+};
 
 export default function LandingPage() {
-  return (
-    <main className="min-h-screen">
-      <HeroSection />
-      <MechanicsSection />
-      <SolutionMatrix />
-      <ExpertsSection />
-    </main>
-  );
+  return <ProductHuntLaunch />;
 }

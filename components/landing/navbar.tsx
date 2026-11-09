@@ -31,7 +31,14 @@ export const LandingNavbar = () => {
     const isBlogArticle = /^\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?blog\/(?!series(?:\/|$)|feed(?:\/|$))[^/]+\/?$/.test(pathname ?? "");
     const { open: openPricingModal } = usePricingModal();
 
-    const navLinks = [
+    // Focus the launch homepage on trying the product. Keep the richer
+    // service navigation everywhere else in the public site.
+    const navLinks = isLandingPage ? [
+        { href: "#demo", label: "Product tour", icon: RocketIcon },
+        { href: "#how-it-works", label: "How it works", icon: FileTextIcon },
+        { href: "/blog", label: "Blog", icon: FileTextIcon },
+        { href: "/downloads", label: "Downloads", icon: RocketIcon },
+    ] : [
         { href: "/blog", label: "Blog", icon: FileTextIcon },
         { href: `/${locale}/blog/feed`, label: "RSS", icon: Rss, external: false },
         { href: "/slack", label: "Slack", icon: () => <BrandIcon name="Slack" /> },
