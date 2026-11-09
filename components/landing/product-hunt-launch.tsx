@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ArrowRight, ArrowUpRight, Braces, Check, CheckCircle2, ChevronRight,
   Circle, Code2, Layers3, LockKeyhole, MonitorSmartphone, MousePointer2,
-  Sparkles, Terminal, WandSparkles, Workflow,
+  Sparkles, WandSparkles, Workflow,
 } from "lucide-react";
 
 type DemoStage = "plan" | "code" | "preview";
