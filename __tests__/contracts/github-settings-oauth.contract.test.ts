@@ -35,7 +35,9 @@ describe('Settings GitHub OAuth canonical connection path', () => {
     expect(mockSetCookie).not.toHaveBeenCalled();
   });
   it('uses the exact registered callback and secure Lax CSRF cookie', async () => {
-    const res = await GET(new Request('https://gen1e.xyz/api/integrations/github/auth'));
+    const res = await GET(new Request('https://gen1e.xyz/api/integrations/github/auth')) as unknown as {
+      redirect: string; status: number;
+    };
     const uri = new URL(res.redirect);
     expect(uri.origin).toBe('https://github.com');
     expect(uri.searchParams.get('redirect_uri')).toBe('https://gen1e.xyz/api/integrations/github/callback');
