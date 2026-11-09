@@ -28,27 +28,33 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Server configuration invalid: NEXT_PUBLIC_APP_URL" }, { status: 500 });
     }
 
+    if (req.nextUrl.origin !== appBaseUrl(appUrlBase)) {
+        console.error("[GitHub Callback] Host mismatch; check registered callback URL");
+        return NextResponse.json({ error: "GitHub callback host mismatch" }, { status: 400 });
+    }
+
     const searchParams = req.nextUrl.searchParams;
     const code = searchParams.get("code");
     const state = searchParams.get("state");
+    const providerError = searchParams.get("error");
 
-    if (!code || !state) {
-        return NextResponse.json({ error: "Missing code or state parameter" }, { status: 400 });
-    }
-
-    // CSRF Protection using cookies
     const cookieStore = await cookies();
     const savedState = cookieStore.get("github_oauth_state")?.value;
-
-    if (!savedState || state !== savedState) {
+    if (!state || !savedState || state !== savedState) {
         return NextResponse.json({ error: "Invalid state parameter. CSRF validation failed." }, { status: 403 });
     }
-
-    // Clear the cookie after successful validation
     cookieStore.delete("github_oauth_state");
 
+    if (providerError) {
+        const reason = providerError === 'access_denied' ? 'denied' : 'provider';
+        return NextResponse.redirect(appUrl(`/settings?github=error&reason=${reason}`, appUrlBase));
+    }
+    if (!code) {
+        return NextResponse.redirect(appUrl('/settings?github=error&reason=missing_code', appUrlBase));
+    }
+
     try {
-        const rawAccessToken = await exchangeCodeForToken(code);
+        const rawAccessToken = await exchangeCodeForToken(code, appUrl('/api/integrations/github/callback', appUrlBase));
         const encryptedAccessToken = encrypt(rawAccessToken);
         
         // Fetch the user's GitHub profile for explicit account linking
@@ -87,15 +93,15 @@ export async function GET(req: NextRequest) {
         // Normalized join (#446 follow-up): trailing-slash env values must not
         // produce "//settings". Fallback matches the codebase convention.
         return NextResponse.redirect(
-            appUrl('/settings?github=connected', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
+            appUrl('/settings?github=connected', appUrlBase),
         );
 
     } catch (error: any) {
         console.error("[GitHub Auth] Error:", error);
         return NextResponse.redirect(
             appUrl(
-                `/settings?github=error&message=${encodeURIComponent(error.message)}`,
-                process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+                '/settings?github=error&reason=connection_failed',
+                appUrlBase,
             ),
         );
     }
