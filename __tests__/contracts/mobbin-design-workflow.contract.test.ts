@@ -83,7 +83,7 @@ describe('Code Builder receives optional structured design guidance', () => {
     await generatePlan(ctx);
     expect(nimChat).toHaveBeenCalledWith(
       expect.stringContaining('original Lattice layouts'),
-      expect.stringContaining('RESEARCH BRIEF'),
+      expect.stringContaining('REFERENCE-INFORMED DESIGN BRIEF'),
       expect.any(Object),
     );
     expect((nimChat as jest.Mock).mock.calls[0][1]).toContain('mobbin.com/apps/example/screen');
