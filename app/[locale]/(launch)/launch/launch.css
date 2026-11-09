@@ -37,3 +37,9 @@
 @media(max-width:380px){.lm-short-label{display:inline}.lm-full-label{display:none}.lm-container{padding-inline:15px}.lm-nav{gap:5px}.lm-logo{font-size:18px;gap:6px}.lm-mark{width:35px;height:35px}.lm-actions{gap:5px}.lm-nav-cta{padding-inline:9px;gap:5px}.lm-hero{padding-top:48px}.lm-preview-bar{padding:13px}.lm-mini-app section{grid-template-columns:1fr}.lm-hero-product{padding:14px}.lm-hero-product small{font-size:8px}}
 @media(min-width:381px){.lm-short-label{display:none}}
 @media(prefers-reduced-motion:reduce){.lm-page *{transition:none!important;animation:none!important}}
+
+/* Consistent dark CTA and explicit footer link colors: prevent default browser-blue anchors. */
+.lm-page[data-theme="dark"] .lm-nav-cta{background:var(--lm-copper);color:#101916}
+.lm-footer nav a{color:var(--lm-muted);text-decoration:none}
+.lm-footer nav a:hover{color:var(--lm-copper-ink)}
+.lm-theme:hover{border-color:var(--lm-forest)}
