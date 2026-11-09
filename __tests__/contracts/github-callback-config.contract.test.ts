@@ -83,4 +83,24 @@ describe('callback validates configuration before provider calls or persistence 
     expect(exchangeCodeForToken).toHaveBeenCalledWith('c1', 'https://gen1e.xyz/api/integrations/github/callback');
     expect(res.redirect).toBe('https://gen1e.xyz/settings?github=connected');
   });
+
+  it('GitHub denial is user-visible but never exchanges a token', async () => {
+    (exchangeCodeForToken as jest.Mock).mockClear();
+    process.env.NEXT_PUBLIC_APP_URL = 'https://gen1e.xyz';
+    const url = 'https://gen1e.xyz/api/integrations/github/callback?error=access_denied&state=state-123';
+    const res = (await GET(new (require('next/server').NextRequest)(url) as any)) as { redirect?: string };
+    expect(res.redirect).toBe('https://gen1e.xyz/settings?github=error&reason=denied');
+    expect(exchangeCodeForToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects callbacks arriving on an unregistered preview hostname', async () => {
+    (exchangeCodeForToken as jest.Mock).mockClear();
+    process.env.NEXT_PUBLIC_APP_URL = 'https://gen1e.xyz';
+    const url = 'https://preview.example.vercel.app/api/integrations/github/callback?code=c1&state=state-123';
+    const res = (await GET(new (require('next/server').NextRequest)(url) as any)) as {
+      status: number;
+    };
+    expect(res.status).toBe(400);
+    expect(exchangeCodeForToken).not.toHaveBeenCalled();
+  });
 });

@@ -118,13 +118,13 @@ export function ProviderKeysSection({ initialKeys }: Props) {
   };
 
   return (
-    <Card className="p-6 border-black/5">
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-emerald-600/10">
+    <Card className="min-w-0 max-w-full border-black/5 p-4 sm:p-6">
+      <div className="flex min-w-0 flex-col gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="shrink-0 p-2 rounded-lg bg-emerald-600/10">
             <Key className="w-6 h-6 text-emerald-600" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <h3 className="text-lg font-semibold">AI Provider Keys</h3>
             <p className="text-sm text-muted-foreground">
               Bring your own OpenAI, Anthropic, and Google keys. Keys are validated server-side, encrypted in Supabase Vault, and never displayed back to the browser.
@@ -132,15 +132,15 @@ export function ProviderKeysSection({ initialKeys }: Props) {
           </div>
         </div>
 
-        <div className="grid gap-4">
+        <div className="grid min-w-0 gap-4">
           {(['openai', 'anthropic', 'google', 'openrouter', 'huggingface'] as ProviderName[]).map((provider) => {
             const status = configuredKeys[provider];
             const inputValue = apiKeyInputs[provider];
             return (
-              <div key={provider} className="rounded-lg border p-4 space-y-3">
+              <div key={provider} className="min-w-0 rounded-lg border p-3 sm:p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h4 className="font-semibold flex items-center gap-2">
+                    <h4 className="font-semibold flex flex-wrap items-center gap-2 break-words">
                       {providerLabels[provider]}
                       {status.configured && (
                         <span className="bg-emerald-500/10 text-emerald-600 px-2 py-0.5 rounded-full text-xs font-bold">
@@ -151,13 +151,13 @@ export function ProviderKeysSection({ initialKeys }: Props) {
                     <p className="text-xs text-muted-foreground">{providerDescriptions[provider]}</p>
                   </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2 max-w-2xl">
+                <div className="flex min-w-0 max-w-2xl flex-col items-stretch gap-2 sm:flex-row sm:items-start">
                   <input
                     type="password"
                     value={inputValue}
                     onChange={(e) => setApiKeyInputs(prev => ({ ...prev, [provider]: e.target.value }))}
                     placeholder={status.configured ? `Enter new ${providerLabels[provider]} key to replace existing...` : providerPlaceholders[provider]}
-                    className="w-full flex h-11 sm:h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full min-w-0 flex h-11 sm:h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     disabled={isSavingKey}
                   />
                   <Button
