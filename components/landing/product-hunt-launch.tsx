@@ -170,7 +170,7 @@ const steps = [
     icon: WandSparkles,
     number: "01",
     title: "Start with a problem",
-    description: "Tell Lattice what you'd like to build. Turn your goal into a plan you can inspect.",
+    description: "Tell Lattice what you&apos;d like to build. Turn your goal into a plan you can inspect.",
   },
   {
     icon: Braces,
@@ -237,7 +237,7 @@ export function ProductHuntLaunch() {
           <div className="max-w-2xl">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-700">From idea to app</p>
             <h2 className="mt-4 text-balance text-3xl font-semibold tracking-[-0.045em] sm:text-5xl">Less tool switching. More building.</h2>
-            <p className="mt-5 text-base leading-7 text-[#64616b]">The workflow stays focused on what you're making, with the AI helping across the planning, implementation, and review steps.</p>
+            <p className="mt-5 text-base leading-7 text-[#64616b]">The workflow stays focused on what you&apos;re making, with the AI helping across the planning, implementation, and review steps.</p>
           </div>
           <div className="mt-10 grid gap-4 md:grid-cols-3">
             {steps.map(({ icon: Icon, number, title, description }) => (
@@ -273,7 +273,7 @@ export function ProductHuntLaunch() {
             </div>
             <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-4">
               <Circle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" aria-hidden="true" />
-              <div><p className="font-semibold">Isolated preview — limited beta</p><p className="mt-1 text-sm leading-6 text-white/55">Preview environments are being qualified; availability isn't universal.</p></div>
+              <div><p className="font-semibold">Isolated preview — limited beta</p><p className="mt-1 text-sm leading-6 text-white/55">Preview environments are being qualified; availability isn&apos;t universal.</p></div>
             </div>
             <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-4">
               <Circle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" aria-hidden="true" />
@@ -287,8 +287,8 @@ export function ProductHuntLaunch() {
         <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-7 sm:flex-row sm:items-center">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-700">Build something real</p>
-            <h2 id="get-started-heading" className="mt-3 max-w-xl text-balance text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">Start with the idea you can't stop thinking about.</h2>
-            <p className="mt-3 text-sm leading-6 text-[#655f69]">Tell us what works, what breaks, and what you'd like to build next.</p>
+            <h2 id="get-started-heading" className="mt-3 max-w-xl text-balance text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">Start with the idea you can&apos;t stop thinking about.</h2>
+            <p className="mt-3 text-sm leading-6 text-[#655f69]">Tell us what works, what breaks, and what you&apos;d like to build next.</p>
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto">
             <Link href="/code/builder" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-violet-700 px-6 text-sm font-semibold text-white transition-colors hover:bg-violet-800 sm:w-auto">
