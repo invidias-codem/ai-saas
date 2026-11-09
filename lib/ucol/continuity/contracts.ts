@@ -35,6 +35,8 @@ export interface RunTransition {
   status: ConversationRunStatus;
   phase: string;
   resultRef?: string | null;
+  /** Explicitly rotate authority after an approval/handoff. */
+  nextGeneration?: number;
 }
 
 /** Return the new cursor or throw. No network, clock, or database access. */
@@ -57,13 +59,24 @@ export function transitionRun(current: RunCursor, update: RunTransition): RunCur
   };
   if (!legal[current.status].includes(update.status)) throw new Error('invalid_run_transition');
   if (!update.phase || update.phase.length > 80) throw new Error('invalid_phase');
+  // A handoff or approval resume MUST fence any old agent/controller. Never
+  // silently keep the prior authority generation when control changes.
+  const handoff = update.status === 'awaiting_approval' ||
+    current.status === 'awaiting_approval';
+  if (handoff && update.nextGeneration !== current.generation + 1) {
+    throw new Error('handoff_requires_generation_rotation');
+  }
+  if (!handoff && update.nextGeneration !== undefined &&
+      update.nextGeneration !== current.generation) {
+    throw new Error('invalid_generation_advance');
+  }
   const resultRef = update.resultRef ?? current.resultRef;
   if (update.status === 'completed' && !resultRef) throw new Error('missing_durable_result');
   return {
     runId: current.runId,
     status: update.status,
     phase: update.phase,
-    generation: current.generation,
+    generation: handoff ? current.generation + 1 : current.generation,
     sequence: update.nextSequence,
     resultRef,
   };
