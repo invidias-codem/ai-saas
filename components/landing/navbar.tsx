@@ -94,7 +94,9 @@ const itemVariants = {
             <header
                 className={cn(
                     "fixed md:absolute top-0 left-0 right-0 z-50 transition duration-200 border-b",
-                    scrolled || isOpen ? "landing-nav-shell" : "landing-nav-shell-top"
+                    isLandingPage
+                      ? "border-[#e6e1e5] !bg-[#f7f5f0]/95 text-[#272235] backdrop-blur-xl"
+                      : scrolled || isOpen ? "landing-nav-shell" : "landing-nav-shell-top"
                 )}
             >
                 <div className="max-w-7xl mx-auto px-4 md:px-10 flex justify-between items-center h-16">
@@ -107,20 +109,22 @@ const itemVariants = {
                                 className="object-cover"
                             />
                         </div>
-                        <span className="landing-text-primary text-xl font-bold tracking-tight font-heading leading-none transition-colors group-hover:text-purple-400">
+                        <span className={cn("text-xl font-bold tracking-tight font-heading leading-none transition-colors group-hover:text-purple-600", isLandingPage ? "text-[#272235]" : "landing-text-primary")}>
                             Lattice OS
                         </span>
                     </Link>
 
                     <nav className="hidden md:flex items-center gap-8">
                         <div className="flex items-center gap-6 text-sm font-medium">
-                            <BlogNavLink href="/blog" label="Blog" />
+                            {isLandingPage
+                              ? <Link href="/blog" className="inline-flex min-h-[48px] items-center text-sm text-[#625a6b] transition-colors hover:text-violet-700">Blog</Link>
+                              : <BlogNavLink href="/blog" label="Blog" />}
                             {navLinks.filter(l => l.label !== "Blog").map((link) => (
                                 link.href === "/downloads" ? <InstallButton key={link.href} className="landing-nav-link min-h-[48px] inline-flex items-center transition">Install</InstallButton> :
                                 <Link
                                     key={link.href}
                                     href={link.href}
-                                    className="landing-nav-link min-h-[48px] inline-flex items-center transition"
+                                    className={cn("min-h-[48px] inline-flex items-center transition", isLandingPage ? "text-[#625a6b] hover:text-violet-700" : "landing-nav-link")}
                                 >
                                     {link.label}
                                 </Link>
@@ -130,7 +134,7 @@ const itemVariants = {
                         <div className="flex items-center gap-3">
                             <Button
                                 variant="ghost"
-                                className="landing-nav-ghost rounded-full"
+                                className={cn("rounded-full", isLandingPage ? "text-[#4f465b] hover:bg-violet-100" : "landing-nav-ghost")}
                                 onClick={() => openPricingModal()}
                             >
                                 Pricing
@@ -138,13 +142,13 @@ const itemVariants = {
                             <Link href="/dashboard">
                                 <Button
                                     variant="ghost"
-                                    className="landing-nav-ghost rounded-full"
+                                    className={cn("rounded-full", isLandingPage ? "text-[#4f465b] hover:bg-violet-100" : "landing-nav-ghost")}
                                 >
                                     {tHero("login")}
                                 </Button>
                             </Link>
                             <Link href="/dashboard">
-                                <Button className="landing-cta-primary min-h-[48px] rounded-full font-semibold shadow-lg dark:shadow-white/10 transition duration-200 hover:scale-105">
+                                <Button className={cn("min-h-[48px] rounded-full font-semibold shadow-lg transition duration-200 hover:scale-105", isLandingPage ? "bg-[#282238] text-white hover:bg-[#45345e]" : "landing-cta-primary dark:shadow-white/10")}>
                                     {tHero("cta")}
                                 </Button>
                             </Link>
@@ -152,7 +156,7 @@ const itemVariants = {
                     </nav>
 
                     <div className="md:hidden flex items-center gap-2 z-50">
-                        <InstallButton className="landing-nav-link inline-flex min-h-[48px] items-center rounded-full border border-border px-4 text-sm font-medium">Install</InstallButton>
+                        <InstallButton className={cn("inline-flex min-h-[48px] items-center rounded-full border px-4 text-sm font-medium", isLandingPage ? "border-[#dcd5de] text-[#4d425b]" : "landing-nav-link border-border")}>Install</InstallButton>
                         <button
                             onClick={() => setIsOpen(!isOpen)}
                             className="relative w-10 h-10 min-h-[48px] min-w-[48px] flex flex-col justify-center items-end gap-[5px] group"
@@ -164,7 +168,7 @@ const itemVariants = {
                             />
                             <motion.span
                                 animate={isOpen ? { opacity: 0 } : { opacity: 1 }}
-                                className="landing-nav-burger-mid w-5 h-[3px] rounded-full group-hover:w-8 transition duration-200"
+                                className={cn("w-5 h-[3px] rounded-full group-hover:w-8 transition duration-200", isLandingPage ? "bg-violet-700" : "landing-nav-burger-mid")}
                             />
                             <motion.span
                                 animate={isOpen ? { rotate: -45, y: -7 } : { rotate: 0, y: 0 }}
