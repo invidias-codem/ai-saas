@@ -1,6 +1,11 @@
 name: Product Hunt launch visual QA
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/launch/**'
+      - '.github/workflows/launch-visual-qa.yml'
   workflow_dispatch:
     inputs:
       launch_url:
@@ -13,7 +18,24 @@ permissions:
   contents: read
 
 jobs:
+  policy-unit:
+    name: Validate launch QA URL security policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Check syntax and policy
+        run: |
+          node --check scripts/launch/qa.mjs
+          node --check scripts/launch/capture-code-builder.mjs
+          node --test scripts/launch/qa-policy.test.mjs
+
   launch-visual-qa:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
