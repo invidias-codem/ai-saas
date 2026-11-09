@@ -22,3 +22,20 @@ Skills [
   Responsive design
   Design systems
 ]
+
+## Reference-informed visual design (Lattice)
+
+For new or substantially redesigned UI, read `ai/skills/mobbin-design-research/SKILL.md`.
+If the official Mobbin MCP is authenticated, compare relevant screens, flows,
+or website sections. Extract *abstract* navigation, information hierarchy,
+interaction and accessibility patterns; cite original reference links.
+Never paste proprietary screenshots, source assets, branded layouts, exact
+copy, or third-party styles into Lattice outputs. Do not scrape or archive
+Mobbin content. If Mobbin is unavailable, continue from product requirements
+and Lattice's existing design system; mark the research step unavailable.
+
+Lattice visual direction: focused working surface first, expressive but
+functional typography, restrained depth and motion, contextual controls,
+well-spaced content regions, keyboard-accessible actions, clear status and
+error states, mobile widths starting at 320px, and reduced-motion support.
+Aim for the finish and usability of leading creative tools, **not** a clone.
