@@ -100,7 +100,10 @@ export default async function SettingsPage({ params }: RouteParams) {
   }
 
   const githubStatus = {
-    connected: githubRow?.is_connected === true && !!githubRow?.access_token_encrypted,
+    // A token row is NOT a verified connection; the client calls the provider
+    // status endpoint before showing Connected.
+    connected: false,
+    hasStoredCredential: githubRow?.is_connected === true && !!githubRow?.access_token_encrypted,
     username: (githubRow?.metadata as any)?.github_login ?? null,
     email: (githubRow?.metadata as any)?.github_email ?? null,
   };
@@ -110,7 +113,7 @@ export default async function SettingsPage({ params }: RouteParams) {
   };
 
   return (
-    <div>
+    <div className="w-full min-w-0 overflow-x-clip">
       <Heading
         title="Settings"
         description="Manage your account settings, integrations, and memories."
@@ -119,7 +122,7 @@ export default async function SettingsPage({ params }: RouteParams) {
         bgColor="bg-gray-700/10"
       />
 
-      <div className="px-4 lg:px-8 space-y-6 pb-20 md:pb-0">
+      <div className="max-w-full min-w-0 px-3 sm:px-4 lg:px-8 space-y-6 pb-20 md:pb-0">
         <CreditsSection initialCredits={credits} />
 
         <MembershipSection
@@ -134,10 +137,10 @@ export default async function SettingsPage({ params }: RouteParams) {
         )}
 
         {/* Vault — server-rendered nav link */}
-        <Card className="p-6 border-black/5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-600/10">
+        <Card className="min-w-0 border-black/5 p-4 sm:p-6">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-amber-600/10">
                 <Archive className="w-6 h-6 text-amber-600" />
               </div>
               <div>
@@ -149,7 +152,7 @@ export default async function SettingsPage({ params }: RouteParams) {
             </div>
             <Link
               href={`/${locale}/settings/vault`}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+              className="inline-flex w-full sm:w-auto shrink-0 items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white transition-colors"
             >
               Open Vault
             </Link>
@@ -157,10 +160,10 @@ export default async function SettingsPage({ params }: RouteParams) {
         </Card>
 
         {/* Data & Memory — server-rendered nav link */}
-        <Card className="p-6 border-black/5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-pink-700/10">
+        <Card className="min-w-0 border-black/5 p-4 sm:p-6">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-pink-700/10">
                 <Database className="w-6 h-6 text-pink-700" />
               </div>
               <div>
@@ -172,17 +175,17 @@ export default async function SettingsPage({ params }: RouteParams) {
             </div>
             <Link
               href={`/${locale}/settings/data`}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 bg-pink-700 hover:bg-pink-800 text-white transition-colors"
+              className="inline-flex w-full sm:w-auto shrink-0 items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 bg-pink-700 hover:bg-pink-800 text-white transition-colors"
             >
               Manage Data
             </Link>
           </div>
         </Card>
 
-        <Card className="p-6 border-black/5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-indigo-500/10">
+        <Card className="min-w-0 border-black/5 p-4 sm:p-6">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="shrink-0 p-2 rounded-lg bg-indigo-500/10">
                 <Mail className="w-6 h-6 text-indigo-500" />
               </div>
               <div>

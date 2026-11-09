@@ -21,7 +21,7 @@ export function CreditsSection({ initialCredits }: Props) {
 
   return (
     <Card className="p-6 border-black/5">
-      <div className="flex items-center justify-between">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-yellow-500/10">
             <Zap className="w-6 h-6 text-yellow-500" />
