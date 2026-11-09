@@ -53,7 +53,7 @@ function ExamplePreview({ step, setStep }: {
         </>}
         {step === 'Inspect' && <>
           <span className="lm-preview-eyebrow">REVIEWABLE RESULT</span>
-          <h3>See what you're creating.</h3>
+          <h3>See what you&apos;re creating.</h3>
           <p>Inspect the output and keep shaping the next iteration.</p>
           <div className="lm-mini-app">
             <div>Intake desk <span>EXAMPLE UI</span></div>
@@ -71,11 +71,15 @@ export function MineralLaunch() {
   const [theme, setTheme] = useState<'light'|'dark'>('light');
   const [step, setStep] = useState<Step>('Describe');
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('lattice-launch-theme');
-      if (saved === 'light' || saved === 'dark') setTheme(saved);
-      else if (window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
-    } catch { /* localStorage is optional */ }
+    // Read client preference after hydration, without synchronous effect state
+    // updates (the repository's React lint rule prohibits them).
+    void Promise.resolve().then(() => {
+      try {
+        const saved = localStorage.getItem('lattice-launch-theme');
+        if (saved === 'light' || saved === 'dark') setTheme(saved);
+        else if (window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
+      } catch { /* localStorage is optional */ }
+    });
   }, []);
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
