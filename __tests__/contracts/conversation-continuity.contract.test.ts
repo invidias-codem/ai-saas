@@ -54,6 +54,25 @@ describe('conversation continuity — fail-closed durable run contract', () => {
       phase: 'completed', resultRef: 'artifact:abc',
     })).toThrow('invalid_run_transition');
   });
+  it('rotates control generation both on approval pause and resumption', () => {
+    expect(() => transitionRun(running, {
+      expectedGeneration: 2, nextSequence: 2, status: 'awaiting_approval', phase: 'awaiting_approval',
+    })).toThrow('handoff_requires_generation_rotation');
+    const paused = transitionRun(running, {
+      expectedGeneration: 2, nextSequence: 2, status: 'awaiting_approval',
+      phase: 'awaiting_approval', nextGeneration: 3,
+    });
+    expect(paused.generation).toBe(3);
+    expect(() => transitionRun(paused, {
+      expectedGeneration: 3, nextSequence: 3, status: 'running', phase: 'resumed',
+    })).toThrow('handoff_requires_generation_rotation');
+    const resumed = transitionRun(paused, {
+      expectedGeneration: 3, nextSequence: 3, status: 'running',
+      phase: 'resumed', nextGeneration: 4,
+    });
+    expect(resumed.generation).toBe(4);
+    expect(resumed.sequence).toBe(3);
+  });
 });
 
 const delegation: EngineDelegation = {
