@@ -97,7 +97,9 @@ function IntegrationsInner({ initialGithub, initialTrello }: Props) {
   // On load and after the OAuth callback, verify the saved credential rather
   // than unconditionally painting the GitHub card green.
   useEffect(() => {
-    void refreshGitHub();
+    // Schedule the initial network verification outside the synchronous effect
+    // body to avoid cascading React updates during hydration.
+    void Promise.resolve().then(() => refreshGitHub());
   }, [refreshGitHub]);
 
   // OAuth callbacks, via useSearchParams instead of raw window.location.
