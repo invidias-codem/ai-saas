@@ -24,6 +24,9 @@ const isPublicRoute = createRouteMatcher([
     '/:locale(en|th|vi|es|fr|de)/privacy',
     '/support',
     '/:locale(en|th|vi|es|fr|de)/support',
+    // Product Hunt candidate stays separate from the sticky homepage experiment.
+    '/launch',
+    '/:locale(en|th|vi|es|fr|de)/launch',
     '/downloads',
     '/:locale(en|th|vi|es|fr|de)/downloads',
     '/downloads/windows',
