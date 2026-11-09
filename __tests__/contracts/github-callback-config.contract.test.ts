@@ -80,7 +80,7 @@ describe('callback validates configuration before provider calls or persistence 
     const res = (await GET(new (require('next/server').NextRequest)(CALLBACK) as any)) as unknown as {
       redirect?: string;
     };
-    expect(exchangeCodeForToken).toHaveBeenCalledWith('c1');
+    expect(exchangeCodeForToken).toHaveBeenCalledWith('c1', 'https://gen1e.xyz/api/integrations/github/callback');
     expect(res.redirect).toBe('https://gen1e.xyz/settings?github=connected');
   });
 });
