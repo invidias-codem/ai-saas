@@ -8,8 +8,8 @@
 .lm-nav-wrap{border-bottom:1px solid var(--lm-border);background:var(--lm-bg)}
 .lm-nav{min-height:80px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .lm-logo{display:flex;align-items:center;gap:10px;color:var(--lm-ink);font-weight:780;letter-spacing:-.065em;font-size:23px;white-space:nowrap;text-decoration:none}
-.lm-mark{display:grid;place-items:center;width:40px;height:40px;background:#101916;color:#F2EFE5;border:1px solid #53705E;border-radius:10px;flex-shrink:0}
-.lm-mark svg{width:24px;height:24px}.lm-dot{color:var(--lm-copper-ink)}.lm-links{display:flex;gap:30px;font-size:13px;font-weight:650}.lm-links a{color:var(--lm-muted);text-decoration:none}.lm-links a:hover{color:var(--lm-copper-ink)}
+.lm-mark{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;overflow:hidden;flex-shrink:0}
+.lm-logo-image{display:block;width:100%;height:100%;object-fit:contain}.lm-links{display:flex;gap:30px;font-size:13px;font-weight:650}.lm-links a{color:var(--lm-muted);text-decoration:none}.lm-links a:hover{color:var(--lm-copper-ink)}
 .lm-actions{display:flex;align-items:center;gap:9px}.lm-theme{display:flex;align-items:center;justify-content:center;gap:8px;border-radius:25px;border:1px solid var(--lm-border);background:var(--lm-surface);color:var(--lm-ink);min-height:44px;min-width:85px;padding:0 10px;font-size:13px;font-weight:700;cursor:pointer}.lm-theme span:first-child{font-size:18px}.lm-nav-cta,.lm-button{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;border-radius:25px;padding:0 21px;font-weight:750;text-decoration:none;white-space:nowrap;font-size:13px}.lm-nav-cta{background:#101916;color:#F2EFE5}.lm-nav-cta:hover{background:#294534}.lm-short-label{display:none}
 .lm-eyebrow{display:inline-block;color:var(--lm-forest);font-weight:800;letter-spacing:.15em;font-size:11px;line-height:1.5}
 .lm-hero{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:30px;min-height:695px;align-items:center;padding-block:80px}

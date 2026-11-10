@@ -2,14 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const steps = ['Describe', 'Plan', 'Inspect'] as const;
 type Step = (typeof steps)[number];
 const builder = '/en/code/builder';
 
+// Use the original Lattice symbol already used by the rest of the website.
+// The adjacent visible wordmark supplies the accessible link name.
 function LatticeMark() {
   return <span className="lm-mark" aria-hidden="true">
-    <svg viewBox="0 0 32 32" focusable="false"><path d="M16 3.5 29 27.5H3L16 3.5Z" fill="currentColor" /></svg>
+    <Image
+      src="/lattice-logo.png"
+      alt=""
+      width={40}
+      height={40}
+      priority
+      className="lm-logo-image"
+    />
   </span>;
 }
 
@@ -89,7 +99,7 @@ export function MineralLaunch() {
   return <div className="lm-page" data-theme={theme}>
     <a href="#main" className="lm-skip">Skip to content</a>
     <header className="lm-nav-wrap"><nav className="lm-container lm-nav" aria-label="Launch navigation">
-      <Link href="/" className="lm-logo"><LatticeMark /><span>lattice<span className="lm-dot">.</span>os</span></Link>
+      <Link href="/" className="lm-logo"><LatticeMark /><span>Lattice OS</span></Link>
       <div className="lm-links"><a href="#workflow">Workflow</a><a href="#why">Why Lattice</a><a href="#availability">Availability</a></div>
       <div className="lm-actions">
         <button className="lm-theme" onClick={toggleTheme} type="button"

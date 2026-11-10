@@ -11,6 +11,12 @@ describe('Product Hunt Mineral/Copper public candidate', () => {
     expect(html).toContain('Try Code Builder');
     expect(html).toContain('ILLUSTRATIVE WALKTHROUGH');
   });
+  it('uses the existing first-party Lattice logo, not the illustrative triangle', () => {
+    const html = renderToStaticMarkup(<MineralLaunch />);
+    expect(html).toContain('lattice-logo.png');
+    expect(html).toContain('Lattice OS');
+    expect(html).not.toContain('M16 3.5 29 27.5H3L16 3.5Z');
+  });
   it('does not suggest unfinished publishing is available', () => {
     const html=renderToStaticMarkup(<MineralLaunch />);
     expect(html).toContain('publishing still in testing');
