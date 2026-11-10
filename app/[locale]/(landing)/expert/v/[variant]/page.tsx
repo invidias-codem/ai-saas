@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { MineralCopperExpertLandingLayout } from "@/components/marketing/mineral-copper-expert-landing-layout";
+import { ExpertLandingLayout } from "@/components/marketing/expert-landing-layout";
 
 const VALID_VARIANTS = ["a", "b", "c"] as const;
 type Variant = (typeof VALID_VARIANTS)[number];
@@ -15,7 +15,7 @@ export default async function ExpertVariantPage({ params }: PageProps) {
     notFound();
   }
 
-  return <MineralCopperExpertLandingLayout variant={variant as Variant} />;
+  return <ExpertLandingLayout variant={variant as Variant} />;
 }
 
 // Static generation for all variant slugs
