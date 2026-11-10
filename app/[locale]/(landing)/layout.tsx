@@ -10,15 +10,17 @@ export default function MarketingLayout({
 }: {
     children: React.ReactNode;
 }) {
+  const isExpertVariant = typeof window !== 'undefined' && window.location.pathname.match(/expert\/v\//);
+  
   return (
     <InstallProvider
       desktopPanels={{ windows: <DesktopDownloads platform="windows" compact />, macos: <DesktopDownloads platform="macos" compact />, linux: <DesktopDownloads platform="linux" compact /> }}
       terminalPanels={{ windows: <TerminalInstall platform="windows" />, macos: <TerminalInstall platform="macos" />, linux: <TerminalInstall platform="linux" /> }}
     >
       <div className="bg-background min-h-screen flex flex-col">
-        <LandingNavbar />
+        {!isExpertVariant && <LandingNavbar />}
         <div className="flex-grow">{children}</div>
-        <LandingFooter />
+        {!isExpertVariant && <LandingFooter />}
       </div>
     </InstallProvider>
   );
