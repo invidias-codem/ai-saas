@@ -113,7 +113,7 @@ it('fails closed when the Clerk boundary throws', async () => {
 
 // Known production defects: expected-failure assertions keep the desired security
 // contract visible and fail on an unexpected pass, requiring removal after repair.
-it.failing('requires authentication for non-English protected pages', async () => {
+it('requires authentication for non-English protected pages', async () => {
   expect((await request('/fr/settings')).status).toBe(307);
   expect(auth).toHaveBeenCalledTimes(1);
 });
