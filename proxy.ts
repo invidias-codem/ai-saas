@@ -14,6 +14,7 @@ const intlMiddleware = createMiddleware({
 });
 
 const isPublicRoute = createRouteMatcher([
+    // Homepage is now public (Mineral/Copper), no longer rewritten to expert variants
     '/',
     '/:locale(en|th|vi|es|fr|de)',
     '/:locale(en|th|vi|es|fr|de)/sign-in(.*)',
@@ -147,12 +148,6 @@ export default clerkMiddleware(async (auth, req) => {
         return res;
     }
     // ───────────────────────────────────────────
-
-
-    // Public locale roots now render the single Mineral / Copper homepage.
-    // Historical A/B experiment cookies are intentionally no longer read or set.
-    // Explicit /:locale/expert/v/[variant] deep links remain supported.
-    // The homepage is under (launch) to avoid the shared (landing) nav/footer.
 
     // ─── REFERRAL TRACKING (runs on ALL page requests, no auth needed) ──────────
     // Only capture on page routes (not API), and only if ?ref= is present
