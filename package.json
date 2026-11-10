@@ -15,6 +15,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "jest",
+    "qa:launch": "node scripts/launch/qa.mjs",
+    "qa:launch:policy": "node --test scripts/launch/qa-policy.test.mjs",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:security": "./scripts/run-security-tests.sh",
