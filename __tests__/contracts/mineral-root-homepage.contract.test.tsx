@@ -53,6 +53,7 @@ describe('Mineral / Copper canonical public homepage', () => {
     expect(styles).toContain('.lm-hero');
     expect(styles).toContain('.lm-page[data-theme="dark"]');
     expect(styles).not.toContain('.mc-');
+    expect(component).toContain("import '@/app/[locale]/(launch)/launch/launch.css'");
     expect(component).toContain('className="lm-page"');
     expect(component).toContain('className="lm-nav-wrap"');
   });

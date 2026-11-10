@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { motion } from 'framer-motion';
 import { ArrowRightIcon } from 'lucide-react';
+import '@/app/[locale]/(launch)/launch/launch.css';
 import '@/app/[locale]/(landing)/expert/mineral-copper.css';
 
 const steps = ['Describe', 'Plan', 'Inspect'] as const;
