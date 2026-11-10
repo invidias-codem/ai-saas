@@ -27,9 +27,34 @@ describe('Mineral / Copper canonical public homepage', () => {
     expect(proxy).toContain("'/expert(.*)'");
     expect(proxy).toContain("'/launch'");
     expect(proxy).toContain('parseReferralParams');
-    const expert = source('app/[locale]/(landing)/expert/v/[variant]/page.tsx');
+    const expert = source('app/[locale]/(home)/expert/v/[variant]/page.tsx');
     expect(expert).toContain('VALID_VARIANTS');
     expect(expert).toContain('generateStaticParams');
     expect(expert).toContain('notFound()');
+  });
+
+  it('renders expert variants without the standard marketing navbar or footer', () => {
+    expect(existsSync(join(process.cwd(), 'app/[locale]/(landing)/expert/v/[variant]/page.tsx'))).toBe(false);
+    const expert = source('app/[locale]/(home)/expert/v/[variant]/page.tsx');
+    expect(expert).toContain('MineralCopperExpertLandingLayout');
+    const homeLayout = source('app/[locale]/(home)/layout.tsx');
+    expect(homeLayout).not.toContain('LandingNavbar');
+    expect(homeLayout).not.toContain('LandingFooter');
+    const marketingLayout = source('app/[locale]/(landing)/layout.tsx');
+    expect(marketingLayout).toContain('<LandingNavbar />');
+    expect(marketingLayout).toContain('<LandingFooter />');
+    expect(marketingLayout).not.toContain('window.location');
+  });
+
+  it('provides lm-* expert styling matching rendered classes and dark theme', () => {
+    const styles = source('app/[locale]/(landing)/expert/mineral-copper.css');
+    const component = source('components/marketing/mineral-copper-expert-landing-layout.tsx');
+    expect(styles).toContain('.lm-page');
+    expect(styles).toContain('.lm-hero');
+    expect(styles).toContain('.lm-page[data-theme="dark"]');
+    expect(styles).not.toContain('.mc-');
+    expect(component).toContain("import '@/app/[locale]/(launch)/launch/launch.css'");
+    expect(component).toContain('className="lm-page"');
+    expect(component).toContain('className="lm-nav-wrap"');
   });
 });
