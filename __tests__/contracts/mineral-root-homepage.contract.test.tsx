@@ -28,7 +28,7 @@ describe('Mineral / Copper canonical public homepage', () => {
     expect(existsSync(join(process.cwd(), 'app/[locale]/(landing)/page.tsx'))).toBe(false);
     const root = source('app/[locale]/(launch)/page.tsx');
     expect(root).toContain('<MineralLaunch />');
-    expect(root).toContain('redirect(\\'/en\\')');
+    expect(root).toContain("redirect('/en')");
   });
 
   it('removes sticky root experiment but preserves direct expert variants and referrals', () => {
