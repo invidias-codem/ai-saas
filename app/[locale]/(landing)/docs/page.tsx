@@ -23,6 +23,7 @@ import {
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { resolveDocsLanguage, translateDocsText, type DocsLanguage } from "@/lib/docs-hub-translations";
 import { LanguageSelector } from "@/components/docs/LanguageSelector";
+import { resolveDocsArticlePath } from "@/lib/docs-article-localization";
 
 type DocItem = {
     title: string;
@@ -42,9 +43,10 @@ type DocSection = {
 const GITHUB_REPO_URL = "https://github.com/invidias-codem/ai-saas";
 const GITHUB_DOCS_URL = `${GITHUB_REPO_URL}/tree/main/docs`;
 
-function githubUrlForPath(path: string) {
+function githubUrlForPath(path: string, language: DocsLanguage) {
     if (path.startsWith("/")) return null;
-    const target = path.endsWith("/") ? `tree/main/${path.slice(0, -1)}` : `blob/main/${path}`;
+    const resolvedPath = resolveDocsArticlePath(path, language);
+    const target = resolvedPath.endsWith("/") ? `tree/main/${resolvedPath.slice(0, -1)}` : `blob/main/${resolvedPath}`;
     return `${GITHUB_REPO_URL}/${target}`;
 }
 
@@ -66,6 +68,9 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
     const language: DocsLanguage = resolveDocsLanguage(lang);
     const t = (key: string): string =>
         translateDocsText(key.endsWith(".command") ? "en" : language, key);
+    const docsIndexUrl = language === "en"
+        ? GITHUB_DOCS_URL
+        : githubUrlForPath("docs/README.md", language) ?? GITHUB_DOCS_URL;
 
     const onboardingPath = [
         {
@@ -386,7 +391,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
                                 {t("sidebar.label")}
                             </h3>
-                            <LanguageSelector language={language} />
+                            <LanguageSelector language={language} selectId="docs-language-desktop" />
                         </div>
                         <ul className="space-y-3 border-l border-border">
                             {docSections.map((section, index) => (
@@ -418,6 +423,9 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
 
                 <div className="w-full flex-grow space-y-10 md:max-w-4xl md:space-y-16">
                     <section id="hero" className="scroll-mt-32">
+                        <div className="mb-5 md:hidden">
+                            <LanguageSelector language={language} selectId="docs-language-mobile" />
+                        </div>
                         <div className="mb-5 inline-flex max-w-full items-start gap-2 rounded-2xl border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[11px] font-medium leading-snug text-purple-700 dark:text-purple-200 sm:items-center sm:rounded-full sm:text-xs">
                             <BookOpen className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 sm:mt-0" />
                             <span>{t("hero.badge")}</span>
@@ -440,7 +448,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                                     {t("hero.ctaSecondary")}
                                 </Button>
                             </a>
-                            <a href={GITHUB_DOCS_URL} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
+                            <a href={docsIndexUrl} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
                                 <Button variant="outline" className="h-11 w-full rounded-full border-border px-5 text-sm hover:bg-accent sm:w-auto">
                                     <BrandIcon name="Github" className="mr-2 h-4 w-4" size={16} /> {t("hero.ctaGithub")}
                                 </Button>
@@ -538,7 +546,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                                         <p className="text-sm text-muted-foreground leading-relaxed mb-4">{recipe.description}</p>
                                         <ul className="space-y-2">
                                             {recipe.links.map((link) => {
-                                                const href = githubUrlForPath(link) ?? link;
+                                                const href = githubUrlForPath(link, language) ?? link;
                                                 const isExternal = href.startsWith("http");
                                                 return (
                                                     <li key={link}>
@@ -577,7 +585,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
 
                                 <div className="grid gap-4">
                                     {section.items.map((item) => {
-                                        const sourceUrl = githubUrlForPath(item.path);
+                                        const sourceUrl = githubUrlForPath(item.path, language);
                                         return (
                                             <div key={`${section.id}-${item.title}`} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                                 <div className="flex items-start justify-between gap-3 sm:gap-4">

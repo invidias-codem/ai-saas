@@ -22,12 +22,13 @@ describe("docs-only six-language preview", () => {
 
   it("uses a server-side query language and a progressively enhanced selector", () => {
     expect(page).toContain("resolveDocsLanguage(lang)");
-    expect(page).toContain("<LanguageSelector language={language} />");
+    expect(page).toContain('<LanguageSelector language={language} selectId="docs-language-desktop" />');
+    expect(page).toContain('<LanguageSelector language={language} selectId="docs-language-mobile" />');
     const selector = source("components/docs/LanguageSelector.tsx");
     expect(selector).toContain('method="get"');
     expect(selector).toContain('action="/en/docs"');
     expect(selector).toContain('name="lang"');
-    expect(selector).toContain('htmlFor="docs-language"');
+    expect(selector).toContain("htmlFor={selectId}");
     expect(selector).not.toContain("window.location.href");
     expect(selector).not.toContain("useSearchParams");
   });
