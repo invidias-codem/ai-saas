@@ -43,10 +43,21 @@ type DocSection = {
 const GITHUB_REPO_URL = "https://github.com/invidias-codem/ai-saas";
 const GITHUB_DOCS_URL = `${GITHUB_REPO_URL}/tree/main/docs`;
 
+/**
+ * A preview must link to its own GitHub revision: articles added in this PR are not
+ * available on main until after merge. Production links always use main.
+ */
+const previewCommit = process.env.VERCEL_ENV === "preview"
+    ? process.env.VERCEL_GIT_COMMIT_SHA
+    : undefined;
+const GITHUB_ARTICLE_REF = previewCommit && /^[a-f0-9]{40}$/.test(previewCommit)
+    ? previewCommit
+    : "main";
+
 function githubUrlForPath(path: string, language: DocsLanguage) {
     if (path.startsWith("/")) return null;
     const resolvedPath = resolveDocsArticlePath(path, language);
-    const target = resolvedPath.endsWith("/") ? `tree/main/${resolvedPath.slice(0, -1)}` : `blob/main/${resolvedPath}`;
+    const target = resolvedPath.endsWith("/") ? `tree/${GITHUB_ARTICLE_REF}/${resolvedPath.slice(0, -1)}` : `blob/${GITHUB_ARTICLE_REF}/${resolvedPath}`;
     return `${GITHUB_REPO_URL}/${target}`;
 }
 
