@@ -688,6 +688,7 @@
       "step": "Step"
     },
     "languageSelector": {
+      "previewNotice": "Translation preview: available articles open in your selected language; other technical articles remain in English. Commands and source paths are unchanged.",
       "label": "Language",
       "selectLanguage": "Select language",
       "en": "English",
