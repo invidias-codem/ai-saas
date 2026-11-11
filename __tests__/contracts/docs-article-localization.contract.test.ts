@@ -79,6 +79,10 @@ describe("translated documentation articles — Slice 2", () => {
     const page = read("app/[locale]/(landing)/docs/page.tsx");
     const selector = read("components/docs/LanguageSelector.tsx");
     expect(page).toContain("resolveDocsArticlePath(path, language)");
+    expect(page).toContain('process.env.VERCEL_ENV === "preview"');
+    expect(page).toContain("process.env.VERCEL_GIT_COMMIT_SHA");
+    expect(page).toContain("GITHUB_ARTICLE_REF");
+    expect(page).toContain('blob/${GITHUB_ARTICLE_REF}');
     expect(page).toContain("githubUrlForPath(item.path, language)");
     expect(page).toContain("githubUrlForPath(link, language)");
     expect(page).toContain('selectId="docs-language-mobile"');
