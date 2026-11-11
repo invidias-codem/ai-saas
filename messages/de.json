@@ -504,6 +504,7 @@
       "step": "Schritt"
     },
     "languageSelector": {
+      "previewNotice": "Übersetzungsvorschau: Verfügbare Artikel öffnen sich in der gewählten Sprache; andere technische Artikel bleiben auf Englisch. Befehle und Quellpfade bleiben unverändert.",
       "label": "Sprache",
       "selectLanguage": "Sprache Wählen",
       "en": "English",

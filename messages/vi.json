@@ -481,6 +481,7 @@
       "step": "Bước"
     },
     "languageSelector": {
+      "previewNotice": "Bản xem trước bản dịch: các bài viết đã có bản dịch sẽ mở bằng ngôn ngữ đã chọn; bài viết kỹ thuật khác vẫn bằng tiếng Anh. Lệnh và đường dẫn không thay đổi.",
       "label": "Ngôn Ngữ",
       "selectLanguage": "Chọn Ngôn Ngữ",
       "en": "English",

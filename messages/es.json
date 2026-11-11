@@ -461,6 +461,7 @@
       "step": "Paso"
     },
     "languageSelector": {
+      "previewNotice": "Vista previa de traducción: los artículos disponibles se abren en el idioma elegido; otros artículos técnicos siguen en inglés. Los comandos y rutas no cambian.",
       "label": "Idioma",
       "selectLanguage": "Seleccionar idioma",
       "en": "English",
