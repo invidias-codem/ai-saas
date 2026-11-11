@@ -165,5 +165,330 @@
     "Settings": {
         "title": "Cài đặt",
         "description": "Quản lý cài đặt tài khoản và tùy chọn của bạn."
+    },
+    "Landing": {
+        "hero": {
+            "badge": "Powered by UCOL — Unified Context Orchestration Layer",
+            "headline1": "Every conversation you've ever had with AI —",
+            "headline2": "forgotten.",
+            "headline3": "Not anymore.",
+            "subhead": "Tech Genie remembers you. Learns you. Connects three AI minds — so you never start from zero.",
+            "cta": "Bắt đầu miễn phí",
+            "ctaSecondary": "See how it works",
+            "graphLabel": "Your Knowledge Graph — live preview",
+            "title": "Các Mô Hình AI Tốt Nhất, Tất Cả Trong Một",
+            "description": "Truy cập sức mạnh của OpenAI, Google Gemini và Anthropic Claude trên một nền tảng duy nhất. Tạo nội dung nhanh hơn gấp 10 lần.",
+            "login": "Đăng nhập"
+        },
+        "infrastructure": {
+            "eyebrow": "Sovereign by Design",
+            "title": "Runs on your hardware. Stays in your network. Scales with your rules.",
+            "subtitle": "Deploy Lattice OS as a self-hosted Docker appliance on Raspberry Pi, NVIDIA Jetson, Intel NUC, or any on-premises server. No cloud dependency, no vendor lock-in, no data exfiltration. Your intelligence work never leaves your infrastructure.",
+            "card1Title": "One-Command Deployment",
+            "card1Body": "docker run lattice-os installs the orchestration layer, memory graph, model routing, and audit logging. No cloud signup, no required third-party AI key path, and enterprise capabilities unlock through your deployment license.",
+            "card2Title": "Network-Isolated Mode",
+            "card2Body": "Run in air-gapped environments with zero outbound internet. All model inference, memory operations, and routing decisions happen on your hardware. Compliant with strict data residency requirements.",
+            "card3Title": "Edge-Native Architecture",
+            "card3Body": "Optimized for ~5µW inference on ARM devices. Event-gated execution means models only run when needed — not always-on polling. Built for low-power, high-reliability environments.",
+            "card4Title": "Cryptographic Provenance",
+            "card4Body": "Every memory write is signed. Every knowledge graph mutation is traceable. Audit logs prove your AI's reasoning chain for compliance reviews, HIPAA safeguards, and forensic analysis."
+        }
+    },
+    "Docs": {
+    "hero": {
+      "badge": "Trung tâm Tài liệu · Onboarding Beta, CLI, Triển khai Appliance",
+      "title": "Tài liệu cho onboarding, vận hành và mở rộng Lattice OS",
+      "subtitle": "Người dùng mới nhận được đường dẫn rõ ràng từ cài đặt đến workspace đầu tiên có bộ nhớ. Người dùng nâng cao nhận các điểm truy cập trực tiếp cho triển khai appliance Docker, cấp phép V3, vận hành air-gapped, triển khai Enterprise, xác minh route và gỡ lỗi sự cố.",
+      "ctaPrimary": "Bắt đầu Onboarding Nhanh",
+      "ctaSecondary": "Công thức cho Người dùng Nâng cao",
+      "ctaGithub": "Tài liệu trên GitHub",
+      "ctaSource": "Mã Nguồn"
+    },
+    "features": {
+      "onboardingTitle": "Onboarding Trước",
+      "onboardingDesc": "Lộ trình nhanh nhất qua các track beta, cài đặt CLI, kích hoạt giấy phép, triển khai và workspace hữu ích đầu tiên.",
+      "applianceTitle": "Sẵn sàng cho Appliance",
+      "applianceDesc": "Giải thích đường dẫn appliance Docker, xác thực preflight, health checks, backup, nâng cấp và quy trình rollback.",
+      "securityTitle": "Nhận thức Bảo mật",
+      "securityDesc": "Làm cho ranh giới tin cậy, route công khai, cách ly workspace và xác minh giấy phép mã hóa trở nên rõ ràng."
+    },
+    "newUser": {
+      "title": "Lộ trình cho Người dùng Mới",
+      "subtitle": "Nếu ai vừa nhận được quyền truy cập, đây là con đường ngắn nhất từ ngữ cảnh không có gì đến một instance Lattice OS cục bộ hoạt động.",
+      "step1": {
+        "step": "01",
+        "title": "Chọn Track Phù Hợp",
+        "description": "Người kiểm tra mới nên bắt đầu với track beta phù hợp với ý định: đánh giá nhanh, build từ source, triển khai enterprise hoặc xem xét privacy/compliance.",
+        "cta": "Mở Các Track Beta"
+      },
+      "step2": {
+        "step": "02",
+        "title": "Cài đặt CLI lattice",
+        "description": "CLI quản lý auth, kích hoạt giấy phép, triển khai appliance Docker, kiểm tra preflight, logs, backup và nâng cấp.",
+        "command": "# Tải xuống và xác minh CLI có phiên bản từ /downloads\nlattice --version\nlattice doctor --offline --json",
+        "cta": "Mở Tải xuống Đã Xác Minh"
+      },
+      "step3": {
+        "step": "03",
+        "title": "Kích Hoạt Giấy Phép và Khởi Tạo",
+        "description": "Giấy phép V3 được ký ed25519 và xác minh cục bộ, do đó các tính năng Enterprise có thể mở khóa mà không cần phụ thuộc phone-home.",
+        "command": "lattice license activate <lattice-v3-key>\nlattice deploy init --name beta --tier enterprise"
+      },
+      "step4": {
+        "step": "04",
+        "title": "Chạy Preflight, Triển Khai, Sau Đó Smoke Test",
+        "description": "Triển khai bắt đầu với Docker, Compose v2, tài nguyên, cổng, ổ đĩa, auth và license checks. Kết thúc bằng việc tạo workspace và xác minh chat có bộ nhớ.",
+        "command": "lattice deploy start --name beta\nlattice health check --instance beta",
+        "cta": "Mở Dashboard Của Bạn"
+      }
+    },
+    "howToUse": {
+      "title": "Cách Sử Dụng Bộ Tài Liệu Này",
+      "audiences": {
+        "newUsers": {
+          "title": "Người Dùng Mới",
+          "description": "Bắt đầu với bộ chọn track beta, cài đặt CLI, triển khai cục bộ, tạo workspace và xác minh cuộc hội thoại đầu tiên có bộ nhớ."
+        },
+        "developers": {
+          "title": "Nhà Phát Triển",
+          "description": "Sử dụng kiến trúc, tham chiếu, CLI và bản đồ file nguồn để hiểu hành vi ở đâu và cách các subsystem chính kết hợp."
+        },
+        "operators": {
+          "title": "Người Vận Hành",
+          "description": "Sử dụng truth surfaces, deployment, preflight, xác minh route và tài liệu gỡ lỗi sự cố để chẩn đoán vấn đề live-system tin cậy hơn."
+        },
+        "powerUsers": {
+          "title": "Người Dùng Nâng Cao",
+          "description": "Sử dụng thẻ công thức để nhảy thẳng đến các flow ngách: triển khai air-gapped, registry tùy chỉnh, triển khai Enterprise, backup và rollback."
+        }
+      }
+    },
+    "recipes": {
+      "title": "Công Thức Cho Người Dùng Nâng Cao",
+      "subtitle": "Đối với câu hỏi ngách, hãy bắt đầu từ công thức phù hợp với công việc thay vì đọc tài liệu tuyến tính.",
+      "selfHosted": {
+        "title": "Appliance Docker Self-Hosted",
+        "description": "Sử dụng CLI và tài liệu triển khai khi bạn cần cài đặt single-server với kiểm soát data-residency rõ ràng."
+      },
+      "airGapped": {
+        "title": "Môi Trường Air-Gapped / Được Điều Chỉnh",
+        "description": "Sử dụng xác minh giấy phép cục bộ, Docker images pre-loaded, cấu hình no-egress và bằng chứng health hướng đến audit."
+      },
+      "enterprise": {
+        "title": "Triển Khai Enterprise",
+        "description": "Hiểu cách ly workspace-as-project, feature gates Enterprise, kỳ vọng SSO/RBAC, nhịp độ backup và đường dẫn rollback."
+      },
+      "debug": {
+        "title": "Gỡ Lỗi Route Lạ Hoặc Vấn Đề Runtime",
+        "description": "Bắt đầu từ truth surfaces, xác minh ranh giới public/protected, sau đó dùng ví dụ request và source maps để tìm code path sở hữu."
+      }
+    },
+    "sections": {
+      "overview": {
+        "title": "Tổng Quan",
+        "description": "Bắt đầu ở đây cho câu chuyện platform cấp cao, minh bạch công nghệ và định vị.",
+        "items": {
+          "index": {
+            "title": "Chỉ Mục Tài Liệu",
+            "description": "Chỉ mục backbone cho hệ thống tài liệu repository và nơi tốt nhất để xem những gì tồn tại hôm nay."
+          },
+          "transparency": {
+            "title": "Minh Bạch Công Nghệ",
+            "description": "Giải thích rõ ràng về stack, bề mặt hosting, layer AI/runtime và ranh giới sản phẩm chính."
+          },
+          "seo": {
+            "title": "Chiến Lược SEO",
+            "description": "Lattice OS nên nói về AI memory-native, inference lai và workspace intelligence cho tìm kiếm và khám phá như thế nào."
+          }
+        }
+      },
+      "onboarding": {
+        "title": "Onboarding",
+        "description": "Các đường dẫn có hướng dẫn cho beta testers, developers, enterprise evaluators và các team tập trung vào privacy.",
+        "items": {
+          "betaPicker": {
+            "title": "Bộ Chọn Track Beta",
+            "description": "Chọn giữa các đường dẫn Onboarding Quick Start, Developer, Enterprise và Privacy & Compliance."
+          },
+          "quickStart": {
+            "title": "Quick Start",
+            "description": "Lộ trình 15 phút từ cài đặt CLI đến workspace đầu tiên và cuộc hội thoại đầu tiên có bộ nhớ."
+          },
+          "devTrack": {
+            "title": "Developer Track",
+            "description": "Source builds, custom registries, CI deployment stubs và standalone binary builds."
+          },
+          "enterpriseTrack": {
+            "title": "Enterprise Track",
+            "description": "Cấp phép, cách ly workspace, kỳ vọng SSO/RBAC, backup, health checks, nâng cấp và rollback."
+          },
+          "privacyTrack": {
+            "title": "Privacy & Compliance Track",
+            "description": "Mẫu triển khai air-gapped cho môi trường được điều chỉnh nơi dữ liệu không thể rời khỏi mạng."
+          }
+        }
+      },
+      "cliAppliance": {
+        "title": "CLI & Appliance",
+        "description": "Quản lý Lattice OS như một appliance Docker có thể cài đặt với preflight checks cục bộ và cấp phép mã hóa.",
+        "items": {
+          "cliRef": {
+            "title": "Tham Khảo Lệnh lattice-cli",
+            "description": "Tùy chọn cài đặt, auth, deploy, health, upgrade, backup, restore và tham chiếu config cho lattice-cli v0.3.0."
+          },
+          "v3License": {
+            "title": "Cấp Phép Mã Hóa V3",
+            "description": "Payload giấy phép ký ed25519 với xác minh public key nhúng cho kích hoạt Enterprise offline-capable."
+          },
+          "selfHostedTopology": {
+            "title": "Topology Self-Hosted",
+            "description": "Cách app, database, storage, auth và optional workers phù hợp trong các cài đặt self-hosted."
+          },
+          "preflightChecklist": {
+            "title": "Danh Sách Kiểm Tra Preflight Self-Hosted",
+            "description": "Danh sách kiểm tra preflight và smoke-test thực tế để quyết định cài đặt mới có thể sử dụng được không."
+          }
+        }
+      },
+      "architecture": {
+        "title": "Kiến Trúc",
+        "description": "Hiểu Lattice OS được cấu trúc như thế nào và platform đang đi đâu.",
+        "items": {
+          "systemArch": {
+            "title": "Kiến Trúc Hệ Thống",
+            "description": "Các layer hệ thống cấp cao, trust zones và request flow."
+          },
+          "runtimeRouting": {
+            "title": "Định Tuyến Chế Độ Runtime",
+            "description": "Cách server giải quyết hành vi runtime hiệu quả từ context thay vì tin client toggles."
+          },
+          "memoryContext": {
+            "title": "Kiến Trúc Bộ Nhớ Và Ngữ Cảnh",
+            "description": "Prepared context, layered memory direction và tại sao raw history không đủ."
+          },
+          "workspaceModel": {
+            "title": "Mô Hình Workspace Và Operating Profile",
+            "description": "Tại sao workspace là container chính và operating profile là layer định hình hành vi."
+          },
+          "retrievalGraph": {
+            "title": "Chiến Lược Retrieval Và Graph",
+            "description": "Cách retrieval và các hệ thống graph-aware trong tương lai hỗ trợ structured context assembly."
+          }
+        }
+      },
+      "security": {
+        "title": "Bảo Mật",
+        "description": "Làm cho route visibility, trust boundaries và authority models trở nên rõ ràng.",
+        "items": {
+          "publicRoutes": {
+            "title": "Route Công Khai",
+            "description": "Route nào được dự định vẫn công khai và route gating thực sự được thực thi như thế nào."
+          },
+          "trustBoundaries": {
+            "title": "Ranh Giới Tin Cậy",
+            "description": "Các trust zone chính của platform trên public users, authenticated users, backend jobs, integrations và operators."
+          },
+          "licenseVerification": {
+            "title": "Ranh Giới Xác Minh Giấy Phép",
+            "description": "Power users có thể kiểm tra đường dẫn xác minh public key mà không tiết lộ private signing key."
+          }
+        }
+      },
+      "operations": {
+        "title": "Vận Hành",
+        "description": "Kỷ luật vận hành cho triển khai, xác minh và gỡ lỗi trong platform multi-surface.",
+        "items": {
+          "truthSurfaces": {
+            "title": "Bề Mặt Sự Thật",
+            "description": "Cách chọn đúng evidence source khi code, CI, deploy logs và runtime không đồng ý."
+          },
+          "deployment": {
+            "title": "Triển Khai",
+            "description": "Cách code di chuyển từ repo state đến live runtime và điều gì cần xác minh dọc đường."
+          },
+          "deploymentModes": {
+            "title": "Chế Độ Triển Khai",
+            "description": "Các deployment mode business chính thức và thứ tự hỗ trợ được khuyến nghị cho self-hosted adoption."
+          },
+          "routeVerification": {
+            "title": "Danh Sách Kiểm Tra Xác Minh Route",
+            "description": "Danh sách kiểm tra để xác thực route public, protected, localized và API-dependent."
+          },
+          "incidentDebugging": {
+            "title": "Gỡ Lỗi Sự Cố",
+            "description": "Phương pháp thực tế cho phân loại sự cố, chọn truth surfaces và thu hẹp failure boundaries."
+          }
+        }
+      },
+      "reference": {
+        "title": "Tham Khảo",
+        "description": "Vật liệu tham khảo cụ thể cho developers cho APIs, environment config và repo navigation.",
+        "items": {
+          "apiRef": {
+            "title": "Tham Khảo API",
+            "description": "Bản đồ human-readable của API surfaces quan trọng, public/protected boundaries và debugging notes."
+          },
+          "envVars": {
+            "title": "Biến Môi Trường",
+            "description": "Cấu hình public vs server-only surfaces và các biến chính định hình runtime behavior."
+          },
+          "requestResponse": {
+            "title": "Ví Dụ Request Và Response",
+            "description": "Ví dụ payload cụ thể cho các API routes quan trọng."
+          },
+          "sourceFileMap": {
+            "title": "Bản Đồ File Nguồn",
+            "description": "Nơi các file route, runtime, auth và subsystem quan trọng sống trong repository."
+          }
+        }
+      },
+      "decisions": {
+        "title": "Quyết Định",
+        "description": "Architectural decision records ghi lại lý do platform tiến hóa theo cách đó.",
+        "items": {
+          "adrIndex": {
+            "title": "Chỉ Mục ADR",
+            "description": "Điểm vào cho bộ architecture decision record."
+          },
+          "adrSet": {
+            "title": "Bộ ADR Hiện Tại",
+            "description": "Bao gồm workspace-first architecture, server-resolved runtime routing, prepared context, public/authenticated boundary separation, deploy truth vs runtime truth, và hơn nữa."
+          }
+        }
+      }
+    },
+    "sidebar": {
+      "label": "Tài Liệu"
+    },
+    "usefulFor": {
+      "label": "Sử Dụng Bộ Tài Liệu Này Cho",
+      "item1": "Onboarding chạy lần đầu",
+      "item2": "Cài đặt Appliance Docker",
+      "item3": "Xem xét Enterprise và Air-Gap",
+      "item4": "Gỡ Lỗi Vận Hành",
+      "item5": "Xem Xét Ranh Giới Bảo Mật"
+    },
+    "cta": {
+      "needPath": "Cần Đường Dẫn Chưa Có Tài Liệu?",
+      "needPathDesc": "Nếu bạn đang cố gắng hiểu một route, runtime behavior, deployment issue, integration surface hoặc compliance requirement chưa rõ ràng, hãy dùng support và chúng tôi sẽ biến câu trả lời thành doc path có thể tái sử dụng.",
+      "support": "Liên Hệ Hỗ Trợ",
+      "dashboard": "Mở Sản Phẩm"
+    },
+    "nav": {
+      "viewSource": "Xem Nguồn",
+      "externalLink": "Liên Kết Ngoại",
+      "command": "Lệnh",
+      "step": "Bước"
+    },
+    "languageSelector": {
+      "label": "Ngôn Ngữ",
+      "selectLanguage": "Chọn Ngôn Ngữ",
+      "en": "English",
+      "es": "Español",
+      "fr": "Français",
+      "de": "Deutsch",
+      "th": "ไทย",
+      "vi": "Tiếng Việt"
     }
+  }
 }
