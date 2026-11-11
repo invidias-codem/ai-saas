@@ -165,5 +165,302 @@
     "Settings": {
         "title": "การตั้งค่า",
         "description": "จัดการการตั้งค่าบัญชีของคุณและการตั้งค่าที่ต้องการ"
+    },
+    "Docs": {
+    "hero": {
+      "badge": "ศูนย์เอกสาร · Onboarding เบต้า, CLI, การปรับใช้เครื่องมือ",
+      "title": "เอกสารสำหรับการเริ่มต้น การดำเนินงาน และการขยาย Lattice OS",
+      "subtitle": "ผู้ใช้ใหม่ได้รับเส้นทางที่ชัดเจนจากการติดตั้งถึง workspace แรกที่มีหน่วยความจำ ผู้ใช้ขั้นสูงได้รับจุดเข้าถึงโดยตรงสำหรับการปรับใช้เครื่องมือ Docker, การออกใบอนุญาต V3, การดำเนินงานแบบ air-gapped, การปรับใช้ Enterprise, การตรวจสอบเส้นทาง และการแก้ไขปัญหาเหตุการณ์",
+      "ctaPrimary": "เริ่มต้น Onboarding ด่วน",
+      "ctaSecondary": "สูตรสำหรับผู้ใช้ขั้นสูง",
+      "ctaGithub": "เอกสารบน GitHub",
+      "ctaSource": "โค้ดแหล่งที่มา"
+    },
+    "features": {
+      "onboardingTitle": "Onboarding ก่อน",
+      "onboardingDesc": "แผนเส้นทางที่เร็วที่สุดผ่านเบต้า tracks, การติดตั้ง CLI, การเปิดใช้งานใบอนุญาต, การปรับใช้ และ workspace ที่มีประโยชน์แรก",
+      "applianceTitle": "พร้อมสำหรับเครื่องมือ",
+      "applianceDesc": "อธิบายเส้นทางเครื่องมือ Docker, การตรวจสอบ preflight, health checks, การสำรองข้อมูล, การอัปเกรด และ workflows การ rollback",
+      "securityTitle": "มีสติด้านความปลอดภัย",
+      "securityDesc": "ทำให้ขอบเขตความเชื่อถือ เส้นทางสาธารณะ การแยก workspace และการตรวจสอบใบอนุญาตแบบเข้ารหัสชัดเจน"
+    },
+    "newUser": {
+      "title": "เส้นทางสำหรับผู้ใช้ใหม่",
+      "subtitle": "หากใครเพิ่งได้รับการเข้าถึง นี่คือเส้นทางสั้นที่สุดจากบริบทศูนย์ถึงอินสแตนซ์ Lattice OS ท้องถิ่นที่ทำงานได้",
+      "step1": {
+        "step": "01",
+        "title": "เลือก track ที่เหมาะสม",
+        "description": "ผู้ทดสอบใหม่ควรเริ่มด้วย track เบต้าที่ตรงกับเจตนา: การประเมินด่วน, การสร้างจากซอร์ส, การปรับใช้ enterprise หรือการทบทวนความเป็นส่วนตัว/การปฏิบัติตามข้อกำหนด",
+        "cta": "เปิด tracks เบต้า"
+      },
+      "step2": {
+        "step": "02",
+        "title": "ติดตั้ง CLI ของ lattice",
+        "description": "CLI จัดการ auth, การเปิดใช้งานใบอนุญาต, การปรับใช้เครื่องมือ Docker, การตรวจสอบ preflight, logs, การสำรองข้อมูล และการอัปเกรด",
+        "command": "# ดาวน์โหลดและตรวจสอบ CLI เวอร์ชันจาก /downloads\nlattice --version\nlattice doctor --offline --json",
+        "cta": "เปิดการดาวน์โหลดที่ตรวจสอบแล้ว"
+      },
+      "step3": {
+        "step": "03",
+        "title": "เปิดใช้งานใบอนุญาตและเริ่มต้น",
+        "description": "ใบอนุญาต V3 ถูกเซ็นด้วย ed25519 และตรวจสอบในท้องถิ่น ดังนั้นฟีเจอร์ Enterprise จึงสามารถปลดล็อกได้โดยไม่ต้องพึ่งพา phone-home",
+        "command": "lattice license activate <lattice-v3-key>\nlattice deploy init --name beta --tier enterprise"
+      },
+      "step4": {
+        "step": "04",
+        "title": "รัน preflight, ปรับใช้, แล้ว smoke test",
+        "description": "การปรับใช้เริ่มด้วย Docker, Compose v2, ทรัพยากร, พอร์ต, ดิสก์, auth และ license checks เสร็จสิ้นโดยการสร้าง workspace และตรวจสอบแชทที่มีหน่วยความจำ",
+        "command": "lattice deploy start --name beta\nlattice health check --instance beta",
+        "cta": "เปิดแดชบอร์ดของคุณ"
+      }
+    },
+    "howToUse": {
+      "title": "วิธีใช้ชุดเอกสารนี้",
+      "audiences": {
+        "newUsers": {
+          "title": "ผู้ใช้ใหม่",
+          "description": "เริ่มต้นด้วยตัวเลือก track เบต้า ติดตั้ง CLI ปรับใช้ในท้องถิ่น สร้าง workspace และตรวจสอบการสนทนาครั้งแรกที่มีหน่วยความจำ"
+        },
+        "developers": {
+          "title": "นักพัฒนา",
+          "description": "ใช้สถาปัตยกรรม การอ้างอิง CLI และแผนที่ไฟล์แหล่งที่มา เพื่อเข้าใจว่าพฤติกรรมอยู่ที่ไหน และระบบย่อยหลักเข้ากันอย่างไร"
+        },
+        "operators": {
+          "title": "ผู้ดำเนินการ",
+          "description": "ใช้ truth surfaces, deployment, preflight, การตรวจสอบเส้นทาง และเอกสารการแก้ไขปัญหาเหตุการณ์ เพื่อวินิจฉัยปัญหา live-system ได้น่าเชื่อถือมากขึ้น"
+        },
+        "powerUsers": {
+          "title": "ผู้ใช้ขั้นสูง",
+          "description": "ใช้การ์ดสูตรอาหารเพื่อกระโดดตรงไปที่ flows เฉพาะ: การปรับใช้ air-gapped, registries แบบกำหนดเอง, การปรับใช้ Enterprise, การสำรองข้อมูล และ rollback"
+        }
+      }
+    },
+    "recipes": {
+      "title": "สูตรสำหรับผู้ใช้ขั้นสูง",
+      "subtitle": "สำหรับคำถามเฉพาะ เริ่มจากสูตรที่ตรงกับงานแทนที่จะอ่านเอกสารแบบเส้นตรง",
+      "selfHosted": {
+        "title": "เครื่องมือ Docker แบบ Self-hosted",
+        "description": "ใช้ CLI และเอกสารการปรับใช้เมื่อคุณต้องการการติดตั้งเซิร์ฟเวอร์เดี่ยวพร้อมการควบคุม data-residency อย่างชัดเจน"
+      },
+      "airGapped": {
+        "title": "สภาพแวดล้อม Air-gapped / กำกับดูแล",
+        "description": "ใช้การยืนยันใบอนุญาตในท้องถิ่น, Docker images โหลดล่วงหน้า, การกำหนดค่า no-egress และหลักฐาน health ที่มุ่งเน้นการตรวจสอบ"
+      },
+      "enterprise": {
+        "title": "การปรับใช้ Enterprise",
+        "description": "เข้าใจการแยก workspace-เป็น-project, feature gates ของ Enterprise, ความคาดหวัง SSO/RBAC, ความถี่ของการสำรองข้อมูล และเส้นทาง rollback"
+      },
+      "debug": {
+        "title": "ดีบั๊กเส้นทางแปลกหรือปัญหา runtime",
+        "description": "เริ่มจาก truth surfaces, ตรวจสอบขอบเขต public/protected, จากนั้นใช้ตัวอย่าง request และ source maps เพื่อหา code path ที่เป็นเจ้าของ"
+      }
+    },
+    "sections": {
+      "overview": {
+        "title": "ภาพรวม",
+        "description": "เริ่มที่นี่สำหรับเรื่องราวแพลตฟอร์มระดับสูง, ความโปร่งใสด้านเทคโนโลยี และการวางตำแหน่ง",
+        "items": {
+          "index": {
+            "title": "ดัชนีเอกสาร",
+            "description": "ดัชนี backbone สำหรับระบบเอกสารที่เก็บไว้ และสถานที่ที่ดีที่สุดเพื่อดูว่ามีอะไรอยู่ในวันนี้"
+          },
+          "transparency": {
+            "title": "ความโปร่งใสทางเทคโนโลยี",
+            "description": "คำอธิบายชัดเจนของ stack, ผิวการโฮสติ้ง, เลเยอร์ AI/runtime และขอบเขตผลิตภัณฑ์หลัก"
+          },
+          "seo": {
+            "title": "กลยุทธ์ SEO",
+            "description": "Lattice OS ควรพูดถึง AI memory-native, การอนุมานแบบไฮบริด และขابرات workspace สำหรับการค้นหาและการค้นพบอย่างไร"
+          }
+        }
+      },
+      "onboarding": {
+        "title": "Onboarding",
+        "description": "เส้นทางที่มีไกด์สำหรับผู้ทดสอบเบต้า, นักพัฒนา, ผู้ประเมิน enterprise และทีมที่เน้นความเป็นส่วนตัว",
+        "items": {
+          "betaPicker": {
+            "title": "ตัวเลือก Track เบต้า",
+            "description": "เลือกระหว่างเส้นทาง Onboarding Quick Start, Developer, Enterprise และ Privacy & Compliance"
+          },
+          "quickStart": {
+            "title": "Quick Start",
+            "description": "เส้นทาง 15 นาที จากการติดตั้ง CLI ถึง workspace แรกและการสนทนาครั้งแรกที่มีหน่วยความจำ"
+          },
+          "devTrack": {
+            "title": "Developer Track",
+            "description": "การสร้างจากซอร์ส, registries แบบกำหนดเอง, CI deployment stubs และการสร้างไบนารี standalone"
+          },
+          "enterpriseTrack": {
+            "title": "Enterprise Track",
+            "description": "การออกใบอนุญาต, การแยก workspace, ความคาดหวัง SSO/RBAC, การสำรองข้อมูล, health checks, การอัปเกรด และ rollback"
+          },
+          "privacyTrack": {
+            "title": "Privacy & Compliance Track",
+            "description": "รูปแบบการปรับใช้ Air-gapped สำหรับสภาพแวดล้อมที่มีการกำกับดูแลซึ่งข้อมูลไม่สามารถออกจากเครือข่ายได้"
+          }
+        }
+      },
+      "cliAppliance": {
+        "title": "CLI & เครื่องมือ",
+        "description": "จัดการ Lattice OS เป็นเครื่องมือ Docker ที่ติดตั้งได้ พร้อมการตรวจสอบ preflight ในท้องถิ่นและการออกใบอนุญาตแบบเข้ารหัส",
+        "items": {
+          "cliRef": {
+            "title": "อ้างอิงคำสั่ง lattice-cli",
+            "description": "ตัวเลือกการติดตั้ง, auth, deploy, health, upgrade, backup, restore และการอ้างอิงการกำหนดค่าสำหรับ lattice-cli v0.3.0"
+          },
+          "v3License": {
+            "title": "การออกใบอนุญาตแบบเข้ารหัส V3",
+            "description": "เพย์โหลดใบอนุญาตที่เซ็น ed25519 พร้อมการยืนยัน public key ที่ฝังอยู่ สำหรับการเปิดใช้งาน Enterprise แบบ offline-capable"
+          },
+          "selfHostedTopology": {
+            "title": "โครงสร้าง Self-Hosted",
+            "description": "วิธีที่แอป, ฐานข้อมูล, สตอเรจ, auth และ workers ทางเลือกเข้ากันในการติดตั้ง self-hosted"
+          },
+          "preflightChecklist": {
+            "title": "รายการตรวจสอบ Preflight Self-Hosted",
+            "description": "รายการตรวจสอบ preflight และ smoke-test ใช้งานจริงสำหรับการตัดสินใจว่าการติดตั้งใหม่ใช้งานได้หรือไม่"
+          }
+        }
+      },
+      "architecture": {
+        "title": "สถาปัตยกรรม",
+        "description": "ทำความเข้าใจว่า Lattice OS มีโครงสร้างอย่างไร และแพลตฟอร์มกำลังไปไหน",
+        "items": {
+          "systemArch": {
+            "title": "สถาปัตยกรรมระบบ",
+            "description": "เลเยอร์ระบบระดับสูง, โซนความเชื่อถือ และการไหลของ request"
+          },
+          "runtimeRouting": {
+            "title": "การจัดเส้นทางโหมด Runtime",
+            "description": "วิธีที่เซิร์ฟเวอร์แก้ไขพฤติกรรม runtime ที่มีผลจากบริบท แทนที่จะไว้วางใจ client toggles"
+          },
+          "memoryContext": {
+            "title": "สถาปัตยกรรมหน่วยความจำและบริบท",
+            "description": "บริบทที่เตรียมไว้, ทิศทางหน่วยความจำแบบชั้น และเหตุผลที่ประวัติดิบไม่เพียงพอ"
+          },
+          "workspaceModel": {
+            "title": "โมเดล Workspace และโปรไฟล์การดำเนินงาน",
+            "description": "เหตุผลที่ workspace เป็นภาชนะหลักและโปรไฟล์การดำเนินงานเป็นเลเยอร์ที่กำหนดพฤติกรรม"
+          },
+          "retrievalGraph": {
+            "title": "กลยุทธ์ Retrieval และกราฟ",
+            "description": "วิธีที่ retrieval และระบบ graph-aware ในอนาคตสนับสนุนการประกอบบริบทที่มีโครงสร้าง"
+          }
+        }
+      },
+      "security": {
+        "title": "ความปลอดภัย",
+        "description": "ทำให้การมองเห็นเส้นทาง, ขอบเขตความเชื่อถือ และโมเดลอำนาจชัดเจน",
+        "items": {
+          "publicRoutes": {
+            "title": "เส้นทางสาธารณะ",
+            "description": "เส้นทางใดที่ตั้งใจจะยังคงเป็นสาธารณะ และการควบคุมเส้นทางถูกบังคับใช้อย่างไรจริงๆ"
+          },
+          "trustBoundaries": {
+            "title": "ขอบเขตความเชื่อถือ",
+            "description": "โซนความเชื่อถือหลักของแพลตฟอร์มข้ามผู้ใช้สาธารณะ, ผู้ใช้ที่ยืนยันตัวตน, backend jobs, การผสานรวม และผู้ปฏิบัติงาน"
+          },
+          "licenseVerification": {
+            "title": "ขอบเขตการตรวจสอบใบอนุญาต",
+            "description": "Power users สามารถตรวจสอบเส้นทางการตรวจสอบ public key ได้โดยไม่เปิดเผย private signing key"
+          }
+        }
+      },
+      "operations": {
+        "title": "การดำเนินงาน",
+        "description": "วินัยการดำเนินงานสำหรับการปรับใช้ การตรวจสอบ และการแก้ไขปัญหาในแพลตฟอร์ม multi-surface",
+        "items": {
+          "truthSurfaces": {
+            "title": "ผิวความจริง",
+            "description": "วิธีเลือกแหล่งหลักฐานที่เหมาะสมเมื่อโค้ด, CI, deploy logs และ runtime ไม่เห็นด้วยกัน"
+          },
+          "deployment": {
+            "title": "การปรับใช้",
+            "description": "วิธีที่โค้ดเคลื่อนจากสถานะ repo ไปสู่ runtime ที่ทำงานอยู่ และสิ่งที่ต้องตรวจสอบในระหว่างทาง"
+          },
+          "deploymentModes": {
+            "title": "โหมดการปรับใช้",
+            "description": "โหมดการปรับใช้ทางธุรกิจที่เป็นทางการและลำดับการสนับสนุนที่แนะนำสำหรับการใช้งาน self-hosted"
+          },
+          "routeVerification": {
+            "title": "รายการตรวจสอบการยืนยันเส้นทาง",
+            "description": "รายการตรวจสอบสำหรับการตรวจสอบเส้นทาง public, protected, localized และ API-dependent"
+          },
+          "incidentDebugging": {
+            "title": "การแก้ไขปัญหาเหตุการณ์",
+            "description": "วิธีปฏิบัติจริงสำหรับการจัดประเภทเหตุการณ์, การเลือก truth surfaces และการลดขอบเขตความล้มเหลว"
+          }
+        }
+      },
+      "reference": {
+        "title": "การอ้างอิง",
+        "description": "วัสดุอ้างอิงเฉพาะนักพัฒนาสำหรับ APIs, การกำหนดค่าสภาพแวดล้อม และการนำทาง repo",
+        "items": {
+          "apiRef": {
+            "title": "การอ้างอิง API",
+            "description": "แผนที่ที่มนุษย์อ่านได้ของผิว API สำคัญ, ขอบเขต public/protected และบันทึกการแก้ไขปัญหา"
+          },
+          "envVars": {
+            "title": "ตัวแปรสภาพแวดล้อม",
+            "description": "ผิวการกำหนดค่า Public vs server-only และตัวแปรหลักที่สร้างพฤติกรรม runtime"
+          },
+          "requestResponse": {
+            "title": "ตัวอย่าง Request และ Response",
+            "description": "ตัวอย่างเพย์โหลดที่เป็นรูปธรรมสำหรับ API routes สำคัญ"
+          },
+          "sourceFileMap": {
+            "title": "แผนที่ไฟล์แหล่งที่มา",
+            "description": "ที่ตั้งของไฟล์ route, runtime, auth และ subsystem ที่สำคัญใน repository"
+          }
+        }
+      },
+      "decisions": {
+        "title": "การตัดสินใจ",
+        "description": "Architectural decision records ที่บันทึกว่าทำไมแพลตฟอร์มจึงวิวัฒนาการไปในลักษณะนั้น",
+        "items": {
+          "adrIndex": {
+            "title": "ดัชนี ADR",
+            "description": "จุดเข้าสู่ชุด architecture decision record"
+          },
+          "adrSet": {
+            "title": "ชุด ADR ปัจจุบัน",
+            "description": "ครอบคลุม สถาปัตยกรรม workspace-first, server-resolved runtime routing, prepared context, public/authenticated boundary separation, deploy truth vs runtime truth และอื่นๆ"
+          }
+        }
+      }
+    },
+    "sidebar": {
+      "label": "เอกสาร"
+    },
+    "usefulFor": {
+          "label": "ใช้ชุดเอกสารนี้สำหรับ",
+          "item1": "Onboarding การรันครั้งแรก",
+          "item2": "การติดตั้งเครื่องมือ Docker",
+          "item3": "การทบทวน Enterprise และ Air-Gap",
+          "item4": "การแก้ไขปัญหาด้านปฏิบัติการ",
+          "item5": "การทบทวนขอบเขตความปลอดภัย"
+        },
+    "cta": {
+      "needPath": "ต้องการเส้นทางที่ยังไม่มีเอกสาร?",
+      "needPathDesc": "หากคุณกำลังพยายามเข้าใจเส้นทาง, พฤติกรรม runtime, ปัญหาการปรับใช้, ผิวการผสานรวม หรือข้อกำหนด compliance ที่ยังไม่ชัดเจน ให้ใช้การสนับสนุน และเราจะเปลี่ยนคำตอบเป็น doc path ที่ใช้ซ้ำได้",
+      "support": "ติดต่อฝ่ายสนับสนุน",
+      "dashboard": "เปิดผลิตภัณฑ์"
+    },
+    "nav": {
+      "viewSource": "ดูแหล่งที่มา",
+      "externalLink": "ลิงก์ภายนอก",
+      "command": "คำสั่ง",
+      "step": "ขั้นตอน"
+    },
+    "languageSelector": {
+      "label": "ภาษา",
+      "selectLanguage": "เลือกภาษา",
+      "en": "English",
+      "es": "Español",
+      "fr": "Français",
+      "de": "Deutsch",
+      "th": "ไทย",
+      "vi": "Tiếng Việt"
     }
+  }
 }
