@@ -365,10 +365,13 @@ export async function generateMetadata({ searchParams }: DocsPageProps): Promise
 
 export default async function DocsPage({ searchParams }: DocsPageProps) {
     const language = resolveDocsLanguage((await searchParams).lang);
-    const t = (english: string) => translateDocsText(language, english);
+    const t = (english: string) => {
+        const translated = translateDocsText(language, english);
+        return translated === english ? english : <span lang={language}>{translated}</span>;
+    };
 
     return (
-        <div lang={language} className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
+        <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
             <div className="fixed inset-0 z-0 pointer-events-none">
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[100px]" />
                 <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px]" />
