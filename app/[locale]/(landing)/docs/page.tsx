@@ -1,4 +1,6 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+import { DOCS_LANGUAGE_OPTIONS, resolveDocsLanguage, translateDocsText } from "@/lib/docs-hub-translations";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
@@ -350,9 +352,23 @@ const audiences = [
     },
 ];
 
-export default function DocsPage() {
+type DocsPageProps = { searchParams: Promise<{ lang?: string }> };
+
+export async function generateMetadata({ searchParams }: DocsPageProps): Promise<Metadata> {
+    const language = resolveDocsLanguage((await searchParams).lang);
+    return {
+        title: translateDocsText(language, "Docs for onboarding, operating, and extending Lattice OS"),
+        alternates: { canonical: "/en/docs" },
+        robots: { index: language === "en", follow: true },
+    };
+}
+
+export default async function DocsPage({ searchParams }: DocsPageProps) {
+    const language = resolveDocsLanguage((await searchParams).lang);
+    const t = (english: string) => translateDocsText(language, english);
+
     return (
-        <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
+        <div lang={language} className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
             <div className="fixed inset-0 z-0 pointer-events-none">
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[100px]" />
                 <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px]" />
@@ -362,7 +378,7 @@ export default function DocsPage() {
                 <aside className="w-full md:w-72 flex-shrink-0 hidden md:block">
                     <div className="sticky top-32 space-y-8">
                         <div>
-                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Documentation</h3>
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">{t("Documentation")}</h3>
                             <ul className="space-y-3 border-l border-border">
                                 {docSections.map((section, index) => (
                                     <li key={section.id}>
@@ -370,7 +386,7 @@ export default function DocsPage() {
                                             href={`#${section.id}`}
                                             className={`block pl-4 min-h-[44px] inline-flex items-center transition ${index === 0 ? "text-primary border-l-2 border-primary -ml-px" : "text-muted-foreground border-l border-transparent hover:text-foreground hover:border-border"}`}
                                         >
-                                            {section.title}
+                                            {t(section.title)}
                                         </a>
                                     </li>
                                 ))}
@@ -378,13 +394,13 @@ export default function DocsPage() {
                         </div>
 
                         <div>
-                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Use This Docs Set For</h3>
+                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">{t("Use This Docs Set For")}</h3>
                             <ul className="space-y-3 border-l border-border">
-                                <li className="block pl-4 text-muted-foreground">First-run onboarding</li>
-                                <li className="block pl-4 text-muted-foreground">Docker appliance installs</li>
-                                <li className="block pl-4 text-muted-foreground">Enterprise and air-gap reviews</li>
-                                <li className="block pl-4 text-muted-foreground">Operational debugging</li>
-                                <li className="block pl-4 text-muted-foreground">Security boundary review</li>
+                                <li className="block pl-4 text-muted-foreground">{t("First-run onboarding")}</li>
+                                <li className="block pl-4 text-muted-foreground">{t("Docker appliance installs")}</li>
+                                <li className="block pl-4 text-muted-foreground">{t("Enterprise and air-gap reviews")}</li>
+                                <li className="block pl-4 text-muted-foreground">{t("Operational debugging")}</li>
+                                <li className="block pl-4 text-muted-foreground">{t("Security boundary review")}</li>
                             </ul>
                         </div>
                     </div>
@@ -394,34 +410,60 @@ export default function DocsPage() {
                     <section id="hero" className="scroll-mt-32">
                         <div className="mb-5 inline-flex max-w-full items-start gap-2 rounded-2xl border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[11px] font-medium leading-snug text-purple-700 dark:text-purple-200 sm:items-center sm:rounded-full sm:text-xs">
                             <BookOpen className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 sm:mt-0" />
-                            <span>Documentation Hub · Beta onboarding, CLI, appliance deployment</span>
+                            <span>{t("Documentation Hub · Beta onboarding, CLI, appliance deployment")}</span>
                         </div>
                         <h1 className="mb-5 max-w-3xl bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 bg-clip-text text-[2.35rem] font-bold leading-[1.04] tracking-tight text-transparent dark:from-white dark:via-slate-300 dark:to-slate-500 min-[390px]:text-[2.75rem] sm:text-5xl md:text-6xl">
-                            Docs for onboarding, operating, and extending Lattice OS
+                            {t("Docs for onboarding, operating, and extending Lattice OS")}
                         </h1>
+
+                        <div className="mb-5 rounded-xl border border-border bg-card/70 px-4 py-3">
+                            <form method="get" action="/en/docs" className="flex flex-wrap items-center gap-3">
+                                <label htmlFor="docs-language" className="text-sm font-semibold">
+                                    {t("Documentation language")}
+                                </label>
+                                <select
+                                    id="docs-language"
+                                    name="lang"
+                                    defaultValue={language}
+                                    className="min-h-11 min-w-36 rounded-md border border-border bg-background px-3 text-sm text-foreground"
+                                >
+                                    {DOCS_LANGUAGE_OPTIONS.map((option) => (
+                                        <option key={option.code} value={option.code}>{option.label}</option>
+                                    ))}
+                                </select>
+                                <button type="submit" className="min-h-11 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground">
+                                    {t("Apply language")}
+                                </button>
+                            </form>
+                            {language !== "en" && (
+                                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                                    {t("Translation preview. Linked technical articles and terminal commands remain in English.")}
+                                </p>
+                            )}
+                        </div>
                         <p className="mb-6 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg md:text-xl md:leading-relaxed">
-                            New users get a clear path from install to first memory-aware workspace. Power users get direct entry points for Docker appliance deployment, V3 licensing, air-gapped operation, Enterprise rollout, route verification, and incident debugging.
+                            {t("New users get a clear path from install to first memory-aware workspace. Power users get direct entry points for Docker appliance deployment, V3 licensing, air-gapped operation, Enterprise rollout, route verification, and incident debugging.")}
                         </p>
 
                         <div className="mb-6 grid gap-3 sm:mb-8 sm:flex sm:flex-wrap">
                             <Link href="/beta/start" className="w-full sm:w-auto">
                                 <Button className="h-11 w-full rounded-full px-5 text-sm font-semibold sm:w-auto">
-                                    Start Quick Onboarding <ArrowRight className="ml-2 h-4 w-4" />
+                                    {t("Start Quick Onboarding")} <ArrowRight className="ml-2 h-4 w-4" />
                                 </Button>
                             </Link>
                             <a href="#power-user-recipes" className="w-full sm:w-auto">
                                 <Button variant="outline" className="h-11 w-full rounded-full border-border px-5 text-sm hover:bg-accent sm:w-auto">
-                                    Power-User Recipes
+                                    {t("Power-User Recipes")}
                                 </Button>
                             </a>
                             <a href={GITHUB_DOCS_URL} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
                                 <Button variant="outline" className="h-11 w-full rounded-full border-border px-5 text-sm hover:bg-accent sm:w-auto">
-                                    <BrandIcon name="Github" className="mr-2 h-4 w-4" size={16} /> Docs on GitHub
+                                    <BrandIcon name="Github" className="mr-2 h-4 w-4" size={16} /> {t("Docs on GitHub")}
                                 </Button>
                             </a>
                             <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
                                 <Button variant="ghost" className="h-11 w-full rounded-full px-5 text-sm hover:bg-accent sm:w-auto">
-                                    Source Code <ExternalLink className="ml-2 h-4 w-4" />
+                                    {t("Source Code")} <ExternalLink className="ml-2 h-4 w-4" />
                                 </Button>
                             </a>
                         </div>
@@ -429,17 +471,17 @@ export default function DocsPage() {
                         <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4">
                             <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                 <Rocket className="w-8 h-8 text-purple-500 dark:text-purple-400 mb-4" />
-                                <h3 className="text-lg font-semibold mb-2">Onboarding-first</h3>
+                                <h3 className="text-lg font-semibold mb-2">{t("Onboarding-first")}</h3>
                                 <p className="text-sm text-muted-foreground">Maps the fastest route through beta tracks, CLI install, license activation, deployment, and first useful workspace.</p>
                             </div>
                             <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                 <ServerCog className="w-8 h-8 text-blue-500 dark:text-blue-400 mb-4" />
-                                <h3 className="text-lg font-semibold mb-2">Appliance-ready</h3>
+                                <h3 className="text-lg font-semibold mb-2">{t("Appliance-ready")}</h3>
                                 <p className="text-sm text-muted-foreground">Explains the Docker appliance path, preflight validation, health checks, backups, upgrades, and rollback workflows.</p>
                             </div>
                             <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                 <Shield className="w-8 h-8 text-emerald-500 dark:text-emerald-400 mb-4" />
-                                <h3 className="text-lg font-semibold mb-2">Security-aware</h3>
+                                <h3 className="text-lg font-semibold mb-2">{t("Security-aware")}</h3>
                                 <p className="text-sm text-muted-foreground">Makes trust boundaries, public routes, workspace isolation, and cryptographic license verification explicit.</p>
                             </div>
                         </div>
@@ -447,9 +489,9 @@ export default function DocsPage() {
 
                     <section id="start-here" className="scroll-mt-24 border-t border-border pt-10 md:scroll-mt-32 md:pt-16">
                         <div className="max-w-[58rem]">
-                            <h2 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">New user path</h2>
+                            <h2 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">{t("New user path")}</h2>
                             <p className="text-muted-foreground mb-8 max-w-2xl">
-                                If someone just received access, this is the shortest path from zero context to a working local Lattice OS instance.
+                                {t("If someone just received access, this is the shortest path from zero context to a working local Lattice OS instance.")}
                             </p>
                         </div>
                         <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
@@ -460,8 +502,8 @@ export default function DocsPage() {
                                             {item.step}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <h3 className="mb-2 text-lg font-semibold sm:text-xl">{item.title}</h3>
-                                            <p className="text-sm leading-6 text-muted-foreground sm:text-base sm:leading-relaxed">{item.description}</p>
+                                            <h3 className="mb-2 text-lg font-semibold sm:text-xl">{t(item.title)}</h3>
+                                            <p className="text-sm leading-6 text-muted-foreground sm:text-base sm:leading-relaxed">{t(item.description)}</p>
                                             {item.command && (
                                                 <pre className="mt-4 max-w-full overflow-x-auto rounded-lg border border-border bg-black/5 p-3 text-xs dark:bg-white/5 sm:p-4 sm:text-sm">
                                                     <code>{item.command}</code>
@@ -469,7 +511,7 @@ export default function DocsPage() {
                                             )}
                                             {item.href && item.cta && (
                                                 <Link href={item.href} className="mt-4 inline-flex items-center text-sm font-semibold text-primary hover:underline">
-                                                    {item.cta} <ArrowRight className="ml-1 h-4 w-4" />
+                                                    {t(item.cta)} <ArrowRight className="ml-1 h-4 w-4" />
                                                 </Link>
                                             )}
                                         </div>
@@ -480,30 +522,30 @@ export default function DocsPage() {
                     </section>
 
                     <section id="how-to-use" className="scroll-mt-24 border-t border-border pt-10 md:scroll-mt-32 md:pt-16">
-                        <h2 className="mb-6 text-2xl font-bold tracking-tight sm:mb-8 sm:text-3xl">How to use this docs set</h2>
+                        <h2 className="mb-6 text-2xl font-bold tracking-tight sm:mb-8 sm:text-3xl">{t("How to use this docs set")}</h2>
                         <div className="grid md:grid-cols-2 gap-6">
                             {audiences.map((audience) => (
-                                <div key={audience.title} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
-                                    <h3 className="text-lg font-semibold mb-3">{audience.title}</h3>
-                                    <p className="text-sm text-muted-foreground leading-relaxed">{audience.description}</p>
+                                <div key={t(audience.title)} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+                                    <h3 className="text-lg font-semibold mb-3">{t(audience.title)}</h3>
+                                    <p className="text-sm text-muted-foreground leading-relaxed">{t(audience.description)}</p>
                                 </div>
                             ))}
                         </div>
                     </section>
 
                     <section id="power-user-recipes" className="scroll-mt-24 border-t border-border pt-10 md:scroll-mt-32 md:pt-16">
-                        <h2 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">Power-user recipes</h2>
+                        <h2 className="mb-3 text-2xl font-bold tracking-tight sm:text-3xl">{t("Power-user recipes")}</h2>
                         <p className="text-muted-foreground mb-8 max-w-3xl">
-                            For niche questions, start from the recipe that matches the job instead of reading the docs linearly.
+                            {t("For niche questions, start from the recipe that matches the job instead of reading the docs linearly.")}
                         </p>
                         <div className="grid md:grid-cols-2 gap-6">
                             {powerUserRecipes.map((recipe) => {
                                 const Icon = recipe.icon;
                                 return (
-                                    <div key={recipe.title} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+                                    <div key={t(recipe.title)} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                         <Icon className="mb-4 h-7 w-7 text-primary" />
-                                        <h3 className="text-lg font-semibold mb-3">{recipe.title}</h3>
-                                        <p className="text-sm text-muted-foreground leading-relaxed mb-4">{recipe.description}</p>
+                                        <h3 className="text-lg font-semibold mb-3">{t(recipe.title)}</h3>
+                                        <p className="text-sm text-muted-foreground leading-relaxed mb-4">{t(recipe.description)}</p>
                                         <ul className="space-y-2">
                                             {recipe.links.map((link) => {
                                                 const href = githubUrlForPath(link) ?? link;
@@ -538,8 +580,8 @@ export default function DocsPage() {
                                         <Icon className="w-7 h-7 text-foreground" />
                                     </div>
                                     <div>
-                                        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{section.title}</h2>
-                                        <p className="text-muted-foreground mt-2">{section.description}</p>
+                                        <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{t(section.title)}</h2>
+                                        <p className="text-muted-foreground mt-2">{t(section.description)}</p>
                                     </div>
                                 </div>
 
@@ -547,11 +589,11 @@ export default function DocsPage() {
                                     {section.items.map((item) => {
                                         const sourceUrl = githubUrlForPath(item.path);
                                         return (
-                                            <div key={`${section.id}-${item.title}`} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+                                            <div key={`${section.id}-${t(item.title)}`} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                                 <div className="flex items-start justify-between gap-3 sm:gap-4">
                                                     <div className="min-w-0">
-                                                        <h3 className="mb-2 text-lg font-semibold sm:text-xl">{item.title}</h3>
-                                                        <p className="mb-4 text-sm leading-6 text-muted-foreground sm:text-base sm:leading-relaxed">{item.description}</p>
+                                                        <h3 className="mb-2 text-lg font-semibold sm:text-xl">{t(item.title)}</h3>
+                                                        <p className="mb-4 text-sm leading-6 text-muted-foreground sm:text-base sm:leading-relaxed">{t(item.description)}</p>
                                                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                                             {item.href ? (
                                                                 <Link href={item.href} className="inline-flex items-center text-sm font-semibold text-primary hover:underline">
@@ -569,7 +611,7 @@ export default function DocsPage() {
                                                                     rel="noreferrer"
                                                                     className="inline-flex items-center text-xs font-semibold text-muted-foreground transition hover:text-foreground"
                                                                 >
-                                                                    View source <ExternalLink className="ml-1 h-3 w-3" />
+                                                                    {t("View source")} <ExternalLink className="ml-1 h-3 w-3" />
                                                                 </a>
                                                             )}
                                                         </div>
@@ -586,19 +628,19 @@ export default function DocsPage() {
 
                     <section className="border-t border-border pb-10 pt-10 md:pb-16 md:pt-16">
                         <div className="rounded-2xl border border-blue-500/20 bg-blue-600/10 p-5 text-center sm:p-8">
-                            <h2 className="text-2xl font-bold mb-4">Need a path that is not documented yet?</h2>
+                            <h2 className="text-2xl font-bold mb-4">{t("Need a path that is not documented yet?")}</h2>
                             <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
                                 If you&apos;re trying to understand a route, runtime behavior, deployment issue, integration surface, or compliance requirement that isn&apos;t clear yet, use support and we can turn the answer into a reusable doc path.
                             </p>
                             <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:gap-4">
                                 <Link href="/support">
                                     <Button className="w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto">
-                                        Contact Support
+                                        {t("Contact Support")}
                                     </Button>
                                 </Link>
                                 <Link href="/dashboard">
                                     <Button variant="outline" className="w-full border-border hover:bg-accent sm:w-auto">
-                                        Open Product <ArrowRight className="w-4 h-4 ml-2" />
+                                        {t("Open Product")} <ArrowRight className="w-4 h-4 ml-2" />
                                     </Button>
                                 </Link>
                             </div>
