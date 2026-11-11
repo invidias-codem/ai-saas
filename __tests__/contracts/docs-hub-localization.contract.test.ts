@@ -67,7 +67,7 @@ describe("docs-only six-language preview", () => {
     }
     expect(translateDocsText("es", "newUser.step2.command")).toContain("lattice doctor --offline --json");
     expect(page).toContain('<code lang="en">{item.command}</code>');
-    expect(page).toContain("githubUrlForPath(link)");
+    expect(page).toContain("githubUrlForPath(link, language)");
   });
 
   it("keeps preview URLs nonindexable and canonical to the English documentation hub", () => {
