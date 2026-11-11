@@ -528,7 +528,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                         <h2 className="mb-6 text-2xl font-bold tracking-tight sm:mb-8 sm:text-3xl">{t("How to use this docs set")}</h2>
                         <div className="grid md:grid-cols-2 gap-6">
                             {audiences.map((audience) => (
-                                <div key={t(audience.title)} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+                                <div key={audience.title} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                     <h3 className="text-lg font-semibold mb-3">{t(audience.title)}</h3>
                                     <p className="text-sm text-muted-foreground leading-relaxed">{t(audience.description)}</p>
                                 </div>
@@ -545,7 +545,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                             {powerUserRecipes.map((recipe) => {
                                 const Icon = recipe.icon;
                                 return (
-                                    <div key={t(recipe.title)} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+                                    <div key={recipe.title} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                         <Icon className="mb-4 h-7 w-7 text-primary" />
                                         <h3 className="text-lg font-semibold mb-3">{t(recipe.title)}</h3>
                                         <p className="text-sm text-muted-foreground leading-relaxed mb-4">{t(recipe.description)}</p>
@@ -592,7 +592,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                                     {section.items.map((item) => {
                                         const sourceUrl = githubUrlForPath(item.path);
                                         return (
-                                            <div key={`${section.id}-${t(item.title)}`} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
+                                            <div key={`${section.id}-${item.title}`} className="rounded-2xl border border-border bg-card p-4 sm:p-6">
                                                 <div className="flex items-start justify-between gap-3 sm:gap-4">
                                                     <div className="min-w-0">
                                                         <h3 className="mb-2 text-lg font-semibold sm:text-xl">{t(item.title)}</h3>
