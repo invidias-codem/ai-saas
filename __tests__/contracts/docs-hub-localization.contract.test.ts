@@ -55,7 +55,8 @@ describe("documentation hub language preview", () => {
   });
 
   it("scopes language to the documentation content and keeps untranslated variants out of search indexing", () => {
-    expect(page).toContain("lang={language}");
+    expect(page).toContain("<span lang={language}>{translated}</span>");
+    expect(page).not.toContain("<div lang={language}");
     expect(page).toContain('alternates: { canonical: "/en/docs" }');
     expect(page).toContain('robots: { index: language === "en", follow: true }');
     expect(page).toContain("resolveDocsLanguage((await searchParams).lang)");
