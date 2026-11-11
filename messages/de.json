@@ -216,5 +216,302 @@
   "Settings": {
     "title": "Settings",
     "description": "Manage your account settings and preferences."
+  },
+  "Docs": {
+    "hero": {
+      "badge": "Dokumentations-Zentrum · Beta-Onboarding, CLI, Appliance-Deployment",
+      "title": "Dokumentation für Onboarding, Betrieb und Erweiterung von Lattice OS",
+      "subtitle": "Neue Nutzer erhalten einen klaren Pfad von der Installation zum ersten Memory-Workspace. Power-User erhalten direkte Einstiegspunkte für Docker-Appliance-Deployment, V3-Lizenzierung, Air-Gapped-Betrieb, Enterprise-Rollout, Routen-Verifikation und Incident-Debugging.",
+      "ctaPrimary": "Schnelles Onboarding starten",
+      "ctaSecondary": "Rezepte für Power-User",
+      "ctaGithub": "Dokumentation auf GitHub",
+      "ctaSource": "Quellcode"
+    },
+    "features": {
+      "onboardingTitle": "Onboarding zuerst",
+      "onboardingDesc": "Zeichnet den schnellsten Pfad durch Beta-Tracks, CLI-Installation, Lizenzaktivierung, Deployment und ersten nützlichen Workspace.",
+      "applianceTitle": "Appliance-bereit",
+      "applianceDesc": "Erklärt den Docker-Appliance-Pfad, Preflight-Validierung, Health-Checks, Backups, Upgrades und Rollback-Workflows.",
+      "securityTitle": "Sicherheitsbewusst",
+      "securityDesc": "Macht Vertrauensgrenzen, öffentliche Routen, Workspace-Isolation und kryptografische Lizenzverifikation explizit."
+    },
+    "newUser": {
+      "title": "Pfad für neue Nutzer",
+      "subtitle": "Wenn jemand gerade Zugriff erhalten hat, ist dies der kürzeste Weg von null Kontext zu einer funktionierenden lokalen Lattice OS-Instanz.",
+      "step1": {
+        "step": "01",
+        "title": "Richtigen Track wählen",
+        "description": "Neue Tester sollten mit dem Beta-Track beginnen, der ihrer Absicht entspricht: schnelle Evaluierung, Source-Build, Enterprise-Rollout oder Privacy/Compliance-Review.",
+        "cta": "Beta-Tracks öffnen"
+      },
+      "step2": {
+        "step": "02",
+        "title": "lattice CLI installieren",
+        "description": "Der CLI verwaltet Auth, Lizenzaktivierung, Docker-Appliance-Deployment, Preflight-Checks, Logs, Backups und Upgrades.",
+        "command": "# Versionierten CLI von /downloads herunterladen und verifizieren\nlattice --version\nlattice doctor --offline --json",
+        "cta": "Verifizierte Downloads öffnen"
+      },
+      "step3": {
+        "step": "03",
+        "title": "Lizenz aktivieren und initialisieren",
+        "description": "V3-Lizenzen sind ed25519-signiert und lokal verifizierbar, sodass Enterprise-Features ohne Phone-Home-Abhängigkeit freigeschaltet werden können.",
+        "command": "lattice license activate <lattice-v3-key>\nlattice deploy init --name beta --tier enterprise"
+      },
+      "step4": {
+        "step": "04",
+        "title": "Preflight ausführen, deployen, dann Smoke-Test",
+        "description": "Deployment startet mit Docker, Compose v2, Ressourcen, Ports, Disk, Auth und License-Checks. Beendet durch Workspace-Erstellung und Verifikation von Memory-Aware-Chat.",
+        "command": "lattice deploy start --name beta\nlattice health check --instance beta",
+        "cta": "Ihr Dashboard öffnen"
+      }
+    },
+    "howToUse": {
+      "title": "Wie man dieses Dokumentations-Set nutzt",
+      "audiences": {
+        "newUsers": {
+          "title": "Neue Nutzer",
+          "description": "Starten Sie mit dem Beta-Track-Picker, installieren Sie den CLI, deployen Sie lokal, erstellen Sie einen Workspace und verifizieren Sie die erste Memory-Aware-Konversation."
+        },
+        "developers": {
+          "title": "Entwickler",
+          "description": "Nutzen Sie Architektur, Referenz, CLI und Source-File-Maps, um zu verstehen, wo Verhalten lebt und wie die großen Subsysteme zusammenpassen."
+        },
+        "operators": {
+          "title": "Operatoren",
+          "description": "Nutzen Sie Truth Surfaces, Deployment, Preflight, Routen-Verifikation und Incident-Debugging-Docs, um Live-System-Probleme zuverlässiger zu diagnostizieren."
+        },
+        "powerUsers": {
+          "title": "Power-User",
+          "description": "Nutzen Sie die Rezept-Karten, um direkt zu Nischen-Flows zu springen: Air-Gapped-Deployments, Custom-Registries, Enterprise-Rollout, Backups, Rollback."
+        }
+      }
+    },
+    "recipes": {
+      "title": "Rezepte für Power-User",
+      "subtitle": "Bei Nischen-Fragen starten Sie beim Rezept, das zum Job passt, statt die Docs linear zu lesen.",
+      "selfHosted": {
+        "title": "Self-hosted Docker Appliance",
+        "description": "Nutzen Sie CLI und Deployment-Docs, wenn Sie einen Single-Server-Install mit expliziter Data-Residency-Kontrolle brauchen."
+      },
+      "airGapped": {
+        "title": "Air-Gapped / Regulierte Umgebung",
+        "description": "Nutzen Sie lokale Lizenzverifikation, Pre-loaded Docker Images, No-Egress-Konfiguration und Audit-orientierte Health-Evidenz."
+      },
+      "enterprise": {
+        "title": "Enterprise Rollout",
+        "description": "Verstehen Sie Workspace-als-Projekt-Isolation, Enterprise-Feature-Gates, SSO/RBAC-Erwartungen, Backup-Kadenz und Rollback-Pfade."
+      },
+      "debug": {
+        "title": "Einen komischen Route oder Runtime-Bug debuggen",
+        "description": "Starten Sie bei Truth Surfaces, verifizieren Sie Public/Protected-Grenzen, nutzen Sie dann Request-Beispiele und Source Maps zum Finden des owning Code-Pfads."
+      }
+    },
+    "sections": {
+      "overview": {
+        "title": "Übersicht",
+        "description": "Starten Sie hier für die High-Level-Plattform-Story, Technologie-Transparenz und Positionierung.",
+        "items": {
+          "index": {
+            "title": "Dokumentations-Index",
+            "description": "Der Backbone-Index für das Repository-Dokumentationssystem und der beste Ort zu sehen, was heute existiert."
+          },
+          "transparency": {
+            "title": "Technologie-Transparenz",
+            "description": "Explizite Erklärung von Stack, Hosting-Surfaces, AI/Runtime-Layern und großen Produktgrenzen."
+          },
+          "seo": {
+            "title": "SEO-Strategie",
+            "description": "Wie Lattice OS über Memory-Native AI, Hybrid Inference und Workspace Intelligence für Search und Discovery sprechen sollte."
+          }
+        }
+      },
+      "onboarding": {
+        "title": "Onboarding",
+        "description": "Geführte Pfade für Beta-Tester, Entwickler, Enterprise-Evaluatoren und Privacy-fokussierte Teams.",
+        "items": {
+          "betaPicker": {
+            "title": "Beta Track Picker",
+            "description": "Wählen Sie zwischen Quick Start, Developer, Enterprise und Privacy & Compliance Onboarding-Pfaden."
+          },
+          "quickStart": {
+            "title": "Quick Start",
+            "description": "15-Minuten-Pfad von CLI-Install zum ersten Workspace und erster Memory-Aware-Konversation."
+          },
+          "devTrack": {
+            "title": "Developer Track",
+            "description": "Source-Builds, Custom-Registries, CI-Deployment-Stubs und Standalone-Binary-Builds."
+          },
+          "enterpriseTrack": {
+            "title": "Enterprise Track",
+            "description": "Lizenzierung, Workspace-Isolation, SSO/RBAC-Erwartungen, Backups, Health-Checks, Upgrades, Rollback."
+          },
+          "privacyTrack": {
+            "title": "Privacy & Compliance Track",
+            "description": "Air-Gapped-Deployment-Pattern für regulierte Umgebungen, wo Daten das Netzwerk nicht verlassen dürfen."
+          }
+        }
+      },
+      "cliAppliance": {
+        "title": "CLI & Appliance",
+        "description": "Verwalten Sie Lattice OS als installierbares Docker-Appliance mit lokalen Preflight-Checks und kryptografischem Lizenzierung.",
+        "items": {
+          "cliRef": {
+            "title": "lattice-cli Command Reference",
+            "description": "Install-Optionen, Auth, Deploy, Health, Upgrade, Backup, Restore und Config-Referenz für lattice-cli v0.3.0."
+          },
+          "v3License": {
+            "title": "V3 Kryptografische Lizenzierung",
+            "description": "ed25519-signierte Lizenz-Payloads mit eingebetteter Public-Key-Verifikation für Offline-fähige Enterprise-Aktivierung."
+          },
+          "selfHostedTopology": {
+            "title": "Self-Hosted Topologie",
+            "description": "Wie App, Database, Storage, Auth und optionale Workers in Self-Hosted-Installs zusammenpassen."
+          },
+          "preflightChecklist": {
+            "title": "Self-Hosted Preflight Checklist",
+            "description": "Das praktische Preflight- und Smoke-Test-Checklist für die Entscheidung, ob ein frischer Install nutzbar ist."
+          }
+        }
+      },
+      "architecture": {
+        "title": "Architektur",
+        "description": "Verstehen Sie, wie Lattice OS strukturiert ist und wohin die Plattform geht.",
+        "items": {
+          "systemArch": {
+            "title": "Systemarchitektur",
+            "description": "High-Level System-Layer, Trust-Zonen und Request-Flow."
+          },
+          "runtimeRouting": {
+            "title": "Runtime Mode Routing",
+            "description": "Wie der Server effektives Runtime-Verhalten aus Kontext auflöst statt Client-Toggles zu vertrauen."
+          },
+          "memoryContext": {
+            "title": "Memory und Context Architektur",
+            "description": "Prepared Context, layered Memory Direction und warum Raw History nicht genug ist."
+          },
+          "workspaceModel": {
+            "title": "Workspace und Operating Profile Model",
+            "description": "Warum Workspace der primäre Container ist und Operating Profile die Behavior-shaping Layer."
+          },
+          "retrievalGraph": {
+            "title": "Retrieval und Graph Strategy",
+            "description": "Wie Retrieval und zukünftige Graph-Aware-Systeme structured Context Assembly unterstützen."
+          }
+        }
+      },
+      "security": {
+        "title": "Sicherheit",
+        "description": "Machen Sie Routen-Sichtbarkeit, Trust Boundaries und Authority Models explizit.",
+        "items": {
+          "publicRoutes": {
+            "title": "Öffentliche Routen",
+            "description": "Welche Routen öffentlich bleiben sollen und wie Route Gating tatsächlich erzwungen wird."
+          },
+          "trustBoundaries": {
+            "title": "Trust Boundaries",
+            "description": "Die großen Trust Zonen der Plattform über öffentliche Nutzer, authentifizierte Nutzer, Backend Jobs, Integrationen und Operatoren."
+          },
+          "licenseVerification": {
+            "title": "License Verification Boundary",
+            "description": "Power User können den Public-Key-Verification-Pfad inspizieren ohne den Private Signing Key preiszugeben."
+          }
+        }
+      },
+      "operations": {
+        "title": "Operationen",
+        "description": "Operational Discipline für Deployment, Verifikation und Debugging in einer Multi-Surface Plattform.",
+        "items": {
+          "truthSurfaces": {
+            "title": "Truth Surfaces",
+            "description": "Wie man die richtige Evidence Source wählt wenn Code, CI, Deploy Logs und Runtime widersprechen."
+          },
+          "deployment": {
+            "title": "Deployment",
+            "description": "Wie Code vom Repo State zum Live Runtime wandert und was man unterwegs verifiziert."
+          },
+          "deploymentModes": {
+            "title": "Deployment Modes",
+            "description": "Offizielle Business Deployment Modes und empfohlene Support-Reihenfolge für Self-Hosted Adoption."
+          },
+          "routeVerification": {
+            "title": "Route Verification Checklist",
+            "description": "Checklist für Validierung von Public, Protected, Localized und API-dependent Routes."
+          },
+          "incidentDebugging": {
+            "title": "Incident Debugging",
+            "description": "Praktische Methode für Incident-Klassifizierung, Truth Surface Auswahl und Failure Boundary Verengung."
+          }
+        }
+      },
+      "reference": {
+        "title": "Referenz",
+        "description": "Konkrete Developer-facing Referenzmaterial für APIs, Environment Config und Repo Navigation.",
+        "items": {
+          "apiRef": {
+            "title": "API Referenz",
+            "description": "Menschenlesbare Map wichtiger API Surfaces, Public/Protected Boundaries und Debugging Notes."
+          },
+          "envVars": {
+            "title": "Environment Variables",
+            "description": "Public vs Server-Only Configuration Surfaces und die großen Variablen die Runtime Behavior formen."
+          },
+          "requestResponse": {
+            "title": "Request und Response Beispiele",
+            "description": "Konkrete Payload Beispiele für wichtige API Routes."
+          },
+          "sourceFileMap": {
+            "title": "Source File Map",
+            "description": "Wo wichtige Route, Runtime, Auth und Subsystem Files im Repository leben."
+          }
+        }
+      },
+      "decisions": {
+        "title": "Entscheidungen",
+        "description": "Architectural Decision Records die erfassen warum die Plattform so evolvierte.",
+        "items": {
+          "adrIndex": {
+            "title": "ADR Index",
+            "description": "Einstiegspunkt für den Architecture Decision Record Set."
+          },
+          "adrSet": {
+            "title": "Aktueller ADR Set",
+            "description": "Deckt ab: Workspace-First Architecture, Server-Resolved Runtime Routing, Prepared Context, Public/Authenticated Boundary Separation, Deploy Truth vs Runtime Truth, und mehr."
+          }
+        }
+      }
+    },
+    "sidebar": {
+      "label": "Dokumentation"
+    },
+    "usefulFor": {
+      "label": "Dieses Docs Set Verwenden Für",
+      "item1": "Erst-Aufruf Onboarding",
+      "item2": "Docker Appliance Installs",
+      "item3": "Enterprise und Air-Gap Reviews",
+      "item4": "Operational Debugging",
+      "item5": "Security Boundary Review"
+    },
+    "cta": {
+      "needPath": "Brauchen Sie einen noch nicht dokumentierten Pfad?",
+      "needPathDesc": "Wenn Sie versuchen eine Route, Runtime Behavior, Deployment Issue, Integration Surface oder Compliance Requirement zu verstehen die noch nicht klar ist, nutzen Sie Support und wir machen die Antwort zu einem wiederverwendbaren Doc Path.",
+      "support": "Support Kontaktieren",
+      "dashboard": "Produkt Öffnen"
+    },
+    "nav": {
+      "viewSource": "Quellcode Anzeigen",
+      "externalLink": "Externer Link",
+      "command": "Befehl",
+      "step": "Schritt"
+    },
+    "languageSelector": {
+      "label": "Sprache",
+      "selectLanguage": "Sprache Wählen",
+      "en": "English",
+      "es": "Español",
+      "fr": "Français",
+      "de": "Deutsch",
+      "th": "ไทย",
+      "vi": "Tiếng Việt"
+    }
   }
 }

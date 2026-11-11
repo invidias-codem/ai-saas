@@ -400,5 +400,302 @@
     "creditsTitle": "Compute Credits",
     "creditsHint": "1 USD = 50 credits. Top up to keep using premium tools like image, video, and code generation.",
     "topUp": "Top up"
+  },
+  "Docs": {
+    "hero": {
+      "badge": "Documentation Hub · Beta onboarding, CLI, appliance deployment",
+      "title": "Docs for onboarding, operating, and extending Lattice OS",
+      "subtitle": "New users get a clear path from install to first memory-aware workspace. Power users get direct entry points for Docker appliance deployment, V3 licensing, air-gapped operation, Enterprise rollout, route verification, and incident debugging.",
+      "ctaPrimary": "Start Quick Onboarding",
+      "ctaSecondary": "Power-User Recipes",
+      "ctaGithub": "Docs on GitHub",
+      "ctaSource": "Source Code"
+    },
+    "features": {
+      "onboardingTitle": "Onboarding-first",
+      "onboardingDesc": "Maps the fastest route through beta tracks, CLI install, license activation, deployment, and first useful workspace.",
+      "applianceTitle": "Appliance-ready",
+      "applianceDesc": "Explains the Docker appliance path, preflight validation, health checks, backups, upgrades, and rollback workflows.",
+      "securityTitle": "Security-aware",
+      "securityDesc": "Makes trust boundaries, public routes, workspace isolation, and cryptographic license verification explicit."
+    },
+    "newUser": {
+      "title": "New user path",
+      "subtitle": "If someone just received access, this is the shortest path from zero context to a working local Lattice OS instance.",
+      "step1": {
+        "step": "01",
+        "title": "Pick the right track",
+        "description": "New testers should start with the beta track that matches their intent: quick evaluation, source build, enterprise rollout, or privacy/compliance review.",
+        "cta": "Open beta tracks"
+      },
+      "step2": {
+        "step": "02",
+        "title": "Install the lattice CLI",
+        "description": "The CLI manages auth, license activation, Docker appliance deployment, preflight checks, logs, backups, and upgrades.",
+        "command": "# Download and verify the versioned CLI from /downloads\nlattice --version\nlattice doctor --offline --json",
+        "cta": "Open verified downloads"
+      },
+      "step3": {
+        "step": "03",
+        "title": "Activate licensing and initialize",
+        "description": "V3 licenses are ed25519-signed and verified locally, so Enterprise features can unlock without a phone-home dependency.",
+        "command": "lattice license activate <lattice-v3-key>\nlattice deploy init --name beta --tier enterprise"
+      },
+      "step4": {
+        "step": "04",
+        "title": "Run preflight, deploy, then smoke test",
+        "description": "Deployment starts with Docker, Compose v2, resources, ports, disk, auth, and license checks. Finish by creating a workspace and verifying memory-aware chat.",
+        "command": "lattice deploy start --name beta\nlattice health check --instance beta",
+        "cta": "Open your dashboard"
+      }
+    },
+    "howToUse": {
+      "title": "How to use this docs set",
+      "audiences": {
+        "newUsers": {
+          "title": "New users",
+          "description": "Start with the beta track picker, install the CLI, deploy locally, create a workspace, and verify the first memory-aware conversation."
+        },
+        "developers": {
+          "title": "Developers",
+          "description": "Use the architecture, reference, CLI, and source-file map docs to understand where behavior lives and how the major subsystems fit together."
+        },
+        "operators": {
+          "title": "Operators",
+          "description": "Use truth surfaces, deployment, preflight, route verification, and incident debugging docs to diagnose live-system issues more reliably."
+        },
+        "powerUsers": {
+          "title": "Power users",
+          "description": "Use the recipe cards to jump straight to niche flows: air-gapped deployments, custom registries, Enterprise rollout, backups, and rollback."
+        }
+      }
+    },
+    "recipes": {
+      "title": "Power-user recipes",
+      "subtitle": "For niche questions, start from the recipe that matches the job instead of reading the docs linearly.",
+      "selfHosted": {
+        "title": "Self-hosted Docker appliance",
+        "description": "Use the CLI and deployment docs when you need a single-server install with explicit data-residency control."
+      },
+      "airGapped": {
+        "title": "Air-gapped / regulated environment",
+        "description": "Use local license verification, pre-loaded Docker images, no-egress configuration, and audit-oriented health evidence."
+      },
+      "enterprise": {
+        "title": "Enterprise rollout",
+        "description": "Understand workspace-as-project isolation, Enterprise feature gates, SSO/RBAC expectations, backup cadence, and rollback paths."
+      },
+      "debug": {
+        "title": "Debug a weird route or runtime issue",
+        "description": "Start from truth surfaces, verify public/protected boundaries, then use request examples and source maps to find the owning code path."
+      }
+    },
+    "sections": {
+      "overview": {
+        "title": "Overview",
+        "description": "Start here for the high-level platform story, technology transparency, and positioning.",
+        "items": {
+          "index": {
+            "title": "Documentation Index",
+            "description": "The backbone index for the repository documentation system and the best place to see what exists today."
+          },
+          "transparency": {
+            "title": "Technology Transparency",
+            "description": "Explicit explanation of the stack, hosting surfaces, AI/runtime layers, and major product boundaries."
+          },
+          "seo": {
+            "title": "SEO Strategy",
+            "description": "How Lattice OS should talk about memory-native AI, hybrid inference, and workspace intelligence for search and discovery."
+          }
+        }
+      },
+      "onboarding": {
+        "title": "Onboarding",
+        "description": "Guided paths for beta testers, developers, enterprise evaluators, and privacy-focused teams.",
+        "items": {
+          "betaPicker": {
+            "title": "Beta Track Picker",
+            "description": "Choose between Quick Start, Developer, Enterprise, and Privacy & Compliance onboarding paths."
+          },
+          "quickStart": {
+            "title": "Quick Start",
+            "description": "15-minute path from CLI install to first workspace and first memory-aware conversation."
+          },
+          "devTrack": {
+            "title": "Developer Track",
+            "description": "Source builds, custom registries, CI deployment stubs, and standalone binary builds."
+          },
+          "enterpriseTrack": {
+            "title": "Enterprise Track",
+            "description": "Licensing, workspace isolation, SSO/RBAC expectations, backups, health checks, upgrades, and rollback."
+          },
+          "privacyTrack": {
+            "title": "Privacy & Compliance Track",
+            "description": "Air-gapped deployment pattern for regulated environments where data cannot leave the network."
+          }
+        }
+      },
+      "cliAppliance": {
+        "title": "CLI & Appliance",
+        "description": "Manage Lattice OS as an installable Docker appliance with local preflight checks and cryptographic licensing.",
+        "items": {
+          "cliRef": {
+            "title": "lattice-cli Command Reference",
+            "description": "Install options, auth, deploy, health, upgrade, backup, restore, and configuration reference for lattice-cli v0.3.0."
+          },
+          "v3License": {
+            "title": "V3 Cryptographic Licensing",
+            "description": "ed25519-signed license payloads with embedded public-key verification for offline-capable Enterprise activation."
+          },
+          "selfHostedTopology": {
+            "title": "Self-Hosted Topology",
+            "description": "How the app, database, storage, auth, and optional workers fit together in self-hosted installs."
+          },
+          "preflightChecklist": {
+            "title": "Self-Hosted Preflight Checklist",
+            "description": "The practical preflight and smoke-test checklist for deciding whether a fresh install is usable."
+          }
+        }
+      },
+      "architecture": {
+        "title": "Architecture",
+        "description": "Understand how Lattice OS is structured and where the platform is headed.",
+        "items": {
+          "systemArch": {
+            "title": "System Architecture",
+            "description": "High-level system layers, trust zones, and request flow."
+          },
+          "runtimeRouting": {
+            "title": "Runtime Mode Routing",
+            "description": "How the server resolves effective runtime behavior from context instead of trusting client toggles."
+          },
+          "memoryContext": {
+            "title": "Memory and Context Architecture",
+            "description": "Prepared context, layered memory direction, and why raw history is not enough."
+          },
+          "workspaceModel": {
+            "title": "Workspace and Operating Profile Model",
+            "description": "Why workspace is the primary container and operating profile is the behavior-shaping layer."
+          },
+          "retrievalGraph": {
+            "title": "Retrieval and Graph Strategy",
+            "description": "How retrieval and future graph-aware systems support structured context assembly."
+          }
+        }
+      },
+      "security": {
+        "title": "Security",
+        "description": "Make route visibility, trust boundaries, and authority models explicit.",
+        "items": {
+          "publicRoutes": {
+            "title": "Public Routes",
+            "description": "Which routes are intended to remain public and how route gating is actually enforced."
+          },
+          "trustBoundaries": {
+            "title": "Trust Boundaries",
+            "description": "The platform's major trust zones across public users, authenticated users, backend jobs, integrations, and operators."
+          },
+          "licenseVerification": {
+            "title": "License Verification Boundary",
+            "description": "Power users can inspect the public-key verification path without exposing the private signing key."
+          }
+        }
+      },
+      "operations": {
+        "title": "Operations",
+        "description": "Operational discipline for deployment, verification, and debugging in a multi-surface platform.",
+        "items": {
+          "truthSurfaces": {
+            "title": "Truth Surfaces",
+            "description": "How to choose the right evidence source when code, CI, deploy logs, and runtime disagree."
+          },
+          "deployment": {
+            "title": "Deployment",
+            "description": "How code moves from repo state to live runtime and what to verify along the way."
+          },
+          "deploymentModes": {
+            "title": "Deployment Modes",
+            "description": "Official business deployment modes and the recommended support order for self-hosted adoption."
+          },
+          "routeVerification": {
+            "title": "Route Verification Checklist",
+            "description": "Checklist for validating public, protected, localized, and API-dependent routes."
+          },
+          "incidentDebugging": {
+            "title": "Incident Debugging",
+            "description": "A practical method for classifying incidents, choosing truth surfaces, and narrowing failure boundaries."
+          }
+        }
+      },
+      "reference": {
+        "title": "Reference",
+        "description": "Concrete developer-facing reference material for APIs, environment configuration, and repo navigation.",
+        "items": {
+          "apiRef": {
+            "title": "API Reference",
+            "description": "Human-readable map of important API surfaces, public/protected boundaries, and debugging notes."
+          },
+          "envVars": {
+            "title": "Environment Variables",
+            "description": "Public vs server-only configuration surfaces and the major variables that shape runtime behavior."
+          },
+          "requestResponse": {
+            "title": "Request and Response Examples",
+            "description": "Concrete payload examples for important API routes."
+          },
+          "sourceFileMap": {
+            "title": "Source File Map",
+            "description": "Where important route, runtime, auth, and subsystem files live in the repository."
+          }
+        }
+      },
+      "decisions": {
+        "title": "Decisions",
+        "description": "Architectural decision records that capture why the platform evolved the way it did.",
+        "items": {
+          "adrIndex": {
+            "title": "ADR Index",
+            "description": "Entry point for the architecture decision record set."
+          },
+          "adrSet": {
+            "title": "Current ADR Set",
+            "description": "Covers workspace-first architecture, server-resolved runtime routing, prepared context, public/authenticated boundary separation, deploy truth vs runtime truth, and more."
+          }
+        }
+      }
+    },
+    "sidebar": {
+      "label": "Documentation"
+    },
+    "usefulFor": {
+      "label": "Use This Docs Set For",
+      "item1": "First-run onboarding",
+      "item2": "Docker appliance installs",
+      "item3": "Enterprise and air-gap reviews",
+      "item4": "Operational debugging",
+      "item5": "Security boundary review"
+    },
+    "cta": {
+      "needPath": "Need a path that is not documented yet?",
+      "needPathDesc": "If you're trying to understand a route, runtime behavior, deployment issue, integration surface, or compliance requirement that isn't clear yet, use support and we can turn the answer into a reusable doc path.",
+      "support": "Contact Support",
+      "dashboard": "Open Product"
+    },
+    "nav": {
+      "viewSource": "View source",
+      "externalLink": "External link",
+      "command": "Command",
+      "step": "Step"
+    },
+    "languageSelector": {
+      "label": "Language",
+      "selectLanguage": "Select language",
+      "en": "English",
+      "es": "Español",
+      "fr": "Français",
+      "de": "Deutsch",
+      "th": "ไทย",
+      "vi": "Tiếng Việt"
+    }
   }
 }
