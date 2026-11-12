@@ -613,7 +613,8 @@
             "title": "Deployment",
             "description": "How code moves from repo state to live runtime and what to verify along the way."
           },
-          "deploymentModes": {
+          "deviceInstallation": {"title":"Device-aware installation","description":"How the install chooser behaves on iPhone, Android, and desktop; what it does not install or authorize."},
+      "deploymentModes": {
             "title": "Deployment Modes",
             "description": "Official business deployment modes and the recommended support order for self-hosted adoption."
           },

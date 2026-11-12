@@ -386,7 +386,8 @@
             "title": "Despliegue",
             "description": "Cómo el código pasa de estado de repo a runtime vivo y qué verificar en el camino."
           },
-          "deploymentModes": {
+          "deviceInstallation": {"title":"Instalación según el dispositivo","description":"Cómo funciona el selector de instalación en iPhone, Android y escritorio; qué no instala ni autoriza."},
+      "deploymentModes": {
             "title": "Modos de Despliegue",
             "description": "Modos de despliegue de negocio oficiales y orden de soporte recomendado para adopción auto-hospedada."
           },

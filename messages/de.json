@@ -429,7 +429,8 @@
             "title": "Deployment",
             "description": "Wie Code vom Repo State zum Live Runtime wandert und was man unterwegs verifiziert."
           },
-          "deploymentModes": {
+          "deviceInstallation": {"title":"Geräteabhängige Installation","description":"Verhalten des Installationsdialogs auf iPhone, Android und Desktop; was er nicht installiert oder autorisiert."},
+      "deploymentModes": {
             "title": "Deployment Modes",
             "description": "Offizielle Business Deployment Modes und empfohlene Support-Reihenfolge für Self-Hosted Adoption."
           },

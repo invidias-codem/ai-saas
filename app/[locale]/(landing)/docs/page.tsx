@@ -310,6 +310,11 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                     description: t("sections.operations.items.deploymentModes.description"),
                 },
                 {
+                    title: t("sections.operations.items.deviceInstallation.title"),
+                    path: "docs/operations/device-aware-install.md",
+                    description: t("sections.operations.items.deviceInstallation.description"),
+                },
+                {
                     title: t("sections.operations.items.routeVerification.title"),
                     path: "docs/operations/route-verification-checklist.md",
                     description: t("sections.operations.items.routeVerification.description"),
