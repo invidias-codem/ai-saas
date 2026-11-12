@@ -18,6 +18,10 @@ export const TRANSLATED_DOCS_ARTICLES = [
   // Security
   "docs/security/public-routes.md",
   "docs/security/trust-boundaries.md",
+  // Operations (Slice 7A - Deployment Foundations)
+  "docs/operations/deployment-modes.md",
+  "docs/operations/deployment.md",
+  "docs/operations/self-hosted-topology.md",
 ] as const;
 
 /** Per-language availability for each allowlisted document.
@@ -42,6 +46,10 @@ export const DOCS_TRANSLATION_AVAILABILITY: Record<string, Partial<Record<DocsLa
   // Security (5 languages)
   "docs/security/public-routes.md": { es: true, fr: true, de: true, th: true, vi: true },
   "docs/security/trust-boundaries.md": { es: true, fr: true, de: true, th: true, vi: true },
+  // Operations (Slice 7A - Deployment Foundations, 5 languages)
+  "docs/operations/deployment-modes.md": { es: true, fr: true, de: true, th: true, vi: true },
+  "docs/operations/deployment.md": { es: true, fr: true, de: true, th: true, vi: true },
+  "docs/operations/self-hosted-topology.md": { es: true, fr: true, de: true, th: true, vi: true },
 };
 
 const translatedPaths: ReadonlySet<string> = new Set(TRANSLATED_DOCS_ARTICLES);

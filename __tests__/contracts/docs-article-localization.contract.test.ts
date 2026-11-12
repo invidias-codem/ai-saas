@@ -6,7 +6,7 @@ import { DOCS_LANGUAGE_OPTIONS } from "../../lib/docs-hub-translations";
 const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 const languages = DOCS_LANGUAGE_OPTIONS.map((x) => x.code);
 
-// All 13 allowlisted documents now have full 5-language coverage (es, fr, de, th, vi)
+// All 16 allowlisted documents now have full 5-language coverage (es, fr, de, th, vi)
 const fullCoverageSources = [
   "docs/README.md",
   "docs/operations/self-hosted-preflight-checklist.md",
@@ -24,6 +24,10 @@ const fullCoverageSources = [
   // Security
   "docs/security/public-routes.md",
   "docs/security/trust-boundaries.md",
+  // Operations (Slice 7A - Deployment Foundations)
+  "docs/operations/deployment-modes.md",
+  "docs/operations/deployment.md",
+  "docs/operations/self-hosted-topology.md",
 ] as const;
 
 const sources = [...fullCoverageSources] as const;

@@ -4,7 +4,7 @@
 
 This document defines the official deployment modes Lattice OS should support for business adoption.
 
-It exists to make self-hosted planning, packaging, operations, and support more concrete than a vague “deploy anywhere” story.
+It exists to make self-hosted planning, packaging, operations, and support more concrete than a vague "deploy anywhere" story.
 
 ---
 
@@ -50,15 +50,15 @@ Deployment modes turn self-hosting from a theory into an operational contract.
 - early business self-hosted adopters
 
 ### Primary use case
-Workspace-scoped internal reasoning over uploaded documents, ongoing project context, and persistent memory.
+`Workspace-scoped` internal reasoning over uploaded documents, ongoing project context, and persistent memory.
 
 ### Goal
 Make Lattice easy to install and useful for internal teams without requiring advanced infrastructure.
 
 ### Required components
-- web/app service
-- database
-- object storage
+- `web/app service`
+- `database`
+- `object storage`
 - authentication provider/config
 - any essential background worker only if the current feature set truly requires it
 
@@ -93,7 +93,7 @@ Should not require:
 - companies embedding Lattice into a user-facing product layer
 
 ### Primary use case
-Power a customer-facing assistant or copilot using scoped knowledge, memory, and retrieval.
+Power a `customer-facing` assistant or copilot using scoped knowledge, memory, and retrieval.
 
 ### Goal
 Let product teams run Lattice inside their own stack for customer-facing workflows with clear tenant and trust boundaries.
