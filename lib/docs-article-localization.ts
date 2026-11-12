@@ -34,14 +34,14 @@ export const DOCS_TRANSLATION_AVAILABILITY: Record<string, Partial<Record<DocsLa
   "docs/architecture/memory-and-context-architecture.md": { es: true, fr: true, de: true, th: true, vi: true },
   "docs/architecture/workspace-operating-profile-model.md": { es: true, fr: true, de: true, th: true, vi: true },
   "docs/architecture/retrieval-and-graph-strategy.md": { es: true, fr: true, de: true, th: true, vi: true },
-  // Reference (Spanish only so far)
-  "docs/reference/api-reference.md": { es: true },
-  "docs/reference/environment-variables.md": { es: true },
-  "docs/reference/request-response-examples.md": { es: true },
-  "docs/reference/source-file-map.md": { es: true },
-  // Security (Spanish only so far)
-  "docs/security/public-routes.md": { es: true },
-  "docs/security/trust-boundaries.md": { es: true },
+  // Reference (5 languages)
+  "docs/reference/api-reference.md": { es: true, fr: true, de: true, th: true, vi: true },
+  "docs/reference/environment-variables.md": { es: true, fr: true, de: true, th: true, vi: true },
+  "docs/reference/request-response-examples.md": { es: true, fr: true, de: true, th: true, vi: true },
+  "docs/reference/source-file-map.md": { es: true, fr: true, de: true, th: true, vi: true },
+  // Security (5 languages)
+  "docs/security/public-routes.md": { es: true, fr: true, de: true, th: true, vi: true },
+  "docs/security/trust-boundaries.md": { es: true, fr: true, de: true, th: true, vi: true },
 };
 
 const translatedPaths: ReadonlySet<string> = new Set(TRANSLATED_DOCS_ARTICLES);

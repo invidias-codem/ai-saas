@@ -1,50 +1,50 @@
-# Trust Boundaries (ขอบเขตความไว้วางใจ)
+# ขอบเขตความไว้วางใจ (Trust Boundaries)
 
-## Purpose (วัตถุประสงค์)
+## วัตถุประสงค์ (Purpose)
 
-This document explains the major trust boundaries in Genie AI / `ai-saas` (เอกสารนี้อธิบาย major trust boundaries ใน Genie AI / `ai-saas`)
+เอกสารนี้อธิบาย major trust boundaries (ขอบเขตความไว้วางใจหลัก) ใน Genie AI / `ai-saas`
 
-It exists because the platform is not a single-surface application (มันมีอยู่เพราะ platform ไม่ใช่ single-surface application) It includes (รวมถึง):
-- public landing and informational routes (public landing และ informational routes)
-- authenticated product routes (authenticated product routes)
-- API routes (API routes)
-- cron/automation jobs (cron/automation jobs)
-- integrations and webhooks (integrations และ webhooks)
-- local development and operational surfaces (local development และ operational surfaces)
+มีอยู่เพราะ platform (แพลตฟอร์ม) ไม่ใช่ single-surface application (แอปพลิเคชันผิวเดียว) รวมถึง:
+- public landing and informational routes (เส้นทาง landing และ informational สาธารณะ)
+- authenticated product routes (เส้นทางผลิตภัณฑ์ที่ยืนยันตัวตนแล้ว)
+- API routes (เส้นทาง API)
+- cron/automation jobs (งาน cron/automation)
+- integrations and webhooks (การรวมและ webhooks)
+- local development and operational surfaces (พื้นผิวการพัฒนาท้องถิ่นและการดำเนินงาน)
 
-When those surfaces are not clearly separated, the system becomes harder to secure, harder to reason about, and easier to break accidentally (เมื่อ surfaces เหล่านี้ not clearly separated, system กลายเป็น harder to secure, harder to reason about, และ easier to break accidentally)
+เมื่อ surfaces (ผิว) เหล่านี้ not clearly separated (ไม่ได้แยกชัดเจน), system (ระบบ) จะกลายเป็น harder to secure (ยากกว่าในการ secure), harder to reason about (ยากกว่าในการ reason about), และ easier to break accidentally (ง่ายกว่าในการ break โดยไม่ได้ตั้งใจ)
 
-This document describes the current trust model at a practical architectural level (เอกสารนี้ describes current trust model at a practical architectural level)
+เอกสารนี้ describes the current trust model (อธิบาย trust model ปัจจุบัน) at a practical architectural level (ใน practical architectural level)
 
 ---
 
-## Core Principle (หลักการพื้นฐาน)
+## หลักการพื้นฐาน (Core Principle)
 
-Not every surface of the application should be trusted equally (Not every surface of the application should be trusted equally)
+Not every surface of the application should be trusted equally (ไม่ใช่ทุก surface ของ application ที่ should be trusted equally)
 
-A healthy architecture distinguishes between (A healthy architecture distinguishes between):
+A healthy architecture distinguishes between (A healthy architecture distinguishes between / สถาปัตยกรรมที่ดีควรแยกแยะระหว่าง):
 - who is allowed to access a surface (ใคร allowed to access a surface)
 - what that surface is allowed to do (surface นั้น allowed to do อะไร)
 - what assumptions the backend is allowed to make about the caller (backend allowed to make assumptions เกี่ยวกับ caller อะไร)
 
-Trust boundaries are not only about authentication (Trust boundaries not only about authentication) They are also about (They are also about):
-- execution rights (execution rights)
-- data exposure (data exposure)
-- operational authority (operational authority)
-- integration privileges (integration privileges)
-- system-to-system assumptions (system-to-system assumptions)
+Trust boundaries are not only about authentication (Trust boundaries ไม่ได้เกี่ยวกับ authentication เพียงอย่างเดียว) They are also about (They are also about / พวกมันยังเกี่ยวกับ):
+- execution rights (execution rights / สิทธิ์ในการรัน)
+- data exposure (data exposure / การเปิดเผยข้อมูล)
+- operational authority (operational authority / อำนาจในการดำเนินงาน)
+- integration privileges (integration privileges / สิทธิประโยชน์การรวม)
+- system-to-system assumptions (system-to-system assumptions / สมมติฐานระหว่างระบบ)
 
 ---
 
-## Primary Trust Zones (Primary Trust Zones)
+## Primary Trust Zones (โซนความไว้วางใจหลัก)
 
-Genie AI should be understood as operating across several major trust zones (Genie AI should be understood as operating across several major trust zones)
+Genie AI should be understood as operating across several major trust zones (Genie AI ควรเข้าใจว่า operate across several major trust zones)
 
-## 1. Public Visitor Zone (Public Visitor Zone / โซนผู้เยี่ยมชมสาธารณะ)
+## 1. Public Visitor Zone (โซนผู้เยี่ยมชมสาธารณะ)
 
 ### Who this includes (ใครที่ this includes)
-- unauthenticated web visitors (unauthenticated web visitors)
-- public readers of landing/support/blog/docs/privacy-style surfaces (public readers ของ landing/support/blog/docs/privacy-style surfaces)
+- unauthenticated web visitors (ผู้เยี่ยมชมเว็บที่ยังไม่ได้ยืนยันตัวตน)
+- public readers of landing/support/blog/docs/privacy-style surfaces (ผู้อ่านสาธารณะของ landing/support/blog/docs/privacy-style surfaces)
 
 ### What this zone should access (โซนนี้ควร access อะไร)
 - public marketing pages (public marketing pages)
@@ -63,12 +63,12 @@ A public-looking page can still be blocked or misrouted if route gating is not c
 
 ---
 
-## 2. Authenticated User Zone (Authenticated User Zone / โซนผู้ใช้ที่ยืนยันตัวตน)
+## 2. Authenticated User Zone (โซนผู้ใช้ที่ยืนยันตัวตนแล้ว)
 
-### Who this includes
+### Who this includes (ใครที่ this includes)
 - signed-in end users using the product intentionally through supported product routes (signed-in end users using the product intentionally through supported product routes)
 
-### What this zone should access
+### What this zone should access (โซนนี้ควร access อะไร)
 - workspace and conversation surfaces (workspace and conversation surfaces)
 - user settings (user settings)
 - authenticated APIs (authenticated APIs)
@@ -85,9 +85,9 @@ Authentication is necessary but not sufficient (Authentication is necessary but 
 
 ---
 
-## 3. Backend Application Zone (Backend Application Zone / โซนแอปพลิเคชันแบ็กเอนด์)
+## 3. Backend Application Zone (โซนแอปพลิเคชันแบ็กเอนด์)
 
-### Who this includes
+### Who this includes (ใครที่ this includes)
 - server-side route handlers (server-side route handlers)
 - internal product logic (internal product logic)
 - trusted backend execution paths (trusted backend execution paths)
@@ -104,14 +104,14 @@ The backend application layer is a trust boundary because it has more authority 
 
 ---
 
-## 4. Automation / Cron Zone (Automation / Cron Zone / โซนอัตโนมัติ / Cron)
+## 4. Automation / Cron Zone (โซนอัตโนมัติ / Cron)
 
-### Who this includes
+### Who this includes (ใครที่ this includes)
 - scheduled jobs (scheduled jobs)
 - background automation flows (background automation flows)
 - task runners hitting internal API routes (task runners hitting internal API routes)
 
-### What this zone can do
+### What this zone can do (โซนนี้ can do อะไร)
 - run maintenance/update workflows (run maintenance/update workflows)
 - perform scheduled integration behavior (perform scheduled integration behavior)
 - access privileged automation routes where explicitly intended (access privileged automation routes where explicitly intended)
@@ -129,9 +129,9 @@ A route being externally reachable for cron/webhook reasons does not mean it sho
 
 ---
 
-## 5. Integration / Webhook Zone (Integration / Webhook Zone / โซนการรวม / Webhook)
+## 5. Integration / Webhook Zone (โซนการรวม / Webhook)
 
-### Who this includes
+### Who this includes (ใครที่ this includes)
 - Slack callbacks (Slack callbacks)
 - Telegram webhooks (Telegram webhooks)
 - external providers or platform callbacks (external providers or platform callbacks)
@@ -145,7 +145,7 @@ A route being externally reachable for cron/webhook reasons does not mean it sho
 - unrestricted internal state mutation (unrestricted internal state mutation)
 - broad authenticated-user equivalence (broad authenticated-user equivalence)
 
-### Why it matters (Why it matters)
+### Why it matters (Why it matters / ทำไมมัน matters)
 External callbacks may be legitimate but still untrusted until validated through (External callbacks may be legitimate but still untrusted until validated through):
 - signing secrets (signing secrets)
 - verification tokens (verification tokens)
@@ -154,9 +154,9 @@ External callbacks may be legitimate but still untrusted until validated through
 
 ---
 
-## 6. Data / Persistence Zone (Data / Persistence Zone / โซนข้อมูล / Persistence)
+## 6. Data / Persistence Zone (โซนข้อมูล / Persistence)
 
-### Who this includes
+### Who this includes (ใครที่ this includes)
 - database-backed product state (database-backed product state)
 - structured persistence systems (structured persistence systems)
 - schema-backed application behavior (schema-backed application behavior)
@@ -168,14 +168,14 @@ The persistence layer should distinguish between (The persistence layer should d
 - internal system state (internal system state)
 - automation-only or admin-only mutation paths (automation-only or admin-only mutation paths)
 
-### Why it matters
+### Why it matters (Why it matters / ทำไมมัน matters)
 A database row existing does not imply every app surface should be allowed to read or mutate it (A database row existing does not imply every app surface should be allowed to read or mutate it)
 
 This is especially important when product architecture evolves faster than policy clarity (This is especially important when product architecture evolves faster than policy clarity)
 
 ---
 
-## 7. Scoping Model: Users, Workspaces, Documents, and Retrieval (Scoping Model: Users, Workspaces, Documents, and Retrieval / โมเดล Scoping: Users, Workspaces, Documents, และ Retrieval)
+## 7. Scoping Model: Users, Workspaces, Documents, and Retrieval (โมเดล Scoping: Users, Workspaces, Documents, and Retrieval)
 
 Many failures that look like "AI bugs" are actually scoping or trust-boundary bugs (Many failures that look like "AI bugs" are actually scoping or trust-boundary bugs)
 
@@ -231,7 +231,7 @@ Whether Lattice runs with different models, storage, or retrieval backends, scop
 
 ---
 
-## 8. Local Development / Operator Zone (Local Development / Operator Zone / โซนการพัฒนาท้องถิ่น / Operator)
+## 8. Local Development / Operator Zone (โซนการพัฒนาท้องถิ่น / Operator)
 
 ### Who this includes (ใครที่ this includes)
 - developers with local repo access (developers with local repo access)
@@ -252,14 +252,14 @@ This is a trust zone because operator actions often exceed normal application pe
 
 ---
 
-## 9. Terminal / Raw SSE + Local Sandbox Zone (Terminal / Raw SSE + Local Sandbox Zone / โซน Terminal / Raw SSE + Local Sandbox)
+## 9. Terminal / Raw SSE + Local Sandbox Zone (โซน Terminal / Raw SSE + Local Sandbox)
 
-### Who this includes
+### Who this includes (ใครที่ this includes)
 - CLI clients and local shell loops (CLI clients and local shell loops)
 - machine-local automation calling `/api/cli/stream` and `/api/memory/cli` (machine-local automation calling `/api/cli/stream` and `/api/memory/cli`)
 - local approval-matrix behavior in `~/.lattice/settings` (local approval-matrix behavior in `~/.lattice/settings`)
 
-### Why this matters
+### Why this matters (Why this matters / ทำไมมัน matters)
 This zone is technically remote-backed but authority is split between (This zone is technically remote-backed but authority is split between):
 - the server stream API (the server stream API)
 - local client trust decisions (local client trust decisions)
@@ -326,7 +326,7 @@ Public-route intent must match actual route gating (Public-route intent must mat
 ## Example 2 — Authenticated Product APIs (Example 2 — Authenticated Product APIs)
 A signed-in user can use product APIs, but that does not mean the server should accept every client claim as authoritative (A signed-in user can use product APIs, but that does not mean the server should accept every client claim as authoritative)
 
-### Lesson
+### Lesson (บทเรียน)
 The backend must still resolve real behavior using trusted context (The backend must still resolve real behavior using trusted context)
 
 ---
@@ -334,7 +334,7 @@ The backend must still resolve real behavior using trusted context (The backend 
 ## Example 3 — Cron or Webhook Routes (Example 3 — Cron or Webhook Routes)
 A route can be externally callable while still belonging to a privileged automation boundary (A route can be externally callable while still belonging to a privileged automation boundary)
 
-### Lesson
+### Lesson (บทเรียน)
 Reachability is not the same thing as broad trust (Reachability is not the same thing as broad trust)
 
 ---
@@ -342,12 +342,12 @@ Reachability is not the same thing as broad trust (Reachability is not the same 
 ## Example 4 — Database Schema Presence (Example 4 — Database Schema Presence)
 A table existing in the repository or local database does not mean the production system should assume it exists everywhere or that every caller should be allowed to use it (A table existing in the repository or local database does not mean the production system should assume it exists everywhere or that every caller should be allowed to use it)
 
-### Lesson
+### Lesson (บทเรียน)
 Schema truth and access policy are separate concerns (Schema truth and access policy are separate concerns)
 
 ---
 
-## Common Boundary Failures to Avoid (Common Boundary Failures to Avoid)
+## Common Boundary Failures to Avoid (Common Boundary Failures to Avoid / ข้อผิดพลาดขอบเขตทั่วไปที่ควรหลีกเลี่ยง)
 
 ## 1. UI Intent Without Backend Enforcement (UI Intent Without Backend Enforcement)
 A page looks public but is still protected by middleware (A page looks public but is still protected by middleware)

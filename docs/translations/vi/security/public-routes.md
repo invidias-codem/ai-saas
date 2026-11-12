@@ -2,14 +2,14 @@
 
 ## Mục Đích (Purpose)
 
-Tài liệu này giải thích (explains) các Genie AI routes nào intended to be publicly accessible (được dự định truy cập công khai),哪些 được bảo vệ (protected), và public-route enforcement hiện tại hoạt động như thế nào (how public-route enforcement currently works).
+Tài liệu này giải thích các Genie AI routes nào intended to be publicly accessible (được dự định truy cập công khai), protected (được bảo vệ), và public-route enforcement hiện tại hoạt động như thế nào.
 
 Nó tồn tại để prevent (ngăn chặn) một recurring class of production bugs (lớp lỗi sản xuất lặp lại):
 - public pages linking into auth-gated surfaces unintentionally (các trang công khai liên kết vào auth-gated surfaces vô tình)
 - otherwise public routes being blocked because middleware/proxy allowlists were not updated (các public routes khác bị blocked vì middleware/proxy allowlists chưa được updated)
 - confusion between UI-level visibility and actual route accessibility (sự nhầm lẫn giữa UI-level visibility và actual route accessibility)
 
-Tài liệu này should be treated as (nên được đối xử như) current route-visibility reference cho application.
+Tài liệu này nên được đối xử như current route-visibility reference cho application.
 
 ---
 
@@ -17,12 +17,12 @@ Tài liệu này should be treated as (nên được đối xử như) current r
 
 Một route chỉ truly public (thực sự công khai) nếu server-side auth gate treats it as public (coi nó là công khai).
 
-Trong Genie AI, điều đó means (nghĩa là) public access not determined only by (không chỉ được xác định bởi):
+Trong Genie AI, điều đó nghĩa là public access not determined only by (không chỉ được xác định bởi):
 - whether a link appears on a landing page (liên kết có xuất hiện trên landing page không)
 - whether a page is visually "marketing-like" (trang có trông "marketing-like" không)
 - whether the route feels public by convention (tuyến đường cảm thấy public theo convention)
 
-It must also be explicitly allowed by the route-matching logic in the auth middleware/proxy layer (Nó cũng phải explicitly allowed by the route-matching logic in the auth middleware/proxy layer).
+Nó cũng phải explicitly allowed by the route-matching logic in the auth middleware/proxy layer (cũng phải được phép một cách rõ ràng bởi route-matching logic trong auth middleware/proxy layer).
 
 ---
 
@@ -179,7 +179,7 @@ Any API route not explicitly allowlisted as public should be assumed protected (
 
 The application uses localized routing (The application uses localized routing).
 
-### Important implication (Nัย Quan Trọng)
+### Important implication (Nãi Quan Trọng)
 Public route treatment must consider both (Public route treatment must consider both):
 - unprefixed route forms (unprefixed route forms)
 - locale-prefixed route forms (locale-prefixed route forms)

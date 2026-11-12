@@ -1,55 +1,55 @@
-# Public Routes (เส้นทางสาธารณะ)
+# เส้นทางสาธารณะ (Public Routes)
 
-## Purpose (วัตถุประสงค์)
+## วัตถุประสงค์ (Purpose)
 
-This document explains which Genie AI routes are intended to be publicly accessible, which are protected, and how public-route enforcement currently works (เอกสารนี้อธิบายว่า Genie AI routes ไหน intended to be publicly accessible, ไหน protected, และ public-route enforcement ทำงานอย่างไร currently)
+เอกสารนี้อธิบายว่า Genie AI routes ไหน intended to be publicly accessible (เข้าถึงได้สาธารณะ), ไหน protected (ถูกป้องกัน), และ public-route enforcement ทำงานอย่างไร currently (ในปัจจุบัน)
 
-It exists to prevent a recurring class of production bugs (มันมีอยู่เพื่อ prevent a recurring class of production bugs):
-- public pages linking into auth-gated surfaces unintentionally (public pages linking into auth-gated surfaces unintentionally)
-- otherwise public routes being blocked because middleware/proxy allowlists were not updated (otherwise public routes being blocked เพราะ middleware/proxy allowlists not updated)
-- confusion between UI-level visibility and actual route accessibility (confusion ระหว่าง UI-level visibility และ actual route accessibility)
+มีอยู่เพื่อ prevent (ป้องกัน) a recurring class of production bugs (คลาสของ production bugs ที่เกิดซ้ำ):
+- public pages linking into auth-gated surfaces unintentionally (public pages ที่ link เข้า auth-gated surfaces โดยไม่ได้ตั้งใจ)
+- otherwise public routes being blocked because middleware/proxy allowlists were not updated (public routes อื่นๆ ถูก blocked เพราะ middleware/proxy allowlists ไม่ได้ updated)
+- confusion ระหว่าง UI-level visibility และ actual route accessibility (ความสับสนระหว่าง UI-level visibility และ actual route accessibility)
 
-This document should be treated as the current route-visibility reference for the application (เอกสารนี้ควร treated as the current route-visibility reference for the application)
-
----
-
-## Core Principle (หลักการพื้นฐาน)
-
-A route is only truly public if the server-side auth gate treats it as public (Route จะ truly public ได้ก็ต่อเมื่อ server-side auth gate treats it as public)
-
-In Genie AI, that means public access is not determined only by (ใน Genie AI หมายถึง public access not determined only by):
-- whether a link appears on a landing page (whether a link appears on a landing page)
-- whether a page is visually "marketing-like" (whether a page is visually "marketing-like")
-- whether the route feels public by convention (whether the route feels public by convention)
-
-It must also be explicitly allowed by the route-matching logic in the auth middleware/proxy layer (มัน must also be explicitly allowed by the route-matching logic in the auth middleware/proxy layer)
+เอกสารนี้ควร treated as the current route-visibility reference for the application (ถูกจัดการเป็น current route-visibility reference สำหรับ application)
 
 ---
 
-## Current Enforcement Layer (Current Enforcement Layer)
+## หลักการพื้นฐาน (Core Principle)
 
-### Route-Gating Mechanism (Route-Gating Mechanism)
-Public vs protected route behavior is primarily controlled in (Public vs protected route behavior is primarily controlled in):
+Route จะ truly public (เข้าถึงได้สาธารณะจริง) ได้ก็ต่อเมื่อ server-side auth gate treats it as public (รับมือมันเป็น public)
+
+ใน Genie AI, หมายถึง public access not determined only by (ไม่ได้ถูกกำหนดเพียงแค่):
+- whether a link appears on a landing page (ลิงก์ปรากฏบน landing page)
+- whether a page is visually "marketing-like" (หน้าตาดู "marketing-like")
+- whether the route feels public by convention (route รู้สึกว่า public ตาม convention)
+
+มัน must also be explicitly allowed by the route-matching logic in the auth middleware/proxy layer (ต้องถูกอนุญาตอย่างชัดเจนโดย route-matching logic ใน auth middleware/proxy layer)
+
+---
+
+## Current Enforcement Layer (ชั้นการบังคับใช้ปัจจุบัน)
+
+### Route-Gating Mechanism (กลไกการกั้น Route)
+Public vs protected route behavior is primarily controlled in (ถูกควบคุมหลักใน):
 - `proxy.ts`
 
-This file contains the `isPublicRoute` matcher used alongside Clerk auth enforcement (ไฟล์นี้ contains the `isPublicRoute` matcher used alongside Clerk auth enforcement)
+ไฟล์นี้ contains the `isPublicRoute` matcher used alongside Clerk auth enforcement (มี `isPublicRoute` matcher ที่ใช้ร่วมกับ Clerk auth enforcement)
 
-### Important implication (Implication สำคัญ)
-Whenever a new public route is added, or a public route subtree changes, the route must be reviewed in **both** places (Whenever a new public route is added, or a public route subtree changes, the route must be reviewed in **both** places):
+### Important implication (นัยสำคัญ)
+Whenever a new public route is added, or a public route subtree changes, the route must be reviewed in **both** places (ทุกครั้งที่มี new public route เพิ่ม หรือ public route subtree เปลี่ยน, route ต้อง reviewed ใน **ทั้งสอง** ที่):
 1. application routing/UI
 2. proxy auth allowlist
 
-If only the UI is updated, public users may still be redirected to sign-in (If only the UI is updated, public users may still be redirected to sign-in)
+If only the UI is updated, public users may still be redirected to sign-in (ถ้า only the UI is updated, public users อาจยัง redirected to sign-in)
 
 ---
 
-## Public Route Categories (Public Route Categories)
+## Public Route Categories (หมวดหมู่ Public Route)
 
-The application currently has several types of routes that should be considered public (The application currently has several types of routes that should be considered public)
+The application currently has several types of routes that should be considered public (Application ปัจจุบันมีหลายประเภทของ routes ที่ควร considered public)
 
 ## 1. Public Landing / Marketing Routes (Public Landing / Marketing Routes)
 
-These are public entry surfaces intended for unauthenticated visitors (These are public entry surfaces intended for unauthenticated visitors)
+These are public entry surfaces intended for unauthenticated visitors (นี่คือ public entry surfaces สำหรับ unauthenticated visitors)
 
 ### Examples (ตัวอย่าง)
 - `/`
@@ -64,7 +64,7 @@ These are public entry surfaces intended for unauthenticated visitors (These are
 
 ## 2. Public Auth Entry Routes (Public Auth Entry Routes)
 
-These are publicly accessible because they are part of the authentication entry flow (These are publicly accessible because they are part of the authentication entry flow)
+These are publicly accessible because they are part of the authentication entry flow (เข้าถึงได้สาธารณะเพราะเป็นส่วนหนึ่งของ authentication entry flow)
 
 ### Examples
 - `/sign-in(.*)`
@@ -80,7 +80,7 @@ These are publicly accessible because they are part of the authentication entry 
 
 ## 3. Public Informational Routes (Public Informational Routes)
 
-These are intended to remain accessible without authentication because they provide support, policy, or educational content (These are intended to remain accessible without authentication because they provide support, policy, or educational content)
+These are intended to remain accessible without authentication because they provide support, policy, or educational content (ตั้งใจให้เข้าถึงได้โดยไม่ต้อง authentication เพราะให้ support, policy, หรือ educational content)
 
 ### Current examples (ตัวอย่างปัจจุบัน)
 - `/privacy`
@@ -97,15 +97,15 @@ These are intended to remain accessible without authentication because they prov
 - `/:locale/docs/(.*)`
 
 ### Purpose
-- help users understand the platform (help users understand the platform)
-- provide public support and policy information (provide public support and policy information)
-- expose documentation without forcing sign-in (expose documentation without forcing sign-in)
+- help users understand the platform (ช่วย users understand the platform)
+- provide public support and policy information (ให้ public support and policy information)
+- expose documentation without forcing sign-in (expose documentation โดยไม่บังคับ sign-in)
 
 ---
 
 ## 4. Public API / Callback Surfaces (Public API / Callback Surfaces)
 
-Some API routes must remain public because they are integration or webhook entry points (Some API routes must remain public because they are integration or webhook entry points)
+Some API routes must remain public because they are integration or webhook entry points (บาง API routes ต้อง public เพราะเป็น integration หรือ webhook entry points)
 
 ### Current examples
 - `/api/guest-chat`
@@ -125,16 +125,16 @@ Some API routes must remain public because they are integration or webhook entry
 - `/api/test-mcts`
 - `/api/webhooks/vercel-logs`
 
-### Explicit exclusions (Explicit exclusions / การยกเว้นอย่างชัดเจน)
-The following are **not** public despite having client-side entry points or non-browser consumers (The following are **not** public despite having client-side entry points or non-browser consumers):
+### Explicit exclusions (การยกเว้นอย่างชัดเจน)
+The following are **not** public despite having client-side entry points or non-browser consumers (ต่อไปนี้ **ไม่ใช่** public ถึงแม้จะมี client-side entry points หรือ non-browser consumers):
 - `/api/cli/stream`
 - `/api/memory/cli`
 
-These routes require bearer-token auth when `LATTICE_CLI_TOKEN` is configured (These routes require bearer-token auth when `LATTICE_CLI_TOKEN` is configured) They must not be treated as public in proxy allowlists or route ops (They must not be treated as public in proxy allowlists or route ops)
+These routes require bearer-token auth when `LATTICE_CLI_TOKEN` is configured (routes นี้ require bearer-token auth เมื่อ `LATTICE_CLI_TOKEN` configured) They must not be treated as public in proxy allowlists or route ops (ต้องไม่ treated as public ใน proxy allowlists หรือ route ops)
 
-### Important note (Important note / หมายเหตุสำคัญ)
-Public API surface does **not** mean low-risk surface (Public API surface does **not** mean low-risk surface)
-Many of these routes are public because they must accept external traffic, but they still require (Many of these routes are public because they must accept external traffic, but they still require):
+### Important note (หมายเหตุสำคัญ)
+Public API surface does **not** mean low-risk surface (Public API surface ไม่ได้หมายถึง low-risk surface)
+Many of these routes are public because they must accept external traffic, but they still require (หลาย routes เหล่านี้ public เพราะต้อง accept external traffic, แต่ยัง require):
 - validation (validation)
 - auth verification where applicable (auth verification where applicable)
 - signature/token checks where appropriate (signature/token checks where appropriate)
@@ -144,7 +144,7 @@ Many of these routes are public because they must accept external traffic, but t
 
 ## Protected Route Categories (Protected Route Categories)
 
-The following broad route classes should be treated as protected unless explicitly documented otherwise (The following broad route classes should be treated as protected unless explicitly documented otherwise)
+The following broad route classes should be treated as protected unless explicitly documented otherwise (broad route classes ต่อไปนี้ควร treated as protected เว้นแต่ documented explicitly otherwise)
 
 ## 1. Authenticated Product Routes (Authenticated Product Routes)
 
@@ -178,21 +178,21 @@ Any API route not explicitly allowlisted as public should be assumed protected (
 
 ## Route Visibility and Locale Prefixes (Route Visibility and Locale Prefixes)
 
-The application uses localized routing (The application uses localized routing)
+The application uses localized routing (Application uses localized routing)
 
 ### Important implication (Important implication / นัยสำคัญ)
-Public route treatment must consider both (Public route treatment must consider both):
+Public route treatment must consider both (Public route treatment ต้อง consider ทั้งสอง):
 - unprefixed route forms (unprefixed route forms)
 - locale-prefixed route forms (locale-prefixed route forms)
 
 ### Example (ตัวอย่าง)
-If `/docs` is meant to be public, then all relevant public forms should be considered (If `/docs` is meant to be public, then all relevant public forms should be considered):
+If `/docs` is meant to be public, then all relevant public forms should be considered (ถ้า `/docs` meant to be public, relevant public forms ทั้งหมดควร considered):
 - `/docs`
 - `/:locale/docs`
 - `/docs/(.*)`
 - `/:locale/docs/(.*)`
 
-This is especially important for nested docs/blog/support trees (This is especially important for nested docs/blog/support trees)
+This is especially important for nested docs/blog/support trees (นี่ especially important สำหรับ nested docs/blog/support trees)
 
 ---
 

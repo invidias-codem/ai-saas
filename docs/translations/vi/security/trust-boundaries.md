@@ -2,9 +2,9 @@
 
 ## Mục Đích (Purpose)
 
-Tài liệu này giải thích (explains) các major trust boundaries (ranh giới niềm tin chính) trong Genie AI / `ai-saas`.
+Tài liệu này giải thích các major trust boundaries (ranh giới niềm tin chính) trong Genie AI / `ai-saas`.
 
-Nó tồn tại vì platform (nền tảng) không phải là single-surface application (ứng dụng đơn일 bề mặt). Nó includes (bao gồm):
+Nó tồn tại vì platform (nền tảng) không phải là single-surface application (ứng dụng đơn một bề mặt). Nó bao gồm:
 - public landing and informational routes (các tuyến đường landing và informational công khai)
 - authenticated product routes (các tuyến đường sản phẩm đã xác thực)
 - API routes (các tuyến đường API)
@@ -65,10 +65,10 @@ A public-looking page can still be blocked or misrouted if route gating is not c
 
 ## 2. Authenticated User Zone (Vùng Người Dùng Đã Xác Thực)
 
-### Who this includes
+### Who this includes (Ai mà this includes)
 - signed-in end users using the product intentionally through supported product routes (signed-in end users using the product intentionally through supported product routes)
 
-### What this zone should access
+### What this zone should access (Vùng này nên access gì)
 - workspace and conversation surfaces (workspace and conversation surfaces)
 - user settings (user settings)
 - authenticated APIs (authenticated APIs)
@@ -87,7 +87,7 @@ Authentication is necessary but not sufficient (Authentication is necessary but 
 
 ## 3. Backend Application Zone (Vùng Ứng Dụng Backend)
 
-### Who this includes
+### Who this includes (Ai mà this includes)
 - server-side route handlers (server-side route handlers)
 - internal product logic (internal product logic)
 - trusted backend execution paths (trusted backend execution paths)
@@ -106,12 +106,12 @@ The backend application layer is a trust boundary because it has more authority 
 
 ## 4. Automation / Cron Zone (Vùng Tự Động Hóa / Cron)
 
-### Who this includes
+### Who this includes (Ai mà this includes)
 - scheduled jobs (scheduled jobs)
 - background automation flows (background automation flows)
 - task runners hitting internal API routes (task runners hitting internal API routes)
 
-### What this zone can do
+### What this zone can do (Vùng này can do gì)
 - run maintenance/update workflows (run maintenance/update workflows)
 - perform scheduled integration behavior (perform scheduled integration behavior)
 - access privileged automation routes where explicitly intended (access privileged automation routes where explicitly intended)
@@ -131,7 +131,7 @@ A route being externally reachable for cron/webhook reasons does not mean it sho
 
 ## 5. Integration / Webhook Zone (Vùng Tích Hợp / Webhook)
 
-### Who this includes
+### Who this includes (Ai mà this includes)
 - Slack callbacks (Slack callbacks)
 - Telegram webhooks (Telegram webhooks)
 - external providers or platform callbacks (external providers or platform callbacks)
@@ -156,7 +156,7 @@ External callbacks may be legitimate but still untrusted until validated through
 
 ## 6. Data / Persistence Zone (Vùng Dữ Liệu / Persistence)
 
-### Who this includes
+### Who this includes (Ai mà this includes)
 - database-backed product state (database-backed product state)
 - structured persistence systems (structured persistence systems)
 - schema-backed application behavior (schema-backed application behavior)
@@ -254,7 +254,7 @@ This is a trust zone because operator actions often exceed normal application pe
 
 ## 9. Terminal / Raw SSE + Local Sandbox Zone (Vùng Terminal / Raw SSE + Local Sandbox)
 
-### Who this includes
+### Who this includes (Ai mà this includes)
 - CLI clients and local shell loops (CLI clients and local shell loops)
 - machine-local automation calling `/api/cli/stream` and `/api/memory/cli` (machine-local automation calling `/api/cli/stream` and `/api/memory/cli`)
 - local approval-matrix behavior in `~/.lattice/settings` (local approval-matrix behavior in `~/.lattice/settings`)
@@ -326,7 +326,7 @@ Public-route intent must match actual route gating (Public-route intent must mat
 ## Example 2 — Authenticated Product APIs (Example 2 — Authenticated Product APIs)
 A signed-in user can use product APIs, but that does not mean the server should accept every client claim as authoritative (A signed-in user can use product APIs, but that does not mean the server should accept every client claim as authoritative).
 
-### Lesson
+### Lesson (Bài Học)
 The backend must still resolve real behavior using trusted context (The backend must still resolve real behavior using trusted context).
 
 ---
@@ -334,7 +334,7 @@ The backend must still resolve real behavior using trusted context (The backend 
 ## Example 3 — Cron or Webhook Routes (Example 3 — Cron or Webhook Routes)
 A route can be externally callable while still belonging to a privileged automation boundary (A route can be externally callable while still belonging to a privileged automation boundary).
 
-### Lesson
+### Lesson (Bài Học)
 Reachability is not the same thing as broad trust (Reachability is not the same thing as broad trust).
 
 ---
@@ -342,7 +342,7 @@ Reachability is not the same thing as broad trust (Reachability is not the same 
 ## Example 4 — Database Schema Presence (Example 4 — Database Schema Presence)
 A table existing in the repository or local database does not mean the production system should assume it exists everywhere or that every caller should be allowed to use it (A table existing in the repository or local database does not mean the production system should assume it exists everywhere or that every caller should be allowed to use it).
 
-### Lesson
+### Lesson (Bài Học)
 Schema truth and access policy are separate concerns (Schema truth and access policy are separate concerns).
 
 ---

@@ -158,7 +158,7 @@ Flux bruts Server-Sent Events destinés aux outils CLI, intégrations, et client
 curl -N -X POST http://localhost:3000/api/cli/stream \
   -H "Content-Type: application/json" \
   -H "x-lattice-user-id: local-dev" \
-  -H "Authorization: Bearer $LATTI...OKEN" \
+  -H "Authorization: Bearer $LATTICE_CLI_TOKEN" \
   -d '{"messages":[{"role":"user","text":"list files"}],"options":{"localMode":true}}'
 ```
 
@@ -183,7 +183,7 @@ curl -N -X POST http://localhost:3000/api/cli/stream \
 ```bash
 curl -sS "http://localhost:3000/api/memory/cli?limit=20" \
   -H "x-lattice-user-id: local-dev" \
-  -H "Authorization: Bearer $LATTI...OKEN"
+  -H "Authorization: Bearer $LATTICE_CLI_TOKEN"
 ```
 
 ### Notes
