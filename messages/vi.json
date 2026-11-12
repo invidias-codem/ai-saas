@@ -406,7 +406,8 @@
             "title": "Triển Khai",
             "description": "Cách code di chuyển từ repo state đến live runtime và điều gì cần xác minh dọc đường."
           },
-          "deploymentModes": {
+          "deviceInstallation": {"title":"Cài đặt theo thiết bị","description":"Cách bộ chọn cài đặt hoạt động trên iPhone, Android và máy tính; những gì bộ chọn không cài hoặc cấp quyền."},
+      "deploymentModes": {
             "title": "Chế Độ Triển Khai",
             "description": "Các deployment mode business chính thức và thứ tự hỗ trợ được khuyến nghị cho self-hosted adoption."
           },

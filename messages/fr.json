@@ -429,7 +429,8 @@
             "title": "Déploiement",
             "description": "Comment le code passe de l'état repo au runtime vivant et quoi vérifier en chemin."
           },
-          "deploymentModes": {
+          "deviceInstallation": {"title":"Installation selon l’appareil","description":"Fonctionnement du sélecteur sur iPhone, Android et ordinateur ; ce qu’il n’installe et n’autorise pas."},
+      "deploymentModes": {
             "title": "Modes de Déploiement",
             "description": "Modes de déploiement business officiels et ordre de support recommandé pour adoption auto-hébergée."
           },
