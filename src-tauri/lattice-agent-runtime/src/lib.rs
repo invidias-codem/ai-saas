@@ -262,7 +262,7 @@ impl RuntimeSupervisor {
             .await?,
         );
 
-        let ipc_server = Arc::new(
+        let ipc_server = Arc::new(Mutex::new(
             IpcServer::new(
                 instance.profile_id.clone(),
                 instance.ipc_config.clone(),
@@ -270,10 +270,10 @@ impl RuntimeSupervisor {
                 agent_loop.clone(),
             )
             .await?,
-        );
+        ));
 
         // Start IPC server
-        ipc_server.start().await?;
+        ipc_server.lock().await.start().await?;
 
         // Start agent loop
         agent_loop.start().await?;
