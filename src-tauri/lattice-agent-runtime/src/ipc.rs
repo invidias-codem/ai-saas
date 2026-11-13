@@ -422,7 +422,7 @@ impl IpcServer {
             protocol_version,
             client_identity,
             client_type,
-            capabilities,
+            capabilities: _capabilities,
         } = hello
         else {
             return Err(IpcError::InvalidMessage(
