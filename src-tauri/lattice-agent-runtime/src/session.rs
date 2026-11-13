@@ -646,7 +646,7 @@ impl SessionManager {
             TaskState::Failed => "failed",
             TaskState::Cancelled => "cancelled",
         })
-        .bind(output.map(serde_json::to_string).transpose()?)
+        .bind(output.map(|value| serde_json::to_string(&value)).transpose()?)
         .bind(error)
         .bind(completed_at)
         .bind(task_id)
