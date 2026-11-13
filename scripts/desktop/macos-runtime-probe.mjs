@@ -2,7 +2,6 @@
 // start VMs, auto-install dependencies, or bypass native operation approval.
 import { execFileSync } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
