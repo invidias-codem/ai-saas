@@ -41,6 +41,18 @@ pub enum IpcError {
     InvalidMessage(String),
 }
 
+impl From<&str> for IpcError {
+    fn from(s: &str) -> Self {
+        IpcError::InvalidMessage(s.to_string())
+    }
+}
+
+impl From<String> for IpcError {
+    fn from(s: String) -> Self {
+        IpcError::InvalidMessage(s)
+    }
+}
+
 pub type IpcResult<T> = std::result::Result<T, IpcError>;
 
 /// IPC message types.
