@@ -6,6 +6,7 @@
 use crate::{ProviderConnectionStatus, ProviderKind, RuntimeError};
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
@@ -38,6 +39,16 @@ pub struct SessionConfig {
     pub db_path: PathBuf,
     pub max_session_age: Duration,
     pub auto_reconcile: bool,
+}
+
+impl From<crate::SessionConfig> for SessionConfig {
+    fn from(config: crate::SessionConfig) -> Self {
+        Self {
+            db_path: config.db_path,
+            max_session_age: config.max_session_age,
+            auto_reconcile: config.auto_reconcile,
+        }
+    }
 }
 
 /// Session record in the database.

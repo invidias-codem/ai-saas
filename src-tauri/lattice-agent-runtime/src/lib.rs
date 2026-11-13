@@ -226,6 +226,8 @@ struct RuntimeInstance {
     session_manager: Arc<SessionManager>,
     provider_router: Arc<ProviderRouter>,
     started_at: SystemTime,
+    loop_config: AgentLoopConfig,
+    ipc_config: IpcConfig,
 }
 
 impl RuntimeSupervisor {
@@ -425,7 +427,7 @@ impl RuntimeSupervisor {
         let session_manager = Arc::new(
             SessionManager::new(
                 profile_path.join("state.sqlite"),
-                self.config_defaults.session_config.clone(),
+                self.config_defaults.session_config.clone().into(),
             )
             .await?,
         );
