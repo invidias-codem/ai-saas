@@ -105,7 +105,9 @@ impl std::str::FromStr for ProviderKind {
             "openrouter" => Ok(Self::OpenRouter),
             "huggingface" => Ok(Self::HuggingFace),
             "local" => Ok(Self::Local),
-            _ => Err(CredentialError::InvalidData(format!("Unknown provider kind: {s}"))),
+            _ => Err(CredentialError::InvalidData(format!(
+                "Unknown provider kind: {s}"
+            ))),
         }
     }
 }
