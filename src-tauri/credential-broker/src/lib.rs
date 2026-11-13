@@ -93,6 +93,23 @@ impl ProviderKind {
     }
 }
 
+impl std::str::FromStr for ProviderKind {
+    type Err = CredentialError;
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "nvidia-nim-managed" => Ok(Self::NvidiaNimManaged),
+            "nvidia-nim-personal" => Ok(Self::NvidiaNimPersonal),
+            "openai" => Ok(Self::OpenAI),
+            "anthropic" => Ok(Self::Anthropic),
+            "google" => Ok(Self::Google),
+            "openrouter" => Ok(Self::OpenRouter),
+            "huggingface" => Ok(Self::HuggingFace),
+            "local" => Ok(Self::Local),
+            _ => Err(CredentialError::InvalidData(format!("Unknown provider kind: {s}"))),
+        }
+    }
+}
+
 /// Credential kinds stored in the broker.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case")]

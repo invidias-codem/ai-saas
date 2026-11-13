@@ -287,8 +287,8 @@ impl AgentLoop {
     pub async fn stop(&self) -> AgentLoopResult<()> {
         // Cancel all active turns
         let mut turns = self.active_turns.write().await;
-        for (_, turn) in turns.drain() {
-            turn.cancelled = true;
+        for (_, _turn) in turns.drain() {
+            _turn.cancelled = true;
         }
         info!("Agent loop stopped");
         Ok(())
@@ -646,8 +646,8 @@ impl AgentLoop {
     /// Handle list sessions command.
     async fn handle_list_sessions(
         &self,
-        limit: Option<usize>,
-        offset: Option<usize>,
+        _limit: Option<usize>,
+        _offset: Option<usize>,
     ) -> AgentResponse {
         // For now, return empty list - would need profile_id
         AgentResponse::SessionList { sessions: vec![] }
