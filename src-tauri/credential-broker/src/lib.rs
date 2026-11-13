@@ -729,6 +729,21 @@ impl CredentialBroker {
         })
     }
 
+    /// Retrieve the raw secret for a credential (provider/kind/suffix).
+    /// Used internally for API calls that need the actual secret.
+    pub async fn get_secret(
+        &self,
+        provider: ProviderKind,
+        kind: CredentialKind,
+        suffix: Option<&str>,
+    ) -> Result<String> {
+        let key = self.storage_key(provider, kind, suffix);
+        self.store
+            .get(&key)
+            .await?
+            .ok_or(CredentialError::NotFound(key))
+    }
+
     /// Retrieve a local endpoint configuration (endpoint_url and model_id).
     /// Returns the config parsed from the stored secret.
     pub async fn get_local_endpoint(&self, provider: ProviderKind) -> Result<(String, String)> {

@@ -41,6 +41,8 @@ pub enum ProviderRouterError {
     ModelNotAvailable(String),
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 pub type ProviderResult<T> = std::result::Result<T, ProviderRouterError>;
@@ -308,19 +310,13 @@ impl ProviderRouter {
             .get(connection_id)
             .ok_or_else(|| ProviderRouterError::NotConfigured(connection_id.to_string()))?;
 
-        if let Some(ref cred_ref) = provider.api_key_ref {
-            // Get the actual secret from the credential broker
-            let key = format!(
-                "{}:api-key:{}",
-                provider.provider_kind.as_str(),
-                connection_id
-            );
+        if provider.api_key_ref.is_some() {
             let secret = self
                 .credential_broker
-                .get(&key)
+                .get_secret(provider.provider_kind, CredentialKind::ApiKey, Some(connection_id))
                 .await?
-                .ok_or_else(|| ProviderRouterError::CredentialNotFound(key))?;
-            Ok(Some(secret.to_string()))
+                .ok_or_else(|| ProviderRouterError::CredentialNotFound(connection_id.to_string()))?;
+            Ok(Some(secret))
         } else {
             Ok(None)
         }
@@ -333,18 +329,13 @@ impl ProviderRouter {
             .get(connection_id)
             .ok_or_else(|| ProviderRouterError::NotConfigured(connection_id.to_string()))?;
 
-        if let Some(ref cred_ref) = provider.refresh_token_ref {
-            let key = format!(
-                "{}:refresh-token:{}",
-                provider.provider_kind.as_str(),
-                connection_id
-            );
+        if provider.refresh_token_ref.is_some() {
             let secret = self
                 .credential_broker
-                .get(&key)
+                .get_secret(provider.provider_kind, CredentialKind::RefreshToken, Some(connection_id))
                 .await?
-                .ok_or_else(|| ProviderRouterError::CredentialNotFound(key))?;
-            Ok(Some(secret.to_string()))
+                .ok_or_else(|| ProviderRouterError::CredentialNotFound(connection_id.to_string()))?;
+            Ok(Some(secret))
         } else {
             Ok(None)
         }
@@ -360,17 +351,12 @@ impl ProviderRouter {
             .get(connection_id)
             .ok_or_else(|| ProviderRouterError::NotConfigured(connection_id.to_string()))?;
 
-        if let Some(ref cred_ref) = provider.local_endpoint_ref {
-            let key = format!(
-                "{}:local-endpoint:{}",
-                provider.provider_kind.as_str(),
-                connection_id
-            );
+        if provider.local_endpoint_ref.is_some() {
             let secret = self
                 .credential_broker
-                .get(&key)
+                .get_secret(provider.provider_kind, CredentialKind::LocalEndpoint, Some(connection_id))
                 .await?
-                .ok_or_else(|| ProviderRouterError::CredentialNotFound(key))?;
+                .ok_or_else(|| ProviderRouterError::CredentialNotFound(connection_id.to_string()))?;
             // Secret format: "url|model_id"
             let parts: Vec<&str> = secret.split('|').collect();
             if parts.len() == 2 {
