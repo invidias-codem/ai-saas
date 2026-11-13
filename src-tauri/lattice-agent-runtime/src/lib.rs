@@ -71,6 +71,14 @@ pub enum RuntimeError {
     Unauthorized(String),
     #[error("Protocol version mismatch: expected {expected}, got {actual}")]
     ProtocolMismatch { expected: u32, actual: u32 },
+    #[error("Path resolution error: {0}")]
+    PathResolution(String),
+}
+
+impl From<String> for RuntimeError {
+    fn from(s: String) -> Self {
+        RuntimeError::PathResolution(s)
+    }
 }
 
 pub type Result<T> = std::result::Result<T, RuntimeError>;
@@ -368,7 +376,7 @@ impl RuntimeSupervisor {
         let runtimes = self.runtimes.read().await;
 
         if let Some(instance) = runtimes.get(&profile_id) {
-            let state = instance.state_machine.current_state();
+            let state = instance.state_machine.current_state().await;
             Ok(RuntimeStatusResponse {
                 profile_id,
                 state,
@@ -388,7 +396,7 @@ impl RuntimeSupervisor {
         let runtimes = self.runtimes.read().await;
 
         if let Some(instance) = runtimes.get(&profile_id) {
-            let state = instance.state_machine.current_state();
+            let state = instance.state_machine.current_state().await;
             let uptime = instance
                 .started_at
                 .elapsed()

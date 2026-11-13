@@ -760,7 +760,7 @@ impl SessionManager {
             attachments: serde_json::from_str(row.get("attachments")).unwrap_or_default(),
             provider_kind: row
                 .get::<Option<String>, _>("provider_kind")
-                .map(|s| ProviderKind::from_str(&s)),
+                .and_then(|s| ProviderKind::from_str(&s).ok()),
             model_id: row.get("model_id"),
             tokens_used: row.get::<Option<i64>, _>("tokens_used").map(|v| v as u32),
             latency_ms: row.get::<Option<i64>, _>("latency_ms").map(|v| v as u64),
