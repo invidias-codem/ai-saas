@@ -315,7 +315,9 @@ impl ProviderRouter {
                 .credential_broker
                 .get_secret(provider.provider_kind, CredentialKind::ApiKey, Some(connection_id))
                 .await?
-                .ok_or_else(|| ProviderRouterError::CredentialNotFound(connection_id.to_string()))?;
+                .ok_or_else(|| {
+                    ProviderRouterError::CredentialNotFound(connection_id.to_string())
+                })?;
             Ok(Some(secret))
         } else {
             Ok(None)
@@ -334,7 +336,9 @@ impl ProviderRouter {
                 .credential_broker
                 .get_secret(provider.provider_kind, CredentialKind::RefreshToken, Some(connection_id))
                 .await?
-                .ok_or_else(|| ProviderRouterError::CredentialNotFound(connection_id.to_string()))?;
+                .ok_or_else(|| {
+                    ProviderRouterError::CredentialNotFound(connection_id.to_string())
+                })?;
             Ok(Some(secret))
         } else {
             Ok(None)
@@ -356,7 +360,9 @@ impl ProviderRouter {
                 .credential_broker
                 .get_secret(provider.provider_kind, CredentialKind::LocalEndpoint, Some(connection_id))
                 .await?
-                .ok_or_else(|| ProviderRouterError::CredentialNotFound(connection_id.to_string()))?;
+                .ok_or_else(|| {
+                    ProviderRouterError::CredentialNotFound(connection_id.to_string())
+                })?;
             // Secret format: "url|model_id"
             let parts: Vec<&str> = secret.split('|').collect();
             if parts.len() == 2 {
