@@ -95,24 +95,9 @@ pub struct AgentRuntimeConfig {
     /// Agent loop configuration.
     pub loop_config: AgentLoopConfig,
     /// IPC configuration.
-    pub ipc_config: IpcConfig,
+    pub ipc_config: ipc::IpcConfig,
     /// Session configuration.
     pub session_config: SessionConfig,
-}
-
-/// IPC configuration for authenticated transport.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IpcConfig {
-    /// Protocol version for negotiation.
-    pub protocol_version: u32,
-    /// Socket/pipe path (platform-specific).
-    pub socket_path: Option<PathBuf>,
-    /// Client identity for this runtime instance.
-    pub client_identity: String,
-    /// Require authentication on connect.
-    pub require_auth: bool,
-    /// Connection timeout.
-    pub connect_timeout_ms: u64,
 }
 
 /// Session configuration for durable sessions.
@@ -163,11 +148,8 @@ pub async fn agent_start(
     profile_id: String,
     channel: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeStatusResponse, String> {
-    state
-        .start_runtime(profile_id, channel)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<RuntimeStatusResponse, RuntimeError> {
+    state.start_runtime(profile_id, channel).await
 }
 
 /// Tauri command: Stop the agent runtime for a profile.
@@ -175,11 +157,8 @@ pub async fn agent_start(
 pub async fn agent_stop(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeStatusResponse, String> {
-    state
-        .stop_runtime(profile_id)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<RuntimeStatusResponse, RuntimeError> {
+    state.stop_runtime(profile_id).await
 }
 
 /// Tauri command: Get the agent runtime status for a profile.
@@ -187,11 +166,8 @@ pub async fn agent_stop(
 pub async fn agent_status(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeStatusResponse, String> {
-    state
-        .get_status(profile_id)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<RuntimeStatusResponse, RuntimeError> {
+    state.get_status(profile_id).await
 }
 
 /// Tauri command: Get the agent runtime health for a profile.
@@ -199,11 +175,8 @@ pub async fn agent_status(
 pub async fn agent_health(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeHealth, String> {
-    state
-        .get_health(profile_id)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<RuntimeHealth, RuntimeError> {
+    state.get_health(profile_id).await
 }
 
 /// Response for runtime status commands.
@@ -230,12 +203,12 @@ struct RuntimeInstance {
     channel: String,
     state_machine: Arc<RuntimeStateMachine>,
     agent_loop: Option<Arc<AgentLoop>>,
-    ipc_server: Option<Arc<IpcServer>>,
+    ipc_server: Option<Arc<Mutex<IpcServer>>>,
     session_manager: Arc<SessionManager>,
     provider_router: Arc<ProviderRouter>,
     started_at: SystemTime,
     loop_config: AgentLoopConfig,
-    ipc_config: IpcConfig,
+    ipc_config: ipc::IpcConfig,
 }
 
 impl RuntimeSupervisor {
@@ -261,9 +234,8 @@ impl RuntimeSupervisor {
 
         // Check if already running
         if let Some(instance) = runtimes.get(&profile_id) {
-            if instance.state_machine.current_state() == RuntimeState::Healthy
-                || instance.state_machine.current_state() == RuntimeState::Starting
-            {
+            let current_state = instance.state_machine.current_state().await;
+            if current_state == RuntimeState::Healthy || current_state == RuntimeState::Starting {
                 return Err(RuntimeError::AlreadyRunning);
             }
         }
@@ -320,10 +292,12 @@ impl RuntimeSupervisor {
                 channel,
                 state_machine: instance.state_machine,
                 agent_loop: Some(agent_loop),
-                ipc_server: Some(ipc_server),
+                ipc_server: Some(Arc::new(Mutex::new(ipc_server))),
                 session_manager: instance.session_manager,
                 provider_router: instance.provider_router,
                 started_at: SystemTime::now(),
+                loop_config: instance.loop_config,
+                ipc_config: instance.ipc_config,
             },
         );
 
@@ -355,7 +329,8 @@ impl RuntimeSupervisor {
 
         // Stop IPC server
         if let Some(ipc_server) = instance.ipc_server.take() {
-            ipc_server.stop().await?;
+            let mut guard = ipc_server.lock().await;
+            guard.stop().await?;
         }
 
         // Transition to stopped
