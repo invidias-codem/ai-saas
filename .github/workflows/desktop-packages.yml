@@ -74,7 +74,7 @@ jobs:
       - name: Collect fixed package names, source identity and checksums
         run: node scripts/desktop/collect-packages.mjs ${{ matrix.platform }} ${{ github.sha }}
       - name: Upload evaluation packages (not a public release)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: lattice-desktop-${{ matrix.platform }}-x64-${{ github.sha }}
           path: dist/desktop/${{ matrix.platform }}-x64/
@@ -130,7 +130,7 @@ jobs:
         run: node scripts/desktop/qualify-installed.mjs artifacts/windows ${{ github.sha }} desktop/evidence/windows
       - name: Preserve measured native UI and installed-package evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installed-native-ui-${{ matrix.platform }}-${{ github.sha }}
           path: desktop/evidence/${{ matrix.platform }}/
