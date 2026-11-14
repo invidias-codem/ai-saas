@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
+import { useTheme } from '@/hooks/use-theme';
 import { useTranslations } from 'next-intl';
 import { motion } from 'framer-motion';
 import { ArrowRightIcon } from 'lucide-react';
@@ -129,27 +130,11 @@ export function MineralCopperExpertLandingLayout({ variant }: MineralCopperExper
   const solutionDelivery3 = t('solution.delivery3');
   const solutionDelivery4 = t('solution.delivery4');
 
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const { isDark, toggleTheme, resolvedTheme } = useTheme();
   const [step, setStep] = useState<Step>('Describe');
 
-  useEffect(() => {
-    void Promise.resolve().then(() => {
-      try {
-        const saved = localStorage.getItem('lattice-launch-theme');
-        if (saved === 'light' || saved === 'dark') setTheme(saved);
-        else if (window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
-      } catch { /* localStorage is optional */ }
-    });
-  }, []);
-
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    try { localStorage.setItem('lattice-launch-theme', next); } catch { /* optional */ }
-  };
-
   return (
-    <div className="lm-page" data-theme={theme}>
+    <div className="lm-page" data-theme={resolvedTheme ?? 'light'}>
       <a href="#main" className="lm-skip">Skip to content</a>
       <header className="lm-nav-wrap">
         <nav className="lm-container lm-nav" aria-label="Launch navigation">
@@ -167,11 +152,11 @@ export function MineralCopperExpertLandingLayout({ variant }: MineralCopperExper
               className="lm-theme"
               onClick={toggleTheme}
               type="button"
-              aria-pressed={theme === 'dark'}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-pressed={isDark}
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              <span aria-hidden="true">{theme === 'dark' ? '☼' : '☾'}</span>
-              <span className="lm-theme-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+              <span aria-hidden="true">{isDark ? '☼' : '☾'}</span>
+              <span className="lm-theme-label">{isDark ? 'Light' : 'Dark'}</span>
             </button>
             <Link className="lm-nav-cta" href={builder}>
               <span className="lm-full-label">Open Code Builder</span>

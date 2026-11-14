@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 import "../globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { env } from "@/lib/env";
@@ -13,12 +13,19 @@ import { locales } from '@/i18n';
 import { getSiteUrl } from '@/lib/site-url';
 import { Analytics } from "@vercel/analytics/react";
 
-const inter = Inter({
-  subsets: ["latin"],
+const inter = localFont({
+  src: "../fonts/InterVariable.woff2",
   variable: "--font-inter",
-  weight: ["300", "400", "500", "600", "700"],
+  weight: "100 900",
   display: "swap",
 });
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F2EFE5" },
+    { media: "(prefers-color-scheme: dark)", color: "#0D1511" },
+  ],
+};
 
 const metadataMessages: Record<string, { title: string; description: string; keywords: string }> = {
     en: {
