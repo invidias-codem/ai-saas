@@ -48,7 +48,7 @@ export default function ExpertPage() {
   };
 
   return (
-    <main className="min-h-screen landing-bg-muted">
+    <main className="lm-page min-h-screen">
       {/* ── Hero ──────────────────────────────────────────────────── */}
       <section className="landing-bg-muted relative overflow-hidden px-4 py-16 md:py-24">
         <div className="mx-auto max-w-4xl text-center">

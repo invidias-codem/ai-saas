@@ -389,7 +389,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
     ];
 
     return (
-        <div lang={language} className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
+        <div lang={language} className="lm-page min-h-screen flex flex-col overflow-x-hidden relative">
             <div className="fixed inset-0 z-0 pointer-events-none">
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[100px]" />
                 <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px]" />

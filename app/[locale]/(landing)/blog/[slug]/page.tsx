@@ -167,7 +167,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
+      <div className="lm-page min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
         <div className="fixed inset-0 z-0 pointer-events-none">
           <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 dark:bg-purple-500/20 rounded-full blur-3xl" />
           <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 dark:bg-blue-500/20 rounded-full blur-3xl" />

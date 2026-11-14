@@ -24,7 +24,7 @@ export default function CheckoutSuccessPage() {
   }, [secondsLeft, router]);
 
   return (
-    <div className="relative min-h-screen bg-background text-foreground flex items-center justify-center px-6 overflow-hidden">
+    <div className="relative min-h-screen lm-page text-foreground flex items-center justify-center px-6 overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(168,85,247,0.06),transparent_65%)] pointer-events-none" />
 
       <div className="relative z-10 w-full max-w-xl text-center animate-fade-in">

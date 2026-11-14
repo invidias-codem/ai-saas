@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 export default function DownloadsPage() {
   const release = getCliRelease();
   return (
-    <main className="min-h-screen bg-[#080a0d] px-6 pb-24 pt-32 text-slate-100 [&_h1]:text-slate-100 [&_h2]:text-slate-100 [&_h3]:text-slate-100">
+    <main className="lm-page min-h-screen px-6 pb-24 pt-32">
       <div className="mx-auto max-w-6xl">
         <h1 className="mb-8 text-5xl font-semibold tracking-tight">Download Lattice OS</h1>
         <InstallEntry />

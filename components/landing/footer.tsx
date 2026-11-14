@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { TELEGRAM_BOT_URL, SUPPORT_URL } from "@/lib/constants/contact";
+import { cn } from "@/lib/utils";
 
 const GITHUB_PROFILE_URL = "https://github.com/invidias-codem";
 const LINKEDIN_URL = "https://www.linkedin.com/in/joshua-jair-mohammed?utm_source=share_via&utm_content=profile&utm_medium=member_ios";
@@ -18,39 +19,48 @@ const NAV_LINKS = [
 
 const outlineLink = "min-h-[48px] inline-flex items-center transition text-muted-foreground hover:text-foreground";
 
-export function LandingFooter() {
+const mcOutlineLink = "min-h-[48px] inline-flex items-center transition text-[#506157] hover:text-[#874025]";
+
+export function LandingFooter({ variant }: { variant?: "mineral-copper" } = { variant: "mineral-copper" }) {
   const year = new Date().getFullYear();
+  const isMC = variant === "mineral-copper";
+  const linkCls = isMC ? mcOutlineLink : outlineLink;
+  const bgCls = isMC ? "border-t border-[#C4D2C5] bg-[#F2EFE5] py-10" : "border-t border-border bg-background py-10";
+  const textCls = isMC ? "text-[#17271E]" : "text-foreground";
+  const mutedCls = isMC ? "text-[#506157]" : "text-muted-foreground";
+  const copyrightCls = isMC ? "text-[#506157] text-sm" : "text-muted-foreground text-sm";
+
   return (
-    <footer className="border-t border-border bg-background py-10">
+    <footer className={bgCls}>
       <div className="max-w-7xl mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           <Link href="/" className="flex items-center gap-2">
             <div className="relative w-6 h-6">
               <Image src="/lattice-logo.png" alt="Lattice OS logo" fill className="object-contain" />
             </div>
-            <span className="text-lg font-bold text-foreground">Lattice OS</span>
+            <span className={cn("text-lg font-bold tracking-tight font-heading", isMC ? "text-[#17271E]" : "text-foreground")}>Lattice OS</span>
           </Link>
 
           <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm md:justify-end" aria-label="Footer">
             {NAV_LINKS.map((l) => (
-              <Link key={l.href} href={l.href} className={outlineLink}>
+              <Link key={l.href} href={l.href} className={linkCls}>
                 {l.label}
               </Link>
             ))}
-            <a href={GITHUB_PROFILE_URL} target="_blank" rel="noreferrer" className={outlineLink}>
+            <a href={GITHUB_PROFILE_URL} target="_blank" rel="noreferrer" className={linkCls}>
               GitHub
             </a>
-            <a href={LINKEDIN_URL} target="_blank" rel="noreferrer" className={outlineLink}>
+            <a href={LINKEDIN_URL} target="_blank" rel="noreferrer" className={linkCls}>
               LinkedIn
             </a>
-            <a href={TELEGRAM_BOT_URL} target="_blank" rel="noreferrer" className={outlineLink}>
+            <a href={TELEGRAM_BOT_URL} target="_blank" rel="noreferrer" className={linkCls}>
               Telegram
             </a>
           </nav>
         </div>
 
-        <div className="mt-8 pt-8 border-t border-border text-center">
-          <p className="text-muted-foreground text-sm">© {year} Lattice OS. All rights reserved.</p>
+        <div className="mt-8 pt-8 border-t border-[#C4D2C5] text-center">
+          <p className={copyrightCls}>© {year} Lattice OS. All rights reserved.</p>
         </div>
       </div>
     </footer>

@@ -2,7 +2,7 @@ import { PricingCards } from "@/components/modals/PricingModal";
 
 export default function PricingPage() {
   return (
-    <div className="relative min-h-screen bg-background text-foreground overflow-hidden">
+    <div className="lm-page relative min-h-screen overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(168,85,247,0.08),transparent_60%)] pointer-events-none" />
 
       <div className="relative z-10">

@@ -29,8 +29,8 @@ export const LandingNavbar = () => {
     // Blog article pages render their own minimal reading-surface header.
     // Bail out here so we don't stack the full landing nav on top of it.
     const isBlogArticle = /^\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?blog\/(?!series(?:\/|$)|feed(?:\/|$))[^/]+\/?$/.test(pathname ?? "");
-    // Expert variant pages (the public homepage after middleware rewrite) use Mineral/Copper theme
-    const isMineralCopper = /^\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?expert\/v\//.test(pathname ?? "");
+    // Expert variant pages and Mineral/Copper landing pages use Mineral/Copper theme
+    const isMineralCopper = /^\/(?:[a-z]{2}(?:-[A-Z]{2})?)?\/(docs|blog|downloads|support|privacy|explore|expert|sovereign|slack|pricing)(?:\/|$)/.test(pathname ?? "");
     const { open: openPricingModal } = usePricingModal();
 
     const navLinks = [

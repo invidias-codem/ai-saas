@@ -45,7 +45,7 @@ export default function SovereignLandingPage() {
   const t = useTranslations("Landing");
 
   return (
-    <div className="relative min-h-screen bg-[#050505] text-white overflow-hidden">
+    <div className="lm-page relative min-h-screen overflow-hidden">
       {/* Animated gradient orbs */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
         <div className="absolute top-[-20%] left-[-10%] h-[800px] w-[800px] rounded-full bg-gradient-to-br from-purple-600/20 via-violet-500/10 to-transparent blur-[120px] pointer-events-none animate-pulse" />

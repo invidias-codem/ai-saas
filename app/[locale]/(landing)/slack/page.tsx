@@ -15,7 +15,7 @@ const SlackLandingPage = () => {
   const addToSlackUrl = '/api/integrations/slack/auth';
 
   return (
-    <div className="bg-black min-h-screen flex flex-col overflow-x-hidden relative">
+    <div className="lm-page min-h-screen flex flex-col overflow-x-hidden relative">
 
       {/* Background Gradients - Manus-inspired */}
       <div className="fixed inset-0 z-0 pointer-events-none">

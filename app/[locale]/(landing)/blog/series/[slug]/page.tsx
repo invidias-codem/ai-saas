@@ -82,7 +82,7 @@ export default async function SeriesPage({ params }: SeriesPageProps) {
   const seriesPosts = posts.filter((post) => post.slug !== featuredPost?.slug);
 
   return (
-    <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative">
+    <div className="lm-page min-h-screen flex flex-col overflow-x-hidden relative">
       {/* Background Gradients */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl" />
