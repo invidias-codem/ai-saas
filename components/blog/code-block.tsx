@@ -51,15 +51,15 @@ export function CodeBlock({
   };
 
   return (
-    <div className="my-6 rounded-xl overflow-hidden border border-white/10 bg-[#1a1b26]">
+    <div className="my-6 rounded-xl overflow-hidden border border-white/10 bg-[var(--lattice-mineral-ink)]">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-white/5 border-b border-white/10">
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-gray-500" />
+          <Terminal className="w-4 h-4 text-[var(--lattice-mist-sage)]" />
           {filename ? (
-            <span className="text-sm text-gray-400 font-mono">{filename}</span>
+            <span className="text-sm text-[var(--lattice-limestone)] font-mono">{filename}</span>
           ) : (
-            <span className="text-sm text-gray-500 font-mono">{language}</span>
+            <span className="text-sm text-[var(--lattice-mist-sage)] font-mono">{language}</span>
           )}
         </div>
         <button
@@ -67,8 +67,8 @@ export function CodeBlock({
           className={cn(
             "flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors",
             copied
-              ? "bg-green-500/20 text-green-400"
-              : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white"
+              ? "bg-white/15 text-[var(--lattice-limestone)]"
+              : "bg-white/5 text-[var(--lattice-limestone)] hover:bg-white/10 hover:text-white"
           )}
         >
           {copied ? (
@@ -95,8 +95,8 @@ export function CodeBlock({
           lineProps={(lineNumber) => {
             const style: React.CSSProperties = { display: "block" };
             if (highlightLines.includes(lineNumber)) {
-              style.backgroundColor = "rgba(139, 92, 246, 0.1)";
-              style.borderLeft = "3px solid #8b5cf6";
+              style.backgroundColor = "color-mix(in srgb, var(--lattice-action) 16%, transparent)";
+              style.borderLeft = "3px solid var(--lattice-action)";
               style.marginLeft = "-3px";
               style.paddingLeft = "calc(1rem - 3px)";
             }
@@ -117,7 +117,7 @@ export function CodeBlock({
 // Inline code component
 export function InlineCode({ children }: { children: React.ReactNode }) {
   return (
-    <code className="px-1.5 py-0.5 rounded bg-white/10 text-purple-300 text-sm font-mono">
+    <code className="px-1.5 py-0.5 rounded bg-chrome text-primary text-sm font-mono">
       {children}
     </code>
   );

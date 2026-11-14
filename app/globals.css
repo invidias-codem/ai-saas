@@ -1,38 +1,49 @@
 @import "tailwindcss";
+@import "./mineral-copper.css";
 @plugin "tailwindcss-animate";
 
 @source "../tailwind.config.ts";
+@custom-variant dark (&:where(.dark, .dark *));
 
-@theme {
+@theme inline {
   --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
   --font-heading: var(--font-inter), system-ui, -apple-system, sans-serif;
 
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
 
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
 
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
 
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
 
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
 
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
 
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
 
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-chrome: var(--lattice-chrome);
+  --color-action: var(--lattice-action);
+  --color-action-hover: var(--lattice-action-hover);
+  --color-action-foreground: var(--lattice-mineral-ink);
+  --color-copper-text: var(--lattice-copper-text);
+  --color-warning: var(--lattice-warning);
+  --color-warning-surface: var(--lattice-warning-surface);
+  --color-danger-surface: var(--lattice-danger-surface);
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -64,68 +75,34 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222.2 84% 4.9%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --background: var(--lattice-canvas);
+    --foreground: var(--lattice-text);
+    --card: var(--lattice-panel);
+    --card-foreground: var(--foreground);
+    --popover: var(--card);
+    --popover-foreground: var(--foreground);
+    --primary: var(--lattice-verdigris);
+    --primary-foreground: var(--lattice-on-verdigris);
+    --secondary: var(--lattice-chrome);
+    --secondary-foreground: var(--foreground);
+    --muted: var(--secondary);
+    --muted-foreground: var(--lattice-text-muted);
+    --accent: var(--lattice-selection);
+    --accent-foreground: var(--lattice-selection-text);
+    --destructive: var(--lattice-danger);
+    --destructive-foreground: var(--lattice-on-danger);
+    --border: var(--lattice-border);
+    --input: var(--lattice-control-border);
+    --ring: var(--lattice-focus);
     --radius: 0.5rem;
+    background-color: var(--background);
   }
 
-  .dark {
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
-
-    --card: 224 71% 4%;
-    --card-foreground: 213 31% 91%;
-
-    --popover: 224 71% 4%;
-    --popover-foreground: 215 20.2% 65.1%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 1.2%;
-
-    --secondary: 222.2 47.4% 11.2%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 223 47% 11%;
-    --muted-foreground: 215.4 16.3% 56.9%;
-
-    --accent: 216 34% 17%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 216 34% 17%;
-    --input: 216 34% 17%;
-    --ring: 216 34% 17%;
+  :where(a, button, input, textarea, select, [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
-}
 
-@layer base {
   * {
     @apply border-border;
   }
@@ -152,7 +129,7 @@
     font-weight: 650;
     letter-spacing: -0.025em;
     line-height: 1.08;
-    color: hsl(var(--foreground));
+    color: inherit;
   }
 
   .font-heading {
@@ -185,21 +162,21 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--border));
+    background-color: var(--border);
     border-radius: 10px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background-color: hsl(var(--muted-foreground));
+    background-color: var(--muted-foreground);
   }
 }
 
 @layer utilities {
   .glass-card {
-    background-color: hsl(var(--card) / 0.6);
+    background-color: color-mix(in srgb, var(--card) 60%, transparent);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid hsl(var(--border) / 0.5);
+    border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
     box-shadow: none;
   }
 
@@ -224,27 +201,27 @@
   }
 
   .landing-bg-main {
-    background-color: hsl(var(--background));
+    background-color: var(--background);
   }
 
   .landing-bg-alt {
-    background-color: hsl(var(--secondary));
+    background-color: var(--secondary);
   }
 
   .landing-bg-muted {
-    background-color: hsl(var(--muted));
+    background-color: var(--muted);
   }
 
   .landing-text-primary {
-    color: hsl(var(--foreground));
+    color: var(--foreground);
   }
 
   .landing-text-secondary {
-    color: hsl(var(--muted-foreground));
+    color: var(--muted-foreground);
   }
 
   .landing-text-muted {
-    color: hsl(var(--muted-foreground));
+    color: var(--muted-foreground);
   }
 
   .landing-badge-primary {
@@ -309,76 +286,6 @@
 
   .landing-headline-gradient {
     @apply bg-gradient-to-r from-violet-600 via-purple-500 to-indigo-600 dark:from-violet-400 dark:via-purple-300 dark:to-indigo-400 bg-clip-text text-transparent;
-  }
-
-  .landing-nav-shell {
-    @apply border-b border-border bg-background/90 shadow-none backdrop-blur-xl;
-  }
-
-  .landing-nav-shell-top {
-    @apply border-b border-transparent bg-transparent backdrop-blur-sm;
-  }
-
-  .landing-nav-link {
-    @apply text-muted-foreground hover:text-foreground;
-  }
-
-  .landing-nav-ghost {
-    @apply text-muted-foreground hover:bg-accent hover:text-accent-foreground;
-  }
-
-  .landing-nav-burger-mid {
-    @apply bg-foreground;
-  }
-
-  /* Mineral / Copper navbar variant (scoped to expert/v/* pages) */
-  .mc-nav-shell {
-    @apply border-b border-[#C4D2C5] bg-[#F2EFE5] shadow-none backdrop-blur-xl;
-  }
-  .mc-nav-shell-top {
-    @apply border-b border-transparent bg-transparent backdrop-blur-sm;
-  }
-  .mc-nav-link {
-    @apply text-[#506157] hover:text-[#874025];
-  }
-  .mc-nav-ghost {
-    @apply text-[#506157] hover:bg-[#EAEFE6] hover:text-[#17271E];
-  }
-  .mc-nav-burger-mid {
-    @apply bg-[#17271E];
-  }
-  .mc-logo-text {
-    @apply text-[#17271E] font-bold tracking-tight font-heading;
-  }
-  .mc-cta-primary {
-    @apply bg-[#101916] text-[#F2EFE5] hover:bg-[#294534];
-  }
-  .mc-cta-secondary {
-    @apply border border-[#C4D2C5] bg-[#FFFCF5] text-[#17271E] hover:border-[#286D50];
-  }
-  .mc-mobile-menu-bg {
-    @apply bg-[#F2EFE5];
-  }
-  .mc-mobile-link {
-    @apply border border-[#C4D2C5] bg-[#FFFCF5] hover:border-[#286D50] hover:bg-[#EAEFE6];
-  }
-  .mc-mobile-link-icon {
-    @apply text-[#CD7A53];
-  }
-  .mc-mobile-link-text {
-    @apply text-[#17271E] hover:text-[#874025];
-  }
-  .mc-mobile-pricing {
-    @apply border-2 border-[#CD7A53]/30 bg-gradient-to-br from-[#CD7A53]/5 to-[#D58A64]/5 hover:border-[#CD7A53] hover:shadow-[0_0_40px_-5px_rgba(205,122,83,0.4)];
-  }
-  .mc-mobile-pricing-text {
-    @apply text-transparent bg-clip-text bg-gradient-to-r from-[#CD7A53] to-[#D58A64];
-  }
-  .mc-mobile-login {
-    @apply border border-[#C4D2C5] bg-[#FFFCF5] hover:border-[#506157] hover:bg-[#EAEFE6];
-  }
-  .mc-mobile-cta {
-    @apply bg-gradient-to-r from-[#CD7A53] via-[#D58A64] to-[#CD7A53] hover:shadow-[0_0_30px_-5px_rgba(205,122,83,0.5)];
   }
 
   @keyframes fade-in {

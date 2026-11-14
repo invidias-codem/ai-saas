@@ -8,10 +8,10 @@ jest.mock('@/lib/ucol/continuity/runStore', () => ({
 
 import { requireAuth } from '@/lib/security/apiAuth';
 import { listOwnerConversationRuns } from '@/lib/ucol/continuity/runStore';
-import { GET } from '@/app/api/conversations/[conversationId]/runs/route';
+import { GET } from '@/app/api/conversations/[id]/runs/route';
 
 const conversationId = '00000000-0000-4000-8000-000000000001';
-const args = { params: Promise.resolve({ conversationId }) };
+const args = { params: Promise.resolve({ id: conversationId }) };
 const original = process.env.ENABLE_CONVERSATION_CONTINUITY;
 
 beforeEach(() => {
@@ -34,7 +34,7 @@ describe('conversation run listing is gated and owner-scoped', () => {
   });
   it('rejects malformed conversation identifiers before database reads', async () => {
     const response = await GET(new Request('https://lattice.example'), {
-      params: Promise.resolve({ conversationId: 'other-user' }),
+      params: Promise.resolve({ id: 'other-user' }),
     });
     expect(response.status).toBe(404);
     expect(listOwnerConversationRuns).not.toHaveBeenCalled();

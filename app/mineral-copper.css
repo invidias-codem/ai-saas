@@ -1,0 +1,53 @@
+/* Shared palette for the public pages and the workspace. */
+@layer base {
+  :root {
+    --lattice-mineral-ink: #101916;
+    --lattice-limestone: #F2EFE5;
+    --lattice-mist-sage: #A5B7A6;
+    --lattice-action: #CD7A53;
+    --lattice-action-hover: #EBAD8A;
+
+    --lattice-canvas: var(--lattice-limestone);
+    --lattice-chrome: #EAEFE6;
+    --lattice-panel: #FFFCF5;
+    --lattice-text: var(--lattice-mineral-ink);
+    --lattice-text-muted: #506157;
+    --lattice-border: #C4D2C5;
+    --lattice-control-border: #78877A;
+    --lattice-verdigris: #286D50;
+    --lattice-on-verdigris: var(--lattice-limestone);
+    --lattice-focus: var(--lattice-verdigris);
+    --lattice-selection: #DCE9DC;
+    --lattice-selection-text: #214C37;
+    --lattice-copper-text: #874025;
+
+    --lattice-warning: #865211;
+    --lattice-warning-surface: #F9EDD6;
+    --lattice-danger: #A12F32;
+    --lattice-danger-surface: #FAE5E2;
+    --lattice-on-danger: var(--lattice-panel);
+    color-scheme: light;
+  }
+
+  :root.dark {
+    --lattice-canvas: #0D1511;
+    --lattice-chrome: #122019;
+    --lattice-panel: #17251D;
+    --lattice-text: var(--lattice-limestone);
+    --lattice-text-muted: var(--lattice-mist-sage);
+    --lattice-border: #3C5344;
+    --lattice-control-border: #617968;
+    --lattice-verdigris: #83B998;
+    --lattice-on-verdigris: var(--lattice-mineral-ink);
+    --lattice-selection: #284234;
+    --lattice-selection-text: #D6E9D9;
+    --lattice-copper-text: #EDB291;
+
+    --lattice-warning: #F3C17A;
+    --lattice-warning-surface: #372A17;
+    --lattice-danger: #F0A3A2;
+    --lattice-danger-surface: #3C2122;
+    --lattice-on-danger: var(--lattice-mineral-ink);
+    color-scheme: dark;
+  }
+}

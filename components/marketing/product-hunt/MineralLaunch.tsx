@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
+import { useTheme } from '@/hooks/use-theme';
 import Image from 'next/image';
 
 const steps = ['Describe', 'Plan', 'Inspect'] as const;
@@ -78,34 +79,19 @@ function ExamplePreview({ step, setStep }: {
 }
 
 export function MineralLaunch() {
-  const [theme, setTheme] = useState<'light'|'dark'>('light');
+  const { isDark, toggleTheme, resolvedTheme } = useTheme();
   const [step, setStep] = useState<Step>('Describe');
-  useEffect(() => {
-    // Read client preference after hydration, without synchronous effect state
-    // updates (the repository's React lint rule prohibits them).
-    void Promise.resolve().then(() => {
-      try {
-        const saved = localStorage.getItem('lattice-launch-theme');
-        if (saved === 'light' || saved === 'dark') setTheme(saved);
-        else if (window.matchMedia('(prefers-color-scheme: dark)').matches) setTheme('dark');
-      } catch { /* localStorage is optional */ }
-    });
-  }, []);
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    try { localStorage.setItem('lattice-launch-theme', next); } catch { /* optional */ }
-  };
-  return <div className="lm-page" data-theme={theme}>
+
+  return <div className="lm-page" data-theme={resolvedTheme ?? 'light'}>
     <a href="#main" className="lm-skip">Skip to content</a>
     <header className="lm-nav-wrap"><nav className="lm-container lm-nav" aria-label="Launch navigation">
       <Link href="/" className="lm-logo"><LatticeMark /><span>Lattice OS</span></Link>
       <div className="lm-links"><a href="#workflow">Workflow</a><a href="#why">Why Lattice</a><a href="#availability">Availability</a></div>
       <div className="lm-actions">
         <button className="lm-theme" onClick={toggleTheme} type="button"
-          aria-pressed={theme==='dark'}
-          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-          <span aria-hidden="true">{theme === 'dark' ? '☼' : '☾'}</span><span className="lm-theme-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+          aria-pressed={isDark}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
+          <span aria-hidden="true">{isDark ? '☼' : '☾'}</span><span className="lm-theme-label">{isDark ? 'Light' : 'Dark'}</span>
         </button>
         <Link className="lm-nav-cta" href={builder}><span className="lm-full-label">Open Code Builder</span><span className="lm-short-label">Builder</span><span aria-hidden="true">↗</span></Link>
       </div>
@@ -181,7 +167,7 @@ export function MineralLaunch() {
     </main>
     <footer className="lm-footer"><div className="lm-container">
       <span>Lattice OS · Built for people who make things.</span>
-      <nav aria-label="Footer"><Link href="/en/privacy">Privacy</Link><Link href="/en/support">Support</Link><Link href="/en/docs">Documentation</Link></nav>
+      <nav aria-label="Footer"><Link href="/en/privacy">Privacy</Link><Link href="/en/support">Support</Link><Link href="/en/docs">Documentation</Link><Link href="/en/downloads">Downloads</Link><Link href="/en/blog">Blog</Link></nav>
     </div></footer>
   </div>;
 }

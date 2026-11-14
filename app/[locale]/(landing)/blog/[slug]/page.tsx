@@ -1,8 +1,5 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import Image from "next/image";
-import { Button } from "@/components/ui/button";
 import { BlogHeader } from "@/components/blog/blog-header";
 import { AuthorCard } from "@/components/blog/author-card";
 import { TableOfContents, MobileTableOfContents } from "@/components/blog/table-of-contents";
@@ -16,7 +13,6 @@ import {
   extractTableOfContents
 } from "@/lib/blog/mdx";
 import { getSiteUrl } from "@/lib/site-url";
-import { BookOpen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkUnwrapImages from "remark-unwrap-images";
@@ -167,72 +163,36 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      <div className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
-        <div className="fixed inset-0 z-0 pointer-events-none">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 dark:bg-purple-500/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 dark:bg-blue-500/20 rounded-full blur-3xl" />
+      <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-8">
+          <article className="min-w-0 max-w-3xl">
+            <BlogHeader post={post} />
+            <MobileTableOfContents items={tableOfContents} />
+
+            <div className="min-w-0 break-words">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkUnwrapImages]}
+                rehypePlugins={[rehypeSlug]}
+                components={mdxComponents}
+              >
+                {post.content}
+              </ReactMarkdown>
+            </div>
+
+            <AuthorCard author={post.author} coAuthors={post.coAuthors} />
+
+            <div className="mt-12">
+              <NewsletterCTA variant="compact" />
+            </div>
+          </article>
+
+          <aside className="hidden lg:block">
+            <TableOfContents items={tableOfContents} />
+          </aside>
         </div>
 
-        <header className="relative z-10 py-4 px-4 sm:py-6 sm:px-6 md:px-10 flex justify-between items-center max-w-7xl mx-auto w-full">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="relative w-7 h-7 sm:w-8 sm:h-8">
-              <Image src="/lattice-logo.png" alt="Lattice OS logo" fill className="object-cover" />
-            </div>
-            <span className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">Lattice OS</span>
-          </Link>
-          <div className="flex items-center gap-x-1 sm:gap-x-2">
-            <Link href="/blog">
-              <Button variant="ghost" className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-slate-200/70 dark:hover:bg-white/10 rounded-full px-2 sm:px-4">
-                <BookOpen className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Blog</span>
-              </Button>
-            </Link>
-            <Link href="/dashboard" className="hidden sm:block">
-              <Button variant="ghost" className="text-foreground hover:text-foreground hover:bg-slate-200/70 dark:hover:bg-white/10 rounded-full">
-                Log in
-              </Button>
-            </Link>
-            <Link href="/dashboard">
-              <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full font-semibold text-sm sm:text-base px-3 sm:px-4">
-                Get Started
-              </Button>
-            </Link>
-          </div>
-        </header>
-
-        <main className="relative z-10 flex-grow">
-          <div className="max-w-7xl mx-auto px-4 py-8">
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8">
-              <article className="max-w-3xl">
-                <BlogHeader post={post} />
-                <MobileTableOfContents items={tableOfContents} />
-
-                <div className="prose prose-slate dark:prose-invert max-w-none prose-headings:scroll-mt-24 prose-a:text-purple-600 dark:prose-a:text-purple-400">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkUnwrapImages]}
-                    rehypePlugins={[rehypeSlug]}
-                    components={mdxComponents}
-                  >
-                    {post.content}
-                  </ReactMarkdown>
-                </div>
-
-                <AuthorCard author={post.author} coAuthors={post.coAuthors} />
-
-                <div className="mt-12">
-                  <NewsletterCTA variant="compact" />
-                </div>
-              </article>
-
-              <aside className="hidden lg:block">
-                <TableOfContents items={tableOfContents} />
-              </aside>
-            </div>
-
-            <RelatedPosts posts={relatedPosts} />
-          </div>
-        </main>
-      </div>
+        <RelatedPosts posts={relatedPosts} />
+      </main>
     </>
   );
 }
