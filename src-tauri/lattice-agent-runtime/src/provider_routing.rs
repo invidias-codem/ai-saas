@@ -19,6 +19,7 @@ use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
+use zeroize::Zeroizing;
 
 /// Provider routing errors.
 #[derive(Debug, Error)]
@@ -304,7 +305,10 @@ impl ProviderRouter {
     }
 
     /// Get API key for a provider connection.
-    pub async fn get_api_key(&self, connection_id: &str) -> ProviderResult<Option<String>> {
+    pub async fn get_api_key(
+        &self,
+        connection_id: &str,
+    ) -> ProviderResult<Option<Zeroizing<String>>> {
         let cache = self.provider_cache.read().await;
         let provider = cache
             .get(connection_id)
@@ -329,7 +333,10 @@ impl ProviderRouter {
     }
 
     /// Get refresh token for a provider connection.
-    pub async fn get_refresh_token(&self, connection_id: &str) -> ProviderResult<Option<String>> {
+    pub async fn get_refresh_token(
+        &self,
+        connection_id: &str,
+    ) -> ProviderResult<Option<Zeroizing<String>>> {
         let cache = self.provider_cache.read().await;
         let provider = cache
             .get(connection_id)
@@ -448,14 +455,19 @@ impl ProviderRouter {
     pub async fn resolve_provider(
         &self,
         session_connection_id: Option<&str>,
-    ) -> ProviderResult<(String, BrokerProviderKind, ProviderConfig, Option<String>)> {
+    ) -> ProviderResult<(
+        String,
+        BrokerProviderKind,
+        ProviderConfig,
+        Option<Zeroizing<String>>,
+    )> {
         // Use session connection or default
-        let connection_id = session_connection_id
-            .map(|s| s.to_string())
-            .or_else(|| self.get_default_connection().await)
-            .ok_or(ProviderRouterError::NotConfigured(
-                "No provider configured".to_string(),
-            ))?;
+        let connection_id = match session_connection_id {
+            Some(s) => s.to_string(),
+            None => self.get_default_connection().await.ok_or_else(|| {
+                ProviderRouterError::NotConfigured("No provider configured".to_string())
+            })?,
+        };
 
         let config = self.get_config(&connection_id).await?;
         let provider_kind = config.kind();
@@ -465,7 +477,7 @@ impl ProviderRouter {
         // Determine the actual credential to use
         let credential = match (&provider_kind, api_key, local_endpoint) {
             (BrokerProviderKind::Local, _, Some((url, model))) => {
-                Some(format!("local:{}:{}", url, model))
+                Some(Zeroizing::new(format!("local:{}:{}", url, model)))
             }
             (_, Some(key), _) => Some(key),
             _ => None,

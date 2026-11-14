@@ -11,11 +11,14 @@ use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::agent_loop::{AgentCommand, AgentResponse};
+
 /// Protocol version for negotiation.
+pub type ProtocolVersion = u32;
 pub const PROTOCOL_VERSION: u32 = 1;
 
 /// IPC errors.
@@ -116,129 +119,12 @@ pub enum ClientType {
     WebView,
 }
 
-/// Agent commands from clients.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum AgentCommand {
-    /// Start a new conversation session.
-    StartSession {
-        session_id: String,
-        provider_connection_id: Option<String>,
-        model_id: Option<String>,
-    },
-    /// Send a message in a session.
-    SendMessage {
-        session_id: String,
-        content: String,
-        attachments: Vec<Attachment>,
-    },
-    /// Cancel an in-flight operation.
-    CancelOperation {
-        session_id: String,
-        operation_id: String,
-    },
-    /// Get session status.
-    GetSessionStatus { session_id: String },
-    /// List sessions.
-    ListSessions {
-        limit: Option<usize>,
-        offset: Option<usize>,
-    },
-    /// Resume a session.
-    ResumeSession { session_id: String },
-    /// Get provider status.
-    GetProviderStatus,
-    /// Switch provider for a session.
-    SwitchProvider {
-        session_id: String,
-        provider_connection_id: String,
-    },
-}
-
-/// Agent responses to clients.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum AgentResponse {
-    /// Session started successfully.
-    SessionStarted { session_id: String },
-    /// Message acknowledged.
-    MessageAcknowledged { message_id: String },
-    /// Operation cancelled.
-    OperationCancelled { operation_id: String },
-    /// Session status.
-    SessionStatus {
-        session_id: String,
-        status: SessionStatus,
-    },
-    /// Session list.
-    SessionList { sessions: Vec<SessionSummary> },
-    /// Provider status.
-    ProviderStatus { providers: Vec<ProviderStatus> },
-    /// Provider switched.
-    ProviderSwitched {
-        session_id: String,
-        provider_connection_id: String,
-    },
-    /// Error response.
-    Error { code: String, message: String },
-}
-
-/// Attachment for messages.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Attachment {
-    pub id: String,
-    pub name: String,
-    pub mime_type: String,
-    pub size: u64,
-    pub path: Option<String>,
-}
-
-/// Session status.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SessionStatus {
-    pub session_id: String,
-    pub state: SessionState,
-    pub provider_connection_id: Option<String>,
-    pub model_id: Option<String>,
-    pub message_count: usize,
-    pub last_activity: SystemTime,
-}
-
-/// Session state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum SessionState {
-    Created,
-    Running,
-    WaitingForInput,
-    Completed,
-    Failed,
-    Cancelled,
-}
-
-/// Session summary for listing.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SessionSummary {
-    pub session_id: String,
-    pub title: Option<String>,
-    pub state: SessionState,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
-}
-
-/// Provider status summary.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ProviderStatus {
-    pub connection_id: String,
-    pub provider_kind: crate::ProviderKind,
-    pub status: crate::ProviderConnectionStatus,
-    pub is_default: bool,
-}
-
 /// IPC server for the agent runtime.
 pub struct IpcServer {
     profile_id: String,
     config: IpcConfig,
     state_machine: Arc<crate::state_machine::RuntimeStateMachine>,
     agent_loop: Arc<crate::agent_loop::AgentLoop>,
-    listener: Option<UnixListener>,
     clients: Arc<RwLock<HashMap<String, ConnectedClient>>>,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -277,7 +163,6 @@ impl IpcServer {
             config,
             state_machine,
             agent_loop,
-            listener: None,
             clients: Arc::new(RwLock::new(HashMap::new())),
             shutdown_tx: None,
         })
@@ -293,8 +178,7 @@ impl IpcServer {
             std::fs::remove_file(&socket_path).ok();
         }
 
-        let listener = UnixListener::bind(&socket_path)?;
-        self.listener = Some(listener);
+        let mut listener_opt = Some(UnixListener::bind(&socket_path)?);
 
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
         self.shutdown_tx = Some(shutdown_tx);
@@ -305,6 +189,7 @@ impl IpcServer {
         let config = self.config.clone();
 
         tokio::spawn(async move {
+            let mut listener = listener_opt;
             loop {
                 tokio::select! {
                     _ = &mut shutdown_rx => {
@@ -312,7 +197,7 @@ impl IpcServer {
                         break;
                     }
                     accept_result = async {
-                        if let Some(listener) = &mut self.listener {
+                        if let Some(listener) = &mut listener {
                             listener.accept().await
                         } else {
                             std::future::pending().await
@@ -326,7 +211,7 @@ impl IpcServer {
                                 let config = config.clone();
                                 tokio::spawn(async move {
                                     if let Err(e) = Self::handle_client(
-                                        stream,
+                                        Arc::new(Mutex::new(stream)),
                                         clients,
                                         state_machine,
                                         agent_loop,
@@ -407,17 +292,20 @@ impl IpcServer {
 
     /// Handle a client connection.
     async fn handle_client(
-        mut stream: UnixStream,
+        stream: Arc<Mutex<UnixStream>>,
         clients: Arc<RwLock<HashMap<String, ConnectedClient>>>,
         state_machine: Arc<crate::state_machine::RuntimeStateMachine>,
         agent_loop: Arc<crate::agent_loop::AgentLoop>,
         config: IpcConfig,
     ) -> IpcResult<()> {
         let client_id = Uuid::new_v4().to_string();
-        debug!("New client connection: {}", client_id);
+        debug!("New client connection: {0}", client_id);
 
         // Read hello message
-        let hello = Self::read_message(&mut stream).await?;
+        let hello = {
+            let mut s = stream.lock().await;
+            Self::read_message(&mut s).await?
+        };
         let IpcMessage::Hello {
             protocol_version,
             client_identity,
@@ -441,7 +329,10 @@ impl IpcServer {
                     config.protocol_version, protocol_version
                 )),
             };
-            Self::write_message(&mut stream, &response).await?;
+            {
+                let mut s = stream.lock().await;
+                Self::write_message(&mut s, &response).await?;
+            }
             return Err(IpcError::ProtocolMismatch {
                 expected: config.protocol_version,
                 actual: protocol_version,
@@ -457,7 +348,10 @@ impl IpcServer {
             accepted: true,
             reason: None,
         };
-        Self::write_message(&mut stream, &response).await?;
+        {
+            let mut s = stream.lock().await;
+            Self::write_message(&mut s, &response).await?;
+        }
 
         // Register client
         let client = ConnectedClient {
@@ -471,20 +365,26 @@ impl IpcServer {
         clients.write().await.insert(client_id.clone(), client);
 
         // Spawn writer task
-        let mut write_stream = stream;
+        let write_stream = stream.clone();
         let writer_handle = tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                if let Err(e) = Self::write_message(&mut write_stream, &msg).await {
-                    error!("Write error: {}", e);
+                if let Err(e) = {
+                    let mut w = write_stream.lock().await;
+                    Self::write_message(&mut w, &msg).await
+                } {
+                    error!("Write error: {0}", e);
                     break;
                 }
             }
         });
 
         // Handle incoming messages
-        let mut read_stream = stream;
+        let read_stream = stream;
         loop {
-            match Self::read_message(&mut read_stream).await {
+            match {
+                let mut r = read_stream.lock().await;
+                Self::read_message(&mut r).await
+            } {
                 Ok(msg) => {
                     if let Err(e) = Self::process_message(
                         &client_id,
@@ -651,7 +551,7 @@ impl IpcServer {
 /// IPC client for connecting to the runtime.
 pub struct IpcClient {
     config: IpcConfig,
-    stream: Option<UnixStream>,
+    stream: Option<Arc<Mutex<UnixStream>>>,
     client_id: String,
     rx: Option<mpsc::UnboundedReceiver<IpcMessage>>,
     request_id: u64,
@@ -675,7 +575,7 @@ impl IpcClient {
         info!("Connecting to runtime at {:?}", socket_path);
 
         let stream = UnixStream::connect(&socket_path).await?;
-        self.stream = Some(stream);
+        self.stream = Some(Arc::new(Mutex::new(stream)));
 
         // Send hello
         let hello = IpcMessage::Hello {
@@ -684,10 +584,16 @@ impl IpcClient {
             client_type: ClientType::Cli,
             capabilities: vec!["commands".to_string(), "events".to_string()],
         };
-        Self::write_message(self.stream.as_mut().unwrap(), &hello).await?;
+        {
+            let mut stream = self.stream.as_ref().unwrap().lock().await;
+            Self::write_message(&mut stream, &hello).await?;
+        }
 
         // Read hello response
-        let response = Self::read_message(self.stream.as_mut().unwrap()).await?;
+        let response = {
+            let mut stream = self.stream.as_ref().unwrap().lock().await;
+            Self::read_message(&mut stream).await?
+        };
         match response {
             IpcMessage::HelloResponse {
                 accepted, reason, ..
@@ -708,10 +614,13 @@ impl IpcClient {
         // Spawn reader
         let (tx, rx) = mpsc::unbounded_channel();
         self.rx = Some(rx);
-        let mut stream = self.stream.as_ref().unwrap().try_clone().await?;
+        let stream = self.stream.as_ref().unwrap().clone();
         tokio::spawn(async move {
             loop {
-                match Self::read_message(&mut stream).await {
+                match {
+                    let mut s = stream.lock().await;
+                    Self::read_message(&mut s).await
+                } {
                     Ok(msg) => {
                         if tx.send(msg).is_err() {
                             break;
@@ -732,7 +641,10 @@ impl IpcClient {
             request_id: request_id.clone(),
             command,
         };
-        Self::write_message(self.stream.as_mut().unwrap(), &msg).await?;
+        {
+            let mut stream = self.stream.as_ref().unwrap().lock().await;
+            Self::write_message(&mut stream, &msg).await?;
+        }
 
         // Wait for response
         let mut rx = self.rx.take().unwrap();
@@ -760,7 +672,8 @@ impl IpcClient {
             let goodbye = IpcMessage::Goodbye {
                 reason: "Client disconnecting".to_string(),
             };
-            let _ = Self::write_message(&mut stream.try_clone().await?, &goodbye).await;
+            let mut s = stream.lock().await;
+            let _ = Self::write_message(&mut s, &goodbye).await;
         }
         Ok(())
     }

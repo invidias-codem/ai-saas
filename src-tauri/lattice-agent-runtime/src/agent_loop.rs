@@ -7,9 +7,8 @@
 //! - Cancellation and timeout handling
 
 use crate::{
-    AgentLoopConfig, AgentLoopError, ProviderKind, ProviderRouter, ProviderRouterError,
-    RuntimeState, RuntimeStateMachine, SessionManager, SessionManagerError, SessionRecord,
-    SessionState, TaskRecord, TaskState,
+    ProviderRouter, ProviderRouterError, ProviderStatus, RuntimeState, RuntimeStateMachine,
+    SessionManager, SessionManagerError, SessionRecord, SessionState, TaskRecord, TaskState,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -162,17 +161,8 @@ pub struct SessionSummary {
     pub updated_at: SystemTime,
 }
 
-/// Provider status summary.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProviderStatus {
-    pub connection_id: String,
-    pub provider_kind: ProviderKind,
-    pub status: ProviderConnectionStatus,
-    pub is_default: bool,
-}
-
 /// Provider connection status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProviderConnectionStatus {
     Connected,
     Disconnected,
@@ -197,7 +187,7 @@ pub struct AgentLoop {
     provider_router: Arc<ProviderRouter>,
     state_machine: Arc<RuntimeStateMachine>,
     event_tx: mpsc::UnboundedSender<AgentEvent>,
-    active_turns: RwLock<HashMap<String, TurnState>>,
+    active_turns: Arc<RwLock<HashMap<String, TurnState>>>,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
@@ -272,7 +262,7 @@ impl AgentLoop {
             provider_router,
             state_machine,
             event_tx,
-            active_turns: RwLock::new(HashMap::new()),
+            active_turns: Arc::new(RwLock::new(HashMap::new())),
             shutdown_tx: None,
         })
     }
@@ -287,7 +277,7 @@ impl AgentLoop {
     pub async fn stop(&self) -> AgentLoopResult<()> {
         // Cancel all active turns
         let mut turns = self.active_turns.write().await;
-        for (_, _turn) in turns.drain() {
+        for (_, mut _turn) in turns.drain() {
             _turn.cancelled = true;
         }
         info!("Agent loop stopped");
@@ -524,7 +514,7 @@ impl AgentLoop {
         }
 
         // Resolve provider
-        let (connection_id, provider_kind, provider_config, credential) =
+        let (connection_id, provider_kind, provider_config, _credential) =
             provider_router.resolve_provider(None).await?;
 
         // For now, simulate provider response

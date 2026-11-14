@@ -33,9 +33,11 @@ pub mod session;
 pub mod state_machine;
 
 pub use agent_loop::{AgentLoop, AgentLoopConfig, AgentLoopError};
-pub use ipc::{IpcClient, IpcError, IpcServer, ProtocolVersion};
-pub use provider_routing::{ProviderRouter, ProviderRouterError};
-pub use session::{SessionManager, SessionManagerError, SessionRecord};
+pub use ipc::{IpcClient, IpcConfig, IpcError, IpcServer, ProtocolVersion, PROTOCOL_VERSION};
+pub use provider_routing::{ProviderRouter, ProviderRouterError, ProviderStatus};
+pub use session::{
+    SessionManager, SessionManagerError, SessionRecord, SessionState, TaskRecord, TaskState,
+};
 pub use state_machine::{RuntimeState, RuntimeStateMachine, StateTransitionError};
 
 /// Errors for the agent runtime supervisor.
@@ -143,39 +145,35 @@ pub enum ProviderConnectionStatus {
 }
 
 /// Tauri command: Start the agent runtime for a profile.
-#[tauri::command]
 pub async fn agent_start(
     profile_id: String,
     channel: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeStatusResponse, RuntimeError> {
+) -> Result<RuntimeStatusResponse> {
     state.start_runtime(profile_id, channel).await
 }
 
 /// Tauri command: Stop the agent runtime for a profile.
-#[tauri::command]
 pub async fn agent_stop(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeStatusResponse, RuntimeError> {
+) -> Result<RuntimeStatusResponse> {
     state.stop_runtime(profile_id).await
 }
 
 /// Tauri command: Get the agent runtime status for a profile.
-#[tauri::command]
 pub async fn agent_status(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeStatusResponse, RuntimeError> {
+) -> Result<RuntimeStatusResponse> {
     state.get_status(profile_id).await
 }
 
 /// Tauri command: Get the agent runtime health for a profile.
-#[tauri::command]
 pub async fn agent_health(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeHealth, RuntimeError> {
+) -> Result<RuntimeHealth> {
     state.get_health(profile_id).await
 }
 
@@ -292,7 +290,7 @@ impl RuntimeSupervisor {
                 channel,
                 state_machine: instance.state_machine,
                 agent_loop: Some(agent_loop),
-                ipc_server: Some(Arc::new(Mutex::new(ipc_server))),
+                ipc_server: Some(ipc_server),
                 session_manager: instance.session_manager,
                 provider_router: instance.provider_router,
                 started_at: SystemTime::now(),
