@@ -33,7 +33,7 @@ export function MemoryIndicator() {
   return (
     <Link
       href="/settings"
-      className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 transition-colors"
+      className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       title="View your stored memories"
     >
       <Brain className="w-3.5 h-3.5" />

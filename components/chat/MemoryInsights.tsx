@@ -12,8 +12,8 @@ interface MemoryInsightsProps {
 
 const ACCENTS = {
   indigo: {
-    dot: "bg-indigo-500",
-    pulsing: "text-indigo-500",
+    dot: "bg-primary",
+    pulsing: "text-primary",
   },
   green: {
     dot: "bg-green-500",
@@ -24,7 +24,7 @@ const ACCENTS = {
 /**
  * Memory-count badge. Presentational only — state/fetching lives in
  * `useMemoryCount`/`useMemoryInsights`. Two layout variants share the count
- * display; `accent` swaps the theme color (indigo for chat, green for code).
+ * display and use the workspace accent by default.
  */
 export function MemoryInsights({
   memoryCount,
@@ -51,7 +51,7 @@ export function MemoryInsights({
       )}
     >
       <span
-        className={cn("w-1.5 h-1.5 rounded-full", c.dot, isMemoryPulsing && "animate-ping")}
+        className={cn("w-1.5 h-1.5 rounded-full", c.dot, isMemoryPulsing && "motion-safe:animate-ping")}
       />
       {memoryCount} memories
     </div>

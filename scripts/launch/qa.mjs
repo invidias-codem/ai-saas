@@ -41,7 +41,7 @@ try {
       });
     }
     await context.addInitScript(() => {
-      try { localStorage.setItem('lattice-launch-theme', 'light'); } catch { /* optional */ }
+      try { localStorage.setItem('theme', 'light'); } catch { /* optional */ }
     });
     const page = await context.newPage();
     const record = { width, pass: false, screenshotNames: [], failures: [] };

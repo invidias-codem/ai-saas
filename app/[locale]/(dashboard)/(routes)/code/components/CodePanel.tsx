@@ -6,12 +6,13 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import SyntaxHighlighter from "react-syntax-highlighter/dist/cjs/prism";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import { vs, vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { useClipboard } from "use-clipboard-copy";
 import type { GeneratedFile } from "@/lib/ucol/types";
 import { Loader2, FileCode, FolderOpen, Copy, Check, Download, Play, X, Smartphone, Monitor, Maximize2 } from "lucide-react";
 import { useTranspiler } from "@/lib/bundler/useTranspiler";
 import { transpileProject } from "@/lib/bundler";
+import { useTheme } from "@/hooks/use-theme";
 
 interface CodePanelProps {
     files: GeneratedFile[];
@@ -100,6 +101,7 @@ export function CodePanel({
     );
 
     const frontendFastPath = isFrontendOnly(files);
+    const { isDark } = useTheme();
 
     function buildRunnerCode(bundledJS: string) {
         // esbuild outputs an ESM bundle for the automatic JSX runtime.
@@ -301,21 +303,23 @@ root.render(React.createElement(App));
     };
 
     return (
-        <div className="flex-1 flex flex-col border border-zinc-800/60 rounded-xl overflow-hidden bg-zinc-950/50">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card">
             {/* Header */}
-            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-zinc-800/60 bg-zinc-900/40">
-                <div className="h-5 w-5 rounded bg-orange-500/15 flex items-center justify-center">
-                    <FileCode className="h-3 w-3 text-orange-400" />
+            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-chrome px-3 py-2.5">
+                <div className="h-5 w-5 rounded bg-accent flex items-center justify-center">
+                    <FileCode className="h-3 w-3 text-accent-foreground" />
                 </div>
-                <span className="text-xs font-semibold text-zinc-300 tracking-wide">Claude Code</span>
-                {loading && <Loader2 className="h-3 w-3 text-orange-400 animate-spin ml-1" />}
-                <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs font-semibold text-foreground tracking-wide">Claude Code</span>
+                {loading && <Loader2 className="h-3 w-3 text-accent-foreground motion-safe:animate-spin ml-1" />}
+                <div className="ml-auto flex min-w-0 flex-wrap items-center gap-2">
                     {files.length > 0 && (
                         <>
-                            <span className="text-[10px] text-zinc-600 font-mono">{files.length} files</span>
+                            <span className="hidden font-mono text-[10px] text-muted-foreground sm:inline">{files.length} files</span>
                             <button
+                                type="button"
+                                aria-label="Download generated files"
                                 onClick={handleDownloadAll}
-                                className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                                className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                             >
                                 <Download className="h-3 w-3" />
                             </button>
@@ -326,9 +330,9 @@ root.render(React.createElement(App));
                                     disabled={creatingPreview || sandboxPreviewPending}
                                     aria-label={onSandboxPreview ? 'Open isolated app preview' : 'Check preview availability'}
                                     title={previewUnavailableReason || 'Open isolated app preview'}
-                                    className="flex shrink-0 items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-300 hover:bg-violet-500/20 transition-colors"
+                                    className="flex shrink-0 items-center gap-1 rounded-md border border-primary/30 bg-accent px-2.5 py-1 text-[11px] font-medium text-accent-foreground hover:bg-chrome transition-colors"
                                 >
-                                    {creatingPreview || sandboxPreviewPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                                    {creatingPreview || sandboxPreviewPending ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                                     <span>Preview</span>
                                 </button>
                             )}
@@ -337,14 +341,14 @@ root.render(React.createElement(App));
                     {previewInsufficientCredits && (
                         <button
                             onClick={() => router.push("/pricing")}
-                            className="text-[10px] text-amber-300 hover:text-amber-200 transition-colors max-w-[220px] truncate"
+                            className="max-w-[220px] truncate text-[10px] text-warning hover:underline"
                             title="Get more credits to unlock live preview"
                         >
                             Insufficient credits for preview · Upgrade
                         </button>
                     )}
                     {previewMode && (
-                        <span className="text-[10px] text-zinc-600 font-mono">
+                        <span className="text-[10px] text-muted-foreground font-mono">
                             {previewMode === 'fast' ? 'fast-path' : 'backend'}
                         </span>
                     )}
@@ -352,7 +356,7 @@ root.render(React.createElement(App));
             </div>
 
             {previewError && !previewInsufficientCredits && (
-                <div role="status" className="shrink-0 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                <div role="status" className="shrink-0 border-b border-warning/30 bg-warning-surface px-3 py-2 text-xs text-warning">
                     {previewError}
                 </div>
             )}
@@ -360,21 +364,24 @@ root.render(React.createElement(App));
             <div className="flex-1 flex overflow-hidden">
                 {/* File tree sidebar (md+ only — mobile uses chip strip below) */}
                 {files.length > 0 && (
-                    <div className="hidden md:block w-48 shrink-0 border-r border-zinc-800/60 overflow-y-auto bg-zinc-950/40">
+                    <div className="hidden w-36 shrink-0 overflow-y-auto border-r border-border bg-chrome lg:block xl:w-40">
                         {/* Code files */}
                         {Array.from(groups.entries()).map(([dir, dirFiles]) => (
                             <div key={dir}>
-                                <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-zinc-600 font-mono uppercase tracking-wider">
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
                                     <FolderOpen className="h-3 w-3" />
-                                    {dir}
+                                    <span className="truncate" title={dir}>{dir}</span>
                                 </div>
                                 {dirFiles.map(file => (
                                     <button
                                         key={file.path}
+                                        type="button"
+                                        aria-pressed={selectedFile?.path === file.path}
+                                        title={file.path}
                                         onClick={() => setActiveFile(file.path)}
-                                        className={`w-full text-left px-4 py-1.5 text-[11px] font-mono transition-colors ${selectedFile?.path === file.path
-                                                ? 'bg-orange-500/10 text-orange-300 border-r-2 border-orange-400'
-                                                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/60'
+                                        className={`w-full truncate px-4 py-1.5 text-left font-mono text-[11px] transition-colors focus-visible:outline-offset-[-2px] ${selectedFile?.path === file.path
+                                                ? 'bg-accent text-accent-foreground border-r-2 border-accent-foreground/30'
+                                                : 'text-muted-foreground hover:text-foreground hover:bg-chrome'
                                             }`}
                                     >
                                         {file.path.split('/').pop()}
@@ -386,17 +393,20 @@ root.render(React.createElement(App));
                         {/* Scaffold files */}
                         {scaffoldFiles.length > 0 && (
                             <div>
-                                <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-zinc-600 font-mono uppercase tracking-wider mt-2 border-t border-zinc-800/40 pt-2">
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-muted-foreground font-mono uppercase tracking-wider mt-2 border-t border-border pt-2">
                                     <FolderOpen className="h-3 w-3" />
                                     config
                                 </div>
                                 {scaffoldFiles.map(file => (
                                     <button
                                         key={file.path}
+                                        type="button"
+                                        aria-pressed={selectedFile?.path === file.path}
+                                        title={file.path}
                                         onClick={() => setActiveFile(file.path)}
-                                        className={`w-full text-left px-4 py-1.5 text-[11px] font-mono transition-colors ${selectedFile?.path === file.path
-                                                ? 'bg-emerald-500/10 text-emerald-300 border-r-2 border-emerald-400'
-                                                : 'text-zinc-600 hover:text-zinc-400 hover:bg-zinc-900/60'
+                                        className={`w-full truncate px-4 py-1.5 text-left font-mono text-[11px] transition-colors focus-visible:outline-offset-[-2px] ${selectedFile?.path === file.path
+                                                ? 'border-r-2 border-primary/30 bg-accent text-accent-foreground'
+                                                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                                             }`}
                                     >
                                         {file.path.split('/').pop()}
@@ -411,14 +421,16 @@ root.render(React.createElement(App));
                 <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
                     {/* Mobile file chip strip */}
                     {files.length > 0 && (
-                        <div className="md:hidden flex-none flex gap-1.5 overflow-x-auto px-3 py-2 border-b border-zinc-800/40 bg-zinc-950/40">
+                        <div className="flex flex-none gap-1.5 overflow-x-auto border-b border-border bg-chrome px-3 py-2 lg:hidden">
                             {[...codeFiles, ...scaffoldFiles].map(file => (
                                 <button
                                     key={file.path}
+                                    type="button"
+                                    aria-pressed={selectedFile?.path === file.path}
                                     onClick={() => setActiveFile(file.path)}
                                     className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-mono border transition-colors ${selectedFile?.path === file.path
-                                        ? 'bg-orange-500/10 text-orange-300 border-orange-500/30'
-                                        : 'text-zinc-500 border-zinc-800/60 hover:text-zinc-300'
+                                        ? 'bg-accent text-accent-foreground border-accent-foreground/30'
+                                        : 'text-muted-foreground border-border hover:text-foreground'
                                         }`}
                                 >
                                     {file.path.split('/').pop()}
@@ -429,15 +441,15 @@ root.render(React.createElement(App));
 
                     <div className="flex-1 overflow-auto">
                     {loading && files.length === 0 && (
-                        <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-500">
-                            <Loader2 className="h-8 w-8 animate-spin text-orange-400/50" />
+                        <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+                            <Loader2 className="h-8 w-8 motion-safe:animate-spin text-accent-foreground" />
                             <p className="text-xs">Claude is generating code...</p>
                         </div>
                     )}
 
                     {!loading && files.length === 0 && (
-                        <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-600">
-                            <FileCode className="h-8 w-8 text-zinc-700" />
+                        <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
+                            <FileCode className="h-8 w-8 text-muted-foreground" />
                             <p className="text-xs">Generated code will appear here</p>
                         </div>
                     )}
@@ -445,16 +457,17 @@ root.render(React.createElement(App));
                     {selectedFile && (
                         <div className="relative h-full">
                             {/* File header */}
-                            <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-1.5 bg-zinc-900/80 backdrop-blur-sm border-b border-zinc-800/40">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[11px] font-mono text-zinc-400">{selectedFile.path}</span>
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400/60 font-mono">
+                            <div className="sticky top-0 left-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-chrome px-3 py-1.5">
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <span className="truncate font-mono text-[11px] text-muted-foreground" title={selectedFile.path}>{selectedFile.path}</span>
+                                    <span className="hidden rounded bg-accent px-1.5 py-0.5 font-mono text-[9px] text-accent-foreground sm:inline">
                                         {selectedFile.model}
                                     </span>
                                 </div>
                                 <button
+                                    type="button"
                                     onClick={() => clipboard.copy(selectedFile.content)}
-                                    className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+                                    className="flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                                 >
                                     {clipboard.copied ? (
                                         <><Check className="h-3 w-3" /> Copied</>
@@ -467,7 +480,7 @@ root.render(React.createElement(App));
                             {/* Syntax highlighted code */}
                             <SyntaxHighlighter
                                 language={mapLanguage(selectedFile.language)}
-                                style={vscDarkPlus}
+                                style={isDark ? vscDarkPlus : vs}
                                 customStyle={{
                                     margin: 0,
                                     padding: '1rem',
@@ -477,7 +490,7 @@ root.render(React.createElement(App));
                                     minHeight: '100%',
                                 }}
                                 showLineNumbers
-                                lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1em', color: '#4a5568' }}
+                                lineNumberStyle={{ minWidth: '2.5em', paddingRight: '1em', color: 'var(--muted-foreground)' }}
                             >
                                 {selectedFile.content}
                             </SyntaxHighlighter>
@@ -489,17 +502,17 @@ root.render(React.createElement(App));
 
             {previewOpen && previewUrl && (
                 <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center">
-                    <div className="w-full h-full max-w-[100vw] max-h-[100dvh] bg-zinc-950 border border-zinc-800 sm:rounded-xl overflow-hidden flex flex-col sm:m-4">
-                        <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-zinc-900/60">
+                    <div className="w-full h-full max-w-[100vw] max-h-[100dvh] bg-background border border-border sm:rounded-xl overflow-hidden flex flex-col sm:m-4">
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-chrome">
                             <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-zinc-300">Live Preview</span>
-                                <span className="text-[10px] text-zinc-600 font-mono">{previewDevice}</span>
-                                <span className="text-[10px] text-zinc-600 font-mono">{previewMode}</span>
+                                <span className="text-xs font-medium text-foreground">Live Preview</span>
+                                <span className="text-[10px] text-muted-foreground font-mono">{previewDevice}</span>
+                                <span className="text-[10px] text-muted-foreground font-mono">{previewMode}</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => setPreviewDevice(previewDevice === 'mobile' ? 'desktop' : 'mobile')}
-                                    className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+                                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
                                 >
                                     {previewDevice === 'mobile' ? <Monitor className="h-3 w-3" /> : <Smartphone className="h-3 w-3" />}
                                     <span className="hidden sm:inline">{previewDevice === 'mobile' ? 'Desktop' : 'Mobile'}</span>
@@ -509,12 +522,12 @@ root.render(React.createElement(App));
                                         const w = window.open(previewUrl || '', '_blank');
                                         if (!w) setPreviewError('Popup blocked');
                                     }}
-                                    className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+                                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
                                 >
                                     <Maximize2 className="h-3 w-3" />
                                     <span className="hidden sm:inline">Open</span>
                                 </button>
-                                <button onClick={closePreview} className="text-zinc-500 hover:text-zinc-300">
+                                <button onClick={closePreview} className="text-muted-foreground hover:text-foreground">
                                     <X className="h-4 w-4" />
                                 </button>
                             </div>
