@@ -19,7 +19,7 @@ import { PlanPanel } from '../components/PlanPanel';
 import { CodePanel } from '../components/CodePanel';
 import { ContextFlowVisualizer } from '../components/ContextFlowVisualizer';
 import type { ProjectPlan, GeneratedFile, ContextFlowEntry } from '@/lib/ucol/types';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Zap } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { observeBuildProgress, type ProgressObservation } from '@/lib/code-builder/buildProgress';
 import { isTerminalRunStatus } from '@/lib/code-builder/runStatus';
@@ -479,27 +479,27 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
     }, [pollDurableStatus, subscribeRealtime]);
 
     return (
-        <div className="h-[100dvh] flex flex-col bg-zinc-950 text-zinc-100 overflow-hidden">
+        <div className="flex min-h-full flex-col bg-background text-foreground lg:h-full">
             {/* Header */}
-            <header className="flex-none px-4 py-3 border-b border-zinc-800/60 bg-zinc-950/80 backdrop-blur-md z-20 flex items-center justify-between">
+            <header className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
                 <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/5">
-                        <span className="text-sm">⚡</span>
+                    <div className="h-8 w-8 rounded-lg bg-accent text-accent-foreground flex items-center justify-center border border-border">
+                        <Zap className="h-4 w-4" aria-hidden="true" />
                     </div>
                     <div>
                         <h1 className="text-sm font-bold tracking-tight">Code Builder</h1>
-                        <p className="text-[10px] text-zinc-500">
+                        <p className="text-[10px] text-muted-foreground">
                             {DURABLE_EXECUTION ? 'Durable execution via Trigger.dev' : 'Gemini plans · Claude codes · UCOL orchestrates'}
                         </p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {phase !== 'idle' && (
-                        <div className={`text-[10px] font-mono px-2.5 py-1 rounded-full border ${phase === 'planning' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
-                                phase === 'coding' ? 'bg-orange-500/10 text-orange-400 border-orange-500/30' :
-                                    error || files.length === 0 ? 'bg-red-500/10 text-red-400 border-red-500/30' :
-                                    'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        <div className={`text-[10px] font-mono px-2.5 py-1 rounded-full border ${phase === 'planning' ? 'bg-accent text-primary border-primary/30' :
+                                phase === 'coding' ? 'bg-accent text-accent-foreground border-accent-foreground/30' :
+                                    error || files.length === 0 ? 'bg-danger-surface text-destructive border-destructive/30' :
+                                    'bg-accent text-primary border-primary/30'
                             }`}>
                             {phase === 'planning' ? '🧠 Planning...' :
                                 phase === 'coding' ? '⚙️ Generating...' :
@@ -510,7 +510,7 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
                     {phase === 'done' && (
                         <button
                             onClick={handleReset}
-                            className="text-[10px] font-medium text-zinc-500 hover:text-zinc-300 px-2 py-1 rounded hover:bg-zinc-800 transition-colors"
+                            className="rounded px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                         >
                             New Build
                         </button>
@@ -528,7 +528,7 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
             {/* PR B1: durable-execution UX states. Three distinct bands: */}
             {/* 1. expectation-setting (always shown in durable mode) */}
             {DURABLE_EXECUTION && phase === 'idle' && !error && (
-                <div className="mx-4 mt-2 text-[11px] text-zinc-400 bg-zinc-900/40 border border-zinc-800/60 rounded-lg px-3 py-2">
+                <div className="mx-4 mt-2 text-[11px] text-muted-foreground bg-chrome border border-border rounded-lg px-3 py-2">
                     Builds may take <strong>5+ minutes</strong>. You can leave
                     this page; your build keeps running and re-appears when you
                     return.
@@ -537,22 +537,22 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
 
             {/* 2. transient connectivity/observability band (NOT failure) */}
             {DURABLE_EXECUTION && (phase === 'planning' || phase === 'coding') && (
-                <div className="mx-4 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-400 bg-zinc-900/40 border border-zinc-800/60 rounded-lg px-3 py-2">
+                <div className="mx-4 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground bg-chrome border border-border rounded-lg px-3 py-2">
                     {elapsedMs != null && (
                         <span>
                             ⏱ {Math.floor(elapsedMs / 60000)}m {Math.floor((elapsedMs % 60000) / 1000)}s
                         </span>
                     )}
                     {relayConnected === false && (
-                        <span className="text-amber-300">
+                        <span className="text-warning">
                             Live updates disconnected · build still running
                         </span>
                     )}
                     {relayConnected === true && (
-                        <span className="text-zinc-400">Updates connected</span>
+                        <span className="text-muted-foreground">Updates connected</span>
                     )}
                     {stale && (
-                        <span className="text-amber-300">
+                        <span className="text-warning">
                             No new build progress for over 90s. Checking status;
                             saved output will appear as it becomes available.
                         </span>
@@ -567,12 +567,14 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
 
             {/* Error banner */}
             {error && (
-                <div className="mx-4 mt-2 flex items-center gap-2 text-red-400 bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-lg text-xs animate-in fade-in slide-in-from-top-2">
+                <div className="mx-4 mt-2 flex items-center gap-2 text-destructive bg-danger-surface border border-destructive/30 px-4 py-2 rounded-lg text-xs animate-in fade-in slide-in-from-top-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
                     <span>{error}</span>
                     <button
                         onClick={() => setError(null)}
-                        className="ml-auto text-red-400/60 hover:text-red-300"
+                        type="button"
+                        aria-label="Dismiss build error"
+                        className="ml-auto rounded px-1 text-destructive hover:underline"
                     >
                         ✕
                     </button>
@@ -580,7 +582,7 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
             )}
 
             {sandboxPreviewError && (
-                <div role="alert" className="mx-4 mt-2 flex items-center gap-2 text-amber-300 bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-lg text-xs">
+                <div role="alert" className="mx-4 mt-2 flex items-center gap-2 text-warning bg-warning-surface border border-warning/30 px-4 py-2 rounded-lg text-xs">
                     <AlertCircle className="h-4 w-4 shrink-0" />
                     <span>{sandboxPreviewError}</span>
                     <button type="button" onClick={() => setSandboxPreviewError(null)} className="ml-auto">Dismiss</button>
@@ -589,21 +591,25 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
 
             {/* Mobile tab switcher (hidden on md+) */}
             {(plan || files.length > 0 || phase === 'planning' || phase === 'coding') && (
-                <div className="md:hidden flex-none flex gap-1 px-4 pt-3">
+                <div className="flex flex-none gap-1 px-4 pt-3 xl:hidden" role="group" aria-label="Build panels">
                     <button
+                        type="button"
+                        aria-pressed={mobileTab === 'plan'}
                         onClick={() => setMobileTab('plan')}
                         className={`flex-1 text-[11px] font-medium py-2 rounded-lg border transition-colors ${mobileTab === 'plan'
-                            ? 'bg-blue-500/10 text-blue-300 border-blue-500/30'
-                            : 'text-zinc-500 border-zinc-800/60 hover:text-zinc-300'
+                            ? 'bg-accent text-primary border-primary/30'
+                            : 'text-muted-foreground border-border hover:text-foreground'
                         }`}
                     >
                         🧠 Plan{plan ? ` · ${plan.components.length}` : ''}
                     </button>
                     <button
+                        type="button"
+                        aria-pressed={mobileTab === 'code'}
                         onClick={() => setMobileTab('code')}
                         className={`flex-1 text-[11px] font-medium py-2 rounded-lg border transition-colors ${mobileTab === 'code'
-                            ? 'bg-orange-500/10 text-orange-300 border-orange-500/30'
-                            : 'text-zinc-500 border-zinc-800/60 hover:text-zinc-300'
+                            ? 'bg-accent text-accent-foreground border-accent-foreground/30'
+                            : 'text-muted-foreground border-border hover:text-foreground'
                         }`}
                     >
                         ⚙️ Code{files.length > 0 ? ` · ${files.length}` : ''}
@@ -611,13 +617,13 @@ export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPr
                 </div>
             )}
 
-            {/* Main content: tabs on mobile, Plan + Code side by side on md+ */}
+            {/* Side-by-side panels need room for the desktop workspace sidebar. */}
             {(plan || files.length > 0 || phase === 'planning' || phase === 'coding') && (
-                <div className="flex-1 flex gap-3 p-3 sm:p-4 overflow-hidden min-h-0">
-                    <div className={`${mobileTab === 'plan' ? 'flex' : 'hidden'} md:flex flex-1 min-w-0 min-h-0`}>
+                <div className="flex min-h-64 flex-1 gap-3 overflow-hidden p-3 sm:p-4 xl:min-h-0">
+                    <div className={`${mobileTab === 'plan' ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-1 xl:flex`}>
                         <PlanPanel plan={plan} loading={phase === 'planning'} />
                     </div>
-                    <div className={`${mobileTab === 'code' ? 'flex' : 'hidden'} md:flex flex-1 min-w-0 min-h-0`}>
+                    <div className={`${mobileTab === 'code' ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-1 xl:flex`}>
                         <CodePanel
                             files={files}
                             loading={phase === 'coding'}

@@ -3,7 +3,7 @@
 // PromptInput — natural language app description input for the code builder.
 
 import { useState, useRef, KeyboardEvent } from 'react';
-import { SendHorizontal, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowUp, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -45,19 +45,15 @@ export function PromptInput({ onSubmit, disabled, phase = 'idle' }: PromptInputP
             {phase === 'idle' && (
                 <div className="max-w-2xl mx-auto mb-4 animate-in fade-in duration-500">
                     <div className="text-center mb-4">
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-orange-500/10 border border-white/5 mb-3">
-                            <Sparkles className="h-3.5 w-3.5 text-purple-400" />
-                            <span className="text-xs font-medium text-zinc-300">Powered by Gemini + Claude</span>
-                        </div>
-                        <h2 className="text-lg font-semibold text-zinc-100 tracking-tight">Describe your app</h2>
-                        <p className="text-sm text-zinc-500 mt-1">Gemini plans the architecture, Claude writes the code</p>
+                        <h2 className="text-lg font-semibold tracking-tight">Describe your app</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">Gemini plans the architecture, Claude writes the code.</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                         {EXAMPLE_PROMPTS.map((prompt, i) => (
                             <button
                                 key={i}
                                 onClick={() => { setValue(prompt); textareaRef.current?.focus(); }}
-                                className="text-left text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-900/50 hover:bg-zinc-800/50 border border-zinc-800/50 hover:border-zinc-700/50 rounded-lg px-3 py-2.5 transition-all duration-200"
+                                className="rounded-lg border border-border bg-card px-3 py-2.5 text-left text-xs text-foreground transition-colors hover:border-primary hover:bg-accent"
                             >
                                 {prompt}
                             </button>
@@ -68,31 +64,32 @@ export function PromptInput({ onSubmit, disabled, phase = 'idle' }: PromptInputP
 
             {/* Input bar */}
             <div className="max-w-2xl mx-auto">
-                <div className="relative flex items-end gap-2 bg-zinc-900/60 hover:bg-zinc-900/80 focus-within:bg-zinc-900 focus-within:ring-2 focus-within:ring-purple-500/20 border border-zinc-800/60 rounded-2xl p-2 transition-all duration-200">
+                <div className="flex items-end gap-2 rounded-2xl border border-input bg-card p-2 shadow-sm focus-within:border-ring">
                     <Textarea
                         ref={textareaRef}
                         rows={1}
+                        aria-label="Describe the app you want to build"
                         placeholder={isWorking ? 'Building...' : 'Describe the app you want to build...'}
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
                         onKeyDown={handleKeyDown}
                         disabled={disabled}
-                        className="flex-1 min-h-[44px] max-h-32 py-3 bg-transparent border-0 focus-visible:ring-0 resize-none text-sm leading-relaxed placeholder:text-zinc-600 text-zinc-200"
+                        className="min-h-11 min-w-0 max-h-32 flex-1 resize-none border-0 bg-transparent py-2.5 text-base leading-relaxed shadow-none"
                     />
                     <Button
+                        type="button"
+                        variant="action"
+                        aria-busy={isWorking}
                         onClick={handleSubmit}
                         disabled={disabled || !value.trim()}
-                        size="icon"
-                        className={`h-10 w-10 rounded-xl shrink-0 transition-all duration-200 ${value.trim() && !disabled
-                                ? 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white shadow-lg shadow-purple-500/20'
-                                : 'bg-zinc-800 text-zinc-600'
-                            }`}
+                        className="h-10 shrink-0 gap-1.5 rounded-xl px-3"
                     >
                         {isWorking ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
                         ) : (
-                            <SendHorizontal className="h-4 w-4" />
+                            <ArrowUp className="h-4 w-4" aria-hidden="true" />
                         )}
+                        Build
                     </Button>
                 </div>
             </div>
