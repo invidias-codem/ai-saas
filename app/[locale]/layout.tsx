@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "../globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { env } from "@/lib/env";
@@ -13,10 +13,10 @@ import { locales } from '@/i18n';
 import { getSiteUrl } from '@/lib/site-url';
 import { Analytics } from "@vercel/analytics/react";
 
-const inter = Inter({
-  subsets: ["latin"],
+const inter = localFont({
+  src: "../fonts/InterVariable.woff2",
   variable: "--font-inter",
-  weight: ["300", "400", "500", "600", "700"],
+  weight: "100 900",
   display: "swap",
 });
 
