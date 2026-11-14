@@ -731,17 +731,17 @@ impl CredentialBroker {
 
     /// Retrieve the raw secret for a credential (provider/kind/suffix).
     /// Used internally for API calls that need the actual secret.
+    /// Returns None when no credential is stored. The secret stays wrapped in
+    /// `Zeroizing` all the way to the caller so it is zeroized on drop and
+    /// never cloned into long-lived ordinary memory.
     pub async fn get_secret(
         &self,
         provider: ProviderKind,
         kind: CredentialKind,
         suffix: Option<&str>,
-    ) -> Result<String> {
+    ) -> Result<Option<Zeroizing<String>>> {
         let key = self.storage_key(provider, kind, suffix);
-        self.store
-            .get(&key)
-            .await?
-            .ok_or(CredentialError::NotFound(key))
+        self.store.get(&key).await
     }
 
     /// Retrieve a local endpoint configuration (endpoint_url and model_id).

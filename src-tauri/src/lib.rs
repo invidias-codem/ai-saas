@@ -11,10 +11,10 @@ mod ipc_tests;
 mod review_test_support;
 
 use agent_runtime::{
-    agent_health, agent_start, agent_status, agent_stop, AgentRuntimeConfig, RuntimeSupervisor,
+    agent_health, agent_start, agent_status, agent_stop, AgentLoopConfig, AgentRuntimeConfig,
+    RuntimeSupervisor, SessionConfig,
 };
 use credential_broker::{handle_broker_command, init_credential_broker, BrokerResponse};
-use lattice_agent_runtime::{AgentLoopConfig, ProviderRouter, SessionConfig, SessionManager};
 use lattice_credential_broker::{BrokerCommand, CredentialBroker, ProviderKind};
 use lattice_native_host::lifecycle::{NativeHost, Phase};
 use lattice_native_host::supervisor::{serve, Supervisor};
