@@ -6,24 +6,17 @@ import Image from "next/image";
 import { BlogPost, BLOG_CATEGORIES } from "@/lib/blog/types";
 import { formatDate } from "@/lib/blog/utils";
 import { Clock, Calendar, Sparkles } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 interface BlogCardProps {
   post: BlogPost;
   featured?: boolean;
 }
 
-function ImagePlaceholder({ title, category }: { title: string; category: string }) {
-  const categoryInfo = BLOG_CATEGORIES[category as keyof typeof BLOG_CATEGORIES];
+function ImagePlaceholder({ title }: { title: string }) {
   return (
-    <div className={cn(
-      "absolute inset-0 flex flex-col items-center justify-center",
-      "bg-gradient-to-br from-purple-500/20 via-pink-500/10 to-blue-500/20"
-    )}>
-      <Sparkles className={cn("w-12 h-12 mb-3", categoryInfo?.color || "text-purple-400")} />
-      <p className="text-white/60 text-sm font-medium text-center px-4 line-clamp-2">
-        {title}
-      </p>
+    <div className="absolute inset-0 grid place-content-center bg-chrome p-4 text-center">
+      <Sparkles className="mx-auto mb-3 h-8 w-8 text-primary" aria-hidden="true" />
+      <p className="line-clamp-2 text-sm font-medium text-muted-foreground">{title}</p>
     </div>
   );
 }
@@ -38,49 +31,44 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
 
   if (featured) {
     return (
-      <Link href={`/blog/${sanitizeSlug(post.slug)}`} className="group block">
-        <article className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition duration-200 shadow-sm dark:shadow-none">
+      <Link href={`/blog/${sanitizeSlug(post.slug)}`} className="group block rounded-2xl">
+        <article className="relative overflow-hidden rounded-2xl border border-border bg-card hover:border-primary transition duration-200 shadow-sm dark:shadow-none">
           <div className="grid md:grid-cols-2 gap-6">
             <div className="relative aspect-video md:aspect-auto md:h-full">
               {imageError ? (
-                <ImagePlaceholder title={post.title} category={post.category} />
+                <ImagePlaceholder title={post.title} />
               ) : (
                 <Image
                   src={post.cardImage ?? post.ogImage}
                   alt={post.title}
                   fill
-                  className="object-cover transition-transform duration-200 group-hover:scale-105"
+                  className="object-cover transition-transform duration-200 motion-safe:group-hover:scale-105"
                   sizes="(max-width: 768px) 100vw, 50vw"
                   onError={() => setImageError(true)}
                 />
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent md:bg-gradient-to-r" />
             </div>
 
             <div className="p-6 md:p-8 flex flex-col justify-center">
-              <div className="flex items-center gap-3 mb-4">
-                <span className={cn(
-                  "px-3 py-1 rounded-full text-xs font-medium",
-                  category.bgColor,
-                  category.color
-                )}>
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <span className="px-3 py-1 rounded-full text-xs font-medium bg-accent text-accent-foreground">
                   {category.name}
                 </span>
-                <span className="text-yellow-500 dark:text-yellow-400 text-xs font-medium">★ Featured</span>
+                <span className="text-copper-text text-xs font-medium">★ Featured</span>
               </div>
 
-              <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white mb-3 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors line-clamp-2">
+              <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-3 group-hover:text-primary transition-colors line-clamp-2">
                 {post.title}
               </h2>
 
-              <p className="text-slate-600 dark:text-gray-400 mb-4 line-clamp-2">
+              <p className="text-muted-foreground mb-4 line-clamp-2">
                 {post.description}
               </p>
 
-              <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-gray-500">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
-                  <div className="relative w-6 h-6 rounded-full overflow-hidden bg-gradient-to-tr from-purple-500 to-blue-500" />
-                  <span className="text-slate-600 dark:text-gray-400">{post.author.name}</span>
+                  <div className="relative w-6 h-6 rounded-full overflow-hidden bg-accent" />
+                  <span className="text-muted-foreground">{post.author.name}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Calendar className="w-4 h-4" />
@@ -99,47 +87,42 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
   }
 
   return (
-    <Link href={`/blog/${sanitizeSlug(post.slug)}`} className="group block h-full">
-      <article className="h-full flex flex-col overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 hover:bg-white dark:hover:bg-white/10 transition duration-200 shadow-sm dark:shadow-none">
+    <Link href={`/blog/${sanitizeSlug(post.slug)}`} className="group block h-full rounded-2xl">
+      <article className="h-full flex flex-col overflow-hidden rounded-2xl border border-border bg-card hover:border-primary transition duration-200 shadow-sm dark:shadow-none">
         <div className="relative aspect-video overflow-hidden">
           {imageError ? (
-            <ImagePlaceholder title={post.title} category={post.category} />
+            <ImagePlaceholder title={post.title} />
           ) : (
             <Image
               src={post.cardImage ?? post.ogImage}
               alt={post.title}
               fill
-              className="object-cover transition-transform duration-200 group-hover:scale-105"
+              className="object-cover transition-transform duration-200 motion-safe:group-hover:scale-105"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               onError={() => setImageError(true)}
             />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
 
           <div className="absolute top-4 left-4 z-10">
-            <span className={cn(
-              "px-3 py-1 rounded-full text-xs font-medium backdrop-blur-sm",
-              category.bgColor,
-              category.color
-            )}>
+            <span className="px-3 py-1 rounded-full text-xs font-medium bg-accent text-accent-foreground">
               {category.name}
             </span>
           </div>
         </div>
 
         <div className="flex-1 p-5 flex flex-col">
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors line-clamp-2">
+          <h3 className="text-lg font-semibold text-foreground mb-2 group-hover:text-primary transition-colors line-clamp-2">
             {post.title}
           </h3>
 
-          <p className="text-slate-600 dark:text-gray-400 text-sm mb-4 line-clamp-2 flex-1">
+          <p className="text-muted-foreground text-sm mb-4 line-clamp-2 flex-1">
             {post.description}
           </p>
 
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-gray-500 pt-4 border-t border-slate-200 dark:border-white/5">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground pt-4 border-t border-border">
             <div className="flex items-center gap-2">
-              <div className="relative w-5 h-5 rounded-full overflow-hidden bg-gradient-to-tr from-purple-500 to-blue-500" />
-              <span className="text-slate-600 dark:text-gray-400">{post.author.name}</span>
+              <div className="relative w-5 h-5 rounded-full overflow-hidden bg-accent" />
+              <span className="text-muted-foreground">{post.author.name}</span>
             </div>
             <div className="flex items-center gap-3">
               <span>{formatDate(post.publishedAt)}</span>
@@ -157,15 +140,15 @@ export function BlogCard({ post, featured = false }: BlogCardProps) {
 
 export function BlogCardSkeleton() {
   return (
-    <div className="h-full flex flex-col overflow-hidden rounded-2xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 animate-pulse shadow-sm dark:shadow-none">
-      <div className="aspect-video bg-slate-200 dark:bg-white/10" />
+    <div className="h-full flex flex-col overflow-hidden rounded-2xl border border-border bg-card motion-safe:animate-pulse shadow-sm dark:shadow-none">
+      <div className="aspect-video bg-accent" />
       <div className="flex-1 p-5 flex flex-col">
-        <div className="h-6 bg-slate-200 dark:bg-white/10 rounded mb-2" />
-        <div className="h-4 bg-slate-200 dark:bg-white/10 rounded w-3/4 mb-4" />
+        <div className="h-6 bg-accent rounded mb-2" />
+        <div className="h-4 bg-accent rounded w-3/4 mb-4" />
         <div className="flex-1" />
-        <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-white/5">
-          <div className="h-4 bg-slate-200 dark:bg-white/10 rounded w-24" />
-          <div className="h-4 bg-slate-200 dark:bg-white/10 rounded w-20" />
+        <div className="flex items-center justify-between pt-4 border-t border-border">
+          <div className="h-4 bg-accent rounded w-24" />
+          <div className="h-4 bg-accent rounded w-20" />
         </div>
       </div>
     </div>

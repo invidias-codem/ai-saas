@@ -16,8 +16,8 @@ import {
 function UnlockCta({ feature }: { feature: ExploreFeature }) {
     // "Workspace intelligence" framing per the product vision.
     return (
-        <div className="mt-6 flex flex-col items-start gap-3 rounded-2xl border border-purple-500/30 bg-purple-500/10 p-5">
-            <div className="flex items-center gap-2 text-purple-700 dark:text-purple-200">
+        <div className="mt-6 flex flex-col items-start gap-3 rounded-2xl border border-border bg-chrome p-5">
+            <div className="flex items-center gap-2 text-accent-foreground">
                 <Lock className="h-4 w-4" />
                 <span className="text-sm font-semibold">Premium extension</span>
             </div>
@@ -26,7 +26,7 @@ function UnlockCta({ feature }: { feature: ExploreFeature }) {
                 Sign in to activate workspace intelligence and unlock it.
             </p>
             <Link href={`/sign-up?redirect_url=/${feature.slug}`}>
-                <span className="inline-flex items-center rounded-full bg-purple-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-purple-700">
+                <span className="inline-flex min-h-11 items-center rounded-full bg-action px-4 py-2 text-sm font-semibold text-action-foreground transition-colors hover:bg-action-hover">
                     Unlock with workspace intelligence <ArrowRight className="ml-2 h-4 w-4" />
                 </span>
             </Link>
@@ -83,7 +83,7 @@ function MemoryDemo() {
                     })}
                     {SAMPLE_MEMORY_NODES.map((n) => (
                         <g key={n.id}>
-                            <circle cx={n.x} cy={n.y} r={3.2} className="fill-purple-500" />
+                            <circle cx={n.x} cy={n.y} r={3.2} className="fill-primary" />
                             <text x={n.x} y={n.y - 5} textAnchor="middle" className="fill-foreground text-[3px]">
                                 {n.label}
                             </text>
@@ -119,8 +119,8 @@ function CodeDemo() {
 function ExpertDemo() {
     return (
         <div className="space-y-4">
-            <div className="rounded-2xl border border-purple-500/30 bg-purple-500/5 p-5">
-                <div className="mb-2 flex items-center gap-2 text-purple-700 dark:text-purple-200">
+            <div className="rounded-2xl border border-border bg-card p-5">
+                <div className="mb-2 flex items-center gap-2 text-accent-foreground">
                     <Sparkles className="h-4 w-4" />
                     <span className="text-sm font-semibold">{SAMPLE_EXPERT.vertical}</span>
                 </div>
@@ -128,7 +128,7 @@ function ExpertDemo() {
                 <ul className="mt-3 space-y-1 text-sm text-foreground">
                     {SAMPLE_EXPERT.capabilities.map((c) => (
                         <li key={c} className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-purple-500" /> {c}
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary" /> {c}
                         </li>
                     ))}
                 </ul>
@@ -161,7 +161,7 @@ function TelemetryDemo() {
                         <p className="text-sm font-semibold text-foreground">{t.metric}</p>
                         <p className="text-xs text-muted-foreground">{t.detail}</p>
                     </div>
-                    <span className="text-lg font-bold text-purple-600">{t.value}</span>
+                    <span className="text-lg font-bold text-primary">{t.value}</span>
                 </div>
             ))}
         </div>

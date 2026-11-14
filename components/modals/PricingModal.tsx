@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { CheckIcon } from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
 import { usePricingModal } from "@/lib/store/pricing-modal-store";
@@ -131,15 +131,15 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
         <div
           key={tier.key}
           className={cn(
-            "relative rounded-2xl border p-6 flex flex-col transition duration-200 hover:-translate-y-1 hover:shadow-lg",
+            "relative flex flex-col rounded-2xl border p-5 transition-colors sm:p-6",
             tier.popular
-              ? "border-purple-500 bg-gradient-to-br from-purple-500/5 to-pink-500/5 shadow-[0_0_35px_-8px_rgba(168,85,247,0.35)]"
+              ? "border-primary bg-chrome"
               : "border-border bg-card"
           )}
           style={{ animationDelay: `${idx * 100}ms` }}
         >
           {tier.popular && (
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-bold">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-accent text-accent-foreground text-xs font-bold">
               Recommended
             </div>
           )}
@@ -147,7 +147,7 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
           <div className="text-center mb-6">
             <h3 className="text-lg font-bold text-foreground mb-2">{tier.name}</h3>
             <div className="flex items-baseline justify-center gap-2">
-              <span className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400">
+              <span className="text-3xl font-bold text-foreground">
                 {tier.price}
               </span>
               <span className="text-sm text-muted-foreground">{tier.unit}</span>
@@ -158,25 +158,22 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
           <ul className="space-y-3 mb-8 flex-1">
             {tier.features.map((feature) => (
               <li key={feature} className="flex items-start gap-2 text-sm text-muted-foreground">
-                <CheckIcon className="w-4 h-4 text-purple-500 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                <CheckIcon className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                 <span>{feature}</span>
               </li>
             ))}
           </ul>
 
           <Button
-            className={cn(
-              "w-full rounded-xl font-semibold",
-              tier.popular
-                ? "bg-gradient-to-r from-purple-500 to-pink-600 text-white hover:opacity-90"
-                : ""
-            )}
+            variant={tier.popular ? "action" : "outline"}
+            className="min-h-11 w-full rounded-xl font-semibold"
             onClick={() => handleTierClick(tier)}
           >
             {tier.cta}
           </Button>
           {tier.checkout && (
             <div className="mt-3 text-center">
+              {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
               <a
                 href="/api/checkout/kofi"
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-200 underline-offset-2 hover:underline"
@@ -193,21 +190,30 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
 
 export function PricingModal() {
   const { close, isOpen } = usePricingModal();
+  const opener = useRef<HTMLElement | null>(null);
 
   return (
     <Dialog open={isOpen} onOpenChange={close}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-0 border-border bg-background">
-        <div className="p-8 md:p-12">
+      <DialogContent
+        className="max-h-[88dvh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl p-0"
+        onOpenAutoFocus={() => {
+          opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          if (opener.current?.isConnected) {
+            event.preventDefault();
+            opener.current.focus();
+          }
+        }}
+      >
+        <div className="p-4 sm:p-8 md:p-12">
           <div className="text-center mb-10">
-            <span className="inline-block rounded-full border border-purple-500/30 bg-purple-500/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-purple-300 mb-4">
-              Intelligence as a Service
-            </span>
-            <h2 className="font-heading font-bold tracking-tight text-3xl md:text-4xl mb-3">
+            <DialogTitle className="mb-3 px-4 text-2xl font-semibold sm:text-3xl md:text-4xl">
               Choose your consultant tier
-            </h2>
-            <p className="text-muted-foreground text-base max-w-xl mx-auto">
+            </DialogTitle>
+            <DialogDescription className="mx-auto max-w-xl text-base">
               Start free. Upgrade when you need a hyper-specialized, data-backed expert on demand.
-            </p>
+            </DialogDescription>
           </div>
 
           <PricingCards />

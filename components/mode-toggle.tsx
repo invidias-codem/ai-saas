@@ -2,6 +2,7 @@
 
 import { MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import { useTheme } from "next-themes";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export function ModeToggle() {
+export function ModeToggle({ className }: { className?: string } = {}) {
   const { theme, setTheme } = useTheme();
 
   return (
@@ -21,7 +22,7 @@ export function ModeToggle() {
           type="button"
           variant="ghost"
           size="icon"
-          className="h-8 w-8 shrink-0 text-muted-foreground"
+          className={cn("h-8 w-8 shrink-0 text-muted-foreground", className)}
           aria-label="Appearance"
         >
           <SunIcon className="h-4 w-4 dark:hidden" aria-hidden="true" />
