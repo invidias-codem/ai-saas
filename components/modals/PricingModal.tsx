@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -189,20 +189,17 @@ export function PricingCards({ layout = "grid" }: { layout?: "grid" | "inline" }
 }
 
 export function PricingModal() {
-  const { close, isOpen } = usePricingModal();
-  const opener = useRef<HTMLElement | null>(null);
+  const { close, takeOpener, isOpen } = usePricingModal();
 
   return (
     <Dialog open={isOpen} onOpenChange={close}>
       <DialogContent
         className="max-h-[88dvh] w-[calc(100%-2rem)] max-w-5xl overflow-y-auto rounded-2xl p-0"
-        onOpenAutoFocus={() => {
-          opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        }}
         onCloseAutoFocus={(event) => {
-          if (opener.current?.isConnected) {
+          const opener = takeOpener();
+          if (opener?.isConnected) {
             event.preventDefault();
-            opener.current.focus();
+            opener.focus();
           }
         }}
       >
