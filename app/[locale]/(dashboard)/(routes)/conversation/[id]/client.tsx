@@ -455,7 +455,7 @@ function ConversationPage({
             aria-label="Connect GitHub"
             title="Connect GitHub"
           >
-            <BrandIcon name="Github" className="h-4 w-4" size={16} />
+            <BrandIcon name="Github" className="h-4 w-4 fill-current" size={16} />
           </Button>
         </div>
 
@@ -512,7 +512,7 @@ function ConversationPage({
                 className="w-full justify-start gap-2"
                 onClick={handleGitHubConnect}
               >
-                <BrandIcon name="Github" className="h-4 w-4" size={16} />
+                <BrandIcon name="Github" className="h-4 w-4 fill-current" size={16} />
                 Connect GitHub
               </Button>
             </div>
