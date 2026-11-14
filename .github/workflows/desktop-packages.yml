@@ -61,6 +61,7 @@ jobs:
           pnpm desktop:check
           pnpm desktop:frontend
           pnpm desktop:sidecar
+          node --test scripts/desktop/sidecar-targets.test.mjs scripts/desktop/macos-runtime-probe.test.mjs
           node --test scripts/desktop/workspace.test.mjs
           node --test scripts/desktop/package-qualification.test.mjs
           node --test scripts/desktop/first-run-kit.test.mjs

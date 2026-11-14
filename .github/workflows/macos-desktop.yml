@@ -1,0 +1,115 @@
+name: macOS desktop foundation (evaluation only)
+
+on:
+  pull_request:
+    paths: ['scripts/desktop/**', 'scripts/build-sidecar.sh', 'src-tauri/**', 'go-harness/**', 'desktop/**', '.github/workflows/macos-desktop.yml', 'package.json', 'pnpm-lock.yaml', 'rustfmt.toml', 'rust-toolchain.toml']
+  push:
+    branches: [main]
+    paths: ['scripts/desktop/**', 'scripts/build-sidecar.sh', 'src-tauri/**', 'go-harness/**', 'desktop/**', '.github/workflows/macos-desktop.yml', 'package.json', 'pnpm-lock.yaml', 'rustfmt.toml', 'rust-toolchain.toml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-evaluation:
+    name: macOS app and sidecar (${{ matrix.arch }})
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-26
+            arch: arm64
+            triple: aarch64-apple-darwin
+            goarch: arm64
+          - os: macos-26-intel
+            arch: x64
+            triple: x86_64-apple-darwin
+            goarch: amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 11.6.0
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go-harness/go.mod
+          cache-dependency-path: go-harness/go.sum
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: 1.99.1
+          components: clippy, rustfmt
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: 'src-tauri -> target'
+          key: macos-${{ matrix.arch }}
+      - name: Install exact dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test sidecar contracts and diagnostic selection
+        run: node --test scripts/desktop/sidecar-targets.test.mjs scripts/desktop/macos-runtime-probe.test.mjs
+      - name: Bundle frontend and native sidecar
+        run: |
+          pnpm desktop:check
+          pnpm desktop:frontend
+          pnpm desktop:sidecar
+      - name: Verify native sidecar architecture and record host diagnostic
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/desktop/macos-runtime-probe.mjs > macos-runtime-probe.json
+          test "$(uname -m)" = '${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}'
+          sidecar='src-tauri/binaries/lattice-harness-${{ matrix.triple }}'
+          test -f "$sidecar"
+          test "$(lipo -archs "$sidecar")" = '${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}'
+      - name: Format, lint and test native host on macOS
+        run: |
+          cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+          cargo clippy --manifest-path src-tauri/Cargo.toml -p lattice-native-host --all-targets --locked -- -D warnings
+          cargo test --manifest-path src-tauri/Cargo.toml -p lattice-native-host --lib --locked
+      - name: Build unsigned evaluation macOS app
+        run: pnpm exec tauri build --config src-tauri/tauri.preview.conf.json --bundles app -- --locked
+      - name: Verify installed bundle contents and archive evaluation app
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$app" && test -f "$app/Contents/Info.plist"
+          app_binary="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+          test -f "$app/Contents/MacOS/$app_binary"
+          test "$(lipo -archs "$app/Contents/MacOS/$app_binary")" = '${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}'
+          sidecar="$(find "$app" -type f -name lattice-harness -print -quit)"
+          test -n "$sidecar" && test -f "$sidecar"
+          test "$(lipo -archs "$sidecar")" = '${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }}'
+          out='dist/desktop/macos-${{ matrix.arch }}'
+          mkdir -p "$out"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$out/lattice-desktop-macos-${{ matrix.arch }}.app.zip"
+          (cd "$out" && shasum -a 256 'lattice-desktop-macos-${{ matrix.arch }}.app.zip' > SHA256SUMS)
+          printf '%s\n' 'Unsigned macOS evaluation artifact — not notarized, not a stable release.' 'CI build does not establish a clean-machine install or a qualified Linux sandbox.' 'Commands must continue to fail closed until runtime isolation is qualified.' > "$out/README.txt"
+          printf '{"schemaVersion":1,"channel":"evaluation","sourceCommit":"%s","platform":"macos-${{ matrix.arch }}","qualification":{"nativeUi":"pending","notarization":"pending","cleanMachineInstall":"pending","sandbox":"unqualified","stableRelease":false}}\n' '${{ github.sha }}' > "$out/desktop-build-manifest.json"
+      - name: Upload evaluation bundle, checksum and diagnostic
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lattice-desktop-macos-${{ matrix.arch }}-${{ github.sha }}
+          path: |
+            dist/desktop/macos-${{ matrix.arch }}/
+            macos-runtime-probe.json
+          if-no-files-found: error
+          retention-days: 14

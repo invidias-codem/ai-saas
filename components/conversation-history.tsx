@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { MessageSquare, Trash2, Plus, Loader2, MessageCircle, Layers3 } from "lucide-react";
+import { Trash2, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -178,10 +178,10 @@ export function ConversationHistory({ onNavigate, initialConversations }: Conver
 
             {loading ? (
                 <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-6 h-6 animate-spin text-[#a0a0a0]" />
+                    <Loader2 className="h-6 w-6 text-muted-foreground motion-safe:animate-spin" />
                 </div>
             ) : visibleConversations.length === 0 ? (
-                <div className="text-center py-8 text-[#a0a0a0]">
+                <div className="py-5 text-center text-muted-foreground">
                     <p className="text-sm">
                         {isWorkspaceScopedView ? 'No workspace conversations.' : 'No conversations yet.'}
                     </p>
@@ -192,40 +192,45 @@ export function ConversationHistory({ onNavigate, initialConversations }: Conver
                         <div
                             key={conv.id}
                             className={cn(
-                                "group flex items-center justify-between px-3 py-2 rounded-full transition-colors cursor-pointer text-[13px]",
-                                conv.id === activeId 
-                                    ? "bg-[#2a2a2a] text-[#e3e3e3] font-medium" 
-                                    : "bg-transparent text-[#c0c0c0] hover:bg-white/5"
+                                "flex items-center gap-1 rounded-lg pr-1 text-[13px] transition-colors",
+                                conv.id === activeId
+                                    ? "bg-accent font-semibold text-accent-foreground ring-1 ring-inset ring-primary/25"
+                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             )}
-                            onClick={() => handleSelectConversation(conv)}
                         >
-                            <p className="truncate mr-2 w-full">
+                            <button
+                                type="button"
+                                aria-current={conv.id === activeId ? "page" : undefined}
+                                onClick={() => handleSelectConversation(conv)}
+                                className="min-h-9 min-w-0 flex-1 truncate rounded-lg py-1.5 pl-3 text-left"
+                            >
                                 {conv.title}
-                            </p>
+                            </button>
 
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                     <Button
-                                        size="sm"
+                                        type="button"
+                                        size="icon"
                                         variant="ghost"
-                                        className="h-5 w-5 p-0 text-[#808080] hover:text-[#ff6b6b] hover:bg-transparent flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={(e) => e.stopPropagation()}
+                                        aria-label={`Delete conversation: ${conv.title}`}
+                                        className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-danger-surface hover:text-destructive"
                                     >
-                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                                     </Button>
                                 </AlertDialogTrigger>
-                                <AlertDialogContent className="bg-[#1e1e1e] border-[#333] text-[#e3e3e3]">
+                                <AlertDialogContent className="w-[calc(100%-2rem)] break-words rounded-lg">
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Delete Conversation?</AlertDialogTitle>
-                                        <AlertDialogDescription className="text-[#a0a0a0]">
+                                        <AlertDialogDescription>
                                             This will permanently delete &quot;{conv.title}&quot;. This action cannot be undone.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                        <AlertDialogCancel className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-white border-none">Cancel</AlertDialogCancel>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
                                         <AlertDialogAction
                                             onClick={() => handleDelete(conv.id)}
-                                            className="bg-[#d32f2f] hover:bg-[#b71c1c] text-white"
+                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                         >
                                             Delete
                                         </AlertDialogAction>

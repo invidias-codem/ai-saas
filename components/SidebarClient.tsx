@@ -1,6 +1,6 @@
 "use client";
 
-import { Montserrat } from "next/font/google";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { useLocale, useTranslations } from "next-intl";
@@ -8,17 +8,12 @@ import { Plus, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useSubscriptionStore } from "@/lib/store/subscription-store";
-import { WELCOME_CREDITS } from "@/lib/subscription/packs";
+import { Button } from "@/components/ui/button";
 
 import { cn } from "@/lib/utils";
 import { routes } from "@/app/constants";
 import { ConversationHistory } from "@/components/conversation-history";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
-
-const montserrat = Montserrat({
-  weight: "600",
-  subsets: ["latin"],
-});
 
 export interface ConversationSeed { id: string; workspaceId?: string | null; title: string; messageCount: number; createdAt: number; lastUpdated: number; isArchived: boolean; preview?: string; }
 
@@ -46,11 +41,6 @@ const SidebarClient = ({ onNavigate, initialConversations }: SidebarClientProps)
 
   const localHref = (href: string) => `/${locale}${href}`;
 
-  const handleClick = (href: string) => {
-    if (onNavigate) onNavigate();
-    router.push(localHref(href));
-  };
-
   const handleNewChat = async () => {
     setCreatingNew(true);
     try {
@@ -75,91 +65,77 @@ const SidebarClient = ({ onNavigate, initialConversations }: SidebarClientProps)
       .catch(console.error);
   }, [setCredits]);
 
-  const maxCredits = WELCOME_CREDITS;
-  const creditsPercentage = Math.min(100, Math.max(0, (computeCredits / maxCredits) * 100));
   const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "Account";
   const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "L";
 
   return (
-    // Outer shell: full height, flex column, matching Gemini's dark theme aesthetics
-    <div className="flex flex-col h-full bg-[#1e1e1e] text-[#e3e3e3] font-sans">
-      
-      {/* ── Top: Logo ────────────────────────────────── */}
-      <div className="flex-shrink-0 px-4 py-5">
-        <div
-          className="flex items-center cursor-pointer mb-6"
-          onClick={() => handleClick("/dashboard")}
+    <div className="flex h-full min-h-0 flex-col bg-chrome font-sans text-foreground">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+        <Link
+          href={localHref("/dashboard")}
+          onClick={onNavigate}
+          className="mb-4 inline-flex items-center gap-2.5 rounded-lg px-2 py-1"
         >
-          <div className="relative w-6 h-6 mr-3">
-            <Image fill alt="Logo" src="/lattice-logo.png" sizes="24px" />
-          </div>
-          <h1 className={cn("text-lg font-medium tracking-wide text-white", montserrat.className)}>
-            Lattice
-          </h1>
-        </div>
+          <Image width={32} height={32} alt="" src="/lattice-logo.png" className="rounded-md" />
+          <span className="text-lg font-bold tracking-tight">Lattice OS</span>
+        </Link>
 
-        {/* ── Top Actions (New Chat) ────────────────────────────────── */}
-        <div className="space-y-0.5 mb-6">
-          <div
+        <nav aria-label="Workspace tools" className="mb-5 space-y-0.5">
+          <Button
+            type="button"
+            variant="outline"
             onClick={handleNewChat}
-            className={cn(
-              "text-sm flex items-center px-3 py-2 w-full justify-start font-medium cursor-pointer rounded-full transition-colors",
-              "hover:bg-white/10 text-[#e3e3e3]",
-              creatingNew ? "opacity-70 pointer-events-none" : ""
-            )}
+            disabled={creatingNew}
+            className="mb-3 w-full justify-start gap-3 rounded-lg border-border bg-card px-3"
           >
-            <Plus className="h-4 w-4 mr-4 text-white" />
+            <Plus className="h-4 w-4 text-primary" aria-hidden="true" />
             {creatingNew ? "Starting…" : "New chat"}
-          </div>
-          
-          {/* Main Routes mapped over */}
-          {routes.filter(r => r.label !== "Conversation").map((route) => (
-            <div
-              key={route.href}
-              onClick={() => handleClick(route.href)}
-              className={cn(
-                "text-sm flex items-center px-3 py-2 w-full justify-start font-medium cursor-pointer rounded-full transition-colors",
-                pathname === localHref(route.href)
-                  ? "bg-white/10 text-white"
-                  : "hover:bg-white/10 text-[#e3e3e3]"
-              )}
-            >
-              <route.icon className={cn("h-4 w-4 mr-4 text-[#e3e3e3]")} />
-              {t(labelMap[route.label] || route.label)}
-            </div>
-          ))}
-        </div>
-      </div>
+          </Button>
+          {routes.filter(route => route.label !== "Conversation").map(route => {
+            const href = localHref(route.href);
+            const active = pathname === href;
+            return (
+              <Link
+                key={route.href}
+                href={href}
+                prefetch={false}
+                onClick={onNavigate}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex min-h-9 items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-accent font-semibold text-accent-foreground ring-1 ring-inset ring-primary/25"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                )}
+              >
+                <route.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {t(labelMap[route.label] || route.label)}
+              </Link>
+            );
+          })}
+        </nav>
 
-      {/* ── Middle: Scrollable conversation history ──────────────── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-2">
-        <div className="text-[11px] font-semibold text-[#a0a0a0] px-2 mb-2 tracking-wider uppercase">
+        <div className="mb-2 px-2 text-xs font-semibold text-muted-foreground">
           Recents
         </div>
         <ConversationHistory onNavigate={onNavigate} initialConversations={initialConversations} />
       </div>
 
-      {/* ── Bottom: Profile / Credits widget ────────────────────────────────── */}
-      <div className="flex-shrink-0 px-4 py-4 mt-2">
-        <div
-          className="bg-transparent rounded-2xl p-2 cursor-pointer hover:bg-white/5 transition flex items-center justify-between"
+      <div className="shrink-0 border-t border-border px-4 py-3">
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-accent"
           onClick={triggerPaywall}
         >
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-[#2a5a2a] flex items-center justify-center text-[#90ee90] font-bold text-sm">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-foreground" aria-hidden="true">
             {avatarInitial}
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-[#e3e3e3]">
-              {displayName}
-              </span>
-              <span className="text-xs text-[#a0a0a0] flex items-center gap-1">
-                <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-sm">{computeCredits} credits</span>
-              </span>
-            </div>
-          </div>
-          <Zap className="w-4 h-4 text-[#a0a0a0] hover:text-white transition-colors" />
-        </div>
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-sm font-medium">{displayName}</span>
+            <span className="text-xs text-muted-foreground">{computeCredits} credits</span>
+          </span>
+          <Zap className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </button>
       </div>
     </div>
   );

@@ -42,7 +42,7 @@ export function FileAttachmentPanel({
       )}
 
       <div className="inline-flex items-center gap-2 bg-background border border-border shadow-sm px-3 py-1.5 rounded-full text-xs font-medium text-foreground">
-        <Paperclip className="h-3 w-3 text-indigo-500" />
+        <Paperclip className="h-3 w-3 text-primary" />
         <span className="max-w-[150px] truncate">{selectedFile.name}</span>
         {selectedFile.isUploading && (
           <span className="text-[10px] text-muted-foreground">uploading…</span>
@@ -50,7 +50,7 @@ export function FileAttachmentPanel({
         <button
           type="button"
           onClick={onTogglePreview}
-          className="text-muted-foreground hover:text-indigo-500 transition-colors"
+          className="text-muted-foreground hover:text-primary transition-colors"
           title={showFilePreview ? "Hide preview" : "Show preview"}
           aria-label={showFilePreview ? "Hide file preview" : "Show file preview"}
         >

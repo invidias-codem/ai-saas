@@ -117,6 +117,25 @@ export default async function LocaleLayout({
       <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
         <ClerkProvider
           publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}
+          appearance={{
+            variables: {
+              colorPrimary: "var(--lattice-verdigris)",
+              colorPrimaryForeground: "var(--lattice-on-verdigris)",
+              colorForeground: "var(--lattice-text)",
+              colorMutedForeground: "var(--lattice-text-muted)",
+              colorMuted: "var(--lattice-chrome)",
+              colorNeutral: "var(--lattice-text)",
+              colorBackground: "var(--lattice-panel)",
+              colorInput: "var(--lattice-canvas)",
+              colorInputForeground: "var(--lattice-text)",
+              colorBorder: "var(--lattice-control-border)",
+              colorRing: "var(--lattice-focus)",
+              colorDanger: "var(--lattice-danger)",
+              colorWarning: "var(--lattice-warning)",
+              colorSuccess: "var(--lattice-verdigris)",
+              borderRadius: "var(--radius)",
+            },
+          }}
         >
           <NextIntlClientProvider locale={locale} messages={messages}>
             <ThemeProvider

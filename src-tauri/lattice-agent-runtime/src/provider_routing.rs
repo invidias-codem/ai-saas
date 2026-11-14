@@ -7,7 +7,6 @@
 //! - Handling provider-specific configurations
 
 use crate::ProviderConnectionStatus;
-use crate::ProviderKind;
 use lattice_credential_broker::{
     CredentialBroker, CredentialKind, CredentialRef, ProviderKind as BrokerProviderKind,
 };
@@ -15,10 +14,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use zeroize::Zeroizing;
 
 /// Provider routing errors.
 #[derive(Debug, Error)]
@@ -41,6 +40,8 @@ pub enum ProviderRouterError {
     ModelNotAvailable(String),
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 pub type ProviderResult<T> = std::result::Result<T, ProviderRouterError>;
@@ -56,14 +57,11 @@ pub struct ProviderRouter {
 /// Cached provider info with credentials.
 #[derive(Debug, Clone)]
 struct CachedProvider {
-    connection_id: String,
     provider_kind: BrokerProviderKind,
     config: ProviderConfig,
     api_key_ref: Option<CredentialRef>,
     refresh_token_ref: Option<CredentialRef>,
     local_endpoint_ref: Option<CredentialRef>,
-    cached_at: SystemTime,
-    ttl: Duration,
 }
 
 /// Provider configuration from profile.
@@ -265,14 +263,11 @@ impl ProviderRouter {
             .cloned();
 
         let cached = CachedProvider {
-            connection_id: conn.id.clone(),
             provider_kind: conn.kind,
             config: conn.config.clone(),
             api_key_ref,
             refresh_token_ref,
             local_endpoint_ref,
-            cached_at: SystemTime::now(),
-            ttl: Duration::from_secs(300), // 5 min cache
         };
 
         cache.insert(conn.id.clone(), cached);
@@ -302,49 +297,56 @@ impl ProviderRouter {
     }
 
     /// Get API key for a provider connection.
-    pub async fn get_api_key(&self, connection_id: &str) -> ProviderResult<Option<String>> {
+    pub async fn get_api_key(
+        &self,
+        connection_id: &str,
+    ) -> ProviderResult<Option<Zeroizing<String>>> {
         let cache = self.provider_cache.read().await;
         let provider = cache
             .get(connection_id)
             .ok_or_else(|| ProviderRouterError::NotConfigured(connection_id.to_string()))?;
 
-        if let Some(ref cred_ref) = provider.api_key_ref {
-            // Get the actual secret from the credential broker
-            let key = format!(
-                "{}:api-key:{}",
-                provider.provider_kind.as_str(),
-                connection_id
-            );
+        if provider.api_key_ref.is_some() {
             let secret = self
                 .credential_broker
-                .get(&key)
+                .get_secret(
+                    provider.provider_kind,
+                    CredentialKind::ApiKey,
+                    Some(connection_id),
+                )
                 .await?
-                .ok_or_else(|| ProviderRouterError::CredentialNotFound(key))?;
-            Ok(Some(secret.to_string()))
+                .ok_or_else(|| {
+                    ProviderRouterError::CredentialNotFound(connection_id.to_string())
+                })?;
+            Ok(Some(secret))
         } else {
             Ok(None)
         }
     }
 
     /// Get refresh token for a provider connection.
-    pub async fn get_refresh_token(&self, connection_id: &str) -> ProviderResult<Option<String>> {
+    pub async fn get_refresh_token(
+        &self,
+        connection_id: &str,
+    ) -> ProviderResult<Option<Zeroizing<String>>> {
         let cache = self.provider_cache.read().await;
         let provider = cache
             .get(connection_id)
             .ok_or_else(|| ProviderRouterError::NotConfigured(connection_id.to_string()))?;
 
-        if let Some(ref cred_ref) = provider.refresh_token_ref {
-            let key = format!(
-                "{}:refresh-token:{}",
-                provider.provider_kind.as_str(),
-                connection_id
-            );
+        if provider.refresh_token_ref.is_some() {
             let secret = self
                 .credential_broker
-                .get(&key)
+                .get_secret(
+                    provider.provider_kind,
+                    CredentialKind::RefreshToken,
+                    Some(connection_id),
+                )
                 .await?
-                .ok_or_else(|| ProviderRouterError::CredentialNotFound(key))?;
-            Ok(Some(secret.to_string()))
+                .ok_or_else(|| {
+                    ProviderRouterError::CredentialNotFound(connection_id.to_string())
+                })?;
+            Ok(Some(secret))
         } else {
             Ok(None)
         }
@@ -360,17 +362,18 @@ impl ProviderRouter {
             .get(connection_id)
             .ok_or_else(|| ProviderRouterError::NotConfigured(connection_id.to_string()))?;
 
-        if let Some(ref cred_ref) = provider.local_endpoint_ref {
-            let key = format!(
-                "{}:local-endpoint:{}",
-                provider.provider_kind.as_str(),
-                connection_id
-            );
+        if provider.local_endpoint_ref.is_some() {
             let secret = self
                 .credential_broker
-                .get(&key)
+                .get_secret(
+                    provider.provider_kind,
+                    CredentialKind::LocalEndpoint,
+                    Some(connection_id),
+                )
                 .await?
-                .ok_or_else(|| ProviderRouterError::CredentialNotFound(key))?;
+                .ok_or_else(|| {
+                    ProviderRouterError::CredentialNotFound(connection_id.to_string())
+                })?;
             // Secret format: "url|model_id"
             let parts: Vec<&str> = secret.split('|').collect();
             if parts.len() == 2 {
@@ -444,14 +447,19 @@ impl ProviderRouter {
     pub async fn resolve_provider(
         &self,
         session_connection_id: Option<&str>,
-    ) -> ProviderResult<(String, BrokerProviderKind, ProviderConfig, Option<String>)> {
+    ) -> ProviderResult<(
+        String,
+        BrokerProviderKind,
+        ProviderConfig,
+        Option<Zeroizing<String>>,
+    )> {
         // Use session connection or default
-        let connection_id = session_connection_id
-            .map(|s| s.to_string())
-            .or_else(|| self.get_default_connection().await)
-            .ok_or(ProviderRouterError::NotConfigured(
-                "No provider configured".to_string(),
-            ))?;
+        let connection_id = match session_connection_id {
+            Some(s) => s.to_string(),
+            None => self.get_default_connection().await.ok_or_else(|| {
+                ProviderRouterError::NotConfigured("No provider configured".to_string())
+            })?,
+        };
 
         let config = self.get_config(&connection_id).await?;
         let provider_kind = config.kind();
@@ -461,7 +469,7 @@ impl ProviderRouter {
         // Determine the actual credential to use
         let credential = match (&provider_kind, api_key, local_endpoint) {
             (BrokerProviderKind::Local, _, Some((url, model))) => {
-                Some(format!("local:{}:{}", url, model))
+                Some(Zeroizing::new(format!("local:{}:{}", url, model)))
             }
             (_, Some(key), _) => Some(key),
             _ => None,

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { SignIn } from "@clerk/nextjs";
 import { ExternalLink, Shield } from "lucide-react";
@@ -34,8 +33,6 @@ export default function WebviewAwareAuth({
   appearance?: any;
   fallbackComponent?: React.ReactNode;
 }) {
-  const router = useRouter();
-
   // Allow the user to dismiss the "open in browser" warning and try the
   // in-webview sign-in anyway.
   const [dismissed, setDismissed] = useState(false);
@@ -49,18 +46,16 @@ export default function WebviewAwareAuth({
 
   if (webview === null) {
     return (
-      <div className="flex h-screen w-full items-center justify-center">
+      <div className="flex min-h-64 w-full items-center justify-center">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     );
   }
 
   if (webview && !dismissed) {
-    const target = path ? `/${locale}${path}` : `/${locale}/sign-in`;
-
     return (
-      <div className="flex h-screen w-full flex-col items-center justify-center bg-background text-foreground p-6">
-        <div className="mx-auto flex max-w-[420px] flex-col items-center justify-center space-y-6 text-center">
+      <div className="rounded-2xl border border-border bg-card p-4 text-card-foreground sm:p-6">
+        <div className="mx-auto flex max-w-[420px] flex-col items-center justify-center space-y-5 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
             <Shield className="h-7 w-7 text-primary" />
           </div>
@@ -73,9 +68,10 @@ export default function WebviewAwareAuth({
             </p>
           </div>
           <Button
+            variant="action"
             size="lg"
             className="w-full gap-2"
-            onClick={() => window.open(target, "_blank", "noopener,noreferrer")}
+            onClick={() => window.open(window.location.href, "_blank", "noopener,noreferrer")}
           >
             <ExternalLink className="h-4 w-4" />
             Continue in Browser

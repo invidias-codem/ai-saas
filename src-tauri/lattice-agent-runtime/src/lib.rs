@@ -16,15 +16,14 @@
 //! Authenticated IPC with protocol-version negotiation.
 //! Crash recovery and session reconciliation.
 
-use lattice_credential_broker::{CredentialBroker, CredentialError, CredentialKind, ProviderKind};
+use lattice_credential_broker::{CredentialBroker, CredentialError, ProviderKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::sync::{Mutex, RwLock};
-use uuid::Uuid;
 
 pub mod agent_loop;
 pub mod ipc;
@@ -33,9 +32,11 @@ pub mod session;
 pub mod state_machine;
 
 pub use agent_loop::{AgentLoop, AgentLoopConfig, AgentLoopError};
-pub use ipc::{IpcClient, IpcError, IpcServer, ProtocolVersion};
-pub use provider_routing::{ProviderRouter, ProviderRouterError};
-pub use session::{SessionManager, SessionManagerError, SessionRecord};
+pub use ipc::{IpcClient, IpcConfig, IpcError, IpcServer, ProtocolVersion, PROTOCOL_VERSION};
+pub use provider_routing::{ProviderRouter, ProviderRouterError, ProviderStatus};
+pub use session::{
+    SessionManager, SessionManagerError, SessionRecord, SessionState, TaskRecord, TaskState,
+};
 pub use state_machine::{RuntimeState, RuntimeStateMachine, StateTransitionError};
 
 /// Errors for the agent runtime supervisor.
@@ -71,6 +72,14 @@ pub enum RuntimeError {
     Unauthorized(String),
     #[error("Protocol version mismatch: expected {expected}, got {actual}")]
     ProtocolMismatch { expected: u32, actual: u32 },
+    #[error("Path resolution error: {0}")]
+    PathResolution(String),
+}
+
+impl From<String> for RuntimeError {
+    fn from(s: String) -> Self {
+        RuntimeError::PathResolution(s)
+    }
 }
 
 pub type Result<T> = std::result::Result<T, RuntimeError>;
@@ -87,24 +96,9 @@ pub struct AgentRuntimeConfig {
     /// Agent loop configuration.
     pub loop_config: AgentLoopConfig,
     /// IPC configuration.
-    pub ipc_config: IpcConfig,
+    pub ipc_config: ipc::IpcConfig,
     /// Session configuration.
     pub session_config: SessionConfig,
-}
-
-/// IPC configuration for authenticated transport.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IpcConfig {
-    /// Protocol version for negotiation.
-    pub protocol_version: u32,
-    /// Socket/pipe path (platform-specific).
-    pub socket_path: Option<PathBuf>,
-    /// Client identity for this runtime instance.
-    pub client_identity: String,
-    /// Require authentication on connect.
-    pub require_auth: bool,
-    /// Connection timeout.
-    pub connect_timeout_ms: u64,
 }
 
 /// Session configuration for durable sessions.
@@ -150,52 +144,36 @@ pub enum ProviderConnectionStatus {
 }
 
 /// Tauri command: Start the agent runtime for a profile.
-#[tauri::command]
 pub async fn agent_start(
     profile_id: String,
     channel: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeStatusResponse, String> {
-    state
-        .start_runtime(profile_id, channel)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<RuntimeStatusResponse> {
+    state.start_runtime(profile_id, channel).await
 }
 
 /// Tauri command: Stop the agent runtime for a profile.
-#[tauri::command]
 pub async fn agent_stop(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeStatusResponse, String> {
-    state
-        .stop_runtime(profile_id)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<RuntimeStatusResponse> {
+    state.stop_runtime(profile_id).await
 }
 
 /// Tauri command: Get the agent runtime status for a profile.
-#[tauri::command]
 pub async fn agent_status(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeStatusResponse, String> {
-    state
-        .get_status(profile_id)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<RuntimeStatusResponse> {
+    state.get_status(profile_id).await
 }
 
 /// Tauri command: Get the agent runtime health for a profile.
-#[tauri::command]
 pub async fn agent_health(
     profile_id: String,
     state: tauri::State<'_, Arc<RuntimeSupervisor>>,
-) -> Result<RuntimeHealth, String> {
-    state
-        .get_health(profile_id)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<RuntimeHealth> {
+    state.get_health(profile_id).await
 }
 
 /// Response for runtime status commands.
@@ -219,13 +197,14 @@ pub struct RuntimeSupervisor {
 /// Runtime instance for a single profile.
 struct RuntimeInstance {
     profile_id: String,
-    channel: String,
     state_machine: Arc<RuntimeStateMachine>,
     agent_loop: Option<Arc<AgentLoop>>,
-    ipc_server: Option<Arc<IpcServer>>,
+    ipc_server: Option<Arc<Mutex<IpcServer>>>,
     session_manager: Arc<SessionManager>,
     provider_router: Arc<ProviderRouter>,
     started_at: SystemTime,
+    loop_config: AgentLoopConfig,
+    ipc_config: ipc::IpcConfig,
 }
 
 impl RuntimeSupervisor {
@@ -251,9 +230,8 @@ impl RuntimeSupervisor {
 
         // Check if already running
         if let Some(instance) = runtimes.get(&profile_id) {
-            if instance.state_machine.current_state() == RuntimeState::Healthy
-                || instance.state_machine.current_state() == RuntimeState::Starting
-            {
+            let current_state = instance.state_machine.current_state().await;
+            if current_state == RuntimeState::Healthy || current_state == RuntimeState::Starting {
                 return Err(RuntimeError::AlreadyRunning);
             }
         }
@@ -280,7 +258,7 @@ impl RuntimeSupervisor {
             .await?,
         );
 
-        let ipc_server = Arc::new(
+        let ipc_server = Arc::new(Mutex::new(
             IpcServer::new(
                 instance.profile_id.clone(),
                 instance.ipc_config.clone(),
@@ -288,10 +266,10 @@ impl RuntimeSupervisor {
                 agent_loop.clone(),
             )
             .await?,
-        );
+        ));
 
         // Start IPC server
-        ipc_server.start().await?;
+        ipc_server.lock().await.start().await?;
 
         // Start agent loop
         agent_loop.start().await?;
@@ -307,13 +285,14 @@ impl RuntimeSupervisor {
             profile_id.clone(),
             RuntimeInstance {
                 profile_id: profile_id.clone(),
-                channel,
                 state_machine: instance.state_machine,
                 agent_loop: Some(agent_loop),
                 ipc_server: Some(ipc_server),
                 session_manager: instance.session_manager,
                 provider_router: instance.provider_router,
                 started_at: SystemTime::now(),
+                loop_config: instance.loop_config,
+                ipc_config: instance.ipc_config,
             },
         );
 
@@ -345,7 +324,8 @@ impl RuntimeSupervisor {
 
         // Stop IPC server
         if let Some(ipc_server) = instance.ipc_server.take() {
-            ipc_server.stop().await?;
+            let mut guard = ipc_server.lock().await;
+            guard.stop().await?;
         }
 
         // Transition to stopped
@@ -366,7 +346,7 @@ impl RuntimeSupervisor {
         let runtimes = self.runtimes.read().await;
 
         if let Some(instance) = runtimes.get(&profile_id) {
-            let state = instance.state_machine.current_state();
+            let state = instance.state_machine.current_state().await;
             Ok(RuntimeStatusResponse {
                 profile_id,
                 state,
@@ -386,7 +366,7 @@ impl RuntimeSupervisor {
         let runtimes = self.runtimes.read().await;
 
         if let Some(instance) = runtimes.get(&profile_id) {
-            let state = instance.state_machine.current_state();
+            let state = instance.state_machine.current_state().await;
             let uptime = instance
                 .started_at
                 .elapsed()
@@ -394,7 +374,7 @@ impl RuntimeSupervisor {
                 .as_millis() as u64;
 
             // Get provider health
-            let mut provider_status = HashMap::new();
+            let provider_status = HashMap::new();
             // This would query the provider router for actual health
 
             Ok(RuntimeHealth {
@@ -425,7 +405,7 @@ impl RuntimeSupervisor {
         let session_manager = Arc::new(
             SessionManager::new(
                 profile_path.join("state.sqlite"),
-                self.config_defaults.session_config.clone(),
+                self.config_defaults.session_config.clone().into(),
             )
             .await?,
         );
@@ -445,7 +425,6 @@ impl RuntimeSupervisor {
 
         Ok(RuntimeInstance {
             profile_id,
-            channel,
             state_machine,
             agent_loop: None,
             ipc_server: None,
@@ -460,7 +439,7 @@ impl RuntimeSupervisor {
 
 /// Profile path resolution helpers.
 mod profiles {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     pub fn resolve_profile_root(channel: &str) -> Result<PathBuf, String> {
         let base = if cfg!(target_os = "windows") {
