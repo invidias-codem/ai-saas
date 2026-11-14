@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRef } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { ChevronDown, Menu } from "lucide-react";
 
@@ -38,6 +39,7 @@ export function LandingNavbar() {
   const locale = useLocale();
   const t = useTranslations("Landing.hero");
   const pathname = usePathname();
+  const moreButton = useRef<HTMLButtonElement>(null);
   const openPricing = usePricingModal((state) => state.open);
   const home = `/${locale}`;
   const dashboard = `${home}/dashboard`;
@@ -81,6 +83,7 @@ export function LandingNavbar() {
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button
+                ref={moreButton}
                 type="button"
                 variant="ghost"
                 className="h-11 min-w-11 gap-1.5 rounded-lg px-2.5 text-muted-foreground"
@@ -112,7 +115,7 @@ export function LandingNavbar() {
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="min-h-11 px-3" onSelect={() => openPricing()}>
+              <DropdownMenuItem className="min-h-11 px-3" onSelect={() => openPricing(null, moreButton.current)}>
                 Pricing
               </DropdownMenuItem>
               <DropdownMenuItem asChild className="min-h-11 px-3">
