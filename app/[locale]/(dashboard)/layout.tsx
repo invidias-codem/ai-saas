@@ -15,15 +15,15 @@ const DashboardLayout = async ({
     const { conversations } = await getConversationsForUser();
 
     return (
-        <div className="h-full relative flex flex-col md:flex-row">
-            <div className="hidden h-full md:flex md:w-72 md:flex-col md:fixed md:inset-y-0 z-[80] bg-white dark:bg-gray-900 border-r border-slate-200 dark:border-white/10">
+        <div className="relative flex h-full flex-col bg-background text-foreground md:flex-row">
+            <div className="hidden h-full border-r border-border bg-chrome md:fixed md:inset-y-0 md:z-30 md:flex md:w-72 md:flex-col">
                 <Sidebar initialConversations={conversations} />
             </div>
-            <main className="flex-1 md:pl-72 h-full flex flex-col overflow-hidden">
+            <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:pl-72">
                 <div className="flex-none">
                     <Navbar initialConversations={conversations} />
                 </div>
-                <div className="flex-1 overflow-auto h-full relative">
+                <div className="relative min-h-0 flex-1 overflow-auto">
                     {children}
                 </div>
             </main>

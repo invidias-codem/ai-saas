@@ -10,8 +10,9 @@ import { KoFiNudge } from "@/components/kofi-nudge";
 import { FileGateNudge } from "@/components/file-gate-nudge";
 import { useSupportNudge } from "@/hooks/use-support-nudge";
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { AlertCircle, X, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain } from "lucide-react";
+import { AlertCircle, Ellipsis, Plus, Code, Sparkles, Layers3, Cpu, Search, Zap, FileText, Brain } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { ShareIconButton } from "@/components/share-button";
 import { cn } from "@/lib/utils";
@@ -175,9 +176,9 @@ function TypingIndicator({ agentMode }: { agentMode: string | undefined }) {
       <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
         <Avatar className="h-8 w-8 ring-1 ring-border/50">
           <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
-          <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
+          <AvatarFallback className="bg-accent text-accent-foreground text-xs">AI</AvatarFallback>
         </Avatar>
-        <div className="flex items-center space-x-2 text-indigo-500 text-sm font-medium animate-pulse">
+        <div className="flex items-center space-x-2 text-primary text-sm font-medium motion-safe:animate-pulse">
           <Sparkles className="w-4 h-4" />
           <span>Thinking & Executing Code...</span>
         </div>
@@ -188,12 +189,12 @@ function TypingIndicator({ agentMode }: { agentMode: string | undefined }) {
     <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
       <Avatar className="h-8 w-8 ring-1 ring-border/50">
         <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
-        <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs">AI</AvatarFallback>
+        <AvatarFallback className="bg-accent text-accent-foreground text-xs">AI</AvatarFallback>
       </Avatar>
       <div className="flex items-center space-x-1.5 h-8">
-        <div className="h-2 w-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-        <div className="h-2 w-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-        <div className="h-2 w-2 bg-sky-400 rounded-full animate-bounce"></div>
+        <div className="h-2 w-2 bg-primary rounded-full motion-safe:animate-bounce [animation-delay:-0.3s]"></div>
+        <div className="h-2 w-2 bg-primary rounded-full motion-safe:animate-bounce [animation-delay:-0.15s]"></div>
+        <div className="h-2 w-2 bg-primary rounded-full motion-safe:animate-bounce"></div>
       </div>
     </div>
   );
@@ -400,16 +401,16 @@ function ConversationPage({
       <FileGateNudge isOpen={showFileGateNudge} onClose={() => setShowFileGateNudge(false)} />
 
       {/* Header - Compact: structural nav + overflow menu */}
-      <header className="flex-none px-3 py-2 sm:px-4 sm:py-3 border-b border-border/40 bg-background/80 backdrop-blur-md z-20 flex items-center justify-between sticky top-0">
+      <header className="flex-none px-3 py-2 sm:px-4 sm:py-3 border-b border-border bg-card z-20 flex items-center justify-between sticky top-0">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="h-8 w-8 rounded-lg bg-sky-500/10 flex items-center justify-center shrink-0">
-            <ChatBubbleIcon className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+          <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center shrink-0">
+            <ChatBubbleIcon className="h-4 w-4 text-primary" />
           </div>
           <h1 className="text-sm font-semibold leading-tight truncate">Weaver</h1>
         </div>
 
         {/* Desktop-only indicators */}
-        <div className="hidden md:flex items-center gap-2">
+        <div className="hidden lg:flex items-center gap-2">
           <RuntimeStatusBar
             agentMode={agentMode}
             loading={loading}
@@ -451,39 +452,22 @@ function ConversationPage({
             size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-foreground"
             onClick={handleGitHubConnect}
+            aria-label="Connect GitHub"
             title="Connect GitHub"
           >
             <BrandIcon name="Github" className="h-4 w-4" size={16} />
           </Button>
         </div>
 
-        {/* Mobile overflow menu */}
-        <div className="flex md:hidden items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground"
-            onClick={() => setShowMobileMenu(true)}
-            aria-label="More options"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
-            </svg>
-          </Button>
-        </div>
-      </header>
-
-      {/* Mobile Menu Overlay */}
-      {showMobileMenu && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowMobileMenu(false)} />
-          <div className="absolute right-0 top-0 h-full w-72 bg-background border-l border-border p-4 shadow-xl">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold">Options</h2>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowMobileMenu(false)}>
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
+        <Sheet open={showMobileMenu} onOpenChange={setShowMobileMenu}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground lg:hidden" aria-label="More options">
+              <Ellipsis className="h-5 w-5" aria-hidden="true" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[min(20rem,90vw)] overflow-y-auto bg-card pt-12 text-card-foreground">
+            <SheetTitle className="mb-4">Options</SheetTitle>
+            <SheetDescription className="sr-only">Conversation mode, memory, and connections.</SheetDescription>
             <div className="space-y-4">
               <ModelToggle disabled={loading || streaming} />
               <RuntimeStatusBar
@@ -532,48 +516,64 @@ function ConversationPage({
                 Connect GitHub
               </Button>
             </div>
-          </div>
-        </div>
-      )}
+          </SheetContent>
+        </Sheet>
+      </header>
 
       {/* Main Chat Area - Flex grow with native scroll for better mobile feel */}
-      <div ref={chatContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden w-full scroll-smooth">
+      <div ref={chatContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden w-full motion-safe:scroll-smooth">
         <div className="max-w-3xl mx-auto w-full px-4 py-6 md:px-6 min-h-0">
 
           {/* Context Summary Chip — collapsed on mobile, expanded on desktop */}
           {(conversationContext.workspaceName || conversationContext.operatingProfileName) && (
             <div className="mb-4">
-              {/* Mobile: single tap-to-expand chip */}
-              <button
-                type="button"
-                onClick={() => setShowContextSheet((v) => !v)}
-                className="md:hidden w-full flex items-center justify-between rounded-xl border border-sky-500/15 bg-sky-500/5 px-3 py-2 text-left"
-              >
-                <div className="flex items-center gap-2 text-xs font-medium">
-                  <Layers3 className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
-                  <span className="text-foreground">
-                    {conversationContext.workspaceName || conversationContext.operatingProfileName}
-                  </span>
-                  <span className="text-muted-foreground">
-                    · {modeLabel(conversationContext.operatingProfileMode)}
-                  </span>
-                </div>
-                <svg className={cn("h-4 w-4 text-muted-foreground transition-transform", showContextSheet && "rotate-180")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                </svg>
-              </button>
+              <Sheet open={showContextSheet} onOpenChange={setShowContextSheet}>
+                <SheetTrigger asChild>
+                  <button type="button" className="flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-chrome px-3 py-2 text-left md:hidden">
+                    <span className="flex min-w-0 items-center gap-2 text-xs font-medium">
+                      <Layers3 className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+                      <span className="truncate">{conversationContext.workspaceName || conversationContext.operatingProfileName}</span>
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{modeLabel(conversationContext.operatingProfileMode)}</span>
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="bottom" className="max-h-[70dvh] overflow-y-auto rounded-t-2xl bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-card-foreground">
+                  <SheetTitle className="mb-4 pr-8">Context</SheetTitle>
+                  <SheetDescription className="sr-only">Workspace and operating profile for this conversation.</SheetDescription>
+                  <div className="space-y-3">
+                    {conversationContext.workspaceName && (
+                      <div className="flex items-center gap-2 rounded-lg border border-border bg-accent px-3 py-2 text-sm">
+                        <Layers3 className="h-4 w-4 text-primary" />
+                        <span className="min-w-0 break-words font-medium">{conversationContext.workspaceName}</span>
+                      </div>
+                    )}
+                    {conversationContext.operatingProfileName && (
+                      <div className="flex items-center gap-2 rounded-lg border border-border bg-accent px-3 py-2 text-sm">
+                        <ProfileModeIcon mode={conversationContext.operatingProfileMode} className="h-4 w-4 text-primary" />
+                        <span className="min-w-0 break-words font-medium">{conversationContext.operatingProfileName}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">· {modeLabel(conversationContext.operatingProfileMode)}</span>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {conversationContext.operatingProfileName
+                        ? `This conversation is running inside your workspace with the ${modeLabel(conversationContext.operatingProfileMode)} profile.`
+                        : 'This conversation is attached to your active workspace context.'}
+                    </p>
+                  </div>
+                </SheetContent>
+              </Sheet>
 
               {/* Desktop: full info box (original) */}
-              <div className="hidden md:block rounded-2xl border border-sky-500/15 bg-sky-500/5 px-4 py-3">
+              <div className="hidden md:block rounded-2xl border border-border bg-chrome px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-medium mb-2">
                   {conversationContext.workspaceName && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-violet-700 dark:text-violet-300">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-accent px-2.5 py-1 text-accent-foreground">
                       <Layers3 className="h-3.5 w-3.5" />
                       {conversationContext.workspaceName}
                     </span>
                   )}
                   {conversationContext.operatingProfileName && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-sky-700 dark:text-sky-300">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-accent px-2.5 py-1 text-accent-foreground">
                       <ProfileModeIcon mode={conversationContext.operatingProfileMode} className="h-3.5 w-3.5" />
                       {conversationContext.operatingProfileName}
                     </span>
@@ -586,40 +586,6 @@ function ConversationPage({
                 </p>
               </div>
 
-              {/* Mobile context bottom sheet */}
-              {showContextSheet && (
-                <div className="fixed inset-0 z-40 md:hidden">
-                  <div className="absolute inset-0 bg-black/50" onClick={() => setShowContextSheet(false)} />
-                  <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-background border-t border-border p-4 shadow-xl">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-semibold">Context</h3>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowContextSheet(false)}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="space-y-3">
-                      {conversationContext.workspaceName && (
-                        <div className="flex items-center gap-2 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-2 text-sm">
-                          <Layers3 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-                          <span className="font-medium">{conversationContext.workspaceName}</span>
-                        </div>
-                      )}
-                      {conversationContext.operatingProfileName && (
-                        <div className="flex items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-sm">
-                          <ProfileModeIcon mode={conversationContext.operatingProfileMode} className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                          <span className="font-medium">{conversationContext.operatingProfileName}</span>
-                          <span className="text-xs text-muted-foreground">· {modeLabel(conversationContext.operatingProfileMode)}</span>
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        {conversationContext.operatingProfileName
-                          ? `This conversation is running inside your workspace with the ${modeLabel(conversationContext.operatingProfileMode)} profile.`
-                          : 'This conversation is attached to your active workspace context.'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -630,9 +596,9 @@ function ConversationPage({
 
           {/* Greeting / Empty State */}
           {showGreeting && (
-            <div className="flex flex-col items-center justify-center min-h-[40vh] text-center animate-in fade-in zoom-in duration-500">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-sky-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 mb-6">
-                <Sparkles className="h-8 w-8 text-white" />
+            <div className="flex flex-col items-center justify-center min-h-[40vh] text-center motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in duration-300">
+              <div className="h-16 w-16 rounded-2xl bg-accent flex items-center justify-center border border-primary/20 mb-6">
+                <Sparkles className="h-8 w-8 text-primary" />
               </div>
               <div className="space-y-2 max-w-xl mb-6">
                 <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-foreground">
@@ -655,7 +621,7 @@ function ConversationPage({
                   <button
                     key={suggestion}
                     onClick={() => setUserInput(suggestion)}
-                    className="text-left rounded-2xl border border-border bg-card hover:bg-accent/60 hover:border-primary/40 px-4 py-3 text-sm md:text-base text-foreground transition-colors duration-200"
+                    className="text-left rounded-2xl border border-border bg-card hover:bg-accent/60 hover:border-primary px-4 py-3 text-sm md:text-base text-foreground transition-colors duration-200"
                   >
                     {suggestion}
                   </button>
@@ -679,7 +645,7 @@ function ConversationPage({
                   {msg.role === "bot" ? (
                     <Avatar className="h-8 w-8 ring-1 ring-border/50 bg-background">
                       <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
-                      <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
+                      <AvatarFallback className="text-[10px] bg-accent text-accent-foreground">AI</AvatarFallback>
                     </Avatar>
                   ) : (
                     <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -692,7 +658,7 @@ function ConversationPage({
                 <div className={cn(
                   "relative text-sm md:text-base leading-relaxed break-words min-w-0",
                   msg.role === "user"
-                    ? "bg-secondary text-secondary-foreground rounded-[20px] rounded-tr-sm px-4 py-3 md:px-5 md:py-4 shadow-sm" // Claude-style user bubble
+                    ? "bg-chrome text-foreground rounded-[20px] rounded-tr-sm px-4 py-3 md:px-5 md:py-4 shadow-sm" // Claude-style user bubble
                     : "bg-transparent text-foreground px-0 py-0" // Gemini/Claude-style bot (no bubble)
                 )}>
                   {msg.role === "bot" ? (
@@ -721,7 +687,7 @@ function ConversationPage({
                                   return match ? (
                                     <code className={className} {...props}>{children}</code>
                                   ) : (
-                                    <code className="bg-muted px-1.5 py-0.5 rounded-md font-mono text-[13px] text-pink-600 dark:text-pink-400" {...props}>{children}</code>
+                                    <code className="bg-muted px-1.5 py-0.5 rounded-md font-mono text-[13px] text-copper-text" {...props}>{children}</code>
                                   );
                                 },
                                 p: ({ node, ...props }) => <p {...props} className="mb-4 last:mb-0" />,
@@ -732,7 +698,7 @@ function ConversationPage({
                                 h2: ({ node, ...props }) => <h2 {...props} className="text-xl font-semibold mb-3 mt-5 tracking-tight" />,
                                 h3: ({ node, ...props }) => <h3 {...props} className="text-lg font-medium mb-2 mt-4" />,
                                 blockquote: ({ node, ...props }) => <blockquote {...props} className="border-l-4 border-primary/40 pl-4 italic text-muted-foreground my-4" />,
-                                a: ({ node, ...props }) => <a {...props} className="text-indigo-500 hover:text-indigo-600 font-medium underline underline-offset-4 transition-colors" target="_blank" rel="noreferrer" />,
+                                a: ({ node, ...props }) => <a {...props} className="text-primary hover:text-indigo-600 font-medium underline underline-offset-4 transition-colors" target="_blank" rel="noreferrer" />,
                                 th: ({ node, ...props }) => <th {...props} className="border-b border-border px-4 py-2 text-left font-semibold bg-muted/30" />,
                                 td: ({ node, ...props }) => <td {...props} className="border-b border-border px-4 py-2" />,
                               }}
@@ -812,10 +778,10 @@ function ConversationPage({
                       {msg.providerError && (
                         <div
                           role="status"
-                          className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-600 dark:text-amber-400"
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-warning/30 bg-warning-surface px-2 py-1 text-xs text-warning"
                         >
                           <span className="font-medium">Response interrupted</span>
-                          <span className="text-amber-600/70 dark:text-amber-400/70">
+                          <span className="text-warning">
                             The provider stopped mid-answer ({msg.providerError.reason}). Partial output shown — try sending again.
                           </span>
                         </div>
@@ -857,10 +823,10 @@ function ConversationPage({
                 <div className="flex-shrink-0 mt-1">
                   <Avatar className="h-8 w-8 ring-1 ring-border/50 bg-background">
                     <AvatarImage src="/lattice-logo.png" alt="Weaver avatar" />
-                    <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
+                    <AvatarFallback className="text-[10px] bg-accent text-accent-foreground">AI</AvatarFallback>
                   </Avatar>
                 </div>
-                <div className="relative text-sm md:text-base leading-relaxed break-words bg-transparent text-foreground px-0 py-0 animate-pulse">
+                <div className="relative text-sm md:text-base leading-relaxed break-words bg-transparent text-foreground px-0 py-0 motion-safe:animate-pulse">
                   <p className="whitespace-pre-wrap">{streamingContent}</p>
                 </div>
               </div>

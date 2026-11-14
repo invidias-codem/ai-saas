@@ -51,7 +51,7 @@ describe('Mineral / Copper canonical public homepage', () => {
     const component = source('components/marketing/mineral-copper-expert-landing-layout.tsx');
     expect(styles).toContain('.lm-page');
     expect(styles).toContain('.lm-hero');
-    expect(styles).toContain('.lm-page[data-theme="dark"]');
+    expect(styles).toContain('.dark .lm-page');
     expect(styles).not.toContain('.mc-');
     expect(component).toContain("import '@/app/[locale]/(launch)/launch/launch.css'");
     expect(component).toContain('className="lm-page"');

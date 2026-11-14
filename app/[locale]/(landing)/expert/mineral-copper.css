@@ -1,41 +1,4 @@
-/* Mineral / Copper expert variant — scoped palette, not global app colors. */
-.lm-page {
-  --lm-bg: #F2EFE5;
-  --lm-ink: #17271E;
-  --lm-muted: #506157;
-  --lm-surface: #FFFCF5;
-  --lm-section: #EAEFE6;
-  --lm-border: #C4D2C5;
-  --lm-copper: #CD7A53;
-  --lm-copper-ink: #874025;
-  --lm-forest: #286D50;
-  --lm-sage: #A5B7A6;
-  --lm-cta-text: #101916;
-  --lm-panel: #101916;
-  background: var(--lm-bg);
-  color: var(--lm-ink);
-  font-family: var(--font-inter), Inter, system-ui, sans-serif;
-  min-height: 100vh;
-  overflow-x: clip;
-  isolation: isolate;
-  color-scheme: light;
-}
-
-.lm-page[data-theme="dark"] {
-  --lm-bg: #0D1511;
-  --lm-ink: #F2EFE5;
-  --lm-muted: #B1C2B6;
-  --lm-surface: #17251D;
-  --lm-section: #122019;
-  --lm-border: #3C5344;
-  --lm-copper: #D58A64;
-  --lm-copper-ink: #EDB291;
-  --lm-forest: #83B998;
-  --lm-sage: #A5B7A6;
-  --lm-panel: #0A100D;
-  color-scheme: dark;
-}
-
+/* Mineral / Copper expert variant layout. */
 .lm-page * { box-sizing: border-box; }
 
 .lm-container { width: min(100%, 1240px); margin: auto; padding-inline: clamp(18px, 4vw, 48px); }
@@ -54,7 +17,7 @@
 .lm-hero-copy > p:not(.lm-availability-mini) { max-width: 570px; color: var(--lm-muted); font-size: clamp(16px, 1.4vw, 19px); line-height: 1.8; }
 .lm-hero-actions { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 28px; }
 .lm-button-primary { background: var(--lm-copper); color: var(--lm-cta-text); }
-.lm-button-primary:hover { background: #EBAD8A; }
+.lm-button-primary:hover { background: var(--lattice-action-hover); }
 .lm-button-secondary { background: var(--lm-surface); color: var(--lm-ink); border: 1px solid var(--lm-border); }
 .lm-button-secondary:hover { border-color: var(--lm-forest); }
 .lm-availability-mini { color: var(--lm-muted); font-size: 12px; line-height: 1.8; margin-top: 22px; }
@@ -62,7 +25,7 @@
 /* Visual / Product preview */
 .lm-visual { min-width: 0; position: relative; min-height: 530px; display: flex; align-items: end; justify-content: center; padding: 36px 15px 55px; }
 .lm-network { position: absolute; top: 0; right: 0; width: min(100%, 480px); height: 440px; color: var(--lm-forest); opacity: .73; }
-.lm-hero-product { position: relative; z-index: 1; max-width: 460px; width: 100%; padding: 22px; background: var(--lm-panel); color: #F2EFE5; border: 1px solid #50735A; border-radius: 23px; box-shadow: 0 28px 60px rgba(0,0,0,.18); }
+.lm-hero-product { position: relative; z-index: 1; max-width: 460px; width: 100%; padding: 22px; background: var(--lm-panel); color: var(--lattice-limestone); border: 1px solid #50735A; border-radius: 23px; box-shadow: 0 28px 60px rgba(0,0,0,.18); }
 .lm-hero-product > div { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 730; }
 .lm-hero-product small { margin-left: auto; font-size: 9px; letter-spacing: .11em; color: #C5D6C4; }
 .lm-indicator { height: 8px; width: 8px; border-radius: 50%; background: #7AC49C; display: inline-block; flex-shrink: 0; }
@@ -83,7 +46,7 @@
 .lm-intro p,
 .lm-features p { color: var(--lm-muted); line-height: 1.8; font-size: 15px; }
 
-.lm-preview { background: #101916; color: #F2EFE5; border: 1px solid #46644F; border-radius: 25px; overflow: hidden; box-shadow: 0 25px 55px rgba(0,0,0,.12); }
+.lm-preview { background: var(--lattice-mineral-ink); color: var(--lattice-limestone); border: 1px solid #46644F; border-radius: 25px; overflow: hidden; box-shadow: 0 25px 55px rgba(0,0,0,.12); }
 .lm-preview-bar { min-height: 65px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 15px 22px; border-bottom: 1px solid #405A47; }
 .lm-preview-title { display: flex; align-items: center; gap: 11px; font-size: 13px; font-weight: 750; }
 .lm-preview-note { font-size: 9px; letter-spacing: .13em; color: #B8C9B5; border: 1px solid #58725B; padding: 7px 10px; border-radius: 20px; }
@@ -106,7 +69,7 @@
 .lm-plan-list > div span,
 .lm-plan-list b { color: #E6B193; }
 .lm-plan-list b { margin-left: auto; }
-.lm-example-next { margin-top: 22px; display: inline-flex; align-items: center; gap: 10px; background: var(--lm-copper); color: #101916; min-height: 43px; padding: 0 18px; border: 0; border-radius: 25px; font-weight: 750; font-size: 13px; cursor: pointer; text-decoration: none; }
+.lm-example-next { margin-top: 22px; display: inline-flex; align-items: center; gap: 10px; background: var(--lm-copper); color: var(--lattice-mineral-ink); min-height: 43px; padding: 0 18px; border: 0; border-radius: 25px; font-weight: 750; font-size: 13px; cursor: pointer; text-decoration: none; }
 
 .lm-mini-app { margin-top: 21px; max-width: 520px; border-radius: 15px; overflow: hidden; background: #F3F6EE; color: #18291E; }
 .lm-mini-app > div { padding: 14px; font-size: 13px; font-weight: 750; border-bottom: 1px solid #D2DDD1; }
@@ -126,12 +89,12 @@
 .lm-features-grid article p { font-size: 14px; }
 
 /* Availability */
-.lm-availability { padding-block: 85px; background: #101916; color: #F2EFE5; }
+.lm-availability { padding-block: 85px; background: var(--lattice-mineral-ink); color: var(--lattice-limestone); }
 .lm-availability-inner { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 45px; }
 .lm-availability .lm-eyebrow { color: #DFA787; }
 .lm-availability h2 { max-width: 590px; }
 .lm-availability-inner > div:first-child > p { color: #C3D2C4; line-height: 1.8; font-size: 14px; }
-.lm-button-cream { background: #F2EFE5; color: #101916; margin-top: 17px; }
+.lm-button-cream { background: var(--lattice-limestone); color: var(--lattice-mineral-ink); margin-top: 17px; }
 .lm-availability-card { display: grid; gap: 12px; }
 .lm-availability-card > div { border: 1px solid #3F6249; background: #1B2A21; border-radius: 15px; padding: 18px; }
 .lm-availability-card strong { font-size: 14px; }
@@ -184,6 +147,6 @@
 }
 
 /* Consistent dark CTA and explicit footer link colors */
-.lm-page[data-theme="dark"] .lm-button-primary { background: var(--lm-copper); color: #101916; }
+.dark .lm-page .lm-button-primary { background: var(--lm-copper); color: var(--lattice-mineral-ink); }
 .lm-footer nav a { color: var(--lm-muted); text-decoration: none; }
 .lm-footer nav a:hover { color: var(--lm-copper-ink); }
