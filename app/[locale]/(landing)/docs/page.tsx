@@ -394,27 +394,22 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
     ];
 
     return (
-        <div lang={language} className="bg-background min-h-screen flex flex-col overflow-x-hidden relative text-foreground">
-            <div className="fixed inset-0 z-0 pointer-events-none">
-                <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[100px]" />
-                <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px]" />
-            </div>
-
-            <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-10 pt-24 sm:px-6 sm:pt-28 md:flex-row md:gap-12 md:px-10 md:py-12">
-                <aside className="w-full md:w-72 flex-shrink-0 hidden md:block">
-                    <div className="sticky top-32 space-y-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+        <div lang={language}>
+            <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 py-10 sm:px-6 lg:flex-row lg:gap-10 lg:px-10 lg:py-14">
+                <aside className="hidden w-60 shrink-0 lg:block">
+                    <div className="sticky top-24 max-h-[calc(100dvh-7rem)] space-y-4 overflow-y-auto">
+                        <div className="space-y-3">
+                            <p className="text-sm font-semibold text-primary">
                                 {t("sidebar.label")}
-                            </h3>
+                            </p>
                             <LanguageSelector language={language} selectId="docs-language-desktop" />
                         </div>
                         <ul className="space-y-3 border-l border-border">
-                            {docSections.map((section, index) => (
+                            {docSections.map((section) => (
                                 <li key={section.id}>
                                     <a
                                         href={`#${section.id}`}
-                                        className={`block pl-4 min-h-[44px] inline-flex items-center transition ${index === 0 ? "text-primary border-l-2 border-primary -ml-px" : "text-muted-foreground border-l border-transparent hover:text-foreground hover:border-border"}`}
+                                        className="flex min-h-11 items-center rounded-r-lg px-4 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
                                     >
                                         {section.title}
                                     </a>
@@ -423,12 +418,12 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                         </ul>
                     </div>
 
-                    <div>
+                    <div className="mt-8">
                         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">
                             {t("usefulFor.label")}
                         </h3>
                         <ul className="space-y-3 border-l border-border">
-                            {['item1', 'item2', 'item3', 'item4', 'item5'].map((key, index) => (
+                            {['item1', 'item2', 'item3', 'item4', 'item5'].map((key) => (
                                 <li key={key} className="block pl-4 text-muted-foreground">
                                     {t(`usefulFor.${key}`)}
                                 </li>
@@ -437,16 +432,16 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                     </div>
                 </aside>
 
-                <div className="w-full flex-grow space-y-10 md:max-w-4xl md:space-y-16">
+                <div className="w-full min-w-0 flex-1 space-y-10 md:space-y-16">
                     <section id="hero" className="scroll-mt-32">
-                        <div className="mb-5 md:hidden">
+                        <div className="mb-6 lg:hidden">
                             <LanguageSelector language={language} selectId="docs-language-mobile" />
                         </div>
-                        <div className="mb-5 inline-flex max-w-full items-start gap-2 rounded-2xl border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-[11px] font-medium leading-snug text-purple-700 dark:text-purple-200 sm:items-center sm:rounded-full sm:text-xs">
+                        <div className="mb-5 inline-flex max-w-full items-start gap-2 rounded-2xl border border-border bg-accent px-3 py-2 text-[11px] font-medium leading-snug text-accent-foreground sm:items-center sm:rounded-full sm:text-xs">
                             <BookOpen className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 sm:mt-0" />
                             <span>{t("hero.badge")}</span>
                         </div>
-                        <h1 className="mb-5 max-w-3xl bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 bg-clip-text text-[2.35rem] font-bold leading-[1.04] tracking-tight text-transparent dark:from-white dark:via-slate-300 dark:to-slate-500 min-[390px]:text-[2.75rem] sm:text-5xl md:text-6xl">
+                        <h1 className="mb-5 max-w-3xl text-[2.35rem] font-bold leading-[1.04] tracking-tight min-[390px]:text-[2.75rem] sm:text-5xl md:text-6xl">
                             {t("hero.title")}
                         </h1>
                         <p className="mb-6 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg md:text-xl md:leading-relaxed">
@@ -454,41 +449,39 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                         </p>
 
                         <div className="mb-6 grid gap-3 sm:mb-8 sm:flex sm:flex-wrap">
-                            <Link href="/beta/start" className="w-full sm:w-auto">
-                                <Button className="h-11 w-full rounded-full px-5 text-sm font-semibold sm:w-auto">
+                            <Button asChild variant="action" className="h-11 rounded-full px-5 font-semibold">
+                                <Link href="/beta/start">
                                     {t("hero.ctaPrimary")} <ArrowRight className="ml-2 h-4 w-4" />
-                                </Button>
-                            </Link>
-                            <a href="#power-user-recipes" className="w-full sm:w-auto">
-                                <Button variant="outline" className="h-11 w-full rounded-full border-border px-5 text-sm hover:bg-accent sm:w-auto">
-                                    {t("hero.ctaSecondary")}
-                                </Button>
-                            </a>
-                            <a href={docsIndexUrl} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
-                                <Button variant="outline" className="h-11 w-full rounded-full border-border px-5 text-sm hover:bg-accent sm:w-auto">
+                                </Link>
+                            </Button>
+                            <Button asChild variant="outline" className="h-11 rounded-full px-5">
+                                <a href="#power-user-recipes">{t("hero.ctaSecondary")}</a>
+                            </Button>
+                            <Button asChild variant="outline" className="h-11 rounded-full px-5">
+                                <a href={docsIndexUrl} target="_blank" rel="noreferrer">
                                     <BrandIcon name="Github" className="mr-2 h-4 w-4" size={16} /> {t("hero.ctaGithub")}
-                                </Button>
-                            </a>
-                            <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer" className="w-full sm:w-auto">
-                                <Button variant="ghost" className="h-11 w-full rounded-full px-5 text-sm hover:bg-accent sm:w-auto">
+                                </a>
+                            </Button>
+                            <Button asChild variant="ghost" className="h-11 rounded-full px-5">
+                                <a href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
                                     {t("hero.ctaSource")} <ExternalLink className="ml-2 h-4 w-4" />
-                                </Button>
-                            </a>
+                                </a>
+                            </Button>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 xl:gap-4">
                             <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
-                                <Rocket className="w-8 h-8 text-purple-500 dark:text-purple-400 mb-4" />
+                                <Rocket className="w-8 h-8 text-primary mb-4" />
                                 <h3 className="text-lg font-semibold mb-2">{t("features.onboardingTitle")}</h3>
                                 <p className="text-sm text-muted-foreground">{t("features.onboardingDesc")}</p>
                             </div>
                             <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
-                                <ServerCog className="w-8 h-8 text-blue-500 dark:text-blue-400 mb-4" />
+                                <ServerCog className="w-8 h-8 text-primary mb-4" />
                                 <h3 className="text-lg font-semibold mb-2">{t("features.applianceTitle")}</h3>
                                 <p className="text-sm text-muted-foreground">{t("features.applianceDesc")}</p>
                             </div>
                             <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
-                                <Shield className="w-8 h-8 text-emerald-500 dark:text-emerald-400 mb-4" />
+                                <Shield className="w-8 h-8 text-primary mb-4" />
                                 <h3 className="text-lg font-semibold mb-2">{t("features.securityTitle")}</h3>
                                 <p className="text-sm text-muted-foreground">{t("features.securityDesc")}</p>
                             </div>
@@ -515,7 +508,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                                             <h3 className="mb-2 text-lg font-semibold sm:text-xl">{item.title}</h3>
                                             <p className="text-sm leading-6 text-muted-foreground sm:text-base sm:leading-relaxed">{item.description}</p>
                                             {item.command && (
-                                                <pre className="mt-4 max-w-full overflow-x-auto rounded-lg border border-border bg-black/5 p-3 text-xs dark:bg-white/5 sm:p-4 sm:text-sm">
+                                                <pre className="mt-4 max-w-full overflow-x-auto rounded-lg border border-border bg-chrome p-3 text-xs sm:p-4 sm:text-sm">
                                                     <code lang="en">{item.command}</code>
                                                 </pre>
                                             )}
@@ -610,7 +603,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                                                         <p className="mb-4 text-sm leading-6 text-muted-foreground sm:text-base sm:leading-relaxed">{item.description}</p>
                                                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                                                             {item.href ? (
-                                                                <Link href={item.href} className="inline-flex items-center text-sm font-semibold text-primary hover:underline">
+                                                                <Link href={item.href} className="inline-flex max-w-full items-center break-all text-sm font-semibold text-primary hover:underline">
                                                                     {item.path} <ArrowRight className="ml-1 h-4 w-4" />
                                                                 </Link>
                                                             ) : (
@@ -630,7 +623,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <CheckCircle2 className="mt-1 h-5 w-5 flex-shrink-0 text-emerald-500" />
+                                                    <CheckCircle2 className="mt-1 h-5 w-5 flex-shrink-0 text-primary" />
                                                 </div>
                                             </div>
                                         );
@@ -641,7 +634,7 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                     })}
 
                     <section className="border-t border-border pb-10 pt-10 md:pb-16 md:pt-16">
-                        <div className="rounded-2xl border border-blue-500/20 bg-blue-600/10 p-5 text-center sm:p-8">
+                        <div className="rounded-2xl border border-border bg-chrome p-5 text-center sm:p-8">
                             <h2 className="text-2xl font-bold mb-4">
                                 {t("cta.needPath")}
                             </h2>
@@ -649,16 +642,14 @@ export default async function DocsPage({ searchParams }: DocsPageProps) {
                                 {t("cta.needPathDesc")}
                             </p>
                             <div className="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center sm:gap-4">
-                                <Link href="/support">
-                                    <Button className="w-full bg-blue-600 text-white hover:bg-blue-700 sm:w-auto">
-                                        {t("cta.support")}
-                                    </Button>
-                                </Link>
-                                <Link href="/dashboard">
-                                    <Button variant="outline" className="w-full border-border hover:bg-accent sm:w-auto">
-                                        {t("cta.dashboard")} <ArrowRight className="w-4 h-4 ml-2" />
-                                    </Button>
-                                </Link>
+                                <Button asChild variant="action" className="h-11">
+                                    <Link href="/support">{t("cta.support")}</Link>
+                                </Button>
+                                <Button asChild variant="outline" className="h-11">
+                                    <Link href="/dashboard">
+                                        {t("cta.dashboard")} <ArrowRight className="ml-2 h-4 w-4" />
+                                    </Link>
+                                </Button>
                             </div>
                         </div>
                     </section>

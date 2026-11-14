@@ -38,32 +38,32 @@ const categoryConfig: Record<PromptCategory, {
 }> = {
   content: {
     icon: FileText,
-    color: "text-blue-600 dark:text-blue-400",
-    bgColor: "bg-blue-500/10",
+    color: "text-accent-foreground",
+    bgColor: "bg-accent",
     label: "Content",
   },
   coding: {
     icon: Code,
-    color: "text-green-600 dark:text-green-400",
-    bgColor: "bg-green-500/10",
+    color: "text-primary",
+    bgColor: "bg-accent",
     label: "Coding",
   },
   analysis: {
     icon: BarChart,
-    color: "text-purple-600 dark:text-purple-400",
-    bgColor: "bg-purple-500/10",
+    color: "text-primary",
+    bgColor: "bg-accent",
     label: "Analysis",
   },
   business: {
     icon: Briefcase,
-    color: "text-orange-600 dark:text-orange-400",
-    bgColor: "bg-orange-500/10",
+    color: "text-accent-foreground",
+    bgColor: "bg-accent",
     label: "Business",
   },
   creative: {
     icon: Palette,
-    color: "text-pink-600 dark:text-pink-400",
-    bgColor: "bg-pink-500/10",
+    color: "text-accent-foreground",
+    bgColor: "bg-accent",
     label: "Creative",
   },
 };
@@ -74,18 +74,18 @@ const difficultyConfig: Record<Difficulty, {
   label: string;
 }> = {
   beginner: {
-    color: "text-green-600 dark:text-green-400",
-    bgColor: "bg-green-500/20",
+    color: "text-primary",
+    bgColor: "bg-accent",
     label: "Beginner",
   },
   intermediate: {
-    color: "text-yellow-600 dark:text-yellow-400",
-    bgColor: "bg-yellow-500/20",
+    color: "text-warning",
+    bgColor: "bg-warning-surface",
     label: "Intermediate",
   },
   advanced: {
-    color: "text-red-600 dark:text-red-400",
-    bgColor: "bg-red-500/20",
+    color: "text-destructive",
+    bgColor: "bg-danger-surface",
     label: "Advanced",
   },
 };
@@ -120,14 +120,14 @@ export function PromptCard({
   return (
     <div 
       id={`prompt-${number}`}
-      className="my-8 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 overflow-hidden scroll-mt-24 shadow-sm dark:shadow-none"
+      className="my-8 rounded-xl border border-border bg-card overflow-hidden scroll-mt-24 shadow-sm dark:shadow-none"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-chrome border-b border-border">
         <div className="flex items-center gap-3">
-          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/20 text-purple-600 dark:text-purple-400 font-bold text-sm">
+          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-accent text-accent-foreground font-bold text-sm">
             {number}
           </span>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{title}</h3>
+          <h3 className="text-lg font-semibold text-foreground">{title}</h3>
         </div>
         
         <div className="flex items-center gap-2">
@@ -152,7 +152,7 @@ export function PromptCard({
 
       <div className="p-4">
         <div className="relative">
-          <div className="p-4 rounded-lg bg-slate-950 font-mono text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+          <div className="p-4 rounded-lg bg-chrome font-mono text-sm text-foreground whitespace-pre-wrap leading-relaxed">
             {prompt}
           </div>
           
@@ -161,7 +161,7 @@ export function PromptCard({
             className={cn(
               "absolute top-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition duration-200",
               copied
-                ? "bg-green-500/20 text-green-600 dark:text-green-400"
+                ? "bg-green-500/20 text-primary"
                 : "bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white"
             )}
           >
@@ -180,18 +180,18 @@ export function PromptCard({
         </div>
 
         {children && (
-          <div className="mt-4 text-slate-600 dark:text-gray-400 text-sm">
+          <div className="mt-4 text-muted-foreground text-sm">
             {children}
           </div>
         )}
 
         {tips && tips.length > 0 && (
-          <div className="mt-4 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
-            <p className="text-purple-700 dark:text-purple-300 text-sm font-medium mb-2">💡 Pro Tips:</p>
+          <div className="mt-4 p-3 rounded-lg bg-accent border border-border">
+            <p className="text-accent-foreground text-sm font-medium mb-2">💡 Pro Tips:</p>
             <ul className="space-y-1">
               {tips.map((tip, index) => (
-                <li key={index} className="text-slate-600 dark:text-gray-400 text-sm flex items-start gap-2">
-                  <span className="text-purple-600 dark:text-purple-400">•</span>
+                <li key={index} className="text-muted-foreground text-sm flex items-start gap-2">
+                  <span className="text-primary">•</span>
                   {tip}
                 </li>
               ))}
@@ -203,7 +203,7 @@ export function PromptCard({
           <div className="mt-4">
             <button
               onClick={() => setShowExample(!showExample)}
-              className="flex items-center gap-2 text-sm text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
             >
               {showExample ? (
                 <ChevronUp className="w-4 h-4" />
@@ -214,9 +214,9 @@ export function PromptCard({
             </button>
             
             {showExample && (
-              <div className="mt-3 p-4 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
-                <p className="text-xs text-slate-500 dark:text-gray-500 mb-2 uppercase tracking-wide">Example Output:</p>
-                <div className="text-slate-700 dark:text-gray-300 text-sm whitespace-pre-wrap">
+              <div className="mt-3 p-4 rounded-lg bg-chrome border border-border">
+                <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide">Example Output:</p>
+                <div className="text-muted-foreground text-sm whitespace-pre-wrap">
                   {example}
                 </div>
               </div>
@@ -224,13 +224,13 @@ export function PromptCard({
           </div>
         )}
 
-        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
-          <p className="text-slate-500 dark:text-gray-500 text-sm">
+        <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
+          <p className="text-muted-foreground text-sm">
             Try this prompt with Genie AI
           </p>
           <Link
             href="/sign-up"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-sm font-medium transition duration-200"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-action text-action-foreground hover:bg-action-hover text-sm font-medium transition duration-200"
           >
             <Sparkles className="w-4 h-4" />
             Try in Genie
@@ -245,8 +245,8 @@ export function PromptNavigation() {
   const categories = Object.entries(categoryConfig);
 
   return (
-    <div className="my-8 p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 shadow-sm dark:shadow-none">
-      <p className="text-sm text-slate-600 dark:text-gray-400 mb-3">Jump to category:</p>
+    <div className="my-8 p-4 rounded-xl border border-border bg-card shadow-sm dark:shadow-none">
+      <p className="text-sm text-muted-foreground mb-3">Jump to category:</p>
       <div className="flex flex-wrap gap-2">
         {categories.map(([key, config]) => {
           const Icon = config.icon;

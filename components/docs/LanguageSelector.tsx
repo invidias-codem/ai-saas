@@ -7,18 +7,18 @@ export function LanguageSelector({
   return (
     <div className="rounded-xl border border-border bg-card p-4">
       <form method="get" action="/en/docs" className="flex flex-wrap items-end gap-3">
-        <div className="flex min-w-40 flex-col gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
           <label htmlFor={selectId} className="text-sm font-semibold">
             {translateDocsText(language, "languageSelector.label")}
           </label>
           <select name="lang" id={selectId} defaultValue={language}
-            className="min-h-11 min-w-40 rounded-lg border border-border bg-background px-3 text-sm text-foreground">
+            className="min-h-11 w-full min-w-32 rounded-lg border border-input bg-background px-3 text-sm text-foreground">
             {DOCS_LANGUAGE_OPTIONS.map(({ code, label }) => (
               <option key={code} value={code}>{label}</option>
             ))}
           </select>
         </div>
-        <button type="submit" className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground">
+        <button type="submit" className="min-h-11 rounded-lg border border-input bg-chrome px-4 text-sm font-semibold text-foreground hover:bg-accent hover:text-accent-foreground">
           {translateDocsText(language, "languageSelector.selectLanguage")}
         </button>
       </form>

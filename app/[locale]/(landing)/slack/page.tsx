@@ -1,317 +1,277 @@
-"use client";
-
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import {
-  CodeIcon,
-  LightningBoltIcon,
-  CheckIcon,
-} from "@radix-ui/react-icons";
+import { CheckIcon, CodeIcon, LightningBoltIcon } from "@radix-ui/react-icons";
 import { MessageSquare, Bot, Zap, Shield, Users, ImageIcon, Presentation, Calendar, ArrowRight, Sparkles } from "lucide-react";
 import { BrandIcon } from "@/lib/icons/brandIcons";
 import { cn } from "@/lib/utils";
 
-const SlackLandingPage = () => {
+export default function SlackLandingPage() {
   const addToSlackUrl = '/api/integrations/slack/auth';
 
   return (
-    <div className="bg-black min-h-screen flex flex-col overflow-x-hidden relative">
+    <main className="min-w-0">
+      {/* Hero Section */}
+      <section className="pt-10 pb-14 sm:pt-16 sm:pb-20 px-4 text-center space-y-10 max-w-5xl mx-auto">
+        <div className="inline-flex items-center rounded-full border border-border bg-accent px-5 py-2.5 text-sm text-accent-foreground">
+          <Sparkles className="w-4 h-4 mr-2 text-primary" />
+          Now with Image, Slides & Calendar
+        </div>
 
-      {/* Background Gradients - Manus-inspired */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-purple-600/20 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[120px]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-[#4A154B]/10 rounded-full blur-[100px]" />
-      </div>
+        <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold text-foreground tracking-tight leading-[1.05]">
+          From Slack Discussion to<br />
+          <span className="text-primary">
+            Finished Deliverable
+          </span>
+          <br />in Minutes
+        </h1>
 
-      {/* Header */}
-      {/* Header Removed - Using Global Navbar */}
+        <p className="text-xl sm:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed font-light">
+          AI-powered image generation, slide decks, and calendar scheduling—directly from your Slack conversations.
+        </p>
 
-      <main className="relative z-10 flex-grow">
-        {/* Hero Section */}
-        <section className="pt-20 pb-24 px-4 text-center space-y-10 max-w-5xl mx-auto">
-          <div className="inline-flex items-center rounded-full border border-purple-500/30 bg-purple-500/10 px-5 py-2.5 text-sm text-white backdrop-blur-xl">
-            <Sparkles className="w-4 h-4 mr-2 text-purple-400" />
-            Now with Image, Slides & Calendar
-          </div>
-
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold text-white tracking-tight leading-[1.05]">
-            From Slack Discussion to<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-blue-500">
-              Finished Deliverable
-            </span>
-            <br />in Minutes
-          </h1>
-
-          <p className="text-xl sm:text-2xl text-gray-300 max-w-3xl mx-auto leading-relaxed font-light">
-            AI-powered image generation, slide decks, and calendar scheduling—directly from your Slack conversations.
-          </p>
-
-          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-6">
-            <Link href={addToSlackUrl} className="w-full sm:w-auto">
-              <Button
-                size="lg"
-                className="w-full sm:w-auto bg-white hover:bg-gray-100 text-black rounded-xl text-lg px-10 py-7 shadow-2xl shadow-purple-500/30 flex items-center justify-center gap-3 font-semibold"
-              >
-                <BrandIcon name="Slack" className="w-6 h-6" size={24} />
-                Connect to Slack
-              </Button>
-            </Link>
-            <Link href="#features" className="w-full sm:w-auto">
-              <Button
-                variant="outline"
-                size="lg"
-                className="w-full sm:w-auto rounded-xl border-white/20 text-white hover:bg-white/10 px-10 py-7 backdrop-blur-sm"
-              >
-                See How It Works
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </Link>
-          </div>
-
-          <p className="text-sm text-gray-500">
-            Free to use • No credit card required • Works with any Slack workspace
-          </p>
-        </section>
-
-        {/* Competitive Comparison - Manus-inspired */}
-        <section className="py-20 px-4 border-y border-white/10 bg-gradient-to-b from-transparent via-purple-950/10 to-transparent relative overflow-hidden">
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl font-bold text-white mb-4">Why Teams Choose Lattice OS</h2>
-              <p className="text-gray-400 text-lg">More features, better performance, unbeatable value</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-[filter] duration-200" />
-                <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
-                  <div className="text-5xl font-bold text-white mb-2">Free to start</div>
-                  <div className="text-gray-400 mb-4">Welcome credits, then pay-as-you-go</div>
-                  <div className="text-sm text-gray-500">Start free — buy credits only when you need more</div>
-                </div>
-              </div>
-
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-pink-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-[filter] duration-200" />
-                <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
-                  <div className="text-5xl font-bold text-white mb-2">4+</div>
-                  <div className="text-gray-400 mb-4">Core Features</div>
-                  <div className="text-sm text-gray-500">Images, Slides, Calendar + Code Assistant</div>
-                </div>
-              </div>
-
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur-xl group-hover:blur-2xl transition-[filter] duration-200" />
-                <div className="relative p-8 rounded-2xl border border-white/10 bg-black/50 backdrop-blur-xl">
-                  <div className="text-5xl font-bold text-white mb-2">Pay-as-you-go</div>
-                  <div className="text-gray-400 mb-4">No subscriptions</div>
-                  <div className="text-sm text-gray-500">Credits, not monthly caps — use what you need</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Ways to Use - Manus-inspired with time savings */}
-        <section id="features" className="py-24 px-4 lg:max-w-7xl lg:mx-auto relative overflow-hidden">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-white mb-4">Ways to Use Lattice OS in Slack</h2>
-            <p className="text-gray-400 text-lg">Transform hours of work into minutes</p>
-          </div>
-
-          <div className="space-y-24">
-            {useCases.map((useCase, index) => (
-              <div
-                key={index}
-                className={cn(
-                  "grid grid-cols-1 lg:grid-cols-2 gap-12 items-center",
-                  index % 2 === 1 && "lg:grid-flow-dense"
-                )}
-              >
-                <div className={cn("space-y-6", index % 2 === 1 && "lg:col-start-2")}>
-                  <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-purple-600/20 to-blue-600/20 border border-purple-500/30">
-                    <useCase.icon className="w-5 h-5 text-purple-400" />
-                    <span className="text-sm text-purple-300 font-medium">{useCase.category}</span>
-                  </div>
-
-                  <h3 className="text-3xl font-bold text-white">{useCase.title}</h3>
-
-                  <div className="flex items-baseline gap-4">
-                    <div className="text-gray-500">
-                      <div className="text-sm uppercase tracking-wide mb-1">Before</div>
-                      <div className="text-2xl font-bold line-through">{useCase.before}</div>
-                    </div>
-                    <ArrowRight className="w-6 h-6 text-purple-400" />
-                    <div className="text-white">
-                      <div className="text-sm uppercase tracking-wide mb-1 text-purple-400">After</div>
-                      <div className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 text-transparent bg-clip-text">
-                        {useCase.after}
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-gray-400 text-lg leading-relaxed">{useCase.description}</p>
-
-                  <div className="pt-4">
-                    <code className="text-sm text-purple-400 bg-purple-950/30 px-4 py-2 rounded-lg border border-purple-500/20">
-                      {useCase.example}
-                    </code>
-                  </div>
-                </div>
-
-                <div className={cn(
-                  "relative group",
-                  index % 2 === 1 && "lg:col-start-1 lg:row-start-1"
-                )}>
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-3xl blur-2xl group-hover:blur-3xl transition-[filter] duration-200" />
-                  <div className="relative aspect-[9/20] lg:aspect-[9/16] rounded-2xl border border-white/10 bg-gradient-to-br from-gray-900 to-black overflow-hidden">
-                    {useCase.title === 'Image Generation' ? (
-                      <video
-                        className="w-full h-full object-cover"
-                        src="/videos/slack-image-gen.mp4"
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        controls={false}
-                      />
-                    ) : useCase.title === 'Slide Decks' ? (
-                      <video
-                        className="w-full h-full object-cover"
-                        src="/videos/slack-slides.mp4"
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        controls={false}
-                      />
-                    ) : useCase.title === 'Calendar Events' ? (
-                      <video
-                        className="w-full h-full object-cover"
-                        src="/videos/slack-calendar.mp4"
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        controls={false}
-                      />
-                    ) : (
-                      <>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <useCase.icon className="w-24 h-24 text-white/10" />
-                        </div>
-                        <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black to-transparent">
-                          <div className="text-white font-semibold">{useCase.title}</div>
-                          <div className="text-gray-400 text-sm">{useCase.category}</div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* How It Works */}
-        <section className="px-4 py-20 max-w-5xl mx-auto border-t border-white/10 relative overflow-hidden">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-white mb-4">Get Started in 60 Seconds</h2>
-            <p className="text-gray-400 text-lg">Three simple steps to transform your Slack workspace</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {steps.map((step, index) => (
-              <div key={index} className="text-center group">
-                <div className="relative mb-6">
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600/30 to-blue-600/30 rounded-full blur-xl group-hover:blur-2xl transition-[filter] duration-200" />
-                  <div className="relative w-16 h-16 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 flex items-center justify-center text-white font-bold text-2xl mx-auto">
-                    {index + 1}
-                  </div>
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">{step.title}</h3>
-                <p className="text-gray-400">{step.description}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* All Features Grid */}
-        <section className="px-4 py-20 max-w-7xl mx-auto border-t border-white/10 relative overflow-hidden">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-white mb-4">Everything You Need</h2>
-            <p className="text-gray-400 text-lg">Powerful AI capabilities, all in one integration</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {allFeatures.map((feature) => (
-              <div
-                key={feature.label}
-                className="group p-6 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors duration-200 backdrop-blur-sm hover:border-purple-500/30"
-              >
-                <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform duration-200 group-hover:scale-110", feature.bgColor)}>
-                  <feature.icon className={cn("w-6 h-6", feature.color)} />
-                </div>
-                <h3 className="text-lg font-semibold text-white mb-2">{feature.label}</h3>
-                <p className="text-gray-400 text-sm leading-relaxed">
-                  {feature.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Security Section */}
-        <section className="py-20 px-4 border-t border-white/10 relative overflow-hidden">
-          <div className="max-w-4xl mx-auto text-center">
-            <Shield className="w-12 h-12 text-green-400 mx-auto mb-6" />
-            <h2 className="text-4xl font-bold text-white mb-4">Enterprise-Grade Security</h2>
-            <p className="text-gray-400 mb-12 max-w-2xl mx-auto text-lg">
-              Your data is protected with industry-leading security practices.
-              We never store your Slack messages or use them to train AI models.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {securityFeatures.map((feature, index) => (
-                <div key={index} className="p-6 rounded-xl bg-white/5 border border-white/10 hover:border-green-500/30 transition-colors duration-200">
-                  <CheckIcon className="w-6 h-6 text-green-400 mx-auto mb-3" />
-                  <p className="text-white font-medium">{feature}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Final CTA */}
-        <section className="py-24 px-4 border-t border-white/10 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-600/10 via-pink-600/10 to-blue-600/10" />
-          <div className="relative max-w-4xl mx-auto text-center">
-            <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">
-              Ready to Transform Your Workflow?
-            </h2>
-            <p className="text-gray-300 mb-10 text-xl max-w-2xl mx-auto">
-              Join thousands of teams using Lattice OS to work smarter, not harder.
-            </p>
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-4 pt-6">
+          <Button asChild size="lg" variant="action" className="min-h-12 gap-2 rounded-xl px-5 py-3 whitespace-normal text-center sm:px-6">
             <Link href={addToSlackUrl}>
-              <Button
-                size="lg"
-                className="bg-white hover:bg-gray-100 text-black rounded-xl text-lg px-12 py-8 shadow-2xl shadow-purple-500/30 font-semibold"
-              >
-                <BrandIcon name="Slack" className="w-6 h-6 mr-3" size={24} />
-                Add to Slack — It&apos;s Free
-              </Button>
+              <BrandIcon name="Slack" className="w-6 h-6" size={24} />
+              Connect to Slack
             </Link>
-            <p className="text-gray-500 mt-6 text-sm">
-              No credit card required • 2-minute setup • Cancel anytime
-            </p>
-          </div>
-        </section>
-      </main>
-    </div>
-  );
-};
+          </Button>
+          <Button asChild size="lg" variant="outline" className="min-h-12 gap-2 rounded-xl px-5 py-3 whitespace-normal text-center sm:px-6">
+            <Link href="#features">
+              See How It Works
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Link>
+          </Button>
+        </div>
 
-export default SlackLandingPage;
+        <p className="text-sm text-muted-foreground">
+          Free to use • No credit card required • Works with any Slack workspace
+        </p>
+      </section>
+
+      {/* Competitive comparison */}
+      <section className="py-20 px-4 border-y border-border bg-chrome relative overflow-hidden">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-foreground mb-4">Why Teams Choose Lattice OS</h2>
+            <p className="text-muted-foreground text-lg">More features, better performance, unbeatable value</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="relative group">
+              <div className="relative p-5 sm:p-8 rounded-2xl border border-border bg-card">
+                <div className="text-3xl font-bold text-foreground xl:text-4xl mb-2">Free to start</div>
+                <div className="text-muted-foreground mb-4">Welcome credits, then pay-as-you-go</div>
+                <div className="text-sm text-muted-foreground">Start free — buy credits only when you need more</div>
+              </div>
+            </div>
+
+            <div className="relative group">
+              <div className="relative p-5 sm:p-8 rounded-2xl border border-border bg-card">
+                <div className="text-3xl font-bold text-foreground xl:text-4xl mb-2">4+</div>
+                <div className="text-muted-foreground mb-4">Core Features</div>
+                <div className="text-sm text-muted-foreground">Images, Slides, Calendar + Code Assistant</div>
+              </div>
+            </div>
+
+            <div className="relative group">
+              <div className="relative p-5 sm:p-8 rounded-2xl border border-border bg-card">
+                <div className="text-3xl font-bold text-foreground xl:text-4xl mb-2">Pay-as-you-go</div>
+                <div className="text-muted-foreground mb-4">No subscriptions</div>
+                <div className="text-sm text-muted-foreground">Credits, not monthly caps — use what you need</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Use cases */}
+      <section id="features" className="scroll-mt-16 py-16 md:py-20 px-4 lg:max-w-7xl lg:mx-auto relative overflow-hidden">
+        <div className="text-center mb-16">
+          <h2 className="text-4xl font-bold text-foreground mb-4">Ways to Use Lattice OS in Slack</h2>
+          <p className="text-muted-foreground text-lg">Transform hours of work into minutes</p>
+        </div>
+
+        <div className="space-y-24">
+          {useCases.map((useCase, index) => (
+            <div
+              key={index}
+              className={cn(
+                "grid grid-cols-1 lg:grid-cols-2 gap-8 items-center",
+                index % 2 === 1 && "lg:grid-flow-dense"
+              )}
+            >
+              <div className={cn("space-y-6", index % 2 === 1 && "lg:col-start-2")}>
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-accent border border-border">
+                  <useCase.icon className="w-5 h-5 text-primary" />
+                  <span className="text-sm text-accent-foreground font-medium">{useCase.category}</span>
+                </div>
+
+                <h3 className="text-3xl font-bold text-foreground">{useCase.title}</h3>
+
+                <div className="flex flex-wrap items-baseline gap-3">
+                  <div className="text-muted-foreground">
+                    <div className="text-sm uppercase tracking-wide mb-1">Before</div>
+                    <div className="text-2xl font-bold line-through">{useCase.before}</div>
+                  </div>
+                  <ArrowRight className="h-6 w-6 shrink-0 text-primary" />
+                  <div className="text-foreground">
+                    <div className="text-sm uppercase tracking-wide mb-1 text-primary">After</div>
+                    <div className="text-3xl font-bold text-primary">
+                      {useCase.after}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-muted-foreground text-lg leading-relaxed">{useCase.description}</p>
+
+                <div className="pt-4">
+                  <code className="inline-block max-w-full break-words rounded-lg border border-border bg-chrome px-4 py-2 text-sm text-primary">
+                    {useCase.example}
+                  </code>
+                </div>
+              </div>
+
+              <div className={cn(
+                "relative group",
+                index % 2 === 1 && "lg:col-start-1 lg:row-start-1"
+              )}>
+                <div className="relative aspect-[9/20] lg:aspect-[9/16] rounded-2xl border border-border bg-[var(--lattice-mineral-ink)] overflow-hidden">
+                  {useCase.title === 'Image Generation' ? (
+                    <video
+                      className="w-full h-full object-cover"
+                      src="/videos/slack-image-gen.mp4"
+                      muted
+                      playsInline
+                      controls
+                      preload="none"
+                    />
+                  ) : useCase.title === 'Slide Decks' ? (
+                    <video
+                      className="w-full h-full object-cover"
+                      src="/videos/slack-slides.mp4"
+                      muted
+                      playsInline
+                      controls
+                      preload="none"
+                    />
+                  ) : useCase.title === 'Calendar Events' ? (
+                    <video
+                      className="w-full h-full object-cover"
+                      src="/videos/slack-calendar.mp4"
+                      muted
+                      playsInline
+                      controls
+                      preload="none"
+                    />
+                  ) : (
+                    <>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <useCase.icon className="w-24 h-24 text-white/10" />
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black to-transparent">
+                        <div className="text-[var(--lattice-limestone)] font-semibold">{useCase.title}</div>
+                        <div className="text-[var(--lattice-mist-sage)] text-sm">{useCase.category}</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="px-4 py-20 max-w-5xl mx-auto border-t border-border relative overflow-hidden">
+        <div className="text-center mb-16">
+          <h2 className="text-4xl font-bold text-foreground mb-4">Get Started in 60 Seconds</h2>
+          <p className="text-muted-foreground text-lg">Three simple steps to transform your Slack workspace</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {steps.map((step, index) => (
+            <div key={index} className="text-center group">
+              <div className="relative mb-6">
+                <div className="relative w-16 h-16 rounded-full bg-accent flex items-center justify-center text-accent-foreground font-bold text-2xl mx-auto">
+                  {index + 1}
+                </div>
+              </div>
+              <h3 className="text-xl font-semibold text-foreground mb-3">{step.title}</h3>
+              <p className="text-muted-foreground">{step.description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* All Features Grid */}
+      <section className="px-4 py-20 max-w-7xl mx-auto border-t border-border relative overflow-hidden">
+        <div className="text-center mb-16">
+          <h2 className="text-4xl font-bold text-foreground mb-4">Everything You Need</h2>
+          <p className="text-muted-foreground text-lg">Powerful AI capabilities, all in one integration</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {allFeatures.map((feature) => (
+            <div
+              key={feature.label}
+              className="group p-6 rounded-2xl border border-border bg-card hover:bg-accent transition-colors duration-200 hover:border-primary"
+            >
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4 transition-transform duration-200 group-hover:scale-110 bg-accent">
+                <feature.icon className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">{feature.label}</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                {feature.description}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Security Section */}
+      <section className="py-20 px-4 border-t border-border relative overflow-hidden">
+        <div className="max-w-4xl mx-auto text-center">
+          <Shield className="w-12 h-12 text-primary mx-auto mb-6" />
+          <h2 className="text-4xl font-bold text-foreground mb-4">Enterprise-Grade Security</h2>
+          <p className="text-muted-foreground mb-12 max-w-2xl mx-auto text-lg">
+            Your data is protected with industry-leading security practices.
+            We never store your Slack messages or use them to train AI models.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {securityFeatures.map((feature, index) => (
+              <div key={index} className="p-6 rounded-xl bg-card border border-border hover:border-primary transition-colors duration-200">
+                <CheckIcon className="w-6 h-6 text-primary mx-auto mb-3" />
+                <p className="text-foreground font-medium">{feature}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="py-16 md:py-20 px-4 border-t border-border bg-chrome">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl font-bold text-foreground sm:text-5xl mb-6">
+            Ready to Transform Your Workflow?
+          </h2>
+          <p className="text-muted-foreground mb-10 text-xl max-w-2xl mx-auto">
+            Join thousands of teams using Lattice OS to work smarter, not harder.
+          </p>
+          <Button asChild size="lg" variant="action" className="min-h-12 gap-2 rounded-xl px-5 py-3 whitespace-normal text-center sm:px-6">
+            <Link href={addToSlackUrl}>
+              <BrandIcon name="Slack" className="w-6 h-6 mr-3" size={24} />
+              Add to Slack — It&apos;s Free
+            </Link>
+          </Button>
+          <p className="text-muted-foreground mt-6 text-sm">
+            No credit card required • 2-minute setup • Cancel anytime
+          </p>
+        </div>
+      </section>
+    </main>
+  );
+}
 
 // --- Data ---
 
@@ -374,64 +334,46 @@ const allFeatures = [
     label: "Image Generation",
     icon: ImageIcon,
     description: "Create stunning visuals with Flux AI. Logos, graphics, illustrations—all from text prompts.",
-    color: "text-pink-500",
-    bgColor: "bg-pink-500/10",
   },
   {
     label: "Slide Decks",
     icon: Presentation,
     description: "Professional PowerPoint presentations generated from your topic. Complete with layouts and content.",
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
   },
   {
     label: "Calendar Scheduling",
     icon: Calendar,
     description: "Schedule meetings with @mentions. Automatic email resolution and Google Calendar integration.",
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
   },
   {
     label: "Code Assistant",
     icon: CodeIcon,
     description: "Generate, debug, and explain code in any programming language with context-aware responses.",
-    color: "text-purple-500",
-    bgColor: "bg-purple-500/10",
   },
   {
     label: "@Mentions",
     icon: Bot,
     description: "Mention @Genie in any channel for contextual AI assistance that understands your conversation.",
-    color: "text-orange-500",
-    bgColor: "bg-orange-500/10",
   },
   {
     label: "Direct Messages",
     icon: MessageSquare,
     description: "Private conversations with Lattice OS for sensitive questions and personal assistance.",
-    color: "text-cyan-500",
-    bgColor: "bg-cyan-500/10",
   },
   {
     label: "Instant Responses",
     icon: LightningBoltIcon,
     description: "Get AI responses in seconds with streaming output. No waiting, no delays.",
-    color: "text-yellow-500",
-    bgColor: "bg-yellow-500/10",
   },
   {
     label: "Team Collaboration",
     icon: Users,
     description: "Share AI-generated content with your team in public channels for seamless collaboration.",
-    color: "text-indigo-500",
-    bgColor: "bg-indigo-500/10",
   },
   {
     label: "Smart Context",
     icon: Zap,
     description: "Lattice OS understands thread context, attached files, and links for more accurate responses.",
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
   },
 ];
 

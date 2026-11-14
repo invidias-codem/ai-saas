@@ -44,9 +44,9 @@ export function SupportForm() {
 
   if (submitStatus === "success") {
     return (
-      <div className="p-8 rounded-2xl border border-green-500/30 bg-green-500/10 text-center">
-        <CheckCircledIcon className="w-12 h-12 text-green-500 mx-auto mb-4" />
-        <h3 className="text-xl font-semibold text-foreground mb-2">Message sent</h3>
+      <div className="rounded-2xl border border-border bg-accent p-5 text-center sm:p-8">
+        <CheckCircledIcon className="w-12 h-12 text-primary mx-auto mb-4" />
+        <h3 role="status" className="mb-2 text-xl font-semibold text-accent-foreground">Message sent</h3>
         <p className="text-muted-foreground mb-6">
           Thanks for reaching out — we&apos;ll respond as soon as we can.
         </p>
@@ -77,27 +77,29 @@ export function SupportForm() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-          <label className="block text-sm font-medium text-card-foreground mb-2">Your name</label>
+          <label htmlFor="support-name" className="mb-2 block text-sm font-medium text-foreground">Your name</label>
           <Input
             type="text"
+            id="support-name"
             name="name"
             required
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            className="bg-card border-border text-foreground placeholder:text-muted-foreground focus:border-purple-500 min-h-[48px]"
+            className="bg-card min-h-[48px]"
             placeholder="Jane Doe"
             maxLength={200}
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-card-foreground mb-2">Email address</label>
+          <label htmlFor="support-email" className="mb-2 block text-sm font-medium text-foreground">Email address</label>
           <Input
             type="email"
+            id="support-email"
             name="email"
             required
             value={formData.email}
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className="bg-card border-border text-foreground placeholder:text-muted-foreground focus:border-purple-500 min-h-[48px]"
+            className="bg-card min-h-[48px]"
             placeholder="jane@example.com"
             maxLength={254}
           />
@@ -105,44 +107,47 @@ export function SupportForm() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-card-foreground mb-2">Subject</label>
+        <label htmlFor="support-subject" className="mb-2 block text-sm font-medium text-foreground">Subject</label>
         <Input
           type="text"
+          id="support-subject"
           name="subject"
           required
           value={formData.subject}
           onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-          className="bg-card border-border text-foreground placeholder:text-muted-foreground focus:border-purple-500 min-h-[48px]"
+          className="bg-card min-h-[48px]"
           placeholder="What can we help with?"
           maxLength={300}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-card-foreground mb-2">Message</label>
+        <label htmlFor="support-message" className="mb-2 block text-sm font-medium text-foreground">Message</label>
         <Textarea
+          id="support-message"
           name="message"
           required
           rows={6}
           value={formData.message}
           onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-          className="bg-card border-border text-foreground placeholder:text-muted-foreground focus:border-purple-500 resize-none"
+          className="bg-card resize-none"
           placeholder="Describe the issue, question, or behavior you need help with..."
           maxLength={10000}
         />
       </div>
 
       {submitStatus === "error" && (
-        <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center gap-3" role="alert">
-          <ExclamationTriangleIcon className="w-5 h-5 text-red-500 dark:text-red-400" />
-          <p className="text-red-600 dark:text-red-400 text-sm">Something went wrong. Please try again.</p>
+        <div className="p-4 rounded-lg bg-danger-surface border border-destructive/30 flex items-center gap-3" role="alert">
+          <ExclamationTriangleIcon className="w-5 h-5 text-destructive" />
+          <p className="text-destructive text-sm">Something went wrong. Please try again.</p>
         </div>
       )}
 
       <Button
         type="submit"
+        variant="action"
         disabled={isSubmitting}
-        className="w-full bg-primary hover:bg-primary/90 text-primary-foreground py-6 rounded-xl text-lg min-h-[48px] transition"
+        className="w-full py-6 rounded-xl text-lg min-h-[48px] transition"
       >
         {isSubmitting ? (
           <>

@@ -167,7 +167,7 @@ export function MineralLaunch() {
     </main>
     <footer className="lm-footer"><div className="lm-container">
       <span>Lattice OS · Built for people who make things.</span>
-      <nav aria-label="Footer"><Link href="/en/privacy">Privacy</Link><Link href="/en/support">Support</Link><Link href="/en/docs">Documentation</Link></nav>
+      <nav aria-label="Footer"><Link href="/en/privacy">Privacy</Link><Link href="/en/support">Support</Link><Link href="/en/docs">Documentation</Link><Link href="/en/downloads">Downloads</Link><Link href="/en/blog">Blog</Link></nav>
     </div></footer>
   </div>;
 }

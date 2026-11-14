@@ -13,9 +13,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function DesktopPlatformPage({ params }: Props) {
   const { platform } = await params;
   if (!DESKTOP_PLATFORMS.some(p => p.id === platform)) notFound();
-  return <main className="min-h-screen bg-[#080a0d] px-6 pb-24 pt-32 text-slate-100"><div className="mx-auto max-w-6xl">
-    <Link href="/downloads" className="mb-8 inline-block text-sm text-emerald-300">← All downloads</Link>
+  return <main className="min-h-screen bg-background px-4 pb-16 sm:px-6 lg:px-10 pt-10 sm:pt-14 text-foreground"><div className="mx-auto max-w-6xl">
+    <Link href="/downloads" className="mb-8 inline-block text-sm text-primary">← All downloads</Link>
     <DesktopDownloads platform={platform} />
-    <p className="text-sm leading-7 text-slate-400">For a test build, open the latest successful desktop package run, download the artifact for your OS, extract the archive and compare its SHA-256 checksum. On Windows, run the setup executable. On Linux, install the Debian package or mark the AppImage executable before opening it. Native file permissions and every write still require your consent.</p>
+    <p className="text-sm leading-7 text-muted-foreground">For a test build, open the latest successful desktop package run, download the artifact for your OS, extract the archive and compare its SHA-256 checksum. On Windows, run the setup executable. On Linux, install the Debian package or mark the AppImage executable before opening it. Native file permissions and every write still require your consent.</p>
   </div></main>;
 }
