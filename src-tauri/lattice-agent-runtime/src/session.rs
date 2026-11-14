@@ -3,15 +3,14 @@
 //! Persists conversations and task events in profile-local SQLite.
 //! Handles session reconciliation and crash recovery.
 
-use crate::{ProviderConnectionStatus, ProviderKind, RuntimeError};
+use crate::ProviderKind;
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 /// Session manager errors.
@@ -79,7 +78,7 @@ pub enum SessionState {
 }
 
 impl SessionState {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             Self::Created => "created",
             Self::Running => "running",
@@ -90,7 +89,8 @@ impl SessionState {
         }
     }
 
-    fn from_str(s: &str) -> Self {
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Self {
         match s {
             "created" => Self::Created,
             "running" => Self::Running,
@@ -483,6 +483,7 @@ impl SessionManager {
     }
 
     /// Add a message to a session.
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_message(
         &self,
         session_id: &str,
@@ -795,7 +796,7 @@ impl SessionManager {
             started_at: parse_datetime(row.get("started_at")),
             completed_at: row
                 .get::<Option<String>, _>("completed_at")
-                .and_then(|s| parse_datetime_opt(s)),
+                .and_then(parse_datetime_opt),
             metadata: serde_json::from_str(row.get("metadata")).unwrap_or_default(),
         }
     }

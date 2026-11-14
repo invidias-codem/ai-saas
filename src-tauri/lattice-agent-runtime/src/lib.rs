@@ -16,15 +16,14 @@
 //! Authenticated IPC with protocol-version negotiation.
 //! Crash recovery and session reconciliation.
 
-use lattice_credential_broker::{CredentialBroker, CredentialError, CredentialKind, ProviderKind};
+use lattice_credential_broker::{CredentialBroker, CredentialError, ProviderKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::sync::{Mutex, RwLock};
-use uuid::Uuid;
 
 pub mod agent_loop;
 pub mod ipc;
@@ -198,7 +197,6 @@ pub struct RuntimeSupervisor {
 /// Runtime instance for a single profile.
 struct RuntimeInstance {
     profile_id: String,
-    channel: String,
     state_machine: Arc<RuntimeStateMachine>,
     agent_loop: Option<Arc<AgentLoop>>,
     ipc_server: Option<Arc<Mutex<IpcServer>>>,
@@ -287,7 +285,6 @@ impl RuntimeSupervisor {
             profile_id.clone(),
             RuntimeInstance {
                 profile_id: profile_id.clone(),
-                channel,
                 state_machine: instance.state_machine,
                 agent_loop: Some(agent_loop),
                 ipc_server: Some(ipc_server),
@@ -377,7 +374,7 @@ impl RuntimeSupervisor {
                 .as_millis() as u64;
 
             // Get provider health
-            let mut provider_status = HashMap::new();
+            let provider_status = HashMap::new();
             // This would query the provider router for actual health
 
             Ok(RuntimeHealth {
@@ -428,7 +425,6 @@ impl RuntimeSupervisor {
 
         Ok(RuntimeInstance {
             profile_id,
-            channel,
             state_machine,
             agent_loop: None,
             ipc_server: None,
@@ -443,7 +439,7 @@ impl RuntimeSupervisor {
 
 /// Profile path resolution helpers.
 mod profiles {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     pub fn resolve_profile_root(channel: &str) -> Result<PathBuf, String> {
         let base = if cfg!(target_os = "windows") {
