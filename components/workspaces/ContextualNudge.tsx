@@ -20,11 +20,11 @@ export function ContextualNudge({ actionIntended, className = "" }: ContextualNu
   if (isDaemonRunning) return null;
 
   return (
-    <Card className={`p-5 sm:p-6 border-indigo-500/20 bg-indigo-500/5 ${className}`}>
+    <Card className={`border-border bg-card p-4 sm:p-5 ${className}`}>
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between">
         <div className="flex items-start gap-4">
-          <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 hidden sm:block">
-            <Shield className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+          <div className="hidden shrink-0 rounded-lg bg-accent p-2 text-accent-foreground sm:block">
+            <Shield className="h-5 w-5" aria-hidden="true" />
           </div>
           <div className="space-y-1.5">
             <h3 className="font-semibold text-base sm:text-lg">
@@ -39,13 +39,13 @@ export function ContextualNudge({ actionIntended, className = "" }: ContextualNu
             </p>
           </div>
         </div>
-        <Link href={`/${locale}/settings/local-capabilities`} className="shrink-0">
-          <Button variant="default" className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
-            <Terminal className="w-4 h-4" />
+        <Button asChild variant="outline" className="shrink-0 gap-2 border-border bg-chrome">
+          <Link href={`/${locale}/settings/local-capabilities`}>
+            <Terminal className="h-4 w-4" aria-hidden="true" />
             Go to Advanced Setup
-            <ArrowRight className="w-4 h-4" />
-          </Button>
-        </Link>
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </Button>
       </div>
     </Card>
   );
