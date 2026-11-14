@@ -8,7 +8,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ conversationId: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   // This flag MUST stay off until the durable worker writes verified data.
   if (process.env.ENABLE_CONVERSATION_CONTINUITY !== 'true') {
@@ -16,11 +16,11 @@ export async function GET(
   }
   try {
     const { userId } = await requireAuth();
-    const { conversationId } = await params;
-    if (!UUID.test(conversationId)) {
+    const { id } = await params;
+    if (!UUID.test(id)) {
       return Response.json({ error: 'Conversation not found' }, { status: 404 });
     }
-    const runs = await listOwnerConversationRuns(conversationId, userId);
+    const runs = await listOwnerConversationRuns(id, userId);
     // The same 404 for an absent or other-user conversation.
     if (!runs) return Response.json({ error: 'Conversation not found' }, { status: 404 });
     return Response.json({ runs }, { headers: { 'Cache-Control': 'private, no-store' } });
