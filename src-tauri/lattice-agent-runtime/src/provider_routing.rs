@@ -7,7 +7,6 @@
 //! - Handling provider-specific configurations
 
 use crate::ProviderConnectionStatus;
-use crate::ProviderKind;
 use lattice_credential_broker::{
     CredentialBroker, CredentialKind, CredentialRef, ProviderKind as BrokerProviderKind,
 };
@@ -15,10 +14,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
 use zeroize::Zeroizing;
 
 /// Provider routing errors.
@@ -59,14 +57,11 @@ pub struct ProviderRouter {
 /// Cached provider info with credentials.
 #[derive(Debug, Clone)]
 struct CachedProvider {
-    connection_id: String,
     provider_kind: BrokerProviderKind,
     config: ProviderConfig,
     api_key_ref: Option<CredentialRef>,
     refresh_token_ref: Option<CredentialRef>,
     local_endpoint_ref: Option<CredentialRef>,
-    cached_at: SystemTime,
-    ttl: Duration,
 }
 
 /// Provider configuration from profile.
@@ -268,14 +263,11 @@ impl ProviderRouter {
             .cloned();
 
         let cached = CachedProvider {
-            connection_id: conn.id.clone(),
             provider_kind: conn.kind,
             config: conn.config.clone(),
             api_key_ref,
             refresh_token_ref,
             local_endpoint_ref,
-            cached_at: SystemTime::now(),
-            ttl: Duration::from_secs(300), // 5 min cache
         };
 
         cache.insert(conn.id.clone(), cached);

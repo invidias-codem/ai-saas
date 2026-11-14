@@ -54,6 +54,5 @@ pub async fn agent_health(
 }
 
 pub use lattice_agent_runtime::{
-    AgentLoopConfig, AgentRuntimeConfig, ProviderRouter, RuntimeSupervisor, SessionConfig,
-    SessionManager,
+    AgentLoopConfig, AgentRuntimeConfig, RuntimeSupervisor, SessionConfig,
 };

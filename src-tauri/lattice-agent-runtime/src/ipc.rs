@@ -2,17 +2,21 @@
 //!
 //! Provides protocol-version negotiation, client identity verification,
 //! and secure message passing between CLI/desktop and the runtime.
+//!
+//! Unix: Unix domain sockets (authenticated).
+//! Windows: IPC transport not yet implemented; fails closed with
+//! `IpcError::Unsupported`. No unauthenticated local execution is ever
+//! exposed on Windows.
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::agent_loop::{AgentCommand, AgentResponse};
@@ -42,6 +46,8 @@ pub enum IpcError {
     Timeout(String),
     #[error("Invalid message: {0}")]
     InvalidMessage(String),
+    #[error("Platform not supported: {0}")]
+    Unsupported(String),
 }
 
 impl From<&str> for IpcError {
@@ -57,6 +63,15 @@ impl From<String> for IpcError {
 }
 
 pub type IpcResult<T> = std::result::Result<T, IpcError>;
+
+/// Platform stream type alias. Unix uses real Unix domain streams;
+/// Windows uses a placeholder that is never instantiated because the
+/// transport fails closed before any stream is created.
+#[cfg(unix)]
+use tokio::net::UnixStream as StreamImpl;
+
+#[cfg(windows)]
+struct StreamImpl;
 
 /// IPC message types.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -139,13 +154,9 @@ pub struct IpcConfig {
     pub connect_timeout_ms: u64,
 }
 
-/// Connected client info.
+/// Connected client info. Only `authenticated` and `tx` are used.
 #[derive(Debug, Clone)]
 struct ConnectedClient {
-    id: String,
-    client_type: ClientType,
-    identity: String,
-    connected_at: SystemTime,
     authenticated: bool,
     tx: mpsc::UnboundedSender<IpcMessage>,
 }
@@ -169,6 +180,7 @@ impl IpcServer {
     }
 
     /// Start the IPC server.
+    #[cfg(unix)]
     pub async fn start(&mut self) -> IpcResult<()> {
         let socket_path = self.socket_path()?;
         info!("Starting IPC server on {:?}", socket_path);
@@ -178,7 +190,7 @@ impl IpcServer {
             std::fs::remove_file(&socket_path).ok();
         }
 
-        let mut listener_opt = Some(UnixListener::bind(&socket_path)?);
+        let listener = UnixListener::bind(&socket_path)?;
 
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
         self.shutdown_tx = Some(shutdown_tx);
@@ -189,7 +201,7 @@ impl IpcServer {
         let config = self.config.clone();
 
         tokio::spawn(async move {
-            let mut listener = listener_opt;
+            let mut listener = Some(listener);
             loop {
                 tokio::select! {
                     _ = &mut shutdown_rx => {
@@ -231,6 +243,14 @@ impl IpcServer {
         });
 
         Ok(())
+    }
+
+    /// Start the IPC server on Windows — not yet implemented, fails closed.
+    #[cfg(windows)]
+    pub async fn start(&mut self) -> IpcResult<()> {
+        Err(IpcError::Unsupported(
+            "Windows IPC transport not yet implemented".to_string(),
+        ))
     }
 
     /// Stop the IPC server.
@@ -278,19 +298,20 @@ impl IpcServer {
         };
 
         let socket_dir = runtime_root.join("runtime");
-        std::fs::create_dir_all(&socket_dir).map_err(|e| IpcError::Io(e))?;
+        std::fs::create_dir_all(&socket_dir).map_err(IpcError::Io)?;
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&socket_dir, std::fs::Permissions::from_mode(0o700))
-                .map_err(|e| IpcError::Io(e))?;
+                .map_err(IpcError::Io)?;
         }
 
         Ok(socket_dir.join(format!("{}.sock", self.profile_id)))
     }
 
     /// Handle a client connection.
+    #[cfg(unix)]
     async fn handle_client(
         stream: Arc<Mutex<UnixStream>>,
         clients: Arc<RwLock<HashMap<String, ConnectedClient>>>,
@@ -308,8 +329,8 @@ impl IpcServer {
         };
         let IpcMessage::Hello {
             protocol_version,
-            client_identity,
-            client_type,
+            client_identity: _,
+            client_type: _,
             capabilities: _capabilities,
         } = hello
         else {
@@ -355,10 +376,6 @@ impl IpcServer {
 
         // Register client
         let client = ConnectedClient {
-            id: client_id.clone(),
-            client_type,
-            identity: client_identity,
-            connected_at: SystemTime::now(),
             authenticated: !config.require_auth, // If no auth required, mark as authenticated
             tx,
         };
@@ -381,10 +398,11 @@ impl IpcServer {
         // Handle incoming messages
         let read_stream = stream;
         loop {
-            match {
+            let result = {
                 let mut r = read_stream.lock().await;
                 Self::read_message(&mut r).await
-            } {
+            };
+            match result {
                 Ok(msg) => {
                     if let Err(e) = Self::process_message(
                         &client_id,
@@ -503,7 +521,7 @@ impl IpcServer {
                     let _ = client.tx.send(ipc_response);
                 }
             }
-            IpcMessage::Ping { timestamp } => {
+            IpcMessage::Ping { timestamp: _ } => {
                 let response = IpcMessage::Pong {
                     timestamp: SystemTime::now(),
                 };
@@ -522,6 +540,7 @@ impl IpcServer {
     }
 
     /// Read a framed message from the stream.
+    #[cfg(unix)]
     async fn read_message(stream: &mut UnixStream) -> IpcResult<IpcMessage> {
         let mut len_buf = [0u8; 4];
         stream.read_exact(&mut len_buf).await?;
@@ -538,6 +557,7 @@ impl IpcServer {
     }
 
     /// Write a framed message to the stream.
+    #[cfg(unix)]
     async fn write_message(stream: &mut UnixStream, msg: &IpcMessage) -> IpcResult<()> {
         let data = serde_json::to_vec(msg)?;
         let len = data.len() as u32;
@@ -551,8 +571,7 @@ impl IpcServer {
 /// IPC client for connecting to the runtime.
 pub struct IpcClient {
     config: IpcConfig,
-    stream: Option<Arc<Mutex<UnixStream>>>,
-    client_id: String,
+    stream: Option<Arc<Mutex<StreamImpl>>>,
     rx: Option<mpsc::UnboundedReceiver<IpcMessage>>,
     request_id: u64,
 }
@@ -563,13 +582,13 @@ impl IpcClient {
         Self {
             config,
             stream: None,
-            client_id: Uuid::new_v4().to_string(),
             rx: None,
             request_id: 0,
         }
     }
 
     /// Connect to the runtime.
+    #[cfg(unix)]
     pub async fn connect(&mut self) -> IpcResult<()> {
         let socket_path = self.socket_path()?;
         info!("Connecting to runtime at {:?}", socket_path);
@@ -607,7 +626,7 @@ impl IpcClient {
             _ => {
                 return Err(IpcError::InvalidMessage(
                     "Expected hello response".to_string(),
-                ))
+                ));
             }
         }
 
@@ -617,10 +636,11 @@ impl IpcClient {
         let stream = self.stream.as_ref().unwrap().clone();
         tokio::spawn(async move {
             loop {
-                match {
+                let result = {
                     let mut s = stream.lock().await;
                     Self::read_message(&mut s).await
-                } {
+                };
+                match result {
                     Ok(msg) => {
                         if tx.send(msg).is_err() {
                             break;
@@ -634,7 +654,16 @@ impl IpcClient {
         Ok(())
     }
 
+    /// Connect to the runtime on Windows — not yet implemented, fails closed.
+    #[cfg(windows)]
+    pub async fn connect(&mut self) -> IpcResult<()> {
+        Err(IpcError::Unsupported(
+            "Windows IPC transport not yet implemented".to_string(),
+        ))
+    }
+
     /// Send a command and wait for response.
+    #[cfg(unix)]
     pub async fn send_command(&mut self, command: AgentCommand) -> IpcResult<AgentResponse> {
         let request_id = self.next_request_id();
         let msg = IpcMessage::Command {
@@ -649,24 +678,23 @@ impl IpcClient {
         // Wait for response
         let mut rx = self.rx.take().unwrap();
         while let Some(msg) = rx.recv().await {
-            match msg {
-                IpcMessage::CommandResponse {
-                    request_id: resp_id,
-                    response,
-                } => {
-                    if resp_id == request_id {
-                        self.rx = Some(rx);
-                        return Ok(response);
-                    }
-                    // Not our response, put back
+            if let IpcMessage::CommandResponse {
+                request_id: resp_id,
+                response,
+            } = msg
+            {
+                if resp_id == request_id {
+                    self.rx = Some(rx);
+                    return Ok(response);
                 }
-                _ => {} // Ignore other messages
+                // Not our response, put back
             }
         }
         Err(IpcError::Channel("Response channel closed".to_string()))
     }
 
     /// Disconnect from the runtime.
+    #[cfg(unix)]
     pub async fn disconnect(&mut self) -> IpcResult<()> {
         if let Some(stream) = self.stream.take() {
             let goodbye = IpcMessage::Goodbye {
@@ -680,7 +708,7 @@ impl IpcClient {
 
     fn next_request_id(&mut self) -> String {
         self.request_id += 1;
-        format!("req-{}", self.request_id)
+        format!("req-{0}", self.request_id)
     }
 
     fn socket_path(&self) -> IpcResult<PathBuf> {
@@ -706,6 +734,8 @@ impl IpcClient {
             .join(format!("{}.sock", self.config.client_identity)))
     }
 
+    /// Read a framed message from the stream.
+    #[cfg(unix)]
     async fn read_message(stream: &mut UnixStream) -> IpcResult<IpcMessage> {
         let mut len_buf = [0u8; 4];
         stream.read_exact(&mut len_buf).await?;
@@ -720,6 +750,8 @@ impl IpcClient {
         Ok(serde_json::from_slice(&buf)?)
     }
 
+    /// Write a framed message to the stream.
+    #[cfg(unix)]
     async fn write_message(stream: &mut UnixStream, msg: &IpcMessage) -> IpcResult<()> {
         let data = serde_json::to_vec(msg)?;
         let len = data.len() as u32;
