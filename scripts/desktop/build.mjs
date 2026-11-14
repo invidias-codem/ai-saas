@@ -17,5 +17,9 @@ await build({ entryPoints: [path.join(root, 'desktop/main.ts')], outfile: path.j
   tsconfig: path.join(root, 'desktop/tsconfig.json'), legalComments: 'none',
   define: { __LATTICE_BUILD__: JSON.stringify({ version, source }) },
 });
-await Promise.all(['index.html', 'workspace.css'].map(name => copyFile(path.join(root, 'desktop', name), path.join(output, name))));
+await Promise.all([
+  copyFile(path.join(root, 'desktop/index.html'), path.join(output, 'index.html')),
+  copyFile(path.join(root, 'desktop/workspace.css'), path.join(output, 'workspace.css')),
+  copyFile(path.join(root, 'app/mineral-copper.css'), path.join(output, 'mineral-copper.css')),
+]);
 console.log('Bundled desktop workspace: desktop/dist (no development server required)');
