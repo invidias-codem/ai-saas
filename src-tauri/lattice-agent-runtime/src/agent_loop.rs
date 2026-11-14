@@ -7,9 +7,8 @@
 //! - Cancellation and timeout handling
 
 use crate::{
-    AgentLoopConfig, AgentLoopError, ProviderKind, ProviderRouter, ProviderRouterError,
-    RuntimeState, RuntimeStateMachine, SessionManager, SessionManagerError, SessionRecord,
-    SessionState, TaskRecord, TaskState,
+    ProviderRouter, ProviderRouterError, ProviderStatus, RuntimeState, RuntimeStateMachine,
+    SessionManager, SessionManagerError, SessionState,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -17,8 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::sync::{mpsc, RwLock};
-use tokio::time::timeout;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info};
 use uuid::Uuid;
 
 /// Agent loop configuration.
@@ -162,17 +160,8 @@ pub struct SessionSummary {
     pub updated_at: SystemTime,
 }
 
-/// Provider status summary.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProviderStatus {
-    pub connection_id: String,
-    pub provider_kind: ProviderKind,
-    pub status: ProviderConnectionStatus,
-    pub is_default: bool,
-}
-
 /// Provider connection status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProviderConnectionStatus {
     Connected,
     Disconnected,
@@ -183,11 +172,7 @@ pub enum ProviderConnectionStatus {
 /// Turn state for the agent loop.
 #[derive(Debug, Clone)]
 struct TurnState {
-    session_id: String,
-    operation_id: String,
     cancelled: bool,
-    tool_depth: usize,
-    started_at: SystemTime,
 }
 
 /// Agent loop instance.
@@ -197,8 +182,7 @@ pub struct AgentLoop {
     provider_router: Arc<ProviderRouter>,
     state_machine: Arc<RuntimeStateMachine>,
     event_tx: mpsc::UnboundedSender<AgentEvent>,
-    active_turns: RwLock<HashMap<String, TurnState>>,
-    shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    active_turns: Arc<RwLock<HashMap<String, TurnState>>>,
 }
 
 /// Agent events for streaming to clients.
@@ -272,8 +256,7 @@ impl AgentLoop {
             provider_router,
             state_machine,
             event_tx,
-            active_turns: RwLock::new(HashMap::new()),
-            shutdown_tx: None,
+            active_turns: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -287,8 +270,8 @@ impl AgentLoop {
     pub async fn stop(&self) -> AgentLoopResult<()> {
         // Cancel all active turns
         let mut turns = self.active_turns.write().await;
-        for (_, turn) in turns.drain() {
-            turn.cancelled = true;
+        for (_, mut _turn) in turns.drain() {
+            _turn.cancelled = true;
         }
         info!("Agent loop stopped");
         Ok(())
@@ -425,13 +408,7 @@ impl AgentLoop {
         }
 
         // Register active turn
-        let turn = TurnState {
-            session_id: session_id.clone(),
-            operation_id: operation_id.clone(),
-            cancelled: false,
-            tool_depth: 0,
-            started_at: SystemTime::now(),
-        };
+        let turn = TurnState { cancelled: false };
         self.active_turns
             .write()
             .await
@@ -494,6 +471,7 @@ impl AgentLoop {
     }
 
     /// Process a conversation turn.
+    #[allow(clippy::too_many_arguments)]
     async fn process_turn(
         session_id: String,
         operation_id: String,
@@ -502,7 +480,7 @@ impl AgentLoop {
         state_machine: Arc<RuntimeStateMachine>,
         event_tx: mpsc::UnboundedSender<AgentEvent>,
         active_turns: Arc<RwLock<HashMap<String, TurnState>>>,
-        config: AgentLoopConfig,
+        _config: AgentLoopConfig,
     ) -> AgentLoopResult<()> {
         // Check for cancellation
         {
@@ -524,7 +502,7 @@ impl AgentLoop {
         }
 
         // Resolve provider
-        let (connection_id, provider_kind, provider_config, credential) =
+        let (_connection_id, provider_kind, provider_config, _credential) =
             provider_router.resolve_provider(None).await?;
 
         // For now, simulate provider response
@@ -646,8 +624,8 @@ impl AgentLoop {
     /// Handle list sessions command.
     async fn handle_list_sessions(
         &self,
-        limit: Option<usize>,
-        offset: Option<usize>,
+        _limit: Option<usize>,
+        _offset: Option<usize>,
     ) -> AgentResponse {
         // For now, return empty list - would need profile_id
         AgentResponse::SessionList { sessions: vec![] }

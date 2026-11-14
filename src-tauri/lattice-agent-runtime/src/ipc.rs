@@ -2,20 +2,27 @@
 //!
 //! Provides protocol-version negotiation, client identity verification,
 //! and secure message passing between CLI/desktop and the runtime.
+//!
+//! Unix: Unix domain sockets (authenticated).
+//! Windows: IPC transport not yet implemented; fails closed with
+//! `IpcError::Unsupported`. No unauthenticated local execution is ever
+//! exposed on Windows.
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, error, info, warn};
+use tokio::sync::{mpsc, Mutex, RwLock};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
+use crate::agent_loop::{AgentCommand, AgentResponse};
+
 /// Protocol version for negotiation.
+pub type ProtocolVersion = u32;
 pub const PROTOCOL_VERSION: u32 = 1;
 
 /// IPC errors.
@@ -39,9 +46,32 @@ pub enum IpcError {
     Timeout(String),
     #[error("Invalid message: {0}")]
     InvalidMessage(String),
+    #[error("Platform not supported: {0}")]
+    Unsupported(String),
+}
+
+impl From<&str> for IpcError {
+    fn from(s: &str) -> Self {
+        IpcError::InvalidMessage(s.to_string())
+    }
+}
+
+impl From<String> for IpcError {
+    fn from(s: String) -> Self {
+        IpcError::InvalidMessage(s)
+    }
 }
 
 pub type IpcResult<T> = std::result::Result<T, IpcError>;
+
+/// Platform stream type alias. Unix uses real Unix domain streams;
+/// Windows uses a placeholder that is never instantiated because the
+/// transport fails closed before any stream is created.
+#[cfg(unix)]
+use tokio::net::UnixStream as StreamImpl;
+
+#[cfg(windows)]
+struct StreamImpl;
 
 /// IPC message types.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -104,129 +134,12 @@ pub enum ClientType {
     WebView,
 }
 
-/// Agent commands from clients.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum AgentCommand {
-    /// Start a new conversation session.
-    StartSession {
-        session_id: String,
-        provider_connection_id: Option<String>,
-        model_id: Option<String>,
-    },
-    /// Send a message in a session.
-    SendMessage {
-        session_id: String,
-        content: String,
-        attachments: Vec<Attachment>,
-    },
-    /// Cancel an in-flight operation.
-    CancelOperation {
-        session_id: String,
-        operation_id: String,
-    },
-    /// Get session status.
-    GetSessionStatus { session_id: String },
-    /// List sessions.
-    ListSessions {
-        limit: Option<usize>,
-        offset: Option<usize>,
-    },
-    /// Resume a session.
-    ResumeSession { session_id: String },
-    /// Get provider status.
-    GetProviderStatus,
-    /// Switch provider for a session.
-    SwitchProvider {
-        session_id: String,
-        provider_connection_id: String,
-    },
-}
-
-/// Agent responses to clients.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub enum AgentResponse {
-    /// Session started successfully.
-    SessionStarted { session_id: String },
-    /// Message acknowledged.
-    MessageAcknowledged { message_id: String },
-    /// Operation cancelled.
-    OperationCancelled { operation_id: String },
-    /// Session status.
-    SessionStatus {
-        session_id: String,
-        status: SessionStatus,
-    },
-    /// Session list.
-    SessionList { sessions: Vec<SessionSummary> },
-    /// Provider status.
-    ProviderStatus { providers: Vec<ProviderStatus> },
-    /// Provider switched.
-    ProviderSwitched {
-        session_id: String,
-        provider_connection_id: String,
-    },
-    /// Error response.
-    Error { code: String, message: String },
-}
-
-/// Attachment for messages.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Attachment {
-    pub id: String,
-    pub name: String,
-    pub mime_type: String,
-    pub size: u64,
-    pub path: Option<String>,
-}
-
-/// Session status.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SessionStatus {
-    pub session_id: String,
-    pub state: SessionState,
-    pub provider_connection_id: Option<String>,
-    pub model_id: Option<String>,
-    pub message_count: usize,
-    pub last_activity: SystemTime,
-}
-
-/// Session state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum SessionState {
-    Created,
-    Running,
-    WaitingForInput,
-    Completed,
-    Failed,
-    Cancelled,
-}
-
-/// Session summary for listing.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SessionSummary {
-    pub session_id: String,
-    pub title: Option<String>,
-    pub state: SessionState,
-    pub created_at: SystemTime,
-    pub updated_at: SystemTime,
-}
-
-/// Provider status summary.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ProviderStatus {
-    pub connection_id: String,
-    pub provider_kind: crate::ProviderKind,
-    pub status: crate::ProviderConnectionStatus,
-    pub is_default: bool,
-}
-
 /// IPC server for the agent runtime.
 pub struct IpcServer {
     profile_id: String,
     config: IpcConfig,
     state_machine: Arc<crate::state_machine::RuntimeStateMachine>,
     agent_loop: Arc<crate::agent_loop::AgentLoop>,
-    listener: Option<UnixListener>,
     clients: Arc<RwLock<HashMap<String, ConnectedClient>>>,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -241,13 +154,9 @@ pub struct IpcConfig {
     pub connect_timeout_ms: u64,
 }
 
-/// Connected client info.
+/// Connected client info. Only `authenticated` and `tx` are used.
 #[derive(Debug, Clone)]
 struct ConnectedClient {
-    id: String,
-    client_type: ClientType,
-    identity: String,
-    connected_at: SystemTime,
     authenticated: bool,
     tx: mpsc::UnboundedSender<IpcMessage>,
 }
@@ -265,13 +174,13 @@ impl IpcServer {
             config,
             state_machine,
             agent_loop,
-            listener: None,
             clients: Arc::new(RwLock::new(HashMap::new())),
             shutdown_tx: None,
         })
     }
 
     /// Start the IPC server.
+    #[cfg(unix)]
     pub async fn start(&mut self) -> IpcResult<()> {
         let socket_path = self.socket_path()?;
         info!("Starting IPC server on {:?}", socket_path);
@@ -282,7 +191,6 @@ impl IpcServer {
         }
 
         let listener = UnixListener::bind(&socket_path)?;
-        self.listener = Some(listener);
 
         let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel();
         self.shutdown_tx = Some(shutdown_tx);
@@ -293,6 +201,7 @@ impl IpcServer {
         let config = self.config.clone();
 
         tokio::spawn(async move {
+            let mut listener = Some(listener);
             loop {
                 tokio::select! {
                     _ = &mut shutdown_rx => {
@@ -300,7 +209,7 @@ impl IpcServer {
                         break;
                     }
                     accept_result = async {
-                        if let Some(listener) = &mut self.listener {
+                        if let Some(listener) = &mut listener {
                             listener.accept().await
                         } else {
                             std::future::pending().await
@@ -314,7 +223,7 @@ impl IpcServer {
                                 let config = config.clone();
                                 tokio::spawn(async move {
                                     if let Err(e) = Self::handle_client(
-                                        stream,
+                                        Arc::new(Mutex::new(stream)),
                                         clients,
                                         state_machine,
                                         agent_loop,
@@ -334,6 +243,14 @@ impl IpcServer {
         });
 
         Ok(())
+    }
+
+    /// Start the IPC server on Windows — not yet implemented, fails closed.
+    #[cfg(windows)]
+    pub async fn start(&mut self) -> IpcResult<()> {
+        Err(IpcError::Unsupported(
+            "Windows IPC transport not yet implemented".to_string(),
+        ))
     }
 
     /// Stop the IPC server.
@@ -381,36 +298,40 @@ impl IpcServer {
         };
 
         let socket_dir = runtime_root.join("runtime");
-        std::fs::create_dir_all(&socket_dir).map_err(|e| IpcError::Io(e))?;
+        std::fs::create_dir_all(&socket_dir).map_err(IpcError::Io)?;
 
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&socket_dir, std::fs::Permissions::from_mode(0o700))
-                .map_err(|e| IpcError::Io(e))?;
+                .map_err(IpcError::Io)?;
         }
 
         Ok(socket_dir.join(format!("{}.sock", self.profile_id)))
     }
 
     /// Handle a client connection.
+    #[cfg(unix)]
     async fn handle_client(
-        mut stream: UnixStream,
+        stream: Arc<Mutex<UnixStream>>,
         clients: Arc<RwLock<HashMap<String, ConnectedClient>>>,
         state_machine: Arc<crate::state_machine::RuntimeStateMachine>,
         agent_loop: Arc<crate::agent_loop::AgentLoop>,
         config: IpcConfig,
     ) -> IpcResult<()> {
         let client_id = Uuid::new_v4().to_string();
-        debug!("New client connection: {}", client_id);
+        debug!("New client connection: {0}", client_id);
 
         // Read hello message
-        let hello = Self::read_message(&mut stream).await?;
+        let hello = {
+            let mut s = stream.lock().await;
+            Self::read_message(&mut s).await?
+        };
         let IpcMessage::Hello {
             protocol_version,
-            client_identity,
-            client_type,
-            capabilities,
+            client_identity: _,
+            client_type: _,
+            capabilities: _capabilities,
         } = hello
         else {
             return Err(IpcError::InvalidMessage(
@@ -429,7 +350,10 @@ impl IpcServer {
                     config.protocol_version, protocol_version
                 )),
             };
-            Self::write_message(&mut stream, &response).await?;
+            {
+                let mut s = stream.lock().await;
+                Self::write_message(&mut s, &response).await?;
+            }
             return Err(IpcError::ProtocolMismatch {
                 expected: config.protocol_version,
                 actual: protocol_version,
@@ -445,34 +369,40 @@ impl IpcServer {
             accepted: true,
             reason: None,
         };
-        Self::write_message(&mut stream, &response).await?;
+        {
+            let mut s = stream.lock().await;
+            Self::write_message(&mut s, &response).await?;
+        }
 
         // Register client
         let client = ConnectedClient {
-            id: client_id.clone(),
-            client_type,
-            identity: client_identity,
-            connected_at: SystemTime::now(),
             authenticated: !config.require_auth, // If no auth required, mark as authenticated
             tx,
         };
         clients.write().await.insert(client_id.clone(), client);
 
         // Spawn writer task
-        let mut write_stream = stream;
+        let write_stream = stream.clone();
         let writer_handle = tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
-                if let Err(e) = Self::write_message(&mut write_stream, &msg).await {
-                    error!("Write error: {}", e);
+                if let Err(e) = {
+                    let mut w = write_stream.lock().await;
+                    Self::write_message(&mut w, &msg).await
+                } {
+                    error!("Write error: {0}", e);
                     break;
                 }
             }
         });
 
         // Handle incoming messages
-        let mut read_stream = stream;
+        let read_stream = stream;
         loop {
-            match Self::read_message(&mut read_stream).await {
+            let result = {
+                let mut r = read_stream.lock().await;
+                Self::read_message(&mut r).await
+            };
+            match result {
                 Ok(msg) => {
                     if let Err(e) = Self::process_message(
                         &client_id,
@@ -591,7 +521,7 @@ impl IpcServer {
                     let _ = client.tx.send(ipc_response);
                 }
             }
-            IpcMessage::Ping { timestamp } => {
+            IpcMessage::Ping { timestamp: _ } => {
                 let response = IpcMessage::Pong {
                     timestamp: SystemTime::now(),
                 };
@@ -610,6 +540,7 @@ impl IpcServer {
     }
 
     /// Read a framed message from the stream.
+    #[cfg(unix)]
     async fn read_message(stream: &mut UnixStream) -> IpcResult<IpcMessage> {
         let mut len_buf = [0u8; 4];
         stream.read_exact(&mut len_buf).await?;
@@ -626,6 +557,7 @@ impl IpcServer {
     }
 
     /// Write a framed message to the stream.
+    #[cfg(unix)]
     async fn write_message(stream: &mut UnixStream, msg: &IpcMessage) -> IpcResult<()> {
         let data = serde_json::to_vec(msg)?;
         let len = data.len() as u32;
@@ -639,8 +571,7 @@ impl IpcServer {
 /// IPC client for connecting to the runtime.
 pub struct IpcClient {
     config: IpcConfig,
-    stream: Option<UnixStream>,
-    client_id: String,
+    stream: Option<Arc<Mutex<StreamImpl>>>,
     rx: Option<mpsc::UnboundedReceiver<IpcMessage>>,
     request_id: u64,
 }
@@ -651,19 +582,19 @@ impl IpcClient {
         Self {
             config,
             stream: None,
-            client_id: Uuid::new_v4().to_string(),
             rx: None,
             request_id: 0,
         }
     }
 
     /// Connect to the runtime.
+    #[cfg(unix)]
     pub async fn connect(&mut self) -> IpcResult<()> {
         let socket_path = self.socket_path()?;
         info!("Connecting to runtime at {:?}", socket_path);
 
         let stream = UnixStream::connect(&socket_path).await?;
-        self.stream = Some(stream);
+        self.stream = Some(Arc::new(Mutex::new(stream)));
 
         // Send hello
         let hello = IpcMessage::Hello {
@@ -672,10 +603,16 @@ impl IpcClient {
             client_type: ClientType::Cli,
             capabilities: vec!["commands".to_string(), "events".to_string()],
         };
-        Self::write_message(self.stream.as_mut().unwrap(), &hello).await?;
+        {
+            let mut stream = self.stream.as_ref().unwrap().lock().await;
+            Self::write_message(&mut stream, &hello).await?;
+        }
 
         // Read hello response
-        let response = Self::read_message(self.stream.as_mut().unwrap()).await?;
+        let response = {
+            let mut stream = self.stream.as_ref().unwrap().lock().await;
+            Self::read_message(&mut stream).await?
+        };
         match response {
             IpcMessage::HelloResponse {
                 accepted, reason, ..
@@ -689,17 +626,21 @@ impl IpcClient {
             _ => {
                 return Err(IpcError::InvalidMessage(
                     "Expected hello response".to_string(),
-                ))
+                ));
             }
         }
 
         // Spawn reader
         let (tx, rx) = mpsc::unbounded_channel();
         self.rx = Some(rx);
-        let mut stream = self.stream.as_ref().unwrap().try_clone().await?;
+        let stream = self.stream.as_ref().unwrap().clone();
         tokio::spawn(async move {
             loop {
-                match Self::read_message(&mut stream).await {
+                let result = {
+                    let mut s = stream.lock().await;
+                    Self::read_message(&mut s).await
+                };
+                match result {
                     Ok(msg) => {
                         if tx.send(msg).is_err() {
                             break;
@@ -713,49 +654,61 @@ impl IpcClient {
         Ok(())
     }
 
+    /// Connect to the runtime on Windows — not yet implemented, fails closed.
+    #[cfg(windows)]
+    pub async fn connect(&mut self) -> IpcResult<()> {
+        Err(IpcError::Unsupported(
+            "Windows IPC transport not yet implemented".to_string(),
+        ))
+    }
+
     /// Send a command and wait for response.
+    #[cfg(unix)]
     pub async fn send_command(&mut self, command: AgentCommand) -> IpcResult<AgentResponse> {
         let request_id = self.next_request_id();
         let msg = IpcMessage::Command {
             request_id: request_id.clone(),
             command,
         };
-        Self::write_message(self.stream.as_mut().unwrap(), &msg).await?;
+        {
+            let mut stream = self.stream.as_ref().unwrap().lock().await;
+            Self::write_message(&mut stream, &msg).await?;
+        }
 
         // Wait for response
         let mut rx = self.rx.take().unwrap();
         while let Some(msg) = rx.recv().await {
-            match msg {
-                IpcMessage::CommandResponse {
-                    request_id: resp_id,
-                    response,
-                } => {
-                    if resp_id == request_id {
-                        self.rx = Some(rx);
-                        return Ok(response);
-                    }
-                    // Not our response, put back
+            if let IpcMessage::CommandResponse {
+                request_id: resp_id,
+                response,
+            } = msg
+            {
+                if resp_id == request_id {
+                    self.rx = Some(rx);
+                    return Ok(response);
                 }
-                _ => {} // Ignore other messages
+                // Not our response, put back
             }
         }
         Err(IpcError::Channel("Response channel closed".to_string()))
     }
 
     /// Disconnect from the runtime.
+    #[cfg(unix)]
     pub async fn disconnect(&mut self) -> IpcResult<()> {
         if let Some(stream) = self.stream.take() {
             let goodbye = IpcMessage::Goodbye {
                 reason: "Client disconnecting".to_string(),
             };
-            let _ = Self::write_message(&mut stream.try_clone().await?, &goodbye).await;
+            let mut s = stream.lock().await;
+            let _ = Self::write_message(&mut s, &goodbye).await;
         }
         Ok(())
     }
 
     fn next_request_id(&mut self) -> String {
         self.request_id += 1;
-        format!("req-{}", self.request_id)
+        format!("req-{0}", self.request_id)
     }
 
     fn socket_path(&self) -> IpcResult<PathBuf> {
@@ -781,6 +734,8 @@ impl IpcClient {
             .join(format!("{}.sock", self.config.client_identity)))
     }
 
+    /// Read a framed message from the stream.
+    #[cfg(unix)]
     async fn read_message(stream: &mut UnixStream) -> IpcResult<IpcMessage> {
         let mut len_buf = [0u8; 4];
         stream.read_exact(&mut len_buf).await?;
@@ -795,6 +750,8 @@ impl IpcClient {
         Ok(serde_json::from_slice(&buf)?)
     }
 
+    /// Write a framed message to the stream.
+    #[cfg(unix)]
     async fn write_message(stream: &mut UnixStream, msg: &IpcMessage) -> IpcResult<()> {
         let data = serde_json::to_vec(msg)?;
         let len = data.len() as u32;

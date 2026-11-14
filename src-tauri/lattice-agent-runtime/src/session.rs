@@ -3,14 +3,14 @@
 //! Persists conversations and task events in profile-local SQLite.
 //! Handles session reconciliation and crash recovery.
 
-use crate::{ProviderConnectionStatus, ProviderKind, RuntimeError};
+use crate::ProviderKind;
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Row, Sqlite};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 /// Session manager errors.
@@ -38,6 +38,16 @@ pub struct SessionConfig {
     pub db_path: PathBuf,
     pub max_session_age: Duration,
     pub auto_reconcile: bool,
+}
+
+impl From<crate::SessionConfig> for SessionConfig {
+    fn from(config: crate::SessionConfig) -> Self {
+        Self {
+            db_path: config.db_path,
+            max_session_age: config.max_session_age,
+            auto_reconcile: config.auto_reconcile,
+        }
+    }
 }
 
 /// Session record in the database.
@@ -68,7 +78,7 @@ pub enum SessionState {
 }
 
 impl SessionState {
-    fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             Self::Created => "created",
             Self::Running => "running",
@@ -79,7 +89,8 @@ impl SessionState {
         }
     }
 
-    fn from_str(s: &str) -> Self {
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Self {
         match s {
             "created" => Self::Created,
             "running" => Self::Running,
@@ -472,6 +483,7 @@ impl SessionManager {
     }
 
     /// Add a message to a session.
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_message(
         &self,
         session_id: &str,
@@ -635,7 +647,11 @@ impl SessionManager {
             TaskState::Failed => "failed",
             TaskState::Cancelled => "cancelled",
         })
-        .bind(output.map(serde_json::to_string).transpose()?)
+        .bind(
+            output
+                .map(|value| serde_json::to_string(&value))
+                .transpose()?,
+        )
         .bind(error)
         .bind(completed_at)
         .bind(task_id)
@@ -749,7 +765,7 @@ impl SessionManager {
             attachments: serde_json::from_str(row.get("attachments")).unwrap_or_default(),
             provider_kind: row
                 .get::<Option<String>, _>("provider_kind")
-                .map(|s| ProviderKind::from_str(&s)),
+                .and_then(|s| ProviderKind::from_str(&s).ok()),
             model_id: row.get("model_id"),
             tokens_used: row.get::<Option<i64>, _>("tokens_used").map(|v| v as u32),
             latency_ms: row.get::<Option<i64>, _>("latency_ms").map(|v| v as u64),
@@ -780,7 +796,7 @@ impl SessionManager {
             started_at: parse_datetime(row.get("started_at")),
             completed_at: row
                 .get::<Option<String>, _>("completed_at")
-                .and_then(|s| parse_datetime_opt(s)),
+                .and_then(parse_datetime_opt),
             metadata: serde_json::from_str(row.get("metadata")).unwrap_or_default(),
         }
     }
