@@ -284,14 +284,16 @@ function ConversationPage({
 
   // File attachment lifecycle (T2): upload state transitions + GCS/base64 logic.
   const {
-    selectedFile,
-    showFilePreview,
+    selectedFiles,
+    previewFileId,
     fileInputRef,
-    attachFile,
+    attachFiles,
     handleFileChange,
     togglePreview,
+    removeFile,
+    retryFile,
     clearFile,
-    buildFilePayload,
+    buildFilePayloads,
   } = useFileUpload(setError);
   const [userId, setUserId] = useState("");
   const [debugExecutionMode, setDebugExecutionMode] = useState<string | undefined>(undefined);
@@ -365,8 +367,8 @@ function ConversationPage({
     agentMode,
     messages,
     setMessages,
-    selectedFile,
-    buildFilePayload,
+    selectedFiles,
+    buildFilePayloads,
     clearFile,
     uploadedDocs,
     setError,
@@ -859,8 +861,8 @@ function ConversationPage({
         loading={loading}
         agentMode={agentMode}
         swarmSuggestion={swarmSuggestion}
-        selectedFile={selectedFile}
-        showFilePreview={showFilePreview}
+        selectedFiles={selectedFiles}
+        previewFileId={previewFileId}
         fileInputRef={fileInputRef}
         uploadedDocs={uploadedDocs}
         setUploadedDocs={setUploadedDocs}
@@ -868,9 +870,10 @@ function ConversationPage({
         handleSendMessage={handleSendMessage}
         handleKeyPress={handleKeyPress}
         handleFileChange={handleFileChange}
-        attachFile={attachFile}
+        attachFiles={attachFiles}
         togglePreview={togglePreview}
-        removeFile={clearFile}
+        removeFile={removeFile}
+        retryFile={retryFile}
       />
     </div>
   );
