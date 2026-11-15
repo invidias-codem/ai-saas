@@ -287,10 +287,9 @@ function ConversationPage({
     selectedFile,
     showFilePreview,
     fileInputRef,
-    handleAttachClick,
+    attachFile,
     handleFileChange,
     togglePreview,
-    removeFile,
     clearFile,
     buildFilePayload,
   } = useFileUpload(setError);
@@ -838,7 +837,7 @@ function ConversationPage({
           {/* Error Message */}
           {error && (
             <div className="flex justify-center mb-4 animate-in fade-in slide-in-from-bottom-2">
-              <div className="flex items-center gap-2 text-destructive bg-destructive/5 border border-destructive/20 px-4 py-2 rounded-full text-sm">
+              <div role="alert" className="flex items-center gap-2 text-destructive bg-destructive/5 border border-destructive/20 px-4 py-2 rounded-full text-sm">
                 <AlertCircle className="h-4 w-4" />
                 {error}
               </div>
@@ -869,8 +868,9 @@ function ConversationPage({
         handleSendMessage={handleSendMessage}
         handleKeyPress={handleKeyPress}
         handleFileChange={handleFileChange}
+        attachFile={attachFile}
         togglePreview={togglePreview}
-        removeFile={removeFile}
+        removeFile={clearFile}
       />
     </div>
   );

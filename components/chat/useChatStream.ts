@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Source } from "@/components/chat/SourceDisplay";
-import { SelectedFile, FilePayload } from "./useFileUpload";
+import type { SelectedFile, FilePayload } from "./useFileUpload";
 import { MediaEnvelope, decodeMediaEvent, ApprovalEnvelope, decodeApprovalEvent, ModelSwitchEvent, decodeModelSwitchEvent, ProviderErrorEvent, decodeProviderErrorEvent } from "@/lib/media/envelope";
 
 /**
@@ -95,6 +95,7 @@ export function useChatStream({
   openPricingModal,
   trackActivity,
 }: UseChatStreamOptions) {
+  const sending = useRef(false);
   const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
@@ -105,38 +106,39 @@ export function useChatStream({
   };
 
   const handleSendMessage = async () => {
+    if (sending.current) return;
     const trimmedInput = userInput.trim();
     if (!trimmedInput && !selectedFile && uploadedDocs.length === 0) return;
-    if (selectedFile?.isUploading) {
-      setError("Please wait for file upload to complete.");
-      return;
-    }
+    const filePayload = buildFilePayload();
+    if (selectedFile && !filePayload) return;
 
+    sending.current = true;
     setLoading(true);
     setError(null);
     setShowGreeting(false);
 
     let messageText = trimmedInput;
     if (selectedFile) {
+      if (!messageText) {
+        messageText = selectedFile.type.startsWith("image/") ? "Describe the attached image." : "Analyze the attached file.";
+      }
       messageText += `\n\n[Attached File: ${selectedFile.name} (${selectedFile.type})]`;
     }
 
     const userMessage: StreamMessage = { text: messageText, role: "user", timestamp: new Date() };
     const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setUserInput("");
+    if (!filePayload) {
+      setMessages(newMessages);
+      setUserInput("");
+    }
     setStreaming(true);
     setStreamingContent("");
 
-    // Capture file data before clearing state
-    const filePayload = selectedFile ? buildFilePayload() : undefined;
-
-    const analyzeUploadEndpoint = selectedFile ? "/api/analyze-upload" : "/api/chat";
-    clearFile();
+    const endpoint = filePayload ? "/api/analyze-upload" : "/api/chat";
 
     try {
       // Dispatcher Call (Fetch with Streaming)
-      const response = await fetch(analyzeUploadEndpoint, {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -158,7 +160,21 @@ export function useChatStream({
       // setUploadedDocs([]);
 
       if (!response.ok) {
+        if (response.status === 401) {
+          window.location.href = "/sign-in?redirect_url=" + encodeURIComponent(window.location.pathname);
+          return;
+        }
+        if (filePayload) {
+          const failure = await response.json().catch(() => null);
+          throw new Error(failure?.message || "Couldn’t analyze the attachment. Try sending it again.");
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      if (filePayload) {
+        setMessages(newMessages);
+        setUserInput("");
+        clearFile();
       }
 
       const reader = response.body?.getReader();
@@ -293,13 +309,15 @@ export function useChatStream({
       setError(error.message || "Sorry, something went wrong.");
       setStreaming(false);
     } finally {
+      sending.current = false;
       setLoading(false);
+      setStreaming(false);
       trackActivity("message");
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSendMessage();
     }

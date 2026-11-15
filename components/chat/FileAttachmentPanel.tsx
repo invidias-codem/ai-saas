@@ -2,13 +2,14 @@
 
 import { Paperclip, FileText, X } from "lucide-react";
 import { FilePreview } from "@/components/FilePreview";
-import { SelectedFile } from "./useFileUpload";
+import type { SelectedFile } from "./useFileUpload";
 
 interface FileAttachmentPanelProps {
   selectedFile: SelectedFile | null;
   showFilePreview: boolean;
   onTogglePreview: () => void;
   onRemoveFile: () => void;
+  sending: boolean;
 }
 
 /**
@@ -23,6 +24,7 @@ export function FileAttachmentPanel({
   showFilePreview,
   onTogglePreview,
   onRemoveFile,
+  sending,
 }: FileAttachmentPanelProps) {
   if (!selectedFile) return null;
 
@@ -41,14 +43,18 @@ export function FileAttachmentPanel({
         </div>
       )}
 
-      <div className="inline-flex items-center gap-2 bg-background border border-border shadow-sm px-3 py-1.5 rounded-full text-xs font-medium text-foreground">
+      <div className="inline-flex items-center max-w-full flex-wrap gap-2 bg-background border border-border shadow-sm px-3 py-1.5 rounded-full text-xs font-medium text-foreground">
         <Paperclip className="h-3 w-3 text-primary" />
         <span className="max-w-[150px] truncate">{selectedFile.name}</span>
         {selectedFile.isUploading && (
-          <span className="text-[10px] text-muted-foreground">uploading…</span>
+          <span role="status" className="text-xs text-muted-foreground">Preparing attachment…</span>
+        )}
+        {selectedFile.error && (
+          <span role="alert" className="text-xs text-destructive">{selectedFile.error}</span>
         )}
         <button
           type="button"
+          disabled={selectedFile.isUploading || Boolean(selectedFile.error)}
           onClick={onTogglePreview}
           className="text-muted-foreground hover:text-primary transition-colors"
           title={showFilePreview ? "Hide preview" : "Show preview"}
@@ -57,6 +63,8 @@ export function FileAttachmentPanel({
           <FileText className="h-3.5 w-3.5" />
         </button>
         <button
+          type="button"
+          disabled={sending}
           onClick={onRemoveFile}
           className="text-muted-foreground hover:text-destructive transition-colors ml-1"
           aria-label="Remove attached file"
