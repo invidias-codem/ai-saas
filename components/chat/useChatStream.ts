@@ -54,8 +54,8 @@ interface UseChatStreamOptions {
   messages: StreamMessage[];
   setMessages: React.Dispatch<React.SetStateAction<StreamMessage[]>>;
   // File attachment (T2)
-  selectedFile: SelectedFile | null;
-  buildFilePayload: () => FilePayload | undefined;
+  selectedFiles: SelectedFile[];
+  buildFilePayloads: () => FilePayload[] | undefined;
   clearFile: () => void;
   uploadedDocs: { id: string }[];
   // External side-effects owned by the orchestrator
@@ -83,8 +83,8 @@ export function useChatStream({
   agentMode,
   messages,
   setMessages,
-  selectedFile,
-  buildFilePayload,
+  selectedFiles,
+  buildFilePayloads,
   clearFile,
   uploadedDocs,
   setError,
@@ -108,9 +108,10 @@ export function useChatStream({
   const handleSendMessage = async () => {
     if (sending.current) return;
     const trimmedInput = userInput.trim();
-    if (!trimmedInput && !selectedFile && uploadedDocs.length === 0) return;
-    const filePayload = buildFilePayload();
-    if (selectedFile && !filePayload) return;
+    if (!trimmedInput && selectedFiles.length === 0 && uploadedDocs.length === 0) return;
+    const filePayloads = buildFilePayloads();
+    if (selectedFiles.length > 0 && !filePayloads) return;
+    const hasFiles = Boolean(filePayloads?.length);
 
     sending.current = true;
     setLoading(true);
@@ -118,23 +119,25 @@ export function useChatStream({
     setShowGreeting(false);
 
     let messageText = trimmedInput;
-    if (selectedFile) {
+    if (selectedFiles.length) {
       if (!messageText) {
-        messageText = selectedFile.type.startsWith("image/") ? "Describe the attached image." : "Analyze the attached file.";
+        messageText = selectedFiles.every(file => file.type.startsWith("image/"))
+          ? (selectedFiles.length > 1 ? "Describe the attached images." : "Describe the attached image.")
+          : "Analyze the attached file.";
       }
-      messageText += `\n\n[Attached File: ${selectedFile.name} (${selectedFile.type})]`;
+      messageText += selectedFiles.map(file => `\n\n[Attached File: ${file.name} (${file.type})]`).join("");
     }
 
     const userMessage: StreamMessage = { text: messageText, role: "user", timestamp: new Date() };
     const newMessages = [...messages, userMessage];
-    if (!filePayload) {
+    if (!hasFiles) {
       setMessages(newMessages);
       setUserInput("");
     }
     setStreaming(true);
     setStreamingContent("");
 
-    const endpoint = filePayload ? "/api/analyze-upload" : "/api/chat";
+    const endpoint = hasFiles ? "/api/analyze-upload" : "/api/chat";
 
     try {
       // Dispatcher Call (Fetch with Streaming)
@@ -147,7 +150,8 @@ export function useChatStream({
           conversationId,
           userId,
           prompt: messageText,
-          fileData: filePayload,
+          fileData: filePayloads?.length === 1 ? filePayloads[0] : undefined,
+          fileDataList: filePayloads && filePayloads.length > 1 ? filePayloads : undefined,
           documentIds: uploadedDocs.map((d) => d.id), // Send the document IDs reference
           messages: newMessages.map((m) => ({ role: m.role, text: m.text })), // Send history for context
           mode: agentMode, // Pass the active agent mode
@@ -164,14 +168,14 @@ export function useChatStream({
           window.location.href = "/sign-in?redirect_url=" + encodeURIComponent(window.location.pathname);
           return;
         }
-        if (filePayload) {
+        if (hasFiles) {
           const failure = await response.json().catch(() => null);
           throw new Error(failure?.message || "Couldn’t analyze the attachment. Try sending it again.");
         }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      if (filePayload) {
+      if (hasFiles) {
         setMessages(newMessages);
         setUserInput("");
         clearFile();
