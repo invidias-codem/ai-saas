@@ -103,7 +103,7 @@ export async function GET(req: Request) {
 
     if (error) throw error;
 
-    const workspaces = await attachOperatingProfiles(data || []);
+    const workspaces = await attachOperatingProfiles(user.userId, data || []);
 
     return NextResponse.json({ success: true, workspaces });
   } catch (error) {
@@ -133,6 +133,22 @@ export async function POST(req: Request) {
     const { supabaseAdmin } = await import('@/lib/supabaseClient');
     if (!supabaseAdmin) {
       return NextResponse.json({ error: 'Database configuration missing' }, { status: 500 });
+    }
+
+    // Reject client-supplied operating profiles the user doesn't own (IDOR guard).
+    if (defaultOperatingProfileId) {
+      const { data: ownedProfile } = await supabaseAdmin
+        .from('operating_profiles')
+        .select('id')
+        .eq('id', defaultOperatingProfileId)
+        .eq('user_id', user.userId)
+        .maybeSingle();
+      if (!ownedProfile) {
+        return NextResponse.json(
+          { error: 'Operating profile not found or not owned by this user' },
+          { status: 400 }
+        );
+      }
     }
 
     await ensureDefaultWorkspace(user.userId);
@@ -188,7 +204,7 @@ export async function POST(req: Request) {
       defaultOperatingProfileId: defaultOperatingProfileId || fallbackProfile.id,
     }, req);
 
-    const [workspace] = await attachOperatingProfiles([data]);
+    const [workspace] = await attachOperatingProfiles(user.userId, [data]);
 
     return NextResponse.json({ success: true, workspace });
   } catch (error) {

@@ -23,7 +23,9 @@ jest.mock('@/lib/security/apiAuth', () => ({
 }));
 jest.mock('@/lib/security/rateLimit', () => ({ limitApiEndpoint: jest.fn().mockResolvedValue({ success: true }) }));
 jest.mock('@/lib/workspaces/operatingProfiles', () => ({ ensureDefaultOperatingProfile: jest.fn() }));
-jest.mock('@/lib/workspaces/query', () => ({ attachOperatingProfiles: jest.fn(async (ws: unknown) => ws) }));
+jest.mock('@/lib/workspaces/query', () => ({
+  attachOperatingProfiles: jest.fn(async (_userId: unknown, workspaces: unknown) => workspaces),
+}));
 jest.mock('@/lib/security/auditLog', () => ({ audit: jest.fn() }));
 
 import {
