@@ -47,6 +47,8 @@ export function useFileUpload(onError: (msg: string | null) => void) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const controllers = useRef(new Map<string, AbortController>());
   const previewUrls = useRef(new Map<string, string>());
+  const cancelledIds = useRef(new Set<string>());
+  const generation = useRef(0);
 
   useEffect(() => () => {
     controllers.current.forEach(controller => controller.abort());
@@ -56,6 +58,8 @@ export function useFileUpload(onError: (msg: string | null) => void) {
   }, []);
 
   const processEntry = async (entry: SelectedFile, forceStoredImage: boolean) => {
+    // The user may remove an item before the bounded worker reaches it.
+    if (cancelledIds.current.has(entry.id)) return;
     const controller = new AbortController();
     controllers.current.set(entry.id, controller);
     const { signal } = controller;
@@ -146,10 +150,11 @@ export function useFileUpload(onError: (msg: string | null) => void) {
 
     // Bounded workers prevent a multi-select from decoding ten camera photos at once.
     let index = 0;
+    const batchGeneration = generation.current;
     void Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_PREPARATIONS, entries.length) }, async () => {
-      while (index < entries.length) {
+      while (index < entries.length && generation.current === batchGeneration) {
         const entry = entries[index++];
-        await processEntry(entry, forceStoredImage);
+        if (!cancelledIds.current.has(entry.id)) await processEntry(entry, forceStoredImage);
       }
     }));
   };
@@ -161,6 +166,7 @@ export function useFileUpload(onError: (msg: string | null) => void) {
   };
 
   const removeFile = (id: string) => {
+    cancelledIds.current.add(id);
     controllers.current.get(id)?.abort();
     controllers.current.delete(id);
     const url = previewUrls.current.get(id);
@@ -171,6 +177,7 @@ export function useFileUpload(onError: (msg: string | null) => void) {
   };
 
   const clearFile = () => {
+    generation.current += 1;
     controllers.current.forEach(controller => controller.abort());
     controllers.current.clear();
     previewUrls.current.forEach(url => URL.revokeObjectURL(url));
