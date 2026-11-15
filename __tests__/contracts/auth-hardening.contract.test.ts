@@ -81,42 +81,42 @@ beforeEach(() => {
 describe('P0 — requireAuth() bypass is test-only', () => {
   it('does NOT bypass Clerk when NODE_ENV is development and MOCK_USER_ID is unset', async () => {
     const origEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'development';
+    Reflect.set(process.env, 'NODE_ENV', 'development');
     delete process.env.MOCK_USER_ID;
     try {
       const { requireAuth } = await import('@/lib/security/apiAuth');
-      (await import('@clerk/nextjs/server')).auth.mockResolvedValue({ userId: 'clerk-user' });
+      ((await import('@clerk/nextjs/server')).auth as unknown as jest.Mock).mockResolvedValue({ userId: 'clerk-user' });
       const user = await requireAuth();
       expect(user.userId).toBe('clerk-user');
     } finally {
-      process.env.NODE_ENV = origEnv;
+      Reflect.set(process.env, 'NODE_ENV', origEnv);
     }
   });
 
   it('does NOT bypass Clerk when MOCK_USER_ID is set in production', async () => {
     const origEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
+    Reflect.set(process.env, 'NODE_ENV', 'production');
     process.env.MOCK_USER_ID = 'mock-user';
     try {
       const { requireAuth } = await import('@/lib/security/apiAuth');
-      (await import('@clerk/nextjs/server')).auth.mockResolvedValue({ userId: null });
+      ((await import('@clerk/nextjs/server')).auth as unknown as jest.Mock).mockResolvedValue({ userId: null });
       await expect(requireAuth()).rejects.toMatchObject({ name: 'AuthenticationError' });
     } finally {
-      process.env.NODE_ENV = origEnv;
+      Reflect.set(process.env, 'NODE_ENV', origEnv);
       delete process.env.MOCK_USER_ID;
     }
   });
 
   it('bypasses Clerk only in test with MOCK_USER_ID', async () => {
     const origEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'test';
+    Reflect.set(process.env, 'NODE_ENV', 'test');
     process.env.MOCK_USER_ID = 'mock-user';
     try {
       const { requireAuth } = await import('@/lib/security/apiAuth');
       const user = await requireAuth();
       expect(user.userId).toBe('mock-user');
     } finally {
-      process.env.NODE_ENV = origEnv;
+      Reflect.set(process.env, 'NODE_ENV', origEnv);
       delete process.env.MOCK_USER_ID;
     }
   });
@@ -164,7 +164,7 @@ describe('P1 — workspace mutation rejects client-supplied resource IDs', () =>
     setTableQueue('workspace_state', [{ data: null }, { data: null }]);
     setTableQueue('workspace_members', [{ data: null }, { data: null }]);
 
-    (await import('@clerk/nextjs/server')).auth.mockResolvedValue({ userId: 'caller-user' });
+    ((await import('@clerk/nextjs/server')).auth as unknown as jest.Mock).mockResolvedValue({ userId: 'caller-user' });
 
     const req = new Request('https://lattice.test/api/workspaces', {
       method: 'POST',
@@ -182,7 +182,7 @@ describe('P1 — workspace mutation rejects client-supplied resource IDs', () =>
     const { POST } = await import('@/app/api/workspaces/route');
     const opProfile = await import('@/lib/workspaces/operatingProfiles');
 
-    opProfile.ensureDefaultOperatingProfile.mockResolvedValue({
+    (opProfile.ensureDefaultOperatingProfile as jest.Mock).mockResolvedValue({
       id: 'default-profile',
       user_id: 'caller-user',
     });
@@ -199,7 +199,7 @@ describe('P1 — workspace mutation rejects client-supplied resource IDs', () =>
     setTableQueue('workspace_state', [{ data: null }, { data: null }]);
     setTableQueue('workspace_members', [{ data: null }, { data: null }]);
 
-    (await import('@clerk/nextjs/server')).auth.mockResolvedValue({ userId: 'caller-user' });
+    ((await import('@clerk/nextjs/server')).auth as unknown as jest.Mock).mockResolvedValue({ userId: 'caller-user' });
 
     const req = new Request('https://lattice.test/api/workspaces', {
       method: 'POST',
@@ -234,7 +234,7 @@ describe('P1 — role revocation denies on next check (no cached state)', () => 
 describe('401 — unauthenticated requests are denied', () => {
   it('GET /api/workspaces returns 401 when no user session', async () => {
     const { GET } = await import('@/app/api/workspaces/route');
-    (await import('@clerk/nextjs/server')).auth.mockResolvedValue({ userId: null });
+    ((await import('@clerk/nextjs/server')).auth as unknown as jest.Mock).mockResolvedValue({ userId: null });
 
     const res = await GET(new Request('https://lattice.test/api/workspaces'));
     expect((res as { status: number }).status).toBe(401);
