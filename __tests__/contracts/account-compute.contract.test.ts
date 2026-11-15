@@ -92,6 +92,16 @@ describe('Account Compute Plane — A0 contract', () => {
     },
   );
 
+  it('fails closed if an attestation object is incomplete at runtime', () => {
+    const provider = {
+      ...request().provider,
+      isolation: {} as AccountComputeRequest['provider']['isolation'],
+    };
+    expect(planAccountCompute(request({ provider }))).toEqual({
+      action: 'blocked', reason: 'isolation_unverified',
+    });
+  });
+
   it('enforces account-level resource ceilings and rejects invalid plans', () => {
     expect(planAccountCompute(request({
       entitlement: { vcpus: 8, memoryMb: 4096, storageGb: 8, maxConcurrentWorkspaces: 1 },
