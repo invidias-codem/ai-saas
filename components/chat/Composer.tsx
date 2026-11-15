@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChangeEvent, ClipboardEvent } from "react";
+import type { ChangeEvent, ClipboardEvent, DragEvent } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus, SendHorizontal } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,8 +16,8 @@ interface ComposerProps {
   loading: boolean;
   agentMode: string | undefined;
   swarmSuggestion: string;
-  selectedFile: SelectedFile | null;
-  showFilePreview: boolean;
+  selectedFiles: SelectedFile[];
+  previewFileId: string | null;
   fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
   uploadedDocs: UploadedDoc[];
   setUploadedDocs: React.Dispatch<React.SetStateAction<UploadedDoc[]>>;
@@ -25,9 +25,10 @@ interface ComposerProps {
   handleSendMessage: () => void;
   handleKeyPress: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleFileChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  attachFile: (file: File) => void;
-  togglePreview: () => void;
-  removeFile: () => void;
+  attachFiles: (files: File[]) => void;
+  togglePreview: (id: string) => void;
+  removeFile: (id: string) => void;
+  retryFile: (id: string) => void;
 }
 
 /**
@@ -41,8 +42,8 @@ export function Composer({
   loading,
   agentMode,
   swarmSuggestion,
-  selectedFile,
-  showFilePreview,
+  selectedFiles,
+  previewFileId,
   fileInputRef,
   uploadedDocs,
   setUploadedDocs,
@@ -50,34 +51,52 @@ export function Composer({
   handleSendMessage,
   handleKeyPress,
   handleFileChange,
-  attachFile,
+  attachFiles,
   togglePreview,
   removeFile,
+  retryFile,
 }: ComposerProps) {
   const t = useTranslations("Conversation");
-  const canSend = Boolean(userInput.trim() || selectedFile || uploadedDocs.length);
-  const attachmentPending = Boolean(selectedFile && !selectedFile.payload);
+  const canSend = Boolean(userInput.trim() || selectedFiles.length || uploadedDocs.length);
+  const attachmentPending = selectedFiles.some(file => file.isUploading || !file.payload || Boolean(file.error));
 
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     if (loading) return;
     const { files, items } = event.clipboardData;
-    const image = Array.from(files).find(getChatImageMimeType)
-      ?? Array.from(items, item => item.getAsFile()).find(file => file && getChatImageMimeType(file));
-    if (!image) return;
-    // If the paste also contains text, let the textarea insert it normally.
+    const fromFiles = Array.from(files).filter(file => Boolean(getChatImageMimeType(file)));
+    const images = fromFiles.length
+      ? fromFiles
+      : Array.from(items, item => item.getAsFile()).filter((file): file is File => Boolean(file && getChatImageMimeType(file)));
+    if (!images.length) return;
+    // Preserve text in a mixed clipboard paste.
     if (!event.clipboardData.getData("text/plain")) event.preventDefault();
-    attachFile(image);
+    attachFiles(images);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (loading || !event.dataTransfer.files.length) return;
+    event.preventDefault();
+    attachFiles(Array.from(event.dataTransfer.files));
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!loading && Array.from(event.dataTransfer.types).includes("Files")) event.preventDefault();
   };
 
   return (
-    <div className="w-full flex-none bg-background px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4">
+    <div
+      className="w-full flex-none bg-background px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4"
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+    >
       <div className="max-w-3xl mx-auto relative">
         {/* File Preview Pill + expandable rich preview */}
         <FileAttachmentPanel
-          selectedFile={selectedFile}
-          showFilePreview={showFilePreview}
+          selectedFiles={selectedFiles}
+          previewFileId={previewFileId}
           onTogglePreview={togglePreview}
           onRemoveFile={removeFile}
+          onRetryFile={retryFile}
           sending={loading}
         />
 
@@ -98,7 +117,8 @@ export function Composer({
               ref={fileInputRef}
               onChange={handleFileChange}
               hidden
-              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv"
+              multiple
+              accept="image/*,.heic,.heif,.pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv"
             />
             <Button
               type="button"
@@ -118,7 +138,7 @@ export function Composer({
             onChange={handleInputChange}
             onKeyDown={handleKeyPress}
             onPaste={handlePaste}
-            readOnly={loading && Boolean(selectedFile)}
+            readOnly={loading && selectedFiles.length > 0}
             aria-label="Message Weaver"
             placeholder={
               swarmSuggestion ||
