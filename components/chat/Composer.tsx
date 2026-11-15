@@ -1,13 +1,14 @@
 "use client";
 
-import { ChangeEvent } from "react";
+import type { ChangeEvent, ClipboardEvent } from "react";
 import { useTranslations } from "next-intl";
 import { Loader2, Plus, SendHorizontal } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { NeuralArchivalUploader, UploadedDoc } from "@/components/documents/NeuralArchivalUploader";
 import { FileAttachmentPanel } from "@/components/chat/FileAttachmentPanel";
-import { SelectedFile } from "@/components/chat/useFileUpload";
+import type { SelectedFile } from "@/components/chat/useFileUpload";
+import { getChatImageMimeType } from "@/lib/utils/chatImage";
 
 interface ComposerProps {
   workspaceId: string | null;
@@ -24,6 +25,7 @@ interface ComposerProps {
   handleSendMessage: () => void;
   handleKeyPress: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   handleFileChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  attachFile: (file: File) => void;
   togglePreview: () => void;
   removeFile: () => void;
 }
@@ -48,11 +50,24 @@ export function Composer({
   handleSendMessage,
   handleKeyPress,
   handleFileChange,
+  attachFile,
   togglePreview,
   removeFile,
 }: ComposerProps) {
   const t = useTranslations("Conversation");
   const canSend = Boolean(userInput.trim() || selectedFile || uploadedDocs.length);
+  const attachmentPending = Boolean(selectedFile && !selectedFile.payload);
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (loading) return;
+    const { files, items } = event.clipboardData;
+    const image = Array.from(files).find(getChatImageMimeType)
+      ?? Array.from(items, item => item.getAsFile()).find(file => file && getChatImageMimeType(file));
+    if (!image) return;
+    // If the paste also contains text, let the textarea insert it normally.
+    if (!event.clipboardData.getData("text/plain")) event.preventDefault();
+    attachFile(image);
+  };
 
   return (
     <div className="w-full flex-none bg-background px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-4">
@@ -63,6 +78,7 @@ export function Composer({
           showFilePreview={showFilePreview}
           onTogglePreview={togglePreview}
           onRemoveFile={removeFile}
+          sending={loading}
         />
 
         {/* Input Container */}
@@ -76,8 +92,7 @@ export function Composer({
             />
           </div>
 
-          {/* Mobile: grouped + button for attachments */}
-          <div className="relative shrink-0 sm:hidden">
+          <div className="relative shrink-0">
             <input
               type="file"
               ref={fileInputRef}
@@ -89,8 +104,9 @@ export function Composer({
               type="button"
               variant="ghost"
               size="icon"
-              aria-label="Attach a file"
-              className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+              aria-label="Attach photo or file"
+              disabled={loading}
+              className="h-11 w-11 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
               onClick={() => fileInputRef.current?.click()}
             >
               <Plus className="h-5 w-5" />
@@ -101,6 +117,8 @@ export function Composer({
             value={userInput}
             onChange={handleInputChange}
             onKeyDown={handleKeyPress}
+            onPaste={handlePaste}
+            readOnly={loading && Boolean(selectedFile)}
             aria-label="Message Weaver"
             placeholder={
               swarmSuggestion ||
@@ -122,8 +140,8 @@ export function Composer({
             aria-label="Send message"
             aria-busy={loading}
             onClick={handleSendMessage}
-            disabled={loading || !canSend}
-            className="h-10 w-10 shrink-0 rounded-xl"
+            disabled={loading || attachmentPending || !canSend}
+            className="h-11 w-11 shrink-0 rounded-xl"
           >
             {loading ? (
               <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />

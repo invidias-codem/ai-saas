@@ -298,7 +298,10 @@ export async function executeWithFallback(params: FallbackParams): Promise<Fallb
 
 async function executeFallbackChain(params: FallbackParams): Promise<FallbackStreamResult> {
   const { primary, messages, systemInstruction, options, enableMiniMax, signal } = params;
-  const chain = buildFallbackChain(primary, { enableMiniMax });
+  const hasImage = messages.some(message =>
+    message.attachments?.some(attachment => attachment.mimeType.startsWith('image/'))
+  );
+  const chain = buildFallbackChain(primary, { enableMiniMax: !hasImage && enableMiniMax });
 
   const perHopErrors: string[] = [];
   let previousModelId: string | undefined;

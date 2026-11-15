@@ -13,6 +13,7 @@ import { GraphNode } from '../memory/graphStore';
 import { PromotableMemory } from '../memoryPromotion';
 import { Source } from '../ragMemory';
 import { env } from "@/lib/env";
+import { resolveConversationAttachment } from './conversationAttachment';
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
 import { GeminiProvider, AGENTIC_MODEL } from "./providers/gemini";
 import { DeepSeekProvider } from "./providers/deepseek";
@@ -59,7 +60,16 @@ import {
 
 export const ConversationRequestSchema = z.object({
   messages: z.array(ChatMessageSchema).min(1).max(100),
-  fileData: z.any().optional(), // updated to any to support the normalizedFileData object
+  fileData: z.union([z.string(), z.object({
+    name: z.string().optional(),
+    type: z.string().optional(),
+    mimeType: z.string().optional(),
+    sizeBytes: z.number().optional(),
+    base64Data: z.string().optional(),
+    fileUri: z.string().optional(),
+    storageProvider: z.literal('gcs').optional(),
+    extractedText: z.string().optional(),
+  })]).nullish(),
   fileName: z.string().max(255).optional(),
   mimeType: z.string().max(100).optional(),
   fileUri: z.string().max(1024).optional(),
@@ -190,6 +200,10 @@ export async function generateConversationReply(
   const { userId, clerkUser, request, conversationId } = args;
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
+  const fileData = typeof parsed.fileData === 'string' ? { base64Data: parsed.fileData } : parsed.fileData;
+  const effectiveMimeType = fileData?.mimeType || fileData?.type || parsed.mimeType;
+  const attachment = resolveConversationAttachment(parsed, userId);
+  const hasAttachments = Boolean(attachment || fileData?.extractedText);
   // Phase 0 (#440): server-produced capability manifest for THIS request,
   // derived from the SAME effective read enforcement retrieval uses (#440
   // review finding 2). The plan computation is hoisted here — before the
@@ -252,29 +266,16 @@ export async function generateConversationReply(
     const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
     let promptInput: string | any[] = userQuery;
 
-    if (parsed.fileData && parsed.fileData.mimeType && parsed.fileData.base64Data) {
+    if (attachment?.base64Data) {
       promptInput = [
         { text: userQuery },
-        {
-          inlineData: {
-            mimeType: parsed.fileData.mimeType,
-            data: parsed.fileData.base64Data
-          }
-        }
+        { inlineData: { mimeType: attachment.mimeType, data: attachment.base64Data } },
       ];
-    } else if (parsed.fileUri) {
-      const uriMimeType = parsed.mimeType || parsed.fileData?.mimeType;
-      if (uriMimeType) {
-        promptInput = [
-          { text: userQuery },
-          {
-            fileData: {
-              mimeType: uriMimeType,
-              fileUri: parsed.fileUri
-            }
-          }
-        ];
-      }
+    } else if (attachment?.fileUri) {
+      promptInput = [
+        { text: userQuery },
+        { fileData: { mimeType: attachment.mimeType, fileUri: attachment.fileUri } },
+      ];
     }
 
     // 3. Execute ReAct Loop (Non-streaming for now, wrapped in stream)
@@ -574,14 +575,13 @@ export async function generateConversationReply(
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const { messages, fileData, mimeType, workspaceId, documentIds: rawDocumentIds } = parsed;
+  const { messages, workspaceId, documentIds: rawDocumentIds } = parsed;
 
   // Filter out optimistic temp_ IDs that haven't been persisted to DB yet
   const documentIds = rawDocumentIds?.filter((id: string) => id && !id.startsWith('temp_'));
 
   // Handle PDF extraction — text is either pre-extracted by the API route
   // or we extract it here if it wasn't done upstream
-  const effectiveMimeType: string | undefined = mimeType || fileData?.mimeType || fileData?.type;
   let pdfText: string | null = fileData?.extractedText || null;
   
   // Fallback: extract PDF text if not pre-extracted (e.g., direct engine calls)
@@ -596,7 +596,7 @@ export async function generateConversationReply(
 
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
-  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys, personaSession: options.personaSession });
+  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments, providerKeys: nativeProviderKeys, personaSession: options.personaSession });
   let { provider, modelId: actualModelId } = providerResolution.execution;
   // Sovereign telemetry: the initially-requested model (before any confidence
   // override or 429 fallback) and the serving provider id.
@@ -761,7 +761,7 @@ export async function generateConversationReply(
         const upgradeMode = confidenceSignal.recommendedTier === 'claude-sonnet'
           ? 'quality'
           : 'reasoning';
-        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys, personaSession: options.personaSession });
+        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments, providerKeys: nativeProviderKeys, personaSession: options.personaSession });
         provider = providerResolution.execution.provider;
         actualModelId = providerResolution.execution.modelId;
         confidenceOverrideApplied = true;
@@ -974,16 +974,9 @@ export async function generateConversationReply(
   // Attach explicit files to the last message if present
   // Skip PDFs that have already been extracted as text — attaching raw binary
   // causes garbled encoded text in the prompt
-  if (fileData && effectiveMimeType && effectiveMimeType !== 'application/pdf') {
-    const lastMsg = history[history.length - 1];
-    if (lastMsg && lastMsg.role === 'user') {
-      lastMsg.attachments = lastMsg.attachments || [];
-      lastMsg.attachments.push({
-        name: parsed.fileName || 'attached_file',
-        mimeType: mimeType || effectiveMimeType || 'application/octet-stream',
-        base64Data: fileData
-      });
-    }
+  const lastMessage = history.at(-1);
+  if (attachment && attachment.mimeType !== 'application/pdf' && lastMessage?.role === 'user') {
+    lastMessage.attachments = [attachment];
   }
 
   // Attach explicitly selected document images
@@ -1055,7 +1048,7 @@ export async function generateConversationReply(
     userId,
     sessionId: conversationId || undefined,
     tags: [agentMode, actualModelId, wmDomain],
-    metadata: { hasAttachments: Boolean(fileData && mimeType), contextFactsCount: intelligentFacts.length },
+    metadata: { hasAttachments, contextFactsCount: intelligentFacts.length },
   });
 
   const updateTrace = (patch: Record<string, unknown>) => {
@@ -1132,7 +1125,7 @@ export async function generateConversationReply(
     try {
       const { calculateInteractionCost } = await import("@/lib/subscription/credits");
       const creditCost = calculateInteractionCost({
-        hasAttachments: Boolean(fileData && mimeType),
+        hasAttachments,
         mode: agentMode as any,
       });
       emitInteractionAudit({
