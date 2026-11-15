@@ -14,6 +14,7 @@ import { PromotableMemory } from '../memoryPromotion';
 import { Source } from '../ragMemory';
 import { env } from "@/lib/env";
 import { resolveConversationAttachment } from './conversationAttachment';
+import { MAX_CHAT_IMAGES } from '@/lib/types/attachments';
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
 import { GeminiProvider, AGENTIC_MODEL } from "./providers/gemini";
 import { DeepSeekProvider } from "./providers/deepseek";
@@ -70,6 +71,16 @@ export const ConversationRequestSchema = z.object({
     storageProvider: z.literal('gcs').optional(),
     extractedText: z.string().optional(),
   })]).nullish(),
+  // Multi-photo transport only. Legacy single fileData remains unchanged for PDFs and older clients.
+  fileDataList: z.array(z.object({
+    name: z.string().min(1).max(255),
+    type: z.string().optional(),
+    mimeType: z.string(),
+    sizeBytes: z.number().int().positive(),
+    base64Data: z.string().optional(),
+    fileUri: z.string().optional(),
+    storageProvider: z.literal('gcs').optional(),
+  })).min(2).max(MAX_CHAT_IMAGES).optional(),
   fileName: z.string().max(255).optional(),
   mimeType: z.string().max(100).optional(),
   fileUri: z.string().max(1024).optional(),
@@ -203,7 +214,11 @@ export async function generateConversationReply(
   const fileData = typeof parsed.fileData === 'string' ? { base64Data: parsed.fileData } : parsed.fileData;
   const effectiveMimeType = fileData?.mimeType || fileData?.type || parsed.mimeType;
   const attachment = resolveConversationAttachment(parsed, userId);
-  const hasAttachments = Boolean(attachment || fileData?.extractedText);
+  const attachments = [
+    ...(attachment ? [attachment] : []),
+    ...(parsed.fileDataList ?? []).map(file => resolveConversationAttachment({ fileData: file }, userId)),
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const hasAttachments = Boolean(attachments.length || fileData?.extractedText);
   // Phase 0 (#440): server-produced capability manifest for THIS request,
   // derived from the SAME effective read enforcement retrieval uses (#440
   // review finding 2). The plan computation is hoisted here — before the
@@ -266,15 +281,12 @@ export async function generateConversationReply(
     const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
     let promptInput: string | any[] = userQuery;
 
-    if (attachment?.base64Data) {
+    if (attachments.length) {
       promptInput = [
         { text: userQuery },
-        { inlineData: { mimeType: attachment.mimeType, data: attachment.base64Data } },
-      ];
-    } else if (attachment?.fileUri) {
-      promptInput = [
-        { text: userQuery },
-        { fileData: { mimeType: attachment.mimeType, fileUri: attachment.fileUri } },
+        ...attachments.map(item => item.base64Data
+          ? { inlineData: { mimeType: item.mimeType, data: item.base64Data } }
+          : { fileData: { mimeType: item.mimeType, fileUri: item.fileUri } }),
       ];
     }
 
@@ -975,8 +987,9 @@ export async function generateConversationReply(
   // Skip PDFs that have already been extracted as text — attaching raw binary
   // causes garbled encoded text in the prompt
   const lastMessage = history.at(-1);
-  if (attachment && attachment.mimeType !== 'application/pdf' && lastMessage?.role === 'user') {
-    lastMessage.attachments = [attachment];
+  const modelAttachments = attachments.filter(item => item.mimeType !== 'application/pdf');
+  if (modelAttachments.length && lastMessage?.role === 'user') {
+    lastMessage.attachments = modelAttachments;
   }
 
   // Attach explicitly selected document images
