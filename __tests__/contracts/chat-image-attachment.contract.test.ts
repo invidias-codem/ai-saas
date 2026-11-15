@@ -154,4 +154,78 @@ describe('photo upload to Gemini', () => {
     expect(resolveConversationAttachment({ fileName: photo.name, mimeType: photo.mimeType, fileData: data }, 'user_test'))
       .toEqual({ name: photo.name, mimeType: photo.mimeType, base64Data: data });
   });
+
+  const analyzeImages = (fileDataList: FileUploadPayload[], extra: Record<string, unknown> = {}) =>
+    POST(new Request('https://lattice.test/api/analyze-upload', {
+      method: 'POST',
+      body: JSON.stringify({
+        messages: [{ role: 'user', text: 'Compare these photos.' }],
+        fileDataList, ...extra,
+      }),
+    }));
+
+  test('delivers both images to Gemini in order rather than only the first', async () => {
+    const first = testImage.toString('base64');
+    const second = Buffer.from('second-image-pixels').toString('base64');
+    const response = await analyzeImages([
+      { ...photo, sizeBytes: testImage.length, base64Data: first },
+      { ...photo, name: 'second.png', sizeBytes: 19, base64Data: second },
+    ]);
+    if (!response.ok) throw new Error(await response.text());
+    await response.text();
+    const parts = mockSendMessageStream.mock.calls[0][0];
+    expect(parts.filter((part: { inlineData?: unknown }) => part.inlineData)).toEqual([
+      { inlineData: { mimeType: 'image/png', data: first } },
+      { inlineData: { mimeType: 'image/png', data: second } },
+    ]);
+  });
+
+  test('retrieves additional signed photos only from the authenticated user namespace', async () => {
+    mockGetObject.mockReturnValue({ createReadStream: () => Readable.from([testImage]) });
+    const first = testImage.toString('base64');
+    const response = await analyzeImages([
+      { ...photo, sizeBytes: testImage.length, base64Data: first },
+      { ...photo, name: 'other.png', sizeBytes: testImage.length,
+        fileUri: 'gs://genie-uploads-test-project/user_test/upload-2/other.png' },
+    ]);
+    if (!response.ok) throw new Error(await response.text());
+    await response.text();
+    expect(mockGetObject).toHaveBeenCalledWith('user_test/upload-2/other.png');
+    expect(mockSendMessageStream.mock.calls[0][0].filter((part: { inlineData?: unknown }) => part.inlineData)).toHaveLength(2);
+  });
+
+  test('rejects a foreign signed image when it is one of several photos', async () => {
+    const response = await analyzeImages([
+      { ...photo, sizeBytes: testImage.length, base64Data: testImage.toString('base64') },
+      { ...photo, sizeBytes: testImage.length, fileUri: 'gs://genie-uploads-test-project/user_other/upload-2/other.png' },
+    ]);
+    expect(response.status).toBe(400);
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
+  });
+
+  test('rejects more than ten images before invoking the provider', async () => {
+    const response = await analyzeImages(Array.from({ length: 11 }, (_, index) => ({
+      ...photo, name: `img-${index}.png`, sizeBytes: testImage.length, base64Data: testImage.toString('base64'),
+    })));
+    expect(response.status).toBe(400);
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
+  });
+
+  test('rejects a PDF mixed with images in the image-only batch', async () => {
+    const response = await analyzeImages([
+      { ...photo, sizeBytes: testImage.length, base64Data: testImage.toString('base64') },
+      { name: 'document.pdf', type: 'application/pdf', mimeType: 'application/pdf',
+        sizeBytes: 16, base64Data: Buffer.from('pdf').toString('base64') },
+    ]);
+    expect(response.status).toBe(400);
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
+  });
+
+  test('rejects missing or oversized images and mixed single-plus-batch fields', async () => {
+    const valid = { ...photo, sizeBytes: testImage.length, base64Data: testImage.toString('base64') };
+    expect((await analyzeImages([valid, { ...photo, name: 'missing.png', sizeBytes: 10 }])).status).toBe(400);
+    expect((await analyzeImages([valid, { ...valid, sizeBytes: 11 * 1024 * 1024 }])).status).toBe(413);
+    expect((await analyzeImages([valid, valid], { fileData: valid })).status).toBe(400);
+    expect(mockSendMessageStream).not.toHaveBeenCalled();
+  });
 });
