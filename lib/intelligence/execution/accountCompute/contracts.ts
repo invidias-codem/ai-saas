@@ -136,9 +136,13 @@ export function planAccountCompute(req: AccountComputeRequest): AccountComputePl
 
   // Never fall back from a requested VM to Daytona's container capability.
   if (!req.provider.runtimeTypes.includes('linux_vm')) return blocked('vm_unavailable');
-  if (!Object.values(req.provider.isolation).every((verified) => verified === true)) {
-    return blocked('isolation_unverified');
-  }
+  const isolation = req.provider.isolation;
+  if (
+    isolation?.filesystem !== true ||
+    isolation?.process !== true ||
+    isolation?.network !== true ||
+    isolation?.secrets !== true
+  ) return blocked('isolation_unverified');
   if (!validQuota(req.entitlement, req.provider)) return blocked('quota_unavailable');
 
   const accountKey = accountVmReservationKey(req.ownerUserId);
