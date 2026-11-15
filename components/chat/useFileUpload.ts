@@ -3,22 +3,25 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import axios from "axios";
 import { compressBase64Payload, type FileUploadPayload } from "@/lib/uploadCompression";
-import { MAX_CHAT_IMAGE_BYTES } from "@/lib/types/attachments";
+import { MAX_CHAT_IMAGE_BYTES, MAX_CHAT_IMAGES } from "@/lib/types/attachments";
 import { getChatImageMimeType, MAX_INLINE_CHAT_IMAGE_BYTES, prepareChatImage } from "@/lib/utils/chatImage";
 
 export interface SelectedFile {
+  id: string;
   file: File;
   name: string;
   type: string;
   isUploading: boolean;
   payload?: FileUploadPayload;
   error?: string;
+  previewUrl?: string;
 }
 
 export type FilePayload = FileUploadPayload;
 
 const LARGE_FILE_THRESHOLD = 4 * 1024 * 1024;
 const MAX_PHOTO_BYTES = 20 * 1024 * 1024;
+const MAX_CONCURRENT_PREPARATIONS = 3;
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -33,49 +36,54 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
+/**
+ * One document or up to MAX_CHAT_IMAGES photos. The first individually chosen
+ * photo may use the existing inline path; every additional photo uses GCS so
+ * mobile/serverless request-body limits cannot be exceeded.
+ */
 export function useFileUpload(onError: (msg: string | null) => void) {
-  const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
-  const [showFilePreview, setShowFilePreview] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
+  const [previewFileId, setPreviewFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pendingUpload = useRef<AbortController | null>(null);
+  const controllers = useRef(new Map<string, AbortController>());
+  const previewUrls = useRef(new Map<string, string>());
 
-  useEffect(() => () => pendingUpload.current?.abort(), []);
+  useEffect(() => () => {
+    controllers.current.forEach(controller => controller.abort());
+    previewUrls.current.forEach(url => URL.revokeObjectURL(url));
+    controllers.current.clear();
+    previewUrls.current.clear();
+  }, []);
 
-  const attachFile = async (file: File) => {
-    pendingUpload.current?.abort();
+  const processEntry = async (entry: SelectedFile, forceStoredImage: boolean) => {
     const controller = new AbortController();
-    pendingUpload.current = controller;
+    controllers.current.set(entry.id, controller);
     const { signal } = controller;
-    const photoType = getChatImageMimeType(file);
-    const type = photoType ?? (file.type || "application/octet-stream");
-    const selection = { file, name: file.name, type };
-
-    onError(null);
-    setShowFilePreview(false);
-    setSelectedFile({ ...selection, isUploading: true });
-
+    const photoType = getChatImageMimeType(entry.file);
     let failureMessage = photoType
       ? "Couldn’t prepare this photo. Try a JPEG, PNG, or another photo."
       : "Couldn’t read the file. Remove it and try again.";
 
     try {
-      if (photoType && file.size > MAX_PHOTO_BYTES) {
+      if (photoType && entry.file.size > MAX_PHOTO_BYTES) {
         failureMessage = "This photo is larger than 20 MB. Choose a smaller image.";
         throw new Error(failureMessage);
       }
-
-      const prepared = photoType ? await prepareChatImage(file, photoType) : file;
+      const prepared = photoType ? await prepareChatImage(entry.file, photoType) : entry.file;
       signal.throwIfAborted();
       if (photoType && prepared.size > MAX_CHAT_IMAGE_BYTES) {
         failureMessage = "This photo is too large to attach. Choose a smaller image.";
         throw new Error(failureMessage);
       }
-      const mimeType = prepared.type || type;
+
+      const mimeType = prepared.type || entry.type;
       const fileInfo = { name: prepared.name, type: mimeType, mimeType, sizeBytes: prepared.size };
       let payload: FileUploadPayload;
+      const storeInGcs = (photoType && forceStoredImage)
+        || prepared.size > (photoType ? MAX_INLINE_CHAT_IMAGE_BYTES : LARGE_FILE_THRESHOLD);
 
-      if (prepared.size > (photoType ? MAX_INLINE_CHAT_IMAGE_BYTES : LARGE_FILE_THRESHOLD)) {
-        failureMessage = "Couldn’t upload this file. Check your connection or choose a smaller file.";
+      if (storeInGcs) {
+        failureMessage = "Couldn’t upload this file. Check your connection and retry.";
         const { data: { uploadUrl, fileUri } } = await axios.post<{ uploadUrl: string; fileUri: string }>(
           "/api/storage/sign", { filename: prepared.name, contentType: mimeType }, { signal }
         );
@@ -92,37 +100,108 @@ export function useFileUpload(onError: (msg: string | null) => void) {
         payload = photoType ? inlinePayload : compressBase64Payload(inlinePayload);
       }
       signal.throwIfAborted();
-      setSelectedFile({ file: prepared, name: file.name, type: mimeType, isUploading: false, payload });
+      setSelectedFiles(current => current.map(item => item.id === entry.id
+        ? { ...item, file: prepared, type: mimeType, isUploading: false, payload, error: undefined }
+        : item));
     } catch {
       if (!signal.aborted) {
-        setSelectedFile({ ...selection, isUploading: false, error: failureMessage });
+        setSelectedFiles(current => current.map(item => item.id === entry.id
+          ? { ...item, isUploading: false, payload: undefined, error: failureMessage }
+          : item));
       }
     } finally {
-      if (pendingUpload.current === controller) pendingUpload.current = null;
+      if (controllers.current.get(entry.id) === controller) controllers.current.delete(entry.id);
     }
   };
 
+  const attachFiles = (files: File[]) => {
+    if (files.length === 0) return;
+    const currentHasDocument = selectedFiles.some(item => !getChatImageMimeType(item.file));
+    const incomingHasDocument = files.some(file => !getChatImageMimeType(file));
+    if ((currentHasDocument || incomingHasDocument) && (selectedFiles.length > 0 || files.length > 1)) {
+      onError("Attach one document at a time, or select multiple images without documents.");
+      return;
+    }
+
+    const remaining = MAX_CHAT_IMAGES - selectedFiles.length;
+    if (remaining <= 0) {
+      onError(`You can attach up to ${MAX_CHAT_IMAGES} images per message.`);
+      return;
+    }
+    const admitted = files.slice(0, remaining);
+    onError(files.length > remaining ? `Only ${MAX_CHAT_IMAGES} images can be attached to one message.` : null);
+    const forceStoredImage = selectedFiles.length > 0 || admitted.length > 1;
+    const entries: SelectedFile[] = admitted.map(file => {
+      const id = crypto.randomUUID();
+      const photoType = getChatImageMimeType(file);
+      const previewUrl = photoType ? URL.createObjectURL(file) : undefined;
+      if (previewUrl) previewUrls.current.set(id, previewUrl);
+      return {
+        id, file, name: file.name,
+        type: photoType ?? (file.type || "application/octet-stream"),
+        isUploading: true, previewUrl,
+      };
+    });
+    setSelectedFiles(current => [...current, ...entries]);
+
+    // Bounded workers prevent a multi-select from decoding ten camera photos at once.
+    let index = 0;
+    void Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_PREPARATIONS, entries.length) }, async () => {
+      while (index < entries.length) {
+        const entry = entries[index++];
+        await processEntry(entry, forceStoredImage);
+      }
+    }));
+  };
+
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.currentTarget.files?.[0];
+    const files = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = "";
-    if (file) void attachFile(file);
+    attachFiles(files);
+  };
+
+  const removeFile = (id: string) => {
+    controllers.current.get(id)?.abort();
+    controllers.current.delete(id);
+    const url = previewUrls.current.get(id);
+    if (url) URL.revokeObjectURL(url);
+    previewUrls.current.delete(id);
+    setSelectedFiles(current => current.filter(item => item.id !== id));
+    setPreviewFileId(current => current === id ? null : current);
   };
 
   const clearFile = () => {
-    pendingUpload.current?.abort();
-    pendingUpload.current = null;
-    setSelectedFile(null);
-    setShowFilePreview(false);
+    controllers.current.forEach(controller => controller.abort());
+    controllers.current.clear();
+    previewUrls.current.forEach(url => URL.revokeObjectURL(url));
+    previewUrls.current.clear();
+    setSelectedFiles([]);
+    setPreviewFileId(null);
+  };
+
+  const retryFile = (id: string) => {
+    const entry = selectedFiles.find(item => item.id === id);
+    if (!entry || entry.isUploading) return;
+    setSelectedFiles(current => current.map(item => item.id === id
+      ? { ...item, isUploading: true, error: undefined } : item));
+    // A retried photo is stored unless it is the only attachment, preventing
+    // large inline bodies when other photos are present.
+    void processEntry(entry, selectedFiles.length > 1);
   };
 
   return {
-    selectedFile,
-    showFilePreview,
+    selectedFiles,
+    previewFileId,
     fileInputRef,
-    attachFile,
+    attachFiles,
     handleFileChange,
-    togglePreview: () => setShowFilePreview((value) => !value),
+    togglePreview: (id: string) => setPreviewFileId(value => value === id ? null : id),
+    removeFile,
+    retryFile,
     clearFile,
-    buildFilePayload: () => pendingUpload.current ? undefined : selectedFile?.payload,
+    buildFilePayloads: (): FilePayload[] | undefined =>
+      selectedFiles.some(item => item.isUploading || !item.payload || item.error)
+        ? undefined
+        : selectedFiles.map(item => item.payload!),
   };
 }
