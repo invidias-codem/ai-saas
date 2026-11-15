@@ -49,6 +49,6 @@ export async function getDefaultWorkspace(userId: string) {
     });
   }
 
-  const [workspace] = await attachOperatingProfiles([data]);
+  const [workspace] = await attachOperatingProfiles(userId, [data]);
   return workspace;
 }

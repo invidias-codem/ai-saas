@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
 export async function attachOperatingProfiles<T extends { default_operating_profile_id?: string | null }>(
+  userId: string,
   workspaces: T[]
 ) {
   if (!supabaseAdmin || workspaces.length === 0) {
@@ -28,7 +29,8 @@ export async function attachOperatingProfiles<T extends { default_operating_prof
   const { data: profiles, error } = await supabaseAdmin
     .from('operating_profiles')
     .select('*')
-    .in('id', ids);
+    .in('id', ids)
+    .eq('user_id', userId); // only attach profiles owned by this user — blocks cross-user IDOR
 
   if (error) throw error;
 

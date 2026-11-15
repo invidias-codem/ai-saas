@@ -33,7 +33,8 @@ export async function GET(req: Request) {
 
     // TEST BYPASS: return mock command if there's no DB or testing
     let mockCommands = commands;
-    if ((error || !supabaseAdmin) && (process.env.NODE_ENV === 'development' || process.env.MOCK_USER_ID)) {
+    const isMock = process.env.NODE_ENV === 'test' && process.env.MOCK_USER_ID;
+    if ((error || !supabaseAdmin) && isMock) {
       mockCommands = [{
         id: 'mock-command-id',
         user_id: user.userId,
