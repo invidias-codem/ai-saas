@@ -355,6 +355,42 @@ BEGIN
 END;
 $$;
 
+-- RPC: mark VM suspended. Dedicated generation-fenced transition (never
+-- writes state='ready' after a provider suspend).
+CREATE OR REPLACE FUNCTION public.account_compute_mark_suspended(
+    p_owner_user_id   TEXT,
+    p_expected_generation INTEGER
+) RETURNS JSON
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    vm record;
+BEGIN
+    SELECT * INTO vm FROM public.account_compute_vms
+     WHERE owner_user_id = p_owner_user_id FOR UPDATE;
+
+    IF vm.owner_user_id IS NULL THEN
+        RETURN json_build_object('ok', false, 'reason', 'vm not found');
+    END IF;
+
+    IF vm.generation <> p_expected_generation THEN
+        RETURN json_build_object('ok', false, 'reason', 'generation mismatch',
+            'expected', p_expected_generation, 'actual', vm.generation);
+    END IF;
+
+    IF vm.state <> 'ready' THEN
+        RETURN json_build_object('ok', false, 'reason', 'vm not ready',
+            'actual_state', vm.state);
+    END IF;
+
+    UPDATE public.account_compute_vms
+       SET state = 'suspended',
+           generation = vm.generation + 1
+     WHERE id = vm.id;
+
+    RETURN json_build_object('ok', true, 'generation', vm.generation + 1, 'state', 'suspended');
+END;
+$$;
+
 -- RLS: service_role owns all access; users can read their own VMs/bindings.
 ALTER TABLE public.account_compute_vms ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.account_compute_vms FROM PUBLIC, anon;
@@ -373,5 +409,24 @@ CREATE POLICY "users_read_own_workspace_bindings" ON public.account_compute_work
     FOR SELECT TO authenticated
     USING (owner_user_id = auth.uid()::text);
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account_compute_workspaces TO service_role;
+
+-- RPC function execution: restrict to service_role only. PostgreSQL grants
+-- EXECUTE to PUBLIC by default, so revoke explicitly and grant only to
+-- service_role. Authenticated users never call these RPCs directly.
+REVOKE EXECUTE ON FUNCTION public.account_compute_claim_vm(text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.account_compute_mark_ready(text, text, text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.account_compute_mark_failed(text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.account_compute_mark_suspended(text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.account_compute_attach_workspace(text, text, text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.account_compute_detach_workspace(text, text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.account_compute_resolve_provisioning(text, text, timestamptz) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.account_compute_claim_vm(text, text, text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.account_compute_mark_ready(text, text, text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.account_compute_mark_failed(text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.account_compute_mark_suspended(text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.account_compute_attach_workspace(text, text, text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.account_compute_detach_workspace(text, text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.account_compute_resolve_provisioning(text, text, timestamptz) TO service_role;
 
 COMMIT;
