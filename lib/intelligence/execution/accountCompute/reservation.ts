@@ -105,6 +105,29 @@ export async function markVmReady(
 }
 
 /**
+ * Mark a claimed VM as suspended. Generation CAS prevents stale writers from
+ * overwriting a newer state. Never writes state='ready'.
+ */
+export async function markVmSuspended(
+  ownerUserId: string,
+  expectedGeneration: number
+): Promise<{ ok: boolean; generation?: number; reason?: string }> {
+  const sb = requireSupabaseAdmin();
+  const { data, error } = await sb.rpc('account_compute_mark_suspended', {
+    p_owner_user_id: ownerUserId,
+    p_expected_generation: expectedGeneration,
+  });
+
+  if (error) throw error;
+
+  return {
+    ok: data.ok,
+    generation: data.generation ?? undefined,
+    reason: data.reason ?? undefined,
+  };
+}
+
+/**
  * Mark a claimed VM as failed (retained for reconciliation, never auto-released).
  */
 export async function markVmFailed(

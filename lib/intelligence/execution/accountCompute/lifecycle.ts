@@ -18,6 +18,7 @@ import {
   attachWorkspaceToVm,
   detachWorkspaceFromVm,
   markVmReady,
+  markVmSuspended,
   markVmFailed,
   resolveProvisioning,
   type WorkspaceAttach,
@@ -37,7 +38,11 @@ export interface AccountVmProvider {
   }>;
   resume(desktopId: string, scope: TenantScope): Promise<void>;
   suspend(desktopId: string, scope: TenantScope): Promise<void>;
-  get(desktopId: string, scope: TenantScope): Promise<{ phase: DesktopPhase } | null>;
+  get(desktopId: string, scope: TenantScope): Promise<{
+    phase: DesktopPhase;
+    sessionLease?: { expiresAt: string } | null;
+    executionLease?: { expiresAt: string } | null;
+  } | null>;
 }
 
 export interface ProvisionAccountVmResult {
@@ -67,10 +72,13 @@ function requireLifecycleEnabled() {
  * Provision one VM per account, generation-fenced.
  *
  * Flow:
- *   1. claimAccountVm (A1) — durable reservation, idempotent on owner
- *   2. Daytona create — only when claim was fresh (not replay)
- *   3. markVmReady with generation — CAS; aborts if another writer moved state
- *   4. On provider failure: markVmFailed, retain for reconciliation
+ *   1. verifyProviderCapability — fail closed unless the org advertises a
+ *      genuine linux_vm with all four isolation attestations (no silent
+ *      container fallback).
+ *   2. claimAccountVm (A1) — durable reservation, idempotent on owner
+ *   3. Daytona create — only when claim was fresh (not replay)
+ *   4. markVmReady with generation — CAS; aborts if another writer moved state
+ *   5. On provider failure: markVmFailed, retain for reconciliation
  *
  * Never creates a second VM for the same account; existing provisioning is
  * waited on, never duplicated.
@@ -81,6 +89,19 @@ export async function provisionAccountVm(
   entitlement: { vcpus: number; memoryMb: number; storageGb: number }
 ): Promise<ProvisionAccountVmResult> {
   requireLifecycleEnabled();
+
+  // Qualification is mandatory before any claim or provider create.
+  const qualified = verifyProviderCapability(provider, provider.capabilities.isolation);
+  if (!qualified.qualified) {
+    return {
+      claimed: false,
+      replay: false,
+      vmId: '',
+      state: 'blocked',
+      generation: 0,
+      desktopId: null,
+    };
+  }
 
   const operationKey = accountVmReservationKey(ownerUserId);
   const claim = await claimAccountVm(
@@ -183,7 +204,10 @@ export async function resumeAccountVm(
 }
 
 /**
- * Suspend an account VM. Refused when an active session or execution lease exists.
+ * Suspend an account VM. Refused when an active session or execution lease
+ * exists. Lease state is read authoritatively from the provider (labels on
+ * the Daytona sandbox) before calling provider.suspend(), preventing a
+ * suspended-with-active-lease race.
  */
 export async function suspendAccountVm(
   ownerUserId: string,
@@ -206,18 +230,30 @@ export async function suspendAccountVm(
 
   const scope: TenantScope = { tenantId: `user:${ownerUserId}`, workspaceId: '__lattice_account_vm__' };
   const desktop = await provider.get(desktopId, scope);
-  if (!desktop || !canSuspend({ desktopId, spec: {} as any, providerId: '', provider: '', phase: desktop.phase, createdAt: new Date().toISOString(), tenantId: scope.tenantId, workspaceId: scope.workspaceId } as any)) {
+  if (!desktop) {
+    return { ok: false, state: current.state, reason: 'desktop not found' };
+  }
+
+  // Authoritative lease check: an active session or execution lease blocks
+  // suspend. Lease expiry is compared against the current wall clock.
+  const now = new Date();
+  const sessionActive = desktop.sessionLease
+    && new Date(desktop.sessionLease.expiresAt) > now;
+  const execActive = desktop.executionLease
+    && new Date(desktop.executionLease.expiresAt) > now;
+  if (sessionActive || execActive) {
     return { ok: false, state: current.state, reason: 'active lease blocks suspend' };
   }
 
   await provider.suspend(desktopId, scope);
 
-  const ready = await markVmReady(ownerUserId, desktopId, current.provider_id ?? '', current.generation);
-  if (!ready.ok) {
-    return { ok: false, state: ready.reason ?? 'generation_mismatch', generation: ready.generation, reason: ready.reason };
+  // Dedicated suspended-state transition (never writes state='ready').
+  const suspended = await markVmSuspended(ownerUserId, current.generation);
+  if (!suspended.ok) {
+    return { ok: false, state: suspended.reason ?? 'generation_mismatch', generation: suspended.generation, reason: suspended.reason };
   }
 
-  return { ok: true, state: 'suspended', generation: ready.generation };
+  return { ok: true, state: 'suspended', generation: suspended.generation };
 }
 
 /**

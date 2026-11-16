@@ -93,6 +93,26 @@ describe('A1 — claimAccountVm passes through RPC args', () => {
     expect(result.vmId).toBe('vm-1');
     expect(result.state).toBe('provisioning');
   });
+
+  it('markVmSuspended calls account_compute_mark_suspended with owner and generation', async () => {
+    jest.resetModules();
+    const { rpc } = getMocks();
+    const { markVmSuspended } = require('@/lib/intelligence/execution/accountCompute/reservation');
+
+    rpc.mockResolvedValue({
+      data: { ok: true, generation: 4, state: 'suspended' },
+      error: null,
+    });
+
+    const result = await markVmSuspended('user_A', 3);
+
+    expect(rpc).toHaveBeenCalledWith('account_compute_mark_suspended', {
+      p_owner_user_id: 'user_A',
+      p_expected_generation: 3,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.generation).toBe(4);
+  });
 });
 
 describe('A1 — API route gating', () => {

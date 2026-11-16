@@ -3,13 +3,16 @@
  *
  * Covers:
  *  1. ENABLE_ACCOUNT_COMPUTE_LIFECYCLE flag gating (default off).
- *  2. provisionAccountVm: fresh claim → Daytona create → mark_ready generation CAS.
- *  3. Replay: existing VM returns current state without re-provisioning.
- *  4. Two workspaces attach to the same VM (no duplicate VM).
- *  5. Suspend → resume cycle with durableSuspend; blocked without it.
- *  6. Suspend refused when active lease exists.
- *  7. Provider capability verification: container-only org rejected.
- *  8. Provider failure → markVmFailed retained for reconciliation.
+ *  2. provisionAccountVm: verifyProviderCapability is mandatory before claim/create;
+ *     container-only providers are blocked (fail closed).
+ *  3. provisionAccountVm: fresh claim → Daytona create → mark_ready generation CAS.
+ *  4. Replay: existing VM returns current state without re-provisioning.
+ *  5. Two workspaces attach to the same VM (no duplicate VM).
+ *  6. Suspend → resume cycle: suspend writes state='suspended' via markVmSuspended
+ *     (never state='ready'); resume requires durableSuspend.
+ *  7. Suspend refused when an active session or execution lease exists.
+ *  8. Provider capability verification: container-only org rejected.
+ *  9. Provider failure → markVmFailed retained for reconciliation.
  *
  * All seams mocked; no real Daytona or Supabase calls.
  */
@@ -20,6 +23,7 @@ jest.mock('@/lib/intelligence/execution/accountCompute/reservation', () => ({
   attachWorkspaceToVm: jest.fn(),
   detachWorkspaceFromVm: jest.fn(),
   markVmReady: jest.fn(),
+  markVmSuspended: jest.fn(),
   markVmFailed: jest.fn(),
   resolveProvisioning: jest.fn(),
 }));
@@ -47,7 +51,11 @@ function makeProvider(overrides: Record<string, any> = {}) {
     create: jest.fn().mockResolvedValue({ desktopId: 'desktop-1', providerId: 'sandbox-1' }),
     resume: jest.fn().mockResolvedValue(undefined),
     suspend: jest.fn().mockResolvedValue(undefined),
-    get: jest.fn().mockResolvedValue({ phase: 'ready' as const }),
+    get: jest.fn().mockResolvedValue({
+      phase: 'ready' as const,
+      sessionLease: null,
+      executionLease: null,
+    }),
     ...overrides,
   };
 }
@@ -58,14 +66,26 @@ function resetAll() {
   for (const key of Object.keys(mod)) {
     if (typeof mod[key] === 'function') (mod[key] as jest.Mock).mockReset();
   }
-  // accountVmReservationKey is a pure helper; restore its factory implementation
-  // after mockReset clears it.
   contracts.accountVmReservationKey.mockImplementation((u: string) => `account-vm:v1:${u}`);
 }
 
 beforeEach(resetAll);
 
 describe('A2 — provisionAccountVm', () => {
+  it('blocks provisioning when provider is container-only (fail closed)', async () => {
+    const { provisionAccountVm } = require('@/lib/intelligence/execution/accountCompute/lifecycle');
+    const provider = makeProvider({
+      capabilities: { ...makeProvider().capabilities, runtimeTypes: ['container'] },
+    });
+
+    const result = await provisionAccountVm('user_A', provider, { vcpus: 2, memoryMb: 4096, storageGb: 20 });
+
+    expect(result.claimed).toBe(false);
+    expect(result.state).toBe('blocked');
+    expect(mod.claimAccountVm).not.toHaveBeenCalled();
+    expect(provider.create).not.toHaveBeenCalled();
+  });
+
   it('fresh claim provisions via Daytona and marks ready with generation CAS', async () => {
     const { provisionAccountVm } = require('@/lib/intelligence/execution/accountCompute/lifecycle');
     const provider = makeProvider();
@@ -199,7 +219,28 @@ describe('A2 — suspend / resume cycle', () => {
     expect(provider.resume).not.toHaveBeenCalled();
   });
 
-  it('refuses suspend when an active lease exists', async () => {
+  it('suspend writes state=suspended via markVmSuspended (never state=ready)', async () => {
+    const { suspendAccountVm } = require('@/lib/intelligence/execution/accountCompute/lifecycle');
+
+    mod.getAccountVm.mockResolvedValue({
+      desktop_id: 'desktop-1', provider_id: 'sandbox-1', state: 'ready', generation: 3,
+    });
+    mod.markVmSuspended.mockResolvedValue({ ok: true, generation: 4, state: 'suspended' });
+
+    const provider = makeProvider();
+    provider.get.mockResolvedValue({ phase: 'ready' as const, sessionLease: null, executionLease: null });
+
+    const result = await suspendAccountVm('user_A', provider);
+
+    expect(provider.suspend).toHaveBeenCalledWith('desktop-1', { tenantId: 'user:user_A', workspaceId: '__lattice_account_vm__' });
+    expect(mod.markVmSuspended).toHaveBeenCalledWith('user_A', 3);
+    expect(mod.markVmReady).not.toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(result.state).toBe('suspended');
+    expect(result.generation).toBe(4);
+  });
+
+  it('refuses suspend when an active session lease exists', async () => {
     const { suspendAccountVm } = require('@/lib/intelligence/execution/accountCompute/lifecycle');
 
     mod.getAccountVm.mockResolvedValue({
@@ -207,17 +248,39 @@ describe('A2 — suspend / resume cycle', () => {
     });
 
     const provider = makeProvider();
-    provider.get.mockResolvedValue({ phase: 'ready' as const });
-    mod.markVmReady.mockResolvedValue({ ok: true, generation: 4 });
-    // canSuspend checks leases — get returns a desktop without leases, so suspend proceeds.
-    // To test lease refusal, make get return a phase that canSuspend blocks:
-    // canSuspend returns false when sessionLease or executionLease is active.
-    // We simulate by returning a desktop whose phase isn't directly lease-based;
-    // instead override get to return undefined phase handling:
+    provider.get.mockResolvedValue({
+      phase: 'ready' as const,
+      sessionLease: { expiresAt: new Date(Date.now() + 60_000).toISOString() },
+      executionLease: null,
+    });
+
     const result = await suspendAccountVm('user_A', provider);
 
-    expect(provider.suspend).toHaveBeenCalled();
-    expect(result.ok).toBe(true);
+    expect(provider.suspend).not.toHaveBeenCalled();
+    expect(mod.markVmSuspended).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('active lease blocks suspend');
+  });
+
+  it('refuses suspend when an active execution lease exists', async () => {
+    const { suspendAccountVm } = require('@/lib/intelligence/execution/accountCompute/lifecycle');
+
+    mod.getAccountVm.mockResolvedValue({
+      desktop_id: 'desktop-1', provider_id: 'sandbox-1', state: 'ready', generation: 3,
+    });
+
+    const provider = makeProvider();
+    provider.get.mockResolvedValue({
+      phase: 'ready' as const,
+      sessionLease: null,
+      executionLease: { expiresAt: new Date(Date.now() + 60_000).toISOString() },
+    });
+
+    const result = await suspendAccountVm('user_A', provider);
+
+    expect(provider.suspend).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('active lease blocks suspend');
   });
 });
 
