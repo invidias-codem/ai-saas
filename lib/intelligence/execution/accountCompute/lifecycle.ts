@@ -28,6 +28,9 @@ import { canSuspend, type DesktopPhase, type TenantScope } from '@/lib/intellige
 export const ENABLE_ACCOUNT_COMPUTE_LIFECYCLE =
   process.env.ENABLE_ACCOUNT_COMPUTE_LIFECYCLE === 'true';
 
+export const ENABLE_ACCOUNT_COMPUTE_GUEST_RUNTIME =
+  process.env.ENABLE_ACCOUNT_COMPUTE_GUEST_RUNTIME === 'true';
+
 /** Minimal provider surface the lifecycle needs. Daytona adapter satisfies it. */
 export interface AccountVmProvider {
   readonly id: string;
