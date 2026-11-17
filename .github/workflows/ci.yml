@@ -1,8 +1,8 @@
 name: CI
 
 on:
+  # Run on stacked feature PRs, not just PRs targeting main.
   pull_request:
-    branches: [ main ]
   push:
     branches: [ main ]
 

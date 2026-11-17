@@ -2,7 +2,7 @@ name: CodiumAI PR-Agent
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review, review_requested]
   
   # Trigger on comments for commands like /describe, /review, /ask
   issue_comment:
@@ -15,7 +15,7 @@ jobs:
     permissions:
       issues: write
       pull-requests: write
-      contents: write
+      contents: read
     name: Run PR Agent
     steps:
       - name: PR Agent action
@@ -31,6 +31,10 @@ jobs:
           # Enable RAG features
           RAG_ARGUMENTS.ENABLE_RAG: "true"
           
+          # PR-Agent skips synchronize unless this explicit action allowlist includes it.
+          GITHUB_ACTION_CONFIG.PR_ACTIONS: '["opened", "reopened", "synchronize", "ready_for_review", "review_requested"]'
+          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
+
           # Configuration
           PR_AGENT.TOOLS.COLLAPSIBLE_COMMENTS: true
           PR_AGENT.TOOLS.RUBRIC_SCORE: true
