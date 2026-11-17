@@ -131,11 +131,14 @@ export class DurableGuestSupervisor {
 
     let createdGen = creating.generation ?? guestGen + 1;
     try {
-      await this.provider.createGuest(workspaceId, namespace, scope);
+      const created = await this.provider.createGuest(workspaceId, namespace, scope);
+      createdGen = created ? createdGen : createdGen;
 
       // Phase: running (guest generation CAS after successful provider create).
+      // Persist the provider ID returned by the provider so it is durable.
       const running = await markGuestPhase(
         ownerUserId, workspaceId, createdGen, 'running',
+        created.desktopId,
       );
       if (!running.ok) {
         await resolveGuestProvisioning(ownerUserId, workspaceId, 'uncertain', new Date().toISOString());

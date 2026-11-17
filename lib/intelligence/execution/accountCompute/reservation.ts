@@ -400,7 +400,8 @@ export async function markGuestPhase(
   ownerUserId: string,
   workspaceId: string,
   expectedGeneration: number,
-  newPhase: string
+  newPhase: string,
+  providerId?: string
 ): Promise<{ ok: boolean; generation?: number; phase?: string; quarantined?: boolean; reason?: string }> {
   const sb = requireSupabaseAdmin();
   const { data, error } = await sb.rpc('account_compute_mark_guest_phase', {
@@ -408,6 +409,7 @@ export async function markGuestPhase(
     p_workspace_id: workspaceId,
     p_expected_generation: expectedGeneration,
     p_new_phase: newPhase,
+    p_provider_id: providerId ?? null,
   });
 
   if (error) throw error;
