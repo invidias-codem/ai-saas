@@ -297,5 +297,4 @@ describe('A3 — suspend / resume recovery', () => {
   });
 });
 
-// Keep test helpers scoped to this file instead of TypeScript's global script scope.
-export {};
+
