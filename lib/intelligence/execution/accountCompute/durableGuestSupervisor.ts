@@ -13,6 +13,7 @@
 //   and background reconciler are A3.5+ concerns.
 
 import {
+  claimGuest,
   acquireGuestLease,
   releaseGuestLease,
   extendGuestLease,
@@ -21,6 +22,7 @@ import {
   resolveGuestProvisioning,
   getGuestRecord,
   type GuestRecord,
+  type GuestLease,
 } from '@/lib/intelligence/execution/accountCompute/reservation';
 import type { GuestProvider, GuestPhase } from '@/lib/intelligence/execution/accountCompute/guest';
 import type { TenantScope } from '@/lib/intelligence/execution/vdi/contracts';
@@ -99,29 +101,39 @@ export class DurableGuestSupervisor {
     generation?: number;
     reason?: string;
   }> {
-    const record = await this.resolveRecord(ownerUserId, workspaceId);
-    if (record && record.phase !== 'destroyed' && record.phase !== 'error') {
-      return { ok: false, reason: 'guest exists', generation: record.generation };
+    const existing = await getGuestRecord(ownerUserId, workspaceId);
+    if (existing && existing.phase !== 'destroyed' && existing.phase !== 'error') {
+      return { ok: false, reason: 'guest exists', generation: existing.generation };
     }
 
-    const acquired = await this.acquireLease(ownerUserId, workspaceId, expectedGeneration);
+    // Claim (register) the durable guest record first.
+    const claimed = await claimGuest(ownerUserId, workspaceId, `${ownerUserId}:${workspaceId}:claim`);
+    if (!claimed.ok) {
+      return { ok: false, reason: claimed.reason, generation: claimed.generation };
+    }
+    const guestGen = claimed.generation ?? 1;
+
+    // Acquire an exclusive lease before any provider call. The RPC checks the
+    // account VM state (ready, not suspending) under the VM lock.
+    const acquired = await this.acquireLease(ownerUserId, workspaceId, guestGen);
     if (!acquired.ok) {
       return { ok: false, reason: acquired.reason, generation: acquired.generation };
     }
 
+    // Phase: creating (guest generation CAS before provider).
     const creating = await markGuestPhase(
-      ownerUserId, workspaceId, expectedGeneration, 'creating',
+      ownerUserId, workspaceId, guestGen, 'creating',
     );
     if (!creating.ok) {
       await this.releaseLease(ownerUserId, workspaceId, acquired.fencingToken!);
       return { ok: false, reason: creating.reason, generation: creating.generation };
     }
 
-    let createdGen = creating.generation ?? expectedGeneration + 1;
+    let createdGen = creating.generation ?? guestGen + 1;
     try {
-      const created = await this.provider.createGuest(workspaceId, namespace, scope);
-      createdGen = created ? createdGen : createdGen;
+      await this.provider.createGuest(workspaceId, namespace, scope);
 
+      // Phase: running (guest generation CAS after successful provider create).
       const running = await markGuestPhase(
         ownerUserId, workspaceId, createdGen, 'running',
       );
@@ -185,39 +197,46 @@ export class DurableGuestSupervisor {
     }
   }
 
-  /** Suspend a guest. Account-wide fence first (VM ready -> suspending), then
-   * per-guest suspending -> suspended. New leases are refused during the fence. */
+  /** Suspend a guest. Account-wide fence first (VM ready -> suspending, VM
+   * generation), then per-guest suspending -> suspended (guest generation).
+   * New leases are refused during the fence. */
   async suspendWorkspaceGuest(
     ownerUserId: string,
     workspaceId: string,
     scope: TenantScope,
-    expectedGeneration: number,
+    expectedVmGeneration: number,
   ): Promise<{ ok: boolean; state?: GuestRecord; generation?: number; reason?: string }> {
     const record = await this.resolveRecord(ownerUserId, workspaceId);
     if (!record) {
-      return { ok: false, reason: 'no guest', generation: expectedGeneration };
+      return { ok: false, reason: 'no guest', generation: expectedVmGeneration };
     }
     if (record.phase !== 'running') {
       return { ok: false, reason: `guest not running (${record.phase})`, generation: record.generation };
     }
 
-    const fenced = await dbSuspendAccountVm(ownerUserId, record.generation);
+    // Account-wide suspension fence: ready -> suspending (VM generation).
+    // Rejects if any active guest lease exists under this account lock.
+    const fenced = await dbSuspendAccountVm(ownerUserId, expectedVmGeneration);
     if (!fenced.ok) {
       return { ok: false, reason: fenced.reason ?? 'suspend fence failed', generation: fenced.generation };
     }
 
-    const acquired = await this.acquireLease(ownerUserId, workspaceId, fenced.generation ?? record.generation + 1);
-    if (!acquired.ok) {
-      return { ok: false, reason: acquired.reason, generation: acquired.generation };
+    // Transition guest to suspending (guest generation). No new lease is
+    // acquired after the fence: the VM is now 'suspending', so
+    // acquireGuestLease would refuse. The fence itself holds the account lock.
+    const suspending = await markGuestPhase(
+      ownerUserId, workspaceId, record.generation, 'suspending',
+    );
+    if (!suspending.ok) {
+      return { ok: false, reason: suspending.reason, generation: suspending.generation };
     }
 
     try {
       await this.provider.suspendGuest(record.providerId!, scope);
 
       const phase = await markGuestPhase(
-        ownerUserId, workspaceId, acquired.generation ?? record.generation + 1, 'suspended',
+        ownerUserId, workspaceId, suspending.generation ?? record.generation, 'suspended',
       );
-      await this.releaseLease(ownerUserId, workspaceId, acquired.fencingToken!);
       const finalRecord = await getGuestRecord(ownerUserId, workspaceId);
       return {
         ok: phase.ok ? true : false,
@@ -226,7 +245,8 @@ export class DurableGuestSupervisor {
         reason: phase.ok ? undefined : phase.reason,
       };
     } catch (error) {
-      await this.releaseLease(ownerUserId, workspaceId, acquired.fencingToken!);
+      // Rollback: back to running so the guest remains usable.
+      await markGuestPhase(ownerUserId, workspaceId, suspending.generation ?? record.generation, 'running');
       return { ok: false, reason: error instanceof Error ? error.message : 'suspend failed', generation: record.generation };
     }
   }
