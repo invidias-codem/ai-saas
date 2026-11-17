@@ -280,6 +280,44 @@ export interface GuestLease {
   readonly replay: boolean;
 }
 
+/** Claim (register) a durable guest record for an account+workspace.
+ *  Requires the account VM to exist and be ready. Creates the initial guest
+ *  row in phase='creating' with generation=1. Idempotent. */
+export async function claimGuest(
+  ownerUserId: string,
+  workspaceId: string,
+  operationKey: string
+): Promise<{ ok: boolean; record?: GuestRecord; generation?: number; reason?: string; replay?: boolean }> {
+  const sb = requireSupabaseAdmin();
+  const { data, error } = await sb.rpc('account_compute_claim_guest', {
+    p_owner_user_id: ownerUserId,
+    p_workspace_id: workspaceId,
+    p_operation_key: operationKey,
+  });
+
+  if (error) throw error;
+
+  return {
+    ok: data.ok,
+    replay: data.replay ?? false,
+    record: data.ok
+      ? {
+          id: data.id,
+          ownerUserId: data.owner_user_id,
+          workspaceId: data.workspace_id,
+          providerId: data.provider_id ?? null,
+          phase: data.phase,
+          generation: data.generation ?? undefined,
+          operationKey: data.operation_key,
+          errorReason: data.error_reason ?? null,
+          quarantined: data.quarantined ?? false,
+        }
+      : undefined,
+    generation: data.generation ?? undefined,
+    reason: data.reason ?? undefined,
+  };
+}
+
 /** Acquire an exclusive execution lease for a guest. Fails if the VM is
  * suspending (account-wide fence) or the caller's generation is stale. */
 export async function acquireGuestLease(
