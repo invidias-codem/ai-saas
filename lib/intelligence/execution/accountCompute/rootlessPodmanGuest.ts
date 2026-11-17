@@ -185,7 +185,7 @@ export function createRootlessPodmanGuestProvider(
         '--pids-limit=' + config.maxPids,
         '--memory=' + config.memoryMb + 'm',
         '--cpus=' + config.cpuLimit,
-        '--tmpfs', '/workspace:rw,nosuid,nodev,noexec,size=' + config.workspaceTmpfsMb + 'm,mode=0700',
+        '--tmpfs', '/workspace:rw,nosuid,nodev,noexec,size=' + config.workspaceTmpfsMb + 'm,mode=1777',
         '--tmpfs', '/tmp:rw,nosuid,nodev,noexec,size=32m,mode=1777',
         config.imageDigest,
         'sleep', 'infinity',
