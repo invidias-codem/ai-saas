@@ -9,7 +9,13 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
-import { ENABLE_ACCOUNT_COMPUTE_LIFECYCLE } from '@/lib/intelligence/execution/accountCompute/lifecycle';
+import {
+  ENABLE_ACCOUNT_COMPUTE_LIFECYCLE,
+} from '@/lib/intelligence/execution/accountCompute/lifecycle';
+import {
+  ENABLE_ACCOUNT_COMPUTE,
+  getAccountVm,
+} from '@/lib/intelligence/execution/accountCompute/reservation';
 import { GuestSupervisor } from '@/lib/intelligence/execution/accountCompute/guest';
 import { admitWorkspace } from '@/lib/intelligence/execution/accountCompute/admission';
 
@@ -37,11 +43,40 @@ const supervisor = new GuestSupervisor(
 );
 
 function isEnabled(): boolean {
-  return ENABLE_ACCOUNT_COMPUTE_LIFECYCLE;
+  // Both account compute and its lifecycle must be explicitly enabled before
+  // any guest operation is served. Mock providers are not qualified for
+  // production use until A3.3 runtime isolation is verified.
+  return (
+    ENABLE_ACCOUNT_COMPUTE === true &&
+    ENABLE_ACCOUNT_COMPUTE_LIFECYCLE === true &&
+    supervisor.provider.id !== 'mock-provider'
+  );
 }
 
 async function handleError(error: unknown): Promise<NextResponse> {
   return handleAuthError(error);
+}
+
+/** Verify the caller's account has an authorized, ready VM before any guest op. */
+async function requireAccountVm(ownerUserId: string): Promise<{
+  ok: boolean;
+  vm?: { desktopId: string | null; phase: string; generation: number };
+  reason?: string;
+}> {
+  const vm = await getAccountVm(ownerUserId);
+  if (!vm) {
+    return { ok: false, reason: 'no account VM claim' };
+  }
+  if (String(vm.owner_user_id) !== ownerUserId) {
+    return { ok: false, reason: 'account VM ownership mismatch' };
+  }
+  if (vm.state !== 'ready') {
+    return { ok: false, reason: `account VM not ready (${vm.state})` };
+  }
+  return {
+    ok: true,
+    vm: { desktopId: vm.desktop_id ?? null, phase: vm.state, generation: vm.generation },
+  };
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
@@ -66,6 +101,12 @@ export async function POST(req: Request): Promise<NextResponse> {
       return NextResponse.json({ error: admission.reason }, { status: 403 });
     }
 
+    // Account VM ownership: caller must have an authorized, ready VM.
+    const vmCheck = await requireAccountVm(user.userId);
+    if (!vmCheck.ok) {
+      return NextResponse.json({ error: vmCheck.reason }, { status: 403 });
+    }
+
     const scope = {
       tenantId: `user:${user.userId}`,
       workspaceId: body.workspaceId,
@@ -78,7 +119,7 @@ export async function POST(req: Request): Promise<NextResponse> {
           body.workspaceId,
           admission.workspaceNamespace!,
           scope,
-          body.expectedGeneration ?? 0,
+          vmCheck.vm?.generation ?? body.expectedGeneration ?? 0,
         );
         if (!result.ok) {
           return NextResponse.json({ error: result.reason }, { status: 409 });
