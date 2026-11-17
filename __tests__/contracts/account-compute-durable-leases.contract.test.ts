@@ -211,6 +211,80 @@ describe('A3.4 — suspendAccountVm (account-wide fence)', () => {
   });
 });
 
+describe('A3.4 — claimGuest (durable guest registration)', () => {
+  it('claims a guest record when the account VM is ready', async () => {
+    const { claimGuest } = require('@/lib/intelligence/execution/accountCompute/reservation');
+    rpcPersistent('account_compute_claim_guest', {
+      ok: true, replay: false, id: 'g-1', workspace_id: 'ws-a',
+      provider_id: null, phase: 'creating', generation: 1,
+      operation_key: 'op-claim-1',
+    });
+
+    const result = await claimGuest('user_A', 'ws-a', 'op-claim-1');
+    expect(result.ok).toBe(true);
+    expect(result.replay).toBe(false);
+    expect(result.record!.phase).toBe('creating');
+    expect(result.record!.generation).toBe(1);
+    expect(rpcMock).toHaveBeenCalledWith('account_compute_claim_guest', {
+      p_owner_user_id: 'user_A',
+      p_workspace_id: 'ws-a',
+      p_operation_key: 'op-claim-1',
+    });
+  });
+
+  it('returns replay=true for an existing guest record', async () => {
+    const { claimGuest } = require('@/lib/intelligence/execution/accountCompute/reservation');
+    rpcPersistent('account_compute_claim_guest', {
+      ok: true, replay: true, id: 'g-1', workspace_id: 'ws-a',
+      provider_id: 'desktop-1', phase: 'running', generation: 3,
+      operation_key: 'op-claim-1',
+    });
+
+    const result = await claimGuest('user_A', 'ws-a', 'op-claim-1');
+    expect(result.ok).toBe(true);
+    expect(result.replay).toBe(true);
+    expect(result.record!.phase).toBe('running');
+  });
+
+  it('rejects when the account VM is not ready', async () => {
+    const { claimGuest } = require('@/lib/intelligence/execution/accountCompute/reservation');
+    rpcPersistent('account_compute_claim_guest', {
+      ok: false, reason: 'account VM not ready', actual_state: 'provisioning',
+    });
+
+    const result = await claimGuest('user_A', 'ws-a', 'op-claim-1');
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('account VM not ready');
+  });
+});
+
+describe('A3.4 — acquireGuestLease checks VM state', () => {
+  it('refuses lease when the account VM is suspending (not ready)', async () => {
+    const { acquireGuestLease } = require('@/lib/intelligence/execution/accountCompute/reservation');
+    rpcPersistent('account_compute_acquire_guest_lease', {
+      ok: false, reason: 'vm not ready', actual_state: 'suspending', generation: 5,
+    });
+
+    const result = await acquireGuestLease('user_A', 'ws-a', 5);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('vm not ready');
+  });
+});
+
+describe('A3.4 — suspendAccountVm rejects active leases', () => {
+  it('refuses suspend when an active guest lease exists', async () => {
+    const { suspendAccountVm } = require('@/lib/intelligence/execution/accountCompute/reservation');
+    rpcPersistent('account_compute_suspend_account_vm', {
+      ok: false, reason: 'active guest lease',
+      workspace_id: 'ws-a', generation: 4,
+    });
+
+    const result = await suspendAccountVm('user_A', 4);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('active guest lease');
+  });
+});
+
 describe('A3.4 — resolveGuestProvisioning', () => {
   it('retains uncertain outcome for reconciliation', async () => {
     const { resolveGuestProvisioning } = require('@/lib/intelligence/execution/accountCompute/reservation');
@@ -283,6 +357,11 @@ describe('A3.4 — DurableGuestSupervisor', () => {
     });
 
     setTableNullOnce();
+    rpcOnce('account_compute_claim_guest', {
+      ok: true, replay: false, id: 'g-1', workspace_id: 'ws-a',
+      provider_id: null, phase: 'creating', generation: 1,
+      operation_key: 'op-claim-1',
+    });
     rpcOnce('account_compute_acquire_guest_lease', {
       ok: true, replay: false, fencing_token: 'tok-1', generation: 1,
       expires_at: new Date(Date.now() + 300_000).toISOString(),
@@ -316,6 +395,11 @@ describe('A3.4 — DurableGuestSupervisor', () => {
     });
 
     setTableNullOnce();
+    rpcOnce('account_compute_claim_guest', {
+      ok: true, replay: false, id: 'g-1', workspace_id: 'ws-a',
+      provider_id: null, phase: 'creating', generation: 1,
+      operation_key: 'op-claim-1',
+    });
     rpcOnce('account_compute_acquire_guest_lease', {
       ok: true, replay: false, fencing_token: 'tok-1', generation: 1,
       expires_at: new Date(Date.now() + 300_000).toISOString(),
@@ -351,12 +435,8 @@ describe('A3.4 — DurableGuestSupervisor', () => {
       operation_key: 'op-1', error_reason: null, quarantined: false,
     });
     rpcOnce('account_compute_suspend_account_vm', { ok: true, generation: 2, state: 'suspending' });
-    rpcOnce('account_compute_acquire_guest_lease', {
-      ok: true, replay: false, fencing_token: 'tok-2', generation: 2,
-      expires_at: new Date(Date.now() + 300_000).toISOString(),
-    });
+    rpcOnce('account_compute_mark_guest_phase', { ok: true, generation: 2, phase: 'suspending', quarantined: false });
     rpcOnce('account_compute_mark_guest_phase', { ok: true, generation: 3, phase: 'suspended', quarantined: false });
-    rpcOnce('account_compute_release_guest_lease', { ok: true, generation: 2 });
     setTableRowOnce({
       id: 'g-1', owner_user_id: 'user_A', workspace_id: 'ws-a',
       provider_id: 'desktop-1', phase: 'suspended', generation: 3,

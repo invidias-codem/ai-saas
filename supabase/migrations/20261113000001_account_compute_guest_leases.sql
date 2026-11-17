@@ -1,20 +1,28 @@
 -- ============================================================================
--- Account Compute Plane — A3.4: durable guest state and execution leases.
+-- Account Compute Plane — A3.4.1: durable guest state and execution leases.
 --
 -- account_compute_guests: one durable record per (owner_user_id, workspace_id).
---   Tracks the guest lifecycle phase, stable provider ID, generation (monotonic
---   CAS), quarantined state, and last error reason. Provider calls are NOT
---   transactional; the durable record is the source of truth and provider
---   operations require idempotent operation keys + evidence.
+--   Tracks the guest lifecycle phase, stable provider ID, guest generation
+--   (monotonic CAS, independent of VM generation), quarantined state, and last
+--   error reason. Provider calls are NOT transactional; the durable record is
+--   the source of truth and provider operations require idempotent operation
+--   keys + evidence.
 --
 -- account_compute_guest_leases: exclusive execution lease per (owner, workspace).
 --   One active lease at a time; fencing token verified by the in-VM command
---   runner before each guest operation. New leases are refused while the VM
---   is suspending (account-wide ready -> suspending fence).
+--   runner before each guest operation. New leases are refused while the
+--   account VM is suspending (account-wide ready -> suspending fence).
+--
+-- Lock order (deadlock-free): account_compute_vms -> account_compute_guests ->
+-- account_compute_guest_leases. Every RPC that touches more than one table
+-- acquires locks in this order.
 --
 -- Invariants:
 --   * One guest record per account+workspace (composite UNIQUE).
---   * Lease acquisition and VM suspend transitions share DB serialization.
+--   * Lease acquisition and VM suspend transitions share DB serialization on
+--     the account VM row.
+--   * VM generation (account_compute_vms) and guest generation
+--     (account_compute_guests) are separate counters.
 --   * Generation CAS on every mutation; stale callers fail closed.
 --   * Provider failure retains the row in error/quarantine for reconciliation.
 -- ============================================================================
@@ -28,7 +36,7 @@ CREATE TABLE IF NOT EXISTS public.account_compute_guests (
     workspace_id     TEXT NOT NULL,
     provider_id      TEXT,                         -- stable provider/container ID
     phase            TEXT NOT NULL DEFAULT 'creating', -- creating|running|suspending|suspended|error|destroyed
-    generation       INTEGER NOT NULL DEFAULT 1,   -- monotonic CAS counter
+    generation       INTEGER NOT NULL DEFAULT 1,   -- guest monotonic CAS counter (separate from VM generation)
     operation_key    TEXT NOT NULL UNIQUE,         -- idempotency key for mutations
     error_reason     TEXT,
     quarantined      BOOLEAN NOT NULL DEFAULT false,
@@ -53,6 +61,7 @@ CREATE TABLE IF NOT EXISTS public.account_compute_guest_leases (
     fencing_token    TEXT NOT NULL UNIQUE,         -- verified by in-VM runner
     acquired_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at       TIMESTAMPTZ NOT NULL DEFAULT now() + interval '5 minutes',
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (owner_user_id, workspace_id),          -- one active lease
     UNIQUE (fencing_token)
 );
@@ -64,9 +73,10 @@ CREATE INDEX IF NOT EXISTS idx_account_compute_guest_leases_workspace
 CREATE INDEX IF NOT EXISTS idx_account_compute_guest_leases_expires
     ON public.account_compute_guest_leases(expires_at);
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_account_compute_guest_leases_unique_active
-    ON public.account_compute_guest_leases(owner_user_id, workspace_id)
-    WHERE expires_at > now();
+-- NOTE: no partial index with WHERE expires_at > now() — now() is not
+-- immutable and PostgreSQL rejects it in index predicates. Single-lease
+-- enforcement is RPC-level (service_role only) plus the UNIQUE constraint
+-- above on all rows; expired rows are cleaned by lease TTL.
 
 -- updated_at maintenance.
 DROP TRIGGER IF EXISTS trg_account_compute_guests_touch ON public.account_compute_guests;
@@ -81,9 +91,72 @@ CREATE TRIGGER trg_account_compute_guest_leases_touch
     FOR EACH ROW
     EXECUTE FUNCTION public.touch_account_compute();
 
+-- RPC: claim (register) a durable guest record for an account+workspace.
+--   Requires the account VM to exist and be ready. Creates the initial guest
+--   row in phase='creating' with generation=1. Idempotent: existing guest
+--   row is returned unchanged.
+CREATE OR REPLACE FUNCTION public.account_compute_claim_guest(
+    p_owner_user_id   TEXT,
+    p_workspace_id    TEXT,
+    p_operation_key   TEXT
+) RETURNS JSON
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+    vm record;
+    existing record;
+BEGIN
+    -- Lock the account VM first (consistent lock order).
+    SELECT * INTO vm FROM public.account_compute_vms
+     WHERE owner_user_id = p_owner_user_id FOR UPDATE;
+
+    IF vm.owner_user_id IS NULL THEN
+        RETURN json_build_object('ok', false, 'reason', 'account VM not found');
+    END IF;
+
+    IF vm.state <> 'ready' THEN
+        RETURN json_build_object('ok', false, 'reason', 'account VM not ready',
+            'actual_state', vm.state);
+    END IF;
+
+    -- Idempotency: existing guest row for this owner+workspace.
+    SELECT * INTO existing FROM public.account_compute_guests
+     WHERE owner_user_id = p_owner_user_id AND workspace_id = p_workspace_id
+     FOR UPDATE;
+
+    IF existing.owner_user_id IS NOT NULL THEN
+        RETURN json_build_object(
+            'ok', true, 'replay', true,
+            'id', existing.id,
+            'workspace_id', existing.workspace_id,
+            'provider_id', existing.provider_id,
+            'phase', existing.phase,
+            'generation', existing.generation,
+            'operation_key', existing.operation_key
+        );
+    END IF;
+
+    INSERT INTO public.account_compute_guests (
+        owner_user_id, workspace_id, phase, generation, operation_key
+    ) VALUES (
+        p_owner_user_id, p_workspace_id, 'creating', 1, p_operation_key
+    )
+    RETURNING * INTO existing;
+
+    RETURN json_build_object(
+        'ok', true, 'replay', false,
+        'id', existing.id,
+        'workspace_id', existing.workspace_id,
+        'provider_id', existing.provider_id,
+        'phase', existing.phase,
+        'generation', existing.generation,
+        'operation_key', existing.operation_key
+    );
+END;
+$$;
+
 -- RPC: acquire an exclusive execution lease for a guest.
---   Generates a fencing token verified by the in-VM command runner.
---   Rejects if the VM is suspending (account-wide fence).
+--   Lock order: account VM (check state='ready') -> guest row (CAS) -> lease
+--   row (insert). Refuses new leases while the VM is suspending.
 CREATE OR REPLACE FUNCTION public.account_compute_acquire_guest_lease(
     p_owner_user_id   TEXT,
     p_workspace_id    TEXT,
@@ -91,10 +164,25 @@ CREATE OR REPLACE FUNCTION public.account_compute_acquire_guest_lease(
 ) RETURNS JSON
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
+    vm record;
     guest record;
     existing record;
     token TEXT := encode(gen_random_bytes(16), 'hex');
 BEGIN
+    -- Lock the account VM first (consistent lock order) and verify it is
+    -- ready, not suspending. This is the account-wide suspension fence.
+    SELECT * INTO vm FROM public.account_compute_vms
+     WHERE owner_user_id = p_owner_user_id FOR UPDATE;
+
+    IF vm.owner_user_id IS NULL THEN
+        RETURN json_build_object('ok', false, 'reason', 'account VM not found');
+    END IF;
+
+    IF vm.state <> 'ready' THEN
+        RETURN json_build_object('ok', false, 'reason', 'vm not ready',
+            'actual_state', vm.state, 'generation', vm.generation);
+    END IF;
+
     -- Resolve the guest record under lock.
     SELECT * INTO guest FROM public.account_compute_guests
      WHERE owner_user_id = p_owner_user_id AND workspace_id = p_workspace_id
@@ -104,16 +192,10 @@ BEGIN
         RETURN json_build_object('ok', false, 'reason', 'guest not found');
     END IF;
 
-    -- Generation CAS: reject stale callers.
+    -- Guest generation CAS: reject stale callers.
     IF guest.generation <> p_expected_generation THEN
         RETURN json_build_object('ok', false, 'reason', 'stale generation',
             'expected', p_expected_generation, 'actual', guest.generation);
-    END IF;
-
-    -- Account-wide suspension fence: refuse new leases while suspending.
-    IF guest.phase = 'suspending' THEN
-        RETURN json_build_object('ok', false, 'reason', 'vm suspending',
-            'generation', guest.generation);
     END IF;
 
     -- Idempotency: return the existing active lease if still valid.
@@ -131,8 +213,8 @@ BEGIN
         );
     END IF;
 
-    -- Insert the new lease. UNIQUE(owner, workspace) + partial unique index
-    -- on active leases prevents concurrent leases under serialization.
+    -- Insert the new lease. UNIQUE(owner, workspace) prevents concurrent
+    -- leases under the account VM lock held above.
     INSERT INTO public.account_compute_guest_leases (
         owner_user_id, workspace_id, generation, fencing_token, acquired_at, expires_at
     ) VALUES (
@@ -199,7 +281,8 @@ BEGIN
     END IF;
 
     UPDATE public.account_compute_guest_leases
-       SET expires_at = lease.expires_at + (p_extend_ms || ' milliseconds')::interval
+       SET expires_at = lease.expires_at + (p_extend_ms || ' milliseconds')::interval,
+           updated_at = now()
      WHERE id = lease.id;
 
     RETURN json_build_object('ok', true, 'expires_at',
@@ -207,7 +290,8 @@ BEGIN
 END;
 $$;
 
--- RPC: transition a guest phase with generation CAS.
+-- RPC: transition a guest phase with generation CAS (guest generation,
+-- independent of VM generation).
 --   Valid phases: creating|running|suspending|suspended|error|destroyed.
 CREATE OR REPLACE FUNCTION public.account_compute_mark_guest_phase(
     p_owner_user_id   TEXT,
@@ -235,7 +319,8 @@ BEGIN
     UPDATE public.account_compute_guests
        SET phase = p_new_phase,
            generation = guest.generation + 1,
-           quarantined = (p_new_phase = 'error')
+           quarantined = (p_new_phase = 'error'),
+           updated_at = now()
      WHERE id = guest.id;
 
     RETURN json_build_object('ok', true, 'generation', guest.generation + 1,
@@ -244,7 +329,9 @@ END;
 $$;
 
 -- RPC: account-wide ready -> suspending fence.
---   Prevents new guest leases while the VM is suspending.
+--   Lock order: account VM -> active leases. Rejects if any active guest
+--   lease exists under this account (existing execution lease overlaps
+--   suspension). Prevents new guest leases while suspending.
 CREATE OR REPLACE FUNCTION public.account_compute_suspend_account_vm(
     p_owner_user_id   TEXT,
     p_expected_generation INTEGER
@@ -252,7 +339,9 @@ CREATE OR REPLACE FUNCTION public.account_compute_suspend_account_vm(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
     vm record;
+    active_lease record;
 BEGIN
+    -- Lock the account VM first.
     SELECT * INTO vm FROM public.account_compute_vms
      WHERE owner_user_id = p_owner_user_id FOR UPDATE;
 
@@ -270,9 +359,22 @@ BEGIN
             'actual_state', vm.state);
     END IF;
 
+    -- Reject if any active guest lease exists under this account lock.
+    SELECT * INTO active_lease FROM public.account_compute_guest_leases
+     WHERE owner_user_id = p_owner_user_id
+       AND expires_at > now()
+     FOR UPDATE;
+
+    IF active_lease.owner_user_id IS NOT NULL THEN
+        RETURN json_build_object('ok', false, 'reason', 'active guest lease',
+            'workspace_id', active_lease.workspace_id,
+            'generation', vm.generation);
+    END IF;
+
     UPDATE public.account_compute_vms
        SET state = 'suspending',
-           generation = vm.generation + 1
+           generation = vm.generation + 1,
+           updated_at = now()
      WHERE id = vm.id;
 
     RETURN json_build_object('ok', true, 'generation', vm.generation + 1,
@@ -349,6 +451,7 @@ CREATE POLICY "users_read_own_guest_leases" ON public.account_compute_guest_leas
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.account_compute_guest_leases TO service_role;
 
 -- RPC function execution: restrict to service_role only.
+REVOKE EXECUTE ON FUNCTION public.account_compute_claim_guest(text, text, text) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.account_compute_acquire_guest_lease(text, text, integer) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.account_compute_release_guest_lease(text, text, text) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.account_compute_extend_guest_lease(text, text, text, integer) FROM PUBLIC, anon, authenticated;
@@ -356,6 +459,7 @@ REVOKE EXECUTE ON FUNCTION public.account_compute_mark_guest_phase(text, text, i
 REVOKE EXECUTE ON FUNCTION public.account_compute_suspend_account_vm(text, integer) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.account_compute_resolve_guest_provisioning(text, text, text, timestamptz) FROM PUBLIC, anon, authenticated;
 
+GRANT EXECUTE ON FUNCTION public.account_compute_claim_guest(text, text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.account_compute_acquire_guest_lease(text, text, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.account_compute_release_guest_lease(text, text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.account_compute_extend_guest_lease(text, text, text, integer) TO service_role;
