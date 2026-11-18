@@ -311,3 +311,6 @@ describe('A2 — provider capability verification', () => {
     expect(result.qualified).toBe(true);
   });
 });
+
+// Keep test helpers scoped to this file instead of TypeScript's global script scope.
+export {};

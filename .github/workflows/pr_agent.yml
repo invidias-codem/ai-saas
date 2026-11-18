@@ -2,7 +2,7 @@ name: CodiumAI PR-Agent
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review, review_requested]
   
   # Trigger on comments for commands like /describe, /review, /ask
   issue_comment:
@@ -15,9 +15,21 @@ jobs:
     permissions:
       issues: write
       pull-requests: write
-      contents: write
+      contents: read
     name: Run PR Agent
     steps:
+      # A missing/placeholder secret previously produced a green job even when
+      # PR-Agent failed to authenticate with both configured models.
+      - name: Require real PR-Agent credential
+        shell: bash
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [[ -z "${OPENAI_KEY:-}" || "${OPENAI_KEY}" == "dummy_key" || "${OPENAI_KEY}" == "sk_test_dummy" ]]; then
+            echo "::error title=PR-Agent credential unavailable::Set a valid OPENAI_API_KEY GitHub Actions secret; placeholders are rejected."
+            exit 1
+          fi
+
       - name: PR Agent action
         id: pr_agent
         uses: Codium-ai/pr-agent@d82f7d3e696cd00822694aaa3096265d3889f3f1 # main
@@ -31,6 +43,10 @@ jobs:
           # Enable RAG features
           RAG_ARGUMENTS.ENABLE_RAG: "true"
           
+          # PR-Agent skips synchronize unless this explicit action allowlist includes it.
+          GITHUB_ACTION_CONFIG.PR_ACTIONS: '["opened", "reopened", "synchronize", "ready_for_review", "review_requested"]'
+          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
+
           # Configuration
           PR_AGENT.TOOLS.COLLAPSIBLE_COMMENTS: true
           PR_AGENT.TOOLS.RUBRIC_SCORE: true

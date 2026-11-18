@@ -78,9 +78,10 @@ jobs:
           
           # Extract suggestions (placeholder - in reality would parse review comments)
           echo "[]" > suggestions.json
+          echo "suggestion_count=$(jq 'length' suggestions.json)" >> "$GITHUB_OUTPUT"
 
       - name: Classify and Apply Suggestions
-        if: steps.extract.outputs.pr_number != ''
+        if: steps.extract.outputs.pr_number != '' && steps.extract.outputs.suggestion_count != '0'
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -99,7 +100,8 @@ jobs:
           " || echo "No suggestions to apply"
 
       - name: Commit Applied Changes
-        if: steps.extract.outputs.pr_number != ''
+        id: commit
+        if: steps.extract.outputs.pr_number != '' && steps.extract.outputs.suggestion_count != '0'
         env:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
@@ -119,9 +121,11 @@ jobs:
           
           git pull --rebase origin "$HEAD_BRANCH"
           git push origin HEAD:refs/heads/$HEAD_BRANCH
+          echo "changes_pushed=true" >> "$GITHUB_OUTPUT"
 
       - name: Post Summary Comment
-        if: steps.extract.outputs.pr_number != ''
+        # Only claim completion when a change was actually pushed.
+        if: steps.commit.outputs.changes_pushed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Pass via env to avoid ${{ }} shell injection
