@@ -1,9 +1,11 @@
-// Account Compute Plane — A3: guest workspace supervisor endpoint.
+// Account Compute Plane — A3.4: durable guest workspace supervisor endpoint.
 //
-// Default-off via ENABLE_ACCOUNT_COMPUTE_LIFECYCLE. Clerk-authenticated,
+// Default-off via ENABLE_ACCOUNT_COMPUTE, ENABLE_ACCOUNT_COMPUTE_LIFECYCLE,
+// and ENABLE_ACCOUNT_COMPUTE_GUEST_RUNTIME. Clerk-authenticated,
 // server-verified workspace admission (membership + role), every operation
-// bound to account + workspace. Provider operations are mocked until A3.3
-// verifies isolation inside a real Linux VM.
+// bound to account + workspace through DB-backed leases and generation CAS.
+// Provider operations are mocked until A3.3 runtime isolation is verified
+// against a real Linux VM.
 
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -11,12 +13,13 @@ import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAut
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import {
   ENABLE_ACCOUNT_COMPUTE_LIFECYCLE,
+  ENABLE_ACCOUNT_COMPUTE_GUEST_RUNTIME,
 } from '@/lib/intelligence/execution/accountCompute/lifecycle';
 import {
   ENABLE_ACCOUNT_COMPUTE,
   getAccountVm,
 } from '@/lib/intelligence/execution/accountCompute/reservation';
-import { GuestSupervisor } from '@/lib/intelligence/execution/accountCompute/guest';
+import { DurableGuestSupervisor } from '@/lib/intelligence/execution/accountCompute/durableGuestSupervisor';
 import { admitWorkspace } from '@/lib/intelligence/execution/accountCompute/admission';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +32,7 @@ const guestSchema = z.object({
   command: z.string().optional(),
 });
 
-const supervisor = new GuestSupervisor(
+const supervisor = new DurableGuestSupervisor(
   {
     id: 'mock-provider',
     createGuest: async () => ({ desktopId: `desktop-${crypto.randomUUID()}` }),
@@ -39,16 +42,20 @@ const supervisor = new GuestSupervisor(
     healthGuest: async () => ({ healthy: true }),
     inspectGuest: async () => null,
   },
-  { maxConcurrentGuests: 10, leaseTtlMs: 5 * 60 * 1000 },
+  {
+    maxConcurrentGuests: 10,
+    leaseTtlMs: 5 * 60 * 1000,
+    leaseRenewalMs: 60_000,
+  },
 );
 
 function isEnabled(): boolean {
-  // Both account compute and its lifecycle must be explicitly enabled before
-  // any guest operation is served. Mock providers are not qualified for
-  // production use until A3.3 runtime isolation is verified.
+  // All three flags must be explicitly enabled, and a real (non-mock)
+  // provider must be qualified before any guest operation is served.
   return (
     ENABLE_ACCOUNT_COMPUTE === true &&
     ENABLE_ACCOUNT_COMPUTE_LIFECYCLE === true &&
+    ENABLE_ACCOUNT_COMPUTE_GUEST_RUNTIME === true &&
     supervisor.provider.id !== 'mock-provider'
   );
 }
