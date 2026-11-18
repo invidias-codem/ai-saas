@@ -258,3 +258,246 @@ export async function getWorkspaceBindings(ownerUserId: string) {
   if (error) throw error;
   return data ?? [];
 }
+
+/** Durable guest record. */
+export interface GuestRecord {
+  readonly id: string;
+  readonly ownerUserId: string;
+  readonly workspaceId: string;
+  readonly providerId: string | null;
+  readonly phase: string;
+  readonly generation: number;
+  readonly operationKey: string;
+  readonly errorReason: string | null;
+  readonly quarantined: boolean;
+}
+
+/** Guest lease with fencing token. */
+export interface GuestLease {
+  readonly fencingToken: string;
+  readonly generation: number;
+  readonly expiresAt: string;
+  readonly replay: boolean;
+}
+
+/** Claim (register) a durable guest record for an account+workspace.
+ *  Requires the account VM to exist and be ready. Creates the initial guest
+ *  row in phase='creating' with generation=1. Idempotent. */
+export async function claimGuest(
+  ownerUserId: string,
+  workspaceId: string,
+  operationKey: string
+): Promise<{ ok: boolean; record?: GuestRecord; generation?: number; reason?: string; replay?: boolean }> {
+  const sb = requireSupabaseAdmin();
+  const { data, error } = await sb.rpc('account_compute_claim_guest', {
+    p_owner_user_id: ownerUserId,
+    p_workspace_id: workspaceId,
+    p_operation_key: operationKey,
+  });
+
+  if (error) throw error;
+
+  return {
+    ok: data.ok,
+    replay: data.replay ?? false,
+    record: data.ok
+      ? {
+          id: data.id,
+          ownerUserId: data.owner_user_id,
+          workspaceId: data.workspace_id,
+          providerId: data.provider_id ?? null,
+          phase: data.phase,
+          generation: data.generation ?? undefined,
+          operationKey: data.operation_key,
+          errorReason: data.error_reason ?? null,
+          quarantined: data.quarantined ?? false,
+        }
+      : undefined,
+    generation: data.generation ?? undefined,
+    reason: data.reason ?? undefined,
+  };
+}
+
+/** Acquire an exclusive execution lease for a guest. Fails if the VM is
+ * suspending (account-wide fence) or the caller's generation is stale. */
+export async function acquireGuestLease(
+  ownerUserId: string,
+  workspaceId: string,
+  expectedGeneration: number
+): Promise<{ ok: boolean; lease?: GuestLease; generation?: number; reason?: string }> {
+  const sb = requireSupabaseAdmin();
+  const { data, error } = await sb.rpc('account_compute_acquire_guest_lease', {
+    p_owner_user_id: ownerUserId,
+    p_workspace_id: workspaceId,
+    p_expected_generation: expectedGeneration,
+  });
+
+  if (error) throw error;
+
+  return {
+    ok: data.ok,
+    lease: data.ok
+      ? {
+          fencingToken: data.fencing_token,
+          generation: data.generation ?? undefined,
+          expiresAt: data.expires_at ?? undefined,
+          replay: data.replay ?? false,
+        }
+      : undefined,
+    generation: data.generation ?? undefined,
+    reason: data.reason ?? undefined,
+  };
+}
+
+/** Release a guest execution lease by fencing token. */
+export async function releaseGuestLease(
+  ownerUserId: string,
+  workspaceId: string,
+  fencingToken: string
+): Promise<{ ok: boolean; generation?: number; reason?: string }> {
+  const sb = requireSupabaseAdmin();
+  const { data, error } = await sb.rpc('account_compute_release_guest_lease', {
+    p_owner_user_id: ownerUserId,
+    p_workspace_id: workspaceId,
+    p_fencing_token: fencingToken,
+  });
+
+  if (error) throw error;
+
+  return {
+    ok: data.ok,
+    generation: data.generation ?? undefined,
+    reason: data.reason ?? undefined,
+  };
+}
+
+/** Extend a guest execution lease expiry by p_extend_ms milliseconds. */
+export async function extendGuestLease(
+  ownerUserId: string,
+  workspaceId: string,
+  fencingToken: string,
+  extendMs: number
+): Promise<{ ok: boolean; expiresAt?: string; reason?: string }> {
+  const sb = requireSupabaseAdmin();
+  const { data, error } = await sb.rpc('account_compute_extend_guest_lease', {
+    p_owner_user_id: ownerUserId,
+    p_workspace_id: workspaceId,
+    p_fencing_token: fencingToken,
+    p_extend_ms: extendMs,
+  });
+
+  if (error) throw error;
+
+  return {
+    ok: data.ok,
+    expiresAt: data.expires_at ?? undefined,
+    reason: data.reason ?? undefined,
+  };
+}
+
+/** Transition a guest phase with generation CAS. */
+export async function markGuestPhase(
+  ownerUserId: string,
+  workspaceId: string,
+  expectedGeneration: number,
+  newPhase: string,
+  providerId?: string
+): Promise<{ ok: boolean; generation?: number; phase?: string; quarantined?: boolean; reason?: string }> {
+  const sb = requireSupabaseAdmin();
+  const { data, error } = await sb.rpc('account_compute_mark_guest_phase', {
+    p_owner_user_id: ownerUserId,
+    p_workspace_id: workspaceId,
+    p_expected_generation: expectedGeneration,
+    p_new_phase: newPhase,
+    p_provider_id: providerId ?? null,
+  });
+
+  if (error) throw error;
+
+  return {
+    ok: data.ok,
+    generation: data.generation ?? undefined,
+    phase: data.phase ?? undefined,
+    quarantined: data.quarantined ?? undefined,
+    reason: data.reason ?? undefined,
+  };
+}
+
+/** Account-wide ready -> suspending fence. Prevents new guest leases while
+ * the VM is suspending. */
+export async function suspendAccountVm(
+  ownerUserId: string,
+  expectedGeneration: number
+): Promise<{ ok: boolean; generation?: number; state?: string; reason?: string }> {
+  const sb = requireSupabaseAdmin();
+  const { data, error } = await sb.rpc('account_compute_suspend_account_vm', {
+    p_owner_user_id: ownerUserId,
+    p_expected_generation: expectedGeneration,
+  });
+
+  if (error) throw error;
+
+  return {
+    ok: data.ok,
+    generation: data.generation ?? undefined,
+    state: data.state ?? undefined,
+    reason: data.reason ?? undefined,
+  };
+}
+
+/** Resolve a guest provisioning outcome. 'uncertain' retains the row in
+ * error/quarantine for reconciliation; 'failed' records the failure. */
+export async function resolveGuestProvisioning(
+  ownerUserId: string,
+  workspaceId: string,
+  outcome: 'uncertain' | 'failed',
+  now: string
+): Promise<{ ok: boolean; phase?: string; generation?: number; quarantined?: boolean; reason?: string }> {
+  const sb = requireSupabaseAdmin();
+  const { data, error } = await sb.rpc('account_compute_resolve_guest_provisioning', {
+    p_owner_user_id: ownerUserId,
+    p_workspace_id: workspaceId,
+    p_outcome: outcome,
+    p_now: now,
+  });
+
+  if (error) throw error;
+
+  return {
+    ok: data.ok,
+    phase: data.phase ?? undefined,
+    generation: data.generation ?? undefined,
+    quarantined: data.quarantined ?? undefined,
+    reason: data.reason ?? undefined,
+  };
+}
+
+/** Read the durable guest record for an owner+workspace (user-scoped RLS read). */
+export async function getGuestRecord(
+  ownerUserId: string,
+  workspaceId: string
+): Promise<GuestRecord | null> {
+  const sb = requireSupabaseAdmin();
+  const { data, error } = await sb
+    .from('account_compute_guests')
+    .select('*')
+    .eq('owner_user_id', ownerUserId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    ownerUserId: data.owner_user_id,
+    workspaceId: data.workspace_id,
+    providerId: data.provider_id ?? null,
+    phase: data.phase,
+    generation: data.generation,
+    operationKey: data.operation_key,
+    errorReason: data.error_reason ?? null,
+    quarantined: data.quarantined,
+  };
+}
+
