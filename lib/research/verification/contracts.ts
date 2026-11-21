@@ -50,6 +50,7 @@ export const DEFAULT_VERIFICATION_POLICY: VerificationPolicy = {
   policyId: 'verification-policy-v1',
   policyVersion: '1',
   requiredChecks: ['compilation', 'kernel_acceptance', 'axiom_inspection', 'replay'],
+  allowedAxioms: [],
   disallowedAxioms: [],
   maxProofSteps: undefined,
   timeoutMs: 300_000,
