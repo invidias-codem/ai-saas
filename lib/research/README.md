@@ -1,4 +1,4 @@
-# Research Plane — R0: Verifiable Research Runs
+# Research Plane — R0 + R1A: Verifiable Research Runs
 
 ## Purpose
 
@@ -31,6 +31,7 @@ certifying their own results.
 | `provenance.ts` | Append-only provenance log, chain integrity, log verification |
 | `verification/contracts.ts` | Verifier provider interface, verification result, default policy, independence assertion, receipt builder |
 | `verification/policy.ts` | Axiom authorization, required-check validation, outcome determination, tamper detection, receipt consistency |
+| `verification/leanAdapter.ts` | R1A: Trusted Lean 4 verifier — pinned toolchain, `lean` check, axiom inspection, outcome from actual evidence |
 
 ## Feature flag
 
@@ -53,19 +54,37 @@ VERIFIED, FAILED, INCONCLUSIVE, and REJECTED are terminal. No direct agent
 promotion to VERIFIED — only a verifier can submit a receipt that transitions
 to VERIFIED.
 
+## R1A — Trusted Lean Adapter
+
+The `LeanVerifierProvider` implements `VerifierProvider` using Lean 4.36.0
+(pinned via elan). It:
+
+1. Verifies spec/candidate content hashes against actual bytes (never trusts caller hashes)
+2. Runs `lean Solution.lean` — the trusted compilation/kernel acceptance check
+3. Extracts axiom/parameter declarations and checks against `disallowedAxioms`
+4. Computes the verification outcome from actual evidence — never caller claims
+5. Generates a sealed `VerificationReceipt` binding spec hash, candidate hash, toolchain, policy, and execution receipt
+
+Requires a Lean 4 toolchain (elan) on the PATH. Without Lean installed, the
+adapter will fail compilation checks (exit status != 0 → FAILED).
+
 ## Testing
 
-Contract tests live in `__tests__/contracts/research-plane.contract.test.ts`.
-Run with:
+Contract tests live in `__tests__/contracts/research-plane.contract.test.ts`
+(R0/R0.1/R0.2) and `__tests__/contracts/research-plane-lean.contract.test.ts`
+(R1A). Run with:
 
 ```
 npx jest __tests__/contracts/research-plane.contract.test.ts --no-coverage
+npx jest __tests__/contracts/research-plane-lean.contract.test.ts --no-coverage
 ```
 
 ## Deployment model
 
 All R0 operations are deterministic and testable without external credentials.
 No live model calls, billable VM provisioning, or production database
-migrations are required for this foundational slice. Persistence (Supabase
-rows, artifact storage) is the caller's responsibility; this module supplies
-pure contracts and validation only.
+migrations are required for this foundational slice. R1A requires a Lean 4
+toolchain for live verification; the adapter gracefully fails (FAILED
+outcome) when Lean is unavailable. Persistence (Supabase rows, artifact
+storage) is the caller's responsibility; this module supplies pure contracts
+and validation only.
