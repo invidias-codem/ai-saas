@@ -28,9 +28,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Install Lean toolchain
-        uses: jetli/lean-action@v0.5.0
-        with:
-          lean-version: 4.36.0
+        uses: leanprover/lean-action@498ce7030982ff0e0cecd98a8f5a7c90615b4e41 # v1.7.1
 
       - name: Build Workspace Packages
         run: pnpm --recursive --filter @lattice-os/core run build && pnpm --recursive --filter @lattice-os/mcp-remote run build
