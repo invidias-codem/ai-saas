@@ -73,6 +73,13 @@ def solution : Target := by
   exact my_disallowed_axiom
 `;
 
+// Arbitrary candidate-defined axiom — should be rejected under default policy
+// (allowedAxioms is empty).
+const ARBITRARY_AXIOM_CANDIDATE = `axiom invented_assumption : Target
+
+def solution : Target := invented_assumption
+`;
+
 function makeProject(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'lean-test-'));
   for (const [name, content] of Object.entries(files)) {
@@ -307,6 +314,31 @@ describe('R1A — unauthorized axioms', () => {
       expect(result.checkResults.axiom_inspection.passed).toBe(false);
       expect(result.checkResults.axiom_inspection.reason).toContain(
         'my_disallowed_axiom',
+      );
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it('rejects an arbitrary candidate-defined axiom under default policy', async () => {
+    const dir = makeProject({
+      'Challenge.lean': CHALLENGE,
+      'Candidate.lean': ARBITRARY_AXIOM_CANDIDATE,
+    });
+    try {
+      const specHash = sha256Bytes(CHALLENGE);
+      const candidateHash = sha256Bytes(ARBITRARY_AXIOM_CANDIDATE);
+      // Default policy: allowedAxioms is empty — no axioms permitted.
+      const result = await provider.verify({
+        specHash,
+        candidateHash,
+        candidatePath: join(dir, 'Candidate.lean'),
+        specPath: join(dir, 'Challenge.lean'),
+      });
+      expect(result.outcome).toBe('FAILED');
+      expect(result.checkResults.axiom_inspection.passed).toBe(false);
+      expect(result.checkResults.axiom_inspection.reason).toContain(
+        'invented_assumption',
       );
     } finally {
       cleanup(dir);

@@ -68,6 +68,8 @@ export const LEAN_VERIFICATION_POLICY: VerificationPolicy = {
     'proof_completeness',
     'mathematical_relatedness',
   ],
+  allowedAxioms: [],
+  disallowedAxioms: [],
 };
 
 // `sorry` keyword marks an incomplete proof in Lean.
@@ -296,16 +298,25 @@ export class LeanVerifierProvider {
 
       let usesSorryAx = false;
       let disallowedAxiomsUsed: string[] = [];
+      let unauthorizedAxioms: string[] = [];
 
       if (!axiomInspectionFailed && printedAxioms !== null) {
         usesSorryAx = printedAxioms.includes('sorryAx');
         disallowedAxiomsUsed = printedAxioms.filter((a) =>
           this.policy.disallowedAxioms.includes(a),
         );
+        // Strict allowlist: every axiom must be explicitly authorized.
+        // Empty allowedAxioms means no axioms are permitted.
+        unauthorizedAxioms = printedAxioms.filter(
+          (a) => !this.policy.allowedAxioms.includes(a),
+        );
       }
 
       const axiomInspectionPassed =
-        !axiomInspectionFailed && !usesSorryAx && disallowedAxiomsUsed.length === 0;
+        !axiomInspectionFailed &&
+        !usesSorryAx &&
+        disallowedAxiomsUsed.length === 0 &&
+        unauthorizedAxioms.length === 0;
 
       // 6. Proof completeness — reject incomplete proofs (sorry / sorryAx).
       const incompleteProof = hasSorry(candidateText) || usesSorryAx;
@@ -329,7 +340,10 @@ export class LeanVerifierProvider {
           replay: { passed: false, reason: 'independent replay not performed' },
         },
         exitStatus: result.exitCode,
-        disallowedAxiomsUsed,
+        disallowedAxiomsUsed: [
+          ...disallowedAxiomsUsed,
+          ...unauthorizedAxioms,
+        ],
         placeholdersPresent: incompleteProof || usesSorryAx,
         timeoutExceeded: false,
       });
@@ -341,7 +355,9 @@ export class LeanVerifierProvider {
             ? 'proof uses sorryAx (incomplete/admitted)'
             : disallowedAxiomsUsed.length > 0
               ? `disallowed axioms: ${disallowedAxiomsUsed.join(', ')}`
-              : undefined;
+              : unauthorizedAxioms.length > 0
+                ? `unauthorized axioms: ${unauthorizedAxioms.join(', ')}`
+                : undefined;
       const completenessReason = incompleteProof
         ? 'proof contains sorry or sorryAx (incomplete)'
         : undefined;

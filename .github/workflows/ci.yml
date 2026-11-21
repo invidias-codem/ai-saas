@@ -29,6 +29,14 @@ jobs:
 
       - name: Install Lean toolchain
         uses: leanprover/lean-action@498ce7030982ff0e0cecd98a8f5a7c90615b4e41 # v1.7.1
+        with:
+          auto-config: false
+          use-github-cache: false
+
+      - name: Verify Lean toolchain
+        run: |
+          lean --version
+          lake --version
 
       - name: Build Workspace Packages
         run: pnpm --recursive --filter @lattice-os/core run build && pnpm --recursive --filter @lattice-os/mcp-remote run build

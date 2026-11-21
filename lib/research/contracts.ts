@@ -123,7 +123,8 @@ export interface VerificationPolicy {
   readonly policyId: string;
   readonly policyVersion: string;
   readonly requiredChecks: string[]; // check names that must pass
-  readonly disallowedAxioms: string[];
+  readonly allowedAxioms: string[]; // only these axioms may be used (strict allowlist)
+  readonly disallowedAxioms: string[]; // never permitted (subset check on top)
   readonly maxProofSteps?: number;
   readonly timeoutMs: number;
 }
