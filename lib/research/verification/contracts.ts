@@ -59,14 +59,28 @@ export const DEFAULT_VERIFICATION_POLICY: VerificationPolicy = {
  * Validation that a verifier provider is not conflicted with the candidate
  * producer. Callers must assert the provider's identity differs from the
  * agent that produced the candidate.
+ *
+ * Fail-closed: the candidate-producing agent cannot act as its own verifier,
+ * and a verifier whose identity name is 'agent' cannot verify work produced
+ * by any agent role (explorer, formalizer, critic, coordinator).
  */
 export function assertVerifierIndependence(
   producerRole: string,
   provider: VerifierProvider,
 ): void {
-  if (producerRole === 'verifier' && provider.identity.name === 'agent') {
+  const agentRoles = ['explorer', 'formalizer', 'critic', 'coordinator'];
+  const producerIsAgent = agentRoles.includes(producerRole);
+  const providerIsAgent = provider.identity.name === 'agent';
+
+  if (producerIsAgent && providerIsAgent) {
     throw new ResearchPlaneError(
       'Candidate-producing agent cannot act as its own verifier',
+      'VERIFIER_CONFLICT',
+    );
+  }
+  if (producerRole === provider.identity.name) {
+    throw new ResearchPlaneError(
+      `Verifier identity '${provider.identity.name}' matches producer role '${producerRole}'`,
       'VERIFIER_CONFLICT',
     );
   }

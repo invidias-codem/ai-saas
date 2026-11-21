@@ -221,16 +221,64 @@ export function requireResearchPlaneEnabled() {
 
 // ── Deterministic hashing ─────────────────────────────────────────────────
 
-/** Canonical SHA-256 of any JSON-serializable value. Deterministic key order. */
+/**
+ * Recursively canonicalize a JSON-serializable value with sorted keys at
+ * every level. Unlike JSON.stringify with a top-level key whitelist, this
+ * sorts keys in nested objects too, so structurally identical values always
+ * produce identical canonical strings regardless of insertion order.
+ */
+export function canonicalizeJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map(canonicalizeJson).join(',') + ']';
+  }
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  const pairs = keys.map(
+    (key) => JSON.stringify(key) + ':' + canonicalizeJson(obj[key]),
+  );
+  return '{' + pairs.join(',') + '}';
+}
+
+/** Canonical SHA-256 of any JSON-serializable value. Deterministic key order at every nesting level. */
 export function sha256Json(value: unknown): string {
-  const canonical = JSON.stringify(value, Object.keys(value as Record<string, unknown>).sort());
-  return createHash('sha256').update(canonical).digest('hex');
+  return createHash('sha256').update(canonicalizeJson(value)).digest('hex');
 }
 
 /** SHA-256 of raw bytes (string or Buffer). */
 export function sha256Bytes(input: string | Buffer): string {
   const data = Buffer.isBuffer(input) ? input : Buffer.from(input, 'utf8');
   return createHash('sha256').update(data).digest('hex');
+}
+
+/**
+ * Verify that supplied content bytes match an expected SHA-256 digest.
+ * Rejects when the digest does not match the actual bytes — prevents
+ * forged hashes from substituting for content verification.
+ */
+export function verifyContentDigest(
+  expectedHash: string,
+  contentBytes: string | Buffer,
+): { readonly valid: boolean; readonly actualHash?: string; readonly reason?: string } {
+  const actualHash = sha256Bytes(contentBytes);
+  if (actualHash !== expectedHash) {
+    return { valid: false, actualHash, reason: 'content digest mismatch' };
+  }
+  return { valid: true, actualHash };
+}
+
+/**
+ * Verify that a frozen specification's bytes match its declared hash.
+ * Used by freezeSpec to independently recompute the specification digest
+ * rather than trusting a caller-supplied hash.
+ */
+export function verifySpecDigest(
+  expectedHash: string,
+  spec: ResearchSpecification,
+): { readonly valid: boolean; readonly actualHash?: string; readonly reason?: string } {
+  return verifyContentDigest(expectedHash, canonicalizeJson(spec));
 }
 
 /** Compute the content hash of a candidate artifact from its fields. */
