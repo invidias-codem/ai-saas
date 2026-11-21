@@ -28,7 +28,10 @@ import {
   sha256Json,
   type ResearchSpecification,
 } from '@/lib/research/contracts';
-import { validateReceiptConsistency } from '@/lib/research/verification/policy';
+import {
+  determineOutcome,
+  validateReceiptConsistency,
+} from '@/lib/research/verification/policy';
 import type { TenantScope } from '@/lib/intelligence/execution/vdi/contracts';
 import type { VerifierProvider } from '@/lib/research/verification/contracts';
 import { assertVerifierIndependence } from '@/lib/research/verification/contracts';
@@ -207,6 +210,24 @@ export function submitVerification(
     );
   }
 
+  // The claimed outcome must match the outcome computed from the receipt's
+  // own evidence. A forged receipt claiming VERIFIED with a nonzero exit
+  // status or insufficient checks is rejected.
+  const computedOutcome = determineOutcome({
+    policy: input.verifierProvider.policy,
+    checkResults: input.receipt.checkResults,
+    exitStatus: input.receipt.exitStatus,
+    disallowedAxiomsUsed: [],
+    placeholdersPresent: false,
+    timeoutExceeded: input.receipt.exitStatus !== 0,
+  });
+  if (computedOutcome !== input.receipt.outcome) {
+    throw new ResearchPlaneError(
+      `Receipt claims ${input.receipt.outcome} but evidence computes ${computedOutcome}`,
+      'VERIFICATION_BIND_MISMATCH',
+    );
+  }
+
   const receipt: VerificationReceipt = {
     ...input.receipt,
     receiptId: input.receiptId,
@@ -265,6 +286,16 @@ export function transitionToStatus(
 
   if (run.status === input.status) return run;
 
+  // Reserve all verification-terminal transitions for submitVerification().
+  // A caller with matching tenant scope must not reach VERIFIED (or any
+  // verification outcome) without a submitted receipt.
+  if (run.status === 'VERIFICATION_PENDING' && isTerminalStatus(input.status)) {
+    throw new ResearchPlaneError(
+      `Direct promotion from VERIFICATION_PENDING to ${input.status} is reserved for submitVerification()`,
+      'INVALID_TRANSITION',
+    );
+  }
+
   requireValidTransition(run.status, input.status);
 
   return {
@@ -272,6 +303,10 @@ export function transitionToStatus(
     status: input.status,
     updatedAt: input.at,
   };
+}
+
+function isTerminalStatus(status: ResearchRunStatus): boolean {
+  return ['VERIFIED', 'FAILED', 'INCONCLUSIVE', 'REJECTED'].includes(status);
 }
 
 /**

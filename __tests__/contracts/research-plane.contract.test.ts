@@ -1020,4 +1020,70 @@ describe('research plane — negative / tamper detection', () => {
       ),
     ).toThrow(ResearchPlaneError);
   });
+
+  it('transitionToStatus rejects direct promotion from VERIFICATION_PENDING to VERIFIED', () => {
+    const run = makeRun({ status: 'VERIFICATION_PENDING' });
+    expect(() =>
+      transitionToStatus(callerScope, run, { status: 'VERIFIED', at: 't' }),
+    ).toThrow(ResearchPlaneError);
+    try {
+      transitionToStatus(callerScope, run, { status: 'VERIFIED', at: 't' });
+    } catch (e) {
+      expect((e as ResearchPlaneError).code).toBe('INVALID_TRANSITION');
+    }
+  });
+
+  it('transitionToStatus rejects direct promotion from VERIFICATION_PENDING to any terminal state', () => {
+    const run = makeRun({ status: 'VERIFICATION_PENDING' });
+    for (const terminal of ['FAILED', 'INCONCLUSIVE', 'REJECTED'] as const) {
+      expect(() =>
+        transitionToStatus(callerScope, run, { status: terminal, at: 't' }),
+      ).toThrow(ResearchPlaneError);
+    }
+  });
+
+  it('transitionToStatus allows non-terminal transitions from VERIFICATION_PENDING', () => {
+    // There are no valid non-terminal transitions from VERIFICATION_PENDING,
+    // so any transition should be rejected.
+    const run = makeRun({ status: 'VERIFICATION_PENDING' });
+    expect(() =>
+      transitionToStatus(callerScope, run, { status: 'RESEARCHING', at: 't' }),
+    ).toThrow(ResearchPlaneError);
+  });
+
+  it('submitVerification rejects forged VERIFIED receipt with nonzero exit status', () => {
+    const specHash = sha256Json(makeSpec());
+    const candidateHash = sha256Bytes('proof content');
+    const run = makeRun({
+      status: 'VERIFICATION_PENDING',
+      specVersion: 1,
+      specHash,
+      candidateHash,
+    });
+    const provider = makeVerifierProvider();
+    expect(() =>
+      submitVerification(callerScope, run, {
+        receipt: {
+          outcome: 'VERIFIED',
+          checkResults: {
+            compilation: { passed: true },
+            kernel_acceptance: { passed: true },
+            axiom_inspection: { passed: true },
+            replay: { passed: true },
+          },
+          command: 'lean check Solution.lean',
+          exitStatus: 1,
+          specHash,
+          candidateHash,
+          toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+          policy: DEFAULT_VERIFICATION_POLICY,
+        },
+        receiptId: 'receipt-1',
+        executedAt: '2026-01-01T03:00:00Z',
+        executedBy: 'verifier@lean-kernel',
+        producerRole: 'explorer',
+        verifierProvider: provider,
+      }),
+    ).toThrow(ResearchPlaneError);
+  });
 });
