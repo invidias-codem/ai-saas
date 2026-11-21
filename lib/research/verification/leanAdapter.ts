@@ -1,16 +1,29 @@
-// Research Plane — R1A: Trusted Lean verification adapter.
+// Research Plane — R1A.1: Trusted Lean verification adapter (integrity-fixed).
 //
 // Implements VerifierProvider using a pinned Lean 4 toolchain.
 // The verifier receives immutable file paths, never caller-provided success
-// claims. All checks (compilation, kernel acceptance, axiom inspection,
-// replay) are performed inside the trusted verifier boundary and bound to
-// the exact frozen specification and candidate bytes.
+// claims. All checks are performed inside the trusted verifier boundary and
+// bound to the exact frozen specification and candidate bytes.
+//
+// Checks:
+//   0. Toolchain version pin (lean-toolchain file + runtime lean --version)
+//   1. Content hash verification (spec + candidate bytes)
+//   2. Combined compilation — Challenge.lean + Solution.lean in one file,
+//      so the solution must reference challenge theorems (Lean enforces this)
+//   3. #print axioms — transitive axiom inspection, reject sorryAx/disallowed
+//   4. Proof completeness — reject sorry keyword
+//   5. Mathematical relatedness — challenge theorem referenced in candidate
+//
+// Non-checks:
+//   replay — NOT performed. Reported as incomplete (not a passing check).
+//
+// Security:
+//   * Process timeout (EXEC_TIMEOUT_MS)
+//   * Output buffer limit (EXEC_MAX_BUFFER_MB)
+//   * Toolchain identity from running executable, not a constant
 //
 // # ponytail: temp directory cleanup is best-effort; a leaked /tmp dir is
 //   not a security boundary. Add explicit cleanup if disk pressure matters.
-// # ponytail: `lean Solution.lean` is used instead of `lake build` because
-//   core Lean (no Mathlib) doesn't need dependency resolution. Add lake
-//   support when builds require Mathlib dependencies.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
@@ -21,10 +34,10 @@ import { sha256Bytes } from '@/lib/research/contracts';
 import { VerificationResult, DEFAULT_VERIFICATION_POLICY } from '@/lib/research/verification/contracts';
 import { determineOutcome } from '@/lib/research/verification/policy';
 
-// Pinned toolchain versions. Bump deliberately when upgrading.
-// Read from lean-toolchain file at repo root; this constant must match it.
-export const LEAN_VERSION = '4.36.0';
 export const LAKE_VERSION = '5.0.0';
+
+// Pinned Lean version. Must match lean-toolchain file. Bump deliberately when upgrading.
+export const LEAN_VERSION = '4.36.0';
 
 export const LEAN_VERIFIER_IDENTITY: VerifierIdentity = {
   name: 'lean',
@@ -40,7 +53,6 @@ export const LEAN_VERIFICATION_POLICY: VerificationPolicy = {
     'compilation',
     'kernel_acceptance',
     'axiom_inspection',
-    'replay',
     'proof_completeness',
     'mathematical_relatedness',
   ],
@@ -52,13 +64,17 @@ const AXIOM_RE = /^\s*(?:axiom|parameter)\s+([\w\.\']+)\s*:/gm;
 // Theorem declaration regex: `theorem Name : ...` or `theorem Name (args) : ...`
 const THEOREM_RE = /^\s*theorem\s+([\w\.\']+)/gm;
 
-// Import regex: `import ModuleName`
-const IMPORT_RE = /^\s*import\s+([\w\.\']+)\s*$/gm;
-
 // `sorry` keyword marks an incomplete proof in Lean.
 const SORRY_RE = /\bsorry\b/;
 
+// `#print axioms` output line: `'TheoremName' depends on axioms: [axiom1, axiom2]`
+const PRINTED_AXIOM_RE = /'(\w+)'\s+depends on axioms:\s*\[([^\]]*)\]/g;
+
 const TOOLCHAIN_FILE = 'lean-toolchain';
+
+// Process execution limits (security: prevent runaway Lean processes).
+const EXEC_TIMEOUT_MS = 300_000;
+const EXEC_MAX_BUFFER_MB = 50;
 
 /**
  * Read the pinned Lean version from the lean-toolchain file.
@@ -75,17 +91,18 @@ export function readPinnedVersion(): string | null {
 }
 
 /**
- * Get the running Lean executable's version by running `lean --version`.
- * Returns the version string (e.g. '4.36.0') or null on failure.
+ * Get the running Lean executable's actual identity by running `lean --version`.
+ * Returns { name, version, type } or null on failure. The version comes from
+ * the executable itself, never from a constant.
  */
-function getLeanVersion(): string | null {
+function getLeanIdentity(): { name: string; version: string; type: 'lean' } | null {
   try {
     const output = execFileSync('lean', ['--version'], {
       encoding: 'utf8',
-      maxBuffer: 10 * 1024 * 1024,
+      maxBuffer: EXEC_MAX_BUFFER_MB * 1024 * 1024,
     }).toString();
     const match = output.match(/Lean\s*\(version\s+(\d+\.\d+\.\d+)/);
-    return match ? match[1] : null;
+    return match ? { name: 'lean', version: match[1], type: 'lean' } : null;
   } catch {
     return null;
   }
@@ -104,8 +121,7 @@ function extractTheoremNames(source: string): string[] {
 
 /**
  * Check whether every theorem from the challenge is referenced in the
- * candidate. This establishes mathematical relatedness without requiring
- * Lean module resolution (which needs a lake project).
+ * candidate. This establishes mathematical relatedness.
  */
 function allChallengeTheoremsReferenced(
   specText: string,
@@ -127,17 +143,55 @@ function hasSorry(source: string): boolean {
 }
 
 /**
- * Trusted Lean verifier. Runs `lean Solution.lean` on the frozen proof
- * file, inspects axiom declarations against the policy, verifies the
- * toolchain version pin, and computes the verification outcome from actual
+ * Run a Lean command with strict resource limits.
+ * Returns { exitCode, stdout, stderr }.
+ */
+function runLean(args: string[], cwd: string): {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+} {
+  try {
+    const stdout = execFileSync('lean', args, {
+      cwd,
+      encoding: 'utf8',
+      timeout: EXEC_TIMEOUT_MS,
+      maxBuffer: EXEC_MAX_BUFFER_MB * 1024 * 1024,
+    }).toString();
+    return { exitCode: 0, stdout, stderr: '' };
+  } catch (err) {
+    return {
+      exitCode: (err as { code?: number }).code ?? 1,
+      stdout: (err as { stdout?: string }).stdout ?? '',
+      stderr: (err as { stderr?: string }).stderr ?? '',
+    };
+  }
+}
+
+/**
+ * Trusted Lean verifier. Combines Challenge.lean and Solution.lean into a
+ * single Verify.lean file (so the solution must reference challenge theorems
+ * — Lean enforces this at compile time), then runs `#print axioms` for
+ * transitive axiom inspection. Computes the verification outcome from actual
  * evidence — never from caller claims.
+ *
+ * `replay` is intentionally NOT a passing check — independent replay has
+ * not been performed. It is reported as incomplete.
  */
 export class LeanVerifierProvider {
-  readonly identity = LEAN_VERIFIER_IDENTITY;
   readonly policy: VerificationPolicy;
 
   constructor(policy?: VerificationPolicy) {
     this.policy = policy ?? LEAN_VERIFICATION_POLICY;
+  }
+
+  /**
+   * The verifier's actual identity, derived from the running executable.
+   * Not a constant — reflects what `lean --version` reports.
+   */
+  get identity(): VerifierIdentity {
+    const actual = getLeanIdentity();
+    return actual ?? { name: 'lean', version: 'unknown', type: 'lean' };
   }
 
   async verify(input: {
@@ -148,7 +202,7 @@ export class LeanVerifierProvider {
   }): Promise<VerificationResult> {
     // 0. Enforce the pinned Lean toolchain version.
     const pinnedVersion = readPinnedVersion();
-    const runningVersion = getLeanVersion();
+    const runningIdentity = getLeanIdentity();
 
     if (!pinnedVersion) {
       return this.failed(
@@ -156,16 +210,16 @@ export class LeanVerifierProvider {
         'lean-toolchain file not found or unparseable',
       );
     }
-    if (!runningVersion) {
+    if (!runningIdentity) {
       return this.failed(
         'toolchain_pin',
         'could not determine running Lean version',
       );
     }
-    if (runningVersion !== pinnedVersion) {
+    if (runningIdentity.version !== pinnedVersion) {
       return this.failed(
         'toolchain_pin',
-        `Lean version mismatch: pinned ${pinnedVersion}, running ${runningVersion}`,
+        `Lean version mismatch: pinned ${pinnedVersion}, running ${runningIdentity.version}`,
       );
     }
 
@@ -191,74 +245,92 @@ export class LeanVerifierProvider {
     // 2. Set up a temporary directory with the frozen files.
     const projectDir = mkdtempSync(join(tmpdir(), 'lean-verify-'));
     try {
-      writeFileSync(join(projectDir, 'Challenge.lean'), specBytes);
-      writeFileSync(join(projectDir, 'Solution.lean'), candidateBytes);
-
-      // 3. Run `lean Solution.lean` — the trusted compilation/kernel acceptance check.
-      let buildExitCode = 0;
-      let buildOutput = '';
-      try {
-        buildOutput = execFileSync('lean', ['Solution.lean'], {
-          cwd: projectDir,
-          encoding: 'utf8',
-          maxBuffer: 10 * 1024 * 1024,
-        }).toString();
-      } catch (err) {
-        buildExitCode = (err as { code?: number }).code ?? 1;
-        buildOutput = (err as { stdout?: string; stderr?: string }).stdout ?? '';
-        if ((err as { stderr?: string }).stderr) {
-          buildOutput += '\n' + (err as { stderr?: string }).stderr;
-        }
-      }
-
-      const compilationPassed = buildExitCode === 0;
-
-      // 4. Proof completeness — reject incomplete proofs (sorry keyword).
-      const candidateText = candidateBytes.toString('utf8');
-      const incompleteProof = hasSorry(candidateText);
-      const completenessPassed = !incompleteProof;
-
-      // 5. Mathematical relatedness — every theorem from the challenge
-      //    must be referenced in the candidate. This prevents mathematically
-      //    unrelated proofs from being accepted even when they compile.
       const specText = specBytes.toString('utf8');
-      const relatednessPassed = allChallengeTheoremsReferenced(
-        specText,
-        candidateText,
+      const candidateText = candidateBytes.toString('utf8');
+
+      // Strip any import lines from the candidate — we concatenate
+      // challenge and solution into a single file, so imports must not
+      // appear in the middle. Mathematical relatedness is enforced by
+      // theorem name matching, not by Lean module imports.
+      const cleanCandidateText = candidateText.replace(
+        /^\s*import\s+[\w\.\']+\s*$/gm,
+        '',
       );
 
-      // 6. Axiom inspection — extract axiom/parameter declarations.
-      const axioms: string[] = [];
-      for (const match of candidateText.matchAll(AXIOM_RE)) {
-        axioms.push(match[1]);
+      // 3. Build a single Verify.lean with challenge + solution + #print axioms.
+      //    This binds the proof to the challenge: the solution must reference
+      //    challenge theorems by name, and Lean will error if they don't exist.
+      const theoremNames = extractTheoremNames(cleanCandidateText);
+      const axiomPrintLines = theoremNames.map(
+        (name) => `#print axioms ${name}`,
+      );
+      const verifyContent = [
+        specText,
+        '',
+        cleanCandidateText,
+        '',
+        ...axiomPrintLines,
+        '',
+      ].join('\n');
+      writeFileSync(join(projectDir, 'Verify.lean'), verifyContent);
+
+      // 4. Run `lean Verify.lean` — compilation + kernel acceptance + #print axioms.
+      const result = runLean(['Verify.lean'], projectDir);
+      const compilationPassed = result.exitCode === 0;
+
+      // 5. Parse `#print axioms` output for axiom names and sorryAx.
+      const axiomOutput = result.stdout + result.stderr;
+      const printedAxioms: string[] = [];
+      for (const match of axiomOutput.matchAll(PRINTED_AXIOM_RE)) {
+        const axiomList = match[2]
+          .split(',')
+          .map((a) => a.trim())
+          .filter(Boolean);
+        printedAxioms.push(...axiomList);
       }
 
-      const disallowedAxiomsUsed = axioms.filter((a) =>
+      const usesSorryAx = printedAxioms.includes('sorryAx');
+      const disallowedAxiomsUsed = printedAxioms.filter((a) =>
         this.policy.disallowedAxioms.includes(a),
       );
-      const axiomInspectionPassed = disallowedAxiomsUsed.length === 0;
+      const axiomInspectionPassed =
+        compilationPassed && !usesSorryAx && disallowedAxiomsUsed.length === 0;
 
-      // 7. Compute outcome from actual evidence — not caller claims.
+      // 6. Proof completeness — reject incomplete proofs (sorry keyword).
+      const incompleteProof = hasSorry(cleanCandidateText);
+      const completenessPassed = !incompleteProof;
+
+      // 7. Mathematical relatedness — every theorem from the challenge
+      //    must be referenced in the candidate.
+      const relatednessPassed = allChallengeTheoremsReferenced(
+        specText,
+        cleanCandidateText,
+      );
+
+      // 8. Compute outcome from actual evidence — not caller claims.
+      //    replay is NOT a passing check (independent replay not performed).
       const outcome = determineOutcome({
         policy: this.policy,
         checkResults: {
           compilation: { passed: compilationPassed },
-          kernel_acceptance: { passed: compilationPassed }, // lean = kernel acceptance
+          kernel_acceptance: { passed: compilationPassed },
           axiom_inspection: { passed: axiomInspectionPassed },
-          replay: { passed: compilationPassed }, // same check = replay
           proof_completeness: { passed: completenessPassed },
           mathematical_relatedness: { passed: relatednessPassed },
+          replay: { passed: false, reason: 'independent replay not performed' },
         },
-        exitStatus: buildExitCode,
+        exitStatus: result.exitCode,
         disallowedAxiomsUsed,
-        placeholdersPresent: incompleteProof,
+        placeholdersPresent: incompleteProof || usesSorryAx,
         timeoutExceeded: false,
       });
 
       const disallowedReason =
         disallowedAxiomsUsed.length > 0
           ? `disallowed axioms: ${disallowedAxiomsUsed.join(', ')}`
-          : undefined;
+          : usesSorryAx
+            ? 'proof uses sorryAx (incomplete/admitted)'
+            : undefined;
       const completenessReason = incompleteProof
         ? 'proof contains sorry (incomplete)'
         : undefined;
@@ -272,19 +344,31 @@ export class LeanVerifierProvider {
           compilation: { passed: compilationPassed, reason: undefined },
           kernel_acceptance: {
             passed: compilationPassed,
-            reason: compilationPassed ? undefined : buildOutput,
+            reason: compilationPassed ? undefined : result.stderr || result.stdout,
           },
-          axiom_inspection: { passed: axiomInspectionPassed, reason: disallowedReason },
-          replay: { passed: compilationPassed, reason: undefined },
-          proof_completeness: { passed: completenessPassed, reason: completenessReason },
-          mathematical_relatedness: { passed: relatednessPassed, reason: relatednessReason },
+          axiom_inspection: {
+            passed: axiomInspectionPassed,
+            reason: disallowedReason,
+          },
+          replay: {
+            passed: false,
+            reason: 'independent replay not performed',
+          },
+          proof_completeness: {
+            passed: completenessPassed,
+            reason: completenessReason,
+          },
+          mathematical_relatedness: {
+            passed: relatednessPassed,
+            reason: relatednessReason,
+          },
         },
-        command: `lean Solution.lean (in ${projectDir})`,
-        exitStatus: buildExitCode,
+        command: `lean Verify.lean (in ${projectDir})`,
+        exitStatus: result.exitCode,
         executedAt: new Date().toISOString(),
-        executedBy: `lean-${LEAN_VERSION}`,
-        toolchain: LEAN_VERIFIER_IDENTITY,
-        policy: LEAN_VERIFICATION_POLICY,
+        executedBy: `lean-${runningIdentity.version}`,
+        toolchain: this.identity,
+        policy: this.policy,
       };
     } finally {
       // Best-effort cleanup.
@@ -305,16 +389,16 @@ export class LeanVerifierProvider {
         compilation: { passed: false, reason },
         kernel_acceptance: { passed: false, reason },
         axiom_inspection: { passed: false, reason },
-        replay: { passed: false, reason },
+        replay: { passed: false, reason: 'independent replay not performed' },
         proof_completeness: { passed: false, reason },
         mathematical_relatedness: { passed: false, reason },
       },
-      command: 'lean Solution.lean',
+      command: 'lean Verify.lean',
       exitStatus: 1,
       executedAt: new Date().toISOString(),
-      executedBy: `lean-${LEAN_VERSION}`,
-      toolchain: LEAN_VERIFIER_IDENTITY,
-      policy: LEAN_VERIFICATION_POLICY,
+      executedBy: 'lean-unknown',
+      toolchain: this.identity,
+      policy: this.policy,
     };
   }
 }
