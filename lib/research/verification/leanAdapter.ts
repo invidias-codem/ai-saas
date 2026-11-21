@@ -44,7 +44,7 @@ import { tmpdir } from 'node:os';
 import type { VerifierIdentity, VerificationPolicy } from '@/lib/research/contracts';
 import { sha256Bytes } from '@/lib/research/contracts';
 import { VerificationResult, DEFAULT_VERIFICATION_POLICY } from '@/lib/research/verification/contracts';
-import { determineOutcome } from '@/lib/research/verification/policy';
+import { determineOutcome, isAxiomAuthorized } from '@/lib/research/verification/policy';
 
 export const LAKE_VERSION = '5.0.0';
 
@@ -298,25 +298,18 @@ export class LeanVerifierProvider {
 
       let usesSorryAx = false;
       let disallowedAxiomsUsed: string[] = [];
-      let unauthorizedAxioms: string[] = [];
 
       if (!axiomInspectionFailed && printedAxioms !== null) {
         usesSorryAx = printedAxioms.includes('sorryAx');
         disallowedAxiomsUsed = printedAxioms.filter((a) =>
-          this.policy.disallowedAxioms.includes(a),
-        );
-        // Strict allowlist: every axiom must be explicitly authorized.
-        // Empty allowedAxioms means no axioms are permitted.
-        unauthorizedAxioms = printedAxioms.filter(
-          (a) => !this.policy.allowedAxioms.includes(a),
+          !isAxiomAuthorized(this.policy, a),
         );
       }
 
       const axiomInspectionPassed =
         !axiomInspectionFailed &&
         !usesSorryAx &&
-        disallowedAxiomsUsed.length === 0 &&
-        unauthorizedAxioms.length === 0;
+        disallowedAxiomsUsed.length === 0;
 
       // 6. Proof completeness — reject incomplete proofs (sorry / sorryAx).
       const incompleteProof = hasSorry(candidateText) || usesSorryAx;
@@ -340,10 +333,7 @@ export class LeanVerifierProvider {
           replay: { passed: false, reason: 'independent replay not performed' },
         },
         exitStatus: result.exitCode,
-        disallowedAxiomsUsed: [
-          ...disallowedAxiomsUsed,
-          ...unauthorizedAxioms,
-        ],
+        disallowedAxiomsUsed,
         placeholdersPresent: incompleteProof || usesSorryAx,
         timeoutExceeded: false,
       });
@@ -354,10 +344,8 @@ export class LeanVerifierProvider {
           : usesSorryAx
             ? 'proof uses sorryAx (incomplete/admitted)'
             : disallowedAxiomsUsed.length > 0
-              ? `disallowed axioms: ${disallowedAxiomsUsed.join(', ')}`
-              : unauthorizedAxioms.length > 0
-                ? `unauthorized axioms: ${unauthorizedAxioms.join(', ')}`
-                : undefined;
+            ? `disallowed/unauthorized axioms: ${disallowedAxiomsUsed.join(', ')}`
+            : undefined;
       const completenessReason = incompleteProof
         ? 'proof contains sorry or sorryAx (incomplete)'
         : undefined;

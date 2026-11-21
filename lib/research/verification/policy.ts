@@ -8,12 +8,18 @@ import { ResearchPlaneError } from '@/lib/research/contracts';
 
 /**
  * Check whether an axiom is authorized under the policy.
+ * Requires both: explicitly allowed AND not explicitly denied.
+ * sorryAx is always denied (marks incomplete/provisional proofs).
  */
 export function isAxiomAuthorized(
   policy: VerificationPolicy,
   axiom: string,
 ): boolean {
-  return !policy.disallowedAxioms.includes(axiom);
+  return (
+    axiom !== 'sorryAx' &&
+    policy.allowedAxioms.includes(axiom) &&
+    !policy.disallowedAxioms.includes(axiom)
+  );
 }
 
 /**
