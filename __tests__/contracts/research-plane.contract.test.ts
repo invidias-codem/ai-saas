@@ -784,13 +784,33 @@ describe('research plane — content digest validation', () => {
 });
 
 describe('research plane — verification policy', () => {
-  it('isAxiomAuthorized rejects disallowed axioms', () => {
+  it('isAxiomAuthorized enforces allowlist and denylist', () => {
     const policy: VerificationPolicy = {
       ...DEFAULT_VERIFICATION_POLICY,
+      allowedAxioms: ['classical.emf'],
       disallowedAxioms: ['classical.choice'],
     };
-    expect(isAxiomAuthorized(policy, 'classical.choice')).toBe(false);
+    // authorized axiom (in allowlist, not denied)
     expect(isAxiomAuthorized(policy, 'classical.emf')).toBe(true);
+    // unauthorized axiom (not in allowlist)
+    expect(isAxiomAuthorized(policy, 'classical.choice')).toBe(false);
+    expect(isAxiomAuthorized(policy, 'propext')).toBe(false);
+    // explicitly denied axiom (even if in allowlist)
+    const lenientPolicy: VerificationPolicy = {
+      ...DEFAULT_VERIFICATION_POLICY,
+      allowedAxioms: ['classical.choice'],
+      disallowedAxioms: ['classical.choice'],
+    };
+    expect(isAxiomAuthorized(lenientPolicy, 'classical.choice')).toBe(false);
+    // sorryAx is always denied
+    expect(isAxiomAuthorized(policy, 'sorryAx')).toBe(false);
+    // empty allowlist rejects everything
+    const emptyPolicy: VerificationPolicy = {
+      ...DEFAULT_VERIFICATION_POLICY,
+      allowedAxioms: [],
+      disallowedAxioms: [],
+    };
+    expect(isAxiomAuthorized(emptyPolicy, 'anything')).toBe(false);
   });
 
   it('allRequiredChecksPassed returns false when a required check is missing', () => {
