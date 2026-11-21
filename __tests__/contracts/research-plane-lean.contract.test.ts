@@ -3,10 +3,13 @@
 // Covers:
 //   * Valid proof → VERIFIED
 //   * Invalid theorem (empty proof of False) → FAILED (compilation fails)
+//   * Incomplete proof (sorry keyword) → FAILED (proof completeness)
+//   * Mathematically unrelated proof (no import Challenge) → FAILED
+//   * Mathematically unrelated proof (no theorem reference) → FAILED
 //   * Altered theorem statement → digest mismatch → FAILED
 //   * Unauthorized axiom → FAILED (axiom inspection)
 //   * Forged success claim → FAILED (outcome computed from evidence)
-//   * Valid Lean version pinning
+//   * Toolchain version pin enforcement
 //
 // Pure: uses the locally installed Lean 4 toolchain (elan), core library
 // only (no Mathlib imports).
@@ -17,6 +20,7 @@ import {
   LEAN_VERIFIER_IDENTITY,
   LEAN_VERIFICATION_POLICY,
   LEAN_VERSION,
+  readPinnedVersion,
 } from '@/lib/research/verification/leanAdapter';
 import type { VerificationPolicy } from '@/lib/research/contracts';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -32,6 +36,16 @@ const VALID_PROOF = `theorem my_and_comm (p q : Prop) : p ∧ q → q ∧ p := b
 `;
 
 const INVALID_PROOF = `theorem absurd : False := by
+`;
+
+const INCOMPLETE_PROOF = `theorem my_and_comm (p q : Prop) : p ∧ q → q ∧ p := by sorry
+`;
+
+const UNRELATED_PROOF = `theorem unrelated : True := by trivial
+`;
+
+const UNRELATED_PROOF_2 = `theorem completely_different (n : Nat) : n + 0 = n := by
+  simp
 `;
 
 const DISALLOWED_AXIOM_CHALLENGE = `theorem uses_axiom : False := by sorry
@@ -66,14 +80,20 @@ describe('R1A — LeanVerifierProvider identity and policy', () => {
     });
   });
 
-  it('has the expected verification policy', () => {
+  it('has the expected verification policy with new required checks', () => {
     expect(provider.policy.policyId).toBe('lean-verification-policy-v1');
     expect(provider.policy.requiredChecks).toEqual([
       'compilation',
       'kernel_acceptance',
       'axiom_inspection',
       'replay',
+      'proof_completeness',
+      'mathematical_relatedness',
     ]);
+  });
+
+  it('readPinnedVersion returns the pinned Lean version', () => {
+    expect(readPinnedVersion()).toBe(LEAN_VERSION);
   });
 });
 
@@ -123,6 +143,76 @@ describe('R1A — invalid theorem', () => {
       expect(result.outcome).toBe('FAILED');
       expect(result.exitStatus).not.toBe(0);
       expect(result.checkResults.compilation.passed).toBe(false);
+    } finally {
+      cleanup(dir);
+    }
+  });
+});
+
+describe('R1A — incomplete proof (sorry)', () => {
+  it('rejects a proof containing sorry', async () => {
+    const dir = makeProject({
+      'Challenge.lean': VALID_CHALLENGE,
+      'Solution.lean': INCOMPLETE_PROOF,
+    });
+    try {
+      const specHash = sha256Bytes(VALID_CHALLENGE);
+      const candidateHash = sha256Bytes(INCOMPLETE_PROOF);
+      const result = await provider.verify({
+        specHash,
+        candidateHash,
+        candidatePath: join(dir, 'Solution.lean'),
+        specPath: join(dir, 'Challenge.lean'),
+      });
+      expect(result.outcome).toBe('FAILED');
+      expect(result.checkResults.proof_completeness.passed).toBe(false);
+      expect(result.checkResults.proof_completeness.reason).toContain(
+        'sorry',
+      );
+    } finally {
+      cleanup(dir);
+    }
+  });
+});
+
+describe('R1A — mathematical relatedness', () => {
+  it('rejects a proof that references no challenge theorems', async () => {
+    const dir = makeProject({
+      'Challenge.lean': VALID_CHALLENGE,
+      'Solution.lean': UNRELATED_PROOF,
+    });
+    try {
+      const specHash = sha256Bytes(VALID_CHALLENGE);
+      const candidateHash = sha256Bytes(UNRELATED_PROOF);
+      const result = await provider.verify({
+        specHash,
+        candidateHash,
+        candidatePath: join(dir, 'Solution.lean'),
+        specPath: join(dir, 'Challenge.lean'),
+      });
+      expect(result.outcome).toBe('FAILED');
+      expect(result.checkResults.mathematical_relatedness.passed).toBe(false);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  it('rejects a proof with completely different theorem names', async () => {
+    const dir = makeProject({
+      'Challenge.lean': VALID_CHALLENGE,
+      'Solution.lean': UNRELATED_PROOF_2,
+    });
+    try {
+      const specHash = sha256Bytes(VALID_CHALLENGE);
+      const candidateHash = sha256Bytes(UNRELATED_PROOF_2);
+      const result = await provider.verify({
+        specHash,
+        candidateHash,
+        candidatePath: join(dir, 'Solution.lean'),
+        specPath: join(dir, 'Challenge.lean'),
+      });
+      expect(result.outcome).toBe('FAILED');
+      expect(result.checkResults.mathematical_relatedness.passed).toBe(false);
     } finally {
       cleanup(dir);
     }
