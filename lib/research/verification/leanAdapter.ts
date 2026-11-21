@@ -1,18 +1,27 @@
-// Research Plane — R1A.1: Trusted Lean verification adapter (integrity-fixed).
+// Research Plane — R1A.2: Trusted Lean verification adapter (theorem binding).
 //
 // Implements VerifierProvider using a pinned Lean 4 toolchain.
-// The verifier receives immutable file paths, never caller-provided success
-// claims. All checks are performed inside the trusted verifier boundary and
-// bound to the exact frozen specification and candidate bytes.
+// Architecture: three logical boundaries in a single Verify.lean file:
+//   1. Challenge section — defines the frozen proposition (`def Target : Prop`),
+//     no proof. Trusted, immutable.
+//   2. Candidate section — must define `def solution : Target` — Lean's type
+//     checker rejects any other type (e.g. `True`), so a mathematically
+//     unrelated proof cannot pass.
+//   3. Verification section — binding check (`def binding_check : Target :=
+//     solution`) + `#print axioms solution` for transitive axiom inspection.
+//
+// Binding: `def solution : Target` forces the candidate to prove the exact
+// frozen proposition. Lean's kernel enforces this — not substring matching.
+// A comment containing the challenge name does not change the type.
 //
 // Checks:
 //   0. Toolchain version pin (lean-toolchain file + runtime lean --version)
 //   1. Content hash verification (spec + candidate bytes)
-//   2. Combined compilation — Challenge.lean + Solution.lean in one file,
-//      so the solution must reference challenge theorems (Lean enforces this)
-//   3. #print axioms — transitive axiom inspection, reject sorryAx/disallowed
-//   4. Proof completeness — reject sorry keyword
-//   5. Mathematical relatedness — challenge theorem referenced in candidate
+//   2. Combined compilation — challenge + candidate + binding check in one
+//      file; Lean enforces exact target binding
+//   3. #print axioms — transitive axiom inspection; FAIL CLOSED if output
+//      is missing, incomplete, or unparseable
+//   4. Proof completeness — reject sorry keyword / sorryAx dependency
 //
 // Non-checks:
 //   replay — NOT performed. Reported as incomplete (not a passing check).
@@ -24,6 +33,9 @@
 //
 // # ponytail: temp directory cleanup is best-effort; a leaked /tmp dir is
 //   not a security boundary. Add explicit cleanup if disk pressure matters.
+// # ponytail: execution isolation (sandbox) is NOT yet implemented — Lean
+//   runs as a subprocess on the application host. Add sandboxing when
+//   untrusted candidates must be executed in production.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
@@ -58,17 +70,14 @@ export const LEAN_VERIFICATION_POLICY: VerificationPolicy = {
   ],
 };
 
-// Axiom declaration regex: `axiom Name : Type` or `parameter Name : Type`
-const AXIOM_RE = /^\s*(?:axiom|parameter)\s+([\w\.\']+)\s*:/gm;
-
-// Theorem declaration regex: `theorem Name : ...` or `theorem Name (args) : ...`
-const THEOREM_RE = /^\s*theorem\s+([\w\.\']+)/gm;
-
 // `sorry` keyword marks an incomplete proof in Lean.
 const SORRY_RE = /\bsorry\b/;
 
-// `#print axioms` output line: `'TheoremName' depends on axioms: [axiom1, axiom2]`
+// `#print axioms` output forms:
+//   'TheoremName' depends on axioms: [axiom1, axiom2]
+//   'TheoremName' does not depend on any axioms
 const PRINTED_AXIOM_RE = /'(\w+)'\s+depends on axioms:\s*\[([^\]]*)\]/g;
+const NO_AXIOM_RE = /'(\w+)'\s+does not depend on any axioms/g;
 
 const TOOLCHAIN_FILE = 'lean-toolchain';
 
@@ -109,32 +118,6 @@ function getLeanIdentity(): { name: string; version: string; type: 'lean' } | nu
 }
 
 /**
- * Extract theorem names from a Lean source file.
- */
-function extractTheoremNames(source: string): string[] {
-  const names: string[] = [];
-  for (const match of source.matchAll(THEOREM_RE)) {
-    names.push(match[1]);
-  }
-  return names;
-}
-
-/**
- * Check whether every theorem from the challenge is referenced in the
- * candidate. This establishes mathematical relatedness.
- */
-function allChallengeTheoremsReferenced(
-  specText: string,
-  candidateText: string,
-): boolean {
-  const challengeTheoremNames = extractTheoremNames(specText);
-  if (challengeTheoremNames.length === 0) return false;
-  return challengeTheoremNames.every((name) =>
-    candidateText.includes(name),
-  );
-}
-
-/**
  * Check whether a Lean source file contains the `sorry` keyword
  * (marks an incomplete proof).
  */
@@ -169,11 +152,45 @@ function runLean(args: string[], cwd: string): {
 }
 
 /**
- * Trusted Lean verifier. Combines Challenge.lean and Solution.lean into a
- * single Verify.lean file (so the solution must reference challenge theorems
- * — Lean enforces this at compile time), then runs `#print axioms` for
- * transitive axiom inspection. Computes the verification outcome from actual
- * evidence — never from caller claims.
+ * Parse `#print axioms` output for axiom names of a given theorem.
+ * Returns null if the output cannot be parsed for that theorem (fail closed).
+ */
+function parsePrintedAxioms(output: string, theoremName: string): string[] | null {
+  let found = false;
+  const axioms: string[] = [];
+
+  for (const match of output.matchAll(PRINTED_AXIOM_RE)) {
+    if (match[1] === theoremName) {
+      found = true;
+      const axiomList = match[2]
+        .split(',')
+        .map((a) => a.trim())
+        .filter(Boolean);
+      axioms.push(...axiomList);
+    }
+  }
+
+  for (const match of output.matchAll(NO_AXIOM_RE)) {
+    if (match[1] === theoremName) {
+      found = true;
+    }
+  }
+
+  return found ? axioms : null;
+}
+
+/**
+ * Trusted Lean verifier. Builds a single Verify.lean with three sections:
+ *   1. Challenge — defines Target (the frozen proposition, no proof)
+ *   2. Candidate — must define `def solution : Target`
+ *   3. Verify — binding check + #print axioms on solution
+ *
+ * Lean's type checker enforces that Candidate.solution has type Target —
+ * any other type (e.g. True) causes compilation failure. This is exact
+ * proposition binding, not substring matching.
+ *
+ * Computes the verification outcome from actual evidence — never from caller
+ * claims. Axiom inspection fails closed if output is missing/unparseable.
  *
  * `replay` is intentionally NOT a passing check — independent replay has
  * not been performed. It is reported as incomplete.
@@ -248,64 +265,56 @@ export class LeanVerifierProvider {
       const specText = specBytes.toString('utf8');
       const candidateText = candidateBytes.toString('utf8');
 
-      // Strip any import lines from the candidate — we concatenate
-      // challenge and solution into a single file, so imports must not
-      // appear in the middle. Mathematical relatedness is enforced by
-      // theorem name matching, not by Lean module imports.
-      const cleanCandidateText = candidateText.replace(
-        /^\s*import\s+[\w\.\']+\s*$/gm,
-        '',
-      );
-
-      // 3. Build a single Verify.lean with challenge + solution + #print axioms.
-      //    This binds the proof to the challenge: the solution must reference
-      //    challenge theorems by name, and Lean will error if they don't exist.
-      const theoremNames = extractTheoremNames(cleanCandidateText);
-      const axiomPrintLines = theoremNames.map(
-        (name) => `#print axioms ${name}`,
-      );
+      // 3. Build Verify.lean — challenge + candidate + binding check.
+      //    The candidate must define `def solution : Target`. Lean's type
+      //    checker enforces exact proposition binding via:
+      //      def binding_check : Target := solution
       const verifyContent = [
         specText,
         '',
-        cleanCandidateText,
+        candidateText,
         '',
-        ...axiomPrintLines,
+        'def binding_check : Target := solution',
+        '',
+        '#print axioms solution',
         '',
       ].join('\n');
       writeFileSync(join(projectDir, 'Verify.lean'), verifyContent);
 
-      // 4. Run `lean Verify.lean` — compilation + kernel acceptance + #print axioms.
+      // 4. Run `lean Verify.lean` — compilation + kernel acceptance +
+      //    binding check + #print axioms.
       const result = runLean(['Verify.lean'], projectDir);
       const compilationPassed = result.exitCode === 0;
 
       // 5. Parse `#print axioms` output for axiom names and sorryAx.
       const axiomOutput = result.stdout + result.stderr;
-      const printedAxioms: string[] = [];
-      for (const match of axiomOutput.matchAll(PRINTED_AXIOM_RE)) {
-        const axiomList = match[2]
-          .split(',')
-          .map((a) => a.trim())
-          .filter(Boolean);
-        printedAxioms.push(...axiomList);
+      const printedAxioms = parsePrintedAxioms(axiomOutput, 'solution');
+
+      // FAIL CLOSED: if axiom output is missing/unparseable, inspection fails.
+      const axiomInspectionFailed =
+        printedAxioms === null || result.exitCode !== 0;
+
+      let usesSorryAx = false;
+      let disallowedAxiomsUsed: string[] = [];
+
+      if (!axiomInspectionFailed && printedAxioms !== null) {
+        usesSorryAx = printedAxioms.includes('sorryAx');
+        disallowedAxiomsUsed = printedAxioms.filter((a) =>
+          this.policy.disallowedAxioms.includes(a),
+        );
       }
 
-      const usesSorryAx = printedAxioms.includes('sorryAx');
-      const disallowedAxiomsUsed = printedAxioms.filter((a) =>
-        this.policy.disallowedAxioms.includes(a),
-      );
       const axiomInspectionPassed =
-        compilationPassed && !usesSorryAx && disallowedAxiomsUsed.length === 0;
+        !axiomInspectionFailed && !usesSorryAx && disallowedAxiomsUsed.length === 0;
 
-      // 6. Proof completeness — reject incomplete proofs (sorry keyword).
-      const incompleteProof = hasSorry(cleanCandidateText);
+      // 6. Proof completeness — reject incomplete proofs (sorry / sorryAx).
+      const incompleteProof = hasSorry(candidateText) || usesSorryAx;
       const completenessPassed = !incompleteProof;
 
-      // 7. Mathematical relatedness — every theorem from the challenge
-      //    must be referenced in the candidate.
-      const relatednessPassed = allChallengeTheoremsReferenced(
-        specText,
-        cleanCandidateText,
-      );
+      // 7. Mathematical relatedness — candidate must prove Target exactly.
+      //    Enforced by Lean's type checker via `def solution : Target`.
+      //    If compilation passed, the candidate proves Target.
+      const relatednessPassed = compilationPassed;
 
       // 8. Compute outcome from actual evidence — not caller claims.
       //    replay is NOT a passing check (independent replay not performed).
@@ -325,17 +334,16 @@ export class LeanVerifierProvider {
         timeoutExceeded: false,
       });
 
-      const disallowedReason =
-        disallowedAxiomsUsed.length > 0
-          ? `disallowed axioms: ${disallowedAxiomsUsed.join(', ')}`
+      const axiomReason =
+        axiomInspectionFailed
+          ? 'axiom output missing or unparseable (fail closed)'
           : usesSorryAx
             ? 'proof uses sorryAx (incomplete/admitted)'
-            : undefined;
+            : disallowedAxiomsUsed.length > 0
+              ? `disallowed axioms: ${disallowedAxiomsUsed.join(', ')}`
+              : undefined;
       const completenessReason = incompleteProof
-        ? 'proof contains sorry (incomplete)'
-        : undefined;
-      const relatednessReason = !relatednessPassed
-        ? `candidate does not reference all challenge theorems`
+        ? 'proof contains sorry or sorryAx (incomplete)'
         : undefined;
 
       return {
@@ -348,7 +356,7 @@ export class LeanVerifierProvider {
           },
           axiom_inspection: {
             passed: axiomInspectionPassed,
-            reason: disallowedReason,
+            reason: axiomReason,
           },
           replay: {
             passed: false,
@@ -360,7 +368,9 @@ export class LeanVerifierProvider {
           },
           mathematical_relatedness: {
             passed: relatednessPassed,
-            reason: relatednessReason,
+            reason: relatednessPassed
+              ? undefined
+              : 'candidate does not prove the challenge target',
           },
         },
         command: `lean Verify.lean (in ${projectDir})`,

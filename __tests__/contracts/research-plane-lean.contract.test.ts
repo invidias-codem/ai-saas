@@ -1,15 +1,21 @@
-// Research Plane — R1A.1 contract tests for LeanVerifierProvider.
+// Research Plane — R1A.2 contract tests for LeanVerifierProvider.
 //
 // Covers:
-//   * Valid proof → VERIFIED
-//   * Invalid theorem (empty proof of False) → FAILED (compilation fails)
+//   * Valid proof of exact target → VERIFIED
+//   * Invalid theorem (no solution declaration) → FAILED (compilation fails)
 //   * Incomplete proof (sorry keyword) → FAILED (proof completeness)
-//   * Mathematically unrelated proof → FAILED (mathematical relatedness)
+//   * Unrelated proof (True instead of Target) → FAILED (binding check)
+//   * Unrelated theorem with challenge name in comment → FAILED (binding check)
 //   * Altered theorem statement → digest mismatch → FAILED
 //   * Unauthorized axiom → FAILED (axiom inspection via #print axioms)
 //   * Forged success claim → FAILED (outcome computed from evidence)
 //   * Toolchain version pin enforcement
 //   * Replay not performed → reported as incomplete (not a passing check)
+//
+// Architecture: three module boundaries (Challenge / Candidate / Verify).
+// The candidate must define `solution : FrozenChallenge.Target`. Lean's
+// type checker enforces exact proposition binding — substring matching is
+// not used.
 //
 // Pure: uses the locally installed Lean 4 toolchain (elan), core library
 // only (no Mathlib imports).
@@ -33,35 +39,37 @@ if (process.env.PATH && !process.env.PATH.includes(ELAN_BIN)) {
   process.env.PATH = `${ELAN_BIN}:${process.env.PATH}`;
 }
 
-const VALID_CHALLENGE = `theorem my_and_comm (p q : Prop) : p ∧ q → q ∧ p := by
-  intro h
-  exact ⟨h.2, h.1⟩
+// Challenge module — defines the frozen proposition (no proof).
+const CHALLENGE = `def Target : Prop := ∀ p q : Prop, p ∧ q → q ∧ p
 `;
 
-const VALID_PROOF = `theorem my_and_comm_verified (p q : Prop) : p ∧ q → q ∧ p := by
-  exact my_and_comm p q
+// Valid candidate — proves Target exactly.
+const VALID_CANDIDATE = `def solution : Target := fun p q h => ⟨h.2, h.1⟩
 `;
 
-const INVALID_PROOF = `theorem absurd : False := by
+// Invalid candidate — no `solution` declaration.
+const INVALID_CANDIDATE = `theorem unrelated : True := by trivial
 `;
 
-const INCOMPLETE_PROOF = `theorem my_and_comm_verified (p q : Prop) : p ∧ q → q ∧ p := by sorry
+// Incomplete proof — uses sorry.
+const INCOMPLETE_CANDIDATE = `def solution : Target := by sorry
 `;
 
-const UNRELATED_PROOF = `theorem unrelated : True := by trivial
+// Unrelated proof — proves True instead of Target.
+const UNRELATED_CANDIDATE = `def solution : True := by trivial
 `;
 
-const UNRELATED_PROOF_2 = `theorem completely_different (n : Nat) : n + 0 = n := by
-  simp
+// Unrelated theorem with challenge name in a comment — substring match
+// would pass, but type binding fails.
+const UNRELATED_WITH_COMMENT = `-- my_and_comm
+def solution : True := by trivial
 `;
 
-const DISALLOWED_AXIOM_CHALLENGE = `theorem target : True := by trivial
-`;
+// Disallowed axiom candidate.
+const DISALLOWED_AXIOM_CANDIDATE = `axiom my_disallowed_axiom : False
 
-const DISALLOWED_AXIOM_PROOF = `axiom my_disallowed_axiom : False
-
-theorem target_proof : False := by
-  have h : True := target
+def solution : Target := by
+  exfalso
   exact my_disallowed_axiom
 `;
 
@@ -107,18 +115,18 @@ describe('R1A — LeanVerifierProvider identity and policy', () => {
 });
 
 describe('R1A — valid proof', () => {
-  it('verifies a correct Lean proof bound to the challenge', async () => {
+  it('verifies a correct Lean proof bound to the frozen target', async () => {
     const dir = makeProject({
-      'Challenge.lean': VALID_CHALLENGE,
-      'Solution.lean': VALID_PROOF,
+      'Challenge.lean': CHALLENGE,
+      'Candidate.lean': VALID_CANDIDATE,
     });
     try {
-      const specHash = sha256Bytes(VALID_CHALLENGE);
-      const candidateHash = sha256Bytes(VALID_PROOF);
+      const specHash = sha256Bytes(CHALLENGE);
+      const candidateHash = sha256Bytes(VALID_CANDIDATE);
       const result = await provider.verify({
         specHash,
         candidateHash,
-        candidatePath: join(dir, 'Solution.lean'),
+        candidatePath: join(dir, 'Candidate.lean'),
         specPath: join(dir, 'Challenge.lean'),
       });
       expect(result.outcome).toBe('VERIFIED');
@@ -137,19 +145,19 @@ describe('R1A — valid proof', () => {
   });
 });
 
-describe('R1A — invalid theorem', () => {
-  it('rejects a proof that does not compile (empty proof of False)', async () => {
+describe('R1A — invalid candidate', () => {
+  it('rejects a candidate with no solution declaration', async () => {
     const dir = makeProject({
-      'Challenge.lean': VALID_CHALLENGE,
-      'Solution.lean': INVALID_PROOF,
+      'Challenge.lean': CHALLENGE,
+      'Candidate.lean': INVALID_CANDIDATE,
     });
     try {
-      const specHash = sha256Bytes(VALID_CHALLENGE);
-      const candidateHash = sha256Bytes(INVALID_PROOF);
+      const specHash = sha256Bytes(CHALLENGE);
+      const candidateHash = sha256Bytes(INVALID_CANDIDATE);
       const result = await provider.verify({
         specHash,
         candidateHash,
-        candidatePath: join(dir, 'Solution.lean'),
+        candidatePath: join(dir, 'Candidate.lean'),
         specPath: join(dir, 'Challenge.lean'),
       });
       expect(result.outcome).toBe('FAILED');
@@ -164,16 +172,16 @@ describe('R1A — invalid theorem', () => {
 describe('R1A — incomplete proof (sorry)', () => {
   it('rejects a proof containing sorry', async () => {
     const dir = makeProject({
-      'Challenge.lean': VALID_CHALLENGE,
-      'Solution.lean': INCOMPLETE_PROOF,
+      'Challenge.lean': CHALLENGE,
+      'Candidate.lean': INCOMPLETE_CANDIDATE,
     });
     try {
-      const specHash = sha256Bytes(VALID_CHALLENGE);
-      const candidateHash = sha256Bytes(INCOMPLETE_PROOF);
+      const specHash = sha256Bytes(CHALLENGE);
+      const candidateHash = sha256Bytes(INCOMPLETE_CANDIDATE);
       const result = await provider.verify({
         specHash,
         candidateHash,
-        candidatePath: join(dir, 'Solution.lean'),
+        candidatePath: join(dir, 'Candidate.lean'),
         specPath: join(dir, 'Challenge.lean'),
       });
       expect(result.outcome).toBe('FAILED');
@@ -187,19 +195,19 @@ describe('R1A — incomplete proof (sorry)', () => {
   });
 });
 
-describe('R1A — mathematical relatedness', () => {
-  it('rejects a proof that references no challenge theorems', async () => {
+describe('R1A — mathematical relatedness (exact target binding)', () => {
+  it('rejects a proof of True instead of the frozen target', async () => {
     const dir = makeProject({
-      'Challenge.lean': VALID_CHALLENGE,
-      'Solution.lean': UNRELATED_PROOF,
+      'Challenge.lean': CHALLENGE,
+      'Candidate.lean': UNRELATED_CANDIDATE,
     });
     try {
-      const specHash = sha256Bytes(VALID_CHALLENGE);
-      const candidateHash = sha256Bytes(UNRELATED_PROOF);
+      const specHash = sha256Bytes(CHALLENGE);
+      const candidateHash = sha256Bytes(UNRELATED_CANDIDATE);
       const result = await provider.verify({
         specHash,
         candidateHash,
-        candidatePath: join(dir, 'Solution.lean'),
+        candidatePath: join(dir, 'Candidate.lean'),
         specPath: join(dir, 'Challenge.lean'),
       });
       expect(result.outcome).toBe('FAILED');
@@ -209,18 +217,18 @@ describe('R1A — mathematical relatedness', () => {
     }
   });
 
-  it('rejects a proof with completely different theorem names', async () => {
+  it('rejects a proof with challenge name in comment but wrong target', async () => {
     const dir = makeProject({
-      'Challenge.lean': VALID_CHALLENGE,
-      'Solution.lean': UNRELATED_PROOF_2,
+      'Challenge.lean': CHALLENGE,
+      'Candidate.lean': UNRELATED_WITH_COMMENT,
     });
     try {
-      const specHash = sha256Bytes(VALID_CHALLENGE);
-      const candidateHash = sha256Bytes(UNRELATED_PROOF_2);
+      const specHash = sha256Bytes(CHALLENGE);
+      const candidateHash = sha256Bytes(UNRELATED_WITH_COMMENT);
       const result = await provider.verify({
         specHash,
         candidateHash,
-        candidatePath: join(dir, 'Solution.lean'),
+        candidatePath: join(dir, 'Candidate.lean'),
         specPath: join(dir, 'Challenge.lean'),
       });
       expect(result.outcome).toBe('FAILED');
@@ -234,16 +242,16 @@ describe('R1A — mathematical relatedness', () => {
 describe('R1A — altered theorem statement', () => {
   it('rejects when spec digest does not match', async () => {
     const dir = makeProject({
-      'Challenge.lean': VALID_CHALLENGE,
-      'Solution.lean': VALID_PROOF,
+      'Challenge.lean': CHALLENGE,
+      'Candidate.lean': VALID_CANDIDATE,
     });
     try {
       const wrongSpecHash = sha256Bytes('different theorem statement');
-      const candidateHash = sha256Bytes(VALID_PROOF);
+      const candidateHash = sha256Bytes(VALID_CANDIDATE);
       const result = await provider.verify({
         specHash: wrongSpecHash,
         candidateHash,
-        candidatePath: join(dir, 'Solution.lean'),
+        candidatePath: join(dir, 'Candidate.lean'),
         specPath: join(dir, 'Challenge.lean'),
       });
       expect(result.outcome).toBe('FAILED');
@@ -255,16 +263,16 @@ describe('R1A — altered theorem statement', () => {
 
   it('rejects when candidate digest does not match', async () => {
     const dir = makeProject({
-      'Challenge.lean': VALID_CHALLENGE,
-      'Solution.lean': VALID_PROOF,
+      'Challenge.lean': CHALLENGE,
+      'Candidate.lean': VALID_CANDIDATE,
     });
     try {
-      const specHash = sha256Bytes(VALID_CHALLENGE);
+      const specHash = sha256Bytes(CHALLENGE);
       const wrongCandidateHash = sha256Bytes('different proof content');
       const result = await provider.verify({
         specHash,
         candidateHash: wrongCandidateHash,
-        candidatePath: join(dir, 'Solution.lean'),
+        candidatePath: join(dir, 'Candidate.lean'),
         specPath: join(dir, 'Challenge.lean'),
       });
       expect(result.outcome).toBe('FAILED');
@@ -278,12 +286,12 @@ describe('R1A — altered theorem statement', () => {
 describe('R1A — unauthorized axioms', () => {
   it('rejects a proof using a disallowed axiom', async () => {
     const dir = makeProject({
-      'Challenge.lean': DISALLOWED_AXIOM_CHALLENGE,
-      'Solution.lean': DISALLOWED_AXIOM_PROOF,
+      'Challenge.lean': CHALLENGE,
+      'Candidate.lean': DISALLOWED_AXIOM_CANDIDATE,
     });
     try {
-      const specHash = sha256Bytes(DISALLOWED_AXIOM_CHALLENGE);
-      const candidateHash = sha256Bytes(DISALLOWED_AXIOM_PROOF);
+      const specHash = sha256Bytes(CHALLENGE);
+      const candidateHash = sha256Bytes(DISALLOWED_AXIOM_CANDIDATE);
       const policy: VerificationPolicy = {
         ...LEAN_VERIFICATION_POLICY,
         disallowedAxioms: ['my_disallowed_axiom'],
@@ -292,7 +300,7 @@ describe('R1A — unauthorized axioms', () => {
       const result = await strictProvider.verify({
         specHash,
         candidateHash,
-        candidatePath: join(dir, 'Solution.lean'),
+        candidatePath: join(dir, 'Candidate.lean'),
         specPath: join(dir, 'Challenge.lean'),
       });
       expect(result.outcome).toBe('FAILED');
@@ -309,21 +317,19 @@ describe('R1A — unauthorized axioms', () => {
 describe('R1A — forged success claims', () => {
   it('rejects a VERIFIED claim with nonzero exit status', async () => {
     const dir = makeProject({
-      'Challenge.lean': VALID_CHALLENGE,
-      'Solution.lean': INVALID_PROOF,
+      'Challenge.lean': CHALLENGE,
+      'Candidate.lean': INVALID_CANDIDATE,
     });
     try {
-      const specHash = sha256Bytes(VALID_CHALLENGE);
-      const candidateHash = sha256Bytes(INVALID_PROOF);
+      const specHash = sha256Bytes(CHALLENGE);
+      const candidateHash = sha256Bytes(INVALID_CANDIDATE);
       const result = await provider.verify({
         specHash,
         candidateHash,
-        candidatePath: join(dir, 'Solution.lean'),
+        candidatePath: join(dir, 'Candidate.lean'),
         specPath: join(dir, 'Challenge.lean'),
       });
       // The verifier computes outcome from evidence, not caller claims.
-      // Even though the proof is invalid (empty proof of False), the outcome
-      // must be FAILED.
       expect(result.outcome).toBe('FAILED');
       expect(result.exitStatus).not.toBe(0);
       expect(result.checkResults.compilation.passed).toBe(false);
