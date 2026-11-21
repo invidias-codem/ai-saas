@@ -15,6 +15,10 @@ import { sha256Bytes, sha256Json } from '@/lib/research/contracts';
 /**
  * Build a provenance event. Caller supplies eventId, seq, timestamp, and
  * previousHash for chain integrity.
+ *
+ * The content hash binds the full canonical event payload — runId, seq,
+ * timestamp, previousHash, eventType, actor, actorRole, and metadata — so
+ * that altering any event identity, sequence, or timestamp is detected.
  */
 export function makeProvenanceEvent(input: {
   eventId: string;
@@ -28,6 +32,10 @@ export function makeProvenanceEvent(input: {
   metadata: Record<string, unknown>;
 }): ProvenanceEvent {
   const payload = {
+    runId: input.runId,
+    seq: input.seq,
+    timestamp: input.timestamp,
+    previousHash: input.previousHash,
     eventType: input.eventType,
     actor: input.actor,
     actorRole: input.actorRole,
@@ -51,14 +59,35 @@ export function makeProvenanceEvent(input: {
 
 /**
  * Verify a provenance event chain. Returns false if any event's contentHash
- * doesn't match its payload, or if the chain link (previousHash) is broken.
+ * doesn't match its payload, the chain link (previousHash) is broken,
+ * sequence numbers are not contiguous from 0, or events span multiple run
+ * IDs.
  */
 export function verifyProvenanceChain(events: readonly ProvenanceEvent[]): {
   readonly valid: boolean;
   readonly failure?: { seq: number; reason: string };
 } {
   let previousHash: string | null = null;
+  let expectedSeq = 0;
+  let runId: string | null = null;
   for (const event of events) {
+    // Single run ID across the entire chain.
+    if (runId === null) runId = event.runId;
+    if (event.runId !== runId) {
+      return {
+        valid: false,
+        failure: { seq: event.seq, reason: 'run ID mismatch' },
+      };
+    }
+    // Contiguous sequence from 0.
+    if (event.seq !== expectedSeq) {
+      return {
+        valid: false,
+        failure: { seq: event.seq, reason: 'sequence gap or duplicate' },
+      };
+    }
+    expectedSeq += 1;
+    // Chain link integrity.
     if (event.previousHash !== previousHash) {
       return {
         valid: false,
@@ -66,6 +95,10 @@ export function verifyProvenanceChain(events: readonly ProvenanceEvent[]): {
       };
     }
     const expectedHash = sha256Json({
+      runId: event.runId,
+      seq: event.seq,
+      timestamp: event.timestamp,
+      previousHash: event.previousHash,
       eventType: event.eventType,
       actor: event.actor,
       actorRole: event.actorRole,

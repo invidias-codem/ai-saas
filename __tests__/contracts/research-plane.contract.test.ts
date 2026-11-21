@@ -1,9 +1,10 @@
-// Research Plane — R0 contract tests.
+// Research Plane — R0.1 contract tests (security-hardened).
 //
 // Covers: state machine transitions, freeze-spec idempotency, candidate
 // proposal, verification receipt binding, tenant isolation, provenance chain
 // integrity, evidence manifest binding, verification policy, negative and
-// tamper-detection tests.
+// tamper-detection tests, recursive canonical hashing, verifier
+// authorization, content digest validation.
 //
 // Pure: no Supabase, no network, no external credentials.
 
@@ -11,6 +12,9 @@ import {
   ResearchPlaneError,
   sha256Json,
   sha256Bytes,
+  canonicalizeJson,
+  verifyContentDigest,
+  verifySpecDigest,
   artifactContentHash,
   isValidTransition,
   requireValidTransition,
@@ -51,6 +55,7 @@ import {
   buildReceipt,
   assertVerifierIndependence,
   DEFAULT_VERIFICATION_POLICY,
+  type VerifierProvider,
 } from '@/lib/research/verification/contracts';
 import {
   isAxiomAuthorized,
@@ -60,11 +65,13 @@ import {
   validateReceiptConsistency,
 } from '@/lib/research/verification/policy';
 
+const callerScope = { tenantId: 'user:user-1', workspaceId: 'ws-1' };
+
 const makeRun = (overrides: Partial<ResearchRun> = {}): ResearchRun => ({
   runId: 'run-1',
   ownerUserId: 'user-1',
   workspaceId: 'ws-1',
-  tenantScope: { tenantId: 'user:user-1', workspaceId: 'ws-1' },
+  tenantScope: callerScope,
   status: 'CREATED',
   specVersion: 0,
   specHash: null,
@@ -95,6 +102,13 @@ const frozenSpecInput = (run: ResearchRun): FrozenSpecInput => ({
   spec: makeSpec(),
   frozenAt: '2026-01-01T01:00:00Z',
   frozenBy: 'user-1',
+});
+
+const makeVerifierProvider = (overrides: Partial<VerifierProvider> = {}): VerifierProvider => ({
+  identity: { name: 'lean-kernel', version: '4.10.0', type: 'lean' },
+  policy: DEFAULT_VERIFICATION_POLICY,
+  verify: jest.fn(),
+  ...overrides,
 });
 
 describe('research plane — feature flag', () => {
@@ -132,11 +146,11 @@ describe('research plane — state machine transitions', () => {
 
 describe('research plane — create and freeze spec', () => {
   it('createRun produces CREATED run with null spec/candidate hashes', () => {
-    const run = createRun({
+    const run = createRun(callerScope, {
       runId: 'run-1',
       ownerUserId: 'user-1',
       workspaceId: 'ws-1',
-      tenantScope: { tenantId: 'user:user-1', workspaceId: 'ws-1' },
+      tenantScope: callerScope,
       createdAt: '2026-01-01T00:00:00Z',
     });
     expect(run.status).toBe('CREATED');
@@ -144,21 +158,73 @@ describe('research plane — create and freeze spec', () => {
     expect(run.candidateHash).toBeNull();
   });
 
+  it('createRun rejects tenant mismatch', () => {
+    expect(() =>
+      createRun(
+        { tenantId: 'user:other', workspaceId: 'ws-1' },
+        {
+          runId: 'run-1',
+          ownerUserId: 'user-1',
+          workspaceId: 'ws-1',
+          tenantScope: callerScope,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ),
+    ).toThrow(ResearchPlaneError);
+  });
+
   it('freezeSpec transitions CREATED -> SPEC_FROZEN and sets specHash', () => {
     const run = makeRun();
     const input = frozenSpecInput(run);
-    const result = freezeSpec(run, input);
+    const result = freezeSpec(callerScope, run, input);
     expect(result.run.status).toBe('SPEC_FROZEN');
     expect(result.run.specVersion).toBe(1);
     expect(result.run.specHash).toBe(input.hash);
     expect(result.specHash).toBe(input.hash);
   });
 
+  it('freezeSpec recomputes spec digest and rejects mismatched caller hash', () => {
+    const run = makeRun();
+    const spec = makeSpec();
+    const actualHash = sha256Json(spec);
+    const input: FrozenSpecInput = {
+      version: 1,
+      hash: 'wrong-hash',
+      spec,
+      frozenAt: '2026-01-01T01:00:00Z',
+      frozenBy: 'user-1',
+    };
+    expect(() => freezeSpec(callerScope, run, input)).toThrow(
+      ResearchPlaneError,
+    );
+    try {
+      freezeSpec(callerScope, run, input);
+    } catch (e) {
+      expect((e as ResearchPlaneError).code).toBe('VERIFICATION_BIND_MISMATCH');
+    }
+  });
+
+  it('freezeSpec accepts matching recomputed digest', () => {
+    const run = makeRun();
+    const spec = makeSpec();
+    const actualHash = sha256Json(spec);
+    const input: FrozenSpecInput = {
+      version: 1,
+      hash: actualHash,
+      spec,
+      frozenAt: '2026-01-01T01:00:00Z',
+      frozenBy: 'user-1',
+    };
+    const result = freezeSpec(callerScope, run, input);
+    expect(result.run.status).toBe('SPEC_FROZEN');
+    expect(result.run.specHash).toBe(actualHash);
+  });
+
   it('freezeSpec is idempotent on same version+hash', () => {
     const run = makeRun();
     const input = frozenSpecInput(run);
-    const first = freezeSpec(run, input);
-    const second = freezeSpec(first.run, input);
+    const first = freezeSpec(callerScope, run, input);
+    const second = freezeSpec(callerScope, first.run, input);
     expect(second.run.specVersion).toBe(1);
     expect(second.run.specHash).toBe(input.hash);
   });
@@ -166,7 +232,21 @@ describe('research plane — create and freeze spec', () => {
   it('freezeSpec rejects transition from non-CREATED status', () => {
     const frozen = makeRun({ status: 'SPEC_FROZEN', specVersion: 1, specHash: 'abc' });
     const input = frozenSpecInput(frozen);
-    expect(() => freezeSpec(frozen, input)).toThrow(ResearchPlaneError);
+    expect(() => freezeSpec(callerScope, frozen, input)).toThrow(
+      ResearchPlaneError,
+    );
+  });
+
+  it('freezeSpec rejects tenant mismatch', () => {
+    const run = makeRun();
+    const input = frozenSpecInput(run);
+    expect(() =>
+      freezeSpec(
+        { tenantId: 'user:other', workspaceId: 'ws-1' },
+        run,
+        input,
+      ),
+    ).toThrow(ResearchPlaneError);
   });
 });
 
@@ -180,7 +260,7 @@ describe('research plane — candidate proposal', () => {
       references: [],
       dependencyHashes: {},
     };
-    const result = proposeCandidate(run, {
+    const result = proposeCandidate(callerScope, run, {
       artifact: artifactInput,
       artifactId: 'art-1',
       createdAt: '2026-01-01T02:00:00Z',
@@ -195,12 +275,28 @@ describe('research plane — candidate proposal', () => {
   it('proposeCandidate rejects from non-RESEARCHING status', () => {
     const run = makeRun({ status: 'CREATED' });
     expect(() =>
-      proposeCandidate(run, {
+      proposeCandidate(callerScope, run, {
         artifact: { type: 'proof', contentHash: 'x', contentSize: 1, references: [], dependencyHashes: {} },
         artifactId: 'art-1',
         createdAt: '2026-01-01T02:00:00Z',
         createdBy: 'explorer@lean-4',
       }),
+    ).toThrow(ResearchPlaneError);
+  });
+
+  it('proposeCandidate rejects tenant mismatch', () => {
+    const run = makeRun({ status: 'RESEARCHING' });
+    expect(() =>
+      proposeCandidate(
+        { tenantId: 'user:other', workspaceId: 'ws-1' },
+        run,
+        {
+          artifact: { type: 'proof', contentHash: 'x', contentSize: 1, references: [], dependencyHashes: {} },
+          artifactId: 'art-1',
+          createdAt: '2026-01-01T02:00:00Z',
+          createdBy: 'explorer@lean-4',
+        },
+      ),
     ).toThrow(ResearchPlaneError);
   });
 });
@@ -215,11 +311,17 @@ describe('research plane — verification receipt binding', () => {
       specHash,
       candidateHash,
     });
+    const provider = makeVerifierProvider();
     const receiptInput = {
       receipt: {
         outcome: 'VERIFIED' as const,
-        checkResults: { kernel_acceptance: { passed: true } },
-        command: 'lean --run Solution.lean',
+        checkResults: {
+          compilation: { passed: true },
+          kernel_acceptance: { passed: true },
+          axiom_inspection: { passed: true },
+          replay: { passed: true },
+        },
+        command: 'lean check Solution.lean',
         exitStatus: 0,
         specHash,
         candidateHash,
@@ -229,13 +331,78 @@ describe('research plane — verification receipt binding', () => {
       receiptId: 'receipt-1',
       executedAt: '2026-01-01T03:00:00Z',
       executedBy: 'verifier@lean-kernel',
+      producerRole: 'explorer',
+      verifierProvider: provider,
     };
-    const result = submitVerification(run, receiptInput);
+    const result = submitVerification(callerScope, run, receiptInput);
     expect(result.run.status).toBe('VERIFIED');
     expect(result.run.verificationReceiptId).toBe('receipt-1');
     expect(result.receipt.specHash).toBe(specHash);
     expect(result.receipt.candidateHash).toBe(candidateHash);
     expect(result.receipt.sealed).toBe(true);
+  });
+
+  it('submitVerification rejects forged VERIFIED receipt with failing checks', () => {
+    const specHash = sha256Json(makeSpec());
+    const candidateHash = sha256Bytes('proof content');
+    const run = makeRun({
+      status: 'VERIFICATION_PENDING',
+      specVersion: 1,
+      specHash,
+      candidateHash,
+    });
+    const provider = makeVerifierProvider();
+    expect(() =>
+      submitVerification(callerScope, run, {
+        receipt: {
+          outcome: 'VERIFIED',
+          checkResults: { kernel_acceptance: { passed: false } },
+          command: 'lean check Solution.lean',
+          exitStatus: 0,
+          specHash,
+          candidateHash,
+          toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+          policy: DEFAULT_VERIFICATION_POLICY,
+        },
+        receiptId: 'receipt-1',
+        executedAt: '2026-01-01T03:00:00Z',
+        executedBy: 'verifier@lean-kernel',
+        producerRole: 'explorer',
+      verifierProvider: provider,
+      }),
+    ).toThrow(ResearchPlaneError);
+  });
+
+  it('submitVerification rejects agent-as-verifier', () => {
+    const specHash = sha256Json(makeSpec());
+    const candidateHash = sha256Bytes('proof content');
+    const run = makeRun({
+      status: 'VERIFICATION_PENDING',
+      specVersion: 1,
+      specHash,
+      candidateHash,
+    });
+    const agentProvider = makeVerifierProvider({
+      identity: { name: 'agent', version: '1', type: 'lean' },
+    });
+    expect(() =>
+      submitVerification(callerScope, run, {
+        receipt: {
+          outcome: 'VERIFIED',
+          checkResults: { kernel_acceptance: { passed: true } },
+          command: 'lean check Solution.lean',
+          exitStatus: 0,
+          specHash,
+          candidateHash,
+          toolchain: { name: 'agent', version: '1', type: 'lean' },
+          policy: DEFAULT_VERIFICATION_POLICY,
+        },
+        receiptId: 'receipt-1',
+        executedAt: '2026-01-01T03:00:00Z',
+        executedBy: 'explorer@lean-4',
+        verifierProvider: agentProvider,
+      }),
+    ).toThrow(ResearchPlaneError);
   });
 
   it('submitVerification rejects specHash mismatch', () => {
@@ -245,12 +412,13 @@ describe('research plane — verification receipt binding', () => {
       specHash: 'expected-hash',
       candidateHash: 'candidate-hash',
     });
+    const provider = makeVerifierProvider();
     expect(() =>
-      submitVerification(run, {
+      submitVerification(callerScope, run, {
         receipt: {
           outcome: 'VERIFIED',
           checkResults: {},
-          command: 'lean --run Solution.lean',
+          command: 'lean check Solution.lean',
           exitStatus: 0,
           toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
           policy: DEFAULT_VERIFICATION_POLICY,
@@ -258,7 +426,44 @@ describe('research plane — verification receipt binding', () => {
         receiptId: 'receipt-1',
         executedAt: '2026-01-01T03:00:00Z',
         executedBy: 'verifier@lean-kernel',
+        producerRole: 'explorer',
+      verifierProvider: provider,
       }),
+    ).toThrow(ResearchPlaneError);
+  });
+
+  it('submitVerification rejects tenant mismatch', () => {
+    const specHash = sha256Json(makeSpec());
+    const candidateHash = sha256Bytes('proof content');
+    const run = makeRun({
+      status: 'VERIFICATION_PENDING',
+      specVersion: 1,
+      specHash,
+      candidateHash,
+    });
+    const provider = makeVerifierProvider();
+    expect(() =>
+      submitVerification(
+        { tenantId: 'user:other', workspaceId: 'ws-1' },
+        run,
+        {
+          receipt: {
+            outcome: 'VERIFIED',
+            checkResults: { kernel_acceptance: { passed: true } },
+            command: 'lean check Solution.lean',
+            exitStatus: 0,
+            specHash,
+            candidateHash,
+            toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+            policy: DEFAULT_VERIFICATION_POLICY,
+          },
+          receiptId: 'receipt-1',
+          executedAt: '2026-01-01T03:00:00Z',
+          executedBy: 'verifier@lean-kernel',
+          producerRole: 'explorer',
+      verifierProvider: provider,
+        },
+      ),
     ).toThrow(ResearchPlaneError);
   });
 
@@ -339,6 +544,7 @@ describe('research plane — provenance chain', () => {
     expect(event.contentHash).toBeDefined();
     expect(event.previousHash).toBeNull();
     expect(event.seq).toBe(0);
+    expect(event.runId).toBe('run-1');
   });
 
   it('verifyProvenanceChain accepts valid chain', () => {
@@ -379,6 +585,34 @@ describe('research plane — provenance chain', () => {
     expect(result.failure!.reason).toBe('content hash mismatch');
   });
 
+  it('verifyProvenanceChain rejects run ID mismatch', () => {
+    const e1 = makeProvenanceEvent({
+      eventId: 'e-1', runId: 'run-1', seq: 0, eventType: 'run_created',
+      actor: 'user-1', actorRole: 'human', timestamp: 't0', previousHash: null, metadata: {},
+    });
+    const e2 = makeProvenanceEvent({
+      eventId: 'e-2', runId: 'run-2', seq: 1, eventType: 'spec_frozen',
+      actor: 'user-1', actorRole: 'human', timestamp: 't1', previousHash: e1.contentHash, metadata: {},
+    });
+    const result = verifyProvenanceChain([e1, e2]);
+    expect(result.valid).toBe(false);
+    expect(result.failure!.reason).toBe('run ID mismatch');
+  });
+
+  it('verifyProvenanceChain rejects sequence gap', () => {
+    const e1 = makeProvenanceEvent({
+      eventId: 'e-1', runId: 'run-1', seq: 0, eventType: 'run_created',
+      actor: 'user-1', actorRole: 'human', timestamp: 't0', previousHash: null, metadata: {},
+    });
+    const e2 = makeProvenanceEvent({
+      eventId: 'e-2', runId: 'run-1', seq: 5, eventType: 'spec_frozen',
+      actor: 'user-1', actorRole: 'human', timestamp: 't1', previousHash: e1.contentHash, metadata: {},
+    });
+    const result = verifyProvenanceChain([e1, e2]);
+    expect(result.valid).toBe(false);
+    expect(result.failure!.reason).toBe('sequence gap or duplicate');
+  });
+
   it('appendProvenanceEvent rejects invalid existing chain', () => {
     const badEvent = makeProvenanceEvent({
       eventId: 'e-1', runId: 'run-1', seq: 0, eventType: 'run_created',
@@ -390,6 +624,25 @@ describe('research plane — provenance chain', () => {
         existingLog: [tampered],
         eventId: 'e-2',
         runId: 'run-1',
+        eventType: 'spec_frozen',
+        actor: 'user-1',
+        actorRole: 'human',
+        timestamp: 't1',
+        metadata: {},
+      }),
+    ).toThrow();
+  });
+
+  it('appendProvenanceEvent rejects run ID mismatch', () => {
+    const existing = [makeProvenanceEvent({
+      eventId: 'e-1', runId: 'run-1', seq: 0, eventType: 'run_created',
+      actor: 'user-1', actorRole: 'human', timestamp: 't0', previousHash: null, metadata: {},
+    })];
+    expect(() =>
+      appendProvenanceEvent({
+        existingLog: existing,
+        eventId: 'e-2',
+        runId: 'run-2',
         eventType: 'spec_frozen',
         actor: 'user-1',
         actorRole: 'human',
@@ -460,9 +713,27 @@ describe('research plane — evidence manifest', () => {
 });
 
 describe('research plane — deterministic hashing', () => {
-  it('sha256Json is deterministic and order-independent', () => {
+  it('sha256Json is deterministic and order-independent at top level', () => {
     const a = sha256Json({ b: 2, a: 1 });
     const b = sha256Json({ a: 1, b: 2 });
+    expect(a).toBe(b);
+  });
+
+  it('sha256Json is order-independent at nested levels (recursive canonicalization)', () => {
+    const a = sha256Json({ executionBudget: { maxSteps: 50, maxWallClockMs: 300000 } });
+    const b = sha256Json({ executionBudget: { maxWallClockMs: 300000, maxSteps: 50 } });
+    expect(a).toBe(b);
+  });
+
+  it('sha256Json produces different digests for different nested values', () => {
+    const a = sha256Json({ executionBudget: { maxSteps: 50 } });
+    const b = sha256Json({ executionBudget: { maxSteps: 100 } });
+    expect(a).not.toBe(b);
+  });
+
+  it('canonicalizeJson sorts keys recursively', () => {
+    const a = canonicalizeJson({ z: 1, a: { y: 2, x: 3 } });
+    const b = canonicalizeJson({ a: { x: 3, y: 2 }, z: 1 });
     expect(a).toBe(b);
   });
 
@@ -478,6 +749,37 @@ describe('research plane — deterministic hashing', () => {
       type: 'proof', contentHash: 'x', contentSize: 1, references: [], dependencyHashes: {},
     });
     expect(h1).toBe(h2);
+  });
+});
+
+describe('research plane — content digest validation', () => {
+  it('verifyContentDigest accepts matching digest', () => {
+    const content = 'proof content';
+    const hash = sha256Bytes(content);
+    const result = verifyContentDigest(hash, content);
+    expect(result.valid).toBe(true);
+    expect(result.actualHash).toBe(hash);
+  });
+
+  it('verifyContentDigest rejects mismatched digest', () => {
+    const result = verifyContentDigest('wrong-hash', 'actual content');
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('content digest mismatch');
+    expect(result.actualHash).toBeDefined();
+  });
+
+  it('verifySpecDigest accepts matching spec digest', () => {
+    const spec = makeSpec();
+    const hash = sha256Json(spec);
+    const result = verifySpecDigest(hash, spec);
+    expect(result.valid).toBe(true);
+  });
+
+  it('verifySpecDigest rejects mismatched spec digest', () => {
+    const spec = makeSpec();
+    const result = verifySpecDigest('wrong-hash', spec);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toBe('content digest mismatch');
   });
 });
 
@@ -584,7 +886,26 @@ describe('research plane — verifier independence', () => {
       identity: { name: 'agent', version: '1', type: 'lean' },
       policy: DEFAULT_VERIFICATION_POLICY,
     };
-    expect(() => assertVerifierIndependence('verifier', provider as any)).toThrow(
+    expect(() => assertVerifierIndependence('explorer', provider as any)).toThrow(
+      ResearchPlaneError,
+    );
+    expect(() => assertVerifierIndependence('formalizer', provider as any)).toThrow(
+      ResearchPlaneError,
+    );
+    expect(() => assertVerifierIndependence('critic', provider as any)).toThrow(
+      ResearchPlaneError,
+    );
+    expect(() => assertVerifierIndependence('coordinator', provider as any)).toThrow(
+      ResearchPlaneError,
+    );
+  });
+
+  it('assertVerifierIndependence rejects matching producer/verifier identity', () => {
+    const provider = {
+      identity: { name: 'explorer', version: '1', type: 'lean' },
+      policy: DEFAULT_VERIFICATION_POLICY,
+    };
+    expect(() => assertVerifierIndependence('explorer', provider as any)).toThrow(
       ResearchPlaneError,
     );
   });
@@ -595,13 +916,14 @@ describe('research plane — verifier independence', () => {
       policy: DEFAULT_VERIFICATION_POLICY,
     };
     expect(() => assertVerifierIndependence('explorer', provider as any)).not.toThrow();
+    expect(() => assertVerifierIndependence('formalizer', provider as any)).not.toThrow();
   });
 
   it('buildReceipt produces sealed receipt bound to hashes', () => {
     const result: VerificationResult = {
       outcome: 'VERIFIED',
       checkResults: { kernel_acceptance: { passed: true } },
-      command: 'lean --run Solution.lean',
+      command: 'lean check Solution.lean',
       exitStatus: 0,
       executedAt: '2026-01-01T03:00:00Z',
       executedBy: 'verifier@lean-kernel',
@@ -629,12 +951,13 @@ describe('research plane — negative / tamper detection', () => {
       specHash: 'spec-hash',
       candidateHash: 'original-hash',
     });
+    const provider = makeVerifierProvider();
     expect(() =>
-      submitVerification(run, {
+      submitVerification(callerScope, run, {
         receipt: {
           outcome: 'VERIFIED',
           checkResults: {},
-          command: 'lean',
+          command: 'lean check',
           exitStatus: 0,
           toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
           policy: DEFAULT_VERIFICATION_POLICY,
@@ -642,6 +965,8 @@ describe('research plane — negative / tamper detection', () => {
         receiptId: 'r',
         executedAt: 't',
         executedBy: 'v',
+        producerRole: 'explorer',
+      verifierProvider: provider,
       }),
     ).toThrow(ResearchPlaneError);
   });
@@ -652,12 +977,13 @@ describe('research plane — negative / tamper detection', () => {
       specHash: 'original-spec',
       candidateHash: 'cand-hash',
     });
+    const provider = makeVerifierProvider();
     expect(() =>
-      submitVerification(run, {
+      submitVerification(callerScope, run, {
         receipt: {
           outcome: 'VERIFIED',
           checkResults: {},
-          command: 'lean',
+          command: 'lean check',
           exitStatus: 0,
           toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
           policy: DEFAULT_VERIFICATION_POLICY,
@@ -665,20 +991,33 @@ describe('research plane — negative / tamper detection', () => {
         receiptId: 'r',
         executedAt: 't',
         executedBy: 'v',
+        producerRole: 'explorer',
+      verifierProvider: provider,
       }),
     ).toThrow(ResearchPlaneError);
   });
 
   it('transitionToStatus is idempotent on same status', () => {
     const run = makeRun({ status: 'FAILED' });
-    const result = transitionToStatus(run, { status: 'FAILED', at: 't' });
+    const result = transitionToStatus(callerScope, run, { status: 'FAILED', at: 't' });
     expect(result).toBe(run);
   });
 
   it('transitionToStatus rejects invalid terminal transition', () => {
     const run = makeRun({ status: 'VERIFIED' });
     expect(() =>
-      transitionToStatus(run, { status: 'RESEARCHING', at: 't' }),
+      transitionToStatus(callerScope, run, { status: 'RESEARCHING', at: 't' }),
+    ).toThrow(ResearchPlaneError);
+  });
+
+  it('transitionToStatus rejects tenant mismatch', () => {
+    const run = makeRun({ status: 'FAILED' });
+    expect(() =>
+      transitionToStatus(
+        { tenantId: 'user:other', workspaceId: 'ws-1' },
+        run,
+        { status: 'REJECTED', at: 't' },
+      ),
     ).toThrow(ResearchPlaneError);
   });
 });

@@ -31,6 +31,16 @@ export function appendProvenanceEvent(input: {
     );
   }
 
+  // New events must belong to the same run as the existing log.
+  if (
+    input.existingLog.length > 0 &&
+    input.existingLog[0].runId !== input.runId
+  ) {
+    throw new Error(
+      `Provenance event run ID '${input.runId}' does not match existing log run ID '${input.existingLog[0].runId}'`,
+    );
+  }
+
   const seq = input.existingLog.length;
   const previousHash =
     input.existingLog.length === 0 ? null : input.existingLog[input.existingLog.length - 1].contentHash;
