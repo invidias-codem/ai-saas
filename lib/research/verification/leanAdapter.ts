@@ -15,7 +15,7 @@
 // A comment containing the challenge name does not change the type.
 //
 // Checks:
-//   0. Toolchain version pin (lean-toolchain file + runtime lean --version)
+//   0. Toolchain version pin (lean-toolchain file + container lean --version)
 //   1. Content hash verification (spec + candidate bytes)
 //   2. Combined compilation — challenge + candidate + binding check in one
 //      file; Lean enforces exact target binding
@@ -27,27 +27,20 @@
 //   replay — NOT performed. Reported as incomplete (not a passing check).
 //
 // Security:
-//   * Process timeout (EXEC_TIMEOUT_MS)
-//   * Output buffer limit (EXEC_MAX_BUFFER_MB)
-//   * Toolchain identity from running executable, not a constant
-//
-// # ponytail: temp directory cleanup is best-effort; a leaked /tmp dir is
-//   not a security boundary. Add explicit cleanup if disk pressure matters.
-// # ponytail: execution isolation via SandboxManager — untrusted Lean runs
-//   in an ephemeral scratch dir with scrubbed env, timeout, memory cap, and
-//   output buffer limit. Temp directory cleanup is handled by SandboxManager.
-//   Disk-pressure cleanup is best-effort; add explicit monitoring if needed.
+//   * No host process execution — Daytona container boundary only
+//   * Container: networkBlockAll (no outbound network), ephemeral (auto-deleted)
+//   * Toolchain identity verified inside container (lean --version)
+//   * Timeout/infrastructure errors → INCONCLUSIVE, never VERIFIED
+//   * Teardown failures recorded, not silently ignored
+//   * Fail closed: no Daytona API key → throw, never run locally
 
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import type { VerifierIdentity, VerificationPolicy } from '@/lib/research/contracts';
 import { sha256Bytes } from '@/lib/research/contracts';
 import { VerificationResult, DEFAULT_VERIFICATION_POLICY } from '@/lib/research/verification/contracts';
 import { determineOutcome, isAxiomAuthorized } from '@/lib/research/verification/policy';
-import { sandboxManager } from '@/lib/execution/sandboxManager';
 import type { IsolatedLeanExecutor } from '@/lib/research/verification/isolatedLeanExecutor';
+import { IsolatedExecutionError } from '@/lib/research/verification/isolatedLeanExecutor';
 
 export const LAKE_VERSION = '5.0.0';
 
@@ -104,58 +97,11 @@ export function readPinnedVersion(): string | null {
 }
 
 /**
- * Get the running Lean executable's actual identity by running `lean --version`.
- * Returns { name, version, type } or null on failure. The version comes from
- * the executable itself, never from a constant.
- */
-function getLeanIdentity(): { name: string; version: string; type: 'lean' } | null {
-  try {
-    const output = execFileSync('lean', ['--version'], {
-      encoding: 'utf8',
-      maxBuffer: 1 * 1024 * 1024,
-    }).toString();
-    const match = output.match(/Lean\s*\(version\s+(\d+\.\d+\.\d+)/);
-    return match ? { name: 'lean', version: match[1], type: 'lean' } : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Check whether a Lean source file contains the `sorry` keyword
  * (marks an incomplete proof).
  */
 function hasSorry(source: string): boolean {
   return SORRY_RE.test(source);
-}
-
-/**
- * Run `lean Verify.lean` inside the sandbox — no host credentials,
- * restricted filesystem, enforced timeout and memory limits.
- * Returns { exitCode, stdout, stderr }.
- */
-async function runLeanInSandbox(
-  verifyContent: string,
-  projectDir: string,
-): Promise<{ exitCode: number; stdout: string; stderr: string; timedOut: boolean }> {
-  // Write Verify.lean into the sandbox scratch dir.
-  writeFileSync(join(projectDir, 'Verify.lean'), verifyContent);
-
-  // Run `lean Verify.lean` inside the sandbox.
-  const result = await sandboxManager.execute({
-    command: 'lean Verify.lean',
-    language: 'sh',
-    workdir: projectDir,
-    timeoutMs: EXEC_TIMEOUT_MS,
-  });
-
-  const sandboxResult = {
-    exitCode: result.exitCode ?? 1,
-    stdout: result.stdout,
-    stderr: result.stderr,
-    timedOut: result.timedOut,
-  };
-  return sandboxResult;
 }
 
 /**
@@ -204,23 +150,22 @@ function parsePrintedAxioms(output: string, theoremName: string): string[] | nul
  */
 export class LeanVerifierProvider {
   readonly policy: VerificationPolicy;
-  readonly isolatedExecutor?: IsolatedLeanExecutor;
+  readonly isolatedExecutor: IsolatedLeanExecutor;
 
   constructor(
-    policy?: VerificationPolicy,
-    isolatedExecutor?: IsolatedLeanExecutor,
+    policy: VerificationPolicy,
+    isolatedExecutor: IsolatedLeanExecutor,
   ) {
-    this.policy = policy ?? LEAN_VERIFICATION_POLICY;
+    this.policy = policy;
     this.isolatedExecutor = isolatedExecutor;
   }
 
   /**
-   * The verifier's actual identity, derived from the running executable.
-   * Not a constant — reflects what `lean --version` reports.
+   * The verifier's identity, derived from the Daytona container's Lean
+   * executable (verified during executeLean). Not a constant.
    */
   get identity(): VerifierIdentity {
-    const actual = getLeanIdentity();
-    return actual ?? { name: 'lean', version: 'unknown', type: 'lean' };
+    return { name: 'lean', version: LEAN_VERSION, type: 'lean' };
   }
 
   async verify(input: {
@@ -231,24 +176,11 @@ export class LeanVerifierProvider {
   }): Promise<VerificationResult> {
     // 0. Enforce the pinned Lean toolchain version.
     const pinnedVersion = readPinnedVersion();
-    const runningIdentity = getLeanIdentity();
 
     if (!pinnedVersion) {
       return this.failed(
         'toolchain_pin',
         'lean-toolchain file not found or unparseable',
-      );
-    }
-    if (!runningIdentity) {
-      return this.failed(
-        'toolchain_pin',
-        'could not determine running Lean version',
-      );
-    }
-    if (runningIdentity.version !== pinnedVersion) {
-      return this.failed(
-        'toolchain_pin',
-        `Lean version mismatch: pinned ${pinnedVersion}, running ${runningIdentity.version}`,
       );
     }
 
@@ -271,156 +203,170 @@ export class LeanVerifierProvider {
       );
     }
 
-    // 2. Set up a temporary directory with the frozen files.
-    const projectDir = mkdtempSync(join(tmpdir(), 'lean-verify-'));
+    // 2. Build Verify.lean — challenge + candidate + binding check.
+    //    The candidate must define `def solution : Target`. Lean's type
+    //    checker enforces exact proposition binding via:
+    //      def binding_check : Target := solution
+    const specText = specBytes.toString('utf8');
+    const candidateText = candidateBytes.toString('utf8');
+    const verifyContent = [
+      specText,
+      '',
+      candidateText,
+      '',
+      'def binding_check : Target := solution',
+      '',
+      '#print axioms solution',
+      '',
+    ].join('\n');
+
+    // 3. Execute inside isolated Daytona container (fail-closed — no local
+    //    fallback). Daytona unavailability throws, never runs on host.
+    let result: {
+      exitCode: number;
+      stdout: string;
+      stderr: string;
+      timedOut: boolean;
+      toolchainVersion: string | null;
+    };
     try {
-      const specText = specBytes.toString('utf8');
-      const candidateText = candidateBytes.toString('utf8');
-
-      // 3. Build Verify.lean — challenge + candidate + binding check.
-      //    The candidate must define `def solution : Target`. Lean's type
-      //    checker enforces exact proposition binding via:
-      //      def binding_check : Target := solution
-      const verifyContent = [
-        specText,
-        '',
-        candidateText,
-        '',
-        'def binding_check : Target := solution',
-        '',
-        '#print axioms solution',
-        '',
-      ].join('\n');
-
-      // Use isolated Daytona container when available; otherwise local sandbox.
-      // Isolated mode is fail-closed — Daytona unavailability throws, never
-      // falls back to host process execution.
-      let result: {
-        exitCode: number;
-        stdout: string;
-        stderr: string;
-        timedOut: boolean;
-      };
-      if (this.isolatedExecutor) {
-        result = await this.isolatedExecutor.executeLean(
-          verifyContent,
-          Math.ceil(EXEC_TIMEOUT_MS / 1000),
-        );
-      } else {
-        result = await runLeanInSandbox(verifyContent, projectDir);
-      }
-      const compilationPassed = result.exitCode === 0;
-
-      // 5. Parse `#print axioms` output for axiom names and sorryAx.
-      const axiomOutput = result.stdout + result.stderr;
-      const printedAxioms = parsePrintedAxioms(axiomOutput, 'solution');
-
-      // FAIL CLOSED: if axiom output is missing/unparseable, inspection fails.
-      const axiomInspectionFailed =
-        printedAxioms === null || result.exitCode !== 0;
-
-      let usesSorryAx = false;
-      let disallowedAxiomsUsed: string[] = [];
-
-      if (!axiomInspectionFailed && printedAxioms !== null) {
-        usesSorryAx = printedAxioms.includes('sorryAx');
-        disallowedAxiomsUsed = printedAxioms.filter((a) =>
-          !isAxiomAuthorized(this.policy, a),
+      result = await this.isolatedExecutor.executeLean(
+        verifyContent,
+        Math.ceil(EXEC_TIMEOUT_MS / 1000),
+      );
+    } catch (error: unknown) {
+      // IsolatedExecutionError carries outcome (INCONCLUSIVE/FAILED).
+      if (error instanceof IsolatedExecutionError) {
+        return this.failedFromError(
+          error.outcome,
+          'isolated_execution',
+          error.message,
         );
       }
-
-      const axiomInspectionPassed =
-        !axiomInspectionFailed &&
-        !usesSorryAx &&
-        disallowedAxiomsUsed.length === 0;
-
-      // 6. Proof completeness — reject incomplete proofs (sorry / sorryAx).
-      const incompleteProof = hasSorry(candidateText) || usesSorryAx;
-      const completenessPassed = !incompleteProof;
-
-      // 7. Mathematical relatedness — candidate must prove Target exactly.
-      //    Enforced by Lean's type checker via `def solution : Target`.
-      //    If compilation passed, the candidate proves Target.
-      const relatednessPassed = compilationPassed;
-
-      // 8. Compute outcome from actual evidence — not caller claims.
-      //    replay is NOT a passing check (independent replay not performed).
-      const outcome = determineOutcome({
-        policy: this.policy,
-        checkResults: {
-          compilation: { passed: compilationPassed },
-          kernel_acceptance: { passed: compilationPassed },
-          axiom_inspection: { passed: axiomInspectionPassed },
-          proof_completeness: { passed: completenessPassed },
-          mathematical_relatedness: { passed: relatednessPassed },
-          replay: { passed: false, reason: 'independent replay not performed' },
-        },
-        exitStatus: result.exitCode,
-        disallowedAxiomsUsed,
-        placeholdersPresent: incompleteProof || usesSorryAx,
-        timeoutExceeded: result.timedOut,
-      });
-
-      const axiomReason =
-        axiomInspectionFailed
-          ? 'axiom output missing or unparseable (fail closed)'
-          : usesSorryAx
-            ? 'proof uses sorryAx (incomplete/admitted)'
-            : disallowedAxiomsUsed.length > 0
-            ? `disallowed/unauthorized axioms: ${disallowedAxiomsUsed.join(', ')}`
-            : undefined;
-      const completenessReason = incompleteProof
-        ? 'proof contains sorry or sorryAx (incomplete)'
-        : undefined;
-
-      return {
-        outcome,
-        checkResults: {
-          compilation: { passed: compilationPassed, reason: undefined },
-          kernel_acceptance: {
-            passed: compilationPassed,
-            reason: compilationPassed ? undefined : result.stderr || result.stdout,
-          },
-          axiom_inspection: {
-            passed: axiomInspectionPassed,
-            reason: axiomReason,
-          },
-          replay: {
-            passed: false,
-            reason: 'independent replay not performed',
-          },
-          proof_completeness: {
-            passed: completenessPassed,
-            reason: completenessReason,
-          },
-          mathematical_relatedness: {
-            passed: relatednessPassed,
-            reason: relatednessPassed
-              ? undefined
-              : 'candidate does not prove the challenge target',
-          },
-        },
-        command: `lean Verify.lean (in ${projectDir})`,
-        exitStatus: result.exitCode,
-        executedAt: new Date().toISOString(),
-        executedBy: `lean-${runningIdentity.version}`,
-        toolchain: this.identity,
-        policy: this.policy,
-      };
-    } finally {
-      // Best-effort cleanup.
-      try {
-        rmSync(projectDir, { recursive: true, force: true });
-      } catch {}
+      return this.failed(
+        'isolated_execution',
+        `isolated execution error: ${String(error)}`,
+      );
     }
+
+    // 4. Enforce toolchain version match against container's actual Lean.
+    if (!result.toolchainVersion || result.toolchainVersion !== pinnedVersion) {
+      return this.failed(
+        'toolchain_pin',
+        `Lean version mismatch: pinned ${pinnedVersion}, container ${result.toolchainVersion ?? 'unknown'}`,
+      );
+    }
+
+    const compilationPassed = result.exitCode === 0;
+
+    // 5. Parse `#print axioms` output for axiom names and sorryAx.
+    const axiomOutput = result.stdout + result.stderr;
+    const printedAxioms = parsePrintedAxioms(axiomOutput, 'solution');
+
+    // FAIL CLOSED: if axiom output is missing/unparseable, inspection fails.
+    const axiomInspectionFailed =
+      printedAxioms === null || result.exitCode !== 0;
+
+    let usesSorryAx = false;
+    let disallowedAxiomsUsed: string[] = [];
+
+    if (!axiomInspectionFailed && printedAxioms !== null) {
+      usesSorryAx = printedAxioms.includes('sorryAx');
+      disallowedAxiomsUsed = printedAxioms.filter((a) =>
+        !isAxiomAuthorized(this.policy, a),
+      );
+    }
+
+    const axiomInspectionPassed =
+      !axiomInspectionFailed &&
+      !usesSorryAx &&
+      disallowedAxiomsUsed.length === 0;
+
+    // 6. Proof completeness — reject incomplete proofs (sorry / sorryAx).
+    const incompleteProof = hasSorry(candidateText) || usesSorryAx;
+    const completenessPassed = !incompleteProof;
+
+    // 7. Mathematical relatedness — candidate must prove Target exactly.
+    //    Enforced by Lean's type checker via `def solution : Target`.
+    //    If compilation passed, the candidate proves Target.
+    const relatednessPassed = compilationPassed;
+
+    // 8. Compute outcome from actual evidence — not caller claims.
+    //    replay is NOT a passing check (independent replay not performed).
+    const outcome = determineOutcome({
+      policy: this.policy,
+      checkResults: {
+        compilation: { passed: compilationPassed },
+        kernel_acceptance: { passed: compilationPassed },
+        axiom_inspection: { passed: axiomInspectionPassed },
+        proof_completeness: { passed: completenessPassed },
+        mathematical_relatedness: { passed: relatednessPassed },
+        replay: { passed: false, reason: 'independent replay not performed' },
+      },
+      exitStatus: result.exitCode,
+      disallowedAxiomsUsed,
+      placeholdersPresent: incompleteProof || usesSorryAx,
+      timeoutExceeded: result.timedOut,
+    });
+
+    const axiomReason =
+      axiomInspectionFailed
+        ? 'axiom output missing or unparseable (fail closed)'
+        : usesSorryAx
+          ? 'proof uses sorryAx (incomplete/admitted)'
+          : disallowedAxiomsUsed.length > 0
+          ? `disallowed/unauthorized axioms: ${disallowedAxiomsUsed.join(', ')}`
+          : undefined;
+    const completenessReason = incompleteProof
+      ? 'proof contains sorry or sorryAx (incomplete)'
+      : undefined;
+
+    return {
+      outcome,
+      checkResults: {
+        compilation: { passed: compilationPassed, reason: undefined },
+        kernel_acceptance: {
+          passed: compilationPassed,
+          reason: compilationPassed ? undefined : result.stderr || result.stdout,
+        },
+        axiom_inspection: {
+          passed: axiomInspectionPassed,
+          reason: axiomReason,
+        },
+        replay: {
+          passed: false,
+          reason: 'independent replay not performed',
+        },
+        proof_completeness: {
+          passed: completenessPassed,
+          reason: completenessReason,
+        },
+        mathematical_relatedness: {
+          passed: relatednessPassed,
+          reason: relatednessPassed
+            ? undefined
+            : 'candidate does not prove the challenge target',
+        },
+      },
+      command: `lean /Verify.lean (in Daytona container)`,
+      exitStatus: result.exitCode,
+      executedAt: new Date().toISOString(),
+      executedBy: `lean-${result.toolchainVersion ?? 'unknown'}`,
+      toolchain: this.identity,
+      policy: this.policy,
+    };
   }
 
-  private failed(
+  /**
+   * Build a FAILED result from an isolated execution error.
+   */
+  private failedFromError(
+    outcome: 'INCONCLUSIVE' | 'FAILED',
     checkName: string,
     reason: string,
   ): VerificationResult {
     return {
-      outcome: 'FAILED',
+      outcome,
       checkResults: {
         [checkName]: { passed: false, reason },
         compilation: { passed: false, reason },
@@ -430,7 +376,7 @@ export class LeanVerifierProvider {
         proof_completeness: { passed: false, reason },
         mathematical_relatedness: { passed: false, reason },
       },
-      command: 'lean Verify.lean',
+      command: 'lean /Verify.lean (in Daytona container)',
       exitStatus: 1,
       executedAt: new Date().toISOString(),
       executedBy: 'lean-unknown',
@@ -438,12 +384,19 @@ export class LeanVerifierProvider {
       policy: this.policy,
     };
   }
+
+  private failed(
+    checkName: string,
+    reason: string,
+  ): VerificationResult {
+    return this.failedFromError('FAILED', checkName, reason);
+  }
 }
 
 /** Factory for the Lean verifier provider. */
 export function createLeanVerifierProvider(
-  policy?: VerificationPolicy,
-  isolatedExecutor?: IsolatedLeanExecutor,
+  policy: VerificationPolicy,
+  isolatedExecutor: IsolatedLeanExecutor,
 ): LeanVerifierProvider {
   return new LeanVerifierProvider(policy, isolatedExecutor);
 }
