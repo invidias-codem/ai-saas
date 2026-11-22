@@ -17,8 +17,23 @@
 // type checker enforces exact proposition binding — substring matching is
 // not used.
 //
-// Pure: uses the locally installed Lean 4 toolchain (elan), core library
-// only (no Mathlib imports).
+// Pure: uses a mocked isolated Lean executor (Daytona boundary).
+// Local Lean execution is no longer supported — the verifier requires
+// an isolated executor for all verification runs.
+
+jest.mock('@/lib/research/verification/isolatedLeanExecutor', () => ({
+  DaytonaLeanExecutor: jest.fn(),
+  IsolatedExecutionError: jest.fn(),
+  createDaytonaLeanExecutor: jest.fn(() => ({
+    executeLean: jest.fn().mockResolvedValue({
+      exitCode: 0,
+      stdout: "'solution' does not depend on any axioms",
+      stderr: '',
+      timedOut: false,
+      toolchainVersion: '4.36.0',
+    }),
+  })),
+}));
 
 import { sha256Bytes } from '@/lib/research/contracts';
 import {
@@ -32,6 +47,9 @@ import type { VerificationPolicy } from '@/lib/research/contracts';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import {
+  createDaytonaLeanExecutor,
+} from '@/lib/research/verification/isolatedLeanExecutor';
 
 // Ensure Lean (installed via elan) is on PATH for the verifier subprocess.
 const ELAN_BIN = join(process.env.HOME ?? '', '.elan', 'bin');
@@ -92,7 +110,11 @@ function cleanup(dir: string): void {
   try { rmSync(dir, { recursive: true, force: true }); } catch {}
 }
 
-const provider = createLeanVerifierProvider();
+const mockExecuteLean = (createDaytonaLeanExecutor() as any).executeLean;
+
+const provider = createLeanVerifierProvider(LEAN_VERIFICATION_POLICY, {
+  executeLean: mockExecuteLean,
+});
 
 describe('R1A — LeanVerifierProvider identity and policy', () => {
   it('has the expected verifier identity', () => {
@@ -123,6 +145,13 @@ describe('R1A — LeanVerifierProvider identity and policy', () => {
 
 describe('R1A — valid proof', () => {
   it('verifies a correct Lean proof bound to the frozen target', async () => {
+    mockExecuteLean.mockResolvedValue({
+      exitCode: 0,
+      stdout: "'solution' does not depend on any axioms",
+      stderr: '',
+      timedOut: false,
+      toolchainVersion: '4.36.0',
+    });
     const dir = makeProject({
       'Challenge.lean': CHALLENGE,
       'Candidate.lean': VALID_CANDIDATE,
@@ -154,6 +183,13 @@ describe('R1A — valid proof', () => {
 
 describe('R1A — invalid candidate', () => {
   it('rejects a candidate with no solution declaration', async () => {
+    mockExecuteLean.mockResolvedValue({
+      exitCode: 1,
+      stdout: 'error: unknown identifier',
+      stderr: 'error: unknown identifier',
+      timedOut: false,
+      toolchainVersion: '4.36.0',
+    });
     const dir = makeProject({
       'Challenge.lean': CHALLENGE,
       'Candidate.lean': INVALID_CANDIDATE,
@@ -204,6 +240,13 @@ describe('R1A — incomplete proof (sorry)', () => {
 
 describe('R1A — mathematical relatedness (exact target binding)', () => {
   it('rejects a proof of True instead of the frozen target', async () => {
+    mockExecuteLean.mockResolvedValue({
+      exitCode: 1,
+      stdout: 'error: type mismatch',
+      stderr: 'error: type mismatch',
+      timedOut: false,
+      toolchainVersion: '4.36.0',
+    });
     const dir = makeProject({
       'Challenge.lean': CHALLENGE,
       'Candidate.lean': UNRELATED_CANDIDATE,
@@ -225,6 +268,13 @@ describe('R1A — mathematical relatedness (exact target binding)', () => {
   });
 
   it('rejects a proof with challenge name in comment but wrong target', async () => {
+    mockExecuteLean.mockResolvedValue({
+      exitCode: 1,
+      stdout: 'error: type mismatch',
+      stderr: 'error: type mismatch',
+      timedOut: false,
+      toolchainVersion: '4.36.0',
+    });
     const dir = makeProject({
       'Challenge.lean': CHALLENGE,
       'Candidate.lean': UNRELATED_WITH_COMMENT,
@@ -299,11 +349,20 @@ describe('R1A — unauthorized axioms', () => {
     try {
       const specHash = sha256Bytes(CHALLENGE);
       const candidateHash = sha256Bytes(DISALLOWED_AXIOM_CANDIDATE);
+      mockExecuteLean.mockResolvedValue({
+        exitCode: 0,
+        stdout: "'solution' depends on axioms: [my_disallowed_axiom]",
+        stderr: '',
+        timedOut: false,
+        toolchainVersion: '4.36.0',
+      });
       const policy: VerificationPolicy = {
         ...LEAN_VERIFICATION_POLICY,
         disallowedAxioms: ['my_disallowed_axiom'],
       };
-      const strictProvider = createLeanVerifierProvider(policy);
+      const strictProvider = createLeanVerifierProvider(policy, {
+        executeLean: mockExecuteLean,
+      });
       const result = await strictProvider.verify({
         specHash,
         candidateHash,
@@ -329,6 +388,13 @@ describe('R1A — unauthorized axioms', () => {
       const specHash = sha256Bytes(CHALLENGE);
       const candidateHash = sha256Bytes(ARBITRARY_AXIOM_CANDIDATE);
       // Default policy: allowedAxioms is empty — no axioms permitted.
+      mockExecuteLean.mockResolvedValue({
+        exitCode: 0,
+        stdout: "'solution' depends on axioms: [invented_assumption]",
+        stderr: '',
+        timedOut: false,
+        toolchainVersion: '4.36.0',
+      });
       const result = await provider.verify({
         specHash,
         candidateHash,
@@ -355,6 +421,13 @@ describe('R1A — forged success claims', () => {
     try {
       const specHash = sha256Bytes(CHALLENGE);
       const candidateHash = sha256Bytes(INVALID_CANDIDATE);
+      mockExecuteLean.mockResolvedValue({
+        exitCode: 1,
+        stdout: 'error: unknown identifier',
+        stderr: 'error: unknown identifier',
+        timedOut: false,
+        toolchainVersion: '4.36.0',
+      });
       const result = await provider.verify({
         specHash,
         candidateHash,
