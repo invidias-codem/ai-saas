@@ -164,8 +164,17 @@ export class LocalSandboxRunner implements SandboxRunner {
       metadata: { executionId, language: req.language || 'sh', timeoutMs, ...req.metadata },
     });
 
-    const { command, args, fileName } = this.resolveRuntime(req.language || 'sh');
+    const resolvedLanguage = req.language || 'sh';
+    const { command, args, fileName } = this.resolveRuntime(resolvedLanguage);
     const filePath = join(scratchDir, fileName);
+
+    // Enforce memory limit via ulimit for shell-based executions.
+    // ulimit -v sets virtual memory limit (KB) inherited by child processes.
+    let effectiveCommand = req.command;
+    if (req.maxMemoryMb && resolvedLanguage === 'sh') {
+      const maxMemoryKb = Math.floor(req.maxMemoryMb * 1024);
+      effectiveCommand = `ulimit -v ${maxMemoryKb};\n${effectiveCommand}`;
+    }
 
     let stdout = '';
     let stderr = '';
@@ -247,7 +256,7 @@ export class LocalSandboxRunner implements SandboxRunner {
 
     try {
       await mkdir(scratchDir, { recursive: true, mode: 0o700 });
-      await writeFile(filePath, req.command, { mode: 0o600 });
+      await writeFile(filePath, effectiveCommand, { mode: 0o600 });
 
       // Capture source files that exist before the script executes (e.g.
       // files staged via quarantine promotion in a prior step).

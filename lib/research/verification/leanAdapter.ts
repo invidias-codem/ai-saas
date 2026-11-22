@@ -33,18 +33,20 @@
 //
 // # ponytail: temp directory cleanup is best-effort; a leaked /tmp dir is
 //   not a security boundary. Add explicit cleanup if disk pressure matters.
-// # ponytail: execution isolation (sandbox) is NOT yet implemented — Lean
-//   runs as a subprocess on the application host. Add sandboxing when
-//   untrusted candidates must be executed in production.
+// # ponytail: execution isolation via SandboxManager — untrusted Lean runs
+//   in an ephemeral scratch dir with scrubbed env, timeout, memory cap, and
+//   output buffer limit. Temp directory cleanup is handled by SandboxManager.
+//   Disk-pressure cleanup is best-effort; add explicit monitoring if needed.
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { VerifierIdentity, VerificationPolicy } from '@/lib/research/contracts';
 import { sha256Bytes } from '@/lib/research/contracts';
 import { VerificationResult, DEFAULT_VERIFICATION_POLICY } from '@/lib/research/verification/contracts';
 import { determineOutcome, isAxiomAuthorized } from '@/lib/research/verification/policy';
+import { sandboxManager } from '@/lib/execution/sandboxManager';
 
 export const LAKE_VERSION = '5.0.0';
 
@@ -85,7 +87,6 @@ const TOOLCHAIN_FILE = 'lean-toolchain';
 
 // Process execution limits (security: prevent runaway Lean processes).
 const EXEC_TIMEOUT_MS = 300_000;
-const EXEC_MAX_BUFFER_MB = 50;
 
 /**
  * Read the pinned Lean version from the lean-toolchain file.
@@ -110,7 +111,7 @@ function getLeanIdentity(): { name: string; version: string; type: 'lean' } | nu
   try {
     const output = execFileSync('lean', ['--version'], {
       encoding: 'utf8',
-      maxBuffer: EXEC_MAX_BUFFER_MB * 1024 * 1024,
+      maxBuffer: 1 * 1024 * 1024,
     }).toString();
     const match = output.match(/Lean\s*\(version\s+(\d+\.\d+\.\d+)/);
     return match ? { name: 'lean', version: match[1], type: 'lean' } : null;
@@ -128,29 +129,32 @@ function hasSorry(source: string): boolean {
 }
 
 /**
- * Run a Lean command with strict resource limits.
+ * Run `lean Verify.lean` inside the sandbox — no host credentials,
+ * restricted filesystem, enforced timeout and memory limits.
  * Returns { exitCode, stdout, stderr }.
  */
-function runLean(args: string[], cwd: string): {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-} {
-  try {
-    const stdout = execFileSync('lean', args, {
-      cwd,
-      encoding: 'utf8',
-      timeout: EXEC_TIMEOUT_MS,
-      maxBuffer: EXEC_MAX_BUFFER_MB * 1024 * 1024,
-    }).toString();
-    return { exitCode: 0, stdout, stderr: '' };
-  } catch (err) {
-    return {
-      exitCode: (err as { code?: number }).code ?? 1,
-      stdout: (err as { stdout?: string }).stdout ?? '',
-      stderr: (err as { stderr?: string }).stderr ?? '',
-    };
-  }
+async function runLeanInSandbox(
+  verifyContent: string,
+  projectDir: string,
+): Promise<{ exitCode: number; stdout: string; stderr: string; timedOut: boolean }> {
+  // Write Verify.lean into the sandbox scratch dir.
+  writeFileSync(join(projectDir, 'Verify.lean'), verifyContent);
+
+  // Run `lean Verify.lean` inside the sandbox.
+  const result = await sandboxManager.execute({
+    command: 'lean Verify.lean',
+    language: 'sh',
+    workdir: projectDir,
+    timeoutMs: EXEC_TIMEOUT_MS,
+  });
+
+  const sandboxResult = {
+    exitCode: result.exitCode ?? 1,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    timedOut: result.timedOut,
+  };
+  return sandboxResult;
 }
 
 /**
@@ -281,11 +285,7 @@ export class LeanVerifierProvider {
         '#print axioms solution',
         '',
       ].join('\n');
-      writeFileSync(join(projectDir, 'Verify.lean'), verifyContent);
-
-      // 4. Run `lean Verify.lean` — compilation + kernel acceptance +
-      //    binding check + #print axioms.
-      const result = runLean(['Verify.lean'], projectDir);
+      const result = await runLeanInSandbox(verifyContent, projectDir);
       const compilationPassed = result.exitCode === 0;
 
       // 5. Parse `#print axioms` output for axiom names and sorryAx.
@@ -335,7 +335,7 @@ export class LeanVerifierProvider {
         exitStatus: result.exitCode,
         disallowedAxiomsUsed,
         placeholdersPresent: incompleteProof || usesSorryAx,
-        timeoutExceeded: false,
+        timeoutExceeded: result.timedOut,
       });
 
       const axiomReason =
