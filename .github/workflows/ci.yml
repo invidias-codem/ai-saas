@@ -27,26 +27,33 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Install Lean toolchain
+      - name: Install elan
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p $HOME/.elan/bin
-          curl --proto '=https' --tlsv1.2 --fail --location \
-            -o /tmp/elan.tar.gz \
+          curl --proto '=https' --tlsv1.2 \
+            --fail --location --retry 3 \
+            -o "$RUNNER_TEMP/elan.tar.gz" \
             https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz
-          echo '42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  /tmp/elan.tar.gz' | sha256sum -c -
-          tar xzf /tmp/elan.tar.gz -C $HOME/.elan/bin --strip-components=1
-          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          printf '%s  %s\n' \
+            '42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63' \
+            "$RUNNER_TEMP/elan.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/elan-bootstrap"
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" \
+            -C "$RUNNER_TEMP/elan-bootstrap" elan-init
+          "$RUNNER_TEMP/elan-bootstrap/elan-init" \
+            -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: Install Lean 4 toolchain from lean-toolchain
+      - name: Install and verify Lean toolchain
+        shell: bash
         run: |
-          elan toolchain install $(cat lean-toolchain)
-          elan default $(cat lean-toolchain)
-
-      - name: Verify Lean toolchain
-        run: |
+          set -euo pipefail
+          elan toolchain install "$(cat lean-toolchain)"
+          elan default "$(cat lean-toolchain)"
           lean --version
           lake --version
+          test "$(lean --version | grep -oE '4\.36\.0')" = "4.36.0"
 
       - name: Build Workspace Packages
         run: pnpm --recursive --filter @lattice-os/core run build && pnpm --recursive --filter @lattice-os/mcp-remote run build
