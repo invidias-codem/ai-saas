@@ -29,8 +29,19 @@ jobs:
 
       - name: Install Lean toolchain
         run: |
-          curl -Proto '=https' --tlsv1.2 -sSf -L https://github.com/leanprover/elan/releases/download/v1.13.0/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz -C $HOME/.elan/bin --strip-components=1
+          set -euo pipefail
+          mkdir -p $HOME/.elan/bin
+          curl --proto '=https' --tlsv1.2 --fail --location \
+            -o /tmp/elan.tar.gz \
+            https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz
+          echo '42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63  /tmp/elan.tar.gz' | sha256sum -c -
+          tar xzf /tmp/elan.tar.gz -C $HOME/.elan/bin --strip-components=1
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Install Lean 4 toolchain from lean-toolchain
+        run: |
+          elan toolchain install $(cat lean-toolchain)
+          elan default $(cat lean-toolchain)
 
       - name: Verify Lean toolchain
         run: |
