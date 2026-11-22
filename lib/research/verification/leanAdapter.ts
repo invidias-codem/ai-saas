@@ -47,6 +47,7 @@ import { sha256Bytes } from '@/lib/research/contracts';
 import { VerificationResult, DEFAULT_VERIFICATION_POLICY } from '@/lib/research/verification/contracts';
 import { determineOutcome, isAxiomAuthorized } from '@/lib/research/verification/policy';
 import { sandboxManager } from '@/lib/execution/sandboxManager';
+import type { IsolatedLeanExecutor } from '@/lib/research/verification/isolatedLeanExecutor';
 
 export const LAKE_VERSION = '5.0.0';
 
@@ -203,9 +204,14 @@ function parsePrintedAxioms(output: string, theoremName: string): string[] | nul
  */
 export class LeanVerifierProvider {
   readonly policy: VerificationPolicy;
+  readonly isolatedExecutor?: IsolatedLeanExecutor;
 
-  constructor(policy?: VerificationPolicy) {
+  constructor(
+    policy?: VerificationPolicy,
+    isolatedExecutor?: IsolatedLeanExecutor,
+  ) {
     this.policy = policy ?? LEAN_VERIFICATION_POLICY;
+    this.isolatedExecutor = isolatedExecutor;
   }
 
   /**
@@ -285,7 +291,24 @@ export class LeanVerifierProvider {
         '#print axioms solution',
         '',
       ].join('\n');
-      const result = await runLeanInSandbox(verifyContent, projectDir);
+
+      // Use isolated Daytona container when available; otherwise local sandbox.
+      // Isolated mode is fail-closed — Daytona unavailability throws, never
+      // falls back to host process execution.
+      let result: {
+        exitCode: number;
+        stdout: string;
+        stderr: string;
+        timedOut: boolean;
+      };
+      if (this.isolatedExecutor) {
+        result = await this.isolatedExecutor.executeLean(
+          verifyContent,
+          Math.ceil(EXEC_TIMEOUT_MS / 1000),
+        );
+      } else {
+        result = await runLeanInSandbox(verifyContent, projectDir);
+      }
       const compilationPassed = result.exitCode === 0;
 
       // 5. Parse `#print axioms` output for axiom names and sorryAx.
@@ -418,6 +441,9 @@ export class LeanVerifierProvider {
 }
 
 /** Factory for the Lean verifier provider. */
-export function createLeanVerifierProvider(policy?: VerificationPolicy): LeanVerifierProvider {
-  return new LeanVerifierProvider(policy);
+export function createLeanVerifierProvider(
+  policy?: VerificationPolicy,
+  isolatedExecutor?: IsolatedLeanExecutor,
+): LeanVerifierProvider {
+  return new LeanVerifierProvider(policy, isolatedExecutor);
 }
