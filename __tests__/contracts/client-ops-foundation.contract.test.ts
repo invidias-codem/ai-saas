@@ -32,6 +32,7 @@ import {
   EXPECTED_DETERMINATIONS,
 } from '@/lib/pilots/clientOps/fixtures';
 import type { EvaluationInput, EvaluationResult, ReviewProposal } from '@/lib/pilots/clientOps/contracts';
+import { computeContentHash, checklistItemId, tenantId, workspaceId } from '@/lib/pilots/clientOps/contracts';
 
 // ── Test Helpers ───────────────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ describe('Client Operations C0 — Contract Tests', () => {
         expect(typeof span.charStart).toBe('number');
         expect(typeof span.charEnd).toBe('number');
         expect(span.charEnd).toBeGreaterThanOrEqual(span.charStart);
-        expect(span.contentHash).toMatch(/^sha256-synthetic-/);
+        expect(span.contentHash).toMatch(/^sha256:[0-9a-f]{64}$/);
       }
     });
 
@@ -177,6 +178,23 @@ describe('Client Operations C0 — Contract Tests', () => {
       expect(['received', 'uncertain']).toContain(w2Item!.status);
     });
 
+    it('cites all contradictory source revisions as evidence', () => {
+      const input = createValidInput({
+        attachments: CONTRADICTORY_ATTACHMENTS,
+      });
+      const result = evaluateEngagement(input);
+      const w2Item = result.determinations.find(d => d.itemId === 'item_income_w2');
+      expect(w2Item).toBeDefined();
+
+      // Both the original W2 and the W2C correction should be cited
+      expect(w2Item!.evidenceIds.length).toBeGreaterThanOrEqual(2);
+      // Evidence IDs must reference the actual attachment docIds
+      const hasOriginal = w2Item!.evidenceIds.some(e => e.includes('W2_Acme_2026_contradict'));
+      const hasCorrected = w2Item!.evidenceIds.some(e => e.includes('W2_Acme_2026_amended'));
+      expect(hasOriginal).toBe(true);
+      expect(hasCorrected).toBe(true);
+    });
+
     it('produces stable metrics despite contradictions', () => {
       const input = createValidInput({
         attachments: CONTRADICTORY_ATTACHMENTS,
@@ -205,6 +223,33 @@ describe('Client Operations C0 — Contract Tests', () => {
           expect(item.confidence).toBeLessThanOrEqual(0.6);
           expect(item.uncertaintyReason).toBeDefined();
         }
+      });
+
+      it('minMatches: 2 with only one keyword match stays uncertain', () => {
+        // One document contains exactly one of two required keywords → uncertain
+        const input = createValidInput({
+          checklist: {
+            ...SYNTHETIC_CHECKLIST,
+            items: [
+              {
+                id: checklistItemId('item_uncertain_test'),
+                description: 'Test item for uncertain with minMatches 2',
+                matchKeywords: ['crypto', 'digital assets', 'form 8949'],
+                minMatches: 2,
+                required: false,
+                category: 'test',
+              },
+            ],
+          },
+          clientMessage: 'We hold some crypto assets for the client.',
+          attachments: [],
+        });
+        const result = evaluateEngagement(input);
+        const det = result.determinations[0];
+        expect(det.status).toBe('uncertain');
+        expect(det.matchCount).toBe(1);
+        expect(det.confidence).toBeGreaterThanOrEqual(0.3);
+        expect(det.confidence).toBeLessThanOrEqual(0.6);
       });
     });
 
@@ -303,6 +348,23 @@ describe('Client Operations C0 — Contract Tests', () => {
           expect(e.details!.contextTenant).toBe(CROSS_TENANT_ID);
         }
       });
+    });
+
+    it('accepts forged-but-matching tenant/workspace IDs (C0 trusts input; C1 must authenticate)', () => {
+      // C0 has no server-side Clerk/storage auth — it only checks alignment
+      // between checklist and context IDs. Forged IDs that match each other
+      // pass C0 validation. This is a known gap; C1 must derive identity
+      // server-side from Clerk and storage authorization.
+      const forgedTenant = tenantId('tenant_forged_but_matching');
+      const forgedWorkspace = workspaceId('ws_forged_but_matching');
+      const input = createValidInput({
+        checklist: { ...SYNTHETIC_CHECKLIST, tenantId: forgedTenant, workspaceId: forgedWorkspace },
+        context: { tenantId: forgedTenant, workspaceId: forgedWorkspace, userId: SYNTHETIC_USER_ID },
+      });
+      // Should NOT throw — C0 accepts aligned IDs without authenticating them
+      const result = evaluateEngagement(input);
+      expect(result.tenantId).toBe(forgedTenant);
+      expect(result.workspaceId).toBe(forgedWorkspace);
     });
 
   // ════════════════════════════════════════════════════════════════════════
@@ -630,6 +692,20 @@ describe('Client Operations C0 — Contract Tests', () => {
         expect(span.charStart).toBeGreaterThanOrEqual(0);
         expect(span.charEnd).toBeGreaterThan(span.charStart);
       }
+    });
+
+    it('detects tampered source content via SHA-256 hash mismatch', () => {
+      const result = evaluateEngagement(validInput);
+      // Recompute expected hash from the actual fixture content
+      const msgSpan = result.citedEvidence.find(s => s.description.startsWith('message:'));
+      expect(msgSpan).toBeDefined();
+      // The stored contentHash must equal SHA-256 of the source content
+      expect(msgSpan!.contentHash).toBe(computeContentHash(SYNTHETIC_CLIENT_MESSAGE));
+    });
+
+    it('produces different hashes for different source content', () => {
+      expect(computeContentHash('a')).not.toBe(computeContentHash('b'));
+      expect(computeContentHash('')).not.toBe(computeContentHash('x'));
     });
   });
 });

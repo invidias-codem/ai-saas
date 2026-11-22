@@ -117,6 +117,65 @@ function extractEvidenceFromSource(
 // ── Input Validation & Sanitization ────────────────────────────────────────
 
 function validateInput(input: EvaluationInput): void {
+  // ── Strict runtime validation ──
+  // TypeScript interfaces and branded casts are compile-time only. Validate
+  // the shape and types of arbitrary input before accessing nested fields.
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    throw new ClientOpsError('MALFORMED_INPUT', 'Evaluation input must be an object', {});
+  }
+  if (typeof input.clientMessage !== 'string') {
+    throw new ClientOpsError('MALFORMED_INPUT', 'clientMessage must be a string', {});
+  }
+  if (!Array.isArray(input.attachments)) {
+    throw new ClientOpsError('MALFORMED_INPUT', 'attachments must be an array', {});
+  }
+  for (const [i, att] of input.attachments.entries()) {
+    if (att === null || typeof att !== 'object' || Array.isArray(att)) {
+      throw new ClientOpsError('MALFORMED_INPUT', `attachments[${i}] must be an object`, {});
+    }
+    if (typeof att.docId !== 'string') {
+      throw new ClientOpsError('MALFORMED_INPUT', `attachments[${i}].docId must be a string`, {});
+    }
+    if (typeof att.filename !== 'string') {
+      throw new ClientOpsError('MALFORMED_INPUT', `attachments[${i}].filename must be a string`, {});
+    }
+    if (typeof att.mimeType !== 'string') {
+      throw new ClientOpsError('MALFORMED_INPUT', `attachments[${i}].mimeType must be a string`, {});
+    }
+    if (typeof att.content !== 'string') {
+      throw new ClientOpsError('MALFORMED_INPUT', `attachments[${i}].content must be a string`, {});
+    }
+  }
+  const checklist = input.checklist;
+  if (checklist === null || typeof checklist !== 'object' || Array.isArray(checklist)) {
+    throw new ClientOpsError('MALFORMED_INPUT', 'checklist must be an object', {});
+  }
+  if (typeof checklist.engagementId !== 'string') {
+    throw new ClientOpsError('MALFORMED_INPUT', 'checklist.engagementId must be a string', {});
+  }
+  if (typeof checklist.tenantId !== 'string') {
+    throw new ClientOpsError('MALFORMED_INPUT', 'checklist.tenantId must be a string', {});
+  }
+  if (typeof checklist.workspaceId !== 'string') {
+    throw new ClientOpsError('MALFORMED_INPUT', 'checklist.workspaceId must be a string', {});
+  }
+  if (!Array.isArray(checklist.items)) {
+    throw new ClientOpsError('MALFORMED_INPUT', 'checklist.items must be an array', {});
+  }
+  const ctx = input.context;
+  if (ctx === null || typeof ctx !== 'object' || Array.isArray(ctx)) {
+    throw new ClientOpsError('MALFORMED_INPUT', 'context must be an object', {});
+  }
+  if (typeof ctx.tenantId !== 'string') {
+    throw new ClientOpsError('MALFORMED_INPUT', 'context.tenantId must be a string', {});
+  }
+  if (typeof ctx.workspaceId !== 'string') {
+    throw new ClientOpsError('MALFORMED_INPUT', 'context.workspaceId must be a string', {});
+  }
+  if (typeof ctx.userId !== 'string') {
+    throw new ClientOpsError('MALFORMED_INPUT', 'context.userId must be a string', {});
+  }
+
   // Check total input size
   let totalChars = input.clientMessage.length;
   for (const att of input.attachments) {
@@ -207,8 +266,7 @@ function validateInput(input: EvaluationInput): void {
 
 function evaluateChecklistItem(
   item: ChecklistItem,
-  sources: ExtractedEvidence[],
-  allText: string
+  sources: ExtractedEvidence[]
 ): ChecklistDetermination {
   const minMatches = item.minMatches ?? 1;
   let totalMatches = 0;
@@ -216,7 +274,9 @@ function evaluateChecklistItem(
   const matchedKeywords: string[] = [];
   let hasExclusion = false;
 
-  // Search across all source documents
+  // Search each source document once; count unique keywords per source exactly
+  // once. Do not re-search an all-text concatenation — that double-counts the
+  // same keyword occurrences already found in the individual sources.
   for (const source of sources) {
     const result = countKeywordMatches(source.fullText, item.matchKeywords, item.excludeKeywords);
     totalMatches += result.matches;
@@ -226,12 +286,6 @@ function evaluateChecklistItem(
       evidenceIds.push(source.evidenceId);
     }
   }
-
-  // Also search the client message directly
-  const msgResult = countKeywordMatches(allText, item.matchKeywords, item.excludeKeywords);
-  totalMatches += msgResult.matches;
-  matchedKeywords.push(...msgResult.matchedKeywords);
-  if (msgResult.excluded) hasExclusion = true;
 
   // Determine status
   let status: ChecklistDetermination['status'];
@@ -457,12 +511,9 @@ export function evaluateEngagement(input: EvaluationInput): EvaluationResult {
     extractEvidenceFromSource(s, input.checklist.engagementId)
   );
 
-  // Combine all text for searching
-  const allText = sources.map(s => s.content).join('\n\n');
-
-  // Evaluate each checklist item
+  // Evaluate each checklist item against sources only (no all-text concat)
   const determinations: ChecklistDetermination[] = input.checklist.items.map(item =>
-    evaluateChecklistItem(item, extractedSources, allText)
+    evaluateChecklistItem(item, extractedSources)
   );
 
   // Build cited evidence
@@ -484,14 +535,55 @@ export function evaluateEngagement(input: EvaluationInput): EvaluationResult {
 }
 
 /**
+ * Verify that a result was produced from the given input — binds a review
+ * proposal to its evaluation provenance so callers cannot pair a stale or
+ * forged result with a different engagement/tenant/workspace.
+ */
+function assertResultMatchesInput(input: EvaluationInput, result: EvaluationResult): void {
+  if (result.engagementId !== input.checklist.engagementId) {
+    throw new ClientOpsError(
+      'MALFORMED_INPUT',
+      'Review proposal result engagementId does not match input checklist engagementId',
+      { resultEngagement: result.engagementId, inputEngagement: input.checklist.engagementId }
+    );
+  }
+  if (result.tenantId !== input.context.tenantId) {
+    throw new ClientOpsError(
+      'TENANT_MISMATCH',
+      'Review proposal result tenantId does not match input context tenantId',
+      { resultTenant: result.tenantId, inputTenant: input.context.tenantId }
+    );
+  }
+  if (result.workspaceId !== input.context.workspaceId) {
+    throw new ClientOpsError(
+      'WORKSPACE_MISMATCH',
+      'Review proposal result workspaceId does not match input context workspaceId',
+      { resultWorkspace: result.workspaceId, inputWorkspace: input.context.workspaceId }
+    );
+  }
+  if (result.evaluatorVersion !== (input.evaluatorVersion ?? EVALUATOR_VERSION)) {
+    throw new ClientOpsError(
+      'MALFORMED_INPUT',
+      'Review proposal result evaluatorVersion does not match input',
+      { resultVersion: result.evaluatorVersion, inputVersion: input.evaluatorVersion ?? EVALUATOR_VERSION }
+    );
+  }
+}
+
+/**
  * Generate a review-only proposal from an evaluation result.
  * Pure, deterministic, no external effects.
+ *
+ * Validates that the supplied result was produced from the same input
+ * identity and evaluation revision before binding it to a proposal. Callers
+ * who want a single atomic call should use evaluateAndPropose instead.
  */
 export function createReviewProposal(
   input: EvaluationInput,
   result: EvaluationResult,
   tone: FollowUpDraft['tone'] = 'professional'
 ): ReviewProposal {
+  assertResultMatchesInput(input, result);
   return generateReviewProposal(input, result, tone);
 }
 

@@ -228,14 +228,11 @@ export const MAX_ATTACHMENT_CHARS = 100_000;
 export const MAX_TOTAL_CHARS = 200_000;
 
 // ── Utility: Content Hash ──────────────────────────────────────────────────
+//
+// Real SHA-256 digest of source text. Used for evidence tamper detection.
+// Not cryptographic signing — just provenance integrity for synthetic data.
+import { createHash } from 'crypto';
 
 export function computeContentHash(content: string): string {
-  // Simple deterministic hash for synthetic data — not cryptographic.
-  let hash = 0;
-  for (let i = 0; i < content.length; i++) {
-    const char = content.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash |= 0; // Convert to 32bit integer
-  }
-  return `sha256-synthetic-${Math.abs(hash).toString(16).padStart(8, '0')}`;
+  return `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`;
 }
