@@ -531,6 +531,100 @@ describe('Client Operations C0 — Contract Tests', () => {
         },
       }));
     });
+    it('rejects checklist item where matchKeywords is not an array', () => {
+      assertMalformed(createValidInput({
+        checklist: {
+          ...SYNTHETIC_CHECKLIST,
+          items: [
+            {
+              id: 'item_bad' as any,
+              description: 'Bad item',
+              matchKeywords: 'not-an-array' as any,
+              required: true,
+              category: 'test',
+            },
+          ],
+        },
+      }));
+    });
+
+    it('rejects checklist item with non-string matchKeyword', () => {
+      assertMalformed(createValidInput({
+        checklist: {
+          ...SYNTHETIC_CHECKLIST,
+          items: [
+            {
+              id: 'item_bad' as any,
+              description: 'Bad item',
+              matchKeywords: ['test', 42 as any],
+              required: true,
+              category: 'test',
+            },
+          ],
+        },
+      }));
+    });
+
+    it('rejects checklist item that is null', () => {
+      assertMalformed(createValidInput({
+        checklist: {
+          ...SYNTHETIC_CHECKLIST,
+          items: [null as any],
+        },
+      }));
+    });
+
+    it('rejects checklist item with non-string id', () => {
+      assertMalformed(createValidInput({
+        checklist: {
+          ...SYNTHETIC_CHECKLIST,
+          items: [
+            {
+              id: 42 as any,
+              description: 'Bad item',
+              matchKeywords: ['test'],
+              required: true,
+              category: 'test',
+            },
+          ],
+        },
+      }));
+    });
+
+    it('rejects checklist item with non-boolean required', () => {
+      assertMalformed(createValidInput({
+        checklist: {
+          ...SYNTHETIC_CHECKLIST,
+          items: [
+            {
+              id: 'item_bad' as any,
+              description: 'Bad item',
+              matchKeywords: ['test'],
+              required: 'yes' as any,
+              category: 'test',
+            },
+          ],
+        },
+      }));
+    });
+
+    it('rejects checklist item with excludeKeywords not an array', () => {
+      assertMalformed(createValidInput({
+        checklist: {
+          ...SYNTHETIC_CHECKLIST,
+          items: [
+            {
+              id: 'item_bad' as any,
+              description: 'Bad item',
+              matchKeywords: ['test'],
+              excludeKeywords: 'not-an-array' as any,
+              required: true,
+              category: 'test',
+            },
+          ],
+        },
+      }));
+    });
   });
 
   // ════════════════════════════════════════════════════════════════════════

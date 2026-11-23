@@ -243,11 +243,51 @@ function validateInput(input: EvaluationInput): void {
   }
 
   // Validate checklist structure
-  if (!input.checklist.items.length) {
+  if (!Array.isArray(input.checklist.items) || !input.checklist.items.length) {
     throw new ClientOpsError('MALFORMED_INPUT', 'Checklist must contain at least one item', {});
   }
 
-  for (const item of input.checklist.items) {
+  for (const [i, item] of input.checklist.items.entries()) {
+    // Validate item shape before accessing any fields — malformed items must
+    // produce a typed ClientOpsError, not an ordinary runtime TypeError.
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new ClientOpsError('MALFORMED_INPUT', `checklist.items[${i}] must be an object`, {});
+    }
+    if (typeof item.id !== 'string') {
+      throw new ClientOpsError('MALFORMED_INPUT', `checklist.items[${i}].id must be a string`, {});
+    }
+    if (typeof item.description !== 'string') {
+      throw new ClientOpsError('MALFORMED_INPUT', `checklist.items[${i}].description must be a string`, {});
+    }
+    if (!Array.isArray(item.matchKeywords)) {
+      throw new ClientOpsError('MALFORMED_INPUT', `checklist.items[${i}].matchKeywords must be an array`, {});
+    }
+    for (const [j, kw] of item.matchKeywords.entries()) {
+      if (typeof kw !== 'string') {
+        throw new ClientOpsError('MALFORMED_INPUT', `checklist.items[${i}].matchKeywords[${j}] must be a string`, {});
+      }
+    }
+    if (item.excludeKeywords !== undefined) {
+      if (!Array.isArray(item.excludeKeywords)) {
+        throw new ClientOpsError('MALFORMED_INPUT', `checklist.items[${i}].excludeKeywords must be an array`, {});
+      }
+      for (const [j, ekw] of item.excludeKeywords.entries()) {
+        if (typeof ekw !== 'string') {
+          throw new ClientOpsError('MALFORMED_INPUT', `checklist.items[${i}].excludeKeywords[${j}] must be a string`, {});
+        }
+      }
+    }
+    if (item.minMatches !== undefined && typeof item.minMatches !== 'number') {
+      throw new ClientOpsError('MALFORMED_INPUT', `checklist.items[${i}].minMatches must be a number`, {});
+    }
+    if (typeof item.required !== 'boolean') {
+      throw new ClientOpsError('MALFORMED_INPUT', `checklist.items[${i}].required must be a boolean`, {});
+    }
+    if (typeof item.category !== 'string') {
+      throw new ClientOpsError('MALFORMED_INPUT', `checklist.items[${i}].category must be a string`, {});
+    }
+
+    // Business rules (only reached when the shape is valid)
     if (!item.matchKeywords.length) {
       throw new ClientOpsError('MALFORMED_INPUT', `Checklist item ${item.id} has no matchKeywords`, {
         itemId: item.id,
