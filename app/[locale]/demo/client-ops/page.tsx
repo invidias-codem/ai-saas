@@ -4,6 +4,7 @@
 import { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { DemoNav } from './demo-nav';
+import { apiUrl } from '@/lib/pilots/clientOps/demoUrl';
 
 interface Props {
   params: Promise<{ locale: string }>;
@@ -21,10 +22,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 async function fetchDemoData(workspaceId: string) {
-  const res = await fetch(
-    `/api/demo/client-ops?workspaceId=${encodeURIComponent(workspaceId)}`,
-    { cache: 'no-store' }
-  );
+  const res = await fetch(await apiUrl('/api/demo/client-ops', { workspaceId }), {
+    cache: 'no-store',
+  });
   if (res.status === 404) notFound();
   if (res.status === 401) redirect('/sign-in');
   if (res.status === 403) notFound();
@@ -52,9 +52,9 @@ export default async function EngagementOverviewPage({ params, searchParams }: P
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
       <div className="mx-auto max-w-5xl px-6 py-8">
         <nav className="flex items-center gap-4 mb-8">
-          <DemoNav current="overview" />
+          <DemoNav current="overview" locale={locale} workspaceId={workspaceId} />
           <a
-            href="/"
+            href={`/${locale}`}
             className="ml-auto text-xs text-neutral-500 hover:text-neutral-300 underline"
           >
             Back to site

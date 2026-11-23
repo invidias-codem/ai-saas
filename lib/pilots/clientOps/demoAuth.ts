@@ -17,14 +17,12 @@ import { getWorkspaceAccess } from '@/lib/security/workspaceAccess';
 export const CLIENT_OPS_DEMO_FEATURE_FLAG = 'ENABLE_CLIENT_OPS_DEMO';
 
 /**
- * Production is defined as NODE_ENV=production or Vercel production env.
- * The demo must never activate in production even if the flag is misconfigured.
+ * Production is defined as Vercel production env only.
+ * NODE_ENV=production is also set on Vercel preview builds, so we must not
+ * gate on it — previews must be able to run the demo.
  */
 export function isProduction(): boolean {
-  return (
-    process.env.NODE_ENV === 'production' ||
-    process.env.VERCEL_ENV === 'production'
-  );
+  return process.env.VERCEL_ENV === 'production';
 }
 
 export function isClientOpsDemoEnabled(): boolean {

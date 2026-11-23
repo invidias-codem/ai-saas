@@ -4,6 +4,7 @@
 import { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { DemoNav } from '../demo-nav';
+import { apiUrl } from '@/lib/pilots/clientOps/demoUrl';
 
 interface Props {
   params: Promise<{ locale: string }>;
@@ -21,10 +22,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 async function fetchDemoData(workspaceId: string) {
-  const res = await fetch(
-    `/api/demo/client-ops/uncertainty?workspaceId=${encodeURIComponent(workspaceId)}`,
-    { cache: 'no-store' }
-  );
+  const res = await fetch(await apiUrl('/api/demo/client-ops/uncertainty', { workspaceId }), {
+    cache: 'no-store',
+  });
   if (res.status === 404) notFound();
   if (res.status === 401) redirect('/sign-in');
   if (res.status === 403) notFound();
@@ -51,7 +51,7 @@ export default async function UncertaintyPage({ params, searchParams }: Props) {
     <main className="min-h-screen bg-neutral-950 text-neutral-100">
       <div className="mx-auto max-w-5xl px-6 py-8">
         <nav className="flex items-center gap-4 mb-8">
-          <DemoNav current="uncertainty" />
+          <DemoNav current="uncertainty" locale={locale} workspaceId={workspaceId} />
         </nav>
 
         <h1 className="text-3xl font-bold tracking-tight mb-2">
