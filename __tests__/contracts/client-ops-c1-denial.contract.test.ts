@@ -112,6 +112,27 @@ describe('C1 demo routes — feature gate', () => {
     const res = await GET(makeReq('ws_owner'));
     expect(res.status).toBe(404);
   });
+
+  it('returns 404 when production is active even if feature flag is true', async () => {
+    // Simulate production environment — demo must stay off regardless of flag
+    ;(process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+    process.env.ENABLE_CLIENT_OPS_DEMO = 'true';
+    (auth as jest.Mock).mockResolvedValue({ userId: 'user_owner' });
+    (getWorkspaceAccess as jest.Mock).mockResolvedValue({
+      role: 'owner',
+      source: 'workspace_owner',
+      workspaceId: 'ws_owner',
+      userId: 'user_owner',
+      permissions: ['*'],
+    });
+
+    const { GET } = requireRoute('@/app/api/demo/client-ops/route');
+    const res = await GET(makeReq('ws_owner'));
+    expect(res.status).toBe(404);
+
+    delete (process.env as Record<string, string | undefined>).NODE_ENV;
+    delete process.env.ENABLE_CLIENT_OPS_DEMO;
+  });
 });
 
 describe('C1 demo routes — feature gate enabled', () => {

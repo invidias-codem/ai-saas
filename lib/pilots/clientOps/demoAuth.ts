@@ -3,6 +3,8 @@
 //
 // Security contract:
 //   - Feature gate ENABLE_CLIENT_OPS_DEMO must be "true" (default: off → 404, no leakage)
+//   - Production environments always fail-closed (404) regardless of the flag,
+//     so the demo cannot be accidentally activated in production.
 //   - User must be authenticated via Clerk
 //   - User must be an OWNER of the requested workspace (role === 'owner');
 //     workspace:read alone is insufficient — viewers and members also have it
@@ -14,7 +16,21 @@ import { getWorkspaceAccess } from '@/lib/security/workspaceAccess';
 
 export const CLIENT_OPS_DEMO_FEATURE_FLAG = 'ENABLE_CLIENT_OPS_DEMO';
 
+/**
+ * Production is defined as NODE_ENV=production or Vercel production env.
+ * The demo must never activate in production even if the flag is misconfigured.
+ */
+export function isProduction(): boolean {
+  return (
+    process.env.NODE_ENV === 'production' ||
+    process.env.VERCEL_ENV === 'production'
+  );
+}
+
 export function isClientOpsDemoEnabled(): boolean {
+  // Production fail-closed: never enable the demo in production, regardless
+  // of the feature flag value. Defense-in-depth against accidental activation.
+  if (isProduction()) return false;
   return process.env[CLIENT_OPS_DEMO_FEATURE_FLAG] === 'true';
 }
 
