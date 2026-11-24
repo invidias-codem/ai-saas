@@ -1,7 +1,7 @@
 # AP0_DEPENDENCY_GRAPH.md
 
 **AP0 — Infrastructure Dependencies** · RFC-0001 §13 · Lattice OS 2027
-**Source:** main @ 113e7ba6 · verified by direct file reads · 2026-11-23
+**Source:** reviewed main @ 80c49ad6c6c01f6f665b839695b6f26135041a54 (2026-11-24); earlier inventory @ 113e7ba6ae9f615c8c8cd3019735f418f5a371da. Selected paths re-read, not exhaustive runtime qualification.
 **Status:** Documentation only · no runtime changes
 
 ## 1. Dependency ordering (RFC-0001 §13)
@@ -34,14 +34,14 @@ P0/AP0: Repository evidence and consolidation (this document)
 P2 and P3 may proceed in bounded parallel after identity contracts stabilize.
 No calendar commitments inferred.
 
-## 2. Existing dependency chains (verified by code)
+## 2. Existing dependency chains (selected source evidence)
 
 ```
 Clerk auth (requireAuth)
   │
   ├── workspaceAccess (getWorkspaceAccess)
   │     │
-  │     ├── requireWorkspacePermission → all API routes
+  │     ├── requireWorkspacePermission → routes that explicitly enforce it (coverage open)
   │     │
   │     └── account/compute/guest/route.ts (admission + VM check)
   │
@@ -114,7 +114,7 @@ src-tauri/credential-broker (native)
 | Multi-agent compute scheduler | Many-to-many allocation | AP6 |
 | Governed extension improvement + rollback | Self-improvement | AP7 |
 
-## 5. Circular dependency check
+## 5. Candidate circular dependency check (not exhaustive)
 
 | Potential cycle | Resolution |
 |-----------------|------------|
@@ -129,6 +129,10 @@ src-tauri/credential-broker (native)
 |------|-------|-------------------|
 | Repository inventory complete | AP0 | This document + AP0_CURRENT_STATE/TRUST_BOUNDARIES/GAP_ANALYSIS |
 | Trust boundaries traced | AP0 | AP0_TRUST_BOUNDARIES.md |
-| Identity contracts stabilize | AP0→AP1 | AgentDefinition/AgentInstance contracts defined |
+| Identity contracts stabilize | AP1.0 before active execution | Principal/scope and delegation ADR accepted |
 | Account compute isolation qualified | AP0→AP6 | Two-connection DB races + real provider isolation evidence |
-| Native execution qualified | AP0→AP6 | Physical Mac tests (M0 doc: Intel + Apple Silicon macOS 26) |
+| Native execution qualified | AP0→AP6 | Physical supported Intel and Apple Silicon tests |
+
+## 7. Reuse paths and ordering correction
+
+Acquisition: registered Apify provider → durable ingestion → Trigger.dev acquisition task; AP4 extends rather than rebuilds. Research: verification policy → required isolated executor → Daytona adapter; specialized consumer, not another scheduler. AP1.0 identity/scope and delegation policy precede AP1.1 definitions; AP1.2 authorization before mailbox/session admission; AP1.5 integration remains inert until qualification. Approval-gated external side effects wait for AP3. The unified model/memory architecture documents introduced since 113e7ba6 must be reconciled before replacement ADRs.
