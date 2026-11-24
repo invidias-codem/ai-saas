@@ -35,17 +35,13 @@ P2 and P3 may proceed in bounded parallel after identity contracts stabilize.
 ## 3. AP1 slice plan (first implementation phase)
 
 | Slice | Deliverable | Acceptance criteria |
-|-------|-------------|---------------------|
-| AP1.1 | AgentDefinition store | Immutable versioned definitions; capability refs; limits; extension references; CRUD with versioning |
-| AP1.2 | AgentInstance | Durable identity pinned to approved revision; lifecycle registered→idle→active→waiting→idle; suspended/retired deny new work |
-| AP1.3 | Mailbox | Durable message acceptance with idempotency keys; at-most-one writer via generation fencing + checkpoint CAS; duplicate delivery expected (no exactly-once claim) |
-| AP1.4 | AgentSession | Checkpointed private execution context independent of conversation; persist checkpoints before ack; crash reconciliation; poison message quarantine |
-| AP1.5 || AP1.0 | Identity/scope and delegation ADR + pure contracts | Map trusted principal, account, workspace and DB identities; deny ambiguous scope; define grants, expiry, revocation and intersection; no schema or execution |
-| AP1.1 | Versioned agent definitions | Immutable revisions, capability refs, limits, provenance; no activation or autonomous extensions |
-| AP1.2 | Agent instance + enforceable admission | Pin approved revision; check delegated scope at admission and before use; revoke/expire; inactive instances deny work |
-| AP1.3 | Durable mailbox | Idempotency, generation fencing, bounded retries, poison quarantine; no active worker until admission is enforced |
-| AP1.4 | Agent session/checkpoint | Separate from conversation; CAS before acknowledgement; crash recovery and stale-writer rejection |
-| AP1.5 | Inert integration and qualification | Trigger.dev adapter, synthetic fixtures, two-connection concurrency and negative tests; no protected external side effects before AP3; default-off |nt authority cannot exceed delegated permissions; cannot self-grant capabilities; cannot modify enforcement; cannot select own trusted evaluator |
+|---|---|---|
+| AP1.0 | Identity/scope/delegation ADR and pure contracts | Trusted principal, account/workspace/DB mapping, grants, expiry, revocation, policy intersection; no schema/runtime changes |
+| AP1.1 | Versioned agent definitions | Immutable approved revisions, capabilities, limits, provenance |
+| AP1.2 | Agent instance and enforceable admission | Pin revision, recheck delegation and current scope, deny inactive/revoked actors |
+| AP1.3 | Durable mailbox | Idempotency, fenced writer, bounded retries, poison quarantine |
+| AP1.4 | Session/checkpoint | Separate from conversation, checkpoint CAS before ack, recovery and stale-writer rejection |
+| AP1.5 | Inert integration and qualification | Trigger adapter, synthetic tests, concurrency and denial evidence; default-off, no approval-gated effects before AP3 |
 
 ## 4. Acceptance gates (every phase, RFC §14)
 
@@ -125,3 +121,15 @@ AP1.0 acceptance: pure contract tests for foreign workspace, forged principal, i
 
 
 See [AP0.2 pinned inventory and acceptance evidence](./AP0_ACCEPTANCE_EVIDENCE.md) for enumerated paths, CI diagnosis and proposed ADR ownership. No production qualification inferred.
+
+## AP0.3 operational milestone
+
+- [AP0_AUTHORITY_MATRIX.md](./AP0_AUTHORITY_MATRIX.md)
+- [AP0_STATE_OWNERSHIP.md](./AP0_STATE_OWNERSHIP.md)
+- [AP0_QUALIFICATION_MATRIX.md](./AP0_QUALIFICATION_MATRIX.md)
+- [AP0_FAILURE_MODEL.md](./AP0_FAILURE_MODEL.md)
+- [AP0_COST_MODEL.md](./AP0_COST_MODEL.md)
+- [AP0_SYSTEM_ACCEPTANCE.md](./AP0_SYSTEM_ACCEPTANCE.md)
+- [AP0_SOURCE_AUDIT.md](./AP0_SOURCE_AUDIT.md)
+
+These proposed specifications are committed for review, not accepted runtime controls. Bounded semantic audit advances AP0 but does not close remaining source coverage or migration verification. F-01–F-03 are separately scoped security remediation candidates; no active actor integration until applicable fixes and qualification pass. Prior AP0.2 head dd7281e2 passed 187 suites/1,759 tests (156 skipped), 14 check runs successful, one skipped and PR Agent failed credential preflight; new head requires fresh CI. RFC #532 and AP0 #533 remain unapproved. AP1.0 starts only after AP0 acceptance.
