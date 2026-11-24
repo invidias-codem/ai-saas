@@ -1,19 +1,19 @@
 # AP0_CURRENT_STATE.md
 
 **AP0 — Infrastructure Inventory** · RFC-0001 · Lattice OS 2027
-**Source:** main @ 113e7ba6 · verified by direct file reads · 2026-11-23
+**Source:** reviewed main @ 80c49ad6c6c01f6f665b839695b6f26135041a54 (2026-11-24); earlier inventory @ 113e7ba6ae9f615c8c8cd3019735f418f5a371da. Selected paths re-read, not exhaustive runtime qualification.
 **Status:** Documentation only · no runtime changes
 
 ## 1. Repository baseline
 
 | Item | Value |
 |------|-------|
-| Main SHA | 113e7ba6 (fix(compute): A3.4.2 staging readiness) |
+| Main SHA (PR #533 base) | 80c49ad6c6c01f6f665b839695b6f26135041a54 |
 | RFC baseline SHA | 80c49ad6 (referenced in RFC-0001 §3) |
 | RFC PR | #532 (docs/rfc-0001-agent-native-operating-environment, draft) |
 | Related open PRs | #526 (C0 foundation), #530 (C1 demo) |
-| Open dependabot PRs | 20+ (Next, node-forge, hono, codeql, etc.) |
-| Local feature branches | 25+ (account-compute-a3-*, client-ops-*, preview-assembler, etc.) |
+| Baseline delta | Main is 17 commits ahead of 113e7ba6 (GitHub compare), including Research Plane and architecture docs. |
+| Inventory coverage | Selected paths only; full route/migration/flag coverage requires checkout-based enumeration. |
 
 ## 2. API routes (app/api/)
 
@@ -29,7 +29,7 @@
 | app/api/memory/* | Memory CRUD (episodic, preferences, scope, backfill, sync, list, delete, extend, feedback, CLI) | — | — |
 | app/api/settings/* | Partner keys, digest, keys, claim | — | — |
 
-Full route inventory: ~50 route.ts files under app/api/.
+Selected routes only. A dash means not reviewed, not unauthenticated. Conversation run listing is owner-scoped in runStore.ts.
 
 ## 3. Database migrations (supabase/migrations/)
 
@@ -54,7 +54,6 @@ Full route inventory: ~50 route.ts files under app/api/.
 | ENABLE_ACCOUNT_COMPUTE_GUEST_RUNTIME | lib/intelligence/execution/accountCompute/lifecycle.ts | false | Guest runtime |
 | ENABLE_PREVIEW_SANDBOX | lib/code-builder/sandboxAdapter.ts | false | Vercel Sandbox previews |
 | ENABLE_HEAVY_CONTEXT | lib/llm/conversationEngine.ts | true (!== 'false') | Heavy context |
-| ENABLE_JEPA | .env.local | [SENSITIVE] | JEPA model |
 | ENABLE_WEB_RESEARCH | lib/llm/conversationEngine.ts | false | Web research |
 | ENABLE_DELTA_AUDIT | lib/llm/conversationEngine.ts | false | Delta audit |
 | ENABLE_LLM_BUDGET_ENFORCEMENT | lib/budget/redisKillSwitch.ts | false | LLM budget |
@@ -65,13 +64,13 @@ Full route inventory: ~50 route.ts files under app/api/.
 
 | Component | File | Status |
 |-----------|------|--------|
-| ExecutionRuntime contracts | lib/intelligence/execution/contracts.ts | Contracts only · 6 ops · provider-neutral |
+| ExecutionRuntime contracts | lib/intelligence/execution/contracts.ts | Provider-neutral contract; adapters exist separately |
 | Decision Plane promotion gate | lib/intelligence/decision/replay/promotion.ts | Canary-eligible ≠ activation |
 | Capability manifest | lib/agents/core/capabilityManifest.ts | Weaver identity · per-request |
-| Workspace access | lib/security/workspaceAccess.ts | owner/admin/member/viewer + 14 perms |
+| Workspace access | lib/security/workspaceAccess.ts | owner/admin/member/viewer + 16 permissions |
 | Account compute VMs | supabase/migrations/20261113000000*.sql | CAS · RLS · service_role RPCs |
 | Guest compute supervisor | app/api/account/compute/guest/route.ts | Mock provider · 3 flags + real provider required |
-| Run store (read-only) | lib/ucol/continuity/runStore.ts | Owner-scoped · no creation yet |
+| Run store (read-only) | lib/ucol/continuity/runStore.ts | Owner-scoped list; other write paths require inventory |
 | Trigger.dev agent loop | src/trigger/agentLoopTask.ts | ReAct loop worker · retry policy |
 | Acquisition contracts | lib/acquisition/contracts.ts | Provider-neutral · EvidenceObjectV1 |
 | Sandbox adapter | lib/code-builder/sandboxAdapter.ts | Vercel Sandbox · default-off |
@@ -79,26 +78,25 @@ Full route inventory: ~50 route.ts files under app/api/.
 | Credential broker (native) | src-tauri/credential-broker/src/lib.rs | macOS Keychain / Windows Credential Manager / Linux Secret Service |
 | macOS desktop foundation | docs/architecture/macos-desktop-foundation.md | Evaluation-only · execution disabled |
 
-## 6. Open workstreams (local branches)
+## 6. PR reconciliation (GitHub metadata)
 
-- feat/client-ops-c0 → C0 synthetic evaluation foundation (PR #526)
-- feat/client-ops-c1 → C1 protected demo UI (PR #530, stacked on C0)
-- feat/account-compute-a3-3-rootless-guest → A3.3 rootless guest
-- feat/account-compute-a3-4-durable-leases → A3.4 durable leases
-- feat/account-compute-a3-4-reconciled → A3.4 reconciliation
-- feat/account-compute-a3-guest-supervisor → A3 guest supervisor
-- feat/account-compute-plane-contract-v1 → Account compute plane contract
-- feat/preview-assembler → Code Builder preview assembler
-- feat/research-plane-r0-contracts → Research plane R0 contracts
+- #501, #510, #512, #513, #514, #515, #518, #519: merged. Stacked merges do not individually prove main ancestry; account compute and research paths directly re-read on pinned main.
+- #526 C0: open draft, mergeable=false at inspection; #530 C1: open draft, mergeable=true, based on C0. Reconcile C0 before pilot integration.
+- #532 RFC: open draft, targets main. #533 AP0: open draft, targets main. Accept RFC before AP0; no duplicate branches.
+- Source-level default flags are not observed deployment settings. No live provider/DB/device tests performed in this review.
 
-## 7. What is NOT present
+## 7. Capabilities not established by this inventory
 
 - No Agent Actor Plane (persistent agent identities, mailboxes, sessions)
 - No Workspace Filesystem Plane (logical namespace, revision API)
 - No universal approval inbox
-- No listener/event/workflow plane beyond Trigger.dev agent loop
+- No unified tenant-defined listener/workflow registry established; existing acquisition adapters and durable ingestion must be reused.
 - No application manifest/install/export plane
 - No multi-agent compute scheduler
 - No governed self-improvement plane
-- No real provider isolation qualification (mock providers everywhere)
-- `lib/research/verification/policy.ts` referenced in RFC §3 does NOT exist
+- Real guest isolation qualification not established; guest route constructs mock provider and denies admission. Other adapters are not universally mocked.
+- Research policy exists on pinned main: lib/research/verification/policy.ts; leanAdapter.ts requires an isolated executor; isolatedLeanExecutor.ts defines Daytona execution. Real isolation evidence still required.
+
+## 8. Re-read evidence and remaining coverage
+
+Direct reads at pinned main: execution/contracts.ts, workspaceAccess.ts, capabilityManifest.ts, runStore.ts, agentLoopTask.ts, guest route, both account compute migrations, sandboxAdapter.ts, research verification policy/Lean adapter/isolated executor, Apify provider. Search also located lib/acquisition/durable/ingestion.ts and src/trigger/acquisitionIngestTask.ts. Unrechecked inventory rows are provisional. AP0 exit requires a checkout-generated complete route/schema/flag/owner/test matrix, CI evidence and maintainer sign-off; do not infer absence from this sample.
