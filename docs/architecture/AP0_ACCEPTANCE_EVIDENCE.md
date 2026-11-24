@@ -785,3 +785,8 @@ tools/agent-harnesses/supabase/agent-harness/cli_anything/supabase/tests/test_fu
 ## AP0.4 update
 
 AP0_SOURCE_AUDIT.md contains 27 additional route-source reviews and five re-read migration sources; cumulative 44/186 bounded route reviews. Source-only coverage, not execution evidence. Existing and new findings require scoped remediation. Baseline unchanged.
+
+
+## AP0.4 pass 3
+
+See AP0_SOURCE_AUDIT.md: 16 additional integration/webhook/cron route sources, cumulative 60/186. Shared signature and cron helpers reviewed. F-12–F-17 added; S1 implementation separately drafted in #534. No live verification or full route/test/flag/migration qualification.

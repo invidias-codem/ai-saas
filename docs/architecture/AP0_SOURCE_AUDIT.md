@@ -108,3 +108,44 @@ F-01 strengthened from source by proxy review; F-02/F-03 remain open. F-04/F-05 
 | 20261113000001_account_compute_guest_leases.sql | owner/workspace uniqueness, fenced lease, row locks | Apply migrations in disposable DB; validate permissions, expiry and lock-order races |
 
 Five migration files re-read (source only; some overlap previous audit). No claim that all 132 are semantically reviewed, applied, or currently deployed. No migration execution. Remaining source audit: unreviewed routes, transitive helpers/RPCs, per-method negative tests, flags, migration ledger and disposable database qualification. AP0 remains open.
+
+
+## AP0.4 — semantic audit pass 3 and parallel security work
+
+Baseline remains `80c49ad6c6c01f6f665b839695b6f26135041a54`. 16 additional distinct route files, cumulative 60/186 bounded route reviews (126 outstanding). Source-level method grouping, not complete transitive audit or live qualification. Reviewed shared cronAuth and slackVerification. No external service calls, real payments, credential reads or exploit tests.
+
+| Route under app/api/ | Methods | Source evidence (baseline lines) | Follow-up |
+|---|---|---|---|
+| integrations/slack/events/route.ts | GET/POST | POST verifies signature before processing (1223–1242); retry logs not durable dedup (1316–1407) | F-12; trace workspace authorization and GET health response |
+| integrations/slack/command/route.ts | POST | requireSlackSignature before retry processing (526–612); idempotency metadata | F-12 |
+| integrations/slack/interactivity/route.ts | GET/POST | signature verified (1056–1072); retry continues (1131–1166) | F-12; trace approval action authority |
+| integrations/telegram/webhook/route.ts | POST | bot token configuration, incoming body parsing and chat identity check (76–160); no provider request authentication observed | F-13 |
+| webhooks/stripe/route.ts | POST | configured secret; SDK constructEvent before effects (95–111) | Trace idempotency and account binding |
+| webhooks/github/route.ts | POST | HMAC validation before processing (31–43); installation lookup (76–114) | Trace provider delivery idempotency and middleware reachability |
+| webhooks/clerk/route.ts | POST | Svix verification (36–65); welcome credit upsert and deletion update (83–132) | Trace audit dedup and failure reconciliation; middleware reachability |
+| webhooks/paypal/route.ts | POST | body identifier equality check (62–67); payment insert then credit RPC (90–131) | F-14/F-15; no live exposure asserted |
+| webhooks/kofi/route.ts | POST | configured shared token (85–96); read-before-effect, ledger RPC and later marker (106–208) | F-15 |
+| webhooks/vercel-logs/route.ts | POST | query secret equality (19–23); raw log metadata stored (29–46) | F-16 |
+| cron/archive-sweep/route.ts | GET | requireCronAuth before state queries (6–8); dispatch follows state update (37–42) | Trace failed dispatch and reclaim |
+| cron/error-resolution/route.ts | GET | requireCronAuth (19–21) before redundant secret logic (23–44) | Shared helper fails closed; remove misleading fallback comments |
+| cron/vectorization-drain/route.ts | POST | requireCronAuth (46–47) | Trace worker claim/limits |
+| cron/refinery/route.ts | POST | requireCronAuth (58–59); pending status read/update/RPC | Trace concurrent claims |
+| integrations/github/callback/route.ts | GET | Clerk auth and saved state comparison/deletion (9–46) | Trace session binding/token storage |
+| integrations/slack/callback/route.ts | GET | stateless signed state timestamp (29–60), token exchange and integration RPC (63–102) | F-17 |
+
+### Additional findings / priorities
+
+| ID | Priority candidate | Source evidence and impact | Required acceptance |
+|---|---|---|---|
+| F-12 | High before durable integration | Slack event/command/interactivity handlers verify signatures and log retries but explicitly defer durable deduplication. lib/slack/slackVerification.ts:22–56 checks signature and timestamp; this alone is not a durable claim. | Durable delivery claim, bounded retries, authorization before effect; duplicate and concurrent delivery negative tests. |
+| F-13 | Urgent | Telegram webhook POST lacks observed provider request authentication; chat identity is taken from incoming update; handler has privileged administrative operations. Raw body logging also creates sensitive-data exposure risk. Proxy treats this route as public. | Verify provider authenticity before parsing/side effects; validate authorized actor, fail closed if missing configuration; redact logs, dedup updates; invalid/missing signature has no effects. Independently verify actual deployment reachability. |
+| F-14 | Urgent | PayPal webhook compares a body identifier to configured webhook ID, without observed cryptographic/provider verification before credit mutation. Proxy does not explicitly exempt PayPal; reachability and configuration unknown. | Verify authentic provider event and expected payment status, merchant, currency and amount before writes; invalid or unverified events have no effects. |
+| F-15 | High | PayPal records payment before ledger RPC; Ko-fi checks existence then performs credit/subscription updates before later marker. No route-local atomic transaction across effects; RPC internal dedup semantics not yet traced. Risks include lost credits or duplicate effects under failure/concurrency. | Inspect ledger RPC and uniqueness; transactional idempotent state machine; concurrent/retry/partial failure tests; reconciliation for existing unmatched records. No real payments in tests. |
+| F-16 | High review | Vercel log webhook accepts query-secret authentication and persists raw metadata for downstream resolution; shared cronAuth also allows query-secret fallback. URL credentials may leak through logging; untrusted log data must never be execution authority. | Header authentication, rotation and redaction plan, schema/size limits and downstream admission verification; compatibility review before removing query fallback. |
+| F-17 | High before connection expansion | Slack callback uses stateless signed state, age check, token exchange, and upsert; no observed single-use state consumption or browser-bound nonce. Issuance and provider code semantics still to trace. | Strict finite timestamp bounds, one-time state tied to initiating session and intended install, replay rejection and correct team/owner binding. |
+
+The cron helper fails closed when configured secrets are absent (lib/security/cronAuth.ts:36–67); do not misclassify the later error-resolution comment as a reachable bypass. Stripe/GitHub/Clerk signature mechanisms are positive source observations, not complete payment/integration qualifications.
+
+### Parallel remediation
+
+S1 draft PR [#534](https://github.com/invidias-codem/ai-saas/pull/534), commit `2ce9b60a884894dba7b632850f1b035ff4de3712`, directly against pinned main: F-01 workspace reads gated by current membership/owner access and path binding, F-02 owner-only harness routes with payload validation, F-06 explicit workspace/profile ownership checks. 13 mocked regression cases authored; no local execution; CI and independent review required. Cloud grant metadata is not native OS consent; live DB/RLS and races remain open. Existing CLI workspace lookup needs authenticated identity; shared conversation creation remains separate policy. Do not mark findings closed until reviewed/qualified and merged. S2 approval/promotion, S3 memory/CLI, S4 network, S5 credentials and S6 durable execution remain open. Prioritize separate Telegram/provider-payment security review in parallel with S2. No runtime changes on AP0 branch.

@@ -138,3 +138,8 @@ These proposed specifications are committed for review, not accepted runtime con
 ## AP0.4 semantic audit progress
 
 See AP0_SOURCE_AUDIT.md pass 2: 44/186 route files have bounded source review, 142 remain; five migration sources re-read, not applied. F-06–F-11 added to prior findings. Existing security hardening must be separately reviewed; full transitive method/test/flag/SQL audit and disposable verification remain open. No runtime changes or activation.
+
+
+## AP0.4 pass 3 — parallel remediation
+
+60/186 route files bounded source-reviewed, 126 outstanding. F-12–F-17 recorded. S1 security draft #534 against main independently addresses F-01/F-02/F-06; tests authored, CI and review pending. Urgent Telegram and payment authenticity candidates require separate remediation review. AP0 not accepted; no persistent actor activation.
