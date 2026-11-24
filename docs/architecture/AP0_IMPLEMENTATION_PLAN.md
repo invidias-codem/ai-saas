@@ -113,9 +113,15 @@ Client documents received
 
 - [x] Six draft artifacts exist; RFC source reopened; key PRs reconciled.
 - [x] Selected source re-read on full pinned main SHA and material discrepancies corrected.
-- [ ] Checkout-based full inventory of routes, schema/migrations, flags, owners and tests; reconcile existing model/memory docs and unified sessions.
-- [ ] Confirm current base and diff, review CI checks and obtain maintainer approval of RFC #532 then AP0 #533.
-- [ ] Assign actual ADR owners and approve AP1.0 identity and delegation acceptance criteria before code.
+- [x] Complete recursive Git tree enumeration and model/memory/session/approval overlap review.
+- [ ] Finish semantic route/auth/flag/test matrix and actual migration verification.
+- [x] Confirm current base and diagnose prior-head CI failures.
+- [ ] Verify fresh-head CI; obtain maintainer approval of RFC #532 then AP0 #533.
+- [x] Proposed ADR roles and acceptance evidence recorded.
+- [ ] Assign actual owners and approve AP1.0 criteria before code.
 - [ ] Existing live DB/provider/device qualifications tracked separately; required before enabling affected execution paths.
 
 AP1.0 acceptance: pure contract tests for foreign workspace, forged principal, insufficient delegation, expiry/revocation and disabled flags; no runtime integration, migration, external calls or production changes. Existing application/agent behavior must remain unchanged. Do not start active actor execution before AP1 admission and qualification.
+
+
+See [AP0.2 pinned inventory and acceptance evidence](./AP0_ACCEPTANCE_EVIDENCE.md) for enumerated paths, CI diagnosis and proposed ADR ownership. No production qualification inferred.

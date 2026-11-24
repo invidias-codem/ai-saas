@@ -136,3 +136,9 @@ src-tauri/credential-broker (native)
 ## 7. Reuse paths and ordering correction
 
 Acquisition: registered Apify provider → durable ingestion → Trigger.dev acquisition task; AP4 extends rather than rebuilds. Research: verification policy → required isolated executor → Daytona adapter; specialized consumer, not another scheduler. AP1.0 identity/scope and delegation policy precede AP1.1 definitions; AP1.2 authorization before mailbox/session admission; AP1.5 integration remains inert until qualification. Approval-gated external side effects wait for AP3. The unified model/memory architecture documents introduced since 113e7ba6 must be reconciled before replacement ADRs.
+
+## AP0.2 reuse edges
+
+Model Plane -> UCOL routing; Neural Memory Plane -> scoped memory/Context Sieve; conversation coordinator -> conversation_runs; unifiedSession -> workspace/artifact control; AP3 -> existing durableApprovalStore (harden before use). Actor identity/checkpoint contracts must not replace these unrelated identities.
+
+See [AP0.2 pinned inventory and acceptance evidence](./AP0_ACCEPTANCE_EVIDENCE.md) for enumerated paths, CI diagnosis and proposed ADR ownership. No production qualification inferred.

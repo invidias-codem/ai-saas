@@ -46,8 +46,8 @@ Rule from RFC §3: No competing implementation may be introduced without an expl
 | Agent Actor | Delegation policies | AP1 | Build new |
 | Workspace Filesystem | Logical resource namespace | AP2 | Build new |
 | Workspace Filesystem | Revision + permission APIs | AP2 | Build new |
-| Conversation/Approval | Universal approval inbox | AP3 | Build new |
-| Conversation/Approval | Receipt store | AP3 | Build new |
+| Conversation/Approval | Universal approval inbox | AP3 | Extend existing durable approval store; harden authorization |
+| Conversation/Approval | Effect receipts | AP3 | Reconcile existing evidence and execution receipts before building |
 | Event/Workflow | Listener registry | AP4 | Build new |
 | Event/Workflow | Workflow definition format | AP4 | Build new |
 | Application Runtime | AppDefinition manifest | AP5 | Build new |
@@ -83,3 +83,7 @@ RFC §3 rule: No competing implementation without explicit replacement ADR. No A
 | C0/C1 in main | PRs #526/#530 are draft, not merged | Security review + merge decision | Post-AP0 |
 
 The main baseline is 17 commits newer than the original inventory; review the Model Plane and Neural Memory Plane architecture docs, existing unified sessions, Slack/webhook ingestion, CLI promotion and authorization records before creating overlapping stores. No replacement or retirement ADR accepted.
+
+Model and memory RFCs are proposed, not deployed. Preserve their versioned references and scoped evidence semantics. No duplicate session or approval table without ADR.
+
+See [AP0.2 pinned inventory and acceptance evidence](./AP0_ACCEPTANCE_EVIDENCE.md) for enumerated paths, CI diagnosis and proposed ADR ownership. No production qualification inferred.

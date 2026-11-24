@@ -29,7 +29,7 @@
 | app/api/memory/* | Memory CRUD (episodic, preferences, scope, backfill, sync, list, delete, extend, feedback, CLI) | — | — |
 | app/api/settings/* | Partner keys, digest, keys, claim | — | — |
 
-Selected routes only. A dash means not reviewed, not unauthenticated. Conversation run listing is owner-scoped in runStore.ts.
+Selected route table; full path index contains 186 routes. A dash means not reviewed, not unauthenticated. Conversation run listing is owner-scoped in runStore.ts.
 
 ## 3. Database migrations (supabase/migrations/)
 
@@ -89,7 +89,7 @@ Selected routes only. A dash means not reviewed, not unauthenticated. Conversati
 
 - No Agent Actor Plane (persistent agent identities, mailboxes, sessions)
 - No Workspace Filesystem Plane (logical namespace, revision API)
-- No universal approval inbox
+- No universal approval inbox established; durable approvals already exist
 - No unified tenant-defined listener/workflow registry established; existing acquisition adapters and durable ingestion must be reused.
 - No application manifest/install/export plane
 - No multi-agent compute scheduler
@@ -100,3 +100,7 @@ Selected routes only. A dash means not reviewed, not unauthenticated. Conversati
 ## 8. Re-read evidence and remaining coverage
 
 Direct reads at pinned main: execution/contracts.ts, workspaceAccess.ts, capabilityManifest.ts, runStore.ts, agentLoopTask.ts, guest route, both account compute migrations, sandboxAdapter.ts, research verification policy/Lean adapter/isolated executor, Apify provider. Search also located lib/acquisition/durable/ingestion.ts and src/trigger/acquisitionIngestTask.ts. Unrechecked inventory rows are provisional. AP0 exit requires a checkout-generated complete route/schema/flag/owner/test matrix, CI evidence and maintainer sign-off; do not infer absence from this sample.
+
+Complete path inventory: 186 API routes, 132 Supabase migrations, 179 JS/TS tests under test directories. Semantic checks remain open.
+
+See [AP0.2 pinned inventory and acceptance evidence](./AP0_ACCEPTANCE_EVIDENCE.md) for enumerated paths, CI diagnosis and proposed ADR ownership. No production qualification inferred.

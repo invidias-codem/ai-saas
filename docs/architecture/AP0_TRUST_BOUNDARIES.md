@@ -72,7 +72,7 @@
 | Gap | RFC reference | Phase |
 |-----|---------------|-------|
 | No persistent AgentDefinition/AgentInstance store | §6 agent lifecycle | AP1 |
-| No universal approval inbox / receipt store | §8 conversations/approvals | AP3 |
+| No universal approval inbox / effect receipt store; durable approvals exist | §8 conversations/approvals | AP3 |
 | No listener registry / event subscription | §9 events/workflows | AP4 |
 | No application manifest / installable app plane | §10 applications | AP5 |
 | No multi-agent compute scheduler | §6 compute fabric | AP6 |
@@ -82,3 +82,9 @@
 ## 7. AP0 review gates
 
 The SQL uses TEXT Clerk owner IDs compared with auth.uid()::text; prove actual JWT subject mapping and service-role caller admission, not merely policy presence. Test cross-tenant denial, role change during queued work, stale leases, cancellation, duplicate delivery, secret exposure and quota exhaustion. The Research Lean adapter requires an isolated executor on pinned main; verify real network/host isolation and teardown independently. No production flag values, live tests or global absence of host fallback were established. Effective delegation must be enforced at admission and execution before actors can run; manifests are not authorization tokens.
+
+## AP0.2 approval boundary finding
+
+Pinned approval resume route performs approval-state mutation before verifying owner, and the durable store transition is not explicitly owner/expiry scoped. Source-level authorization-order issue; no live exploit tested. Scope atomic approve/deny and idempotent reads by authenticated identity and expiry, revalidate current workspace permission and action revision before execution, verify migrations and all callers, and add negative tests. Do not add new actor approval flows until remediated. Existing durable storage is not qualified authorization.
+
+See [AP0.2 pinned inventory and acceptance evidence](./AP0_ACCEPTANCE_EVIDENCE.md) for enumerated paths, CI diagnosis and proposed ADR ownership. No production qualification inferred.

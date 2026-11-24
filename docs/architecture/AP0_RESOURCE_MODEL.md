@@ -26,7 +26,7 @@ client-supplied owner field alone.
 | **WorkflowDefinition / WorkflowRun** | Versioned durable steps, persisted execution | Trigger.dev task execution and acquisition ingestion; unified definition not established | Absent · build in AP4 |
 | **Listener / Event / Signal** | Authorized subscription, immutable input, derived trigger | Acquisition contracts, Apify provider and durable ingestion; unified listener registry not established | Absent · build in AP4 |
 | **AppDefinition / AppInstallation** | Versioned portable software, tenant-scoped deployed state | `lib/code-builder/sandboxAdapter.ts` (preview only); `preview_sandboxes` table | Retain · extend to install/export |
-| **Approval / Receipt** | Exact action authorization, auditable outcome | `approvalRequest` field in agentLoopTask result; no persistent approval/receipt store | Absent · build in AP3 |
+| **Approval / Receipt** | Exact action authorization and auditable outcome | lib/execution/durableApprovalStore.ts; app/api/approval/resume/route.ts; volatile approvalStore.ts | Reuse and harden; universal inbox/effect receipts not established |
 
 ## 3. Source-level scope controls (runtime qualification pending)
 
@@ -46,7 +46,7 @@ client-supplied owner field alone.
 |--------------|------------|----------|
 | AgentDefinition revision store | Capability manifest is Weaver-only, no revision history | AP1 |
 | AgentSession checkpoint store | runStore is read-only; no checkpoint writes | AP1 |
-| Approval / Receipt persistent store | approvalRequest is ephemeral in task result | AP3 |
+| Universal approval inbox / effect receipts | Durable approval persistence exists; authorization and effect reconciliation need remediation | AP3 |
 | WorkflowDefinition graph store | No workflow definition format | AP4 |
 | Listener registry | No listener definition or event subscription | AP4 |
 | AppDefinition manifest | Code Builder builds exist but no installable app manifest | AP5 |
@@ -55,3 +55,7 @@ client-supplied owner field alone.
 ## 5. ID correlation (RFC §14)
 
 Proposed independent identifiers: tenant_id, workspace_id, initiator_id, agent_definition_id, agent_revision_id, agent_instance_id, agent_session_id, task_id, run_id, attempt_id, lease_id, event_id, receipt_id. Generation is a fencing version, not a lease ID. A conversation is not a task or tenant. Trigger.dev task/run IDs are external execution references, not agent/session identities. No existing end-to-end correlation chain is verified. AP1.0 must map account/Clerk subject, workspace ownership/membership and DB JWT subject (auth.uid()::text) explicitly; deny ambiguous mapping, including service-role paths. No DDL until the canonical mapping ADR is approved.
+
+Interactive unifiedSession identifies workspace/artifact control, not a private actor session. Preserve separate identities.
+
+See [AP0.2 pinned inventory and acceptance evidence](./AP0_ACCEPTANCE_EVIDENCE.md) for enumerated paths, CI diagnosis and proposed ADR ownership. No production qualification inferred.
