@@ -133,3 +133,8 @@ See [AP0.2 pinned inventory and acceptance evidence](./AP0_ACCEPTANCE_EVIDENCE.m
 - [AP0_SOURCE_AUDIT.md](./AP0_SOURCE_AUDIT.md)
 
 These proposed specifications are committed for review, not accepted runtime controls. Bounded semantic audit advances AP0 but does not close remaining source coverage or migration verification. F-01–F-03 are separately scoped security remediation candidates; no active actor integration until applicable fixes and qualification pass. Prior AP0.2 head dd7281e2 passed 187 suites/1,759 tests (156 skipped), 14 check runs successful, one skipped and PR Agent failed credential preflight; new head requires fresh CI. RFC #532 and AP0 #533 remain unapproved. AP1.0 starts only after AP0 acceptance.
+
+
+## AP0.4 semantic audit progress
+
+See AP0_SOURCE_AUDIT.md pass 2: 44/186 route files have bounded source review, 142 remain; five migration sources re-read, not applied. F-06–F-11 added to prior findings. Existing security hardening must be separately reviewed; full transitive method/test/flag/SQL audit and disposable verification remain open. No runtime changes or activation.

@@ -780,3 +780,8 @@ tools/agent-harnesses/supabase/agent-harness/cli_anything/supabase/tests/test_fu
 .github/workflows/windows-command-harness.yml
 ```
 
+
+
+## AP0.4 update
+
+AP0_SOURCE_AUDIT.md contains 27 additional route-source reviews and five re-read migration sources; cumulative 44/186 bounded route reviews. Source-only coverage, not execution evidence. Existing and new findings require scoped remediation. Baseline unchanged.

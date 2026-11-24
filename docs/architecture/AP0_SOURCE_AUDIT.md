@@ -41,3 +41,70 @@ AP0_ACCEPTANCE_EVIDENCE.md enumerates 186 app/api route files, 132 migration SQL
 | F-05 | High for persistent work | Agent dispatch catch returns null for inline fallback; uncertain dispatch may have been accepted. | Durable intent/operation key, reconciliation and single fenced owner before retry/fallback. |
 
 Prioritize F-01–F-03 as existing runtime security remediation, independently reviewed; no claim of successful exploitation. F-04/F-05 are future actor integration blockers, not necessarily defects in current interactive policy. Do not silently alter behavior in AP0. Remaining semantic route/test/flag audit and disposable migration verification stay open; assign owners before acceptance. No production or secret changes.
+
+
+## AP0.4 — semantic source audit, pass 2
+
+Pinned baseline unchanged. Reopened original audit, vision, proxy, exact source and relevant helpers. 27 additional distinct route files reviewed, 44/186 cumulative bounded reviews, 142 route files not yet reviewed. Method rows below group verbs; source-local evidence only, not full call-graph or negative-test qualification. Existing severity labels are candidates, not CVSS or live exposure claims.
+
+| Route under app/api/ | Methods | Source evidence (line numbers at baseline) | Follow-up |
+|---|---|---|---|
+| workspaces/route.ts | GET/POST | requireAuth; rate limit; owner filter; validates operating-profile ownership (79–201) | Trace membership initialization transaction and tests |
+| workspaces/[workspaceId]/repos/route.ts | GET/POST/DELETE | Clerk; owner-only helper (8–38); permission parameter unused | Retain stricter owner-only until role policy reviewed |
+| workspaces/[workspaceId]/ingest/route.ts | POST | Clerk; workspace owner filter (14–37) | Trace vector insertion and payload limits |
+| workspaces/[workspaceId]/search/route.ts | POST | Clerk; workspace owner check before RPC (10–46) | Verify RPC scope and cost controls |
+| workspaces/default/route.ts | GET | requireAuth and rate limit (10–12) | Trace default helper |
+| conversations/[id]/route.ts | GET/PATCH/DELETE | requireAuth/rate limit; ownership check before operations (33–246) | Review mutation scope/CAS and message reads |
+| conversations/route.ts | GET | requireAuth/rate limit (11–15) | Trace list helper |
+| conversations/new/route.ts | POST | requireAuth; caller-provided workspace/profile persisted using service role (41–71) | F-06 |
+| conversations/vault/route.ts | GET | requireAuth/rate limit (20–23) | Trace vault query |
+| memory/[id]/route.ts | DELETE/PATCH | Clerk; userId passed to deleteMemory/updateMemory (11–46) | Trace store predicates |
+| memory/delete/route.ts | POST | requireAuth/rate limit; user-scoped Firebase path (29–36) | Review retention and other stores |
+| memory/scope/route.ts | POST | requireAuth; requireOwnership; subsequent update by id (55–61) | Validate allowed scope and atomic owner predicate |
+| memory/sync/route.ts | POST | requireAuth/rate limit; conversation format only before asynchronous fetch (17–89) | F-07 |
+| memory/cli/route.ts | GET/POST | shared bearer token; request supplies user identity (6–63) | F-08 |
+| cli/stream/route.ts | GET | shared bearer; request supplies user identity; CLI workspace (43–79,182–185) | F-08; trace resume ownership |
+| operating-profiles/route.ts | GET/POST | requireAuth/rate limit; user-scoped list and insert (37–131) | Verify default profile constraints |
+| operating-profiles/default/route.ts | GET | requireAuth/rate limit (10–12) | Trace helper |
+| storage/sign/route.ts | POST | Clerk/rate limit; user-prefixed generated object path (33–39,105–111) | Verify signed URL expiry, MIME and size limits |
+| export/route.ts | POST | Clerk (13) | Trace export helpers and scope |
+| documents/[id]/preview/route.ts | GET | requireAuth; owner equality after document lookup (38–47) | Trace getDocument and shared-workspace policy |
+| files/preview/route.ts | GET/POST | GET fetches request URL before validation (95–126); proxy auth only | F-09 |
+| settings/keys/route.ts | GET/POST/DELETE | Clerk; validates provider key (73–119) | Trace encryption, storage, redaction |
+| settings/partner-keys/route.ts | GET/POST/DELETE | Clerk; workspace create/revoke permission; user-filtered list (24–148) | F-11; key lifecycle and scope delegation |
+| integrations/github/execute/route.ts | POST | Clerk; caller-owned Firebase integration; direct GitHub writes (18–90) | Review manual vs delegated action approval; explicit branch binding before actor exposure |
+| v1/tasks/[taskId]/promote/route.ts | POST | partner stream:read scope; workspace equality; separate status read and mutations (21–204) | F-10 |
+| relay/trigger/route.ts | POST | requireAuth/rate limit; caller user_id insert (13–34) | Trace command scope and runner authorization |
+| relay/exchange/route.ts | POST | userId derived from returned session (52–85) | Trace token exchange, issuer and expiry |
+
+### Middleware and database authority
+
+- proxy.ts explicitly treats workspaces, conversation APIs, CLI memory/stream and partner v1 as public for Clerk middleware purposes. The handler must independently authenticate/authorize; public classification alone is not a defect. F-01 workspace GET lacks route-local membership and identity check, and middleware does not protect it. No deployed probe performed.
+- lib/supabaseClient.ts:20–41 chooses service-role key for server-side default client when configured; RLS cannot be assumed even for imports named supabase rather than supabaseAdmin. Trace each call against its effective credential.
+- lib/api/partnerAuth.ts:110–175 verifies stored key hash, revocation, expiry, required scope and rate limit; returns stored user/workspace, not caller-selected identity. No current membership check observed in this helper. lib/api/partnerKeys.ts:73–80 contains read/write scope vocabulary but no dedicated promotion permission.
+- lib/memory/vectorStore.ts:55–75 filters by passed userId; 89–140 stores normalized passed userId. This is useful enforcement only when upstream identity is trusted.
+
+### Additional source findings
+
+| ID | Priority candidate | Evidence / consequence | Required acceptance |
+|---|---|---|---|
+| F-06 | High | app/api/conversations/new/route.ts:41–71 inserts request-supplied workspace and operating profile IDs without route-local membership or profile ownership validation. DB constraints/triggers and downstream effects need verification. | Resolve authorized workspace/profile server-side, deny foreign/mismatched IDs, no persisted invalid association. |
+| F-07 | High | app/api/memory/sync/route.ts:27–43,75–105 validates conversation ID format, then background fetch filters by conversation ID alone; default server Supabase client may use service role. Potential unauthorized source read/derived memory contamination. | Owner/workspace authorization before scheduling and at execution; scope source query; durable job admission, negative read/write tests. |
+| F-08 | High | app/api/memory/cli/route.ts:6–63 and app/api/cli/stream/route.ts:43–79 use shared bearer credential and request-selected user identity. Credential holder is not bound to a verified user scope; privileged service use must be explicitly distinguished. | Replace with per-subject or narrowly scoped service credentials; bind user/workspace, revocation/expiry; deny cross-user read/write/resume; no default pseudo-user for personal state. |
+| F-09 | High | app/api/files/preview/route.ts:95–126 fetches caller-supplied URL and buffers response before file validation, no route-local URL/redirect safety checks observed. SSRF/resource-exhaustion risk; proxy authentication is not egress authorization. | Authorized object references or centralized SSRF-safe fetch with DNS/redirect checks, bounded bytes/time, negative tests; no internal network request. |
+| F-10 | High | app/api/v1/tasks/[taskId]/promote/route.ts:21–90,174–204 accepts stream:read for promotion mutation; status read, approval insertion and status update are separate. Existing key scopes lack promotion action. | Dedicated human or explicitly authorized promotion capability, current membership, exact artifact/action digest, transaction/CAS and replay denial. Trace artifact fetch and integrity separately. |
+| F-11 | High for delegated operations | lib/api/partnerAuth.ts:110–175 checks key state but not current user/workspace membership. settings/partner-keys checks permission at issuance/revocation. Revoked membership may leave a still-active key unless other lifecycle enforcement exists; not yet traced. | Define service vs user-bound keys; revalidate membership or atomic revocation propagation, test after membership removal, expiry, key revocation. |
+
+F-01 strengthened from source by proxy review; F-02/F-03 remain open. F-04/F-05 remain future actor boundaries. Additional review candidates (not confirmed findings): direct GitHub write path must distinguish human vs autonomous grant and bind explicit branch; task promotion artifact fetch must verify provenance; source/embedding RPC and memory scope vocabulary need reconciliation. No exploit attempts, credential access, live production calls or runtime edits.
+
+### Migration source review (not application)
+
+| Migration | Observed source | Verification still required |
+|---|---|---|
+| 20260426000001_workspace_first_slice.sql | workspace ownership text, user/slug uniqueness, workspace_state foreign key, conversation workspace FK | Verify profile/workspace composite ownership or trigger constraints; FK alone does not prove membership |
+| 20260620000000_workspace_members_audit_primitives.sql | workspace+user unique membership, own-row RLS using auth.uid()::text | Map Clerk subjects to JWT; test active/revoked memberships |
+| 20261109000000_conversation_continuity.sql | owner-scoped idempotency and service-only grants; comment explicitly distinguishes Clerk and auth.uid() | Verify service caller scope and transactional run+event transitions |
+| 20261113000000_account_compute_vms.sql | unique account owner, service RPC, owner read RLS auth.uid()::text | Reconcile identity strategy with continuity; test direct authenticated access and two-connection claims |
+| 20261113000001_account_compute_guest_leases.sql | owner/workspace uniqueness, fenced lease, row locks | Apply migrations in disposable DB; validate permissions, expiry and lock-order races |
+
+Five migration files re-read (source only; some overlap previous audit). No claim that all 132 are semantically reviewed, applied, or currently deployed. No migration execution. Remaining source audit: unreviewed routes, transitive helpers/RPCs, per-method negative tests, flags, migration ledger and disposable database qualification. AP0 remains open.
