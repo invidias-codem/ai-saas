@@ -1,27 +1,27 @@
 # AP0_IMPLEMENTATION_PLAN.md
 
 **AP0 — Implementation Plan** · RFC-0001 §13 P0 · Lattice OS 2027
-**Source:** main @ 113e7ba6 · verified by direct file reads · 2026-11-23
+**Source:** reviewed main @ 80c49ad6c6c01f6f665b839695b6f26135041a54 (2026-11-24); earlier inventory @ 113e7ba6ae9f615c8c8cd3019735f418f5a371da. Selected paths re-read, not exhaustive runtime qualification.
 **Status:** Documentation only · bounded slices + acceptance criteria · no calendar commitments
 
 ## 1. AP0 deliverables (this phase)
 
 | Deliverable | File | Status |
 |-------------|------|--------|
-| Current state inventory | docs/architecture/AP0_CURRENT_STATE.md | Complete |
-| Resource model mapping | docs/architecture/AP0_RESOURCE_MODEL.md | Complete |
-| Trust boundaries matrix | docs/architecture/AP0_TRUST_BOUNDARIES.md | Complete |
-| Dependency graph | docs/architecture/AP0_DEPENDENCY_GRAPH.md | Complete |
-| Gap analysis (reuse/extend/replace/retire) | docs/architecture/AP0_GAP_ANALYSIS.md | Complete |
-| Implementation plan (this document) | docs/architecture/AP0_IMPLEMENTATION_PLAN.md | Complete |
+| Current state inventory | docs/architecture/AP0_CURRENT_STATE.md | Draft present; review pending |
+| Resource model mapping | docs/architecture/AP0_RESOURCE_MODEL.md | Draft present; review pending |
+| Trust boundaries matrix | docs/architecture/AP0_TRUST_BOUNDARIES.md | Draft present; review pending |
+| Dependency graph | docs/architecture/AP0_DEPENDENCY_GRAPH.md | Draft present; review pending |
+| Gap analysis (reuse/extend/replace/retire) | docs/architecture/AP0_GAP_ANALYSIS.md | Draft present; review pending |
+| Implementation plan (this document) | docs/architecture/AP0_IMPLEMENTATION_PLAN.md | Draft present; review pending |
 
-AP0 requires no runtime code. It is evidence and decision capture only.
+AP0 requires no runtime code. Six documents exist; sampled re-review does not establish AP0 exit or production qualification.
 
 ## 2. Phase plan (dependency-ordered)
 
 | Phase | Name | Depends on | Scope | Exit criteria |
 |-------|------|------------|-------|---------------|
-| P0/AP0 | Repository evidence and consolidation | — | Inventory, trust boundaries, dependency graph, gap analysis, this plan | All 6 AP0 documents complete; RFC-0001 architecture reviewed by maintainers |
+| P0/AP0 | Repository evidence and consolidation | — | Inventory, trust boundaries, dependency graph, gap analysis, this plan | All six reviewed; exhaustive inventory reconciled; RFC #532 accepted and AP0 #533 approved |
 | P1/AP1 | Agent Actor Plane | P0 | Persistent agent identities, definitions, mailboxes, sessions, delegation policies | AgentDefinition/AgentRevision store; AgentInstance pinned to revision; mailbox with idempotency keys; generation-fenced state transitions; no autonomous extensions |
 | P2/AP2 | Workspace Filesystem Plane | P0 + identity contracts | Logical resource namespace, revision and permission APIs | Logical paths (agents/, apps/, documents/, etc.); object-backed revision API; per-operation auth (list/read/write/rename/share/delete); path traversal denial; cross-tenant object ID denial |
 | P3/AP3 | Conversation and Approval Plane | P1 + existing run store; P2 filesystem | Conversation projections, run linkage, approval inbox, receipts | Universal inbox projects approvals/questions/exceptions; approval binds principal/tenant/workspace/action/revision/hash/limits/expiry/nonce; atomic consumption; denial/expiry/cancellation/revocation first-class; receipt store for external side effects |
@@ -40,7 +40,12 @@ P2 and P3 may proceed in bounded parallel after identity contracts stabilize.
 | AP1.2 | AgentInstance | Durable identity pinned to approved revision; lifecycle registered→idle→active→waiting→idle; suspended/retired deny new work |
 | AP1.3 | Mailbox | Durable message acceptance with idempotency keys; at-most-one writer via generation fencing + checkpoint CAS; duplicate delivery expected (no exactly-once claim) |
 | AP1.4 | AgentSession | Checkpointed private execution context independent of conversation; persist checkpoints before ack; crash reconciliation; poison message quarantine |
-| AP1.5 | Delegation policies | Agent authority cannot exceed delegated permissions; cannot self-grant capabilities; cannot modify enforcement; cannot select own trusted evaluator |
+| AP1.5 || AP1.0 | Identity/scope and delegation ADR + pure contracts | Map trusted principal, account, workspace and DB identities; deny ambiguous scope; define grants, expiry, revocation and intersection; no schema or execution |
+| AP1.1 | Versioned agent definitions | Immutable revisions, capability refs, limits, provenance; no activation or autonomous extensions |
+| AP1.2 | Agent instance + enforceable admission | Pin approved revision; check delegated scope at admission and before use; revoke/expire; inactive instances deny work |
+| AP1.3 | Durable mailbox | Idempotency, generation fencing, bounded retries, poison quarantine; no active worker until admission is enforced |
+| AP1.4 | Agent session/checkpoint | Separate from conversation; CAS before acknowledgement; crash recovery and stale-writer rejection |
+| AP1.5 | Inert integration and qualification | Trigger.dev adapter, synthetic fixtures, two-connection concurrency and negative tests; no protected external side effects before AP3; default-off |nt authority cannot exceed delegated permissions; cannot self-grant capabilities; cannot modify enforcement; cannot select own trusted evaluator |
 
 ## 4. Acceptance gates (every phase, RFC §14)
 
@@ -82,18 +87,18 @@ Client documents received
 
 **Metrics to baseline before SLOs:** completion rate, review time, cost per engagement, duplicate effects, recovery success, denied-access coverage.
 
-## 6. Open ADRs (owners + acceptance criteria to be assigned in AP0)
+## 6. Open ADRs (proposed ownership roles; maintainer assignment pending)
 
-| ADR | Decision needed |
+| ADR | Decision needed / proposed responsible role |
 |-----|-----------------|
-| Actor persistence/backend and mailbox semantics | Which backend; generation fencing; checkpoint CAS |
-| Canonical identity and resource scope mapping | Map existing IDs/tables to RFC resource model |
-| Filesystem consistency/storage | Logical namespace vs POSIX; object-backed revision API |
-| Workflow definition format and version migration | Graph vs code-defined; revision pinning |
-| Approval policy and external-effect reconciliation | Atomic consumption; ambiguous outcome handling |
-| App packaging and renderer trust | Manifest format; CSP/network constraints |
-| Placement/cost model | Tenant/task-level bounds; spend admission |
-| Tenant deletion/export | Data retention; source export |
+| Actor persistence/backend and mailbox semantics | Which backend; generation fencing; checkpoint CAS — Runtime |
+| Canonical identity and resource scope mapping | Map existing IDs/tables to RFC resource model — Security + Data |
+| Filesystem consistency/storage | Logical namespace vs POSIX; object-backed revision API — Storage |
+| Workflow definition format and version migration | Graph vs code-defined; revision pinning — Workflow |
+| Approval policy and external-effect reconciliation | Atomic consumption; ambiguous outcome handling — Security |
+| App packaging and renderer trust | Manifest format; CSP/network constraints — Application Runtime |
+| Placement/cost model | Tenant/task-level bounds; spend admission — Compute |
+| Tenant deletion/export | Data retention; source export — Data Governance |
 
 ## 7. What is explicitly NOT in scope
 
@@ -103,3 +108,14 @@ Client documents received
 - No calendar commitments inferred from dependency order
 - No vendor adoption assumption (Trigger.dev retained unless ADR demonstrates superior alternative)
 - No public sharing until #479 or verified successor
+
+## 8. AP0 exit checklist
+
+- [x] Six draft artifacts exist; RFC source reopened; key PRs reconciled.
+- [x] Selected source re-read on full pinned main SHA and material discrepancies corrected.
+- [ ] Checkout-based full inventory of routes, schema/migrations, flags, owners and tests; reconcile existing model/memory docs and unified sessions.
+- [ ] Confirm current base and diff, review CI checks and obtain maintainer approval of RFC #532 then AP0 #533.
+- [ ] Assign actual ADR owners and approve AP1.0 identity and delegation acceptance criteria before code.
+- [ ] Existing live DB/provider/device qualifications tracked separately; required before enabling affected execution paths.
+
+AP1.0 acceptance: pure contract tests for foreign workspace, forged principal, insufficient delegation, expiry/revocation and disabled flags; no runtime integration, migration, external calls or production changes. Existing application/agent behavior must remain unchanged. Do not start active actor execution before AP1 admission and qualification.
