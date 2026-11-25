@@ -1,21 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clerkClient } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
-
-// PayPal can deliver webhooks as JSON or multipart/form-data (with a form field
-// named `data` containing the JSON payload). This route handles both so it
-// matches the actual webhook payload boundary, not just JSON.
-
-const PAYPAL_WEBHOOK_ID = process.env.PAYPAL_WEBHOOK_ID;
-import { CREDITS_PER_DOLLAR, matchPack } from '@/lib/subscription/packs';
-
-const getSupabaseAdmin = () => {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-};
+import { verifyPayPalWebhook } from "@/lib/paypal/webhookVerification";
+import { CREDITS_PER_DOLLAR, matchPack } from "@/lib/subscription/packs";
 
 const eventEnvelopeSchema = z.object({
   event_type: z.string().optional(),
@@ -24,6 +10,7 @@ const eventEnvelopeSchema = z.object({
   resource: z
     .object({
       id: z.string().optional(),
+      status: z.string().optional(),
       amount: z
         .object({
           value: z.string().optional(),
@@ -38,6 +25,13 @@ const eventEnvelopeSchema = z.object({
         })
         .passthrough()
         .optional(),
+      payee: z
+        .object({
+          email: z.string().optional(),
+          merchant_id: z.string().optional(),
+        })
+        .passthrough()
+        .optional(),
     })
     .passthrough()
     .optional(),
@@ -46,7 +40,7 @@ const eventEnvelopeSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") || "";
-    let raw: any;
+    let rawBody: string;
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -54,38 +48,83 @@ export async function POST(req: NextRequest) {
       if (typeof dataField !== "string") {
         return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
       }
-      raw = JSON.parse(dataField);
+      rawBody = dataField;
     } else {
-      raw = await req.json();
+      rawBody = await req.text();
     }
 
-    const parsed = eventEnvelopeSchema.parse(raw);
+    // ── 1. Verify PayPal webhook signature BEFORE any DB writes ──
+    const headers: Record<string, string | undefined> = {};
+    req.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
 
-    const webhookId = parsed.webhook_id || parsed.id;
-    if (!PAYPAL_WEBHOOK_ID || webhookId !== PAYPAL_WEBHOOK_ID) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const verification = await verifyPayPalWebhook(headers, rawBody);
+    if (!verification.verified) {
+      return NextResponse.json(
+        { error: "Webhook verification failed", reason: verification.reason },
+        { status: 401 },
+      );
     }
+
+    // ── 2. Parse and validate the event envelope ──
+    const parsed = eventEnvelopeSchema.parse(JSON.parse(rawBody));
 
     const eventType = parsed.event_type;
     if (!eventType || eventType !== "PAYMENT.CAPTURE.COMPLETED") {
       return NextResponse.json({ status: "ignored" }, { status: 200 });
     }
 
-    const transactionId = parsed.resource?.id || parsed.id;
-    const payerEmail =
-      parsed.resource?.payer?.email_address ||
-      parsed.resource?.payer?.payer_id ||
-      "";
-
-    const rawAmount = parsed.resource?.amount?.value;
-    const amount = parseFloat(rawAmount || "0");
-    const currency = parsed.resource?.amount?.currency_code || "USD";
-
-    if (!transactionId || !payerEmail || amount <= 0) {
-      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    const resource = parsed.resource;
+    if (!resource) {
+      return NextResponse.json({ error: "Missing resource" }, { status: 400 });
     }
 
-    const supabaseAdmin = getSupabaseAdmin();
+    // ── 3. Validate capture status ──
+    if (resource.status !== "COMPLETED") {
+      return NextResponse.json(
+        { error: `Capture not completed: ${resource.status ?? 'missing'}` },
+        { status: 400 },
+      );
+    }
+
+    // ── 4. Validate currency ──
+    const currency = resource.amount?.currency_code;
+    if (!currency || currency !== "USD") {
+      return NextResponse.json(
+        { error: `Unsupported currency: ${currency ?? 'missing'}` },
+        { status: 400 },
+      );
+    }
+
+    // ── 5. Validate amount: finite, positive ──
+    const rawAmount = resource.amount?.value;
+    const amount = parseFloat(rawAmount || "0");
+    if (!isFinite(amount) || amount <= 0) {
+      return NextResponse.json(
+        { error: "Invalid amount: must be finite and positive" },
+        { status: 400 },
+      );
+    }
+
+    // ── 6. Validate transaction ID ──
+    const transactionId = resource.id || parsed.id;
+    if (!transactionId) {
+      return NextResponse.json({ error: "Missing transaction ID" }, { status: 400 });
+    }
+
+    // ── 7. Validate payer/beneficiary ──
+    const payerEmail = resource.payer?.email_address || resource.payer?.payer_id || "";
+    if (!payerEmail) {
+      return NextResponse.json({ error: "Missing payer identity" }, { status: 400 });
+    }
+
+    // ── 8. DB writes only after all validation ──
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
 
     const { error: insertError } = await supabaseAdmin
       .from("payment_events")
@@ -102,6 +141,7 @@ export async function POST(req: NextRequest) {
       throw insertError;
     }
 
+    const { clerkClient } = await import("@clerk/nextjs/server");
     const client = await clerkClient();
     const users = await client.users.getUserList({
       emailAddress: [payerEmail],
@@ -113,8 +153,7 @@ export async function POST(req: NextRequest) {
 
     const user = users.data[0];
 
-    // Credit the unified ledger (supporter_credits) — same ledger all spend
-    // paths deduct from.
+    // Credit the unified ledger (supporter_credits)
     const creditsToAdd = Math.floor(amount * CREDITS_PER_DOLLAR);
     const pack = matchPack(amount);
 
