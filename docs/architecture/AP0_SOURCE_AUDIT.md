@@ -149,3 +149,55 @@ The cron helper fails closed when configured secrets are absent (lib/security/cr
 ### Parallel remediation
 
 S1 draft PR [#534](https://github.com/invidias-codem/ai-saas/pull/534), commit `2ce9b60a884894dba7b632850f1b035ff4de3712`, directly against pinned main: F-01 workspace reads gated by current membership/owner access and path binding, F-02 owner-only harness routes with payload validation, F-06 explicit workspace/profile ownership checks. 13 mocked regression cases authored; no local execution; CI and independent review required. Cloud grant metadata is not native OS consent; live DB/RLS and races remain open. Existing CLI workspace lookup needs authenticated identity; shared conversation creation remains separate policy. Do not mark findings closed until reviewed/qualified and merged. S2 approval/promotion, S3 memory/CLI, S4 network, S5 credentials and S6 durable execution remain open. Prioritize separate Telegram/provider-payment security review in parallel with S2. No runtime changes on AP0 branch.
+
+
+## AP0.4 — semantic audit pass 4
+
+Pinned baseline unchanged: `80c49ad6c6c01f6f665b839695b6f26135041a54`. 18 additional distinct route files, cumulative 78/186 bounded route source reviews (108 outstanding). This is not a complete method/call-graph or deployed security qualification.
+
+| Route under app/api/ | Methods | Source evidence (baseline lines) | Follow-up |
+|---|---|---|---|
+| v1/tasks/route.ts | GET/POST | POST stream:read creates tasks, pseudo-user from key workspace, optional org access, internal cron branch (61–245); GET memory:read filters pseudo-user | F-19; actor admission and cost gate |
+| v1/tasks/[taskId]/stream/route.ts | GET | partner key stream:read; task query by ID and audit by trace ID, no workspace predicates (8–82) | F-18 |
+| v1/memory/route.ts | GET/POST | partner scope read/write; derived workspace pseudo-user, workspace scope (27–100) | Trace vector-store filters and revocation |
+| v1/query/route.ts | POST | query:read, workspace pseudo-user RPC/filter (26–77) | Verify RPC ACL and metering |
+| v1/stream/route.ts | POST | stream:read, workspace pseudo-user RPC/filter (27–115) | Check provider admission and bounded use |
+| v1/webhooks/route.ts | GET/POST/DELETE | webhooks:manage, key-scoped list/deactivation, HTTPS-only registration (19–108) | F-20; trace delivery |
+| v1/mcp/register/route.ts | GET/POST | Clerk/rate limits, process-local shared registry; GET maps all clients (25–116) | F-21 |
+| v1/mcp/[[...path]]/route.ts | GET/POST | Clerk/rate limits, delegates raw request to handleRequest (47–115) | Trace downstream identity and scopes |
+| v1/metrics/route.ts | GET | memory:read; workspace-scoped task/audit queries (28–62) | Verify scope and error/size bounds |
+| v1/health/route.ts | GET | authenticatePartner without required action scope (17–28) | Verify minimal status disclosure |
+| v1/docs/route.ts | GET | public API schema (221); task submission documented as stream:read | F-19; update docs with revised action policy |
+| cron/blog-weekly/route.ts | GET | requireCronAuth, second bearer check, dispatch to task route (5–32) | Trace service principal and durable operation |
+| cron/slack-indexer/route.ts | GET/POST | shared runSlackIndexerCron calls requireCronAuth (17–19,50–57) | Trace workspace and provider claims |
+| cron/jepa-training-queue/route.ts | GET | requireCronAuth, env thresholds, enqueue RPC (18–33) | Trace training provenance/eligibility |
+| cron/tool-registry-sync/route.ts | GET | requireCronAuth plus redundant header/query auth (67–80) | F-16; bound registry mutation |
+| cron/daily-digest/route.ts | GET | requireCronAuth, additional bearer check (12–15) | Verify recipients and idempotent delivery |
+| cron/profile-builder/route.ts | GET/POST | requireCronAuth on both methods (14,155); user-filtered query (181) | Trace per-user processing/retention |
+| cron/refresh-truth-scores/route.ts | GET | requireCronAuth then bearer check; refresh RPC (19–35) | Trace evidence policy and RPC privileges |
+
+### New findings / gate candidates
+
+| ID | Priority candidate | Evidence and impact | Acceptance |
+|---|---|---|---|
+| F-18 | High | v1/tasks/[taskId]/stream/route.ts:8–82 derives key workspace but queries task by ID alone and audit by trace alone. No observed per-task workspace authorization. | Verify workspace-scoped task before opening stream; scope every task/audit lookup, uniform foreign denial, revocation and no cross-tenant data tests. |
+| F-19 | High | v1/tasks/route.ts:61–245 creates and executes tasks using stream:read; documented in v1/docs. Pseudo-user is workspace derived, but read scope is not explicit execution authority. | Dedicated task-create grant, current workspace permission, bounded budget, verified service principal and durable operation key. Separate internal cron policy. |
+| F-20 | High | v1/webhooks/route.ts:19–38 validates HTTPS only; lib/api/webhooks.ts:80–120 fetches stored endpoint with timeout, no observed DNS/redirect boundary; response is fully read before truncation. | Central SSRF-safe egress and bounded responses at registration/delivery; resolve/redirect/rebind negative cases. |
+| F-21 | High | v1/mcp/register/route.ts:7–15,67–116 uses a global in-memory registry without owner attribute, authenticated GET returns all client metadata. | Owner-scoped durable client registry, list/revoke isolation, callback URI constraints, no secrets in listing. |
+| F-22 | High qualification gate | 20260904000000_canonical_state_and_genotypes.sql:81–135 declares durable approval owner RLS policies for select/insert/update/delete using auth.uid()::text; explicit client table privilege revocation not established here. | Verify actual grants and Clerk JWT mapping, make server-owned approval transitions only, reject direct client status/payload writes; disposable DB tests. |
+| F-23 | High qualification gate | Legacy root migration_refactor_credits.sql defines service-role increment RPC with optional idempotency key and a spend RPC whose auth/null and positive amount guards require verification. Current lib/credits.ts includes legacy direct increment deduction and atomic spend path. Actual effective deployed function signatures unknown. | Inventory current deployed definitions/grants, positive finite amounts, explicit null/role denial, concurrency and retry/rollback tests; no unsupported claim of exposure. |
+
+### S8 payment ledger trace (source only)
+
+- migration_refactor_credits.sql defines composite (user_id,idempotency_key) unique index and optional p_idempotency_key on increment_credits; balance update and transaction insertion occur in one function call. A duplicate key may roll back the transaction; current provider routes omit this key.
+- migration_kofi_idempotency.sql defines process_kofi_donation with a donation marker and increment_credits in one RPC; current Ko-fi route does not invoke it and also updates subscription separately. Legacy root SQL is not proof of deployed migrations.
+- migration_atomic_credits.sql defines older spend_credits with row locking and dedup. Need reconcile migration history and actual grants/function definitions before changing financial ledger. No payments or migrations executed.
+- Proposed S8 acceptance: provider event authentic, globally unique provider+event key, one transaction binds beneficiary, amount/currency, credit and subscription effects, retry-safe terminal receipt, quarantine unmatched payments and reconcile existing records. No real payment data or production writes.
+
+### Independently reviewed remediation status
+
+- S1 #534 @ 2ce9b60a: Build/Lint/Test 188 suites and 1,772 tests passed (156 skipped); new 13-test suite passed. Dedicated security workflow fails existing Research Plane test TypeScript contract errors (job 138805531030); PR Agent credential preflight fails. No merge clearance.
+- S2A #535 @ 8dc44291f4325587c8e1b34fc528790b00a911fe: scoped approval read/resolve, explicit decision, expiry and current workspace owner checks, sandbox/privileged context denial; 15 mocked cases authored. No local test run. F-03 partial mitigation; atomic membership/action binding, DB privilege qualification and effect receipts open. F-10 partner promotion separately open.
+- S7A #536 @ d07e2e7770003abd8aeff73cbd8b0ae35c20be8e: provider secret verification and private sender binding, redact incoming body; quarantine legacy engineering/blog/callback actions pending durable action binding. 10 mocked cases authored. Configuration and provider qualification required before merge/rollout, no live secret changes. F-13 partial mitigation; F-14 PayPal authenticity remains urgent.
+
+Next priority: F-18 stream tenant isolation, F-10/F-19 partner mutation authority, F-14 PayPal authenticity, S8 ledger atomicity and Research Plane compile gate. Continue remaining routes/transitive helpers/test/migration mapping. Persistent agent activation stays blocked; no production changes.

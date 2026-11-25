@@ -143,3 +143,8 @@ See AP0_SOURCE_AUDIT.md pass 2: 44/186 route files have bounded source review, 1
 ## AP0.4 pass 3 — parallel remediation
 
 60/186 route files bounded source-reviewed, 126 outstanding. F-12–F-17 recorded. S1 security draft #534 against main independently addresses F-01/F-02/F-06; tests authored, CI and review pending. Urgent Telegram and payment authenticity candidates require separate remediation review. AP0 not accepted; no persistent actor activation.
+
+
+## AP0.4 pass 4
+
+78/186 bounded route reviews; F-18–F-23 recorded. S1 #534 regression suite passes but dedicated security TypeScript and PR Agent checks fail. S2A #535 and S7A #536 are separate draft mitigation candidates; tests authored, CI/review and runtime qualification pending. S8 source trace only; verify deployed financial RPCs before changing ledger. No activation.

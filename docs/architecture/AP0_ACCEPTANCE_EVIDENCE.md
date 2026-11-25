@@ -790,3 +790,8 @@ AP0_SOURCE_AUDIT.md contains 27 additional route-source reviews and five re-read
 ## AP0.4 pass 3
 
 See AP0_SOURCE_AUDIT.md: 16 additional integration/webhook/cron route sources, cumulative 60/186. Shared signature and cron helpers reviewed. F-12–F-17 added; S1 implementation separately drafted in #534. No live verification or full route/test/flag/migration qualification.
+
+
+## AP0.4 pass 4
+
+18 additional partner API and cron routes; cumulative 78/186. Six new findings (F-18–F-23); root credit SQL and durable approval RLS source inspected, not applied. S1 tests passed; S2A/S7A independently drafted. Full audit and live qualification remain open.
