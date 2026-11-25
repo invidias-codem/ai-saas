@@ -182,6 +182,8 @@ export const envSchema = z.object({
   // withRetry() reuse the remaining budget instead of silently dropping memory.
   NIM_EMBEDDING_TIMEOUT_MS: z.coerce.number().optional().default(50_000),
 
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+
   // Billing / Payment
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
