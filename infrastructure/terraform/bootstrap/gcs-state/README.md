@@ -21,8 +21,12 @@ The exact provider version is pinned, but the signed provider lock file
 must be generated, reviewed and committed before live use. Run
 terraform providers lock with the approved platforms using the official registry;
 verify signature/trust and commit .terraform.lock.hcl. Never copy guessed
-hashes or allow unreviewed provider changes. CI currently initializes the
-candidate to qualify schema only; it is not the live apply path.
+hashes or allow unreviewed provider changes. CI generates a candidate lock for
+Linux amd64, macOS arm64/amd64 and Windows amd64 when none is tracked. It logs
+only public provider lock metadata and initializes with -lockfile=readonly.
+Once the reviewed lock is committed, CI verifies read-only initialization and
+rejects changes to that lock during cross-platform checksum verification. A
+candidate-only green run does not satisfy Gate A. CI is not the live apply path.
 
 ## Gate A — operator prerequisites (all required)
 
