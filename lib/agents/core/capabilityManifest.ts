@@ -1,3 +1,5 @@
+import { renderCognitiveExpansionInstruction, type IntellectualDepth } from '@/lib/intelligence/cognition/expansion';
+
 // lib/agents/core/capabilityManifest.ts
 // Phase 0 (#440) + Phase 1 (#442) + Phase 2A (#444): server-produced,
 // per-request capability manifest.
@@ -348,7 +350,14 @@ function renderConnectionLines(manifest: CapabilityManifest): string[] {
  * "Never deny these capabilities" and "speak authoritatively as if you
  * fetched it yourself" directives are gone.
  */
-export function buildWeaverSystemInstruction(manifest: CapabilityManifest, date: Date = new Date()): string {
+export function buildWeaverSystemInstruction(
+  manifest: CapabilityManifest,
+  date: Date = new Date(),
+  intellectualDepth?: IntellectualDepth,
+): string {
+  const expansion = intellectualDepth === undefined
+    ? ''
+    : renderCognitiveExpansionInstruction(intellectualDepth) + '\n\n';
   const dateLine = date.toLocaleDateString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -379,7 +388,7 @@ CITATION RULES:
 - Use lineage ONLY to explain WHY state changed (e.g., "X changed to Y in January"). Never cite lineage as a source.
 - If a source has lineage showing SUPERSEDES: mention the transition in your prose, then cite the current content.
 
-Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences.`;
+${expansion}Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences.`;
 }
 
 /**
