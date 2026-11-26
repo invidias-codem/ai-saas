@@ -1,0 +1,20 @@
+# Terraform generated files and potentially sensitive inputs
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.plan
+*.plan.json
+plan.json
+*.tfvars
+*.tfvars.json
+*.tfbackend
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+# Keep .terraform.lock.hcl tracked for roots with external providers.

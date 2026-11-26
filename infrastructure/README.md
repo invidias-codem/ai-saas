@@ -66,3 +66,7 @@ sudo docker compose -f docker-compose.lambda.yml up -d
 - ~7GB free for future models or larger context windows
 - Embedding server runs on CPU (sentence-transformers, ~500MB RAM)
 - Twin router runs on CPU (pure proxy, ~50MB RAM)
+
+## Infrastructure as Code (new, isolated foundation)
+
+See [Terraform foundation](terraform/README.md) and [Infrastructure Plane architecture](../docs/architecture/infrastructure-plane.md). Existing Docker/GPU deployment assets remain independently owned; the Terraform fixture does not manage them.
