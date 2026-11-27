@@ -12,7 +12,6 @@ const REQUIRED_HEADERS = [
   'paypal-cert-url',
   'paypal-transmission-id',
   'paypal-transmission-time',
-  'paypal-webhook-id',
   'paypal-transmission-sig',
 ] as const;
 
@@ -21,7 +20,6 @@ export interface PayPalWebhookHeaders {
   'paypal-cert-url': string;
   'paypal-transmission-id': string;
   'paypal-transmission-time': string;
-  'paypal-webhook-id': string;
   'paypal-transmission-sig': string;
 }
 
@@ -158,14 +156,5 @@ export async function verifyPayPalWebhook(
   }
 
   const typedHeaders = headers as unknown as PayPalWebhookHeaders;
-  // Fail closed: header webhook_id must match configured webhook_id
-  const headerWebhookId = typedHeaders['paypal-webhook-id'];
-  if (!headerWebhookId || headerWebhookId !== webhookId) {
-    return {
-      verified: false,
-      reason: 'paypal webhook_id mismatch',
-    };
-  }
-
   return verify(typedHeaders, body);
 }

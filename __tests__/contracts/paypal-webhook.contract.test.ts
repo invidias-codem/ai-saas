@@ -1,8 +1,9 @@
 // __tests__/contracts/paypal-webhook.contract.test.ts
 // PayPal webhook authenticity — contract tests.
 // Tests the default verification provider path with mocked fetch, and
-// real route-handler behavior asserting no Clerk/Supabase calls for
-// unauthenticated or invalid events. No live payment calls.
+// real route-handler behavior asserting no Clerk/Supabase credit mutations
+// for unauthenticated or invalid events. No live payment calls.
+// All PayPal API calls are mocked; real sandbox qualification is separate.
 
 process.env.PAYPAL_CLIENT_ID = 'test-client-id';
 process.env.PAYPAL_CLIENT_SECRET = 'test-client-secret';
@@ -11,12 +12,14 @@ process.env.PAYPAL_WEBHOOK_ID = 'TEST-WEBHOOK-ID';
 import { NextRequest } from "next/server";
 import { verifyPayPalWebhook } from '@/lib/paypal/webhookVerification';
 
+// Documented PayPal capture-completed webhook payload.
+// Per PayPal developer docs, capture-completed events do NOT include
+// resource.payer. The webhook_id is sourced from server config, not headers.
 const baseHeaders: Record<string, string> = {
   'paypal-auth-algo': 'SHA256withRSA',
   'paypal-cert-url': 'https://api-m.paypal.com/test-cert',
   'paypal-transmission-id': 'TEST-TRANSMISSION-ID',
   'paypal-transmission-time': '2026-01-01T00:00:00Z',
-  'paypal-webhook-id': 'TEST-WEBHOOK-ID',
   'paypal-transmission-sig': 'TEST-SIGNATURE',
 };
 
@@ -27,7 +30,6 @@ const baseBody = JSON.stringify({
     id: 'capture-1',
     status: 'COMPLETED',
     amount: { value: '10.00', currency_code: 'USD' },
-    payer: { email_address: 'buyer@example.com', payer_id: 'payer-1' },
     payee: { merchant_id: 'EXPECTED-MERCHANT-ID', email: 'merchant@example.com' },
   },
 });
@@ -83,23 +85,18 @@ describe('paypal webhook — verification fail-closed', () => {
     }
   });
 
-  it('rejects when required headers missing', async () => {
+  it('rejects when required transmission headers missing', async () => {
     const { 'paypal-transmission-sig': _, ...incomplete } = baseHeaders;
     const result = await verifyPayPalWebhook(incomplete, baseBody, makeVerify(true));
     expect(result.verified).toBe(false);
     expect(result.reason).toContain('missing paypal headers');
   });
 
-  it('rejects when header webhook_id does not match configured', async () => {
-    const original = process.env.PAYPAL_WEBHOOK_ID;
-    process.env.PAYPAL_WEBHOOK_ID = 'DIFFERENT-WEBHOOK-ID';
-    try {
-      const result = await verifyPayPalWebhook(baseHeaders, baseBody, makeVerify(true));
-      expect(result.verified).toBe(false);
-      expect(result.reason).toContain('webhook_id mismatch');
-    } finally {
-      process.env.PAYPAL_WEBHOOK_ID = original;
-    }
+  it('accepts legitimate delivery without paypal-webhook-id header', async () => {
+    // PayPal protocol: webhook_id comes from server config, not incoming headers.
+    const { 'paypal-webhook-id': _, ...headersNoWebhookId } = baseHeaders;
+    const result = await verifyPayPalWebhook(headersNoWebhookId, baseBody, makeVerify(true));
+    expect(result.verified).toBe(true);
   });
 
   it('rejects when verify function returns unverified', async () => {
@@ -238,12 +235,21 @@ describe('paypal webhook — default provider path (mocked fetch)', () => {
   });
 });
 
-describe('paypal webhook — route handler (no real Clerk/Supabase for invalid events)', () => {
+// Supabase mock for idempotency and no-credit assertions
+jest.mock("@supabase/supabase-js", () => ({
+  createClient: jest.fn(),
+}));
+
+import { createClient } from "@supabase/supabase-js";
+const mockCreateClient = jest.mocked(createClient);
+
+describe('paypal webhook — route handler (fail-closed, no credits without S8)', () => {
   beforeEach(() => {
     process.env.PAYPAL_WEBHOOK_ID = 'TEST-WEBHOOK-ID';
     process.env.PAYPAL_CLIENT_ID = 'test-client-id';
     process.env.PAYPAL_CLIENT_SECRET = 'test-client-secret';
     process.env.PAYPAL_MERCHANT_ID = 'EXPECTED-MERCHANT-ID';
+    mockCreateClient.mockReset();
   });
 
   async function postWebhook(body: string, customHeaders?: Record<string, string>) {
@@ -275,6 +281,13 @@ describe('paypal webhook — route handler (no real Clerk/Supabase for invalid e
         });
       }) as any,
     );
+  }
+
+  function mockSupabaseInsert(result: { error: null } | { error: { code: string } }) {
+    const mockInsert = jest.fn().mockResolvedValue(result);
+    const mockFrom = jest.fn().mockReturnValue({ insert: mockInsert });
+    mockCreateClient.mockReturnValue({ from: mockFrom } as any);
+    return mockInsert;
   }
 
   it('returns 401 without Clerk/Supabase when signature verification fails', async () => {
@@ -345,6 +358,19 @@ describe('paypal webhook — route handler (no real Clerk/Supabase for invalid e
     expect(res.status).toBe(400);
   });
 
+  it('returns 400 for malformed monetary value (partially numeric)', async () => {
+    mockProvider('SUCCESS');
+    const body = JSON.stringify({
+      ...JSON.parse(baseBody),
+      resource: {
+        ...JSON.parse(baseBody).resource,
+        amount: { value: '10abc', currency_code: 'USD' },
+      },
+    });
+    const res = await postWebhook(body);
+    expect(res.status).toBe(400);
+  });
+
   it('returns 400 for negative amount', async () => {
     mockProvider('SUCCESS');
     const body = JSON.stringify({
@@ -384,7 +410,7 @@ describe('paypal webhook — route handler (no real Clerk/Supabase for invalid e
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when merchant/beneficiary binding missing', async () => {
+  it('returns 400 when merchant/beneficiary binding missing (no payee)', async () => {
     mockProvider('SUCCESS');
     const body = JSON.stringify({
       ...JSON.parse(baseBody),
@@ -393,7 +419,7 @@ describe('paypal webhook — route handler (no real Clerk/Supabase for invalid e
     const res = await postWebhook(body);
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json.error).toContain('merchant/beneficiary');
+    expect(json.error).toContain('Merchant/beneficiary');
   });
 
   it('returns 400 when merchant ID does not match configured', async () => {
@@ -409,43 +435,65 @@ describe('paypal webhook — route handler (no real Clerk/Supabase for invalid e
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when transaction ID missing', async () => {
+  it('returns 400 when merchant configuration missing (fail-closed)', async () => {
+    mockProvider('SUCCESS');
+    const original = process.env.PAYPAL_MERCHANT_ID;
+    delete process.env.PAYPAL_MERCHANT_ID;
+    try {
+      const res = await postWebhook(baseBody);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error).toContain('Merchant configuration missing');
+    } finally {
+      process.env.PAYPAL_MERCHANT_ID = original;
+    }
+  });
+
+  it('returns 400 when capture ID missing (no fallback to webhook event ID)', async () => {
     mockProvider('SUCCESS');
     const body = JSON.stringify({
       ...JSON.parse(baseBody),
       resource: { ...JSON.parse(baseBody).resource, id: undefined },
-      id: undefined,
+      id: 'event-1',
     });
     const res = await postWebhook(body);
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when payer identity missing', async () => {
+  it('returns 402 settlement pending S8 when all validation passes (no credits issued)', async () => {
     mockProvider('SUCCESS');
-    const body = JSON.stringify({
-      ...JSON.parse(baseBody),
-      resource: {
-        ...JSON.parse(baseBody).resource,
-        payer: {},
-      },
-    });
-    const res = await postWebhook(body);
-    expect(res.status).toBe(400);
+    mockSupabaseInsert({ error: null });
+    const res = await postWebhook(baseBody);
+    expect(res.status).toBe(402);
+    const json = await res.json();
+    expect(json.status).toContain('Settlement pending S8');
+    // No credit mutation: insert was called once for idempotency, not for credits
+    expect(mockCreateClient).toHaveBeenCalledTimes(1);
   });
 
-  it('returns 200 for duplicate transaction (idempotent replay)', async () => {
+  it('detects duplicate delivery with two handler invocations (idempotent replay)', async () => {
     mockProvider('SUCCESS');
-    const res = await postWebhook(baseBody);
-    // First call: attempts DB insert, will fail on Supabase env missing → 500 catch
-    // Second call with same transaction_id: duplicate detection
-    expect([200, 500]).toContain(res.status);
+    const mockInsert = mockSupabaseInsert({ error: null });
+    mockInsert.mockResolvedValueOnce({ error: null });      // first: insert succeeds
+    mockInsert.mockResolvedValueOnce({ error: { code: '23505' } }); // second: duplicate
+
+    // First delivery
+    const res1 = await postWebhook(baseBody);
+    expect(res1.status).toBe(402); // settlement pending, insert succeeded
+
+    // Second delivery (duplicate)
+    const res2 = await postWebhook(baseBody);
+    expect(res2.status).toBe(200); // already processed, no double credit
+
+    // Explicit mutation assertions: insert called exactly twice, same transaction ID
+    expect(mockInsert).toHaveBeenCalledTimes(2);
+    expect(mockInsert).toHaveBeenCalledWith({ transaction_id: 'capture-1', amount: '10 USD' });
   });
 
-  it('does not credit when Supabase/Clerk unavailable after verification', async () => {
+  it('does not credit when Supabase unavailable after verification', async () => {
     mockProvider('SUCCESS');
+    // createClient returns undefined (default jest.fn() return) → insert throws → 500
     const res = await postWebhook(baseBody);
-    // Without Supabase env, the DB insert will throw → caught → 500
-    // No credit mutation occurs because Supabase is not configured
     expect(res.status).toBe(500);
   });
 });
