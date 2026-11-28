@@ -32,6 +32,22 @@ AP0 requires no runtime code. Six documents exist; sampled re-review does not es
 
 P2 and P3 may proceed in bounded parallel after identity contracts stabilize.
 
+### Infrastructure workstream alignment (reconciliation)
+
+Retain the provider-neutral Terraform management foundation (#542), with GCP
+state bootstrap (#543) as an optional provider-specific child. TF-1A.1P compares
+all-in cost and qualified security capabilities before any provider is selected.
+Existing account compute and research runtime contracts remain authoritative.
+Terraform provisions durable foundations/templates; the runtime broker owns
+individual authorized allocations, lease fencing, expiration and reconciliation.
+
+The integration order is: repaired CI baseline (#541); independently reviewed
+security remediation candidates (combined test evidence in #546); management
+foundation (#542); provider economics/qualification; approved state and identity
+bootstrap; hardened image and live workload qualification; governed runtime
+broker. These are dependency and acceptance gates, not permission to merge,
+attach a cloud account, provision resources or enable production behavior.
+
 ## 3. AP1 slice plan (first implementation phase)
 
 | Slice | Deliverable | Acceptance criteria |
