@@ -16,10 +16,12 @@ variable "environment" {
 
 resource "terraform_data" "ownership" {
   input = {
-    environment      = var.environment
-    management_plane = "terraform"
-    runtime_owner    = "lattice-execution-plane"
-    cloud_mutations  = false
+    environment         = var.environment
+    management_plane    = "terraform"
+    runtime_owner       = "lattice-execution-plane"
+    cloud_mutations     = false
+    provider_selected   = false
+    provider_candidates = ["gcp", "oci", "digitalocean"]
   }
 }
 

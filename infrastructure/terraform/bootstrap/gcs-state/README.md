@@ -94,3 +94,12 @@ Record each gate's evidence and obtain operator acceptance before IP2.
 References:
 - https://developer.hashicorp.com/terraform/language/backend/gcs
 - https://docs.cloud.google.com/docs/terraform/resource-management/store-state
+
+## Reconciliation (TF-1A)
+
+The candidate Google 7.30.0 cross-platform lockfile from TF-1A has been
+carried into this canonical root. It was generated with Terraform 1.12.2;
+CI must independently verify it with repository-pinned 1.16.7. Signing-key
+trust and provider review remain required. This stack is a candidate only:
+provider selection, project naming and state-writer scope must be reconciled
+with TF-1A.1 before live use. No cloud attachment or apply authorized.

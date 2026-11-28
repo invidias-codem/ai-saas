@@ -29,3 +29,14 @@ operator-controlled state and credentials.
 Do not commit any state, saved plans, real tfvars, backend config, credentials,
 or plan JSON. Keep provider .terraform.lock.hcl files tracked when introduced.
 No real cloud state backend, apply, import or destroy is authorized by IP1a.
+
+## Provider qualification and consolidation
+
+This root remains the canonical provider-neutral fixture and does not select a
+cloud. GCP (#543), OCI and DigitalOcean are candidates, not qualified adapters.
+Complete TF-1A.1P (economics and security evidence) before provider selection,
+account attachment or live state bootstrap. Keep each provider root separate;
+do not add a second GCS state implementation. The earlier TF-1A/TF-1A.1 local
+packages used Terraform 1.12.2; the repository fixture uses 1.16.7. Revalidate
+ported roots with the repository-pinned CLI and their reviewed lockfiles. No
+live apply or credential changes are authorized by this reconciliation.

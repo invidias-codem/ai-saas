@@ -54,7 +54,8 @@ identifiers or credentials belong in this public repository inventory.
 | --- | --- | --- |
 | IP0 | repository-derived assessment | live read-only inventory, owners, dependency graph and provider schema verification; not complete |
 | IP1a | local Terraform contract fixture and CI | format, initialization, validate, plan-only tests pass |
-| IP1b | dedicated nonproduction remote state bootstrap | encrypted/versioned GCS backend, public access blocked, least privilege, lock contention and recovery test; explicit operator approval |
+| TF-1A.1P | provider economics and capability qualification | compare qualified total cost, VM isolation, resource controls, identity, state, residency, teardown and availability; no provider selected |
+| IP1b | dedicated nonproduction remote state bootstrap | protected backend for selected provider, public access blocked, least privilege, lock contention and recovery test; explicit operator approval; GCS is one candidate |
 | IP2 | import one low-risk nonproduction resource | import supported; no unintended create/update/delete/replace in reviewed plan; independent provider read |
 | IP3 | reusable environment modules | isolated state, credentials, budget, deployment smoke checks |
 | IP4 | governed plan/apply and drift | authenticated approval bound to exact saved plan digest, commit, state lineage/serial, target and expiry; destructive/unknown operations denied; independent receipt |
@@ -87,8 +88,21 @@ plan plus data backup/restore where applicable.
 
 ## First live pilot
 
-After IP1a CI and IP0 live inventory are accepted, request a dedicated
-nonproduction GCP project and approve a cost ceiling. Review backend bootstrap
-HCL and credentials before applying it. Demonstrate state locking, version
-recovery and independent resource read. No production resource is imported
-before this pilot passes.
+After IP1a CI and IP0 live inventory are accepted, complete TF-1A.1P before
+attaching a cloud account. Compare GCP, OCI and DigitalOcean using equivalent
+qualified workloads, all-in costs (including storage, boot, idle, networking
+and teardown), effective IAM, guest isolation, aggregate resource controls,
+region/residency and capacity. Record observed evidence separately from
+advertised features and prices. A cheap but unqualified provider is ineligible.
+The selected backend and execution provider need not be the same; each trust
+boundary and cost must be qualified independently.
+
+#542 is the provider-neutral parent; #543 is the GCP candidate only. Keep a
+single canonical GCS bootstrap, with other providers in separate roots. The
+TF-1A/TF-1A.1 review packages are inputs for incremental reconciliation, not
+accepted live configurations. Reconcile project IDs, state writer and execution
+identity scopes, approved budgets and locked toolchains before live adoption.
+Do not enable federation, create accounts or apply plans during comparison.
+Once provider and spend are explicitly approved, demonstrate backend locking,
+version recovery and independent resource read. No production resource is
+imported before this pilot passes.

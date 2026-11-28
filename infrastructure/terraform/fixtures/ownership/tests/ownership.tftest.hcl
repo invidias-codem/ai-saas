@@ -15,6 +15,11 @@ run "sandbox_ownership" {
     condition     = output.ownership.cloud_mutations == false
     error_message = "The fixture must not advertise live cloud mutations."
   }
+
+  assert {
+    condition     = output.ownership.provider_selected == false && toset(output.ownership.provider_candidates) == toset(["gcp", "oci", "digitalocean"])
+    error_message = "Provider candidates must remain unselected until qualification."
+  }
 }
 
 run "reject_production" {
