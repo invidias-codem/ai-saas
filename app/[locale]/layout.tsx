@@ -1,24 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import localFont from "next/font/local";
 import "../globals.css";
-import { ClerkProvider } from "@clerk/nextjs";
-import { env } from "@/lib/env";
-
-import { ThemeProvider } from "@/components/theme-provider";
-import { ModalProvider } from "@/components/modal-provider";
-import { DesktopAuthProvider } from "@/components/providers/DesktopAuthProvider";
 import { NextIntlClientProvider } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { locales } from '@/i18n';
 import { getSiteUrl } from '@/lib/site-url';
-import { Analytics } from "@vercel/analytics/react";
-
-const inter = localFont({
-  src: "../fonts/InterVariable.woff2",
-  variable: "--font-inter",
-  weight: "100 900",
-  display: "swap",
-});
 
 export const viewport: Viewport = {
   themeColor: [
@@ -113,47 +98,8 @@ export default async function LocaleLayout({
   const messages = (await import(`@/messages/${locale}.json`)).default;
 
   return (
-    <html lang={locale} suppressHydrationWarning={true}>
-      <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
-        <ClerkProvider
-          publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}
-          appearance={{
-            variables: {
-              colorPrimary: "var(--lattice-verdigris)",
-              colorPrimaryForeground: "var(--lattice-on-verdigris)",
-              colorForeground: "var(--lattice-text)",
-              colorMutedForeground: "var(--lattice-text-muted)",
-              colorMuted: "var(--lattice-chrome)",
-              colorNeutral: "var(--lattice-text)",
-              colorBackground: "var(--lattice-panel)",
-              colorInput: "var(--lattice-canvas)",
-              colorInputForeground: "var(--lattice-text)",
-              colorBorder: "var(--lattice-control-border)",
-              colorRing: "var(--lattice-focus)",
-              colorDanger: "var(--lattice-danger)",
-              colorWarning: "var(--lattice-warning)",
-              colorSuccess: "var(--lattice-verdigris)",
-              borderRadius: "var(--radius)",
-            },
-          }}
-        >
-          <NextIntlClientProvider locale={locale} messages={messages}>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem={true}
-              disableTransitionOnChange={true}
-            >
-              <ModalProvider>
-                <DesktopAuthProvider>
-                  {children}
-                </DesktopAuthProvider>
-              </ModalProvider>
-              <Analytics />
-            </ThemeProvider>
-          </NextIntlClientProvider>
-        </ClerkProvider>
-      </body>
-    </html>
+    <NextIntlClientProvider locale={locale} messages={messages}>
+      {children}
+    </NextIntlClientProvider>
   );
 }
