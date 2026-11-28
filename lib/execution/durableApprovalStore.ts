@@ -63,6 +63,9 @@ export async function registerDurableApproval(
     approvalId?: string;
   }
 ): Promise<string> {
+  if (!input.userId || input.context.userId !== input.userId || (input.context.workspaceId ?? null) !== (input.workspaceId ?? null)) {
+    throw new Error('Approval context scope mismatch');
+  }
   const admin = assertAdmin();
   const approvalId = input.approvalId ?? crypto.randomUUID();
 
@@ -85,55 +88,36 @@ export async function registerDurableApproval(
   return approvalId;
 }
 
-/**
- * Atomically claim a PENDING approval as APPROVED. Returns the claimed record,
- * or null when it was already resolved/expired (prevents double execution).
- */
-export async function approveDurable(approvalId: string): Promise<DurableApprovalRecord | null> {
-  const admin = assertAdmin();
-  const { data, error } = await admin
-    .from('durable_approvals')
-    .update({ status: 'APPROVED' })
+/** Owner-scoped, unexpired pending transition; no unscoped mutation API. */
+async function resolveDurable(approvalId: string, userId: string, status: 'APPROVED' | 'REJECTED'): Promise<DurableApprovalRecord | null> {
+  if (!userId || !approvalId) return null;
+  const { data, error } = await assertAdmin().from('durable_approvals')
+    .update({ status })
     .eq('approval_id', approvalId)
+    .eq('user_id', userId)
     .eq('status', 'PENDING')
-    .select('*')
-    .single();
-
-  if (error || !data) return null;
-  return mapRow(data);
-}
-
-/** Mark a pending approval as REJECTED (idempotent). */
-export async function rejectDurable(approvalId: string): Promise<boolean> {
-  const admin = assertAdmin();
-  const { error } = await admin
-    .from('durable_approvals')
-    .update({ status: 'REJECTED' })
-    .eq('approval_id', approvalId)
-    .eq('status', 'PENDING');
-  return !error;
-}
-
-/** Drop a pending approval (denial timeout); idempotent. */
-export async function dropDurableApproval(approvalId: string): Promise<boolean> {
-  return rejectDurable(approvalId);
-}
-
-/**
- * Read the current record without side effects. Returns null when the row is
- * absent or has expired past its expires_at window.
- */
-export async function getDurableApproval(approvalId: string): Promise<DurableApprovalRecord | null> {
-  const admin = assertAdmin();
-  const { data, error } = await admin
-    .from('durable_approvals')
-    .select('*')
-    .eq('approval_id', approvalId)
     .gt('expires_at', new Date().toISOString())
+    .select('*')
     .maybeSingle();
-
-  if (error || !data) return null;
-  return mapRow(data);
+  if (error) throw new Error('Approval transition unavailable');
+  return data ? mapRow(data) : null;
+}
+export function approveDurable(approvalId: string, userId: string) {
+  return resolveDurable(approvalId, userId, 'APPROVED');
+}
+export async function rejectDurable(approvalId: string, userId: string): Promise<boolean> {
+  return Boolean(await resolveDurable(approvalId, userId, 'REJECTED'));
+}
+export function dropDurableApproval(approvalId: string, userId: string) {
+  return rejectDurable(approvalId, userId);
+}
+export async function getDurableApproval(approvalId: string, userId: string): Promise<DurableApprovalRecord | null> {
+  if (!userId || !approvalId) return null;
+  const { data, error } = await assertAdmin().from('durable_approvals')
+    .select('*').eq('approval_id', approvalId).eq('user_id', userId)
+    .gt('expires_at', new Date().toISOString()).maybeSingle();
+  if (error) throw new Error('Approval lookup unavailable');
+  return data ? mapRow(data) : null;
 }
 
 type DurableRow = Record<string, unknown> & {
