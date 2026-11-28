@@ -44,7 +44,7 @@ const mockSandbox = {
 };
 
 function setupMockDaytona(createResult: any = mockSandbox) {
-  (Daytona as jest.Mock).mockImplementation(() => ({
+  (Daytona as unknown as jest.Mock).mockImplementation(() => ({
     create: mockCreate,
   }));
   mockCreate.mockResolvedValue(createResult);

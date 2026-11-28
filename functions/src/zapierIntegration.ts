@@ -1,4 +1,4 @@
-import { validateWebhookUrl } from '../../lib/security/urlValidator';
+import { validateWebhookUrl } from './webhookUrlValidator';
 /**
  * Zapier Integration - Webhook handlers for triggering external workflows
  */

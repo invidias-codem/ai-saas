@@ -16,11 +16,11 @@ class SocketClient {
     // We pass the token as a query parameter so the Desktop Core (websocket-server.ts) can authenticate the upgrade request.
     const wsUrl = `ws://${info.ip}:${info.port}?token=${encodeURIComponent(info.token)}`;
     
-    logger.info(`[SocketClient] Connecting to ${wsUrl}`);
+    console.info('[SocketClient] Connecting');
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
-      logger.info('[SocketClient] Connected successfully');
+      console.info('[SocketClient] Connected successfully');
       this.reconnectAttempts = 0;
       useLatticeStore.getState().setStatus('connected');
     };
@@ -41,16 +41,16 @@ class SocketClient {
           });
         }
       } catch (err) {
-        logger.warn('[SocketClient] Failed to parse message', event.data);
+        console.warn('[SocketClient] Failed to parse message');
       }
     };
 
     this.ws.onerror = (error: any) => {
-      logger.error('[SocketClient] WebSocket error', error.message || 'Unknown error');
+      console.error('[SocketClient] WebSocket error');
     };
 
     this.ws.onclose = (event) => {
-      logger.info(`[SocketClient] Disconnected (code: ${event.code})`);
+      console.info(`[SocketClient] Disconnected (code: ${event.code})`);
       
       if (this.isIntentionalDisconnect) {
         useLatticeStore.getState().setStatus('idle');
@@ -70,7 +70,7 @@ class SocketClient {
     this.reconnectAttempts++;
     const backoffTime = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000); // Max 10 seconds
     
-    logger.info(`[SocketClient] Reconnecting in ${backoffTime}ms (Attempt ${this.reconnectAttempts})`);
+    console.info(`[SocketClient] Reconnecting in ${backoffTime}ms (Attempt ${this.reconnectAttempts})`);
     
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -97,9 +97,9 @@ class SocketClient {
   public haltExecution() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ action: 'halt' }));
-      logger.info('[SocketClient] Halt execution payload sent');
+      console.info('[SocketClient] Halt execution payload sent');
     } else {
-      logger.warn('[SocketClient] Cannot halt: WebSocket is not open');
+      console.warn('[SocketClient] Cannot halt: WebSocket is not open');
     }
   }
 }

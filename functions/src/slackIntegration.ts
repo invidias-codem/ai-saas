@@ -1,4 +1,4 @@
-import { validateWebhookUrl } from '../../lib/security/urlValidator';
+import { validateWebhookUrl } from './webhookUrlValidator';
 /**
  * Slack Integration - Bot commands and notifications
  */
