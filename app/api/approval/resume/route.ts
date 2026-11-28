@@ -1,89 +1,68 @@
-// app/api/approval/resume/route.ts
-// Resumes a human-in-the-loop tool approval: with `approved: true`, re-hydrates
-// the paused tool from the stable agentic tool set (by name), re-validates its
-// input, and executes it (the action was already human-approved, so the
-// approval gate is bypassed). With `approved: false`, the pending approval is
-// dropped. Approvals are durable (Supabase-backed) so they survive serverless
-// cold starts.
-import { NextResponse } from "next/server";
-import { requireAuth, handleAuthError, getClientIP } from "@/lib/security/apiAuth";
-import { approveDurable, rejectDurable, getDurableApproval } from "@/lib/execution/durableApprovalStore";
-import { resolveAgenticTool } from "@/lib/agents/core/agenticToolSet";
-import { hasMediaEnvelope, MediaEnvelope } from "@/lib/media/envelope";
-import { logger } from "@/lib/logger";
+import { NextResponse } from 'next/server';
+import { requireAuth, AuthenticationError, AuthorizationError, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { limitApiEndpoint } from '@/lib/security/rateLimit';
+import { getWorkspaceAccess } from '@/lib/security/workspaceAccess';
+import { approveDurable, rejectDurable, getDurableApproval, type DurableApprovalRecord } from '@/lib/execution/durableApprovalStore';
+import { resolveAgenticTool } from '@/lib/agents/core/agenticToolSet';
+import { hasMediaEnvelope, type MediaEnvelope } from '@/lib/media/envelope';
+import { z } from 'zod';
+
+const decisionSchema = z.object({ approvalId: z.string().trim().min(1).max(256), approved: z.boolean() });
+const unavailable = () => NextResponse.json({ error: 'Approval not found or unavailable' }, { status: 404 });
+
+async function currentScope(row: DurableApprovalRecord, userId: string): Promise<boolean> {
+  if (row.userId !== userId || row.context?.userId !== userId ||
+      (row.context?.workspaceId ?? null) !== row.workspaceId ||
+      !Number.isFinite(Date.parse(row.expiresAt)) || Date.parse(row.expiresAt) <= Date.now()) return false;
+  if (row.workspaceId) {
+    // Conservative interim policy. Shared delegated mutation is not qualified.
+    const access = await getWorkspaceAccess(userId, row.workspaceId);
+    if (access?.role !== 'owner') return false;
+  }
+  return true;
+}
 
 export async function POST(req: Request) {
   try {
-    const user = await requireAuth();
-    getClientIP(req);
-
-    const body = (await req.json()) as { approvalId?: string; approved?: boolean };
-    const { approvalId, approved } = body;
-
-    if (!approvalId) {
-      return NextResponse.json({ error: "approvalId is required" }, { status: 400 });
+    const { userId } = await requireAuth();
+    const rate = await limitApiEndpoint(userId, getClientIP(req), 'mutation');
+    if (!rate.success) return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    const parsed = decisionSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) return NextResponse.json({ error: 'Explicit approval decision required' }, { status: 400 });
+    const { approvalId, approved } = parsed.data;
+    const row = await getDurableApproval(approvalId, userId);
+    if (!row || !await currentScope(row, userId)) return unavailable();
+    if (row.status !== 'PENDING') return NextResponse.json({ error: 'Approval already resolved' }, { status: 409 });
+    if (!approved) {
+      const rejected = await rejectDurable(approvalId, userId);
+      return rejected ? NextResponse.json({ success: true, approved: false }) :
+        NextResponse.json({ error: 'Approval no longer pending' }, { status: 409 });
     }
 
-    if (approved === false) {
-      // Denial: idempotently mark the pending approval REJECTED.
-      await rejectDurable(approvalId);
-      return NextResponse.json({ success: true, approved: false });
+    // A persisted context is not a fresh admin/org grant or sandbox admission.
+    const tool = resolveAgenticTool(row.toolName);
+    if (!tool || tool.requiresSandbox || row.context.userRole === 'admin' || row.context.orgContext) {
+      return NextResponse.json({ error: 'Approval requires a qualified execution path' }, { status: 403 });
     }
-
-    // Atomically claim the PENDING approval as APPROVED (null if already
-    // resolved/expired) — this prevents double execution across instances.
-    const claimed = await approveDurable(approvalId);
-    if (!claimed) {
-      // Fall back to a read in case the row exists but was already claimed,
-      // so we can still distinguish a not-found from an already-resolved row.
-      const existing = await getDurableApproval(approvalId);
-      if (!existing) {
-        return NextResponse.json(
-          { error: "Approval request not found or expired" },
-          { status: 404 }
-        );
-      }
-      // Already resolved — treat as no-op success (idempotent resume).
-      return NextResponse.json({ success: true, approved: true, alreadyResolved: true });
+    const validation = tool.schema.safeParse(row.input);
+    if (!validation.success) return NextResponse.json({ error: 'Invalid tool input' }, { status: 400 });
+    const claimed = await approveDurable(approvalId, userId);
+    if (!claimed) return NextResponse.json({ error: 'Approval no longer pending' }, { status: 409 });
+    // Check again after the claim. Do not execute against stale or changed context.
+    if (!await currentScope(claimed, userId) || claimed.toolName !== row.toolName ||
+        claimed.workspaceId !== row.workspaceId || claimed.context.userRole === 'admin' ||
+        claimed.context.orgContext || JSON.stringify(claimed.input) !== JSON.stringify(row.input)) {
+      return NextResponse.json({ error: 'Approval authority changed; new approval required' }, { status: 409 });
     }
-
-    // Ownership guard: the resuming user must be the one who initiated the pause.
-    if (claimed.userId !== user.userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    // Re-hydrate the tool from the stable agentic tool set by name.
-    const tool = resolveAgenticTool(claimed.toolName);
-    if (!tool) {
-      logger.error(`[approval/resume] tool not found for resume: ${claimed.toolName}`);
-      return NextResponse.json(
-        { error: `Tool '${claimed.toolName}' is no longer available` },
-        { status: 404 }
-      );
-    }
-
-    // Re-run schema validation + execute the paused tool (approval already granted).
-    const validation = tool.schema.safeParse(claimed.input);
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: "Invalid tool input", details: validation.error.flatten() },
-        { status: 400 }
-      );
-    }
-
-    const result = await tool.execute(validation.data, claimed.context as any);
-
-    // If the tool produced a media envelope, surface it for inline rendering.
+    const result = await tool.execute(validation.data, {
+      userId, sessionId: claimed.context.sessionId, workspaceId: claimed.workspaceId,
+      userRole: 'user', history: claimed.context.history, enableTelemetry: claimed.context.enableTelemetry,
+    });
     const media = hasMediaEnvelope(result) ? (result._media as MediaEnvelope) : null;
-
     return NextResponse.json({ success: true, approved: true, result, media });
-  } catch (error: any) {
-    logger.error("[approval/resume] failed:", { error: error?.message });
-    const handled = handleAuthError(error);
-    if (handled) return handled;
-    return NextResponse.json(
-      { error: error?.message || "Failed to resume approval" },
-      { status: 500 }
-    );
+  } catch (error) {
+    if (error instanceof AuthenticationError || error instanceof AuthorizationError) return handleAuthError(error);
+    // A consumed approval is not proof of successful external execution; do not retry blindly.
+    return NextResponse.json({ error: 'Approval resume unavailable; reconcile before retrying' }, { status: 503 });
   }
 }
