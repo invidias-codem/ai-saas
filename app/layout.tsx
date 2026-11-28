@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import localFont from "next/font/local";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { env } from "@/lib/env";
+import { defaultLocale, locales } from "@/i18n";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ModalProvider } from "@/components/modal-provider";
 import { DesktopAuthProvider } from "@/components/providers/DesktopAuthProvider";
@@ -52,8 +54,16 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Locale is resolved from the NEXT_LOCALE cookie and validated against
+  // supported locales. Invalid or missing cookies fall back to defaultLocale.
+  // This prevents lang attribute mismatch when a cookie names an unsupported
+  // locale (e.g. cookie=fr while only en is supported).
+  const cookieStore = await cookies();
+  const cookieLocale = cookieStore.get("NEXT_LOCALE")?.value;
+  const locale = locales.includes(cookieLocale as any) ? cookieLocale : defaultLocale;
+
   return (
-    <html lang="en" suppressHydrationWarning={true}>
+    <html lang={locale} suppressHydrationWarning={true}>
       <body className={`${inter.variable} font-sans`} suppressHydrationWarning={true}>
         <ClerkProvider
           publishableKey={env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "pk_test_Y2xlcmsuZXhhbXBsZS5jb20k"}
