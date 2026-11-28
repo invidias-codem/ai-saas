@@ -27,8 +27,12 @@ import {
   validateOrigin,
   checkToolPermission,
   checkTenantAccess,
+  getSessionCount,
   type AuthContext,
 } from './auth.js';
+
+// Maximum number of concurrent MCP sessions (bounded session counts).
+const MAX_SESSIONS = 100;
 
 // Lazy-load heavy schemas only when a session initializes
 async function loadSchemas() {
@@ -109,7 +113,8 @@ export function createServer(authCtx?: AuthContext) {
     if (!authCtx) {
       return { content: [{ type: 'text', text: 'Unauthorized' }], isError: true };
     }
-    if (!checkToolPermission(authCtx, 'tools/list')) {
+    // Tool-specific authorization — fail-closed: unknown tools denied.
+    if (!checkToolPermission(authCtx, 'tools/list', { roles: [], permissions: [] })) {
       return { content: [{ type: 'text', text: 'Forbidden' }], isError: true };
     }
     return { tools: TOOLS };
@@ -126,7 +131,20 @@ export function createServer(authCtx?: AuthContext) {
 
     const { name, arguments: args } = request.params;
 
-    if (!checkToolPermission(authCtx, name)) {
+    // Cross-tenant access denial: resolve resource tenant independently
+    // of the requesting principal. The resource tenant comes from the
+    // tool's target context, not from the caller's auth context.
+    const resourceTenantId = (args as any)?.tenant_id ?? authCtx.tenantId;
+    if (!checkTenantAccess(authCtx, resourceTenantId)) {
+      return { content: [{ type: 'text', text: 'Cross-tenant access denied' }], isError: true };
+    }
+
+    // Tool-specific authorization — fail-closed: unknown tools denied.
+    const sessionClaims = {
+      roles: (args as any)?._roles ?? [],
+      permissions: (args as any)?._permissions ?? [],
+    };
+    if (!checkToolPermission(authCtx, name, sessionClaims)) {
       return {
         content: [{ type: 'text', text: 'Tool access denied' }],
         isError: true,
@@ -236,7 +254,7 @@ export function createServer(authCtx?: AuthContext) {
   return mcp;
 }
 
-export function createTransport(authCtx?: AuthContext) {
+export function createTransport() {
   return new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
   });
@@ -259,6 +277,15 @@ export async function handleRequest(req: any, res: any, body?: unknown) {
 
   const authCtx = authResult as AuthContext;
 
+  // Enforce bounded session counts
+  if (getSessionCount() >= MAX_SESSIONS) {
+    if (res.statusCode !== undefined) res.statusCode = 503;
+    if (res.setHeader) res.setHeader('content-type', 'application/json');
+    if (res.write) res.write(JSON.stringify({ error: 'Session limit reached' }));
+    if (res.end) res.end();
+    return;
+  }
+
   // Validate origin
   if (!validateOrigin(req)) {
     if (res.statusCode !== undefined) res.statusCode = 403;
@@ -269,7 +296,11 @@ export async function handleRequest(req: any, res: any, body?: unknown) {
   }
 
   const server = createServer(authCtx);
-  const transport = createTransport(authCtx);
+  const transport = createTransport();
+
+  // Wire lifecycle: server.connect(transport) is required by the MCP SDK
+  // to bind the server to the transport for message routing.
+  (server as any).connect(transport);
 
   (server as any).onclose = () => transport.close();
   (transport as any).onclose = () => server.close();

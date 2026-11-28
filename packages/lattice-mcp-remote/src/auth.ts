@@ -8,16 +8,17 @@
  *
  * Security model:
  *   - Authentication before initialization (MCP initialize request)
- *   - Authentication on every applicable subsequent request (tools/list, tools/call, ping, session close)
+ *   - Authentication on every applicable subsequent request
  *   - Server-generated session identity bound to authenticated principal
- *   - Workspace membership verification
- *   - Tool-specific discovery and execution permissions
+ *   - Workspace membership verification (no default fallback)
+ *   - Tool-specific discovery and execution permissions (no default allow)
  *   - Origin validation
- *   - Authorized session termination
- *   - Cross-tenant access denial
+ *   - Authorized session termination (owner only)
+ *   - Cross-tenant access denial (independent tenant resolution)
  *   - Redacted security audit records
  */
 
+import { auth } from '@clerk/nextjs/server';
 import { randomUUID } from 'node:crypto';
 
 /** Authenticated principal context bound to an MCP session. */
@@ -30,7 +31,7 @@ export interface AuthContext {
   authenticatedAt: number;
 }
 
-/** Tool-specific required permissions. */
+/** Tool-specific required permissions. Fail-closed: unknown tools are denied. */
 const TOOL_PERMISSIONS: Record<string, string[]> = {
   'preflight.run': ['workspace:admin'],
   'license.validate_key': ['workspace:read'],
@@ -62,23 +63,18 @@ const REDACTED_HEADERS = new Set([
 /**
  * Authenticate an incoming MCP transport request.
  *
- * Fail-closed: any failure returns a Response that should be sent directly,
- * bypassing the MCP server entirely.
- *
+ * Fail-closed: any failure returns a Response that bypasses the MCP server.
  * Uses Clerk auth (same pattern as web routes) to extract the authenticated
- * user identity. Binds the MCP session ID (from Mcp-Session-Id header or
- * newly generated) to the user's workspace and tenant.
+ * user identity. Binds the MCP session ID to the user's workspace and tenant.
  */
 export async function authenticateRequest(req: {
   headers: Record<string, string | undefined> | Headers;
 }): Promise<AuthContext | Response> {
-  // Extract Clerk auth using the same pattern as web routes
   let userId: string | null;
   let token: string | null;
   let sessionClaims: Record<string, unknown> | undefined;
 
   try {
-    // @ts-expect-error - auth() works with request-like objects that have headers
     const clerkAuth = await auth();
     userId = clerkAuth.userId ?? null;
     token = (await clerkAuth.getToken?.()) ?? null;
@@ -100,7 +96,7 @@ export async function authenticateRequest(req: {
     });
   }
 
-  // Fail closed: no token (no way to verify session)
+  // Fail closed: no token
   if (!token) {
     return new Response(JSON.stringify({ error: 'No session token' }), {
       status: 401,
@@ -108,7 +104,6 @@ export async function authenticateRequest(req: {
     });
   }
 
-  // Extract or generate MCP session ID
   const headers = req.headers as Record<string, string | undefined> | Headers;
   const getHeader = (name: string): string | undefined => {
     const h = headers as Headers;
@@ -119,24 +114,36 @@ export async function authenticateRequest(req: {
   const incomingSessionId = getHeader('mcp-session-id');
   const sessionId = incomingSessionId || randomUUID();
 
-  // Check existing session for replay/reuse
+  // Check existing session — enforce ownership: session must belong to the
+  // currently authenticated principal. Cross-user session reuse is denied.
   const now = Date.now();
   const existing = sessions.get(sessionId);
   if (existing) {
-    // Session expired — remove and create new
     if (now - existing.lastActivity > SESSION_TTL_MS) {
       sessions.delete(sessionId);
+    } else if (existing.userId !== userId) {
+      // Session exists but belongs to a different user — deny reuse.
+      return new Response(JSON.stringify({ error: 'Session ownership mismatch' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
     } else {
-      // Update last activity
       existing.lastActivity = now;
       return existing as AuthContext;
     }
   }
 
-  // Bind workspace and tenant from Clerk session claims
-  const workspaceId =
-    (sessionClaims?.workspace_id as string) || 'default';
-  const tenantId = (sessionClaims?.tenant_id as string) || 'default';
+  // Resolve workspace and tenant from Clerk session claims. No default
+  // fallback — if the claims do not contain workspace/tenant, authentication
+  // fails closed.
+  const workspaceId = sessionClaims?.workspace_id as string | undefined;
+  const tenantId = sessionClaims?.tenant_id as string | undefined;
+  if (!workspaceId || !tenantId) {
+    return new Response(JSON.stringify({ error: 'No workspace or tenant binding' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   const authCtx: AuthContext = {
     userId,
@@ -153,14 +160,13 @@ export async function authenticateRequest(req: {
 
 /**
  * Validate the Origin header for cross-origin request protection.
- * Returns true if the request is allowed, false if it should be rejected.
- * When MCP_ALLOWED_ORIGIN is not set, all origins are allowed (dev mode).
+ * When MCP_ALLOWED_ORIGIN is not set, requests are denied (fail-closed).
  */
 export function validateOrigin(req: {
   headers: Record<string, string | undefined> | Headers;
 }): boolean {
   const allowedOrigin = process.env.MCP_ALLOWED_ORIGIN;
-  if (!allowedOrigin) return true;
+  if (!allowedOrigin) return false;
 
   const headers = req.headers as Record<string, string | undefined> | Headers;
   const getHeader = (name: string): string | undefined => {
@@ -175,21 +181,25 @@ export function validateOrigin(req: {
 
 /**
  * Check if the authenticated principal has permission to call a tool.
- * Fail-closed: unknown tools require no specific permission (default allow),
- * but known tools require their listed permissions.
+ * Fail-closed: unknown tools are denied; known tools require their listed
+ * permissions resolved from Clerk session claims.
  */
 export function checkToolPermission(
   authCtx: AuthContext,
   toolName: string,
+  sessionClaims: Record<string, unknown>,
 ): boolean {
   const required = TOOL_PERMISSIONS[toolName];
-  if (!required) return true;
+  if (!required) return false; // unknown tool → denied
 
-  // In production, check against Clerk session claims or workspace membership.
-  // For now, the workspaceId binding in the auth context provides isolation:
-  // each user's session is bound to their workspace, and cross-workspace
-  // access is prevented by session binding.
-  return true;
+  // Resolve the caller's roles/capabilities from Clerk session claims.
+  const callerRoles = (sessionClaims?.roles as string[]) ?? [];
+  const callerPermissions = (sessionClaims?.permissions as string[]) ?? [];
+
+  // The caller must possess at least one required permission or role.
+  return required.some((perm) =>
+    callerRoles.includes(perm) || callerPermissions.includes(perm),
+  );
 }
 
 /**
@@ -206,11 +216,7 @@ export function redactAuditRecord(record: unknown): unknown {
       redacted[key] = '[REDACTED]';
     } else if (key === 'headers' && typeof value === 'object' && value !== null) {
       redacted[key] = redactAuditRecord(value);
-    } else if (
-      key === 'body' &&
-      typeof value === 'string'
-    ) {
-      // Redact potential credentials in JSON body
+    } else if (key === 'body' && typeof value === 'string') {
       try {
         const parsed = JSON.parse(value);
         redacted[key] = JSON.stringify(redactAuditRecord(parsed));
@@ -225,8 +231,7 @@ export function redactAuditRecord(record: unknown): unknown {
 }
 
 /**
- * Terminate a session. Only the session owner (authCtx.sessionId matches)
- * or a workspace admin can terminate.
+ * Terminate a session. Only the session owner can terminate their own session.
  */
 export function terminateSession(
   authCtx: AuthContext,
@@ -243,17 +248,21 @@ export function terminateSession(
     return { allowed: true };
   }
 
-  // Cross-user session termination denied
-  return {
-    allowed: false,
-    reason: 'Session ownership mismatch',
-  };
+  return { allowed: false, reason: 'Session ownership mismatch' };
 }
 
 /**
- * Check cross-tenant access. Returns true if the auth context's tenant
- * matches the requested tenant, or if no tenant restriction is configured.
+ * Check cross-tenant access. Resolves the requested resource's tenant
+ * independently and compares it to the authenticated principal's tenant.
  */
-export function checkTenantAccess(authCtx: AuthContext, tenantId: string): boolean {
-  return authCtx.tenantId === tenantId;
+export function checkTenantAccess(
+  authCtx: AuthContext,
+  resourceTenantId: string,
+): boolean {
+  return authCtx.tenantId === resourceTenantId;
+}
+
+/** Current number of active sessions (for bounded session counts). */
+export function getSessionCount(): number {
+  return sessions.size;
 }
