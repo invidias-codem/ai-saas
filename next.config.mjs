@@ -38,6 +38,7 @@ const nextConfig = {
   },
 
   experimental: {},
+  serverExternalPackages: ['esbuild-wasm'],
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals = config.externals || [];
