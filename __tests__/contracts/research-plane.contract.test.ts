@@ -28,7 +28,6 @@ import {
   type VerificationReceipt,
   type VerifierIdentity,
   type VerificationPolicy,
-  type FrozenSpecInput,
 } from '@/lib/research/contracts';
 import {
   createRun,
@@ -37,6 +36,7 @@ import {
   submitVerification,
   transitionToStatus,
   validateReceiptBinding,
+  type FrozenSpecInput,
 } from '@/lib/research/lifecycle';
 import {
   makeProvenanceEvent,
@@ -254,6 +254,7 @@ describe('research plane — candidate proposal', () => {
   it('proposeCandidate seals the artifact and sets candidateHash', () => {
     const run = makeRun({ status: 'RESEARCHING' });
     const artifactInput = {
+      runId: 'run-1',
       type: 'proof' as const,
       contentHash: 'abc123',
       contentSize: 1024,
@@ -276,12 +277,12 @@ describe('research plane — candidate proposal', () => {
     const run = makeRun({ status: 'CREATED' });
     expect(() =>
       proposeCandidate(callerScope, run, {
-        artifact: { type: 'proof', contentHash: 'x', contentSize: 1, references: [], dependencyHashes: {} },
+        artifact: { type: 'proof', contentHash: 'x', contentSize: 1, references: [], dependencyHashes: {}, runId: 'run-1' },
         artifactId: 'art-1',
         createdAt: '2026-01-01T02:00:00Z',
         createdBy: 'explorer@lean-4',
-      }),
-    ).toThrow(ResearchPlaneError);
+      }))
+    .toThrow(ResearchPlaneError);
   });
 
   it('proposeCandidate rejects tenant mismatch', () => {
@@ -291,7 +292,7 @@ describe('research plane — candidate proposal', () => {
         { tenantId: 'user:other', workspaceId: 'ws-1' },
         run,
         {
-          artifact: { type: 'proof', contentHash: 'x', contentSize: 1, references: [], dependencyHashes: {} },
+          artifact: { type: 'proof', contentHash: 'x', contentSize: 1, references: [], dependencyHashes: {}, runId: 'run-1' },
           artifactId: 'art-1',
           createdAt: '2026-01-01T02:00:00Z',
           createdBy: 'explorer@lean-4',
@@ -325,7 +326,8 @@ describe('research plane — verification receipt binding', () => {
         exitStatus: 0,
         specHash,
         candidateHash,
-        toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+        runId: 'run-1',
+        toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
         policy: DEFAULT_VERIFICATION_POLICY,
       },
       receiptId: 'receipt-1',
@@ -361,7 +363,8 @@ describe('research plane — verification receipt binding', () => {
           exitStatus: 0,
           specHash,
           candidateHash,
-          toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+          runId: 'run-1',
+          toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
           policy: DEFAULT_VERIFICATION_POLICY,
         },
         receiptId: 'receipt-1',
@@ -394,12 +397,14 @@ describe('research plane — verification receipt binding', () => {
           exitStatus: 0,
           specHash,
           candidateHash,
-          toolchain: { name: 'agent', version: '1', type: 'lean' },
+          runId: 'run-1',
+          toolchainIdentity: { name: 'agent', version: '1', type: 'lean' } as const,
           policy: DEFAULT_VERIFICATION_POLICY,
         },
         receiptId: 'receipt-1',
         executedAt: '2026-01-01T03:00:00Z',
         executedBy: 'explorer@lean-4',
+        producerRole: 'explorer',
         verifierProvider: agentProvider,
       }),
     ).toThrow(ResearchPlaneError);
@@ -420,7 +425,10 @@ describe('research plane — verification receipt binding', () => {
           checkResults: {},
           command: 'lean check Solution.lean',
           exitStatus: 0,
-          toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+          specHash: 'expected-hash',
+          candidateHash: 'candidate-hash',
+          runId: 'run-1',
+          toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
           policy: DEFAULT_VERIFICATION_POLICY,
         },
         receiptId: 'receipt-1',
@@ -454,7 +462,8 @@ describe('research plane — verification receipt binding', () => {
             exitStatus: 0,
             specHash,
             candidateHash,
-            toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+            runId: 'run-1',
+            toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
             policy: DEFAULT_VERIFICATION_POLICY,
           },
           receiptId: 'receipt-1',
@@ -474,7 +483,7 @@ describe('research plane — verification receipt binding', () => {
       runId: 'run-1',
       specHash: 'wrong-spec',
       candidateHash: 'cand-hash',
-      toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' },
+      toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
       policy: DEFAULT_VERIFICATION_POLICY,
       outcome: 'VERIFIED',
       checkResults: {},
@@ -690,7 +699,7 @@ describe('research plane — evidence manifest', () => {
     });
     const receipt: VerificationReceipt = {
       receiptId: 'r', runId: 'run-1', specHash: 'spec-hash', candidateHash: 'cand-hash',
-      toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' },
+      toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
       policy: DEFAULT_VERIFICATION_POLICY, outcome: 'VERIFIED', checkResults: {},
       command: 'lean', exitStatus: 0, executedAt: 't', executedBy: 'v', sealed: true,
     };
@@ -704,7 +713,7 @@ describe('research plane — evidence manifest', () => {
     });
     const receipt: VerificationReceipt = {
       receiptId: 'r', runId: 'run-1', specHash: 'wrong', candidateHash: 'cand-hash',
-      toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' },
+      toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
       policy: DEFAULT_VERIFICATION_POLICY, outcome: 'VERIFIED', checkResults: {},
       command: 'lean', exitStatus: 0, executedAt: 't', executedBy: 'v', sealed: true,
     };
@@ -743,9 +752,11 @@ describe('research plane — deterministic hashing', () => {
 
   it('artifactContentHash is deterministic', () => {
     const h1 = artifactContentHash({
+      runId: 'run-1',
       type: 'proof', contentHash: 'x', contentSize: 1, references: [], dependencyHashes: {},
     });
     const h2 = artifactContentHash({
+      runId: 'run-1',
       type: 'proof', contentHash: 'x', contentSize: 1, references: [], dependencyHashes: {},
     });
     expect(h1).toBe(h2);
@@ -947,7 +958,7 @@ describe('research plane — verifier independence', () => {
       exitStatus: 0,
       executedAt: '2026-01-01T03:00:00Z',
       executedBy: 'verifier@lean-kernel',
-      toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+      toolchain: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
       policy: DEFAULT_VERIFICATION_POLICY,
     };
     const receipt = buildReceipt({
@@ -979,7 +990,10 @@ describe('research plane — negative / tamper detection', () => {
           checkResults: {},
           command: 'lean check',
           exitStatus: 0,
-          toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+          specHash: 'spec-hash',
+          candidateHash: 'original-hash',
+          runId: 'run-1',
+          toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
           policy: DEFAULT_VERIFICATION_POLICY,
         },
         receiptId: 'r',
@@ -1005,7 +1019,10 @@ describe('research plane — negative / tamper detection', () => {
           checkResults: {},
           command: 'lean check',
           exitStatus: 0,
-          toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+          specHash: 'spec-hash',
+          candidateHash: 'original-hash',
+          runId: 'run-1',
+          toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
           policy: DEFAULT_VERIFICATION_POLICY,
         },
         receiptId: 'r',
@@ -1095,7 +1112,8 @@ describe('research plane — negative / tamper detection', () => {
           exitStatus: 1,
           specHash,
           candidateHash,
-          toolchain: { name: 'lean', version: '4.10.0', type: 'lean' },
+          runId: 'run-1',
+          toolchainIdentity: { name: 'lean', version: '4.10.0', type: 'lean' } as const,
           policy: DEFAULT_VERIFICATION_POLICY,
         },
         receiptId: 'receipt-1',
