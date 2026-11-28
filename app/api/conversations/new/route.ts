@@ -5,11 +5,8 @@
  * Creates a new empty conversation and returns its ID
  */
 
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { db } from "@/lib/firebaseAdmin";
-import { v4 as uuidv4 } from "uuid";
-import { requireAuth, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
+import { requireAuth, AuthenticationError, AuthorizationError, handleAuthError, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
 import { z } from 'zod';
 
@@ -59,6 +56,24 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Database configuration missing" }, { status: 500 });
         }
 
+        // Preserve legacy null associations; explicitly requested resources must
+        // be owned by the caller. Shared conversation creation is a separate
+        // policy decision; do not widen the existing owner-only routing model.
+        if (workspaceId) {
+            const { data: workspace, error: workspaceError } = await supabaseAdmin
+                .from('workspaces').select('id').eq('id', workspaceId)
+                .eq('user_id', user.userId).maybeSingle();
+            if (workspaceError) throw workspaceError;
+            if (!workspace) return NextResponse.json({ error: 'Workspace not found or not accessible' }, { status: 404 });
+        }
+        if (operatingProfileId) {
+            const { data: profile, error: profileError } = await supabaseAdmin
+                .from('operating_profiles').select('id').eq('id', operatingProfileId)
+                .eq('user_id', user.userId).maybeSingle();
+            if (profileError) throw profileError;
+            if (!profile) return NextResponse.json({ error: 'Operating profile not found or not accessible' }, { status: 404 });
+        }
+
         const { data, error } = await supabaseAdmin
             .from("conversations")
             .insert({
@@ -88,8 +103,7 @@ export async function POST(req: Request) {
     } catch (error) {
         console.error("[API:Conversation:New] Error:", error);
 
-        const authResponse = handleAuthError(error);
-        if (authResponse) return authResponse;
+        if (error instanceof AuthenticationError || error instanceof AuthorizationError) return handleAuthError(error);
 
         return NextResponse.json(
             { error: "Internal server error" },
