@@ -8,8 +8,13 @@
  *
  * OAuth dynamic client registration at /register
  * Clerk auth middleware for /mcp
+ *
+ * Security: All MCP transport requests are authenticated before the MCP
+ * server processes them. Session identity is bound to the authenticated
+ * principal. Workspace and tenant isolation are enforced per-session.
  */
 
+import { auth } from '@clerk/nextjs/server';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
@@ -17,6 +22,13 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
+import {
+  authenticateRequest,
+  validateOrigin,
+  checkToolPermission,
+  checkTenantAccess,
+  type AuthContext,
+} from './auth.js';
 
 // Lazy-load heavy schemas only when a session initializes
 async function loadSchemas() {
@@ -31,7 +43,7 @@ async function loadSchemas() {
   };
 }
 
-export function createServer() {
+export function createServer(authCtx?: AuthContext) {
   const mcp = new Server(
     { name: 'lattice-mcp-remote', version: '0.1.0' },
     { capabilities: { tools: {} } }
@@ -92,53 +104,172 @@ export function createServer() {
     },
   ];
 
-  mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+  mcp.setRequestHandler(ListToolsRequestSchema, async () => {
+    // Tool discovery requires authentication
+    if (!authCtx) {
+      return { content: [{ type: 'text', text: 'Unauthorized' }], isError: true };
+    }
+    if (!checkToolPermission(authCtx, 'tools/list')) {
+      return { content: [{ type: 'text', text: 'Forbidden' }], isError: true };
+    }
+    return { tools: TOOLS };
+  });
 
   mcp.setRequestHandler(CallToolRequestSchema, async (request) => {
+    // Every tool call requires authentication and authorization
+    if (!authCtx) {
+      return { content: [{ type: 'text', text: 'Unauthorized' }], isError: true };
+    }
+    if (!checkTenantAccess(authCtx, authCtx.tenantId)) {
+      return { content: [{ type: 'text', text: 'Cross-tenant access denied' }], isError: true };
+    }
+
     const { name, arguments: args } = request.params;
+
+    if (!checkToolPermission(authCtx, name)) {
+      return {
+        content: [{ type: 'text', text: 'Tool access denied' }],
+        isError: true,
+      };
+    }
+
     switch (name) {
       case 'preflight.run': {
-        const result = { tool: 'preflight.run', status: 'ok', note: 'Delegated to local adapter or future implementation' };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        const result = {
+          tool: 'preflight.run',
+          status: 'ok',
+          note: 'Delegated to local adapter or future implementation',
+          authenticatedAs: authCtx.userId,
+          workspace: authCtx.workspaceId,
+        };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
       }
       case 'license.validate_key': {
         const key = String((args as any).key ?? '');
         const schemas = await loadSchemas();
         const parseResult = schemas.licenseKeySchema.safeParse(key);
-        if (!parseResult.success) return { content: [{ type: 'text', text: JSON.stringify({ valid: false, error: 'Invalid Lattice V3 license key format' }, null, 2) }], isError: true };
-        return { content: [{ type: 'text', text: JSON.stringify({ valid: true, key: parseResult.data }, null, 2) }] };
+        if (!parseResult.success) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  valid: false,
+                  error: 'Invalid Lattice V3 license key format',
+                }, null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ valid: true, key: parseResult.data }, null, 2),
+            },
+          ],
+        };
       }
       case 'license.validate_payload': {
         const payload = (args as any).payload;
         const schemas = await loadSchemas();
         const parseResult = schemas.licensePayloadSchema.safeParse(payload);
-        if (!parseResult.success) return { content: [{ type: 'text', text: JSON.stringify({ valid: false, issues: parseResult.error.issues }, null, 2) }], isError: true };
-        return { content: [{ type: 'text', text: JSON.stringify({ valid: true, payload: parseResult.data }, null, 2) }] };
+        if (!parseResult.success) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  valid: false,
+                  issues: parseResult.error.issues,
+                }, null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ valid: true, payload: parseResult.data }, null, 2),
+            },
+          ],
+        };
       }
       case 'license.supported_tiers': {
-        return { content: [{ type: 'text', text: JSON.stringify({ supported_tiers: ['community', 'enterprise'] }, null, 2) }] };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ supported_tiers: ['community', 'enterprise'] }, null, 2),
+            },
+          ],
+        };
       }
       case 'platform.constants': {
         const schemas = await loadSchemas();
-        return { content: [{ type: 'text', text: JSON.stringify({ DEFAULT_PORTS: schemas.DEFAULT_PORTS, MINIMUM_RESOURCES: schemas.MINIMUM_RESOURCES, DISK_THRESHOLDS: schemas.DISK_THRESHOLDS }, null, 2) }] };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                DEFAULT_PORTS: schemas.DEFAULT_PORTS,
+                MINIMUM_RESOURCES: schemas.MINIMUM_RESOURCES,
+                DISK_THRESHOLDS: schemas.DISK_THRESHOLDS,
+              }, null, 2),
+            },
+          ],
+        };
       }
       default:
-        return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `Unknown tool: ${name}` }],
+          isError: true,
+        };
     }
   });
 
   return mcp;
 }
 
-export function createTransport() {
+export function createTransport(authCtx?: AuthContext) {
   return new StreamableHTTPServerTransport({
     sessionIdGenerator: () => randomUUID(),
   });
 }
 
 export async function handleRequest(req: any, res: any, body?: unknown) {
-  const server = createServer();
-  const transport = createTransport();
+  // Fail-closed: authenticate before any MCP processing
+  const authResult = await authenticateRequest(req);
+  if (typeof authResult !== 'object' || 'error' in authResult) {
+    // AuthenticateRequest returned a Response (401/503)
+    const resp = authResult as Response;
+    const status = resp.status ?? 401;
+    if (res.statusCode !== undefined) res.statusCode = status;
+    if (res.setHeader) res.setHeader('content-type', 'application/json');
+    const bodyText = await resp.text();
+    if (res.write) res.write(bodyText);
+    if (res.end) res.end();
+    return;
+  }
+
+  const authCtx = authResult as AuthContext;
+
+  // Validate origin
+  if (!validateOrigin(req)) {
+    if (res.statusCode !== undefined) res.statusCode = 403;
+    if (res.setHeader) res.setHeader('content-type', 'application/json');
+    if (res.write) res.write(JSON.stringify({ error: 'Forbidden: origin not allowed' }));
+    if (res.end) res.end();
+    return;
+  }
+
+  const server = createServer(authCtx);
+  const transport = createTransport(authCtx);
 
   (server as any).onclose = () => transport.close();
   (transport as any).onclose = () => server.close();
