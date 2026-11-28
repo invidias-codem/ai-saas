@@ -8,8 +8,13 @@
  *
  * OAuth dynamic client registration at /register
  * Clerk auth middleware for /mcp
+ *
+ * Security: All MCP transport requests are authenticated before the MCP
+ * server processes them. Session identity is bound to the authenticated
+ * principal. Workspace and tenant isolation are enforced per-session.
  */
 
+import { auth } from '@clerk/nextjs/server';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
@@ -17,6 +22,17 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
+import {
+  authenticateRequest,
+  validateOrigin,
+  checkToolPermission,
+  checkTenantAccess,
+  getSessionCount,
+  type AuthContext,
+} from './auth.js';
+
+// Maximum number of concurrent MCP sessions (bounded session counts).
+const MAX_SESSIONS = 100;
 
 // Lazy-load heavy schemas only when a session initializes
 async function loadSchemas() {
@@ -31,7 +47,7 @@ async function loadSchemas() {
   };
 }
 
-export function createServer() {
+export function createServer(authCtx?: AuthContext) {
   const mcp = new Server(
     { name: 'lattice-mcp-remote', version: '0.1.0' },
     { capabilities: { tools: {} } }
@@ -92,38 +108,146 @@ export function createServer() {
     },
   ];
 
-  mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+  mcp.setRequestHandler(ListToolsRequestSchema, async () => {
+    // Tool discovery requires authentication
+    if (!authCtx) {
+      return { content: [{ type: 'text', text: 'Unauthorized' }], isError: true };
+    }
+    // Tool-specific authorization — fail-closed: unknown tools denied.
+    if (!checkToolPermission(authCtx, 'tools/list', { roles: [], permissions: [] })) {
+      return { content: [{ type: 'text', text: 'Forbidden' }], isError: true };
+    }
+    return { tools: TOOLS };
+  });
 
   mcp.setRequestHandler(CallToolRequestSchema, async (request) => {
+    // Every tool call requires authentication and authorization
+    if (!authCtx) {
+      return { content: [{ type: 'text', text: 'Unauthorized' }], isError: true };
+    }
+    if (!checkTenantAccess(authCtx, authCtx.tenantId)) {
+      return { content: [{ type: 'text', text: 'Cross-tenant access denied' }], isError: true };
+    }
+
     const { name, arguments: args } = request.params;
+
+    // Cross-tenant access denial: resolve resource tenant independently
+    // of the requesting principal. The resource tenant comes from the
+    // tool's target context, not from the caller's auth context.
+    const resourceTenantId = (args as any)?.tenant_id ?? authCtx.tenantId;
+    if (!checkTenantAccess(authCtx, resourceTenantId)) {
+      return { content: [{ type: 'text', text: 'Cross-tenant access denied' }], isError: true };
+    }
+
+    // Tool-specific authorization — fail-closed: unknown tools denied.
+    const sessionClaims = {
+      roles: (args as any)?._roles ?? [],
+      permissions: (args as any)?._permissions ?? [],
+    };
+    if (!checkToolPermission(authCtx, name, sessionClaims)) {
+      return {
+        content: [{ type: 'text', text: 'Tool access denied' }],
+        isError: true,
+      };
+    }
+
     switch (name) {
       case 'preflight.run': {
-        const result = { tool: 'preflight.run', status: 'ok', note: 'Delegated to local adapter or future implementation' };
-        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+        const result = {
+          tool: 'preflight.run',
+          status: 'ok',
+          note: 'Delegated to local adapter or future implementation',
+          authenticatedAs: authCtx.userId,
+          workspace: authCtx.workspaceId,
+        };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        };
       }
       case 'license.validate_key': {
         const key = String((args as any).key ?? '');
         const schemas = await loadSchemas();
         const parseResult = schemas.licenseKeySchema.safeParse(key);
-        if (!parseResult.success) return { content: [{ type: 'text', text: JSON.stringify({ valid: false, error: 'Invalid Lattice V3 license key format' }, null, 2) }], isError: true };
-        return { content: [{ type: 'text', text: JSON.stringify({ valid: true, key: parseResult.data }, null, 2) }] };
+        if (!parseResult.success) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  valid: false,
+                  error: 'Invalid Lattice V3 license key format',
+                }, null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ valid: true, key: parseResult.data }, null, 2),
+            },
+          ],
+        };
       }
       case 'license.validate_payload': {
         const payload = (args as any).payload;
         const schemas = await loadSchemas();
         const parseResult = schemas.licensePayloadSchema.safeParse(payload);
-        if (!parseResult.success) return { content: [{ type: 'text', text: JSON.stringify({ valid: false, issues: parseResult.error.issues }, null, 2) }], isError: true };
-        return { content: [{ type: 'text', text: JSON.stringify({ valid: true, payload: parseResult.data }, null, 2) }] };
+        if (!parseResult.success) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  valid: false,
+                  issues: parseResult.error.issues,
+                }, null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ valid: true, payload: parseResult.data }, null, 2),
+            },
+          ],
+        };
       }
       case 'license.supported_tiers': {
-        return { content: [{ type: 'text', text: JSON.stringify({ supported_tiers: ['community', 'enterprise'] }, null, 2) }] };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ supported_tiers: ['community', 'enterprise'] }, null, 2),
+            },
+          ],
+        };
       }
       case 'platform.constants': {
         const schemas = await loadSchemas();
-        return { content: [{ type: 'text', text: JSON.stringify({ DEFAULT_PORTS: schemas.DEFAULT_PORTS, MINIMUM_RESOURCES: schemas.MINIMUM_RESOURCES, DISK_THRESHOLDS: schemas.DISK_THRESHOLDS }, null, 2) }] };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                DEFAULT_PORTS: schemas.DEFAULT_PORTS,
+                MINIMUM_RESOURCES: schemas.MINIMUM_RESOURCES,
+                DISK_THRESHOLDS: schemas.DISK_THRESHOLDS,
+              }, null, 2),
+            },
+          ],
+        };
       }
       default:
-        return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
+        return {
+          content: [{ type: 'text', text: `Unknown tool: ${name}` }],
+          isError: true,
+        };
     }
   });
 
@@ -137,8 +261,46 @@ export function createTransport() {
 }
 
 export async function handleRequest(req: any, res: any, body?: unknown) {
-  const server = createServer();
+  // Fail-closed: authenticate before any MCP processing
+  const authResult = await authenticateRequest(req);
+  if (typeof authResult !== 'object' || 'error' in authResult) {
+    // AuthenticateRequest returned a Response (401/503)
+    const resp = authResult as Response;
+    const status = resp.status ?? 401;
+    if (res.statusCode !== undefined) res.statusCode = status;
+    if (res.setHeader) res.setHeader('content-type', 'application/json');
+    const bodyText = await resp.text();
+    if (res.write) res.write(bodyText);
+    if (res.end) res.end();
+    return;
+  }
+
+  const authCtx = authResult as AuthContext;
+
+  // Enforce bounded session counts
+  if (getSessionCount() >= MAX_SESSIONS) {
+    if (res.statusCode !== undefined) res.statusCode = 503;
+    if (res.setHeader) res.setHeader('content-type', 'application/json');
+    if (res.write) res.write(JSON.stringify({ error: 'Session limit reached' }));
+    if (res.end) res.end();
+    return;
+  }
+
+  // Validate origin
+  if (!validateOrigin(req)) {
+    if (res.statusCode !== undefined) res.statusCode = 403;
+    if (res.setHeader) res.setHeader('content-type', 'application/json');
+    if (res.write) res.write(JSON.stringify({ error: 'Forbidden: origin not allowed' }));
+    if (res.end) res.end();
+    return;
+  }
+
+  const server = createServer(authCtx);
   const transport = createTransport();
+
+  // Wire lifecycle: server.connect(transport) is required by the MCP SDK
+  // to bind the server to the transport for message routing.
+  (server as any).connect(transport);
 
   (server as any).onclose = () => transport.close();
   (transport as any).onclose = () => server.close();

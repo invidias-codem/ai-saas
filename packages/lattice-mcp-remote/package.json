@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@lattice-os/core": "workspace:*",
+    "@clerk/nextjs": "^6.39.5",
     "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "devDependencies": {
