@@ -17,9 +17,9 @@ use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::{mpsc, RwLock};
 #[cfg(unix)]
 use tokio::sync::Mutex;
+use tokio::sync::{mpsc, RwLock};
 #[cfg(unix)]
 use tracing::{debug, error, info};
 #[cfg(unix)]
@@ -833,7 +833,10 @@ mod tests {
             require_auth: true,
             connect_timeout_ms: 100,
         });
-        let err = client.connect().await.expect_err("unsupported transport must reject connection");
+        let err = client
+            .connect()
+            .await
+            .expect_err("unsupported transport must reject connection");
         assert!(matches!(err, IpcError::Unsupported(_)));
         assert_eq!(
             err.to_string(),
