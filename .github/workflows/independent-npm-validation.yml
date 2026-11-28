@@ -49,6 +49,20 @@ jobs:
       - name: Check installed node-forge against lockfile
         run: |
           node -e 'const assert = require("node:assert/strict"); const lock = require("./package-lock.json"); const installed = require("node-forge/package.json"); assert.equal(installed.version, lock.packages["node_modules/node-forge"].version); const forge = require("node-forge"); const digest = forge.md.sha256.create(); digest.update("abc"); assert.equal(digest.digest().toHex(), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"); console.log("Locked node-forge version and synthetic digest verified:", installed.version)'
+      - name: Verify security patch versions against the locked install
+        run: |
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const lock = require('./package-lock.json');
+          const name = process.cwd().endsWith('/remote') ? 'shell-quote' : 'follow-redirects';
+          const minimum = name === 'shell-quote' ? [1,12,0] : [1,16,3];
+          const installed = require(name + '/package.json').version;
+          assert.equal(installed, lock.packages['node_modules/' + name].version);
+          const version = installed.split('.').map(Number);
+          assert.ok(version.length === 3 && version.every(Number.isInteger));
+          assert.ok(version[0] > minimum[0] || (version[0] === minimum[0] && (version[1] > minimum[1] || (version[1] === minimum[1] && version[2] >= minimum[2]))));
+          console.log(name, installed, 'passes locked version floor');
+          NODE
       - name: Functions TypeScript build
         if: matrix.check == 'build'
         run: npm run build
