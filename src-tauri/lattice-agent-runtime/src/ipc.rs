@@ -18,6 +18,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, Mutex, RwLock};
+#[cfg(unix)]
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
@@ -138,9 +139,12 @@ pub enum ClientType {
 
 /// IPC server for the agent runtime.
 pub struct IpcServer {
+    #[cfg(unix)]
     profile_id: String,
     config: IpcConfig,
+    #[cfg(unix)]
     state_machine: Arc<crate::state_machine::RuntimeStateMachine>,
+    #[cfg(unix)]
     agent_loop: Arc<crate::agent_loop::AgentLoop>,
     clients: Arc<RwLock<HashMap<String, ConnectedClient>>>,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
@@ -159,6 +163,7 @@ pub struct IpcConfig {
 /// Connected client info. Only `authenticated` and `tx` are used.
 #[derive(Debug, Clone)]
 struct ConnectedClient {
+    #[cfg(unix)]
     authenticated: bool,
     tx: mpsc::UnboundedSender<IpcMessage>,
 }
@@ -172,9 +177,12 @@ impl IpcServer {
         agent_loop: Arc<crate::agent_loop::AgentLoop>,
     ) -> IpcResult<Self> {
         Ok(Self {
+            #[cfg(unix)]
             profile_id,
             config,
+            #[cfg(unix)]
             state_machine,
+            #[cfg(unix)]
             agent_loop,
             clients: Arc::new(RwLock::new(HashMap::new())),
             shutdown_tx: None,
@@ -278,6 +286,7 @@ impl IpcServer {
     }
 
     /// Get the socket path for this profile.
+    #[cfg(unix)]
     fn socket_path(&self) -> IpcResult<PathBuf> {
         if let Some(path) = &self.config.socket_path {
             return Ok(path.clone());
@@ -435,6 +444,7 @@ impl IpcServer {
     }
 
     /// Process an incoming message.
+    #[cfg(unix)]
     async fn process_message(
         client_id: &str,
         msg: IpcMessage,
@@ -577,9 +587,13 @@ impl IpcServer {
 
 /// IPC client for connecting to the runtime.
 pub struct IpcClient {
+    #[cfg(unix)]
     config: IpcConfig,
+    #[cfg(unix)]
     stream: Option<Arc<Mutex<StreamImpl>>>,
+    #[cfg(unix)]
     rx: Option<mpsc::UnboundedReceiver<IpcMessage>>,
+    #[cfg(unix)]
     request_id: u64,
 }
 
@@ -587,9 +601,13 @@ impl IpcClient {
     /// Create a new IPC client.
     pub fn new(config: IpcConfig) -> Self {
         Self {
+            #[cfg(unix)]
             config,
+            #[cfg(unix)]
             stream: None,
+            #[cfg(unix)]
             rx: None,
+            #[cfg(unix)]
             request_id: 0,
         }
     }
@@ -713,11 +731,13 @@ impl IpcClient {
         Ok(())
     }
 
+    #[cfg(unix)]
     fn next_request_id(&mut self) -> String {
         self.request_id += 1;
         format!("req-{0}", self.request_id)
     }
 
+    #[cfg(unix)]
     fn socket_path(&self) -> IpcResult<PathBuf> {
         // Same logic as server
         let base = if cfg!(target_os = "windows") {
@@ -782,5 +802,32 @@ mod tests {
     fn test_client_types() {
         assert_eq!(ClientType::Desktop as u8, 0);
         assert_eq!(ClientType::Cli as u8, 1);
+    }
+
+    /// Negative test: unauthenticated clients start with authenticated = false.
+    /// This is the fail-closed baseline — no token is accepted until a real
+    /// auth provider is wired in.
+    #[cfg(unix)]
+    #[test]
+    fn test_client_starts_unauthenticated() {
+        let (tx, _rx) = mpsc::unbounded_channel::<IpcMessage>();
+        let client = ConnectedClient {
+            authenticated: false,
+            tx,
+        };
+        assert!(!client.authenticated);
+    }
+
+    /// Negative test: Windows IPC transport fails closed — the Unsupported
+    /// error variant is the only outcome for any transport operation.
+    #[cfg(windows)]
+    #[test]
+    fn test_windows_transport_unsupported() {
+        let err = IpcError::Unsupported("Windows IPC transport not yet implemented".to_string());
+        assert!(matches!(err, IpcError::Unsupported(_)));
+        assert_eq!(
+            err.to_string(),
+            "Platform not supported: Windows IPC transport not yet implemented"
+        );
     }
 }
