@@ -1,0 +1,57 @@
+name: Independent npm validation
+
+on:
+  pull_request:
+    paths:
+      - 'functions/**'
+      - 'remote/**'
+      - '.github/workflows/independent-npm-validation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'remote/**'
+      - '.github/workflows/independent-npm-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  locked-package-check:
+    name: Validate ${{ matrix.directory }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Match the existing Functions runtime contract, not a runtime upgrade.
+          - directory: functions
+            node: '20'
+            check: build
+          - directory: remote
+            node: '22'
+            check: typecheck
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install exact locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check installed node-forge against lockfile
+        run: |
+          node -e 'const assert = require("node:assert/strict"); const lock = require("./package-lock.json"); const installed = require("node-forge/package.json"); assert.equal(installed.version, lock.packages["node_modules/node-forge"].version); const forge = require("node-forge"); const digest = forge.md.sha256.create(); digest.update("abc"); assert.equal(digest.digest().toHex(), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"); console.log("Locked node-forge version and synthetic digest verified:", installed.version)'
+      - name: Functions TypeScript build
+        if: matrix.check == 'build'
+        run: npm run build
+      - name: Remote TypeScript check
+        if: matrix.check == 'typecheck'
+        run: ./node_modules/.bin/tsc --noEmit
