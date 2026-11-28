@@ -1,8 +1,13 @@
-name: CLI release CodeQL
+name: CLI and desktop release CodeQL
 on:
   pull_request:
     paths:
       - 'scripts/lattice-cli/**'
+      - 'scripts/desktop/**'
+      - 'desktop/**'
+      - 'components/desktop-downloads.tsx'
+      - 'components/install/**'
+      - 'lib/install/**'
       - 'lib/releases/**'
       - 'app/**/downloads/**'
       - 'components/landing/**'
@@ -12,6 +17,11 @@ on:
     branches: [main]
     paths:
       - 'scripts/lattice-cli/**'
+      - 'scripts/desktop/**'
+      - 'desktop/**'
+      - 'components/desktop-downloads.tsx'
+      - 'components/install/**'
+      - 'lib/install/**'
       - 'lib/releases/**'
       - 'app/**/downloads/**'
       - 'components/landing/**'
@@ -20,6 +30,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  security-events: write
 jobs:
   analyze:
     name: CodeQL ${{ matrix.language }}
@@ -41,6 +52,11 @@ jobs:
           config: |
             paths:
               - scripts/lattice-cli
+              - scripts/desktop
+              - desktop
+              - components/desktop-downloads.tsx
+              - components/install
+              - lib/install
               - lib/releases
               - components/landing
               - app/**/downloads/**
@@ -49,7 +65,7 @@ jobs:
               - '**/build/**'
               - '**/tests/**'
               - '**/*.test.ts'
-      - uses: github/codeql-action/analyze@f051dc808ef3645eb0d08647ec751634ec2304ac # v4
+      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           category: '/cli-release/${{ matrix.language }}'
           output: codeql-results

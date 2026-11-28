@@ -1,246 +1,661 @@
-// src-tauri/src/lib.rs
-//
-// Tauri <-> lattice-harness (Go sidecar) IPC bridge.
-//
-// The Go daemon (`cmd/lattice-harness`) is an ephemeral-port JSON-RPC HTTP
-// server. On boot it prints a single line to stdout:
-//     {"status":"ready","port":<N>}
-// and then serves `POST /rpc` with `{ id, jsonrpc, workspaceRoot, action,
-// inputs }`. Rust is the parent process and is responsible for capturing that
-// port and proxying a lightweight `status` call so the Next.js webview can
-// render the daemon's live telemetry.
-//
-// State note (per design review): we use `std::sync::Mutex` (NOT tokio locks)
-// and deliberately drop the guard *before* any `.await` — the critical section
-// is a single `u16` copy. `OnceLock` was ruled out because a crash/restart must
-// be able to return the port to `None` so the UI can re-show the boot state.
+mod agent_runtime;
+mod credential_broker;
+mod native_host;
+mod profiles;
+mod review;
+mod workspace;
 
+#[cfg(test)]
+mod ipc_tests;
+#[cfg(test)]
+mod review_test_support;
+
+use agent_runtime::{
+    agent_health, agent_start, agent_status, agent_stop, AgentLoopConfig, AgentRuntimeConfig,
+    RuntimeSupervisor, SessionConfig,
+};
+use credential_broker::{handle_broker_command, init_credential_broker, BrokerResponse};
+use lattice_credential_broker::{BrokerCommand, CredentialBroker, ProviderKind};
+use lattice_native_host::lifecycle::{NativeHost, Phase};
+use lattice_native_host::supervisor::{serve, Supervisor};
+use lattice_native_host::{permits_window, TelemetryEvent};
+use native_host::TauriLauncher;
 use serde::Serialize;
 use serde_json::json;
-use std::sync::Mutex;
-use tauri::Manager;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
+use tauri::Manager;
+use tokio::net::TcpListener;
 
-/// Shared, Tauri-managed state. `None` until the sidecar's stdout handshake
-/// delivers a port, and reset to `None` on a hard sidecar failure so the
-/// frontend can fall back to the "Boot the Local Harness" empty state.
-#[derive(Default)]
-struct SidecarState {
-    port: Mutex<Option<u16>>,
-}
-
-impl SidecarState {
-    fn port(&self) -> Option<u16> {
-        match self.port.lock() {
-            Ok(g) => *g,
-            Err(_) => None, // poisoned -> treat as not ready
-        }
-    }
-
-    fn set_port(&self, port: Option<u16>) {
-        if let Ok(mut g) = self.port.lock() {
-            *g = port;
-        }
-    }
-}
-
-/// One event row for the Security Audit stream, mapped from the daemon's
-/// internal telemetry event (`go-harness/internal/telemetry`).
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Serialize)]
 struct HarnessEvent {
     id: String,
     timestamp: String,
     #[serde(rename = "type")]
     event_type: String,
     description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    payload: Option<serde_json::Value>,
 }
 
-/// Minimal JSON-RPC request matching `cmd/lattice-harness` (`action`+`inputs`).
-#[derive(Serialize)]
-struct RpcRequest<'a> {
-    id: &'a str,
-    jsonrpc: &'a str,
-    #[serde(rename = "workspaceRoot")]
-    workspace_root: &'a str,
-    action: &'a str,
-    inputs: serde_json::Value,
-}
-
-async fn request_sidecar(port: u16, action: &str) -> Result<serde_json::Value, String> {
-    let body = RpcRequest {
-        id: &format!("tauri-{}", uuid_v4()),
-        jsonrpc: "2.0",
-        workspace_root: "",
-        action,
-        inputs: json!({}),
+fn to_harness_event(event: &TelemetryEvent) -> HarnessEvent {
+    use sha2::{Digest, Sha256};
+    let id = event
+        .id
+        .clone()
+        .filter(|id| !id.is_empty())
+        .unwrap_or_else(|| {
+            format!(
+                "{:x}",
+                Sha256::digest(serde_json::to_vec(event).unwrap_or_default())
+            )
+        });
+    let event_type = if event.event_type.contains("command")
+        || event.event_type.contains("delete")
+        || event.event_type.contains("move")
+    {
+        "execution"
+    } else if event.event_type.contains("read")
+        || event.event_type.contains("stat")
+        || event.event_type.contains("list")
+        || event.event_type.contains("discover")
+    {
+        "read"
+    } else if event.event_type.contains("sync") || event.event_type.contains("ingest") {
+        "sync"
+    } else {
+        "heartbeat"
     };
-
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(1500))
-        .build()
-        .map_err(|e| format!("http client build: {e}"))?;
-
-    let resp = client
-        .post(format!("http://127.0.0.1:{port}/rpc"))
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("sidecar unreachable: {e}"))?;
-
-    let parsed: serde_json::Value = resp.json().await.map_err(|e| format!("bad json: {e}"))?;
-
-    if let Some(err) = parsed.get("error") {
-        return Err(err.get("message").and_then(|m| m.as_str()).unwrap_or("rpc error").to_string());
-    }
-    Ok(parsed.get("result").cloned().unwrap_or(serde_json::Value::Null))
-}
-
-/// Convert a daemon `TelemetryEvent` json into the frontend `HarnessEvent`.
-fn to_harness_event(ev: &serde_json::Value) -> HarnessEvent {
-    let event_type = ev.get("event_type").and_then(|v| v.as_str()).unwrap_or("heartbeat");
-    let path = ev.get("path_accessed").and_then(|v| v.as_str()).unwrap_or("");
-    let success = ev.get("success").and_then(|v| v.as_bool()).unwrap_or(true);
     HarnessEvent {
-        id: ev.get("id").and_then(|v| v.as_str()).map(String::from).unwrap_or_else(uuid_v4),
-        timestamp: ev.get("timestamp").and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        event_type: ui_event_type(event_type).to_string(),
-        description: format!("{event_type}{}: {}", if path.is_empty() { "".into() } else { format!(" {path}") }, if success { "ok" } else { "failed" }),
-        payload: Some(ev.clone()),
+        id,
+        timestamp: event.timestamp.clone(),
+        event_type: event_type.into(),
+        description: format!(
+            "{}{}: {}",
+            event.event_type,
+            event
+                .path_accessed
+                .as_ref()
+                .map(|p| format!(" {p}"))
+                .unwrap_or_default(),
+            if event.success { "ok" } else { "failed" }
+        ),
     }
 }
 
-/// Map daemon event types onto the hook's four display classes.
-fn ui_event_type(daemon_type: &str) -> &'static str {
-    match daemon_type {
-        // anything mutating / executing
-        t if t.contains("command") || t.contains("delete") || t.contains("move") => "execution",
-        // reads/stat/list
-        t if t.contains("read") || t.contains("stat") || t.contains("list") || t.contains("discover") => "read",
-        // sync/ingest
-        t if t.contains("ingest") || t.contains("sync") || t.contains("synchroniz") => "sync",
-        _ => "heartbeat",
+fn require_local_window<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) -> Result<(), String> {
+    let url = window
+        .url()
+        .map_err(|_| "Local window required".to_string())?;
+    if permits_window(window.label(), url.as_str(), cfg!(debug_assertions)) {
+        Ok(())
+    } else {
+        Err("Local window required".into())
     }
-}
-
-fn uuid_v4() -> String {
-    // Small, dependency-free v4 uuid (bridge only needs uniqueness for keys).
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    format!("{:08x}-{:04x}-4{:03x}-{:04x}-{:012x}", (now & 0xFFFF_FFFF) as u32, (now >> 32) as u16, (now >> 48) as u16 & 0xFFF, ((now >> 16) as u16 & 0x3FFF) | 0x8000, (now & 0xFFFF_FFFF_FFFF) as u64)
 }
 
 #[tauri::command]
-async fn ping_daemon(state: tauri::State<'_, SidecarState>) -> Result<serde_json::Value, String> {
-    // Scoped lock: copy the port and release the guard BEFORE any await.
-    let port = state.port();
+async fn ping_daemon<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<NativeHost>>,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    match state.status().await {
+        Ok(Some(status)) => Ok(json!({
+            "status": "ok",
+            "recent_events": status.events.iter().map(to_harness_event).collect::<Vec<_>>()
+        })),
+        Ok(None) => Ok(json!({"status":"booting","recent_events":[]})),
+        Err(_) if state.phase() == Phase::Stopping => {
+            Ok(json!({"status":"stopping","recent_events":[]}))
+        }
+        Err(_) if state.phase() == Phase::Booting => {
+            Ok(json!({"status":"booting","recent_events":[]}))
+        }
+        Err(error) => Ok(json!({
+            "status": if state.phase() == Phase::Stopped { "stopped" } else { "error" },
+            "recent_events": [],
+            "error": { "code": error.code(), "message": error.message() }
+        })),
+    }
+}
 
-    let Some(port) = port else {
-        // Sidecar hasn't announced a port yet (still booting) — not an error.
-        return Ok(json!({ "status": "booting", "recent_events": [] }));
+#[tauri::command]
+async fn restart_daemon<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, Arc<NativeHost>>,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    match state.restart(TauriLauncher(app)).await {
+        Ok(()) => Ok(json!({"status":"ok"})),
+        Err(error) => {
+            Ok(json!({"status":"error","error":{"code":error.code(),"message":error.message()}}))
+        }
+    }
+}
+
+#[tauri::command]
+async fn flush_telemetry<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    // Existing frontend trigger only; no generic native RPC or cloud credential.
+    Ok(json!({"status":"trigger_ok"}))
+}
+
+// Supervisor commands — the desktop reaches the same Supervisor state the CLI
+// reaches over TCP, so both clients observe one consistent session journal.
+
+#[tauri::command]
+async fn supervisor_status<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<Supervisor>>,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    Ok(state.status().await)
+}
+
+#[tauri::command]
+async fn supervisor_ensure_host<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, Arc<Supervisor>>,
+) -> Result<(), String> {
+    require_local_window(&window)?;
+    state
+        .ensure_host(TauriLauncher(app))
+        .await
+        .map_err(|e| e.message().to_string())
+}
+
+#[tauri::command]
+async fn supervisor_session_create<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<Supervisor>>,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    state
+        .session_create("desktop")
+        .await
+        .map(|s| json!({ "session": s }))
+        .map_err(|e| e.message().to_string())
+}
+
+#[tauri::command]
+async fn supervisor_session_list<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<Supervisor>>,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    Ok(json!({ "sessions": state.list_sessions().await }))
+}
+
+#[tauri::command]
+async fn supervisor_event_append<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<Supervisor>>,
+    session_id: String,
+    kind: String,
+    payload: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    state
+        .append_event("desktop", &session_id, kind, payload.unwrap_or(json!({})))
+        .await
+        .map(|e| json!({ "event": e }))
+        .map_err(|e| e.message().to_string())
+}
+
+#[tauri::command]
+async fn supervisor_cancel<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<Supervisor>>,
+    session_id: String,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    state
+        .cancel_session("desktop", &session_id)
+        .await
+        .map(|s| json!({ "session_id": s }))
+        .map_err(|e| e.message().to_string())
+}
+
+// Credential Broker commands
+
+#[tauri::command]
+async fn credential_store_api_key<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    api_key: String,
+    label: String,
+    metadata: Option<serde_json::Value>,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::StoreApiKey {
+        provider: provider_kind,
+        api_key,
+        label,
+        metadata: metadata.and_then(|v| serde_json::from_value(v).ok()),
+        suffix,
     };
-
-    match request_sidecar(port, "status").await {
-        Ok(result) => {
-            let events = result
-                .get("data")
-                .and_then(|d| d.get("recent_events"))
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default();
-            Ok(json!({
-                "status": "ok",
-                "port": port,
-                "recent_events": events.iter().map(to_harness_event).collect::<Vec<_>>(),
-            }))
-        }
-        Err(e) => {
-            // Sidecar is unreachable — release the port so the UI can offer
-            // a restart path rather than trusting a dead daemon.
-            state.set_port(None);
-            Err(format!("daemon unreachable: {e}"))
-        }
-    }
+    Ok(handle_broker_command(&state, cmd).await)
 }
 
 #[tauri::command]
-async fn flush_telemetry() -> Result<serde_json::Value, String> {
-    // The native telemetry ledger lives in the webview (IndexedDB) and is
-    // flushed to the enterprise instance by the JS layer (flushNativeTelemetry).
-    // This command is the Rust-side trigger/hook: it signals the frontend to
-    // perform the flush and reports ledger status from the Tauri store.
-    Ok(json!({ "status": "trigger_ok" }))
+async fn credential_update_api_key<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    api_key: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::UpdateApiKey {
+        provider: provider_kind,
+        api_key,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_get_api_key_status<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::GetApiKeyStatus {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_delete_api_key<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::DeleteApiKey {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_list_provider_credentials<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::ListProviderCredentials {
+        provider: provider_kind,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_store_refresh_token<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    token: String,
+    label: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::StoreRefreshToken {
+        provider: provider_kind,
+        token,
+        label,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_get_refresh_token_status<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::GetRefreshTokenStatus {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_delete_refresh_token<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::DeleteRefreshToken {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_store_local_endpoint<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    endpoint_url: String,
+    model_id: String,
+    label: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::StoreLocalEndpoint {
+        provider: provider_kind,
+        endpoint_url,
+        model_id,
+        label,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_get_local_endpoint_status<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::GetLocalEndpointStatus {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_get_local_endpoint<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::GetLocalEndpoint {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn credential_delete_local_endpoint<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    state: tauri::State<'_, Arc<CredentialBroker>>,
+    provider: String,
+    suffix: Option<String>,
+) -> Result<BrokerResponse, String> {
+    require_local_window(&window)?;
+    let provider_kind: ProviderKind = serde_json::from_value(serde_json::json!(provider))
+        .map_err(|_| "Invalid provider".to_string())?;
+    let cmd = BrokerCommand::DeleteLocalEndpoint {
+        provider: provider_kind,
+        suffix,
+    };
+    Ok(handle_broker_command(&state, cmd).await)
+}
+
+#[tauri::command]
+async fn resolve_native_paths<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    channel: String,
+) -> Result<serde_json::Value, String> {
+    require_local_window(&window)?;
+    Ok(profiles::paths(&profiles::native_root(&channel)?))
+}
+
+#[tauri::command]
+async fn load_profile_config<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    profile_id: String,
+    channel: String,
+) -> Result<Option<serde_json::Value>, String> {
+    require_local_window(&window)?;
+    profiles::load(&profiles::native_root(&channel)?, &profile_id)
+}
+
+#[tauri::command]
+async fn save_profile_config<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    profile_id: String,
+    channel: String,
+    settings: serde_json::Value,
+) -> Result<(), String> {
+    require_local_window(&window)?;
+    profiles::save(&profiles::native_root(&channel)?, &profile_id, &settings)
+}
+
+#[tauri::command]
+async fn list_profiles<R: tauri::Runtime>(
+    window: tauri::WebviewWindow<R>,
+    channel: String,
+) -> Result<Vec<String>, String> {
+    require_local_window(&window)?;
+    profiles::list(&profiles::native_root(&channel)?)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
-    .plugin(tauri_plugin_shell::init())
-    .plugin(tauri_plugin_store::Builder::default().build())
-    .plugin(tauri_plugin_stronghold::Builder::new(|password| {
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(password);
-        hasher.finalize().to_vec()
-    }).build())
-    .plugin(tauri_plugin_deep_link::init())
-    .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-        use tauri::Emitter;
-        for arg in args {
-          if arg.starts_with("latticeos://") {
-            let _ = app.emit("oauth_callback", arg);
-          }
-        }
-    }))
-    .setup(|app| {
-      use tauri_plugin_shell::ShellExt;
-      use tauri_plugin_shell::process::CommandEvent;
-
-      let state = SidecarState::default();
-      let app_handle = app.handle().clone();
-
-      // Spawn the Go sidecar and capture its stdout handshake.
-      // The daemon prints {"status":"ready","port":N} once on boot.
-      let sidecar_command = app.shell().sidecar("lattice-harness").unwrap();
-      let (mut rx, _child) = sidecar_command
-          .spawn()
-          .expect("Failed to spawn lattice-harness sidecar");
-
-      app.manage(state);
-
-      tauri::async_runtime::spawn(async move {
-        use tauri::Manager;
-        let state = app_handle.state::<SidecarState>();
-        while let Some(event) = rx.recv().await {
-          if let CommandEvent::Stdout(line) = event {
-            let line = String::from_utf8_lossy(&line);
-            let line = line.trim();
-            if line.contains("\"status\":\"ready\"") || line.contains("\"status\": \"ready\"") {
-              if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) {
-                if let Some(port) = parsed.get("port").and_then(|p| p.as_u64()).map(|p| p as u16) {
-                  state.set_port(Some(port));
-                  log::info!("lattice-harness sidecar ready on port {port}");
-                }
-              }
-            }
-          }
-        }
-        // stdout closed — sidecar exited; drop the port so UI shows boot state.
-        state.set_port(None);
-      });
-
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
+    let app = tauri::Builder::default()
+        .manage(review::ReviewWindows::<tauri::Wry>::default())
+        .register_uri_scheme_protocol("lattice-review", |_, request| review::resource(request))
+        .on_window_event(review::window_event)
+        .plugin(workspace::boundary())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(
+            tauri_plugin_stronghold::Builder::new(|password| {
+                use sha2::{Digest, Sha256};
+                let mut hasher = Sha256::new();
+                hasher.update(password);
+                hasher.finalize().to_vec()
+            })
             .build(),
-        )?;
-      }
-      Ok(())
-    })
-    .invoke_handler(tauri::generate_handler![ping_daemon, flush_telemetry])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+        )
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            use tauri::Emitter;
+            for arg in args {
+                if arg.starts_with("latticeos://") {
+                    let _ = app.emit("oauth_callback", arg);
+                }
+            }
+        }))
+        .setup(|app| {
+            let host = Arc::new(NativeHost::default());
+            app.manage(host.clone());
+
+            // Initialize credential broker
+            let broker = tauri::async_runtime::block_on(async { init_credential_broker().await })?;
+            app.manage(broker.clone());
+
+            // Initialize agent runtime supervisor
+            let runtime_config = AgentRuntimeConfig {
+                profile_id: String::new(), // Will be set per-runtime
+                channel: String::new(),
+                default_connection_id: None,
+                loop_config: AgentLoopConfig::default(),
+                ipc_config: lattice_agent_runtime::IpcConfig {
+                    protocol_version: lattice_agent_runtime::PROTOCOL_VERSION,
+                    socket_path: None,
+                    client_identity: "desktop".to_string(),
+                    require_auth: false,
+                    connect_timeout_ms: 5000,
+                },
+                session_config: SessionConfig {
+                    db_path: PathBuf::from("state.sqlite"),
+                    max_session_age: Duration::from_secs(86400 * 30),
+                    auto_reconcile: true,
+                },
+            };
+            let supervisor = tauri::async_runtime::block_on(async {
+                RuntimeSupervisor::new(broker.clone(), runtime_config).await
+            })?;
+            app.manage(supervisor);
+
+            // Supervisor: owns the profile's durable session journal and the
+            // NativeHost lifecycle, and serves the TCP JSON-RPC transport shared
+            // with the CLI. One writer per profile.
+            let profile_root = profiles::native_root("stable")?;
+            let profile_dir = profile_root.join("profiles/default");
+            let native_supervisor = Arc::new(Supervisor::new("default".to_string(), &profile_dir)?);
+            // Register the in-process desktop identity before session commands run.
+            tauri::async_runtime::block_on(native_supervisor.hello(
+                "desktop",
+                1,
+                Some(native_supervisor.server_secret()),
+            ))
+            .map_err(|e| e.message().to_string())?;
+            app.manage(native_supervisor.clone());
+            let profile_dir_owned = profile_dir.clone();
+            let sup = native_supervisor.clone();
+            tauri::async_runtime::spawn(async move {
+                let Ok(listener) = TcpListener::bind("127.0.0.1:0").await else {
+                    return;
+                };
+                let port = listener.local_addr().unwrap().port();
+                let _ = std::fs::write(
+                    profile_dir_owned.join(".supervisor.addr"),
+                    format!("127.0.0.1:{}", port),
+                );
+                let _ = serve(listener, sup).await;
+            });
+
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = host.start(TauriLauncher(handle)).await;
+            });
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
+                    tauri_plugin_log::Builder::default()
+                        .level(log::LevelFilter::Info)
+                        .build(),
+                )?;
+            }
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            ping_daemon,
+            restart_daemon,
+            flush_telemetry,
+            supervisor_status,
+            supervisor_ensure_host,
+            supervisor_session_create,
+            supervisor_session_list,
+            supervisor_event_append,
+            supervisor_cancel,
+            credential_store_api_key,
+            credential_update_api_key,
+            credential_get_api_key_status,
+            credential_delete_api_key,
+            credential_list_provider_credentials,
+            credential_store_refresh_token,
+            credential_get_refresh_token_status,
+            credential_delete_refresh_token,
+            credential_store_local_endpoint,
+            credential_get_local_endpoint_status,
+            credential_get_local_endpoint,
+            credential_delete_local_endpoint,
+            resolve_native_paths,
+            load_profile_config,
+            save_profile_config,
+            list_profiles,
+            agent_start,
+            agent_stop,
+            agent_status,
+            agent_health,
+            workspace::native_select_folder,
+            workspace::native_workspace_grants,
+            workspace::native_revoke_grant,
+            workspace::native_request_write_access,
+            workspace::native_list,
+            workspace::native_stat,
+            workspace::native_read_text,
+            workspace::native_daemon_status,
+            review::native_propose_operation,
+            review::native_proposal_status,
+            review::native_cancel_proposal,
+            review::native_open_review,
+            review::native_review_document,
+            review::native_review_ready,
+            review::native_review_decide,
+            review::native_review_cancel,
+            review::native_dispatch_operation,
+            review::native_operation_status,
+            review::native_cancel_operation,
+            review::native_command_output,
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building Tauri application");
+    let exit_started = Arc::new(AtomicBool::new(false));
+    let exit_ready = Arc::new(AtomicBool::new(false));
+    app.run(move |handle, event| match event {
+        tauri::RunEvent::ExitRequested { api, code, .. } if !exit_ready.load(Ordering::Acquire) => {
+            api.prevent_exit();
+            if !exit_started.swap(true, Ordering::AcqRel) {
+                let app = handle.clone();
+                let host = handle.state::<Arc<NativeHost>>().inner().clone();
+                let ready = exit_ready.clone();
+                tauri::async_runtime::spawn(async move {
+                    let clean = host.shutdown().await.is_ok();
+                    if !clean {
+                        log::error!("LOCAL_CLEANUP_UNCONFIRMED");
+                    }
+                    ready.store(true, Ordering::Release);
+                    app.exit(if clean { code.unwrap_or(0) } else { 1 });
+                });
+            }
+        }
+        tauri::RunEvent::Exit => handle.state::<Arc<NativeHost>>().emergency_stop(),
+        _ => {}
+    });
 }

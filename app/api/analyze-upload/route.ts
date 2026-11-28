@@ -4,6 +4,8 @@ import { requireAuth, handleAuthError } from '@/lib/security/apiAuth';
 import { resolveRuntimeContext } from '@/lib/ucol/runtimeContextResolver';
 import { buildInitialRoutingDecision } from '@/lib/ucol/routing/decision';
 import { createPersonaSession } from '@/lib/consultant/personaSession';
+import { fileUploadSchema, ValidationError } from '@/lib/security/inputValidation';
+import { MAX_CHAT_IMAGE_BYTES, MAX_CHAT_IMAGES, MAX_CHAT_IMAGE_TOTAL_BYTES } from '@/lib/types/attachments';
 import { decompressLzStringPayload } from '@/lib/uploadCompression';
 
 export const dynamic = 'force-dynamic';
@@ -58,6 +60,11 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
+    const hasMultiImageField = body.fileDataList !== undefined;
+    if (hasMultiImageField && (body.fileData || !Array.isArray(body.fileDataList)
+      || body.fileDataList.length < 2 || body.fileDataList.length > MAX_CHAT_IMAGES)) {
+      return NextResponse.json({ message: `Choose between 2 and ${MAX_CHAT_IMAGES} images per message.` }, { status: 400 });
+    }
 
     // Diagnostic hardening: check the RAW incoming payload (pre-decompression)
     // for a compression-metadata mismatch, so we can catch a client that
@@ -74,8 +81,9 @@ export async function POST(req: Request) {
 
     const normalized = {
       ...body,
-      mode: body.fileData ? 'quality' : (body.mode || 'quality'),
+      mode: (body.fileData || hasMultiImageField) ? 'quality' : (body.mode || 'quality'),
       fileData: body.fileData ? decompressLzStringPayload(body.fileData) : undefined,
+      fileDataList: hasMultiImageField ? body.fileDataList : undefined,
     };
 
     if (normalized.fileData) {
@@ -83,9 +91,50 @@ export async function POST(req: Request) {
       if (!pdfCheck.valid) {
         console.warn('[analyze-upload] pdf-validation failed:', pdfCheck.reason);
         return NextResponse.json(
-          { error: pdfCheck.reason || 'Invalid PDF structure', source: 'pdf-validation' },
+          { error: pdfCheck.reason || 'Invalid PDF structure', message: pdfCheck.reason, source: 'pdf-validation' },
           { status: 400 }
         );
+      }
+    }
+
+    const file = normalized.fileData;
+    const mimeType = file?.mimeType || file?.type || normalized.mimeType;
+    const isImage = typeof mimeType === 'string' && mimeType.startsWith('image/');
+    const allowedImageTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+    const multiImages = normalized.fileDataList as Array<{
+      name?: string; type?: string; mimeType?: string; sizeBytes?: number;
+      base64Data?: string; fileUri?: string; storageProvider?: string;
+    }> | undefined;
+    if (multiImages) {
+      let aggregateBytes = 0;
+      let aggregateInlineChars = 0;
+      for (const image of multiImages) {
+        const imageType = image?.mimeType || image?.type;
+        const parsedImage = fileUploadSchema.safeParse({ ...image, type: imageType, mimeType: imageType });
+        if (!parsedImage.success || !allowedImageTypes.includes(imageType || '')
+          || !parsedImage.data.sizeBytes || !parsedImage.data.name) {
+          return NextResponse.json({ message: 'Each attachment must be a valid JPEG, PNG, WebP, HEIC or HEIF image.' }, { status: 400 });
+        }
+        if (parsedImage.data.sizeBytes > MAX_CHAT_IMAGE_BYTES
+          || (parsedImage.data.base64Data?.length ?? 0) > Math.ceil(MAX_CHAT_IMAGE_BYTES / 3) * 4) {
+          return NextResponse.json({ message: 'One of the images is too large. Choose a smaller image.' }, { status: 413 });
+        }
+        aggregateBytes += parsedImage.data.sizeBytes;
+        aggregateInlineChars += parsedImage.data.base64Data?.length ?? 0;
+      }
+      // Only one <=2MB photo can be inline; remaining images use signed GCS
+      // references, keeping the API request under serverless body limits.
+      if (aggregateBytes > MAX_CHAT_IMAGE_TOTAL_BYTES || aggregateInlineChars > Math.ceil(2 * 1024 * 1024 / 3) * 4) {
+        return NextResponse.json({ message: 'The selected images exceed the per-message size limit.' }, { status: 413 });
+      }
+    }
+    if (isImage) {
+      const validImage = fileUploadSchema.safeParse({ ...file, type: mimeType, mimeType });
+      if (!validImage.success || !allowedImageTypes.includes(mimeType)) {
+        return NextResponse.json({ message: 'Attach a JPEG, PNG, WebP, HEIC, or HEIF image and try again.' }, { status: 400 });
+      }
+      if ((validImage.data.sizeBytes ?? 0) > MAX_CHAT_IMAGE_BYTES || (validImage.data.base64Data?.length ?? 0) > Math.ceil(MAX_CHAT_IMAGE_BYTES / 3) * 4) {
+        return NextResponse.json({ message: 'This photo is too large. Attach a smaller image and try again.' }, { status: 413 });
       }
     }
 
@@ -112,21 +161,17 @@ export async function POST(req: Request) {
         workspaceId: resolved.ucolContext.workspaceId,
         surface: 'api',
         rawInput: validationResult.data.messages.at(-1)?.text || '',
-        attachments: validationResult.data.fileData
-          ? [
-              {
-                id: 'upload-analyzer',
-                type: 'document',
-                mimeType: validationResult.data.fileData.mimeType || validationResult.data.fileData.type || 'application/octet-stream',
-                metadata: {
-                  name: validationResult.data.fileData.name || 'uploaded_file',
-                  sizeBytes: validationResult.data.fileData.sizeBytes,
-                  fileUri: validationResult.data.fileData.fileUri,
-                  storageProvider: validationResult.data.fileData.storageProvider,
-                },
-              },
-            ]
-          : [],
+        attachments: (multiImages ?? (file ? [file] : [])).map((entry, index) => ({
+          id: `upload-analyzer-${index}`,
+          type: (entry.mimeType || entry.type || '').startsWith('image/') ? 'image' : 'document',
+          mimeType: entry.mimeType || entry.type || 'application/octet-stream',
+          metadata: {
+            name: entry.name || 'uploaded_file',
+            sizeBytes: entry.sizeBytes,
+            fileUri: entry.fileUri,
+            storageProvider: entry.storageProvider,
+          },
+        })),
         trustContext: {
           canUseExternalActions: false,
           canUseSensitiveTools: false,
@@ -137,7 +182,7 @@ export async function POST(req: Request) {
       context: resolved.ucolContext,
       agentMode: normalized.mode,
       signals: {
-        hasAttachments: Boolean(validationResult.data.fileData),
+        hasAttachments: Boolean(validationResult.data.fileData || validationResult.data.fileDataList?.length),
         messageHistoryCount: Array.isArray(validationResult.data.messages) ? validationResult.data.messages.length : 0,
         profile: resolved.profile,
       },
@@ -171,10 +216,16 @@ export async function POST(req: Request) {
       },
       {
         mode: normalized.mode,
+        signal: req.signal,
         memoryPlan: routingDecision.memoryPlan,
         personaSession,
       }
     );
+
+    if ((isImage || multiImages?.length) && reply.debug?.error === 'all_providers_exhausted') {
+      await reply.stream.cancel();
+      return NextResponse.json({ message: 'The image couldn’t be analyzed right now. Try sending it again.' }, { status: 503 });
+    }
 
     return new NextResponse(reply.stream, {
       headers: {
@@ -187,6 +238,9 @@ export async function POST(req: Request) {
   } catch (error: any) {
     const handled = handleAuthError(error);
     if (handled) return handled;
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
     return NextResponse.json(
       { error: 'Internal Server Error', details: process.env.NODE_ENV === 'production' ? 'Unexpected error' : error.message },
       { status: 500 }

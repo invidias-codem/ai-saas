@@ -1,3 +1,4 @@
+import { CommandShellSchema, CommandTextSchema } from './commandShell';
 import { z } from 'zod';
 
 // ----------------------------------------------------------------------
@@ -12,6 +13,7 @@ export type ToolExecutionResult =
   | {
       ok: false;
       error: string;
+      output?: string;
       code?: string;
       meta?: Record<string, unknown>;
     };
@@ -35,8 +37,9 @@ export const PatchFileArgsSchema = z.object({
 });
 
 export const RunCommandArgsSchema = z.object({
-  command: z.string().min(1, "Command is required"),
-  timeoutMs: z.number().optional().default(30000), // Default 30s timeout
+  command: CommandTextSchema,
+  shell: CommandShellSchema.optional(),
+  timeoutMs: z.number().int().positive().max(120000).optional().default(30000), // Default 30s timeout
 });
 
 export type ReadFileArgs = z.infer<typeof ReadFileArgsSchema>;

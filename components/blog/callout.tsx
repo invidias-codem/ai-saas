@@ -28,45 +28,45 @@ const calloutConfig: Record<CalloutType, {
 }> = {
   info: {
     icon: Info,
-    bgColor: "bg-blue-500/10",
-    borderColor: "border-blue-500/30",
-    iconColor: "text-blue-500 dark:text-blue-400",
-    titleColor: "text-blue-700 dark:text-blue-300",
+    bgColor: "bg-accent",
+    borderColor: "border-primary/30",
+    iconColor: "text-accent-foreground",
+    titleColor: "text-accent-foreground",
   },
   warning: {
     icon: AlertTriangle,
-    bgColor: "bg-yellow-500/10",
-    borderColor: "border-yellow-500/30",
-    iconColor: "text-yellow-500 dark:text-yellow-400",
-    titleColor: "text-yellow-700 dark:text-yellow-300",
+    bgColor: "bg-warning-surface",
+    borderColor: "border-warning/30",
+    iconColor: "text-warning",
+    titleColor: "text-warning",
   },
   success: {
     icon: CheckCircle,
-    bgColor: "bg-green-500/10",
-    borderColor: "border-green-500/30",
-    iconColor: "text-green-500 dark:text-green-400",
-    titleColor: "text-green-700 dark:text-green-300",
+    bgColor: "bg-accent",
+    borderColor: "border-primary/30",
+    iconColor: "text-accent-foreground",
+    titleColor: "text-accent-foreground",
   },
   tip: {
     icon: Lightbulb,
-    bgColor: "bg-purple-500/10",
-    borderColor: "border-purple-500/30",
-    iconColor: "text-purple-500 dark:text-purple-400",
-    titleColor: "text-purple-700 dark:text-purple-300",
+    bgColor: "bg-accent",
+    borderColor: "border-primary/30",
+    iconColor: "text-primary",
+    titleColor: "text-accent-foreground",
   },
   error: {
     icon: AlertCircle,
-    bgColor: "bg-red-500/10",
-    borderColor: "border-red-500/30",
-    iconColor: "text-red-500 dark:text-red-400",
-    titleColor: "text-red-700 dark:text-red-300",
+    bgColor: "bg-danger-surface",
+    borderColor: "border-destructive/30",
+    iconColor: "text-destructive",
+    titleColor: "text-destructive",
   },
   note: {
     icon: Zap,
-    bgColor: "bg-slate-100 dark:bg-white/5",
-    borderColor: "border-slate-200 dark:border-white/10",
-    iconColor: "text-slate-500 dark:text-gray-400",
-    titleColor: "text-slate-700 dark:text-gray-300",
+    bgColor: "bg-chrome",
+    borderColor: "border-border",
+    iconColor: "text-muted-foreground",
+    titleColor: "text-muted-foreground",
   },
 };
 
@@ -90,7 +90,7 @@ export function Callout({ type = "info", title, children }: CalloutProps) {
               {title}
             </p>
           )}
-          <div className="text-slate-700 dark:text-gray-300 text-sm leading-relaxed [&>p]:mb-2 [&>p:last-child]:mb-0">
+          <div className="text-muted-foreground text-sm leading-relaxed [&>p]:mb-2 [&>p:last-child]:mb-0">
             {children}
           </div>
         </div>

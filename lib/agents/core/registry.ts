@@ -57,6 +57,13 @@ export class ToolRegistry {
     }
 
     /**
+     * Names of all registered tools (for capability traces and parity tests).
+     */
+    getToolNames(): string[] {
+        return Array.from(this.tools.keys());
+    }
+
+    /**
      * Get all tools properly formatted for the Gemini API (Vertex AI).
      */
     getToolsForGemini(): any[] {

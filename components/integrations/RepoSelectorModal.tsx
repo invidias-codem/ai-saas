@@ -201,7 +201,7 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] h-[80vh] flex flex-col">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-[600px] min-w-0 h-[min(85dvh,700px)] max-h-[85dvh] flex flex-col overflow-hidden px-3 sm:px-6">
         <DialogHeader>
           <DialogTitle>Select Repositories</DialogTitle>
           <DialogDescription>
@@ -210,10 +210,10 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
         </DialogHeader>
 
         {workspaces.length > 0 && (
-          <div className="mt-4 flex items-center gap-3">
-            <span className="text-sm font-medium text-slate-700 whitespace-nowrap">Configure for:</span>
+          <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <span className="shrink-0 text-sm font-medium text-foreground">Configure for:</span>
             <Select value={selectedWorkspaceId || ""} onValueChange={setSelectedWorkspaceId}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full min-w-0">
                 <SelectValue placeholder="Select a workspace" />
               </SelectTrigger>
               <SelectContent>
@@ -242,17 +242,17 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        <div className="flex-1 min-w-0 min-h-0 overflow-x-hidden overflow-y-auto space-y-3 pr-1 sm:pr-2">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
             filteredRepos.map((repo) => (
-              <div key={repo.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">{repo.full_name}</span>
+              <div key={repo.id} className="flex min-w-0 items-start justify-between gap-3 p-3 border rounded-lg hover:bg-muted/50 transition">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="font-medium text-sm break-all">{repo.full_name}</span>
                     {repo.private && (
                       <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border">
                         Private
@@ -263,7 +263,8 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
                     Last pushed: {new Date(repo.pushed_at).toLocaleDateString()}
                   </span>
                 </div>
-                <Switch 
+                <Switch
+                  className="shrink-0"
                   disabled={!selectedWorkspaceId}
                   checked={allowedRepos.has(repo.full_name)}
                   onCheckedChange={(checked) => toggleRepo(repo.full_name, checked)}

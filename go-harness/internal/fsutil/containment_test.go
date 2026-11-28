@@ -6,7 +6,7 @@ import (
 )
 
 func TestGetRelativePath(t *testing.T) {
-	root := "/Users/jroot/Desktop/ai-nexus/ai-saas"
+	root := t.TempDir()
 
 	tests := []struct {
 		name      string
@@ -38,7 +38,7 @@ func TestGetRelativePath(t *testing.T) {
 		},
 		{
 			name:      "Absolute path outside workspace",
-			input:     "/etc/passwd",
+			input:     filepath.Join(filepath.Dir(root), "outside.txt"),
 			expectErr: true,
 		},
 		{
@@ -49,7 +49,7 @@ func TestGetRelativePath(t *testing.T) {
 		},
 		{
 			name:      "Absolute path inside workspace",
-			input:     "/Users/jroot/Desktop/ai-nexus/ai-saas/lib/harness/LocalIOHarness.ts",
+			input:     filepath.Join(root, "lib/harness/LocalIOHarness.ts"),
 			expectRel: filepath.Clean("lib/harness/LocalIOHarness.ts"),
 			expectErr: false,
 		},
@@ -70,19 +70,19 @@ func TestGetRelativePath(t *testing.T) {
 }
 
 func TestIsPathContained(t *testing.T) {
-	root := "/var/log/app"
+	root := filepath.Join(t.TempDir(), "app")
 
 	tests := []struct {
 		name     string
 		target   string
 		expected bool
 	}{
-		{"Inside root", "/var/log/app/info.log", true},
-		{"Same as root", "/var/log/app", true},
-		{"Trailing slash root match", "/var/log/app/", true},
-		{"Outside root", "/var/log/other.log", false},
-		{"Path traversal outside", "/var/log/app/../../etc/passwd", false},
-		{"Lexical trick (different folder starting with same name)", "/var/log/app-data/info.log", false},
+		{"Inside root", filepath.Join(root, "info.log"), true},
+		{"Same as root", root, true},
+		{"Trailing slash root match", root + string(filepath.Separator), true},
+		{"Outside root", filepath.Join(filepath.Dir(root), "other.log"), false},
+		{"Path traversal outside", filepath.Join(root, "../../etc/passwd"), false},
+		{"Lexical trick (different folder starting with same name)", filepath.Join(root+"-data", "info.log"), false},
 		{"Relative path traversal outside", "../../../../etc/passwd", false},
 	}
 

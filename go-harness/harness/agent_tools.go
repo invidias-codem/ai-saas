@@ -6,7 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
+
+	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
 	"net/http"
 	"strings"
 )
@@ -30,7 +31,10 @@ type SemanticSearchResponse struct {
 }
 
 func SemanticCodeSearch(ctx context.Context, config SemanticSearchConfig) (ToolExecutionResult, error) {
-	url := fmt.Sprintf("%s/api/workspaces/%s/search", config.APIBaseURL, config.WorkspaceID)
+	url, err := netguard.APIURL(config.APIBaseURL, config.WorkspaceID, "search")
+	if err != nil {
+		return ToolExecutionResult{}, err
+	}
 
 	payload := map[string]interface{}{
 		"repo_full_name": config.RepoFullName,
@@ -51,14 +55,14 @@ func SemanticCodeSearch(ctx context.Context, config SemanticSearchConfig) (ToolE
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", config.ClerkToken))
 
-	client := &http.Client{}
+	client := netguard.CloudClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return ToolExecutionResult{}, fmt.Errorf("search request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := netguard.ReadBody(resp.Body)
 	if err != nil {
 		return ToolExecutionResult{}, fmt.Errorf("failed to read search response: %v", err)
 	}
@@ -97,11 +101,11 @@ type GithubFileContentResponse struct {
 	Encoding string `json:"encoding"`
 }
 
-func GetFileContents(ctx context.Context, repoFullName string, filePath string, expectedToken string, allowedRepos []string) (ToolExecutionResult, error) {
+func GetFileContents(ctx context.Context, repoFullName string, filePath string, upstreamToken string, allowedRepos []string) (ToolExecutionResult, error) {
 	// The WAF wrapper handles checking allowedRepos internally
 	url := fmt.Sprintf("https://api.github.com/repos/%s/contents/%s", repoFullName, filePath)
-	
-	wafRes, err := ExecuteGitHubRequest(ctx, "GET", url, "", expectedToken, allowedRepos)
+
+	wafRes, err := ExecuteGitHubRequest(ctx, "GET", url, "", upstreamToken, allowedRepos)
 	if err != nil {
 		return ToolExecutionResult{}, fmt.Errorf("GitHub API request failed via WAF: %v", err)
 	}

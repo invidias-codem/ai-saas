@@ -1,8 +1,8 @@
 name: CI
 
 on:
+  # Run on stacked feature PRs, not just PRs targeting main.
   pull_request:
-    branches: [ main ]
   push:
     branches: [ main ]
 
@@ -26,6 +26,34 @@ jobs:
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Install elan
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 \
+            --fail --location --retry 3 \
+            -o "$RUNNER_TEMP/elan.tar.gz" \
+            https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz
+          printf '%s  %s\n' \
+            '42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63' \
+            "$RUNNER_TEMP/elan.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/elan-bootstrap"
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" \
+            -C "$RUNNER_TEMP/elan-bootstrap" elan-init
+          "$RUNNER_TEMP/elan-bootstrap/elan-init" \
+            -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Install and verify Lean toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          elan toolchain install "$(cat lean-toolchain)"
+          elan default "$(cat lean-toolchain)"
+          lean --version
+          lake --version
+          test "$(lean --version | grep -oE '4\.36\.0')" = "4.36.0"
 
       - name: Build Workspace Packages
         run: pnpm --recursive --filter @lattice-os/core run build && pnpm --recursive --filter @lattice-os/mcp-remote run build

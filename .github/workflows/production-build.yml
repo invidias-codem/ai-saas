@@ -1,8 +1,8 @@
 name: Production Build Validation
 
 on:
+  # Include stacked PRs whose base is another feature branch.
   pull_request:
-    branches: [main]
   workflow_dispatch:
   push:
     branches:

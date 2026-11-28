@@ -117,26 +117,38 @@ export const semanticSearchTool: Tool<{ query: string }, any> = {
     }
 };
 
-export const workspaceSourcesSearchTool: Tool<{ query: string }, any> = {
+export const workspaceSourcesSearchTool: Tool<{ query: string; targetWorkspaceId?: string }, any> = {
     name: "query_workspace_sources",
-    description: "Searches the user's dedicated workspace knowledge base (Data Refinery) for factual market data, competitor intelligence, and provided documentation. Always use this to verify facts before answering domain-specific queries. Each result contains: (1) content — the factual text you must cite, and (2) lineage — optional metadata showing SUPERSEDES/CAUSES transitions. Use lineage ONLY to explain WHY state changed, never as a citation target. Cite content using [1], [2], etc.",
+    description: "Searches a workspace knowledge base (Data Refinery) for factual market data, competitor intelligence, and provided documentation. By default this searches the conversation's selected workspace; pass targetWorkspaceId (an id from workspace_list) to search another workspace you are authorized to access — explicit targeting reads that workspace only and never changes the conversation's selected workspace. Each result contains: (1) content — the factual text you must cite, and (2) lineage — optional metadata showing SUPERSEDES/CAUSES transitions. Use lineage ONLY to explain WHY state changed, never as a citation target. Cite content using [1], [2], etc.",
     schema: z.object({
-        query: z.string().describe("The semantic search term derived from the user's prompt.")
+        query: z.string().describe("The semantic search term derived from the user's prompt."),
+        targetWorkspaceId: z.string().uuid().optional().describe("Explicit workspace to search, from workspace_list. Omit to search the conversation's selected workspace."),
     }),
     risk: "read-only",
     timeoutMs: 15_000,
     execute: async (input, context) => {
-        if (!context.workspaceId) {
-            return { success: false, error: "Missing workspace context." };
-        }
         if (!context.userId) {
             return { success: false, error: "Missing user context." };
+        }
+        const effectiveWorkspaceId = input.targetWorkspaceId ?? context.workspaceId;
+        if (!effectiveWorkspaceId) {
+            return { success: false, error: "Missing workspace context." };
+        }
+
+        // #442: explicit targeting authorizes against the SAME shared seam —
+        // ownership or accepted membership. Uniform denial discloses nothing,
+        // and reading another workspace never touches the conversation's
+        // selected workspace or its memory.
+        const { getWorkspaceAccess, WORKSPACE_ACCESS_DENIED_MESSAGE } = await import('@/lib/security/workspaceAccess');
+        const access = await getWorkspaceAccess(context.userId, effectiveWorkspaceId);
+        if (!access) {
+            return { success: false, error: WORKSPACE_ACCESS_DENIED_MESSAGE };
         }
 
         try {
             const { queryWorkspaceSources } = await import('@/lib/workspace/sources');
             const results = await queryWorkspaceSources({
-                workspaceId: context.workspaceId,
+                workspaceId: effectiveWorkspaceId,
                 userId: context.userId,
                 query: input.query,
                 matchCount: 8,

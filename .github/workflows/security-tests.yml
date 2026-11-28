@@ -5,6 +5,11 @@ on:
     branches: [main, develop, staging]
     paths:
       - 'app/api/**'
+      - 'lib/intelligence/execution/accountCompute/**'
+      - '__tests__/contracts/account-compute*'
+      - '__tests__/contracts/research-plane*'
+      - 'lib/research/**'
+      - 'supabase/migrations/*account_compute*'
       - 'lib/security/**'
       - 'lib/releases/**'
       - 'scripts/lattice-cli/**'
@@ -17,9 +22,14 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
   pull_request:
-    branches: [main, develop]
+    # Include stacked feature PRs, not only main/develop.
     paths:
       - 'app/api/**'
+      - 'lib/intelligence/execution/accountCompute/**'
+      - '__tests__/contracts/account-compute*'
+      - '__tests__/contracts/research-plane*'
+      - 'lib/research/**'
+      - 'supabase/migrations/*account_compute*'
       - 'lib/security/**'
       - 'lib/releases/**'
       - 'scripts/lattice-cli/**'

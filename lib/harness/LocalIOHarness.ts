@@ -1,3 +1,4 @@
+import type { CommandShell } from './commandShell';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { spawn } from 'child_process';
@@ -119,8 +120,11 @@ export class LocalIOHarness implements IOHarness {
     }
   }
 
-  public async executeCommandSecure(command: string, timeoutSeconds: number, workspaceId: string, userId: string): Promise<ToolExecutionResult> {
-    const timeout = timeoutSeconds * 1000 || this.defaultCommandTimeoutMs;
+  public async executeCommandSecure(command: string, timeoutSeconds: number, workspaceId: string, userId: string, shell?: CommandShell): Promise<ToolExecutionResult> {
+    if (shell !== undefined || process.platform === 'win32') {
+      return { ok: false, code: 'NATIVE_HARNESS_REQUIRED', error: 'Explicit shell execution requires the native Go harness. No shell fallback was performed.' };
+    }
+    const timeout = Math.min(timeoutSeconds > 0 ? timeoutSeconds * 1000 : this.defaultCommandTimeoutMs, 120000);
     
     return new Promise((resolve) => {
       let outputBuffer = '';

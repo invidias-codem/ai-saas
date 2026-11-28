@@ -1,12 +1,12 @@
 // lib/ucol/prompts/nimChat.ts
 // Shared non-streaming OpenAI-compatible completion helper for the UCOL
 // Code Builder debate loop (planner / coder / reviewer). All three stages
-// call Kimi K3 directly against NVIDIA NIM — no self-proxy hop, no relative
+// call the supported NVIDIA NIM code model — no self-proxy hop, no relative
 // URL resolution (which threw ERR_INVALID_URL under Node's fetch()).
 import { nvidiaNimConfig } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { NIM_MODEL_CODE } from '@/lib/llm/providers/nvidiaNim';
 
-const NIM_MODEL_KIMI_K3 = 'moonshotai/kimi-k3';
 const DEFAULT_TIMEOUT_MS = 50_000;
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1_000;
@@ -78,7 +78,7 @@ export async function nimChat(
     throw new Error('[NIM] NVIDIA_API_KEY is not set. Code Builder requires NVIDIA NIM.');
   }
 
-  const modelId = opts.model || NIM_MODEL_KIMI_K3;
+  const modelId = opts.model || NIM_MODEL_CODE;
   const body = {
     messages: [
       { role: 'system', content: systemPrompt },
@@ -89,8 +89,12 @@ export async function nimChat(
     max_tokens: opts.maxTokens ?? 8192,
     top_p: 0.95,
     stream: false,
-    chat_template_kwargs: { enable_thinking: false },
-    ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}),
+    // Nemotron supports thinking via chat_template_kwargs, not reasoning_effort.
+    // Disable thinking here: the planner/coder/reviewer require JSON in message.content.
+    ...(modelId.startsWith('nvidia/nemotron-')
+      ? { chat_template_kwargs: { enable_thinking: false } } : {}),
+    ...(modelId.startsWith('moonshotai/kimi-') && opts.reasoningEffort
+      ? { reasoning_effort: opts.reasoningEffort } : {}),
   };
 
   // Collapse malformed values to the default: a zero, negative, or NaN timeout
@@ -236,4 +240,4 @@ function jitter(ms: number): number {
   return ms / 2 + Math.random() * ms;
 }
 
-export { NIM_MODEL_KIMI_K3 };
+export { NIM_MODEL_CODE };

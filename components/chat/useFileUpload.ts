@@ -1,193 +1,214 @@
 "use client";
 
-import { useRef, useState, ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import axios from "axios";
-import {
-  compressBase64Payload,
-  FileUploadPayload,
-} from "@/lib/uploadCompression";
+import { compressBase64Payload, type FileUploadPayload } from "@/lib/uploadCompression";
+import { MAX_CHAT_IMAGE_BYTES, MAX_CHAT_IMAGES } from "@/lib/types/attachments";
+import { getChatImageMimeType, MAX_INLINE_CHAT_IMAGE_BYTES, prepareChatImage } from "@/lib/utils/chatImage";
 
-/**
- * Selected file structure. Used by the send pipeline to build the `fileData`
- * payload (either a GCS `fileUri` for large files or `base64Data` for small).
- */
 export interface SelectedFile {
+  id: string;
   file: File;
-  preview: string;
   name: string;
   type: string;
-  mimeType?: string;
-  sizeBytes?: number;
-  storageProvider?: string;
-  base64Data?: string;
-  fileUri?: string; // GCS URI for large files
-  isUploading?: boolean;
+  isUploading: boolean;
+  payload?: FileUploadPayload;
+  error?: string;
+  previewUrl?: string;
 }
 
-const readFileAsBase64 = (file: File): Promise<string> => {
+export type FilePayload = FileUploadPayload;
+
+const LARGE_FILE_THRESHOLD = 4 * 1024 * 1024;
+const MAX_PHOTO_BYTES = 20 * 1024 * 1024;
+const MAX_CONCURRENT_PREPARATIONS = 3;
+
+function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(",")[1];
-      resolve(base64);
+      const data = typeof reader.result === "string" ? reader.result.split(",")[1] : undefined;
+      if (data) resolve(data);
+      else reject(new Error("The file is empty."));
     };
-    reader.onerror = reject;
+    reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
-};
-
-/** The `fileData` payload shape sent to the chat/analyze endpoint. */
-export type FilePayload = FileUploadPayload;
-
-const LARGE_FILE_THRESHOLD = 4 * 1024 * 1024; // 4MB
+}
 
 /**
- * File attachment lifecycle: selection, smart upload (GCS direct for >4MB,
- * base64 for small files), preview toggling, and removal.
- *
- * Extracted from conversation/[id]/client.tsx (T2 — leaf slice, no edges).
- * Only owns the *upload* state transitions; the send pipeline (T6) consumes
- * `selectedFile` via `buildFilePayload()` and then calls `clearFile()`.
- *
- * @param onError external error reporter (surfaces upload failures to the UI).
+ * One document or up to MAX_CHAT_IMAGES photos. The first individually chosen
+ * photo may use the existing inline path; every additional photo uses GCS so
+ * mobile/serverless request-body limits cannot be exceeded.
  */
-export function useFileUpload(onError: (msg: string) => void) {
-  const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
-  const [showFilePreview, setShowFilePreview] = useState(false);
+export function useFileUpload(onError: (msg: string | null) => void) {
+  const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
+  const [previewFileId, setPreviewFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const controllers = useRef(new Map<string, AbortController>());
+  const previewUrls = useRef(new Map<string, string>());
+  const cancelledIds = useRef(new Set<string>());
+  const generation = useRef(0);
 
-  const hasFile = selectedFile !== null;
+  useEffect(() => () => {
+    controllers.current.forEach(controller => controller.abort());
+    previewUrls.current.forEach(url => URL.revokeObjectURL(url));
+    controllers.current.clear();
+    previewUrls.current.clear();
+  }, []);
 
-  const handleAttachClick = () => {
-    fileInputRef.current?.click();
-  };
+  const processEntry = async (entry: SelectedFile, forceStoredImage: boolean) => {
+    // The user may remove an item before the bounded worker reaches it.
+    if (cancelledIds.current.has(entry.id)) return;
+    const controller = new AbortController();
+    controllers.current.set(entry.id, controller);
+    const { signal } = controller;
+    const photoType = getChatImageMimeType(entry.file);
+    let failureMessage = photoType
+      ? "Couldn’t prepare this photo. Try a JPEG, PNG, or another photo."
+      : "Couldn’t read the file. Remove it and try again.";
 
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const objectUrl = URL.createObjectURL(file);
-      const isLargeFile = file.size > LARGE_FILE_THRESHOLD;
-
-      const newFileState: SelectedFile = {
-        file,
-        preview: objectUrl,
-        name: file.name,
-        type: file.type,
-        mimeType: file.type,
-        sizeBytes: file.size,
-        isUploading: isLargeFile,
-      };
-
-      setSelectedFile(newFileState);
-      setShowFilePreview(false);
-
-      if (isLargeFile) {
-        // Smart Upload: GCS Direct
-        try {
-          // 1. Get Signed URL
-          const signRes = await axios.post("/api/storage/sign", {
-            filename: file.name,
-            contentType: file.type,
-          });
-
-          const { uploadUrl, fileUri } = signRes.data;
-
-          // 2. Upload to GCS
-          const uploadRes = await fetch(uploadUrl, {
-            method: "PUT",
-            headers: { "Content-Type": file.type },
-            body: file,
-          });
-
-          if (!uploadRes.ok) {
-            throw new Error(`Upload failed: ${uploadRes.statusText}`);
-          }
-
-          // 3. Update State
-          setSelectedFile((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  fileUri,
-                  storageProvider: "gcs",
-                  base64Data: undefined,
-                  isUploading: false,
-                }
-              : null
-          );
-        } catch (err: any) {
-          console.error("Smart Upload Failed:", err);
-          onError("Failed to upload large file. Please try a smaller one.");
-          URL.revokeObjectURL(objectUrl); // Clean up memory
-          setSelectedFile(null);
-        }
-      } else {
-        // Standard Upload: Base64
-        const base64 = await readFileAsBase64(file);
-        setSelectedFile((prev) => (prev ? { ...prev, base64Data: base64 } : null));
+    try {
+      if (photoType && entry.file.size > MAX_PHOTO_BYTES) {
+        failureMessage = "This photo is larger than 20 MB. Choose a smaller image.";
+        throw new Error(failureMessage);
       }
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      const prepared = photoType ? await prepareChatImage(entry.file, photoType) : entry.file;
+      signal.throwIfAborted();
+      if (photoType && prepared.size > MAX_CHAT_IMAGE_BYTES) {
+        failureMessage = "This photo is too large to attach. Choose a smaller image.";
+        throw new Error(failureMessage);
+      }
+
+      const mimeType = prepared.type || entry.type;
+      const fileInfo = { name: prepared.name, type: mimeType, mimeType, sizeBytes: prepared.size };
+      let payload: FileUploadPayload;
+      const storeInGcs = (photoType && forceStoredImage)
+        || prepared.size > (photoType ? MAX_INLINE_CHAT_IMAGE_BYTES : LARGE_FILE_THRESHOLD);
+
+      if (storeInGcs) {
+        failureMessage = "Couldn’t upload this file. Check your connection and retry.";
+        const { data: { uploadUrl, fileUri } } = await axios.post<{ uploadUrl: string; fileUri: string }>(
+          "/api/storage/sign", { filename: prepared.name, contentType: mimeType }, { signal }
+        );
+        const response = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": mimeType },
+          body: prepared,
+          signal,
+        });
+        if (!response.ok) throw new Error("Direct upload failed");
+        payload = { ...fileInfo, fileUri, storageProvider: "gcs" };
+      } else {
+        const inlinePayload = { ...fileInfo, base64Data: await readFileAsBase64(prepared) };
+        payload = photoType ? inlinePayload : compressBase64Payload(inlinePayload);
+      }
+      signal.throwIfAborted();
+      setSelectedFiles(current => current.map(item => item.id === entry.id
+        ? { ...item, file: prepared, type: mimeType, isUploading: false, payload, error: undefined }
+        : item));
+    } catch {
+      if (!signal.aborted) {
+        setSelectedFiles(current => current.map(item => item.id === entry.id
+          ? { ...item, isUploading: false, payload: undefined, error: failureMessage }
+          : item));
+      }
+    } finally {
+      if (controllers.current.get(entry.id) === controller) controllers.current.delete(entry.id);
     }
   };
 
-  const togglePreview = () => {
-    setShowFilePreview((v) => !v);
+  const attachFiles = (files: File[]) => {
+    if (files.length === 0) return;
+    const currentHasDocument = selectedFiles.some(item => !getChatImageMimeType(item.file));
+    const incomingHasDocument = files.some(file => !getChatImageMimeType(file));
+    if ((currentHasDocument || incomingHasDocument) && (selectedFiles.length > 0 || files.length > 1)) {
+      onError("Attach one document at a time, or select multiple images without documents.");
+      return;
+    }
+
+    const remaining = MAX_CHAT_IMAGES - selectedFiles.length;
+    if (remaining <= 0) {
+      onError(`You can attach up to ${MAX_CHAT_IMAGES} images per message.`);
+      return;
+    }
+    const admitted = files.slice(0, remaining);
+    onError(files.length > remaining ? `Only ${MAX_CHAT_IMAGES} images can be attached to one message.` : null);
+    const forceStoredImage = selectedFiles.length > 0 || admitted.length > 1;
+    const entries: SelectedFile[] = admitted.map(file => {
+      const id = crypto.randomUUID();
+      const photoType = getChatImageMimeType(file);
+      const previewUrl = photoType ? URL.createObjectURL(file) : undefined;
+      if (previewUrl) previewUrls.current.set(id, previewUrl);
+      return {
+        id, file, name: file.name,
+        type: photoType ?? (file.type || "application/octet-stream"),
+        isUploading: true, previewUrl,
+      };
+    });
+    setSelectedFiles(current => [...current, ...entries]);
+
+    // Bounded workers prevent a multi-select from decoding ten camera photos at once.
+    let index = 0;
+    const batchGeneration = generation.current;
+    void Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_PREPARATIONS, entries.length) }, async () => {
+      while (index < entries.length && generation.current === batchGeneration) {
+        const entry = entries[index++];
+        if (!cancelledIds.current.has(entry.id)) await processEntry(entry, forceStoredImage);
+      }
+    }));
   };
 
-  const removeFile = () => {
-    if (selectedFile?.preview) {
-      URL.revokeObjectURL(selectedFile.preview); // Clean up object URL
-    }
-    setSelectedFile(null);
-    setShowFilePreview(false);
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = "";
+    attachFiles(files);
+  };
+
+  const removeFile = (id: string) => {
+    cancelledIds.current.add(id);
+    controllers.current.get(id)?.abort();
+    controllers.current.delete(id);
+    const url = previewUrls.current.get(id);
+    if (url) URL.revokeObjectURL(url);
+    previewUrls.current.delete(id);
+    setSelectedFiles(current => current.filter(item => item.id !== id));
+    setPreviewFileId(current => current === id ? null : current);
   };
 
   const clearFile = () => {
-    setSelectedFile(null);
-    setShowFilePreview(false);
+    generation.current += 1;
+    controllers.current.forEach(controller => controller.abort());
+    controllers.current.clear();
+    previewUrls.current.forEach(url => URL.revokeObjectURL(url));
+    previewUrls.current.clear();
+    setSelectedFiles([]);
+    setPreviewFileId(null);
   };
 
-  /** Builds the wire `fileData` payload from the current selection. */
-  const buildFilePayload = (): FilePayload | undefined => {
-    if (!selectedFile) return undefined;
-
-    if (selectedFile.fileUri) {
-      return {
-        name: selectedFile.name,
-        type: selectedFile.type,
-        mimeType: selectedFile.mimeType || selectedFile.type,
-        sizeBytes: selectedFile.sizeBytes,
-        fileUri: selectedFile.fileUri,
-        storageProvider: selectedFile.storageProvider || "gcs",
-      };
-    }
-
-    if (selectedFile.base64Data) {
-      return compressBase64Payload({
-        name: selectedFile.name,
-        type: selectedFile.type,
-        mimeType: selectedFile.mimeType || selectedFile.type,
-        sizeBytes: selectedFile.sizeBytes,
-        base64Data: selectedFile.base64Data,
-      });
-    }
-
-    return undefined;
+  const retryFile = (id: string) => {
+    const entry = selectedFiles.find(item => item.id === id);
+    if (!entry || entry.isUploading) return;
+    setSelectedFiles(current => current.map(item => item.id === id
+      ? { ...item, isUploading: true, error: undefined } : item));
+    // A retried photo is stored unless it is the only attachment, preventing
+    // large inline bodies when other photos are present.
+    void processEntry(entry, selectedFiles.length > 1);
   };
 
   return {
-    selectedFile,
-    showFilePreview,
+    selectedFiles,
+    previewFileId,
     fileInputRef,
-    hasFile,
-    handleAttachClick,
+    attachFiles,
     handleFileChange,
-    togglePreview,
+    togglePreview: (id: string) => setPreviewFileId(value => value === id ? null : id),
     removeFile,
+    retryFile,
     clearFile,
-    buildFilePayload,
+    buildFilePayloads: (): FilePayload[] | undefined =>
+      selectedFiles.some(item => item.isUploading || !item.payload || item.error)
+        ? undefined
+        : selectedFiles.map(item => item.payload!),
   };
 }

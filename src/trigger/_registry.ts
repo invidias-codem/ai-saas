@@ -1,56 +1,47 @@
 import { ToolRegistry } from '@/lib/agents/core/registry';
+import {
+  buildCapabilityManifest,
+  buildWeaverSystemInstruction,
+  logCapabilityResolution,
+  type CapabilityManifest,
+} from '@/lib/agents/core/capabilityManifest';
 
 /**
- * Rebuilds the agentic ToolRegistry on the Trigger.dev worker from stable
- * module-level tool constants.
+ * Builds the worker's authorized agentic runtime (Phase 0 #440): the tool
+ * registry AND the manifest-derived system instruction, from the SAME
+ * manifest-gated builder the web engine uses — parity by construction.
  *
- * This is duplicated from the agentic branch of `generateConversationReply`
- * (lib/llm/conversationEngine.ts) ON PURPOSE: the task worker runs outside the
- * request lifecycle, so it cannot inherit the route's in-memory registry. The
- * tools themselves are stable module singletons — safe to re-register here by
- * importing them directly (never serialized across the task boundary).
+ * The worker supplies no ioHarness (src/trigger/_context.ts); the harness
+ * tools and the four LOCAL discovery tools refuse at execute-time without
+ * one, so their capabilities report unavailable. query_workspace_sources is
+ * SERVER-SIDE source search (workspace/user guards, no harness — #440 review
+ * finding 1), so the worker's effective catalog is the base set plus that
+ * one tool: 9 exposed, advertised identically.
  */
-export async function buildAgenticRegistry(mode: 'agentic'): Promise<ToolRegistry> {
-  const { dealSentinelTool } = await import('@/lib/agents/tools/dealSentinel');
-  const { webSearchTool } = await import('@/lib/agents/tools/webSearch');
-  const { researchWriterTool } = await import('@/lib/agents/tools/researchWriter');
-  const { novelWriterTool } = await import('@/lib/agents/tools/novelWriter');
-  const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
-  const { generateMusicTool } = await import('@/lib/agents/tools/generateMusic');
-  const { generateImageTool } = await import('@/lib/agents/tools/generateImage');
-  const { generateVideoTool } = await import('@/lib/agents/tools/generateVideo');
-  const { readFileTool, writeFileTool, patchFileTool } = await import('@/lib/agents/tools/harnessTools');
-  const { executeCommandTool } = await import('@/lib/agents/tools/executionTools');
-  const {
-    discoverDocumentsTool,
-    extractTextTool,
-    summarizeRepoTool,
-    semanticSearchTool,
-    workspaceSourcesSearchTool,
-  } = await import('@/lib/agents/tools/intelligenceTools');
-
-  const registry = new ToolRegistry();
-  registry.register(dealSentinelTool);
-  registry.register(webSearchTool);
-  registry.register(researchWriterTool);
-  registry.register(novelWriterTool);
-  registry.register(searchCodebaseTool);
-  registry.register(generateMusicTool);
-  registry.register(generateImageTool);
-  registry.register(generateVideoTool);
-
-  // Phase 1: Local Mutable Capabilities
-  registry.register(readFileTool);
-  registry.register(writeFileTool);
-  registry.register(patchFileTool);
-  registry.register(executeCommandTool);
-
-  // Phase 3 & 4: Intelligence Capabilities
-  registry.register(discoverDocumentsTool);
-  registry.register(extractTextTool);
-  registry.register(summarizeRepoTool);
-  registry.register(semanticSearchTool);
-  registry.register(workspaceSourcesSearchTool);
-
-  return registry;
+export async function buildAgenticRuntime(ctx: {
+  userId?: string;
+  workspaceId?: string | null;
+  requestId?: string;
+  conversationId?: string;
+}): Promise<{ registry: ToolRegistry; manifest: CapabilityManifest; systemInstruction: string }> {
+  const manifest: CapabilityManifest = buildCapabilityManifest({
+    resolvedMode: 'agentic',
+    workspaceId: ctx.workspaceId ?? null,
+    surface: 'trigger-worker',
+    memoryReadEnabled: false,
+    webResearchEnabled: false,
+    ioHarnessPresent: false,
+  });
+  const { buildAuthorizedToolSet, registryFromTools } = await import('@/lib/agents/core/agenticToolSet');
+  const registry = registryFromTools(buildAuthorizedToolSet(manifest));
+  const systemInstruction = buildWeaverSystemInstruction(manifest);
+  void logCapabilityResolution({
+    userId: ctx.userId,
+    workspaceId: ctx.workspaceId ?? undefined,
+    requestId: ctx.requestId,
+    conversationId: ctx.conversationId,
+    manifest,
+    toolNames: registry.getToolNames(),
+  });
+  return { registry, manifest, systemInstruction };
 }

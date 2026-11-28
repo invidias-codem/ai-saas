@@ -60,15 +60,14 @@ function runtimeLabel(state: RuntimeState, agentMode?: string) {
 function runtimeColor(state: RuntimeState) {
   switch (state) {
     case "thinking":
-      return "text-amber-600 dark:text-amber-400";
+      return "text-warning";
     case "executing_tools":
-      return "text-violet-600 dark:text-violet-400";
     case "streaming":
-      return "text-sky-600 dark:text-sky-400";
+      return "text-accent-foreground";
     case "error":
-      return "text-red-600 dark:text-red-400";
+      return "text-destructive";
     default:
-      return "text-emerald-600 dark:text-emerald-400";
+      return "text-primary";
   }
 }
 

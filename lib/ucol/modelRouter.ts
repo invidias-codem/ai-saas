@@ -2,17 +2,18 @@
  * UCOL Model Router — code generation routing (NVIDIA NIM).
  *
  * After the provider consolidation, code generation is served by a single
- * model — Kimi K3 (moonshotai/kimi-k3) on NVIDIA NIM. The router now exists to:
+ * model — Nemotron 3 Ultra on NVIDIA NIM. The router now exists to:
  *   1. Emit stable routing decisions for observability/telemetry
  *   2. Retain the escalation/thrash bookkeeping contract so callers that
  *      import `recordThrash` / `decide` keep working unchanged
  *
- * Escalation now resolves to the same Kimi K3 target (no multi-provider
+ * Escalation now resolves to the same Nemotron target (no multi-provider
  * cascade). This removes the openrouter / huggingface / anthropic / google
  * sprawl while preserving the shape of RouterDecision.
  */
 
 import type { ComponentSpec, ProjectPlan, BuildSession, ContextFlowEntry } from './types';
+import { NIM_MODEL_CODE } from '@/lib/llm/providers/nvidiaNim';
 
 export type ModelTier = 'L1' | 'L2' | 'L3';
 
@@ -49,16 +50,16 @@ export interface RouterDecision {
   telemetry: Record<string, any>;
 }
 
-const KIMI_K3: ModelTarget = {
+const CODE_MODEL: ModelTarget = {
   provider: 'nvidia-nim',
-  modelId: 'moonshotai/kimi-k3',
+  modelId: NIM_MODEL_CODE,
   tier: 'L1',
-  contextLimit: 256_000,
+  contextLimit: 1_048_576,
   maxTokens: 16384,
   strengths: ['react', 'typescript', 'ui-components', 'fullstack', 'agentic', 'tool-use', 'long-horizon'],
 };
 
-const MODEL_CATALOG: ModelTarget[] = [KIMI_K3];
+const MODEL_CATALOG: ModelTarget[] = [CODE_MODEL];
 
 const MAX_PROMPT_TOKENS_ESTIMATE = (text: string) => Math.ceil(text.length / 3.5);
 
@@ -74,7 +75,7 @@ export class ModelRouter {
 
   decide(component: ComponentSpec, plan: ProjectPlan, session: BuildSession, promptText: string): RouterDecision {
     void session;
-    const primary = KIMI_K3;
+    const primary = CODE_MODEL;
     const primaryTokens = MAX_PROMPT_TOKENS_ESTIMATE(promptText);
     const saturation = primaryTokens / primary.contextLimit;
 
@@ -87,7 +88,7 @@ export class ModelRouter {
       componentName: component.name,
       primaryModel: primary,
       escalationModel: primary,
-      reason: `Kimi K3 (NVIDIA NIM) — strengths: ${primary.strengths.slice(0, 3).join(', ')}`,
+      reason: `Nemotron 3 Ultra (NVIDIA NIM) — strengths: ${primary.strengths.slice(0, 3).join(', ')}`,
       preemptive: false,
       telemetry: { promptTokens: primaryTokens, saturation },
     };

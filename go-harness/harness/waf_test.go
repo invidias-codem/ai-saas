@@ -29,7 +29,6 @@ func TestWAFTransport_AllowedRequests(t *testing.T) {
 		{http.MethodGet, "https://api.github.com/user"}, // User root, no repo
 		{http.MethodGet, "https://api.github.com/repos/invidias-codem/ai-saas/issues"},
 		{http.MethodGet, "https://github.com/invidias-codem/ai-saas/tree/main"},
-		{http.MethodPost, "https://example.com/api"}, // Non-GitHub domain allowed
 	}
 
 	for _, tc := range tests {
@@ -52,10 +51,18 @@ func TestWAFTransport_BlockedRequests(t *testing.T) {
 		method string
 		url    string
 	}{
-		{http.MethodPost, "https://api.github.com/repos/invidias-codem/ai-saas/pulls"}, // Allowed repo, but destructive method
+		{http.MethodPost, "https://example.com/api"},
+		{http.MethodGet, "http://api.github.com/repos/invidias-codem/ai-saas"},
+		{http.MethodGet, "https://api.github.com:444/repos/invidias-codem/ai-saas"},
+		{http.MethodGet, "https://user:password@api.github.com/repos/invidias-codem/ai-saas"},
+		{http.MethodGet, "https://api.github.com/repos/invidias-codem/ai-saas/%2e%2e/other"},
+		{http.MethodGet, "https://api.github.com/repos/invidias-codem/ai-saas/%252e%252e/other"},
+		{http.MethodGet, "https://api.github.com/repos/invidias-codem%2fother/ai-saas"},
+		{http.MethodGet, "https://api.github.com/search/code?q=private"},
+		{http.MethodPost, "https://api.github.com/repos/invidias-codem/ai-saas/pulls"},            // Allowed repo, but destructive method
 		{http.MethodPut, "https://api.github.com/repos/invidias-codem/ai-saas/contents/file.txt"}, // Allowed repo, but destructive method
-		{http.MethodGet, "https://api.github.com/repos/unauthorized/repo"}, // Safe method, but unauthorized repo
-		{http.MethodGet, "https://github.com/unauthorized/repo/tree/main"}, // Safe method, but unauthorized repo
+		{http.MethodGet, "https://api.github.com/repos/unauthorized/repo"},                        // Safe method, but unauthorized repo
+		{http.MethodGet, "https://github.com/unauthorized/repo/tree/main"},                        // Safe method, but unauthorized repo
 	}
 
 	for _, tc := range tests {
@@ -67,7 +74,7 @@ func TestWAFTransport_BlockedRequests(t *testing.T) {
 		if resp.StatusCode != http.StatusForbidden {
 			t.Errorf("Expected status 403 Forbidden for %s %s, got %d", tc.method, tc.url, resp.StatusCode)
 		}
-		
+
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		bodyStr := string(bodyBytes)
 		if !strings.Contains(bodyStr, "Lattice WAF") {

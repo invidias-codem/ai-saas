@@ -33,7 +33,8 @@ export async function runReActLoop(
     userQuery: string | Array<Part>,
     context: AgentContext,
     registry: ToolRegistry,
-    modelName: string = 'gemini-2.5-flash'
+    modelName: string = 'gemini-2.5-flash',
+    systemInstruction?: string,
 ): Promise<ReActResult> {
   const providerMode = process.env.MODEL_PROVIDER || process.env.NEXT_PUBLIC_MODEL_PROVIDER || '';
 
@@ -94,7 +95,11 @@ export async function runReActLoop(
 
   const chat = model.startChat({
     history: context.history || [],
-    tools: registry.getToolsForGemini()
+    tools: registry.getToolsForGemini(),
+    // Phase 0 (#440): manifest-derived instruction reaches Gemini inference
+    // via the SDK's StartChatParams.systemInstruction (verified in the
+    // installed @google-cloud/vertexai .d.ts).
+    ...(systemInstruction ? { systemInstruction } : {}),
   });
 
   let promptToSend: string | Array<Part> = userQuery;

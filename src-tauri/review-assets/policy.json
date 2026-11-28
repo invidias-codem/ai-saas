@@ -1,0 +1,15 @@
+{
+  "default-src": "'none'",
+  "script-src": "'self'",
+  "style-src": "'self'",
+  "connect-src": "ipc: http://ipc.localhost",
+  "img-src": "'none'",
+  "font-src": "'none'",
+  "frame-src": "'none'",
+  "frame-ancestors": "'none'",
+  "object-src": "'none'",
+  "base-uri": "'none'",
+  "form-action": "'none'",
+  "worker-src": "'none'",
+  "media-src": "'none'"
+}

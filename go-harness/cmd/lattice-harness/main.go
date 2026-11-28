@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha3"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,12 +13,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/invidias-codem/ai-saas/go-harness/harness"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/fsutil"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/lifecycle"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/nativeprotocol"
 	"github.com/invidias-codem/ai-saas/go-harness/internal/telemetry"
 )
 
@@ -46,6 +50,8 @@ type SessionContext struct {
 	Registry  *fsutil.RootRegistry
 	Telemetry *telemetry.Manager
 	VectorDB  *harness.VectorIndex
+	Work      *lifecycle.Group
+	Native    *nativeprotocol.Session
 }
 
 type SyncGrantsArgs struct {
@@ -64,6 +70,7 @@ type LocalCapabilityArgs struct {
 
 type SemanticSearchSecureArgs struct {
 	Query       string `json:"query"`
+	AuthToken   string `json:"auth_token"`
 	WorkspaceID string `json:"workspace_id"`
 	UserID      string `json:"user_id"`
 }
@@ -82,13 +89,7 @@ type SearchEpisodicEventsArgs struct {
 	TopK           int       `json:"top_k"`
 }
 
-type ExecuteCommandSecureArgs struct {
-	Command        string `json:"command"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	Path           string `json:"path"`
-	WorkspaceID    string `json:"workspace_id"`
-	UserID         string `json:"user_id"`
-}
+type ExecuteCommandSecureArgs = harness.CommandRequest
 
 type StartWorkspaceIngestionArgs struct {
 	Path        string `json:"path"`
@@ -134,6 +135,7 @@ type RunCommandArgs struct {
 }
 
 type GitHubRequestArgs struct {
+	GitHubToken  string   `json:"githubToken"`
 	Method       string   `json:"method"`
 	URL          string   `json:"url"`
 	Body         string   `json:"body,omitempty"`
@@ -157,6 +159,7 @@ type SemanticSearchArgs struct {
 }
 
 type GetFileContentsArgs struct {
+	GitHubToken  string   `json:"githubToken"`
 	RepoFullName string   `json:"repoFullName"`
 	FilePath     string   `json:"filePath"`
 	AllowedRepos []string `json:"allowedRepos"` // Injected by Next.js per request
@@ -169,87 +172,78 @@ var (
 	expectedToken   string
 )
 
+// Compare fixed-length SHA3 digests rather than raw secret prefixes, per the
+// repository authentication policy. Never log either candidate or launch token.
+func sameToken(candidate, expected string) bool {
+	return sha3.Sum256([]byte(candidate)) == sha3.Sum256([]byte(expected))
+}
+
+// validateLaunchAuthToken enforces fail-closed startup (#448 review):
+// packaged startup rejects missing authentication instead of running the
+// daemon unauthenticated.
+func validateLaunchAuthToken(token string) error {
+	if token == "" {
+		return errors.New("LATTICE_AUTH_TOKEN is not set; refusing to start. Packaged startup rejects missing authentication.")
+	}
+	return nil
+}
+
 func main() {
 	// Violent Descriptor Separation
 	log.SetOutput(os.Stderr)
 
 	portFlag := flag.Int("port", 0, "Port to bind the HTTP server to (0 for dynamic)")
 	corsOriginsFlag := flag.String("cors-origins", "http://localhost:3000,tauri://localhost,https://tauri.localhost", "Comma-separated list of allowed CORS origins")
+	parentStdio := flag.Bool("parent-stdio", false, "Stop when the native parent's stdin lifeline closes")
+	nativeHost := flag.Bool("native-host", false, "Require the native desktop's versioned local authority protocol")
 	flag.Parse()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	work := lifecycle.New(ctx)
+	defer work.Stop()
+	ctx = work.Context()
+	if *parentStdio {
+		go func() { _, _ = io.Copy(io.Discard, os.Stdin); work.Stop() }()
+	}
 	defer cleanupHarnesses()
 
 	expectedToken = os.Getenv("LATTICE_AUTH_TOKEN")
-	if expectedToken == "" {
-		log.Println("WARNING: LATTICE_AUTH_TOKEN is not set. The daemon is running in insecure mode (not recommended).")
+	// #448 review: fail closed. Packaged startup rejects missing
+	// authentication — the previous behavior (warn + run unauthenticated)
+	// exposed every daemon capability to any local process.
+	if err := validateLaunchAuthToken(expectedToken); err != nil {
+		log.Fatalf("%v", err)
 	}
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		sig := <-sigChan
-		log.Printf("Received signal %v, shutting down...", sig)
-		cancel()
-		cleanupHarnesses()
-		os.Exit(1)
-	}()
-
 	// 1. Initialize the decoupled memory structures
-	telemetryManager := telemetry.NewManager() // Buffer is ready, flusher is OFF
+	telemetryManager := telemetry.NewManagerContext(ctx) // Buffer is ready, flusher is OFF
+	defer telemetryManager.Close()
 	rootRegistry := fsutil.NewRootRegistry()
-	vectorDB, err := harness.NewVectorIndex("lattice_vectors.db")
-	if err != nil {
-		log.Printf("Failed to initialize vector index: %v", err)
+	defer rootRegistry.Close()
+	var vectorDB *harness.VectorIndex
+	if !*nativeHost {
+		var err error
+		vectorDB, err = harness.NewVectorIndex("lattice_vectors.db")
+		if err != nil {
+			log.Fatalf("Failed to initialize vector index: %v", err)
+		}
+		defer vectorDB.Close()
 	}
 
 	session := &SessionContext{
 		Registry:  rootRegistry,
 		Telemetry: telemetryManager,
 		VectorDB:  vectorDB,
+		Work:      work,
+	}
+	if *nativeHost {
+		session.Native = nativeprotocol.NewSessionWithWork(work)
+		defer session.Native.Close()
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/rpc", func(w http.ResponseWriter, r *http.Request) {
-		// CORS Headers
-		origin := r.Header.Get("Origin")
-		allowedOrigins := strings.Split(*corsOriginsFlag, ",")
-		allowed := false
-		for _, o := range allowedOrigins {
-			if origin == strings.TrimSpace(o) {
-				allowed = true
-				break
-			}
-		}
-		if allowed {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		} else {
-			// Fallback for development if no origin is provided
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-		}
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Bad request", http.StatusBadRequest)
-			return
-		}
-		defer r.Body.Close()
-
-		processFrame(w, ctx, session, body)
-	})
+	mux.Handle("/rpc", newRPCHandler(session, *corsOriginsFlag))
 
 	addr := fmt.Sprintf("127.0.0.1:%d", *portFlag)
 	listener, err := net.Listen("tcp", addr)
@@ -266,16 +260,40 @@ func main() {
 	}
 	json.NewEncoder(os.Stdout).Encode(readyMsg)
 
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      130 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		MaxHeaderBytes:    32 * 1024,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+	}
 
+	shutdownDone := make(chan struct{})
 	go func() {
+		defer close(shutdownDone)
 		<-ctx.Done()
-		srv.Shutdown(context.Background())
+		work.Stop()
+		deadline, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		if err := srv.Shutdown(deadline); err != nil {
+			_ = srv.Close()
+		}
+		if err := work.Wait(deadline); err != nil {
+			// Do not run shared-resource closers underneath unfinished work or
+			// advertise a clean exit. The native owner handles bounded fallback.
+			log.Print("Local work did not finish before the shutdown deadline")
+			os.Exit(1)
+		}
 	}()
 
 	log.Printf("Listening on http://127.0.0.1:%d", actualPort)
 	if err := srv.Serve(listener); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("HTTP server error: %v", err)
+	}
+	if ctx.Err() != nil {
+		<-shutdownDone
 	}
 }
 
@@ -332,16 +350,52 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 		return
 	}
 
-	// Inner Ring Security check: verify the injected auth token
-	if expectedToken != "" && req.AuthToken != expectedToken {
+	// Inner Ring Security check: verify the injected auth token.
+	// #448 review: UNCONDITIONAL — the previous `expectedToken != "" &&`
+	// short-circuit let the daemon run fully unauthenticated whenever the
+	// launch token was missing ("insecure mode"), which is the exact taint
+	// path behind the CodeQL network/command-sink criticals. Defense in depth
+	// behind the fail-closed startup: an unconfigured token rejects EVERY
+	// request, and a configured token must match exactly.
+	if expectedToken == "" || !sameToken(req.AuthToken, expectedToken) {
 		log.Printf("Unauthorized JSON-RPC payload received. Expected valid auth token.")
 		sendErrorResponse(w, req.ID, -32000, "Unauthorized: Invalid or missing authToken")
 		return
 	}
-
-	ioHarness, err := getOrInitHarness(req.WorkspaceRoot)
-	if err != nil {
-		sendErrorResponse(w, req.ID, -32602, fmt.Sprintf("Invalid workspace initialization: %v", err))
+	var native nativeFrame
+	if session.Native != nil {
+		if nativeprotocol.Decode(line, &native) != nil || native.Version != "2.0" || native.ID == "" || len(native.ID) > 128 {
+			sendErrorResponse(w, req.ID, -32602, "Invalid native request")
+			return
+		}
+		if req.Action == "shutdown" {
+			var empty struct{}
+			if nativeprotocol.Decode(native.Inputs, &empty) != nil {
+				sendErrorResponse(w, req.ID, -32602, "Invalid native shutdown inputs")
+				return
+			}
+		}
+	}
+	if req.Action == "shutdown" {
+		if session.Work == nil {
+			sendErrorResponse(w, req.ID, -32603, "Lifecycle control is unavailable")
+			return
+		}
+		session.Work.Stop()
+		writeResponse(w, JSONRPCResponse{ID: req.ID, Version: "2.0", Result: &harness.ToolExecutionResult{Ok: true, Data: json.RawMessage(`{"status":"stopping"}`)}})
+		return
+	}
+	if session.Work != nil {
+		workCtx, finish, err := session.Work.Begin(ctx)
+		if err != nil {
+			sendErrorResponse(w, req.ID, -32001, "Local service is stopping")
+			return
+		}
+		defer finish()
+		ctx = workCtx
+	}
+	if session.Native != nil {
+		nativeDispatch(w, ctx, native, session)
 		return
 	}
 
@@ -368,11 +422,21 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "sync_root_grants":
 		var args SyncGrantsArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
-			// 1. Hydrate the registry
-			session.Registry.UpdateGrants(args.Grants)
+			// Validate the entire control-plane update before changing grants.
+			if (args.AuthToken != "" && sameToken(args.AuthToken, expectedToken)) || telemetry.ValidateCloudConfig(args.ApiBaseUrl, args.AuthToken) != nil {
+				sendErrorResponse(w, req.ID, -32602, "Invalid upstream configuration; launch credentials cannot be used upstream")
+				return
+			}
+			if err := session.Registry.UpdateGrants(args.Grants); err != nil {
+				sendErrorResponse(w, req.ID, -32602, "Invalid root grants")
+				return
+			}
 
 			// 2. Activate the background flusher securely
-			session.Telemetry.StartFlusher(args.ApiBaseUrl, args.AuthToken)
+			if err := session.Telemetry.StartFlusher(args.ApiBaseUrl, args.AuthToken); err != nil {
+				sendErrorResponse(w, req.ID, -32603, "Telemetry is unavailable")
+				return
+			}
 
 			// Log the successful hydration
 			session.Telemetry.RecordEvent(telemetry.NewEvent(
@@ -420,7 +484,11 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "start_workspace_ingestion":
 		var args StartWorkspaceIngestionArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = harness.StartWorkspaceIngestion(session.Registry, session.Telemetry, session.VectorDB, args.Path, args.WorkspaceID, args.UserID, args.AuthToken, args.ApiBaseUrl)
+			if sameToken(args.AuthToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
+			res = harness.StartWorkspaceIngestion(session.Work, session.Registry, session.Telemetry, session.VectorDB, args.Path, args.WorkspaceID, args.UserID, args.AuthToken, args.ApiBaseUrl)
 		} else {
 			sendErrorResponse(w, req.ID, -32602, "Invalid params for start_workspace_ingestion")
 			return
@@ -429,12 +497,7 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "execute_command_secure":
 		var args ExecuteCommandSecureArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
-			outputStr, execErr := harness.ExecuteCommandSecure(session.Registry, session.Telemetry, args.Command, args.Path, args.WorkspaceID, args.UserID, args.TimeoutSeconds)
-			if execErr != nil {
-				res = harness.ToolExecutionResult{Ok: false, Error: execErr.Error(), Code: "COMMAND_FAILED"}
-			} else {
-				res = harness.ToolExecutionResult{Ok: true, Output: outputStr}
-			}
+			res = harness.ExecuteCommand(ctx, session.Registry, session.Telemetry, args)
 		} else {
 			sendErrorResponse(w, req.ID, -32602, "Invalid params for execute_command_secure")
 			return
@@ -470,7 +533,11 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "semantic_search_secure":
 		var args SemanticSearchSecureArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = harness.SemanticSearchSecure(session.Registry, session.Telemetry, session.VectorDB, args.Query, args.WorkspaceID, args.UserID, expectedToken)
+			if sameToken(args.AuthToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
+			res = harness.SemanticSearchSecure(ctx, session.Registry, session.Telemetry, session.VectorDB, args.Query, args.WorkspaceID, args.UserID, args.AuthToken)
 		} else {
 			sendErrorResponse(w, req.ID, -32602, "Invalid params for semantic_search_secure")
 			return
@@ -550,43 +617,22 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 			return
 		}
 
-	case "read_file":
-		var args ReadFileArgs
-		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = ioHarness.ReadFile(ctx, args.FilePath)
-		} else {
-			sendErrorResponse(w, req.ID, -32602, "Invalid params for read_file")
-			return
-		}
-	case "write_file":
-		var args WriteFileArgs
-		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = ioHarness.WriteFile(ctx, args.FilePath, args.Content)
-		} else {
-			sendErrorResponse(w, req.ID, -32602, "Invalid params for write_file")
-			return
-		}
-	case "patch_file":
-		var args PatchFileArgs
-		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = ioHarness.PatchFile(ctx, args.FilePath, args.SearchBlock, args.ReplaceBlock)
-		} else {
-			sendErrorResponse(w, req.ID, -32602, "Invalid params for patch_file")
-			return
-		}
+	case "read_file", "write_file", "patch_file":
+		res = harness.ToolExecutionResult{Error: "Use grant-checked file capabilities with user/workspace identity", Code: "FILE_ACCESS_DENIED"}
+
 	case "run_command":
-		var args RunCommandArgs
-		if json.Unmarshal(req.Inputs, &args) == nil {
-			res = ioHarness.RunCommand(ctx, args.Command, args.TimeoutMs)
-		} else {
-			sendErrorResponse(w, req.ID, -32602, "Invalid params for run_command")
-			return
-		}
+		// Legacy RPC must not bypass the identity/root-grant execution gate.
+		res = harness.ToolExecutionResult{Error: "Use execute_command_secure with user/workspace identity and a root grant", Code: "COMMAND_ACCESS_DENIED"}
+
 	case "github_request":
 		var args GitHubRequestArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
+			if sameToken(args.GitHubToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
 			var err error
-			res, err = harness.ExecuteGitHubRequest(ctx, args.Method, args.URL, args.Body, expectedToken, args.AllowedRepos)
+			res, err = harness.ExecuteGitHubRequest(ctx, args.Method, args.URL, args.Body, args.GitHubToken, args.AllowedRepos)
 			if err != nil {
 				sendErrorResponse(w, req.ID, -32603, fmt.Sprintf("Failed to execute GitHub request: %v", err))
 				return
@@ -598,7 +644,11 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "ingest_repository":
 		var args IngestRepositoryArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
-			err := harness.CrawlAndIngest(harness.CrawlerConfig{
+			if sameToken(args.ClerkToken, expectedToken) || sameToken(args.GitHubToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
+			err := harness.CrawlAndIngest(ctx, harness.CrawlerConfig{
 				WorkspaceID:  args.WorkspaceID,
 				RepoFullName: args.RepoFullName,
 				AuthToken:    args.ClerkToken,
@@ -620,6 +670,10 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "semantic_code_search":
 		var args SemanticSearchArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
+			if sameToken(args.ClerkToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
 			var err error
 			res, err = harness.SemanticCodeSearch(ctx, harness.SemanticSearchConfig{
 				WorkspaceID:  args.WorkspaceID,
@@ -639,8 +693,12 @@ func processFrame(w http.ResponseWriter, ctx context.Context, session *SessionCo
 	case "get_file_contents":
 		var args GetFileContentsArgs
 		if json.Unmarshal(req.Inputs, &args) == nil {
+			if sameToken(args.GitHubToken, expectedToken) {
+				sendErrorResponse(w, req.ID, -32602, "Launch credentials cannot be used upstream")
+				return
+			}
 			var err error
-			res, err = harness.GetFileContents(ctx, args.RepoFullName, args.FilePath, expectedToken, args.AllowedRepos)
+			res, err = harness.GetFileContents(ctx, args.RepoFullName, args.FilePath, args.GitHubToken, args.AllowedRepos)
 			if err != nil {
 				sendErrorResponse(w, req.ID, -32603, fmt.Sprintf("File read error: %v", err))
 				return

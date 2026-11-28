@@ -7,7 +7,7 @@ const list = source.slice(source.indexOf('createRouteMatcher(['), source.indexOf
 const routes = [...list.matchAll(/^\s*'([^']+)'/gm)].map(m => m[1]);
 const isPublic = createRouteMatcher(routes);
 
-test.each(['/downloads', '/en/downloads', '/fr/downloads'])('allows the public download page %s', pathname => {
+test.each(['/downloads', '/en/downloads', '/fr/downloads', '/downloads/windows', '/en/downloads/linux', '/fr/downloads/macos'])('allows the public download page %s', pathname => {
   expect(isPublic(new NextRequest(`https://example.test${pathname}`))).toBe(true);
 });
 test.each(['/api/downloads', '/api/code-builder/stream', '/downloads/admin', '/en/downloads/private', '/api/settings/keys'])('keeps adjacent and protected paths private: %s', pathname => {

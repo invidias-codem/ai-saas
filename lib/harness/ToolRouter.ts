@@ -99,7 +99,9 @@ export class ToolRouter {
       };
     }
 
-    return this.harness.executeCommandSecure(args.command, Math.ceil(args.timeoutMs / 1000), '', '');
+    return args.shell === undefined
+      ? this.harness.executeCommandSecure(args.command, Math.ceil(args.timeoutMs / 1000), '', '')
+      : this.harness.executeCommandSecure(args.command, Math.ceil(args.timeoutMs / 1000), '', '', args.shell);
   }
 
   private async handleSearchCodebase(rawArgs: unknown): Promise<ToolExecutionResult> {

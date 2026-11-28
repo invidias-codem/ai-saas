@@ -14,9 +14,45 @@ if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
   };
 }
 
-export function ThemeProvider({ 
-  children, 
-  ...props 
+// A saved workspace preference takes precedence over the old public-page key.
+const migrateLaunchTheme = `try {
+  var launchTheme = localStorage.getItem('lattice-launch-theme');
+  if (!localStorage.getItem('theme') && (launchTheme === 'light' || launchTheme === 'dark')) {
+    localStorage.setItem('theme', launchTheme);
+  }
+} catch {}`;
+
+function BrowserThemeColor() {
+  React.useEffect(() => {
+    const root = document.documentElement;
+    const updateColor = () => {
+      const color = getComputedStyle(root).getPropertyValue("--lattice-canvas").trim();
+      if (!color) return;
+      document.querySelectorAll('meta[name="theme-color"]').forEach(meta => {
+        if (meta.getAttribute("content") !== color) meta.setAttribute("content", color);
+      });
+    };
+    const observer = new MutationObserver(updateColor);
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    observer.observe(document.head, { childList: true });
+    updateColor();
+    return () => observer.disconnect();
+  }, []);
+
+  return null;
+}
+
+export function ThemeProvider({
+  children,
+  ...props
 }: React.ComponentProps<typeof NextThemesProvider>) {
-  return <NextThemesProvider {...props}>{children}</NextThemesProvider>
+  return (
+    <>
+      <script dangerouslySetInnerHTML={{ __html: migrateLaunchTheme }} />
+      <NextThemesProvider {...props}>
+        <BrowserThemeColor />
+        {children}
+      </NextThemesProvider>
+    </>
+  );
 }

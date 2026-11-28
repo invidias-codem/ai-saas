@@ -1,8 +1,10 @@
+import { addAbortSignal } from "node:stream";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ChatMessage, CompletionOptions, LLMProvider, StreamResult } from "../types";
 import { sanitizeHistory } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
 import { getStorageClient, getStorageProjectId } from '@/lib/gcp/storage';
+import { MAX_CHAT_IMAGE_BYTES } from '@/lib/types/attachments';
 import { encodeProviderErrorEvent } from '@/lib/media/envelope';
 
 // Lazy initialisation — validate at first use, not at module load.
@@ -97,7 +99,23 @@ export class GeminiProvider implements LLMProvider {
                             });
                         } else {
                             try {
-                                const [fileContents] = await storage.bucket(bucketName).file(filePath).download();
+                                const file = storage.bucket(bucketName).file(filePath);
+                                let fileContents: Buffer;
+                                if (att.mimeType.startsWith('image/')) {
+                                    const source = file.createReadStream({ start: 0, end: MAX_CHAT_IMAGE_BYTES, validation: false });
+                                    if (options.signal) addAbortSignal(options.signal, source);
+                                    const chunks: Buffer[] = [];
+                                    let size = 0;
+                                    for await (const chunk of source) {
+                                        size += chunk.length;
+                                        if (size > MAX_CHAT_IMAGE_BYTES) throw new Error('The attachment exceeds the image size limit.');
+                                        chunks.push(chunk);
+                                    }
+                                    if (!size) throw new Error('The attached image is empty.');
+                                    fileContents = Buffer.concat(chunks, size);
+                                } else {
+                                    [fileContents] = await file.download();
+                                }
                                 parts.push({
                                     inlineData: {
                                         mimeType: att.mimeType,
@@ -105,7 +123,10 @@ export class GeminiProvider implements LLMProvider {
                                     }
                                 });
                             } catch (e) {
-                                logger.error(`[Gemini] Failed to download GCS attachment: ${att.fileUri}`, e);
+                                if (att.mimeType.startsWith('image/')) {
+                                    throw new Error('The attached image could not be retrieved.', { cause: e });
+                                }
+                                logger.error('[Gemini] Failed to download GCS attachment', e);
                             }
                         }
                     } else if (att.base64Data) {

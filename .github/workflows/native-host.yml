@@ -1,0 +1,107 @@
+name: Native desktop host
+
+on:
+  pull_request:
+    paths: ['src-tauri/**', 'go-harness/**', 'scripts/native-host/**', 'testdata/native-*.json', '.github/workflows/native-host.yml', 'package.json', 'pnpm-lock.yaml', 'rustfmt.toml', 'rust-toolchain.toml']
+  push:
+    branches: [main]
+    paths: ['src-tauri/**', 'go-harness/**', 'scripts/native-host/**', 'testdata/native-*.json', '.github/workflows/native-host.yml', 'package.json', 'pnpm-lock.yaml', 'rustfmt.toml', 'rust-toolchain.toml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-host-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-policy:
+    name: Local webview CSP (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+        with:
+          version: 11.6.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install policy test browser (Linux)
+        if: runner.os == 'Linux'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install policy test browser (Windows)
+        if: runner.os == 'Windows'
+        run: pnpm exec playwright install chromium
+      - name: Exercise the configured CSP with real blocked requests
+        run: node --test scripts/native-host/csp.test.mjs
+      - name: Exact bundled review renderer and incomplete-display denial
+        run: node --test scripts/native-host/review.test.mjs
+
+  protocol:
+    name: Rust and Go authenticated startup (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go-harness/go.mod
+          cache-dependency-path: go-harness/go.sum
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.99.1
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: 'src-tauri -> target'
+          key: native-protocol
+      - name: Build this revision's native daemon
+        working-directory: go-harness
+        run: go build -o bin/lattice-rust-host-test.exe ./cmd/lattice-harness
+      - name: Check formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+      - name: Build process-tree regression helper
+        working-directory: go-harness
+        run: go test -c -o bin/lattice-process-helper.exe ./internal/executil
+      - name: Lint native protocol
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -p lattice-native-host --all-targets --locked -- -D warnings
+      - name: Protocol and real daemon regressions
+        env:
+          LATTICE_TEST_DAEMON_PATH: ${{ github.workspace }}/go-harness/bin/lattice-rust-host-test.exe
+          LATTICE_TEST_PROCESS_HELPER_PATH: ${{ github.workspace }}/go-harness/bin/lattice-process-helper.exe
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p lattice-native-host --locked -- --nocapture
+
+  credentials:
+    name: Credential broker (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: 1.99.1
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: 'src-tauri -> target'
+          key: credential-broker
+      - name: Check the whole workspace format
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all --check
+      - name: Lint the real platform backend
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -p lattice-credential-broker --all-targets --locked -- -D warnings
+      - name: Test production backend behavior
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p lattice-credential-broker --locked
+      - name: Test explicit memory fixtures and the fail-closed IPC contract
+        run: cargo test --manifest-path src-tauri/Cargo.toml -p lattice-credential-broker --features test-store --locked

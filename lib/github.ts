@@ -2,7 +2,7 @@ import { Octokit } from "octokit";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 import { decrypt } from "@/lib/encryption";
 
-export async function exchangeCodeForToken(code: string): Promise<string> {
+export async function exchangeCodeForToken(code: string, redirectUri?: string): Promise<string> {
     const clientId = process.env.GITHUB_CLIENT_ID;
     const clientSecret = process.env.GITHUB_CLIENT_SECRET;
 
@@ -20,6 +20,7 @@ export async function exchangeCodeForToken(code: string): Promise<string> {
             client_id: clientId,
             client_secret: clientSecret,
             code,
+            ...(redirectUri ? { redirect_uri: redirectUri } : {}),
         }),
     });
 

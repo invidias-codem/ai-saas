@@ -9,6 +9,8 @@
 
 import CodeBuilderIsland from './CodeBuilderIsland';
 
+export const dynamic = 'force-dynamic';
+
 export default function CodeBuilderPage() {
-    return <CodeBuilderIsland />;
+    return <CodeBuilderIsland sandboxPreviewEnabled={process.env.ENABLE_PREVIEW_SANDBOX === 'true'} />;
 }

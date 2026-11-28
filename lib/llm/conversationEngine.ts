@@ -13,10 +13,12 @@ import { GraphNode } from '../memory/graphStore';
 import { PromotableMemory } from '../memoryPromotion';
 import { Source } from '../ragMemory';
 import { env } from "@/lib/env";
+import { resolveConversationAttachment } from './conversationAttachment';
+import { MAX_CHAT_IMAGES } from '@/lib/types/attachments';
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
 import { GeminiProvider, AGENTIC_MODEL } from "./providers/gemini";
 import { DeepSeekProvider } from "./providers/deepseek";
-import { NIM_MODEL_KIMI_K3 } from "./providers/nvidiaNim";
+import { NIM_MODEL_CODE } from "./providers/nvidiaNim";
 import {
   captureMemory,
   extractTags,
@@ -47,12 +49,38 @@ import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { createQuarantinePromotionManager } from '@/lib/execution/quarantinePromotionManager';
 import { sandboxManager } from '@/lib/execution/sandboxManager';
 import { withAbort } from '@/lib/runtime/abort';
+import {
+  buildCapabilityManifest,
+  buildWeaverSystemInstruction,
+  derivePreparedCapabilityInputs,
+  logCapabilityResolution,
+  type CapabilityManifest,
+} from '@/lib/agents/core/capabilityManifest';
 
 // ChatMessageSchema imported from types
 
 export const ConversationRequestSchema = z.object({
   messages: z.array(ChatMessageSchema).min(1).max(100),
-  fileData: z.any().optional(), // updated to any to support the normalizedFileData object
+  fileData: z.union([z.string(), z.object({
+    name: z.string().optional(),
+    type: z.string().optional(),
+    mimeType: z.string().optional(),
+    sizeBytes: z.number().optional(),
+    base64Data: z.string().optional(),
+    fileUri: z.string().optional(),
+    storageProvider: z.literal('gcs').optional(),
+    extractedText: z.string().optional(),
+  })]).nullish(),
+  // Multi-photo transport only. Legacy single fileData remains unchanged for PDFs and older clients.
+  fileDataList: z.array(z.object({
+    name: z.string().min(1).max(255),
+    type: z.string().optional(),
+    mimeType: z.string(),
+    sizeBytes: z.number().int().positive(),
+    base64Data: z.string().optional(),
+    fileUri: z.string().optional(),
+    storageProvider: z.literal('gcs').optional(),
+  })).min(2).max(MAX_CHAT_IMAGES).optional(),
   fileName: z.string().max(255).optional(),
   mimeType: z.string().max(100).optional(),
   fileUri: z.string().max(1024).optional(),
@@ -152,28 +180,11 @@ function getGoogleApiKey(): string {
   return key;
 }
 
-function getSystemInstruction() {
-  return `You are 'Genie', a highly capable AI assistant equipped with dynamic tool integrations.
-Current Date: ${new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })}.
-
-CAPABILITIES:
-- You DO have real-time internet access. When you receive "Web Search Results" in your context, it means the system has searched the live internet on your behalf.
-- You DO have long-term memory. When you see "User Profile" or "Relevant Previous Work", it means the system has retrieved past context.
-- Never deny these capabilities. If the context contains the answer, speak authoritatively as if you fetched it yourself.
-
-CITATION RULES:
-- When you retrieve sources from the Data Refinery (query_workspace_sources), each result contains content and optional lineage.
-- The content field is the factual text. Cite it using [1], [2], etc.
-- The lineage field contains optional transition metadata (SUPERSEDES, CAUSES edges).
-- Use lineage ONLY to explain WHY state changed (e.g., "X changed to Y in January"). Never cite lineage as a source.
-- If a source has lineage showing SUPERSEDES: mention the transition in your prose, then cite the current content.
-
-Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences.`;
+// Phase 0 (#440): the instruction is derived from the per-request capability
+// manifest — no unconditional capability claims. Weaver is the customer-facing
+// identity; "Genie" is handled explicitly as a former name of the same assistant.
+function getSystemInstruction(manifest: CapabilityManifest) {
+  return buildWeaverSystemInstruction(manifest);
 }
 
 const GREETING = "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights.";
@@ -200,54 +211,68 @@ export async function generateConversationReply(
   const { userId, clerkUser, request, conversationId } = args;
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
+  const fileData = typeof parsed.fileData === 'string' ? { base64Data: parsed.fileData } : parsed.fileData;
+  const effectiveMimeType = fileData?.mimeType || fileData?.type || parsed.mimeType;
+  const attachment = resolveConversationAttachment(parsed, userId);
+  const attachments = [
+    ...(attachment ? [attachment] : []),
+    ...(parsed.fileDataList ?? []).map(file => resolveConversationAttachment({ fileData: file }, userId)),
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const hasAttachments = Boolean(attachments.length || fileData?.extractedText);
+  // Phase 0 (#440): server-produced capability manifest for THIS request,
+  // derived from the SAME effective read enforcement retrieval uses (#440
+  // review finding 2). The plan computation is hoisted here — before the
+  // agentic branch — so the manifest and prepareContextBundle cannot drift.
+  // Invalid/missing resolved mode is a typed failure — never a silent default.
+  const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
+  const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
+  const graphReadScope: UcolMemoryScope[] = agentMode === 'fast' ? [] : ['graph'];
+  const fallbackMemoryPlan: UcolMemoryPlan = {
+    readScopes: ['conversation', 'user', ...graphReadScope],
+    retrievalMode: agentMode === 'reasoning' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
+    usePreparedContext: true,
+    useGraphRecall: agentMode !== 'fast',
+    useRecentTaskState: false,
+  };
+  const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan(options.memoryPlan ?? fallbackMemoryPlan);
+  const preparedCapabilityInputs = derivePreparedCapabilityInputs({
+    plan: contextPreparationPlan,
+    disableExternalContext: effectivelyDisabled,
+    skipWebResearch: process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch,
+  });
+  const capabilityManifest = buildCapabilityManifest({
+    resolvedMode: agentMode,
+    workspaceId: parsed.workspaceId ?? null,
+    surface: 'web',
+    memoryReadEnabled: preparedCapabilityInputs.memoryReadEnabled,
+    webResearchEnabled: preparedCapabilityInputs.webResearchEnabled,
+    ioHarnessPresent: Boolean(options.ioHarness),
+  });
   const providerKeys = await withAbort(getUserProviderApiKeys(userId), options.signal);
   const nativeProviderKeys = await withAbort((await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys), options.signal);
 
   // ---------------------------------------------------------
-  // UCOL AGENTIC MODE — Kimi K3 (NVIDIA NIM) + ReAct Loop
+  // UCOL AGENTIC MODE — Nemotron 3 Ultra (NVIDIA NIM) + ReAct Loop
   // Tools: web_search, write_research_paper, write_creative_content
   // ---------------------------------------------------------
   if (agentMode === 'agentic') {
     const { runReActLoop } = await import('@/lib/agents/core/reactLoop');
     const { runNimReactLoop } = await import('@/lib/agents/core/nimReactLoop');
-    const { ToolRegistry } = await import('@/lib/agents/core/registry');
-    const { dealSentinelTool } = await import('@/lib/agents/tools/dealSentinel');
-    const { webSearchTool } = await import('@/lib/agents/tools/webSearch');
-    const { researchWriterTool } = await import('@/lib/agents/tools/researchWriter');
-    const { novelWriterTool } = await import('@/lib/agents/tools/novelWriter');
-    const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
-    const { generateMusicTool } = await import('@/lib/agents/tools/generateMusic');
-    const { generateImageTool } = await import('@/lib/agents/tools/generateImage');
-    const { generateVideoTool } = await import('@/lib/agents/tools/generateVideo');
-    const { readFileTool, writeFileTool, patchFileTool } = await import('@/lib/agents/tools/harnessTools');
-    const { executeCommandTool } = await import('@/lib/agents/tools/executionTools');
-    const { discoverDocumentsTool, extractTextTool, summarizeRepoTool, semanticSearchTool, workspaceSourcesSearchTool } = await import('@/lib/agents/tools/intelligenceTools');
+    const { buildAuthorizedToolSet, registryFromTools } = await import('@/lib/agents/core/agenticToolSet');
 
-    // 1. Initialize Registry with all agentic tools
-    const registry = new ToolRegistry();
-    registry.register(dealSentinelTool);
-    registry.register(webSearchTool);
-    registry.register(researchWriterTool);
-    registry.register(novelWriterTool);
-    registry.register(searchCodebaseTool);
-    registry.register(generateMusicTool);
-    registry.register(generateImageTool);
-    registry.register(generateVideoTool);
-
-    if (request.mode === 'agentic') {
-      // Phase 1: Local Mutable Capabilities
-      registry.register(readFileTool);
-      registry.register(writeFileTool);
-      registry.register(patchFileTool);
-      registry.register(executeCommandTool);
-
-      // Phase 3 & 4: Intelligence Capabilities
-      registry.register(discoverDocumentsTool);
-      registry.register(extractTextTool);
-      registry.register(summarizeRepoTool);
-      registry.register(semanticSearchTool);
-      registry.register(workspaceSourcesSearchTool);
-    }
+    // 1. Authorized tool catalog (Phase 0 #440): one shared, manifest-gated
+    // builder for web AND worker — parity by construction. Gating follows the
+    // RESOLVED runtime mode (not the raw request field), and the set is never
+    // wider than what the worker exposes for the same resolved conversation.
+    const registry = registryFromTools(buildAuthorizedToolSet(capabilityManifest));
+    void logCapabilityResolution({
+      userId,
+      workspaceId: parsed.workspaceId ?? undefined,
+      requestId: options.requestId,
+      conversationId: conversationId ?? undefined,
+      manifest: capabilityManifest,
+      toolNames: registry.getToolNames(),
+    });
 
     // 2. Construct Prompt (Multimodal support)
     const userQuery = parsed.messages[parsed.messages.length - 1]?.text || "";
@@ -256,29 +281,13 @@ export async function generateConversationReply(
     const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
     let promptInput: string | any[] = userQuery;
 
-    if (parsed.fileData && parsed.fileData.mimeType && parsed.fileData.base64Data) {
+    if (attachments.length) {
       promptInput = [
         { text: userQuery },
-        {
-          inlineData: {
-            mimeType: parsed.fileData.mimeType,
-            data: parsed.fileData.base64Data
-          }
-        }
+        ...attachments.map(item => item.base64Data
+          ? { inlineData: { mimeType: item.mimeType, data: item.base64Data } }
+          : { fileData: { mimeType: item.mimeType, fileUri: item.fileUri } }),
       ];
-    } else if (parsed.fileUri) {
-      const uriMimeType = parsed.mimeType || parsed.fileData?.mimeType;
-      if (uriMimeType) {
-        promptInput = [
-          { text: userQuery },
-          {
-            fileData: {
-              mimeType: uriMimeType,
-              fileUri: parsed.fileUri
-            }
-          }
-        ];
-      }
     }
 
     // 3. Execute ReAct Loop (Non-streaming for now, wrapped in stream)
@@ -371,7 +380,7 @@ export async function generateConversationReply(
     }
     // ------------------------------------
 
-    // Agentic execution uses the NVIDIA NIM Kimi K3 model (see providerResolver.ts).
+    // Agentic execution uses the NVIDIA NIM Nemotron 3 Ultra model (see providerResolver.ts).
     const onReasoning = (text: string) => {
       console.log(`[AgenticReasoning] ${String(text).slice(0, 400)}`);
     };
@@ -448,14 +457,29 @@ export async function generateConversationReply(
           void (async () => {
             try {
               const { dispatchAgentLoopToTrigger } = await import('@/lib/trigger/dispatch');
-              await dispatchAgentLoopToTrigger({
+              const triggerRunId = await dispatchAgentLoopToTrigger({
                 userId,
                 workspaceId: parsed.workspaceId!,
                 conversationId: conversationId ?? undefined,
+                requestId: options.requestId,
                 userQuery: sanitizedQuery,
-                modelName: NIM_MODEL_KIMI_K3,
+                modelName: NIM_MODEL_CODE,
                 mode: 'agentic',
               });
+              if (triggerRunId) {
+                // Correlate request → durable worker run for attribution
+                // (#440 review finding 5).
+                logEvent({
+                  eventType: 'agent_loop_offloaded',
+                  userId,
+                  workspaceId: parsed.workspaceId || undefined,
+                  metadata: {
+                    requestId: options.requestId ?? 'unknown',
+                    conversationId: conversationId ?? null,
+                    triggerRunId,
+                  },
+                });
+              }
             } catch (err) {
               console.warn('[Trigger.dev] offload dispatch skipped:', err);
             }
@@ -463,7 +487,7 @@ export async function generateConversationReply(
           // ─────────────────────────────────────────────────────────────────────
 
           // ── Tool-calling route: NIM (OpenAI-compatible) vs Gemini Vertex ──────
-          // NIM (Kimi K3) is the resolved agentic provider. Use the NIM ReAct
+          // NIM (Nemotron 3 Ultra) is the resolved agentic provider. Use the NIM ReAct
           // loop for text queries when NIM is configured; fall back to the
           // Gemini Vertex loop for multimodal (attachment-bearing) queries,
           // which NIM's text-only models cannot serve.
@@ -474,19 +498,25 @@ export async function generateConversationReply(
 
           let reactResult;
           if (useNimLoop) {
+            // Phase 0 (#440): the manifest-derived instruction reaches agentic
+            // inference — NIM path (runNimReactLoop passes it to
+            // provider.chatWithTools as the system instruction).
             reactResult = await runNimReactLoop(
               sanitizedQuery,
               agentContext,
               registry,
-              NIM_MODEL_KIMI_K3,
+              NIM_MODEL_CODE,
+              getSystemInstruction(capabilityManifest),
             );
           } else {
-            // Gemini Vertex fallback (multimodal or NIM-unconfigured).
+            // Gemini Vertex fallback (multimodal or NIM-unconfigured) —
+            // StartChatParams.systemInstruction carries the same manifest-derived text.
             reactResult = await runReActLoop(
               promptInput,
               agentContext,
               registry,
               AGENTIC_MODEL,
+              getSystemInstruction(capabilityManifest),
             );
           }
           const isSuccess = reactResult.status === 'success';
@@ -527,7 +557,7 @@ export async function generateConversationReply(
       stream,
       sources: [],
       debug: {
-        model: `nvidia-nim/${NIM_MODEL_KIMI_K3}`,
+        model: `nvidia-nim/${NIM_MODEL_CODE}`,
         userQuery,
       }
     };
@@ -557,14 +587,13 @@ export async function generateConversationReply(
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const { messages, fileData, mimeType, workspaceId, documentIds: rawDocumentIds } = parsed;
+  const { messages, workspaceId, documentIds: rawDocumentIds } = parsed;
 
   // Filter out optimistic temp_ IDs that haven't been persisted to DB yet
   const documentIds = rawDocumentIds?.filter((id: string) => id && !id.startsWith('temp_'));
 
   // Handle PDF extraction — text is either pre-extracted by the API route
   // or we extract it here if it wasn't done upstream
-  const effectiveMimeType: string | undefined = mimeType || fileData?.mimeType || fileData?.type;
   let pdfText: string | null = fileData?.extractedText || null;
   
   // Fallback: extract PDF text if not pre-extracted (e.g., direct engine calls)
@@ -579,7 +608,7 @@ export async function generateConversationReply(
 
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
-  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys, personaSession: options.personaSession });
+  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments, providerKeys: nativeProviderKeys, personaSession: options.personaSession });
   let { provider, modelId: actualModelId } = providerResolution.execution;
   // Sovereign telemetry: the initially-requested model (before any confidence
   // override or 429 fallback) and the serving provider id.
@@ -591,19 +620,10 @@ export async function generateConversationReply(
   // to prevent the router from being distracted by file metadata
   const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
 
-  const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
-  const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
-
-  const graphReadScope: UcolMemoryScope[] = agentMode === 'fast' ? [] : ['graph'];
-  const fallbackMemoryPlan: UcolMemoryPlan = {
-    readScopes: ['conversation', 'user', ...graphReadScope],
-    retrievalMode: agentMode === 'reasoning' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
-    usePreparedContext: true,
-    useGraphRecall: agentMode !== 'fast',
-    useRecentTaskState: false,
-  };
-
-  const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan(options.memoryPlan ?? fallbackMemoryPlan);
+  // Phase 0 (#440): heavy-context gates, fallback memory plan, and the
+  // prepared-context plan are computed ONCE above (before the agentic
+  // branch) — the manifest and prepareContextBundle share them by
+  // construction; no duplicate derivation here.
 
   options.signal?.throwIfAborted();
   const preparedContext = await withAbort(prepareContextBundle({
@@ -753,7 +773,7 @@ export async function generateConversationReply(
         const upgradeMode = confidenceSignal.recommendedTier === 'claude-sonnet'
           ? 'quality'
           : 'reasoning';
-        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys, personaSession: options.personaSession });
+        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments, providerKeys: nativeProviderKeys, personaSession: options.personaSession });
         provider = providerResolution.execution.provider;
         actualModelId = providerResolution.execution.modelId;
         confidenceOverrideApplied = true;
@@ -775,8 +795,19 @@ export async function generateConversationReply(
   const TOOL_SCHEMA_ESTIMATE = 3000;
   const maxContextBudget = Math.max(0, modelLimits.totalMax - GENERATION_HEADROOM - TOOL_SCHEMA_ESTIMATE);
 
+  // Phase 0 (#440): record capability resolution + (empty) tool exposure for
+  // the prepared-context path. No secrets — statuses and names only.
+  void logCapabilityResolution({
+    userId,
+    workspaceId: workspaceId ?? undefined,
+    requestId: options.requestId,
+    conversationId: conversationId ?? undefined,
+    manifest: capabilityManifest,
+    toolNames: [],
+  });
+
   const allocation = ContextTokenManager.assembleContext(
-    getSystemInstruction(),
+    getSystemInstruction(capabilityManifest),
     preparedContext.sections,
     {
       modelId: actualModelId,
@@ -785,7 +816,7 @@ export async function generateConversationReply(
     }
   );
 
-  let baseSystemInstruction = getSystemInstruction();
+  let baseSystemInstruction = getSystemInstruction(capabilityManifest);
 
   // Append extracted PDF text to the system instruction if available
   // Empty text indicates a scanned/image-only PDF (no text layer)
@@ -955,16 +986,10 @@ export async function generateConversationReply(
   // Attach explicit files to the last message if present
   // Skip PDFs that have already been extracted as text — attaching raw binary
   // causes garbled encoded text in the prompt
-  if (fileData && effectiveMimeType && effectiveMimeType !== 'application/pdf') {
-    const lastMsg = history[history.length - 1];
-    if (lastMsg && lastMsg.role === 'user') {
-      lastMsg.attachments = lastMsg.attachments || [];
-      lastMsg.attachments.push({
-        name: parsed.fileName || 'attached_file',
-        mimeType: mimeType || effectiveMimeType || 'application/octet-stream',
-        base64Data: fileData
-      });
-    }
+  const lastMessage = history.at(-1);
+  const modelAttachments = attachments.filter(item => item.mimeType !== 'application/pdf');
+  if (modelAttachments.length && lastMessage?.role === 'user') {
+    lastMessage.attachments = modelAttachments;
   }
 
   // Attach explicitly selected document images
@@ -1036,7 +1061,7 @@ export async function generateConversationReply(
     userId,
     sessionId: conversationId || undefined,
     tags: [agentMode, actualModelId, wmDomain],
-    metadata: { hasAttachments: Boolean(fileData && mimeType), contextFactsCount: intelligentFacts.length },
+    metadata: { hasAttachments, contextFactsCount: intelligentFacts.length },
   });
 
   const updateTrace = (patch: Record<string, unknown>) => {
@@ -1113,7 +1138,7 @@ export async function generateConversationReply(
     try {
       const { calculateInteractionCost } = await import("@/lib/subscription/credits");
       const creditCost = calculateInteractionCost({
-        hasAttachments: Boolean(fileData && mimeType),
+        hasAttachments,
         mode: agentMode as any,
       });
       emitInteractionAudit({
