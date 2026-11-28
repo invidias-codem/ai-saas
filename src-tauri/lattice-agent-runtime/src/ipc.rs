@@ -17,9 +17,12 @@ use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, RwLock};
+#[cfg(unix)]
+use tokio::sync::Mutex;
 #[cfg(unix)]
 use tracing::{debug, error, info};
+#[cfg(unix)]
 use uuid::Uuid;
 
 use crate::agent_loop::{AgentCommand, AgentResponse};
@@ -67,14 +70,9 @@ impl From<String> for IpcError {
 
 pub type IpcResult<T> = std::result::Result<T, IpcError>;
 
-/// Platform stream type alias. Unix uses real Unix domain streams;
-/// Windows uses a placeholder that is never instantiated because the
-/// transport fails closed before any stream is created.
+// Only Unix has a supported stream implementation.
 #[cfg(unix)]
 use tokio::net::UnixStream as StreamImpl;
-
-#[cfg(windows)]
-struct StreamImpl;
 
 /// IPC message types.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -176,6 +174,9 @@ impl IpcServer {
         state_machine: Arc<crate::state_machine::RuntimeStateMachine>,
         agent_loop: Arc<crate::agent_loop::AgentLoop>,
     ) -> IpcResult<Self> {
+        // Windows retains the constructor API but cannot start this transport.
+        #[cfg(windows)]
+        drop((profile_id, state_machine, agent_loop));
         Ok(Self {
             #[cfg(unix)]
             profile_id,
@@ -600,6 +601,8 @@ pub struct IpcClient {
 impl IpcClient {
     /// Create a new IPC client.
     pub fn new(config: IpcConfig) -> Self {
+        #[cfg(windows)]
+        drop(config);
         Self {
             #[cfg(unix)]
             config,
@@ -821,9 +824,16 @@ mod tests {
     /// Negative test: Windows IPC transport fails closed — the Unsupported
     /// error variant is the only outcome for any transport operation.
     #[cfg(windows)]
-    #[test]
-    fn test_windows_transport_unsupported() {
-        let err = IpcError::Unsupported("Windows IPC transport not yet implemented".to_string());
+    #[tokio::test]
+    async fn test_windows_transport_unsupported() {
+        let mut client = IpcClient::new(IpcConfig {
+            protocol_version: PROTOCOL_VERSION,
+            socket_path: None,
+            client_identity: "qualification-test".to_string(),
+            require_auth: true,
+            connect_timeout_ms: 100,
+        });
+        let err = client.connect().await.expect_err("unsupported transport must reject connection");
         assert!(matches!(err, IpcError::Unsupported(_)));
         assert_eq!(
             err.to_string(),
