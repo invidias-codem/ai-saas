@@ -1,13 +1,14 @@
 import { sanitizeForLog } from '@/lib/security/urlValidator';
+import { db } from '@/lib/firebaseAdmin';
+import { FieldValue } from 'firebase-admin/firestore';
+import { logger } from '@/lib/logger';
+
 /**
  * Slack Thread Manager
  *
  * Manages conversation histories for Slack threads in Firestore.
  * This allows the bot to maintain context within a thread.
  */
-import { db } from '@/lib/firebaseAdmin';
-import { FieldValue } from 'firebase-admin/firestore';
-
 const THREAD_COLLECTION = 'slackThreadHistories';
 
 /**
@@ -38,7 +39,7 @@ export async function getThreadHistory(teamId: string, threadTs: string): Promis
     const data = doc.data();
     return data?.messages || [];
   } catch (error) {
-    console.error(`[THREAD_MANAGER] Error getting thread history for ${sanitizeForLog(teamId)}-${sanitizeForLog(threadTs)}:`, error);
+    logger.error(`[THREAD_MANAGER] Error getting thread history for ${sanitizeForLog(teamId)}-${sanitizeForLog(threadTs)}:`, error);
     return [];
   }
 }
@@ -68,6 +69,6 @@ export async function updateThreadHistory(teamId: string, threadTs: string, mess
       { merge: true }
     );
   } catch (error) {
-    console.error(`[THREAD_MANAGER] Error updating thread history for ${sanitizeForLog(teamId)}-${sanitizeForLog(threadTs)}:`, error);
+    logger.error(`[THREAD_MANAGER] Error updating thread history for ${sanitizeForLog(teamId)}-${sanitizeForLog(threadTs)}:`, error);
   }
 }

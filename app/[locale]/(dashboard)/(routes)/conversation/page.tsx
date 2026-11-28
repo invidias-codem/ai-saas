@@ -1,41 +1,22 @@
-"use client";
+import { redirect } from 'next/navigation';
+import { auth } from '@clerk/nextjs/server';
+import { getDefaultWorkspace } from '@/lib/workspaces/defaultWorkspace';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useLocale } from 'next-intl';
+export const dynamic = 'force-dynamic';
 
-export default function ConversationIndexPage() {
-  const router = useRouter();
-  const locale = useLocale();
+interface RouteParams {
+  params: Promise<{ locale: string }>;
+}
 
-  useEffect(() => {
-    let cancelled = false;
+export default async function ConversationIndexPage({ params }: RouteParams) {
+  const { locale } = await params;
+  const { userId } = await auth();
 
-    const routeUser = async () => {
-      try {
-        const res = await fetch('/api/workspaces/default', { cache: 'no-store' });
-        const data = await res.json();
-        if (cancelled) return;
+  if (!userId) {
+    redirect(`/${locale}/sign-in`);
+  }
 
-        const workspace = data?.workspace;
-        if (!res.ok || !workspace) {
-          router.replace(`/${locale}/conversation/new`);
-          return;
-        }
-
-        router.replace(`/${locale}/workspaces/${workspace.id}/conversation`);
-      } catch {
-        if (!cancelled) {
-          router.replace(`/${locale}/conversation/new`);
-        }
-      }
-    };
-
-    routeUser();
-    return () => {
-      cancelled = true;
-    };
-  }, [router, locale]);
-
-  return null;
+  // Default workspace -> resolver (respects last-open unless it doesn't exist)
+  const workspace = await getDefaultWorkspace(userId);
+  redirect(`/${locale}/workspaces/${workspace.id}/conversation`);
 }

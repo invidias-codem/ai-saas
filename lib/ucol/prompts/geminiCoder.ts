@@ -1,150 +1,116 @@
 // lib/ucol/prompts/geminiCoder.ts
-// Gemini-based code generation — fallback when Claude is unavailable (billing, rate limit, etc.)
-// Uses the same ContextPackage/RefinementContext interfaces as claudeCoder.ts.
-
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { requireEnv } from '@/lib/env';
+// Gemini code-generation provider — fallback for the UCOL Code Builder debate loop
+// when the primary NIM path (kimiCoderProvider) throws DEGRADED, timeout, or stream-drop.
+//
+// Uses the same prompt contract as kimiCoderProvider: ContextPackage in → GeneratedFile[] out.
+import { GeminiProvider } from '@/lib/llm/providers/gemini';
+import type { StreamResult } from '@/lib/llm/types';
 import type { ContextPackage, GeneratedFile, RefinementContext, DiscoveredPattern } from '../types';
-import type { ProviderApiKeys } from '@/lib/userProviderKeys';
 
-const CODER_SYSTEM_PROMPT = `You are an expert React/Next.js developer. You receive a component specification from a planning agent and generate production-quality code.
+async function streamToText(result: StreamResult): Promise<string> {
+  const reader = result.stream.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value, { stream: true });
+  }
+  return text;
+}
 
-You will receive:
-- The component spec (name, props, description, file path)
-- The full project plan (for context on the overall app)
-- Already-generated dependency files (so you can import correctly)
-- The tech stack
+const GEMINI_CODER_SYSTEM_PROMPT = `You are an expert React/Next.js developer who writes production-ready code.
 
-CRITICAL — GO BEYOND THE SPEC (BUT BE PRAGMATIC):
-- Handle edge cases the spec DIDN'T mention (empty states, loading, errors, overflow).
-- Extract reusable logic into custom hooks when it makes the code cleaner.
-- Use defensive coding: type guards, null checks, fallback values.
-- Choose non-obvious patterns ONLY when they genuinely improve the code.
-- Name things to reveal intent, not just function ("handleProductCreation" not "handleSubmit").
+Output a JSON array of file objects:
+{ "path": string, "content": string, "language": string }
 
-WARNING — AVOID OVER-ENGINEERING (PRAGMATISM AXIS):
-- Do NOT build massive enterprise architectures for simple UI components.
-- Do NOT use \`useReducer\` for simple toggles.
-- Do NOT build exponential backoff retry hooks for a basic submit button unless strictly necessary.
-- Your code is evaluated on Correctness (1-10), Originality (1-10), AND Pragmatism (1-10). If you over-engineer and bloat the code, you will be rejected on the Pragmatism axis. Keep it elegant, readable, and appropriately scoped.
+Rules: TypeScript, Tailwind CSS, defensive coding, no markdown fences.`;
 
-OUTPUT FORMAT:
-Return a JSON array of file objects. Each object has:
-- "path": string (e.g., "components/TodoList.tsx")  
-- "content": string (the full file source code)
-- "language": string (e.g., "tsx", "ts")
+export const geminiCoderProvider = {
+  id: 'gemini',
+  label: 'Gemini (Cloud Fallback)',
+  tier: 'L2' as const,
 
-Output a single JSON array (NOT wrapped in another array). No markdown fences, no explanation text.`;
-
-const REFINEMENT_ADDENDUM = `
-
-## ⚠️ REVISION REQUIRED
-
-A Lead QA Engineer reviewed your previous code and found issues. Fix every flagged issue immediately. The reviewer's feedback is below. Fix the problems, output the corrected JSON array, and nothing else.`;
-
-export async function generateComponentGemini(
+  async generateCode(
     contextPackage: ContextPackage,
     refinement?: RefinementContext,
     discoveredPatterns?: DiscoveredPattern[],
-    providerKeys: ProviderApiKeys = {}
-): Promise<GeneratedFile[]> {
+    _call?: import('@/lib/llm/providers/providerInterface').ProviderCallContext,
+  ): Promise<GeneratedFile[]> {
+    const provider = new GeminiProvider();
     const { component, fullPlan, existingFiles, techStack } = contextPackage.payload.content;
 
-    const genAI = new GoogleGenerativeAI(providerKeys.google || requireEnv('GOOGLE_API_KEY'));
+    const lines = [
+      `## Project Context`,
+      `App: ${fullPlan.appName} — ${fullPlan.description}`,
+      `Tech stack: ${(techStack || []).join(', ')}`,
+      `Components: ${(fullPlan.components || []).map((c: any) => c.name).join(', ')}`,
+      '',
+      `## Component to Build`,
+      `Name: ${component.name}`,
+      `File: ${component.filePath}`,
+      `Description: ${component.description}`,
+      `Props: ${JSON.stringify(component.props)}`,
+      `Dependencies: ${(component.dependencies || []).join(', ') || 'none'}`,
+    ];
 
-    const systemPrompt = refinement && refinement.feedbackHistory.length > 0
-        ? CODER_SYSTEM_PROMPT + REFINEMENT_ADDENDUM
-        : CODER_SYSTEM_PROMPT;
+    if ((existingFiles || []).length > 0) {
+      lines.push('', '## Already Built Dependencies');
+      for (const f of existingFiles) {
+        const preview = f.content.length > 1200 ? f.content.substring(0, 1200) + '\n// ...' : f.content;
+        lines.push(`### ${f.path}\n\`\`\`${f.language}\n${preview}\n\`\`\``);
+      }
+    }
 
-    const model = genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
-    });
-
-    let userPrompt = `## Project Plan
-${JSON.stringify(fullPlan, null, 2)}
-
-## Component to Build
-${JSON.stringify(component, null, 2)}
-
-## Already Built Dependencies
-${(existingFiles || []).map((f: GeneratedFile) => `### ${f.path}\n\`\`\`${f.language}\n${f.content}\n\`\`\``).join('\n\n') || '(none — this is a leaf component)'}
-
-## Tech Stack
-${(techStack || []).join(', ')}`;
-
-    // Inject discovered patterns from earlier components
     if (discoveredPatterns && discoveredPatterns.length > 0) {
-        userPrompt += `\n\n## 💡 Novel Patterns Discovered by Your Team\n${discoveredPatterns.map((p, i) => `${i + 1}. **${p.component}** — ${p.pattern} (originality: ${p.originalityScore}/10)`).join('\n')}`;
+      lines.push('', '## Novel Patterns from Earlier Components');
+      for (const p of discoveredPatterns) {
+        lines.push(`- ${p.component}: ${p.pattern} (originality ${p.originalityScore}/10)`);
+      }
     }
 
-    // Append feedback chain for revisions
     if (refinement && refinement.feedbackHistory.length > 0) {
-        userPrompt += `\n\n---\n## REVISION ATTEMPT ${refinement.attempt}\n`;
-        userPrompt += `\n### Your Previous Code\n\`\`\`\n${refinement.previousCode}\n\`\`\`\n`;
-        if (refinement.constraint) {
-            userPrompt += `\n### 🎯 CREATIVITY CONSTRAINT\n**${refinement.constraint}**\n`;
-        }
-        userPrompt += `\n### Review Feedback History (ALL rounds)\n`;
-        for (let i = 0; i < refinement.feedbackHistory.length; i++) {
-            const fb = refinement.feedbackHistory[i];
-            userPrompt += `\n**Round ${i + 1}** (Correctness: ${fb.score}/10, Originality: ${fb.originalityScore}/10, Pragmatism: ${fb.pragmatismScore}/10, ${fb.approved ? 'Approved' : 'Rejected'})\n`;
-            userPrompt += `- Critique: ${fb.critique}\n`;
-            if (fb.suggestions.length > 0) {
-                userPrompt += `- Fix instructions:\n${fb.suggestions.map(s => `  - ${s}`).join('\n')}\n`;
-            }
-        }
-        userPrompt += `\nFix ALL flagged issues. Output the corrected JSON array.`;
-    } else {
-        userPrompt += `\n\nGenerate the code files for "${component.name}". Output ONLY a JSON array.`;
+      lines.push(
+        '',
+        `## Revision Attempt ${refinement.attempt}`,
+        'Fix ALL issues from previous review. Output corrected JSON only.'
+      );
     }
 
-    const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.7,
-            maxOutputTokens: 8192,
-        },
-    });
+    const result = await provider.generateStream(
+      [{ role: 'user', text: lines.join('\n') }],
+      GEMINI_CODER_SYSTEM_PROMPT,
+      { model: 'gemini-2.5-flash', maxTokens: 8192, temperature: 0.7 }
+    );
 
-    if (!result.response) {
-        throw new Error('[UCOL:GeminiCoder] No response received');
-    }
-
-    const text = result.response.text();
+    const text = await streamToText(result);
     return parseGeneratedFiles(text, component.name);
-}
+  },
+};
 
 function parseGeneratedFiles(text: string, componentName: string): GeneratedFile[] {
-    let jsonStr = text.trim();
+  let jsonStr = text.trim();
+  const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (fenceMatch) jsonStr = fenceMatch[1].trim();
 
-    // Strip markdown fences if present
-    const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    if (fenceMatch) jsonStr = fenceMatch[1].trim();
-
-    try {
-        let parsed = JSON.parse(jsonStr);
-        // Unwrap nested array
-        if (Array.isArray(parsed) && parsed.length === 1 && Array.isArray(parsed[0])) {
-            parsed = parsed[0];
-        }
-        const items = Array.isArray(parsed) ? parsed : [parsed];
-        return items.map((f: any) => ({
-            path: f.path || f.filePath || `${componentName}.tsx`,
-            content: f.content || f.code || '',
-            language: f.language || 'tsx',
-            component: componentName,
-            model: 'gemini',
-        }));
-    } catch {
-        console.error('[UCOL:GeminiCoder] Failed to parse JSON:', text.substring(0, 300));
-        return [{
-            path: `components/${componentName}.tsx`,
-            content: text,
-            language: 'tsx',
-            component: componentName,
-            model: 'gemini',
-        }];
-    }
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return (Array.isArray(parsed) ? parsed : [parsed]).map((f: any) => ({
+      path: f.path || f.filePath || `components/${componentName}.tsx`,
+      content: f.content || f.code || '',
+      language: f.language || 'tsx',
+      component: componentName,
+      model: 'gemini',
+    }));
+  } catch {
+    return [
+      {
+        path: `components/${componentName}.tsx`,
+        content: text,
+        language: 'tsx',
+        component: componentName,
+        model: 'gemini',
+      },
+    ];
+  }
 }

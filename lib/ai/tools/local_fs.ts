@@ -84,7 +84,7 @@ export const createLocalFsTools = (workspaceId: string, userId: string, authToke
   }),
 
   move_path: tool({
-    description: "Move or rename a file or directory. BOTH the source and destination paths must reside within authorized MUTABLE roots. Moving across different mounted drives is supported via fallback.",
+    description: "Move or rename a file or directory. BOTH the source and destination paths must reside within authorized MUTABLE roots. Moves across separate granted roots or mounted drives are not supported.",
     parameters: z.object({
       src_path: z.string().describe("The absolute path of the source to move."),
       dest_path: z.string().describe("The absolute destination path.")

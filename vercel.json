@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/blog-weekly",
       "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/cron/bluesky-feed-poll",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/jepa-training-queue",
+      "schedule": "0 0 * * *"
     }
   ],
   "functions": {
@@ -14,6 +22,9 @@
       "maxDuration": 300
     },
     "app/api/cron/blog-weekly/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/jepa-training-queue/route.ts": {
       "maxDuration": 300
     }
   }

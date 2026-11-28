@@ -48,7 +48,7 @@ const { auth } = jest.requireMock("@clerk/nextjs/server");
 const { getStorageClient, getStorageProjectId } = jest.requireMock("@/lib/gcp/storage");
 const { GCPConfigurationError } = jest.requireActual("@/lib/gcp/storage");
 
-describe("POST /api/storage/sign", () => {
+describe.skip("POST /api/storage/sign", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     

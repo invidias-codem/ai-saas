@@ -20,10 +20,14 @@ export interface BlogPost {
   author: Author;
   coAuthors?: Author[];
   category: BlogCategory;
+  series?: string;
   tags: string[];
   readingTime: number;
   featured: boolean;
+  draft?: boolean;
   ogImage: string;
+  /** Blog card thumbnail — image-only (no baked-in typography); distinct from ogImage. */
+  cardImage?: string;
   content: string;
 }
 
@@ -60,8 +64,10 @@ export interface BlogPostMeta {
   author: string;
   coAuthors?: string[];
   category: BlogCategory;
+  series?: string;
   tags: string[];
   featured?: boolean;
+  draft?: boolean;
   ogImage?: string;
 }
 

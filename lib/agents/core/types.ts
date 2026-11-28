@@ -1,6 +1,7 @@
 
 import { z } from "zod";
 import type { IOHarness } from "@/lib/harness/IOHarness";
+import type { IPromotionManager } from "@/lib/execution/sandboxManager";
 
 /**
  * Capability-based security levels for tools.
@@ -38,13 +39,28 @@ export interface Tool<TInput = any, TOutput = any> {
     requiresApproval?: boolean;
 
     /**
+     * If true, execute through SandboxManager instead of calling `execute` directly.
+     */
+    requiresSandbox?: boolean;
+
+    /**
+     * Optional runtime hints for the sandbox runner.
+     */
+    sandbox?: {
+      kind?: 'exec' | 'write' | 'patch' | 'read';
+      language?: 'sh' | 'python' | 'node';
+      allowedEnv?: string[];
+      isolatedEnv?: Record<string, string>;
+      buildCommand?: (input: TInput) => string;
+    };
+
+    /**
      * The actual function to execute.
      */
     execute: (input: TInput, context: AgentContext) => Promise<TOutput>;
 }
 
 /**
- * Context available to the agent during execution.
  /** Context available to the agent during execution. */
  export interface AgentContext {
      userId: string;
@@ -72,10 +88,33 @@ export interface Tool<TInput = any, TOutput = any> {
      ioHarness?: IOHarness;
 
      /** Callback fired whenever the agent updates its thought or executes a tool. */
-     onStep?: (step: TrajectoryStep) => void;
+         onStep?: (step: TrajectoryStep) => void;
+
+         /**
+          * Fired when a mutative tool halts for human-in-the-loop approval. The
+          * callback receives the approvalId + tool name + params so the caller can
+          * emit a structured approval event and later resume the paused tool.
+          */
+         onToolApproval?: (approval: {
+           approvalId: string;
+           toolName: string;
+           params: any;
+         }) => void;
 
      /** Optional root span for per-tool child span instrumentation. */
      rootSpan?: import('@/lib/ucol/observability/span').UcolSpan;
+
+     /** Streaming callback for raw reasoning/thinking chunks from the provider. */
+     onReasoning?: (text: string) => void;
+
+     /** Quarantine promotion manager for operator approval gate. */
+     promotionManager?: IPromotionManager;
+
+     /** Rejection counter for circuit breaker logic. */
+     promotionRejectionCount?: number;
+
+     /** Approval mode: 'interactive' blocks for stdin, 'non-interactive' yields structured approval event. */
+     operatorApprovalMode?: 'interactive' | 'non-interactive';
      }
 
 /**

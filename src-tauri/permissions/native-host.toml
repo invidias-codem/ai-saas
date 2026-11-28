@@ -1,0 +1,24 @@
+[[permission]]
+identifier = "native-host-control"
+description = "Authenticated local service liveness and lifecycle only; no arbitrary RPC, identity, grant or execution setters."
+commands.allow = ["ping_daemon", "restart_daemon", "flush_telemetry"]
+
+[[permission]]
+identifier = "native-workspace-read"
+description = "Native-confirmed folder selection, opaque grant revocation, typed read-only file previews and write consent; no raw paths, grants, identity, mutation or execution setters."
+commands.allow = ["native_select_folder", "native_workspace_grants", "native_revoke_grant", "native_list", "native_stat", "native_read_text", "native_request_write_access"]
+
+[[permission]]
+identifier = "native-proposal-control"
+description = "Propose, inspect, cancel and request native review only; no approval or dispatch authority."
+commands.allow = ["native_propose_operation", "native_proposal_status", "native_cancel_proposal", "native_open_review"]
+
+[[permission]]
+identifier = "native-review-decision"
+description = "Fixed native-created review instance only: read immutable display, acknowledge it and submit one decision."
+commands.allow = ["native_review_document", "native_review_ready", "native_review_decide", "native_review_cancel"]
+
+[[permission]]
+identifier = "native-operation-control"
+description = "Dispatch accepted proposals, check status, cancel and retrieve command output; no propose, review or authority."
+commands.allow = ["native_dispatch_operation", "native_operation_status", "native_cancel_operation", "native_command_output"]

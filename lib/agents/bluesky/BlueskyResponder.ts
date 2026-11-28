@@ -14,9 +14,9 @@
 
 import { BskyAgent, RichText } from '@atproto/api';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { classifyQuery } from '@/lib/ucol/agentRouter';
-import { buildOllamaKnowledgeContext } from '@/lib/ucol/ollamaKnowledgeContext';
+import { buildKnowledgeContext } from '@/lib/ucol/knowledgeContext';
+import { nimGenerate } from './nimGenerate';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
 import { extractFacts, detectContentType } from '@/lib/agents/knowledgeExtractor';
 import { addNode, formatGraphContext, strengthenEdge, findRelatedEntities } from '@/lib/memory/graphStore';
@@ -28,13 +28,6 @@ import type {
   EngagementResult,
 } from './types';
 import { BlueskySafetyPolicy } from './BlueskySafetyPolicy';
-
-const LAMBDA_OLLAMA_URL = process.env.LAMBDA_OLLAMA_URL || '';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'hf.co/Qwen/Qwen3.5-35B-A3B';
-
-const NOUS_API_KEY = process.env.NOUSE_API_KEY;
-const NOUS_BASE_URL = process.env.HERMES_BASE_URL || 'https://inference-api.nousresearch.com/v1';
-const NOUS_MODEL = process.env.HERMES_MODEL_ID || 'Hermes-4.3-36B';
 
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RESPONSE_MAX_CHARS = 290;
@@ -464,7 +457,7 @@ export class BlueskyResponder {
     let enrichedSystem = systemPrompt;
     if (userId) {
       try {
-        const knowledgeCtx = await buildOllamaKnowledgeContext(userId, context);
+        const knowledgeCtx = await buildKnowledgeContext(userId, context);
         if (knowledgeCtx.systemFragment) {
           enrichedSystem = `${systemPrompt}\n\n${knowledgeCtx.systemFragment}`;
           console.log(JSON.stringify({
@@ -479,82 +472,10 @@ export class BlueskyResponder {
       }
     }
 
-    if (LAMBDA_OLLAMA_URL) {
-      try {
-        const raw = await this.generateWithOllamaEndpoint(LAMBDA_OLLAMA_URL, context, enrichedSystem);
-        console.log(JSON.stringify({ runId, event: 'responder_generate_ollama_success', source: 'lambda' }));
-        return this.enforceCharLimit(raw, context);
-      } catch (err: any) {
-        console.warn(JSON.stringify({ runId, event: 'responder_generate_ollama_error', source: 'lambda', error: formatError(err) }));
-      }
-    }
-
-    if (NOUS_API_KEY) {
-      try {
-        const raw = await this.generateWithOllamaEndpoint(NOUS_BASE_URL, context, enrichedSystem, {
-          apiKey: NOUS_API_KEY,
-          model: NOUS_MODEL,
-        });
-        return this.enforceCharLimit(raw, context);
-      } catch (err: any) {
-        console.warn(JSON.stringify({ runId, event: 'responder_generate_nous_error', error: formatError(err) }));
-      }
-    }
-
-    const geminiResponse = await this.generateWithGemini(context, enrichedSystem);
-    return this.enforceCharLimit(geminiResponse, context);
-  }
-
-  private async generateWithOllamaEndpoint(
-    baseUrl: string,
-    context: string,
-    systemPrompt: string,
-    opts?: { apiKey?: string; model?: string }
-  ): Promise<string> {
-    const model = opts?.model ?? OLLAMA_MODEL;
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (opts?.apiKey) headers['Authorization'] = `Bearer ${opts.apiKey}`;
-
-    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: context },
-        ],
-        max_tokens: 150,
-        temperature: 0.75,
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => response.statusText);
-      throw new Error(`Ollama endpoint ${response.status}: ${errText}`);
-    }
-
-    const data = await response.json();
-    const text = data?.choices?.[0]?.message?.content;
-    if (typeof text !== 'string' || !text.trim()) {
-      throw new Error('Endpoint returned empty content');
-    }
-    return text.trim();
-  }
-
-  private async generateWithGemini(context: string, systemPrompt: string): Promise<string> {
-    const effectiveApiKey = process.env.BLUESKY_GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
-    const gemini = new GoogleGenerativeAI(effectiveApiKey);
-    const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: context }] }],
-      systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
-      generationConfig: { maxOutputTokens: 150, temperature: 0.7 },
-    });
-
-    return result.response.text().trim();
+    // Unified inference: NIM (DeepSeek-V4-Pro) primary, Gemini fallback.
+    // Single source of truth in nimGenerate.ts.
+    const raw = await nimGenerate(context, enrichedSystem);
+    return this.enforceCharLimit(raw, context);
   }
 
   private enforceCharLimit(raw: string, sourceText: string): string {

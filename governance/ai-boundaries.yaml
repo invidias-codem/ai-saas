@@ -1,0 +1,109 @@
+version: "2026-08-10"
+owner: "Lattice AI Security"
+review_cadence: "quarterly"
+
+agentic_execution:
+  default_provider: "hermes"
+  model_env: "LATTICE_AGENTIC_MODEL"
+  allowed_providers:
+    - id: "hermes"
+      primary_env: "NOUSE_API_KEY"
+      model_env: "NOUS_MODEL_ID"
+      requires_api_key: true
+      fallback_chain: ["gemini", "claude-byok"]
+    - id: "claude-byok"
+      primary_env: "ANTHROPIC_API_KEY"
+      requires_api_key: true
+      note: "BYOK only; not used as default unless explicitly configured"
+    - id: "gemini"
+      primary_env: "GOOGLE_API_KEY"
+      requires_api_key: true
+      note: "Cloud fallback; multimodal forwarding when attachments present"
+  allowed_tools:
+    - "web_search"
+    - "read_file"
+    - "write_file"
+    - "patch_file"
+    - "execute_command"
+    - "search_codebase"
+    - "discover_documents"
+    - "extract_text"
+    - "summarize_repo"
+    - "semantic_search"
+    - "deal_sentinel"
+    - "research_writer"
+    - "novel_writer"
+  prohibited_tools:
+    - "raw_shell"
+    - "network_exfil"
+  requires_human_owner: true
+  trace_retention_days: 365
+  max_loops: 7
+  circuit_breaker_threshold: 3
+
+conversational_mode:
+  allowed_providers: ["hermes", "gemini", "claude-byok"]
+  tool_access: "denied"
+  data_egress: "public_models_only"
+  note: "No agentic tools; strict input/output guardrails"
+
+cli_stream:
+  endpoint: "/api/cli/stream"
+  auth: "Bearer LATTICE_CLI_TOKEN"
+  allowed_events: ["meta", "thought", "tool", "reasoning", "done", "error"]
+  reasoning_event: "reasoning"
+  reasoning_max_length: 400
+  allowed_tools:
+    - "gh_commits"
+    - "create_blog_pr"
+    - "web_search"
+    - "read_file"
+    - "search_codebase"
+
+tasks_api:
+  endpoint: "/api/v1/tasks"
+  auth: "internal bypass via x-cron-blog + CRON_SECRET for blog_post tasks"
+  allowed_tools:
+    - "gh_commits"
+    - "create_blog_pr"
+    - "web_search"
+    - "read_file"
+    - "search_codebase"
+    - "deal_sentinel"
+    - "research_writer"
+    - "novel_writer"
+    - "write_file"
+    - "patch_file"
+    - "execute_command"
+    - "discover_documents"
+    - "extract_text"
+    - "summarize_repo"
+    - "semantic_search"
+    - "gh_mock"
+    - "db_select_mock"
+
+security_boundaries:
+  context_firewall: true
+  prompt_injection_detection: true
+  output_filtering: true
+  tool_call_validation: true
+  agent_identity_isolation: true
+  execution_environment_boundary: "HarnessFactory-only"
+  fallback_telemetry:
+    enabled: true
+    table: "harness_telemetry_events"
+    required_fields: ["provider_id", "model_id", "fallback_reason", "trace_id"]
+
+compliance:
+  frameworks:
+    - "NIST AI RMF"
+    - "ISO 42001"
+    - "OWASP AI Exchange"
+    - "OWASP Agentic Top 10"
+    - "CSA AICM"
+  assessment_scale: "0-5 maturity evidence scale"
+  audit_artifacts:
+    - "governance/ai-boundaries.yaml"
+    - "public/governance/asset-manifest.json"
+    - "harness_telemetry_events"
+    - "agent_task_stream_events"

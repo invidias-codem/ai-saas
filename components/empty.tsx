@@ -18,7 +18,7 @@ export const EmptyState: React.FC<EmptyProps> = ({ label, description, actionLab
     <div className="h-full p-8 md:p-12 flex flex-col items-center justify-center text-center">
       <div className="relative h-40 w-40 md:h-52 md:w-52 mb-6 flex items-center justify-center">
         <Image
-          src="/Genie.png"
+          src="/lattice-logo.png"
           alt="Empty state"
           width={192}
           height={192}

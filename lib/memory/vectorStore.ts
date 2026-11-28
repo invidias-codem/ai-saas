@@ -20,21 +20,29 @@ export interface Memory {
 }
 
 function buildEmbeddingColumnPatch(embeddingResult: Awaited<ReturnType<typeof generateEmbeddingWithMetadata>>) {
-    const now = new Date().toISOString();
-    return embeddingResult.dimension === 768
-        ? {
-            embedding: embeddingResult.vector,
-            embedding_768: embeddingResult.vector,
-            embedding_provider: embeddingResult.provider,
-            embedding_model: embeddingResult.model,
-            embedding_updated_at: now,
-        }
-        : {
-            embedding_3072: embeddingResult.vector,
-            embedding_provider: embeddingResult.provider,
-            embedding_model: embeddingResult.model,
-            embedding_updated_at: now,
-        };
+  const now = new Date().toISOString();
+  if (
+    !embeddingResult ||
+    !Array.isArray(embeddingResult.vector) ||
+    embeddingResult.vector.length === 0 ||
+    embeddingResult.vector.every((v) => v === 0)
+  ) {
+    return {};
+  }
+  return embeddingResult.dimension === 768
+    ? {
+        embedding: embeddingResult.vector,
+        embedding_768: embeddingResult.vector,
+        embedding_provider: embeddingResult.provider,
+        embedding_model: embeddingResult.model,
+        embedding_updated_at: now,
+      }
+    : {
+        embedding_3072: embeddingResult.vector,
+        embedding_provider: embeddingResult.provider,
+        embedding_model: embeddingResult.model,
+        embedding_updated_at: now,
+      };
 }
 
 function getMemoryRpcName(dimension: 768 | 3072): 'match_memories_768' | 'match_memories_3072' {
@@ -112,16 +120,24 @@ export async function storeMemory(
                 : {}),
         };
 
+        const insertPayload: any = {
+            user_id: normalizedUserId,
+            content: compressedContent,
+            // Plain-text shadow for lexical FTS (content itself is LZ-compressed).
+            content_search: content,
+            type,
+            scope,
+            metadata: normalizedMetadata,
+        };
+
+        const embeddingPatch = buildEmbeddingColumnPatch(embeddingResult);
+        if (embeddingPatch) {
+            Object.assign(insertPayload, embeddingPatch);
+        }
+
         const { data, error } = await supabase
             .from('memory_bank')
-            .insert({
-                user_id: normalizedUserId,
-                content: compressedContent,
-                type,
-                scope,
-                metadata: normalizedMetadata,
-                ...buildEmbeddingColumnPatch(embeddingResult),
-            })
+            .insert(insertPayload)
             .select('id')
             .single();
 
@@ -233,6 +249,8 @@ export async function storeMemoriesBulk(
             return {
                 user_id: normalizedUserId,
                 content: compressedContent,
+                // Plain-text shadow for lexical FTS (content is LZ-compressed).
+                content_search: m.content,
                 type: m.type,
                 scope,
                 metadata: normalizedMetadata,
@@ -272,6 +290,37 @@ export async function searchMemories(
     try {
         const embeddingResult = await generateEmbeddingWithMetadata(query);
         const { safeDecompress } = await import('@/lib/compression');
+
+        // Degraded embedding (zero vector): NEVER run pgvector retrieval — a
+        // zero vector matches nothing meaningful. Route to lexical FTS over
+        // the plain-text shadow column instead.
+        if (embeddingResult.degraded) {
+            console.info('[VectorStore] Embedding degraded — lexical retrieval', {
+                provider: embeddingResult.provider,
+            });
+            const { data: lexical, error: lexicalError } = await supabase.rpc('search_memories_lexical', {
+                query_text: query,
+                match_count: limit,
+                filter_user_id: userId,
+                filter_feature_type: featureType || null,
+            });
+            if (lexicalError) {
+                // RPC not deployed yet → no retrieval rather than nonsense
+                // vector retrieval. Progressive rollout, same as RRF.
+                console.warn('[VectorStore] search_memories_lexical unavailable:', lexicalError?.message);
+                return [];
+            }
+            return lexical.map((item: any) => ({
+                id: item.id,
+                userId: userId,
+                content: safeDecompress(item.content),
+                type: item.type,
+                metadata: item.metadata,
+                similarity: item.similarity,
+                createdAt: item.created_at
+            }));
+        }
+
         const rpcName = getMemoryRpcName(embeddingResult.dimension);
 
         console.info('[VectorStore] Using retrieval lane', {
@@ -287,7 +336,13 @@ export async function searchMemories(
             match_count: limit,
             filter_user_id: userId,
             filter_feature_type: featureType || null,
-            metadata_filter: metadataFilter
+            metadata_filter: metadataFilter,
+            // Model-aware retrieval (3072 lane only): GA-model queries match
+            // GA-model vectors. Rows still carrying preview-model embeddings
+            // are progressively re-embedded (backfill) and match once re-embedded.
+            ...(embeddingResult.dimension === 3072
+                ? { filter_embedding_model: embeddingResult.model }
+                : {}),
         });
 
         if (error) {
@@ -397,6 +452,8 @@ export async function updateMemory(
             .from('memory_bank')
             .update({
                 content: compressedContent,
+                // Plain-text shadow for lexical FTS.
+                content_search: newContent,
                 ...buildEmbeddingColumnPatch(embeddingResult),
             })
             .eq('id', memoryId)

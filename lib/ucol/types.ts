@@ -63,8 +63,8 @@ export interface GeneratedFile {
 // ─── Context Routing ───
 
 export interface ContextPackage {
-    source: 'gemini' | 'claude' | 'user';
-    target: 'gemini' | 'claude';
+    source: 'gemini' | 'claude' | 'user' | 'ucol' | string;
+    target: 'gemini' | 'claude' | 'ucol' | string;
     payload: {
         type: 'plan' | 'code' | 'review' | 'refinement';
         content: any;
@@ -78,8 +78,8 @@ export interface ContextPackage {
 export interface ContextFlowEntry {
     id: string;
     timestamp: number;
-    source: string;
-    target: string;
+    source: 'user' | 'gemini' | 'claude' | 'ucol' | string;
+    target: 'user' | 'gemini' | 'claude' | 'ucol' | string;
     action: string;
     reasoning: string;
     status: 'active' | 'complete' | 'error';
@@ -107,6 +107,7 @@ export interface RefinementContext {
     feedbackHistory: ReviewFeedback[]; // ALL prior critiques, not just latest
     component: ComponentSpec;
     constraint?: string; // creativity constraint imposed for low-originality revisions
+    appliedConstraints?: string[]; // track which constraints have been tried (prevents ping-pong)
 }
 
 // ─── Cross-Component Pattern Discovery ───
@@ -135,14 +136,23 @@ export interface BuildResponse {
 
 // ─── Session ───
 
+export interface RefinementLogEntry {
+    component: string;
+    constraint: string;
+    constraintType: 'complexity' | 'simplicity';
+    appliedAt: number;
+}
+
 export interface BuildSession {
     id: string;
     userId: string;
+    userPrompt?: string;  // original user prompt (passed to reviewer for grounding)
     plan?: ProjectPlan;
     files: GeneratedFile[];
     contextFlow: ContextFlowEntry[];
     reviewRounds: number;       // total review iterations across all components
     constraintRounds: number;   // how many times a creativity constraint was imposed
     discoveredPatterns: DiscoveredPattern[]; // novel patterns found during this build
+    refinementLog: RefinementLogEntry[]; // log of applied constraints (prevents ping-pong)
 }
 

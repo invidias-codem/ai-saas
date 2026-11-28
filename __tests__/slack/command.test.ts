@@ -13,6 +13,24 @@ jest.mock('next/server', () => ({
   },
 }));
 
+// Mock the shared Slack verification to always pass in tests
+jest.mock('@/lib/slack/slackVerification', () => ({
+  requireSlackSignature: jest.fn().mockReturnValue(null),
+  verifySlackSignature: jest.fn().mockReturnValue({ valid: true }),
+}));
+
+// Mock the shared Slack telemetry
+jest.mock('@/lib/slack/slackTelemetry', () => ({
+  emitSlackTelemetry: jest.fn(),
+  extractTelemetryFields: jest.fn().mockReturnValue({
+    teamId: 'T123ABC456',
+    eventType: 'command',
+    channelId: 'C_CHANNEL_123',
+    threadTs: '',
+    userId: 'U_USER_123'
+  }),
+}));
+
 // Mock the token manager
 jest.mock('@/lib/slack/tokenManager', () => ({
   getSlackConfig: jest.fn(),

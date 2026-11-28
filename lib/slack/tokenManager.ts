@@ -1,5 +1,6 @@
 import { sanitizeForLog } from '@/lib/security/urlValidator';
 import { shouldQuietBuildLogs } from '@/lib/runtime/buildPhase';
+import { logger } from '@/lib/logger';
 /**
  * Slack Token Manager (Supabase Edition)
  * Handles multi-tenant token resolution from Supabase
@@ -15,7 +16,7 @@ import { supabase } from '@/lib/supabaseClient';
 const ENCRYPTION_KEY = process.env.SLACK_TOKEN_ENCRYPTION_KEY || process.env.SLACK_CLIENT_SECRET;
 
 if (!ENCRYPTION_KEY && !shouldQuietBuildLogs()) {
-  console.warn('[TOKEN_MANAGER] ⚠️ No encryption key found. Slack token retrieval will fail.');
+  logger.warn('[TOKEN_MANAGER] ⚠️ No encryption key found. Slack token retrieval will fail.');
 }
 
 export interface SlackConfig {
@@ -46,7 +47,7 @@ export async function getSlackConfig(teamId: string): Promise<SlackConfig> {
 
   // 1. Env Var Override (Dev/Testing)
   if (process.env.SLACK_BOT_TOKEN && (!process.env.NODE_ENV || process.env.NODE_ENV === 'development')) {
-    console.warn(`[TOKEN_MANAGER] ⚠️ Using environment variable override for team ${sanitizeForLog(teamId)}`);
+    logger.warn(`[TOKEN_MANAGER] ⚠️ Using environment variable override for team ${sanitizeForLog(teamId)}`);
     return {
       teamId,
       teamName: 'Env Var Workspace',
@@ -66,7 +67,7 @@ export async function getSlackConfig(teamId: string): Promise<SlackConfig> {
     .single();
 
   if (error || !data) {
-    console.error("[TOKEN_MANAGER] Failed to fetch token for team %s:", sanitizeForLog(teamId), error?.message); // lgtm[js/tainted-format-string]
+    logger.error(`[TOKEN_MANAGER] Failed to fetch token for team ${sanitizeForLog(teamId)}:`, error?.message);
     throw new Error(`No Slack installation found for team ${sanitizeForLog(teamId)}`);
   }
 
@@ -111,11 +112,11 @@ export async function removeSlackInstallation(teamId: string): Promise<void> {
     .eq('slack_team_id', teamId);
 
   if (error) {
-    console.error("[TOKEN_MANAGER] Failed to remove team %s:", sanitizeForLog(teamId), error);
+    logger.error(`[TOKEN_MANAGER] Failed to remove team ${sanitizeForLog(teamId)}:`, error);
     throw new Error('Failed to remove installation');
   }
 
-  console.log(`[TOKEN_MANAGER] Removed installation for team ${sanitizeForLog(teamId)}`);
+  logger.info(`[TOKEN_MANAGER] Removed installation for team ${sanitizeForLog(teamId)}`);
 }
 
 /**

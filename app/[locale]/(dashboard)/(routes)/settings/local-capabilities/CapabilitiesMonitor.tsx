@@ -1,0 +1,203 @@
+"use client";
+
+import { Terminal, Shield, HardDrive, Zap, CheckCircle2, XCircle, Monitor, Lock } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { useHarnessHeartbeat } from "@/hooks/useHarnessHeartbeat";
+import { useWorkspaceSyncStatus } from "@/hooks/useWorkspaceSyncStatus";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { SyncStatusIndicator } from "@/components/harness/SyncStatusIndicator";
+
+export function CapabilitiesMonitor({ workspaceId }: { workspaceId: string }) {
+  const { isDaemonRunning, lastHeartbeat, auditLogs, nativeError, isRestarting, restartDaemon, canRestart } = useHarnessHeartbeat();
+  const syncStatus = useWorkspaceSyncStatus(workspaceId);
+  const isTauri =
+    typeof window !== 'undefined' &&
+    ('__TAURI_INTERNALS__' in window || '__TAURI_IPC__' in window);
+
+  if (!workspaceId) {
+    return (
+      <Card className="p-8 border-dashed border-2 border-slate-300/30 bg-slate-500/5">
+        <div className="text-center text-muted-foreground">No workspace found. Please complete onboarding first.</div>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Zap className="w-5 h-5 text-yellow-500" />
+              Local service
+            </h2>
+            {isDaemonRunning ? (
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Connected
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-slate-500/10 text-slate-500 border-slate-500/20">
+                <XCircle className="w-3 h-3 mr-1" /> Disconnected
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Connects Lattice to the local service running on your device.
+          </p>
+        </Card>
+
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Monitor className="w-5 h-5 text-purple-500" />
+              Runtime Environment
+            </h2>
+            {isTauri ? (
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Desktop
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">
+                <Monitor className="w-3 h-3 mr-1" /> Browser
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Indicates whether Lattice is running as a native Tauri desktop app or in a standard web browser.
+          </p>
+        </Card>
+
+        <Card className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold flex items-center gap-2">
+              <Lock className="w-5 h-5 text-amber-500" />
+              Native Secret Vault
+            </h2>
+            {isTauri ? (
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Stronghold
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="bg-slate-500/10 text-slate-500 border-slate-500/20">
+                <Lock className="w-3 h-3 mr-1" /> Web Storage
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Provider API keys are stored in Tauri’s encrypted Stronghold vault on desktop, or in the standard web secret store in browser mode.
+          </p>
+        </Card>
+      </div>
+
+      {!isDaemonRunning && (
+        <Card className="p-8 border-dashed border-2 border-indigo-500/30 bg-indigo-500/5">
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Terminal className="w-6 h-6" />
+                {isTauri ? (isRestarting ? 'Restarting the local service' : nativeError ? 'Local service unavailable' : 'Connecting to the local service') : 'Set up the local service'}
+              </h2>
+              <p className="text-muted-foreground max-w-3xl">
+                {isTauri ? (nativeError ?? 'Starting the local service on your device. This should only take a moment.') : 'Local features require the desktop application. Developers can run the app from source using the commands below.'}
+              </p>
+              {isTauri && ((nativeError && canRestart) || isRestarting) && (
+                <Button onClick={() => void restartDaemon()} disabled={isRestarting}>
+                  {isRestarting ? 'Restarting…' : 'Restart local service'}
+                </Button>
+              )}
+            </div>
+
+            {!isTauri && <div className="space-y-4">
+              <div className="bg-slate-950 rounded-lg p-4 font-mono text-sm text-slate-300 overflow-x-auto">
+                <div className="flex items-center gap-4">
+                  <span className="text-slate-500">$</span>
+                  <span className="text-green-400">git</span> clone https://github.com/invidias-codem/ai-saas.git
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-slate-500">$</span>
+                  <span className="text-green-400">cd</span> ai-saas
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-slate-500">$</span>
+                  <span className="text-green-400">pnpm</span> install
+                </div>
+                <div className="flex items-center gap-4 mt-2">
+                  <span className="text-slate-500"># Start the native Tauri app + daemon</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-slate-500">$</span>
+                  <span className="text-green-400">pnpm</span> tauri dev
+                </div>
+              </div>
+            </div>}
+          </div>
+        </Card>
+      )}
+
+      {isDaemonRunning && (
+        <Card className="p-6 space-y-4 border-emerald-500/20 bg-emerald-500/5">
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <Shield className="w-6 h-6 text-emerald-500" />
+              Security Audit Stream
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Recent activity reported by the local service.
+              Last successful ping: {lastHeartbeat?.toLocaleTimeString() || "Pending..."}
+            </p>
+          </div>
+
+          <ScrollArea className="h-72 rounded-md border bg-slate-950/50 p-4">
+            {auditLogs.length === 0 ? (
+              <div className="text-sm text-slate-500 text-center py-10 font-mono">
+                No local activity recorded yet.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {auditLogs.map((log) => (
+                  <div key={log.id} className="text-xs font-mono space-y-1 pb-3 border-b border-slate-800/50 last:border-0">
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <span className="text-slate-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider
+                        ${log.type === 'execution' ? 'bg-rose-500/20 text-rose-400' :
+                          log.type === 'read' ? 'bg-blue-500/20 text-blue-400' :
+                          log.type === 'sync' ? 'bg-indigo-500/20 text-indigo-400' :
+                          'bg-emerald-500/20 text-emerald-400'}`}
+                      >
+                        {log.type}
+                      </span>
+                    </div>
+                    <div className="text-slate-200">
+                      {log.description}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </Card>
+      )}
+
+      {/* Local File Sync Status - Detailed View */}
+      <Card className="p-6 space-y-4 border-indigo-500/20 bg-indigo-500/5">
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <HardDrive className="w-6 h-6 text-indigo-500" />
+            Local File Sync Status
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Real-time synchronization status for your authorized workspace directories.
+            Ingestion events are streamed via Supabase Realtime with a 5s polling fallback.
+          </p>
+        </div>
+
+        <SyncStatusIndicator
+          syncStatus={syncStatus}
+          variant="detailed"
+        />
+      </Card>
+    </>
+  );
+}

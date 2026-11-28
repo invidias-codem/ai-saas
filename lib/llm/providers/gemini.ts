@@ -1,8 +1,11 @@
+import { addAbortSignal } from "node:stream";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ChatMessage, CompletionOptions, LLMProvider, StreamResult } from "../types";
 import { sanitizeHistory } from "@/lib/gemini";
 import { logger } from "@/lib/logger";
 import { getStorageClient, getStorageProjectId } from '@/lib/gcp/storage';
+import { MAX_CHAT_IMAGE_BYTES } from '@/lib/types/attachments';
+import { encodeProviderErrorEvent } from '@/lib/media/envelope';
 
 // Lazy initialisation — validate at first use, not at module load.
 // Module-level throws break integration tests that import routes without setting env vars.
@@ -22,7 +25,7 @@ function getGenAI(apiKeyOverride?: string): GoogleGenerativeAI {
 }
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
-const AGENTIC_MODEL = "gemini-3-flash-preview";
+export const AGENTIC_MODEL = "gemini-3-flash-preview";
 
 export class GeminiProvider implements LLMProvider {
     id = "gemini";
@@ -46,14 +49,28 @@ export class GeminiProvider implements LLMProvider {
             const parts: any[] = [];
             let textToProcess = msg.text;
 
-            // Extract thought signatures
-            const signatureRegex = /<thought_signature>([\s\S]*?)<\/thought_signature>/g;
-            let match;
-            while ((match = signatureRegex.exec(textToProcess)) !== null) {
-                parts.push({ thoughtSignature: match[1].trim() });
+            // Extract thought signatures (linear scan, no regex backtracking)
+            const marker = '<thought_signature>';
+            const endMarker = '</thought_signature>';
+            let searchFrom = 0;
+
+            while (searchFrom < textToProcess.length) {
+              const startIdx = textToProcess.indexOf(marker, searchFrom);
+              if (startIdx === -1) break;
+              const endIdx = textToProcess.indexOf(endMarker, startIdx + marker.length);
+              if (endIdx === -1) break;
+
+              const signature = textToProcess.slice(startIdx + marker.length, endIdx).trim();
+              if (signature) parts.push({ thoughtSignature: signature });
+
+              searchFrom = endIdx + endMarker.length;
             }
 
-            let remainingText = textToProcess.replace(signatureRegex, '').trim();
+            let remainingText = textToProcess
+              .split(marker)
+              .flatMap((segment) => segment.split(endMarker))
+              .join('')
+              .trim();
             if (remainingText) {
                 parts.push({ text: remainingText });
             } else if (parts.length === 0) {
@@ -82,7 +99,23 @@ export class GeminiProvider implements LLMProvider {
                             });
                         } else {
                             try {
-                                const [fileContents] = await storage.bucket(bucketName).file(filePath).download();
+                                const file = storage.bucket(bucketName).file(filePath);
+                                let fileContents: Buffer;
+                                if (att.mimeType.startsWith('image/')) {
+                                    const source = file.createReadStream({ start: 0, end: MAX_CHAT_IMAGE_BYTES, validation: false });
+                                    if (options.signal) addAbortSignal(options.signal, source);
+                                    const chunks: Buffer[] = [];
+                                    let size = 0;
+                                    for await (const chunk of source) {
+                                        size += chunk.length;
+                                        if (size > MAX_CHAT_IMAGE_BYTES) throw new Error('The attachment exceeds the image size limit.');
+                                        chunks.push(chunk);
+                                    }
+                                    if (!size) throw new Error('The attached image is empty.');
+                                    fileContents = Buffer.concat(chunks, size);
+                                } else {
+                                    [fileContents] = await file.download();
+                                }
                                 parts.push({
                                     inlineData: {
                                         mimeType: att.mimeType,
@@ -90,7 +123,10 @@ export class GeminiProvider implements LLMProvider {
                                     }
                                 });
                             } catch (e) {
-                                logger.error(`[Gemini] Failed to download GCS attachment: ${att.fileUri}`, e);
+                                if (att.mimeType.startsWith('image/')) {
+                                    throw new Error('The attached image could not be retrieved.', { cause: e });
+                                }
+                                logger.error('[Gemini] Failed to download GCS attachment', e);
                             }
                         }
                     } else if (att.base64Data) {
@@ -147,11 +183,14 @@ export class GeminiProvider implements LLMProvider {
                 maxOutputTokens: options.maxTokens,
                 topP: options.topP,
                 topK: options.topK,
+                ...(options.responseMimeType ? { responseMimeType: options.responseMimeType } : {}),
             }
         });
 
-        const result = await chat.sendMessageStream(lastMessage.parts);
+        options.signal?.throwIfAborted();
+        const result = await chat.sendMessageStream(lastMessage.parts, { signal: options.signal });
         const textEncoder = new TextEncoder();
+        const providerId = this.id; // captured: `this` doesn't bind inside start()
 
         let capturedSignature: string | null = null;
         let resolveSignature!: (v: string | null) => void;
@@ -159,26 +198,36 @@ export class GeminiProvider implements LLMProvider {
 
         const stream = new ReadableStream({
             async start(controller) {
-                for await (const chunk of result.stream) {
-                    if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
-                        for (const part of chunk.candidates[0].content.parts) {
-                            if ((part as any).thoughtSignature) {
-                                // Capture silently — do not enqueue to the text stream
-                                capturedSignature = (part as any).thoughtSignature;
-                            } else if ((part as any).thought) {
-                                controller.enqueue(textEncoder.encode(`<thought>${(part as any).thought}</thought>`));
-                            } else if (part.text) {
-                                controller.enqueue(textEncoder.encode(part.text));
+                try {
+                    for await (const chunk of result.stream) {
+                        if (chunk.candidates && chunk.candidates[0]?.content?.parts) {
+                            for (const part of chunk.candidates[0].content.parts) {
+                                if ((part as any).thoughtSignature) {
+                                    // Capture silently — do not enqueue to the text stream
+                                    capturedSignature = (part as any).thoughtSignature;
+                                } else if ((part as any).thought) {
+                                    controller.enqueue(textEncoder.encode(`<thought>${(part as any).thought}</thought>`));
+                                } else if (part.text) {
+                                    controller.enqueue(textEncoder.encode(part.text));
+                                }
+                            }
+                        } else {
+                            const chunkText = chunk.text();
+                            if (chunkText) {
+                                controller.enqueue(textEncoder.encode(chunkText));
                             }
                         }
-                    } else {
-                        const chunkText = chunk.text();
-                        if (chunkText) {
-                            controller.enqueue(textEncoder.encode(chunkText));
-                        }
                     }
+                    controller.close();
+                } catch (err: any) {
+                    // Mid-stream death: marker + clean close, never error() —
+                    // that faults the client HTTP response (Vercel 500s).
+                    logger.error(`[GeminiProvider] stream ended early: ${err?.message || String(err)}`);
+                    try {
+                        controller.enqueue(textEncoder.encode(encodeProviderErrorEvent({ provider: providerId, model: modelId, reason: String(err?.message || err) })));
+                    } catch { /* client gone */ }
+                    try { controller.close(); } catch { /* already closed */ }
                 }
-                controller.close();
                 resolveSignature(capturedSignature); // Resolve only after stream fully drains
             }
         });

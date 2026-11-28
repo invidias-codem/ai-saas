@@ -53,40 +53,43 @@ export function CodeModelToggle({ disabled }: { disabled?: boolean }) {
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top" className="w-[220px] mb-2 p-1 border-border/50 shadow-lg rounded-xl">
-                {Object.entries(visibleModels).map(([key, config]) => {
-                    const Icon = MODE_ICONS[key as keyof typeof MODE_ICONS] || Zap;
-                    const isActive = codeModel === key;
+                {/* Scrollable list with visible scrollbar */}
+                <div className="max-h-[280px] overflow-y-auto overscroll-contain scrollbar-thin">
+                    {Object.entries(visibleModels).map(([key, config]) => {
+                        const Icon = MODE_ICONS[key as keyof typeof MODE_ICONS] || Zap;
+                        const isActive = codeModel === key;
 
-                    return (
+                        return (
+                            <DropdownMenuItem
+                                key={key}
+                                onClick={() => setCodeModel(key)}
+                                className={cn(
+                                    "flex items-start gap-3 p-2.5 cursor-pointer rounded-lg mb-1 last:mb-0 transition-colors",
+                                    isActive ? "bg-muted" : "hover:bg-muted/50"
+                                )}
+                            >
+                                <div className="flex-shrink-0 mt-0.5">
+                                    <Icon className={cn("w-4 h-4", MODE_COLORS[key as keyof typeof MODE_COLORS])} />
+                                </div>
+                                <div className="flex flex-col gap-0.5 min-w-0">
+                                    <span className="font-semibold text-[13px] truncate">{config.name}</span>
+                                    <span className="text-[11px] leading-tight text-muted-foreground line-clamp-2">{config.description}</span>
+                                </div>
+                            </DropdownMenuItem>
+                        );
+                    })}
+                    {hasOpenRouterModels && Object.keys(visibleModels).every(key => !key.startsWith('openrouter-')) && (
                         <DropdownMenuItem
-                            key={key}
-                            onClick={() => setCodeModel(key)}
-                            className={cn(
-                                "flex items-start gap-3 p-2.5 cursor-pointer rounded-lg mb-1 last:mb-0 transition-colors",
-                                isActive ? "bg-muted" : "hover:bg-muted/50"
-                            )}
+                            disabled
+                            className="flex flex-col gap-0.5 p-2.5 cursor-default rounded-lg mb-1 opacity-70"
                         >
-                            <div className="flex-shrink-0 mt-0.5">
-                                <Icon className={cn("w-4 h-4", MODE_COLORS[key as keyof typeof MODE_COLORS])} />
-                            </div>
-                            <div className="flex flex-col gap-0.5">
-                                <span className="font-semibold text-[13px]">{config.name}</span>
-                                <span className="text-[11px] leading-tight text-muted-foreground">{config.description}</span>
-                            </div>
+                            <span className="text-[13px] text-muted-foreground">More models available</span>
+                            <span className="text-[11px] leading-tight text-muted-foreground/80">
+                                Add an OpenRouter key in <span className="underline underline-offset-2">Settings</span> to unlock open models.
+                            </span>
                         </DropdownMenuItem>
-                    );
-                })}
-                {hasOpenRouterModels && Object.keys(visibleModels).every(key => !key.startsWith('openrouter-')) && (
-                    <DropdownMenuItem
-                        disabled
-                        className="flex flex-col gap-0.5 p-2.5 cursor-default rounded-lg mb-1 opacity-70"
-                    >
-                        <span className="text-[13px] text-muted-foreground">More models available</span>
-                        <span className="text-[11px] leading-tight text-muted-foreground/80">
-                            Add an OpenRouter key in <span className="underline underline-offset-2">Settings</span> to unlock open models.
-                        </span>
-                    </DropdownMenuItem>
-                )}
+                    )}
+                </div>
             </DropdownMenuContent>
         </DropdownMenu>
     );

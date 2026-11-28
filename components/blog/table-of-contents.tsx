@@ -58,7 +58,7 @@ export function TableOfContents({ items }: TableOfContentsProps) {
 
       window.scrollTo({
         top: offsetPosition,
-        behavior: "smooth",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
       });
     }
   };
@@ -68,11 +68,11 @@ export function TableOfContents({ items }: TableOfContentsProps) {
   }
 
   return (
-    <nav className="sticky top-24">
-      <div className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 shadow-sm dark:shadow-none">
-        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-200 dark:border-white/10">
-          <List className="w-4 h-4 text-purple-500 dark:text-purple-400" />
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Table of Contents</h3>
+    <nav aria-label="Table of contents" className="sticky top-24 max-h-[calc(100dvh-7rem)] overflow-y-auto">
+      <div className="p-4 rounded-xl border border-border bg-card shadow-sm dark:shadow-none">
+        <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
+          <List className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">Table of Contents</h3>
         </div>
         
         <ul className="space-y-2">
@@ -84,10 +84,10 @@ export function TableOfContents({ items }: TableOfContentsProps) {
               <button
                 onClick={() => handleClick(item.id)}
                 className={cn(
-                  "text-left text-sm transition-colors duration-200 hover:text-slate-900 dark:hover:text-white w-full truncate",
+                  "w-full rounded px-2 py-1 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
                   activeId === item.id
-                    ? "text-purple-600 dark:text-purple-400 font-medium"
-                    : "text-slate-500 dark:text-gray-400"
+                    ? "bg-accent font-medium text-accent-foreground"
+                    : "text-muted-foreground"
                 )}
               >
                 {item.title}
@@ -116,7 +116,7 @@ export function MobileTableOfContents({ items }: TableOfContentsProps) {
 
       window.scrollTo({
         top: offsetPosition,
-        behavior: "smooth",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
       });
       setIsOpen(false);
     }
@@ -125,18 +125,20 @@ export function MobileTableOfContents({ items }: TableOfContentsProps) {
   return (
     <div className="lg:hidden mb-8">
       <button
+        type="button"
+        aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 text-slate-900 dark:text-white shadow-sm dark:shadow-none"
+        className="w-full flex items-center justify-between p-4 rounded-xl border border-border bg-card text-foreground shadow-sm dark:shadow-none"
       >
         <div className="flex items-center gap-2">
-          <List className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+          <List className="w-4 h-4 text-primary" />
           <span className="font-medium">Table of Contents</span>
         </div>
-        <span className="text-slate-500 dark:text-gray-400">{isOpen ? "−" : "+"}</span>
+        <span className="text-muted-foreground">{isOpen ? "−" : "+"}</span>
       </button>
 
       {isOpen && (
-        <div className="mt-2 p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-white/90 dark:bg-white/5 shadow-sm dark:shadow-none">
+        <div className="mt-2 p-4 rounded-xl border border-border bg-card shadow-sm dark:shadow-none">
           <ul className="space-y-2">
             {items.map((item) => (
               <li
@@ -145,7 +147,7 @@ export function MobileTableOfContents({ items }: TableOfContentsProps) {
               >
                 <button
                   onClick={() => handleClick(item.id)}
-                  className="text-left text-sm text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors w-full truncate"
+                  className="text-left text-sm text-muted-foreground hover:text-primary w-full transition-colors"
                 >
                   {item.title}
                 </button>

@@ -8,6 +8,7 @@ overrides:
   ws: ^8.21.0
 allowBuilds:
   '@clerk/shared': true
+  '@depot/cli': false
   '@firebase/util': true
   '@google/genai': true
   '@parcel/watcher': true
@@ -21,3 +22,5 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   utf-8-validate: true
+patchedDependencies:
+  '@trigger.dev/core@4.5.16': patches/@trigger.dev__core@4.5.16.patch

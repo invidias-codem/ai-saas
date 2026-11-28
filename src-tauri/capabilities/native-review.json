@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "native-review",
+  "description": "Review-only commands; runtime also requires the exact live native-created instance and fixed review origin.",
+  "webviews": ["native-review-*"],
+  "permissions": ["native-review-decision"]
+}

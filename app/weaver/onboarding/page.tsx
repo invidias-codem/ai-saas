@@ -24,7 +24,7 @@ export default function WeaverOnboardingPage() {
               2. Authenticate:{' '}
               <code className="text-neutral-100">lattice-cli auth --token YOUR_TOKEN</code>
             </li>
-            <li>3. Run your first weave: <code className="text-neutral-100">lattice-cli weaver "map the dependencies in /lib"</code></li>
+            <li>3. Run your first weave: <code className="text-neutral-100">lattice-cli weaver &quot;map the dependencies in /lib&quot;</code></li>
           </ol>
 
           <div className="mt-8">

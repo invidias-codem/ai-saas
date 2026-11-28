@@ -1,8 +1,8 @@
 name: CI
 
 on:
+  # Run on stacked feature PRs, not just PRs targeting main.
   pull_request:
-    branches: [ main ]
   push:
     branches: [ main ]
 
@@ -12,20 +12,56 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6.0.9
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with: { version: 11.6.0 }
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 22
           cache: pnpm
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Install elan
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 \
+            --fail --location --retry 3 \
+            -o "$RUNNER_TEMP/elan.tar.gz" \
+            https://github.com/leanprover/elan/releases/download/v4.2.4/elan-x86_64-unknown-linux-gnu.tar.gz
+          printf '%s  %s\n' \
+            '42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63' \
+            "$RUNNER_TEMP/elan.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/elan-bootstrap"
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" \
+            -C "$RUNNER_TEMP/elan-bootstrap" elan-init
+          "$RUNNER_TEMP/elan-bootstrap/elan-init" \
+            -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Install and verify Lean toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          elan toolchain install "$(cat lean-toolchain)"
+          elan default "$(cat lean-toolchain)"
+          lean --version
+          lake --version
+          test "$(lean --version | grep -oE '4\.36\.0')" = "4.36.0"
+
+      - name: Build Workspace Packages
+        run: pnpm --recursive --filter @lattice-os/core run build && pnpm --recursive --filter @lattice-os/mcp-remote run build
+
+      - name: ONNX artifact integrity
+        # Fails if any deployed .onnx's bytes disagree with its *_meta.json size_bytes.
+        # See scripts/check-onnx-artifact-integrity.sh for the incident context.
+        run: bash scripts/check-onnx-artifact-integrity.sh
 
       - name: Lint
         run: pnpm lint
@@ -34,7 +70,18 @@ jobs:
         run: pnpm typecheck
 
       - name: Test
-        run: pnpm test
+        # 6A.3: attest execution. --json gives real counts; the attestation
+        # proves the suite RAN against this commit (zero tests = red flag).
+        run: |
+          npx jest --json --outputFile=.attestation-jest.json || TEST_FAILED=$?
+          npx tsx scripts/attestation-cli.ts write \
+            --suite decision-plane-contracts \
+            --jest-json .attestation-jest.json \
+            --out attestations/decision-plane-contracts.json
+          cat attestations/decision-plane-contracts.json
+          exit ${TEST_FAILED:-0}
 
       - name: Build
         run: pnpm build
+
+

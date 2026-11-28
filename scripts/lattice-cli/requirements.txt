@@ -1,2 +1,1 @@
-# lattice-cli runtime dependencies
-cryptography>=41.0      # ed25519 license signing/verification (V3)
+cryptography==50.0.2

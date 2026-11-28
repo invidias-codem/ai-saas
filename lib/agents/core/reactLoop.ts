@@ -1,21 +1,40 @@
 import { VertexAI, GenerativeModel, GenerateContentRequest, Part } from '@google-cloud/vertexai';
+import { logger } from '@/lib/logger';
 import { AgentContext, ToolResult, TrajectoryStep, AgentActionType } from './types';
 import { ToolRegistry } from './registry';
+import { withPromotionGate, NeedsApprovalError } from '@/lib/cli/promotionPrompt';
+import type { QuarantineArtifact } from '@/lib/execution/sandboxManager';
 
 const MAX_LOOPS = 7;
 const CIRCUIT_BREAKER_THRESHOLD = 3;
 
+function stripThinkingBlocks(text: string): string {
+  return text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+}
+
 export interface ReActResult {
-    answer: string;
-    trajectory: TrajectoryStep[];
-    status: 'success' | 'max_loops' | 'error' | 'halted_for_approval';
+  answer: string;
+  trajectory: TrajectoryStep[];
+  status: 'success' | 'max_loops' | 'error' | 'halted_for_approval';
+  approvalRequest?: {
+    approvalId: string;
+    toolName: string;
+    params: any;
+  };
+  promotionState?: {
+    sessionId: string;
+    artifacts: QuarantineArtifact[];
+    rejectionCount: number;
+    circuitBreakerTripped: boolean;
+  };
 }
 
 export async function runReActLoop(
     userQuery: string | Array<Part>,
     context: AgentContext,
     registry: ToolRegistry,
-    modelName: string = 'gemini-2.5-flash'
+    modelName: string = 'gemini-2.5-flash',
+    systemInstruction?: string,
 ): Promise<ReActResult> {
   const providerMode = process.env.MODEL_PROVIDER || process.env.NEXT_PUBLIC_MODEL_PROVIDER || '';
 
@@ -55,12 +74,20 @@ export async function runReActLoop(
           const credentials = JSON.parse(keyJson);
           googleAuthOptions = { credentials };
       } catch (e) {
-          console.error("Failed to parse GCP_SERVICE_ACCOUNT_KEY_JSON for Vertex AI auth", e);
+          logger.error("Failed to parse GCP_SERVICE_ACCOUNT_KEY_JSON for Vertex AI auth", e);
       }
   }
 
   const vertexAI = new VertexAI({ project, location, googleAuthOptions });
-  const model = vertexAI.getGenerativeModel({ model: modelName });
+  const model = vertexAI.getGenerativeModel({
+    model: modelName,
+    generationConfig: {
+      // Prevent mid-table/chart truncation on long research answers. The default
+      // output budget was silently cutting markdown tables in half.
+      maxOutputTokens: 16384,
+      temperature: 0.2,
+    },
+  });
 
   const trajectory: TrajectoryStep[] = [];
   let loopCount = 0;
@@ -68,7 +95,11 @@ export async function runReActLoop(
 
   const chat = model.startChat({
     history: context.history || [],
-    tools: registry.getToolsForGemini()
+    tools: registry.getToolsForGemini(),
+    // Phase 0 (#440): manifest-derived instruction reaches Gemini inference
+    // via the SDK's StartChatParams.systemInstruction (verified in the
+    // installed @google-cloud/vertexai .d.ts).
+    ...(systemInstruction ? { systemInstruction } : {}),
   });
 
   let promptToSend: string | Array<Part> = userQuery;
@@ -77,7 +108,7 @@ export async function runReActLoop(
     loopCount++;
 
     if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
-      console.warn(`[ReActLoop] Circuit breaker triggered after ${consecutiveFailures} failures.`);
+      logger.warn(`[ReActLoop] Circuit breaker triggered after ${consecutiveFailures} failures.`);
       const metaPrompt = `CRITICAL: The previous approach failed ${consecutiveFailures} times. Pivot your strategy. Do NOT repeat the same tool/arguments. Verify your assumptions.`;
 
       if (typeof promptToSend === 'string') {
@@ -99,7 +130,8 @@ export async function runReActLoop(
       const functionCallPart = parts.find(p => p.functionCall);
       const textPart = parts.find(p => p.text);
 
-      const thought = textPart?.text || "Processing...";
+      const thoughtRaw = textPart?.text || "Processing...";
+      const thought = stripThinkingBlocks(thoughtRaw);
 
       trajectory.push({
         stepNumber: loopCount,
@@ -111,10 +143,13 @@ export async function runReActLoop(
       if (context.onStep) {
         context.onStep(trajectory[trajectory.length - 1]);
       }
+      if (thought && context.onReasoning) {
+        context.onReasoning(thought);
+      }
 
       if (!functionCallPart) {
         return {
-          answer: thought,
+          answer: stripThinkingBlocks(thought),
           trajectory,
           status: 'success'
         };
@@ -133,7 +168,7 @@ export async function runReActLoop(
       } catch (error: any) {
         childSpan?.fail(error.message ?? String(error), { toolName, inputSize: JSON.stringify(toolArgs ?? {}).length });
         childSpan?.end({ metadata: { status: 'error', latencyMs: Date.now() - toolStart } });
-        console.warn(`[ReActLoop] Tool Error: ${error.message}`);
+        logger.warn(`[ReActLoop] Tool Error: ${error.message}`);
         consecutiveFailures++;
         trajectory[trajectory.length - 1].observation = { status: 'error', error: error.message };
         if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
@@ -157,10 +192,33 @@ export async function runReActLoop(
           summary: 'Halted for user approval'
         };
         if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
+
+        // Register the paused tool DURABLY so a follow-up approve/deny can
+        // resume it even after a serverless cold start. We persist only the
+        // serializable subset of the context; the resume route re-hydrates the
+        // tool by name from the stable agentic tool set.
+        const { registerDurableApproval } = await import('@/lib/execution/durableApprovalStore');
+        const approvalId = await registerDurableApproval({
+          userId: context.userId,
+          toolName,
+          workspaceId: context.workspaceId ?? null,
+          input: toolArgs,
+          context: {
+            userId: context.userId,
+            sessionId: context.sessionId,
+            workspaceId: context.workspaceId ?? null,
+            userRole: context.userRole,
+            orgContext: context.orgContext,
+            history: context.history,
+            enableTelemetry: context.enableTelemetry,
+          },
+        });
+
         return {
           answer: "I need your approval to proceed with this action.",
           trajectory,
-          status: 'halted_for_approval'
+          status: 'halted_for_approval',
+          approvalRequest: { approvalId, toolName, params: toolArgs }
         };
       }
 
@@ -169,7 +227,10 @@ export async function runReActLoop(
         let outputString = JSON.stringify(execResult.data);
 
         if (outputString.length > 20000) {
-          outputString = outputString.substring(0, 5000) + `... [Truncated ${outputString.length - 5000} chars]`;
+          // Structural-safe truncation: keep 20k chars so data-heavy research
+          // tools (CSV/JSON/table sources) don't starve the model of rows it
+          // needs to render a full chart/table.
+          outputString = outputString.substring(0, 20000) + `... [Truncated ${outputString.length - 20000} chars]`;
         }
 
         trajectory[trajectory.length - 1].observation = {
@@ -177,6 +238,84 @@ export async function runReActLoop(
           data: execResult.data
         };
         if (context.onStep) context.onStep(trajectory[trajectory.length - 1]);
+
+        // Operator approval gate for pending quarantine artifacts before final answer
+        if (context.promotionManager) {
+          const sessionId = context.sessionId;
+          const rejectionCounter = {
+            count: context.promotionRejectionCount || 0,
+            tripped: false,
+          };
+
+          const pending = await context.promotionManager.getPendingArtifacts(sessionId);
+
+          if (pending.length > 0) {
+            if (context.operatorApprovalMode === 'non-interactive') {
+              const result: ReActResult = {
+                answer: 'NeedsApproval: pending quarantine artifacts require operator approval.',
+                trajectory,
+                status: 'halted_for_approval',
+                promotionState: {
+                  sessionId,
+                  artifacts: pending.map((a) => ({
+                    sessionId: a.sessionId,
+                    relativePath: a.relativePath,
+                    digest: a.digest,
+                    absPath: a.absPath,
+                  })),
+                  rejectionCount: context.promotionRejectionCount || 0,
+                  circuitBreakerTripped: false,
+                },
+              };
+              return result;
+            }
+
+            const gateResult = await withPromotionGate(
+              sessionId,
+              context.promotionManager,
+              pending,
+              rejectionCounter,
+              async (decision) => {
+                if (decision === 'reset') {
+                  return {
+                    answer: 'Quarantine circuit breaker reset. Awaiting operator confirmation to continue.',
+                    trajectory,
+                    status: 'halted_for_approval' as const,
+                  };
+                }
+
+                if (decision === 'reject') {
+                  const rejectedObservation = {
+                    status: 'error' as const,
+                    error: 'system_error: promotion rejected by operator',
+                    observability: 'operator_rejected',
+                  };
+
+                  // Append the rejection as an additional trajectory step
+                  trajectory.push({
+                    stepNumber: trajectory.length + 1,
+                    timestamp: new Date().toISOString(),
+                    thought: 'The operator rejected the pending quarantine artifacts. Adjusting strategy.',
+                    action: { type: 'final_answer' as const },
+                    observation: rejectedObservation,
+                  });
+
+                  return {
+                    answer: 'The operator rejected the pending artifacts. I need to adjust my approach and retry without writing those files.',
+                    trajectory,
+                    status: 'success' as const,
+                  };
+                }
+
+                return null;
+              },
+            );
+
+            if (gateResult) {
+              return gateResult;
+            }
+          }
+        }
 
         promptToSend = [{
           functionResponse: {
@@ -188,7 +327,7 @@ export async function runReActLoop(
           }
         }];
       } else {
-        console.warn(`[ReActLoop] Tool Error: ${execResult.error}`);
+        logger.warn(`[ReActLoop] Tool Error: ${execResult.error}`);
         consecutiveFailures++;
         trajectory[trajectory.length - 1].observation = {
           status: 'error',
@@ -207,7 +346,7 @@ export async function runReActLoop(
         }];
       }
     } catch (error: any) {
-      console.error("[ReActLoop] Implementation Error:", error);
+      logger.error("[ReActLoop] Implementation Error:", error);
       return {
           answer: "An internal error occurred during the agent loop.",
           trajectory,

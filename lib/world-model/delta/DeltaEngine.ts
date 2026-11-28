@@ -9,6 +9,7 @@ import { claimExtractor } from "./ClaimExtractor";
 import { graphLookup } from "./GraphLookup";
 import { auditLogger } from "./AuditLogger";
 import { supabase } from "@/lib/supabaseClient";
+import type { DeltaPayload } from "../types";
 
 export class DeltaEngine {
   private static instance: DeltaEngine;
@@ -76,6 +77,16 @@ export class DeltaEngine {
             case 'CONTRADICTED': deltaScore = 1.0; break;
           }
 
+          // Mutation: on contradiction, obsoleted the contradicted entity via
+          // an OBSOLETED event (append-only, event-sourced) rather than an UPDATE.
+          if (lookup.verdict === 'CONTRADICTED' && lookup.contradictsNodeId) {
+            void this.writeObsolescenceEvent({
+              obsoleteEntityId: lookup.contradictsNodeId,
+              claim,
+              graphEdgeId: lookup.graphEdgeId,
+            });
+          }
+
           return {
             claim,
             verdict: lookup.verdict,
@@ -106,6 +117,42 @@ export class DeltaEngine {
     
     const totalScore = results.reduce((sum, r) => sum + r.deltaScore, 0);
     return totalScore / results.length;
+  }
+
+  /**
+   * Mutation path — event-sourced append-only.
+   *
+   * When a claim CONTRADICTS a graph entity, the entity is obsoleted by
+   * writing an OBSOLETED event with a strict delta payload, NOT by mutating
+   * knowledge_nodes.valid_until. The DB trigger enforces the delta contract.
+   */
+  private async writeObsolescenceEvent(params: {
+    obsoleteEntityId: string;
+    claim: ExtractedClaim;
+    graphEdgeId?: string;
+  }): Promise<void> {
+    const { obsoleteEntityId, claim, graphEdgeId } = params;
+
+    const delta: DeltaPayload = {
+      before: { valid: true },
+      after: null, // OBSOLETED
+      reason: `Contradicted by claim "${claim.text}" (claim ${claim.id})`,
+      evidence: graphEdgeId ? [{ edge_id: graphEdgeId, weight: 1.0 }] : [],
+      score: 1.0, // full contradiction
+    };
+
+    const { error } = await supabase.from('wm_events').insert({
+      entity_id: obsoleteEntityId,
+      event_type: 'OBSOLETED',
+      payload: { entity_type: 'node', delta },
+      trust_tier: 'SUPPORTED',
+      source_model: 'delta-engine',
+      context_version_id: claim.id,
+    });
+
+    if (error) {
+      console.error('[DeltaEngine] Failed to write OBSOLETED event:', error);
+    }
   }
 
   async getModelTruthScore(model: string, domain?: string): Promise<ModelTruthScore | null> {

@@ -1,0 +1,640 @@
+'use client';
+
+// Code Builder interactive island (Phase 4A/4B).
+//
+// Dashboard invariant: page.tsx stays a server-component shell; ALL
+// interactivity — prompt, polling, realtime relay subscription, panels —
+// lives in this client island (AGENTS.md pattern; qodo #2).
+//
+// Lifecycle contract (qodo #3/#4):
+//   - activeBuildRef tracks the buildId that owns the page's polling/relay;
+//     every poll apply checks it before touching shared state.
+//   - graceTimerRef holds the terminal re-read timer; cleared on every
+//     transition (new build, reset, terminal, unmount) so stale callbacks
+//     can never clear a newer build's key or stop its polling.
+
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { PromptInput } from '../components/PromptInput';
+import { PlanPanel } from '../components/PlanPanel';
+import { CodePanel } from '../components/CodePanel';
+import { ContextFlowVisualizer } from '../components/ContextFlowVisualizer';
+import type { ProjectPlan, GeneratedFile, ContextFlowEntry } from '@/lib/ucol/types';
+import { AlertCircle, Zap } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { observeBuildProgress, type ProgressObservation } from '@/lib/code-builder/buildProgress';
+import { isTerminalRunStatus } from '@/lib/code-builder/runStatus';
+import { resolvePreviewAvailability } from '@/lib/code-builder/previewAvailability';
+
+type BuildPhase = 'idle' | 'planning' | 'coding' | 'done';
+
+interface DurableBuildStatus {
+  buildId: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  phase: 'queued' | 'planning' | 'generating' | 'verifying' | 'completed';
+  progress: number;
+  error: { code: string | null; message: string } | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  updatedAt?: string | null;
+  artifactsMissing?: boolean;
+  /** Owner-authorized artifact checkpoints while the build is running. */
+  plan?: ProjectPlan | null;
+  files?: GeneratedFile[] | null;
+}
+
+// Feature flag - use env variable pattern consistent with codebase
+const DURABLE_EXECUTION = process.env.NEXT_PUBLIC_CODE_BUILDER_DURABLE_EXECUTION === 'true';
+
+// localStorage key for active durable build recovery
+const ACTIVE_BUILD_KEY = 'lattice:code-builder:active-build-id';
+const COMPLETED_BUILD_KEY = 'lattice:code-builder:last-completed-build-id';
+
+function getLastCompletedBuildId(): string | null {
+    if (typeof window === 'undefined') return null;
+    try { return localStorage.getItem(COMPLETED_BUILD_KEY); } catch { return null; }
+}
+function saveCompletedBuildId(buildId: string) {
+    if (typeof window === 'undefined') return;
+    try { localStorage.setItem(COMPLETED_BUILD_KEY, buildId); } catch { /* optional */ }
+}
+
+function getActiveBuildId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(ACTIVE_BUILD_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setActiveBuildId(buildId: string | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (buildId) {
+      localStorage.setItem(ACTIVE_BUILD_KEY, buildId);
+    } else {
+      localStorage.removeItem(ACTIVE_BUILD_KEY);
+    }
+  } catch { }
+}
+
+export default function CodeBuilderIsland({ sandboxPreviewEnabled }: { sandboxPreviewEnabled: boolean }) {
+    const router = useRouter();
+    const params = useParams();
+    const locale = typeof params?.locale === 'string' ? params.locale : 'en';
+    const [phase, setPhase] = useState<BuildPhase>('idle');
+    const [plan, setPlan] = useState<ProjectPlan | null>(null);
+    const [files, setFiles] = useState<GeneratedFile[]>([]);
+    const [contextFlow, setContextFlow] = useState<ContextFlowEntry[]>([]);
+    const [error, setError] = useState<string | null>(null);
+    const [mobileTab, setMobileTab] = useState<'plan' | 'code'>('plan');
+    const [completedBuildId, setCompletedBuildId] = useState<string | null>(null);
+    const [creatingSandboxPreview, setCreatingSandboxPreview] = useState(false);
+    const [sandboxPreviewError, setSandboxPreviewError] = useState<string | null>(null);
+    // This is an owner-only launcher, not a public share feature.
+    // Keep the action visible even when the backend flag is off so mobile users
+    // get an accurate availability message rather than a missing button.
+    const previewAvailability = resolvePreviewAvailability({
+        enabled: sandboxPreviewEnabled,
+        durableExecution: DURABLE_EXECUTION,
+        buildId: completedBuildId,
+        phase,
+        hasFiles: files.length > 0,
+        hasError: !!error,
+    });
+
+    // Durable-execution observability state (PR B1). Tracks polling health
+    // separately from build progress so we can render "still running, updates
+    // stalled" without cancelling the build or falsely reporting failure.
+    const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+    const [lastProgressAt, setLastProgressAt] = useState<number | null>(null);
+    const [relayConnected, setRelayConnected] = useState<boolean | null>(null);
+    const [buildStartedAt, setBuildStartedAt] = useState<number | null>(null);
+    // "now" is updated only inside pollDurableStatus; render-time derivations
+    // stay pure for the React Compiler.
+    const [nowTick, setNowTick] = useState<number | null>(null);
+    const staleThresholdMs = 90_000;
+    const stale = lastProgressAt != null && nowTick != null && (nowTick - lastProgressAt) > staleThresholdMs;
+
+    // Durable execution state — polling lifecycle is owned by pollIntervalRef;
+    // the buildId display state lands with Phase 4B (Realtime) if needed.
+    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const isSubmittingRef = useRef(false);
+    const realtimeSubRef = useRef<{ unsubscribe: () => void } | null>(null);
+    // qodo #3: which build owns the page's shared polling/relay state, and
+    // the retained terminal grace timer that must never outlive it.
+    const activeBuildRef = useRef<string | null>(null);
+    const graceTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const progressObservationRef = useRef<ProgressObservation | null>(null);
+
+    const stopPolling = useCallback(() => {
+        if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current);
+            pollIntervalRef.current = null;
+        }
+        if (graceTimerRef.current) {
+            clearTimeout(graceTimerRef.current);
+            graceTimerRef.current = null;
+        }
+        realtimeSubRef.current?.unsubscribe();
+        realtimeSubRef.current = null;
+        activeBuildRef.current = null;
+    }, []);
+
+    const mapDurablePhase = (status: DurableBuildStatus['status'], dPhase: DurableBuildStatus['phase']): BuildPhase => {
+        if (status === 'completed') return 'done';
+        if (status === 'failed' || status === 'cancelled') return 'done';
+        if (dPhase === 'planning') return 'planning';
+        if (dPhase === 'generating' || dPhase === 'verifying') return 'coding';
+        if (status === 'running' || status === 'queued') return 'planning';
+        return 'idle';
+    };
+
+    const pollDurableStatus = useCallback(async (buildId: string) => {
+        try {
+            const version = progressObservationRef.current?.updatedAt;
+            const query = version ? `?artifactVersion=${encodeURIComponent(version)}` : '';
+            const res = await fetch(`/api/code-builder/build/${buildId}${query}`, {
+                headers: { 'Accept': 'application/json' },
+            });
+
+            if (activeBuildRef.current !== buildId) return;
+
+            if (!res.ok) {
+                if (res.status === 404) {
+                    stopPolling();
+                    setError('Build not found');
+                    setPhase('done');
+                }
+                return;
+            }
+
+            const data: DurableBuildStatus = await res.json();
+
+            // qodo #3: never apply a stale build's result to the page — the
+            // poll started under an older build must not clear the newer
+            // build's active key or stop its polling.
+            if (activeBuildRef.current !== buildId) return;
+
+            // PR B1: track build timeline + progress-change markers.
+            const pollNow = Date.now();
+            setNowTick(pollNow);
+            if (data.startedAt) {
+                const t = Date.parse(data.startedAt);
+                if (Number.isFinite(t)) {
+                    setBuildStartedAt(t);
+                    setElapsedMs(pollNow - t);
+                }
+            }
+            const observation = observeBuildProgress(progressObservationRef.current, data, pollNow);
+            progressObservationRef.current = observation;
+            setLastProgressAt(observation.lastChangedAt);
+
+            // Intermediate checkpoints survive reload and remain visible even
+            // if a later component fails. Missing keys mean an unchanged version.
+            if (data.plan) setPlan(data.plan);
+            if (data.files) setFiles(data.files);
+
+            setPhase(mapDurablePhase(data.status, data.phase));
+
+            // Handle terminal states
+            if (data.status === 'completed') {
+                stopPolling();
+                if (data.artifactsMissing) {
+                    setCompletedBuildId(null);
+                    // Preserve the build reference for recovery after the
+                    // worker result is restored; never claim empty success.
+                    setError('Build finished, but its output was not saved. Your build reference has been retained for recovery.');
+                } else {
+                    setCompletedBuildId(buildId);
+                    saveCompletedBuildId(buildId);
+                    setActiveBuildId(null);
+                    setError(null);
+                }
+            } else if (data.status === 'failed' || data.status === 'cancelled') {
+                setCompletedBuildId(null);
+                stopPolling();
+                setActiveBuildId(null);
+                setError(data.error?.message || `Build ${data.status}`);
+                setPhase('done');
+            }
+        } catch (err) {
+            if (activeBuildRef.current !== buildId) return;
+            // Transient polling error — do not mark build failed. Surface a
+            // one-line banner; keep polling (the durable row is the source
+            // of truth, not the network path).
+            console.warn('[CodeBuilder] Polling error:', err);
+            setError('Lost connection to build status. Still polling; will recover when network is back.');
+        }
+    }, [stopPolling]);
+
+    // Phase 4B: subscribe to the product relay for the run's terminal signal.
+    // The relay streams Trigger's run lifecycle (server-side; no Trigger
+    // internals reach the browser) and has already reconciled platform
+    // terminal statuses into the durable row before emitting. Statuses map
+    // through the existing mapDurablePhase machine; per-phase progress stays
+    // on polling (Supabase is the durable state). EventSource auto-reconnects
+    // after each bounded stream — reconnects replay current run state.
+    // Any failure is non-fatal by design — polling is the fallback backbone.
+    const subscribeRealtime = useCallback(async (buildId: string) => {
+        try {
+            const es = new EventSource(`/api/code-builder/build/${buildId}/events`);
+            realtimeSubRef.current = {
+                unsubscribe: () => { setRelayConnected(false); es.close(); },
+            };
+            es.addEventListener('open', () => setRelayConnected(true));
+            es.addEventListener('run-status', (e) => {
+                try {
+                    const { status } = JSON.parse((e as MessageEvent).data);
+                    if (isTerminalRunStatus(status)) {
+                        // Authoritative state lives in Supabase — read it now
+                        // (plus a 5s grace re-read for hook persistence lag).
+                        void pollDurableStatus(buildId);
+                        graceTimerRef.current = setTimeout(() => {
+                            graceTimerRef.current = null;
+                            void pollDurableStatus(buildId);
+                        }, 5_000);
+                        es.close();
+                    }
+                } catch { /* malformed event — polling covers it */ }
+            });
+            es.onerror = () => {
+                // EventSource retries on its own; poll fallback stays alive.
+                // Mark disconnected so UI can render "live updates
+                // disconnected, build still running".
+                setRelayConnected(false);
+            };
+        } catch (err) {
+            console.warn('[CodeBuilder] Realtime unavailable, polling remains:', err);
+            setRelayConnected(false);
+        }
+    }, [pollDurableStatus]);
+
+    const handleBuild = useCallback(async (prompt: string) => {
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
+
+        // Reset state
+        setCompletedBuildId(null);
+        setSandboxPreviewError(null);
+        setPhase('planning');
+        setPlan(null);
+        setFiles([]);
+        setContextFlow([]);
+        setError(null);
+        setElapsedMs(null);
+        setLastProgressAt(null);
+        setBuildStartedAt(null);
+        setRelayConnected(null);
+        setNowTick(null);
+        progressObservationRef.current = null;
+        stopPolling();
+
+        try {
+            if (DURABLE_EXECUTION) {
+                // Durable path: POST /api/code-builder/build → poll + relay
+                const res = await fetch('/api/code-builder/build', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, mode: 'fast' }), // Use fast mode for now
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || 'Failed to start build');
+                }
+
+                if (!data.buildId || !data.runId) {
+                    throw new Error('Invalid response from build API');
+                }
+
+                // qodo #3: this build now owns the page's shared state.
+                activeBuildRef.current = data.buildId;
+                setActiveBuildId(data.buildId);
+
+                // Initial poll
+                await pollDurableStatus(data.buildId);
+                if (activeBuildRef.current !== data.buildId) return;
+
+                // Start polling interval
+                pollIntervalRef.current = setInterval(() => {
+                    pollDurableStatus(data.buildId);
+                }, 1500); // Poll every 1.5s
+
+                void subscribeRealtime(data.buildId);
+
+            } else {
+                // Existing SSE path
+                const url = `/api/code-builder/stream?prompt=${encodeURIComponent(prompt)}`;
+                const eventSource = new EventSource(url);
+
+                eventSource.addEventListener('context-flow', (e) => {
+                    try {
+                        const entry: ContextFlowEntry = JSON.parse(e.data);
+                        setContextFlow(prev => [...prev, entry]);
+                    } catch { }
+                });
+
+                eventSource.addEventListener('component-error', (e) => {
+                    try {
+                        const entry: ContextFlowEntry = JSON.parse(e.data);
+                        setContextFlow(prev => [...prev, entry]);
+                    } catch { }
+                });
+                eventSource.addEventListener('plan-ready', (e) => {
+                    try {
+                        const planData: ProjectPlan = JSON.parse(e.data);
+                        setPlan(planData);
+                        setPhase('coding');
+                    } catch { }
+                });
+
+                eventSource.addEventListener('file-generated', (e) => {
+                    try {
+                        const file: GeneratedFile = JSON.parse(e.data);
+                        setFiles(prev => [...prev, file]);
+                        setMobileTab('code');
+                    } catch { }
+                });
+
+                eventSource.addEventListener('error', (e) => {
+                    try {
+                        const data = JSON.parse((e as MessageEvent).data);
+                        setError(data.message || 'An error occurred during build');
+                        setPhase('done');
+                    } catch {
+                        setError('Connection lost. Please try again.');
+                        setPhase('done');
+                    }
+                    eventSource.close();
+                });
+
+                eventSource.addEventListener('done', (e) => {
+                    setPhase('done');
+                    eventSource.close();
+                });
+
+                eventSource.onerror = () => {
+                    if (eventSource.readyState === EventSource.CLOSED) return;
+                    setError('Connection error. Please try again.');
+                    setPhase('done');
+                    eventSource.close();
+                };
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to start build');
+            setPhase('done');
+        } finally {
+            isSubmittingRef.current = false;
+        }
+    }, [pollDurableStatus, stopPolling, subscribeRealtime]);
+
+    // qodo #4: unmount tears down BOTH the interval and the relay (and the
+    // grace timer via stopPolling) — navigating away never leaves an
+    // EventSource reconnecting in the background.
+    useEffect(() => {
+        return () => stopPolling();
+    }, [stopPolling]);
+
+    const handleReset = () => {
+        stopPolling();
+        setActiveBuildId(null);
+        setPhase('idle');
+        setCompletedBuildId(null);
+        setSandboxPreviewError(null);
+        setPlan(null);
+        setFiles([]);
+        setContextFlow([]);
+        setError(null);
+        setMobileTab('plan');
+        setElapsedMs(null);
+        setLastProgressAt(null);
+        setBuildStartedAt(null);
+        setRelayConnected(null);
+        setNowTick(null);
+        progressObservationRef.current = null;
+    };
+
+    // Reuse an existing owner-authorized preview if available. Provision only
+    // when none exists; the server authenticates the build owner in both cases.
+    const openSandboxPreview = useCallback(async () => {
+        if (!sandboxPreviewEnabled || !completedBuildId || creatingSandboxPreview) return;
+        setCreatingSandboxPreview(true);
+        setSandboxPreviewError(null);
+        try {
+            const existing = await fetch(`/api/preview/sandbox?buildId=${encodeURIComponent(completedBuildId)}`, {
+                cache: 'no-store',
+            });
+            const existingBody = await existing.json().catch(() => ({}));
+            if (!existing.ok) throw new Error(existingBody.error || 'Unable to look up preview');
+            let previewId: string | undefined = existingBody.preview?.previewId;
+            if (!previewId) {
+                const created = await fetch('/api/preview/sandbox', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ buildId: completedBuildId }),
+                });
+                const result = await created.json().catch(() => ({}));
+                if (!created.ok) throw new Error(result.error || 'Sandbox provisioning failed');
+                previewId = result.previewId;
+            }
+            if (!previewId) throw new Error('Preview server returned no preview identity');
+            router.push(`/${locale}/previews/${encodeURIComponent(previewId)}`);
+        } catch (e) {
+            setSandboxPreviewError(e instanceof Error ? e.message : 'Failed to launch preview');
+        } finally {
+            setCreatingSandboxPreview(false);
+        }
+    }, [sandboxPreviewEnabled, completedBuildId, creatingSandboxPreview, router, locale]);
+
+    // Recover active build on mount (browser close/reopen).
+    // durableBuildId/polling state intentionally not set here: both are
+    // write-only for render; the interval below IS the recovery behavior.
+    useEffect(() => {
+        if (DURABLE_EXECUTION) {
+            const activeBuildId = getActiveBuildId();
+            if (activeBuildId) {
+                activeBuildRef.current = activeBuildId;
+                // setState lives inside the async callback, not the effect body
+                // (react-hooks/set-state-in-effect).
+                Promise.resolve().then(() => pollDurableStatus(activeBuildId));
+                pollIntervalRef.current = setInterval(() => {
+                    pollDurableStatus(activeBuildId);
+                }, 1500);
+                // Deferred: setState happens in the async chain, not the effect body.
+                Promise.resolve().then(() => subscribeRealtime(activeBuildId));
+            } else {
+                // A completed build remains reopenable after refresh; the API
+                // re-verifies ownership before returning the stored artifacts.
+                const lastCompleted = getLastCompletedBuildId();
+                if (lastCompleted) {
+                    activeBuildRef.current = lastCompleted;
+                    Promise.resolve().then(() => pollDurableStatus(lastCompleted));
+                }
+            }
+        }
+    }, [pollDurableStatus, subscribeRealtime]);
+
+    return (
+        <div className="flex min-h-full flex-col bg-background text-foreground lg:h-full">
+            {/* Header */}
+            <header className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
+                <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-accent text-accent-foreground flex items-center justify-center border border-border">
+                        <Zap className="h-4 w-4" aria-hidden="true" />
+                    </div>
+                    <div>
+                        <h1 className="text-sm font-bold tracking-tight">Code Builder</h1>
+                        <p className="text-[10px] text-muted-foreground">
+                            {DURABLE_EXECUTION ? 'Durable execution via Trigger.dev' : 'Gemini plans · Claude codes · UCOL orchestrates'}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                    {phase !== 'idle' && (
+                        <div className={`text-[10px] font-mono px-2.5 py-1 rounded-full border ${phase === 'planning' ? 'bg-accent text-primary border-primary/30' :
+                                phase === 'coding' ? 'bg-accent text-accent-foreground border-accent-foreground/30' :
+                                    error || files.length === 0 ? 'bg-danger-surface text-destructive border-destructive/30' :
+                                    'bg-accent text-primary border-primary/30'
+                            }`}>
+                            {phase === 'planning' ? '🧠 Planning...' :
+                                phase === 'coding' ? '⚙️ Generating...' :
+                                    error || files.length === 0 ? 'Build needs attention' : `✓ ${files.length} files`}
+                        </div>
+                    )}
+
+                    {phase === 'done' && (
+                        <button
+                            onClick={handleReset}
+                            className="rounded px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                        >
+                            New Build
+                        </button>
+                    )}
+                </div>
+            </header>
+
+            {/* Prompt Input — always visible */}
+            <PromptInput
+                onSubmit={handleBuild}
+                disabled={phase === 'planning' || phase === 'coding'}
+                phase={phase}
+            />
+
+            {/* PR B1: durable-execution UX states. Three distinct bands: */}
+            {/* 1. expectation-setting (always shown in durable mode) */}
+            {DURABLE_EXECUTION && phase === 'idle' && !error && (
+                <div className="mx-4 mt-2 text-[11px] text-muted-foreground bg-chrome border border-border rounded-lg px-3 py-2">
+                    Builds may take <strong>5+ minutes</strong>. You can leave
+                    this page; your build keeps running and re-appears when you
+                    return.
+                </div>
+            )}
+
+            {/* 2. transient connectivity/observability band (NOT failure) */}
+            {DURABLE_EXECUTION && (phase === 'planning' || phase === 'coding') && (
+                <div className="mx-4 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground bg-chrome border border-border rounded-lg px-3 py-2">
+                    {elapsedMs != null && (
+                        <span>
+                            ⏱ {Math.floor(elapsedMs / 60000)}m {Math.floor((elapsedMs % 60000) / 1000)}s
+                        </span>
+                    )}
+                    {relayConnected === false && (
+                        <span className="text-warning">
+                            Live updates disconnected · build still running
+                        </span>
+                    )}
+                    {relayConnected === true && (
+                        <span className="text-muted-foreground">Updates connected</span>
+                    )}
+                    {stale && (
+                        <span className="text-warning">
+                            No new build progress for over 90s. Checking status;
+                            saved output will appear as it becomes available.
+                        </span>
+                    )}
+                </div>
+            )}
+
+            {/* Context Flow Visualizer */}
+            {contextFlow.length > 0 && (
+                <ContextFlowVisualizer entries={contextFlow} />
+            )}
+
+            {/* Error banner */}
+            {error && (
+                <div className="mx-4 mt-2 flex items-center gap-2 text-destructive bg-danger-surface border border-destructive/30 px-4 py-2 rounded-lg text-xs animate-in fade-in slide-in-from-top-2">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{error}</span>
+                    <button
+                        onClick={() => setError(null)}
+                        type="button"
+                        aria-label="Dismiss build error"
+                        className="ml-auto rounded px-1 text-destructive hover:underline"
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+
+            {sandboxPreviewError && (
+                <div role="alert" className="mx-4 mt-2 flex items-center gap-2 text-warning bg-warning-surface border border-warning/30 px-4 py-2 rounded-lg text-xs">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{sandboxPreviewError}</span>
+                    <button type="button" onClick={() => setSandboxPreviewError(null)} className="ml-auto">Dismiss</button>
+                </div>
+            )}
+
+            {/* Mobile tab switcher (hidden on md+) */}
+            {(plan || files.length > 0 || phase === 'planning' || phase === 'coding') && (
+                <div className="flex flex-none gap-1 px-4 pt-3 xl:hidden" role="group" aria-label="Build panels">
+                    <button
+                        type="button"
+                        aria-pressed={mobileTab === 'plan'}
+                        onClick={() => setMobileTab('plan')}
+                        className={`flex-1 text-[11px] font-medium py-2 rounded-lg border transition-colors ${mobileTab === 'plan'
+                            ? 'bg-accent text-primary border-primary/30'
+                            : 'text-muted-foreground border-border hover:text-foreground'
+                        }`}
+                    >
+                        🧠 Plan{plan ? ` · ${plan.components.length}` : ''}
+                    </button>
+                    <button
+                        type="button"
+                        aria-pressed={mobileTab === 'code'}
+                        onClick={() => setMobileTab('code')}
+                        className={`flex-1 text-[11px] font-medium py-2 rounded-lg border transition-colors ${mobileTab === 'code'
+                            ? 'bg-accent text-accent-foreground border-accent-foreground/30'
+                            : 'text-muted-foreground border-border hover:text-foreground'
+                        }`}
+                    >
+                        ⚙️ Code{files.length > 0 ? ` · ${files.length}` : ''}
+                    </button>
+                </div>
+            )}
+
+            {/* Side-by-side panels need room for the desktop workspace sidebar. */}
+            {(plan || files.length > 0 || phase === 'planning' || phase === 'coding') && (
+                <div className="flex min-h-64 flex-1 gap-3 overflow-hidden p-3 sm:p-4 xl:min-h-0">
+                    <div className={`${mobileTab === 'plan' ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-1 xl:flex`}>
+                        <PlanPanel plan={plan} loading={phase === 'planning'} />
+                    </div>
+                    <div className={`${mobileTab === 'code' ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-1 xl:flex`}>
+                        <CodePanel
+                            files={files}
+                            loading={phase === 'coding'}
+                            disableLegacyBackendPreview={true}
+                            onSandboxPreview={previewAvailability.canLaunch ? openSandboxPreview : undefined}
+                            previewUnavailableReason={previewAvailability.reason}
+                            sandboxPreviewPending={creatingSandboxPreview}
+                        />
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

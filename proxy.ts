@@ -14,25 +14,52 @@ const intlMiddleware = createMiddleware({
 });
 
 const isPublicRoute = createRouteMatcher([
+    // Homepage is now public (Mineral/Copper), no longer rewritten to expert variants
     '/',
-    '/:locale',
-    '/:locale/sign-in(.*)',
-    '/:locale/sign-up(.*)',
+    '/:locale(en|th|vi|es|fr|de)',
+    '/:locale(en|th|vi|es|fr|de)/sign-in(.*)',
+    '/:locale(en|th|vi|es|fr|de)/sign-up(.*)',
     '/sign-in(.*)',
     '/sign-up(.*)',
     '/privacy',
-    '/:locale/privacy',
+    '/:locale(en|th|vi|es|fr|de)/privacy',
     '/support',
-    '/:locale/support',
+    '/:locale(en|th|vi|es|fr|de)/support',
+    // Product Hunt candidate stays separate from the sticky homepage experiment.
+    '/launch',
+    '/:locale(en|th|vi|es|fr|de)/launch',
+    '/downloads',
+    '/:locale(en|th|vi|es|fr|de)/downloads',
+    '/downloads/windows',
+    '/downloads/linux',
+    '/downloads/macos',
+    '/:locale(en|th|vi|es|fr|de)/downloads/windows',
+    '/:locale(en|th|vi|es|fr|de)/downloads/linux',
+    '/:locale(en|th|vi|es|fr|de)/downloads/macos',
     '/docs',
-    '/:locale/docs',
+    '/:locale(en|th|vi|es|fr|de)/docs',
     '/docs/(.*)',
-    '/:locale/docs/(.*)',
+    '/:locale(en|th|vi|es|fr|de)/docs/(.*)',
+    '/expert(.*)',
+    '/:locale(en|th|vi|es|fr|de)/expert(.*)',
+    '/expert/v(.*)',
+    '/:locale(en|th|vi|es|fr|de)/expert/v(.*)',
+    '/sovereign(.*)',
+    '/:locale(en|th|vi|es|fr|de)/sovereign(.*)',
     '/slack',
-    '/:locale/slack',
+    '/:locale(en|th|vi|es|fr|de)/slack',
     '/blog(.*)',
-    '/:locale/blog(.*)',
+    '/:locale(en|th|vi|es|fr|de)/blog(.*)',
     '/videos(.*)',
+    '/explore',
+    '/:locale(en|th|vi|es|fr|de)/explore',
+    '/explore/(.*)',
+    '/:locale(en|th|vi|es|fr|de)/explore/(.*)',
+    '/conversation(.*)',
+    '/:locale(en|th|vi|es|fr|de)/conversation(.*)',
+    '/memory-center(.*)',
+    '/:locale(en|th|vi|es|fr|de)/memory-center(.*)',
+    '/code(.*)',
     '/api/guest-chat',
     '/api/feedback',
     '/api/integrations/slack/callback',
@@ -41,7 +68,10 @@ const isPublicRoute = createRouteMatcher([
     '/api/integrations/slack/interactivity',
     '/api/integrations/slack/auth',
     '/api/webhooks/kofi',
+    '/api/webhooks/stripe',
+    '/api/webhooks/apify', // dedicated header secret is checked by the route
     '/api/support/verify-donation',
+    '/api/support',
     '/api/integrations/telegram/webhook',
     '/api/internal/jklaw',
     '/api/internal/route-to-jklaw',
@@ -52,17 +82,72 @@ const isPublicRoute = createRouteMatcher([
     '/api/cli/stream',
     '/api/memory/cli',
     '/api/code',
+    '/api/conversation(.*)',
+    '/api/conversations(.*)',
+    '/api/workspaces(.*)',
     '/api/v1/(.*)',  // partner gateway — uses its own bearer auth, not Clerk
+    '/api/guest/conversation(.*)',
+    '/api/guest/code(.*)',
+    '/api/guest/memory(.*)',
+    '/api/wasm-probe',
+    '/api/jepa/infer',
+    '/api/jepa/predict',
+    '/api/jepa/reflect',
+    '/api/jepa/shadow-probe',
+    '/api/analyze-upload',
+    '/api/test/mcts-e2e',
 ]);
 
+const GUEST_COOKIE = 'guest_id';
+const GUEST_COOKIE_MAX_AGE = 60 * 60 * 24; // 24 hours
+
+// Generate or read a guest UUID from a secure, httpOnly cookie.
+// This runs BEFORE auth() so server components can render guest state
+// without layout shifts or hydration mismatches.
+async function getOrCreateGuestId(req: Request): Promise<string> {
+    const url = new URL(req.url);
+    let guestId = url.searchParams.get('guest_id');
+
+    // Prefer existing cookie
+    const cookieGuest = req.headers.get('cookie')?.match(/[;\s]guest_id=([^;]+)/)?.[1];
+    if (cookieGuest) {
+        guestId = decodeURIComponent(cookieGuest);
+    }
+
+    // If still missing, generate a new UUID and set the cookie
+    if (!guestId) {
+        guestId = crypto.randomUUID();
+    }
+
+    return guestId;
+}
+
 export default clerkMiddleware(async (auth, req) => {
+    // ─── GUEST SESSION COOKIE ─────────────────────
+    // Generate/refresh guest_id before any routing so downstream
+    // server components and API handlers can read it instantly.
+    const guestId = await getOrCreateGuestId(req);
+    const url = new URL(req.url);
+
+    // Only set/refresh the cookie on page requests (not API)
+    // so Clerk's auth header injection isn't interfered with.
+    const isApi = req.nextUrl.pathname.startsWith('/api') || req.nextUrl.pathname.startsWith('/trpc');
+
     // ─── DESKTOP STATIC EXPORT BYPASS ──────────
     if (process.env.NEXT_PUBLIC_IS_DESKTOP === 'true') {
-        return NextResponse.next();
+        const res = NextResponse.next();
+        if (!isApi) {
+            res.cookies.set(GUEST_COOKIE, guestId, {
+                maxAge: GUEST_COOKIE_MAX_AGE,
+                path: '/',
+                sameSite: 'lax',
+                secure: process.env.NODE_ENV === 'production',
+                httpOnly: true,
+            });
+        }
+        return res;
     }
     // ───────────────────────────────────────────
-
-    const isApi = req.nextUrl.pathname.startsWith('/api') || req.nextUrl.pathname.startsWith('/trpc');
 
     // ─── REFERRAL TRACKING (runs on ALL page requests, no auth needed) ──────────
     // Only capture on page routes (not API), and only if ?ref= is present
@@ -86,7 +171,30 @@ export default clerkMiddleware(async (auth, req) => {
         // IMPORTANT: Must return NextResponse.next() (not bare `return`) so Clerk
         // injects its internal auth headers. Without this, auth() calls inside
         // route handlers throw "Clerk can't detect usage of clerkMiddleware()".
-        if (isPublicRoute(req)) return NextResponse.next();
+        if (isPublicRoute(req)) {
+            const res = NextResponse.next();
+            // Attach guest_id as a cookie AND request header for downstream handlers
+            res.cookies.set(GUEST_COOKIE, guestId, {
+                maxAge: GUEST_COOKIE_MAX_AGE,
+                path: '/',
+                sameSite: 'lax',
+                secure: process.env.NODE_ENV === 'production',
+                httpOnly: true,
+            });
+            res.headers.set('x-guest-id', guestId);
+            return res;
+        }
+
+        // DEV BYPASS (never in production): route handlers implement their own
+        // ?dev_token= check, but Clerk middleware ran first and 401'd the request
+        // before the handler could. Honor the same token here.
+        if (process.env.NODE_ENV !== 'production' && process.env.DEV_BYPASS_TOKEN) {
+            const devToken = req.nextUrl.searchParams.get('dev_token');
+            if (devToken && devToken === process.env.DEV_BYPASS_TOKEN) {
+                return NextResponse.next();
+            }
+        }
+
         const { userId } = await auth();
         if (!userId) {
             return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
@@ -101,6 +209,17 @@ export default clerkMiddleware(async (auth, req) => {
 
     if (isPublicRoute(req)) {
         res = intlMiddleware(req) as NextResponse;
+        // Set guest cookie on public pages so server components
+        // can render guest state instantly (no layout shift).
+        if (!isApi) {
+            res.cookies.set(GUEST_COOKIE, guestId, {
+                maxAge: GUEST_COOKIE_MAX_AGE,
+                path: '/',
+                sameSite: 'lax',
+                secure: process.env.NODE_ENV === 'production',
+                httpOnly: true,
+            });
+        }
     } else {
         const { userId, redirectToSignIn } = await auth();
         if (!userId) return redirectToSignIn();

@@ -22,7 +22,8 @@ import type { BuildSession, ContextFlowEntry, GeneratedFile } from '@/lib/ucol/t
 import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
 
 export const runtime = 'nodejs';
-export const maxDuration = 300; // Vercel Pro: 5 min ceiling for streaming SSE
+// Hobby maximum. Longer Code Builder work runs durably through Trigger.dev.
+export const maxDuration = 300;
 
 const CodeBuilderQuerySchema = z.object({
     prompt: z.string().min(1, "Prompt is required").max(5000, "Prompt too long"),
@@ -119,6 +120,8 @@ export async function GET(req: Request) {
                     reviewRounds: 0,
                     constraintRounds: 0,
                     discoveredPatterns: [],
+                    refinementLog: [],
+                    userPrompt: prompt,
                 };
 
                 const providerKeys = await getUserProviderApiKeys(user.userId);

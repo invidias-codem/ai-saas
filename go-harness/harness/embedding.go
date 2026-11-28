@@ -2,11 +2,12 @@ package harness
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
 	"math"
 	"net/http"
 	"time"
@@ -16,7 +17,7 @@ import (
 )
 
 // FetchEmbeddings calls the Next.js API route to batch generate embeddings via OpenAI
-func FetchEmbeddings(texts []string, authToken string) ([][]float32, error) {
+func FetchEmbeddings(ctx context.Context, texts []string, authToken string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return nil, nil
 	}
@@ -29,17 +30,17 @@ func FetchEmbeddings(texts []string, authToken string) ([][]float32, error) {
 		return nil, fmt.Errorf("failed to marshal embeddings payload: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "http://localhost:3000/api/harness/embeddings", bytes.NewBuffer(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", netguard.AppOrigin+"/api/harness/embeddings", bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create embeddings request: %w", err)
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	if authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
 
-	client := &http.Client{}
+	client := netguard.CloudClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch embeddings: %w", err)
@@ -47,20 +48,23 @@ func FetchEmbeddings(texts []string, authToken string) ([][]float32, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := netguard.ReadBody(resp.Body)
 		return nil, fmt.Errorf("embeddings API returned status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var response struct {
 		Embeddings [][]float32 `json:"embeddings"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	responseBody, err := netguard.ReadBody(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(responseBody, &response); err != nil {
 		return nil, fmt.Errorf("failed to decode embeddings response: %w", err)
 	}
 
 	return response.Embeddings, nil
 }
-
 
 // VectorIndex manages the local SQLite connection for chunk storage
 type VectorIndex struct {
@@ -97,11 +101,15 @@ func NewVectorIndex(dbPath string) (*VectorIndex, error) {
 	CREATE INDEX IF NOT EXISTS idx_episodic_workspace ON episodic_events(workspace_id);
 	`
 	if _, err := db.Exec(schema); err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("failed to initialize vector schema: %w", err)
 	}
 
 	return &VectorIndex{db: db}, nil
 }
+
+// Close releases the memory database before profile restart or application exit.
+func (v *VectorIndex) Close() error { return v.db.Close() }
 
 // --- VECTOR SERIALIZATION ---
 
@@ -345,5 +353,3 @@ func (vi *VectorIndex) SearchEpisodicEvents(workspaceID string, queryEmbedding [
 	}
 	return results, nil
 }
-
-

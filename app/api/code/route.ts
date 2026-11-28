@@ -54,6 +54,10 @@ export async function POST(req: Request) {
         language,
         timeoutMs,
         traceId,
+        env: {
+          LATTICE_WORKSPACE_ID: 'direct',
+          LATTICE_USER_ID: 'direct',
+        },
       });
 
       const responseBody: any = { ...executionResult };
@@ -138,6 +142,18 @@ export async function POST(req: Request) {
       }
     }
 
+    // --- PDF text extraction -------------------------------------------
+    let pdfExtractedText: string | null = null;
+    if (fileData && (fileData.mimeType === 'application/pdf' || fileData.name?.toLowerCase().endsWith('.pdf'))) {
+      try {
+        const { extractPdfText } = await import('@/lib/fileProcessing/pdfExtractor');
+        pdfExtractedText = await extractPdfText(fileData);
+        console.log(`[CodeRoute] PDF extracted: ${pdfExtractedText.length} chars`);
+      } catch (err) {
+        console.error('[CodeRoute] PDF extraction failed:', err);
+      }
+    }
+
     if (!messages && (!currentUserPrompt && !fileData)) {
       return new NextResponse("Messages or prompt/file are required", { status: 400 });
     }
@@ -153,12 +169,27 @@ export async function POST(req: Request) {
 
     // --- Phase 2: delegate to bridge ---------------------------------
     try {
+      // If PDF was extracted, inject extractedText into the body's fileData
+      // so the code engine receives readable text instead of raw binary
+      const modifiedBody = pdfExtractedText && body.fileData
+        ? {
+            ...body,
+            fileData: {
+              name: body.fileData.name,
+              type: body.fileData.type,
+              mimeType: body.fileData.mimeType || body.fileData.type,
+              sizeBytes: body.fileData.sizeBytes,
+              extractedText: pdfExtractedText,
+            }
+          }
+        : body;
+
       return await runRuntimeBridge({
         surface: 'code',
         session,
         requestId,
         featureType: 'code',
-        body,
+        body: modifiedBody,
         execute: async ({ resolved: ctx, rawInput, messages: msgs, fileData: attachedFileData }) => {
           try {
             const history = (msgs || []).slice(0, -1).map((msg: {
@@ -198,15 +229,20 @@ export async function POST(req: Request) {
               resolvedContext: ctx,
               requestId,
               messagesLength: msgs?.length || 0,
+              surface: 'web',
             });
 
-            return {
-              text: responseText,
-              modelId: finalModelConfig.modelId,
-              routingDecision,
-              intelligentFacts,
-              userContext,
-            };
+            // Reasoning-only / empty-body guard: NIM's "first token" log can
+            // include reasoning tokens, so a nominally-successful provider
+            // request can still produce no visible answer. Refuse at the
+            // boundary and let runtimeBridge surface a typed failure.
+            const visible = (responseText ?? '').trim();
+            if (!visible) {
+              console.warn('[code] empty completion', { model: finalModelConfig?.modelId, requestId });
+              throw new Error('Provider returned an empty or reasoning-only response. Please try again.');
+            }
+
+            return { text: visible, modelId: finalModelConfig.modelId, routingDecision, intelligentFacts, userContext };
           } catch (engineErr: any) {
             console.error('[code] engine execution failed', engineErr);
             throw new Error(`Code engine failed: ${engineErr?.message || String(engineErr)}`);
@@ -242,6 +278,10 @@ export async function POST(req: Request) {
         status = 402;
         userError = 'Insufficient credits';
         userDetails = 'Weaver Code requires credits before generation starts.';
+      } else if (message.includes('empty or reasoning-only response')) {
+        status = 502;
+        userError = 'Provider returned an empty response';
+        userDetails = 'The model finished without producing a usable answer. Try again or switch models.';
       }
 
       return NextResponse.json(

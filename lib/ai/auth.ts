@@ -17,7 +17,7 @@ export class PremiumRequiredError extends Error {
  * 3. If credits > 0, subsidizes using the root OPENAI_API_KEY.
  * 4. Otherwise, throws a PremiumRequiredError.
  */
-export async function getOpenAIClient(userId: string): Promise<OpenAI> {
+export async function getOpenAIClient(userId: string, email?: string | null): Promise<OpenAI> {
   // Phase 1: Dynamic Fetch from Vault (to be swapped with Redis cache in Phase 2)
   if (!supabaseAdmin) {
     throw new Error('Supabase Admin not configured');
@@ -36,10 +36,31 @@ export async function getOpenAIClient(userId: string): Promise<OpenAI> {
     return new OpenAI({ apiKey: decryptedKey as string });
   }
 
+  // Master users bypass credit checks — resolve email from Clerk if not provided
+  const masterEmails = (process.env.MASTER_USER_EMAILS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  let resolvedEmail = email;
+  if (!resolvedEmail && userId) {
+    try {
+      const { clerkClient } = await import('@clerk/nextjs/server');
+      const client = await clerkClient();
+      const user = await client.users.getUser(userId);
+      resolvedEmail = user?.emailAddresses?.[0]?.emailAddress || null;
+    } catch {
+      // Clerk lookup failed — continue
+    }
+  }
+
+  if (resolvedEmail && masterEmails.includes(resolvedEmail)) {
+    return new OpenAI({ apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-build' });
+  }
+
   // Fallback Policy: Check compute credits
   const credits = await getUserCredits(userId);
   if (credits > 0) {
-    // Note: We provide 'dummy-key-for-build' during static generation
     return new OpenAI({ apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-build' });
   }
 

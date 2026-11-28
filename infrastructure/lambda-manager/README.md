@@ -88,7 +88,7 @@ Change the Ollama baseUrl from the Lambda IP to your proxy:
 ```
 
 ### 6. Update Tech Genie
-Set `LAMBDA_OLLAMA_URL=http://your-proxy:8003` in Vercel env vars.
+The legacy `LAMBDA_OLLAMA_URL` self-hosted Ollama path has been removed (inference now routes through NVIDIA NIM; embeddings through Gemini). No Vercel env var is required for the legacy proxy.
 
 ## Endpoints
 

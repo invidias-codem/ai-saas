@@ -15,7 +15,7 @@ export const CreateAgentTaskSchema = z.object({
 });
 export type CreateAgentTask = z.infer<typeof CreateAgentTaskSchema>;
 
-export const AgentTaskStatusSchema = z.enum(['queued', 'running', 'completed', 'failed']);
+export const AgentTaskStatusSchema = z.enum(['queued', 'running', 'pending_approval', 'completed', 'failed']);
 export type AgentTaskStatus = z.infer<typeof AgentTaskStatusSchema>;
 
 export interface AgentTaskRecord {

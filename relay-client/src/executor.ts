@@ -1,9 +1,44 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
+import * as path from 'path';
+import { isAbsolute } from 'path';
 import { RelayCommand, RelayCommandResult } from './types';
 
 const execAsync = promisify(exec);
+
+// SECURITY: Only allow file operations inside the allowed workspace roots.
+// This prevents path traversal attacks from remote payloads.
+const ALLOWED_READ_ROOTS = [process.env.ALLOWED_READ_ROOT || ''].filter(Boolean);
+const ALLOWED_WRITE_ROOTS = [process.env.ALLOWED_WRITE_ROOT || ''].filter(Boolean);
+
+function assertAllowedRead(candidate: string): void {
+  const abs = path.resolve(candidate);
+  if (!isAbsolute(abs)) {
+    throw new Error(`read_file: path must be absolute: ${candidate}`);
+  }
+  if (ALLOWED_READ_ROOTS.length === 0) {
+    throw new Error('read_file: ALLOWED_READ_ROOT not configured');
+  }
+  const allowed = ALLOWED_READ_ROOTS.some((root) => abs === root || abs.startsWith(root + path.sep));
+  if (!allowed) {
+    throw new Error(`read_file: path outside allowed roots: ${abs}`);
+  }
+}
+
+function assertAllowedWrite(candidate: string): void {
+  const abs = path.resolve(candidate);
+  if (!isAbsolute(abs)) {
+    throw new Error(`write_file: path must be absolute: ${candidate}`);
+  }
+  if (ALLOWED_WRITE_ROOTS.length === 0) {
+    throw new Error('write_file: ALLOWED_WRITE_ROOT not configured');
+  }
+  const allowed = ALLOWED_WRITE_ROOTS.some((root) => abs === root || abs.startsWith(root + path.sep));
+  if (!allowed) {
+    throw new Error(`write_file: path outside allowed roots: ${abs}`);
+  }
+}
 
 function truncateOutput(text: string | Buffer): { text: string, truncated: boolean } {
     const str = text.toString();
@@ -59,12 +94,14 @@ export class CommandExecutor {
                 case 'read_file':
                     const readPath = command.payload.path;
                     if (!readPath) throw new Error('Missing file path');
+                    assertAllowedRead(readPath);
                     data = await fs.readFile(readPath, 'utf8');
                     break;
                 case 'write_file':
                     const writePath = command.payload.path;
                     const content = command.payload.content;
                     if (!writePath || content === undefined) throw new Error('Missing file path or content');
+                    assertAllowedWrite(writePath);
                     await fs.writeFile(writePath, content, 'utf8');
                     break;
                 case 'copy_to_clipboard':

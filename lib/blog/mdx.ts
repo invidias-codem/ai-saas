@@ -93,10 +93,27 @@ const parsePostFile = cache((slug: string): BlogPost | null => {
       author: getAuthor(meta.author),
       coAuthors: meta.coAuthors?.map(getAuthor),
       category: normalizeCategory(meta.category),
+      series: meta.series,
       tags: meta.tags || [],
       readingTime: Math.ceil(stats.minutes),
       featured: meta.featured || false,
-      ogImage: meta.ogImage || `/blog/images/${slug}/og-image.png`,
+      draft: meta.draft === true || String(meta.draft).toLowerCase() === 'true',
+      // Use the post's own OG image only if it actually exists in /public;
+      // otherwise fall back to the Lattice OS brand banner. Posts whose
+      // frontmatter points at a missing /blog/{slug}-og.png would otherwise
+      // 404 and render the gradient placeholder on every card.
+      ogImage:
+        meta.ogImage && fs.existsSync(path.join(process.cwd(), 'public', meta.ogImage))
+          ? meta.ogImage
+          : `/og-image.jpg`,
+      // Card thumbnail: image-only variant rendered by scripts/generate-blog-og.py.
+      // No frontmatter key needed — derived from slug; falls back to ogImage if missing.
+      cardImage: (() => {
+        const candidate = `/blog/${slug}-card.jpg`;
+        return fs.existsSync(path.join(process.cwd(), 'public', candidate))
+          ? candidate
+          : undefined;
+      })(),
       content,
     };
   } catch (error) {
@@ -115,8 +132,16 @@ const readAllPosts = cache((): BlogPost[] => {
 
 /**
  * Get all blog posts sorted by date (newest first)
+ * Drafts are excluded from the public index.
  */
 export function getAllPosts(): BlogPost[] {
+  return readAllPosts().filter((post) => !post.draft);
+}
+
+/**
+ * Get all posts including drafts (for preview/admin use)
+ */
+export function getAllPostsIncludingDrafts(): BlogPost[] {
   return readAllPosts();
 }
 
@@ -136,6 +161,7 @@ export function getPostsByCategory(category: BlogCategory): BlogPost[] {
 
 /**
  * Get featured posts
+ * Drafts are excluded.
  */
 export function getFeaturedPosts(limit?: number): BlogPost[] {
   const featured = getAllPosts().filter((post) => post.featured);
@@ -147,8 +173,27 @@ export function getFeaturedPosts(limit?: number): BlogPost[] {
  */
 export function getPostsByTag(tag: string): BlogPost[] {
   return getAllPosts().filter((post) =>
-    post.tags.map(t => t.toLowerCase()).includes(tag.toLowerCase())
+    post.tags.map((t) => t.toLowerCase()).includes(tag.toLowerCase())
   );
+}
+
+/**
+ * Get all unique series slugs from published posts
+ */
+export function getAllSeries(): string[] {
+  const posts = getAllPosts();
+  const seriesSet = new Set<string>();
+  posts.forEach((post) => {
+    if (post.series) seriesSet.add(post.series);
+  });
+  return Array.from(seriesSet).sort();
+}
+
+/**
+ * Get posts in a specific series
+ */
+export function getPostsBySeries(series: string): BlogPost[] {
+  return getAllPosts().filter((post) => post.series === series);
 }
 
 /**
@@ -195,9 +240,12 @@ export function getAllTags(): string[] {
 
 /**
  * Get all post slugs (for static generation)
+ * Drafts are excluded.
  */
 export function getAllPostSlugs(): string[] {
-  return readBlogFilenames().map((file) => file.replace('.mdx', ''));
+  return readAllPosts()
+    .filter((post) => !post.draft)
+    .map((post) => post.slug);
 }
 
 /**

@@ -1,6 +1,7 @@
 import type { AgentMode } from '@/lib/llm/types';
 import type { RuntimeProfileSignals } from '@/lib/workspaces/runtimeMode';
 import { resolveProviderForMode } from './providerResolver';
+import { NO_EXECUTION_REQUIRED } from '@/lib/intelligence/execution/contracts';
 import type {
   UcolRequestPacket,
   UcolResolvedContext,
@@ -194,6 +195,10 @@ export function buildInitialRoutingDecision(args: {
     intent,
     capabilityRequirements: buildCapabilityRequirements(intent.category, context, signals),
     memoryPlan: buildMemoryPlan({ context, agentMode, signals }),
+    // Execution Plane: default abstention. B2 will emit real requirements;
+    // resolveRuntime() turns them into adapter selections without
+    // provisioning anything here.
+    executionRequirement: NO_EXECUTION_REQUIRED,
     executionPlan: {
       mode: isAgentic ? 'agent_run' : context.workspaceBacked || intent.category === 'research_task' || intent.category === 'coding_task' || signals.hasAttachments ? 'retrieve_then_respond' : 'respond',
       syncOrAsync: 'sync',

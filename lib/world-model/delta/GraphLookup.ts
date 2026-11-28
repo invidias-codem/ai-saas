@@ -2,23 +2,23 @@ import { ExtractedClaim, ClaimVerdict } from "./types";
 import { generateEmbedding } from "@/lib/memory/embedding";
 import { supabase } from "@/lib/supabaseClient";
 
+/**
+ * GraphLookup — event-sourced read path.
+ *
+ * All claim verification now queries the event-sourced projections
+ * (wm_nodes_view / wm_edges_view) and the get_causal_chain RPC, NOT the
+ * legacy knowledge_nodes / knowledge_edges tables. The legacy tables are
+ * retired to vector-search targets only.
+ */
+
+/** Row shape returned by wm_nodes_view semantic match (via match_wm_nodes). */
 interface MatchedNode {
   id: string;
   name: string;
   type: string;
   description?: string;
   similarity: number;
-  // World-model temporal fields (may not exist on all nodes)
-  valid_until?: string | null;
-}
-
-interface MatchedEdge {
-  id: string;
-  source_node_id: string;
-  target_node_id: string;
-  relation: string;
-  relationship_type?: string; // CONTRADICTS, SUPPORTS, etc. (world-model edges)
-  weight: number;
+  trust_tier?: string;
   valid_until?: string | null;
 }
 
@@ -31,7 +31,6 @@ export class GraphLookup {
     explanation: string;
   }> {
     try {
-      // Generate embedding for the claim text if not already present
       const claimEmbedding = claim.embedding ?? await generateEmbedding(claim.text);
       if (!claimEmbedding || claimEmbedding.length === 0) {
         return {
@@ -41,17 +40,18 @@ export class GraphLookup {
         };
       }
 
-      // Semantic search against the knowledge graph via match_nodes RPC
-      const { data: matchedNodes, error } = await supabase.rpc('match_nodes', {
+      // Semantic search against the event-sourced node projection.
+      // match_wm_nodes is the CQRS projection RPC (see 20260320 projections).
+      const { data: matchedNodes, error } = await supabase.rpc('match_wm_nodes', {
         query_embedding: claimEmbedding,
-        match_threshold: 0.4, // low threshold — we triage via similarity score below
+        match_threshold: 0.4,
         match_count: 5,
-        // match_nodes may require p_user_id; pass null for system-level delta audit
+        // Delta audit is system-level; pass null user id (projection handles it).
         p_user_id: null,
-      }) as { data: MatchedNode[] | null; error: unknown };
+      }) as { data: MatchedNode[] | null; error: { message?: string } | null };
 
       if (error) {
-        console.error('[GraphLookup] match_nodes RPC error:', error);
+        console.error('[GraphLookup] match_wm_nodes RPC error:', error);
         return { verdict: 'UNVERIFIED', confidence: 0, explanation: "Graph lookup error." };
       }
 
@@ -66,7 +66,7 @@ export class GraphLookup {
       const best = matchedNodes[0];
       const similarity = best.similarity ?? 0;
 
-      // Check if the best-matching node has expired (OUTDATED)
+      // OUTDATED check against the event-sourced projection's temporal validity
       if (similarity > 0.75 && best.valid_until && new Date(best.valid_until) < new Date()) {
         return {
           verdict: 'OUTDATED',
@@ -75,18 +75,17 @@ export class GraphLookup {
         };
       }
 
-      // Now look up edges from this node to detect CONTRADICTS relationships
+      // Detect contradictions via the event-sourced edge projection.
       const { data: edges } = await supabase
-        .from('graph_edges')
-        .select('id, source_node_id, target_node_id, relation, relationship_type, weight, valid_until')
+        .from('wm_edges_view')
+        .select('id, source_node_id, target_node_id, relation, relationship_type, causal_strength, confidence, valid_until')
         .or(`source_node_id.eq.${best.id},target_node_id.eq.${best.id}`)
-        .limit(10) as { data: MatchedEdge[] | null; error: unknown };
+        .limit(10) as { data: any[] | null; error: { message?: string } | null };
 
       const contradictingEdge = (edges ?? []).find(
         (e) => e.relationship_type === 'CONTRADICTS'
       );
 
-      // Verdict scoring
       if (similarity > 0.92) {
         if (contradictingEdge) {
           return {
@@ -126,6 +125,23 @@ export class GraphLookup {
         explanation: "Unexpected error during graph lookup.",
       };
     }
+  }
+
+  /**
+   * Offload causal traversal to Postgres. Delegates to the get_causal_chain
+   * RPC rather than doing in-memory BFS — the DB owns cycle-pruning now.
+   */
+  async getCausalChain(rootNodeId: string, maxDepth = 3, minCausalStrength = 0.0): Promise<any[]> {
+    const { data, error } = await supabase.rpc('get_causal_chain', {
+      p_root_node_id: rootNodeId,
+      p_max_depth: maxDepth,
+      p_min_causal_strength: minCausalStrength,
+    });
+    if (error) {
+      console.error('[GraphLookup] get_causal_chain RPC error:', error);
+      return [];
+    }
+    return data ?? [];
   }
 }
 

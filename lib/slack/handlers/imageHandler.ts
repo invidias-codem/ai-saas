@@ -6,6 +6,7 @@
 import { SlackConfig } from '@/lib/slack';
 import { supabase } from '@/lib/supabaseClient';
 import { generateImage, ImageModel } from '@/lib/imageGeneration';
+import { logger } from '@/lib/logger';
 
 const SLACK_API_BASE = 'https://slack.com/api';
 
@@ -61,17 +62,17 @@ async function sendImageToSlack(
         const data = await response.json();
 
         if (!data.ok) {
-            console.error('[IMAGE_HANDLER] Failed to send image to Slack:', data.error);
-            console.error('[IMAGE_HANDLER] Slack response payload:', JSON.stringify(data).slice(0, 2000));
-            console.error('[IMAGE_HANDLER] Image payload caption:', caption);
-            console.error('[IMAGE_HANDLER] Image payload image_url:', imageUrl);
+            logger.error('[IMAGE_HANDLER] Failed to send image to Slack:', data.error);
+            logger.error('[IMAGE_HANDLER] Slack response payload:', JSON.stringify(data).slice(0, 2000));
+            logger.error('[IMAGE_HANDLER] Image payload caption:', caption);
+            logger.error('[IMAGE_HANDLER] Image payload image_url:', imageUrl);
             throw new Error(data.error);
         }
 
-        console.log('[IMAGE_HANDLER] Image sent to Slack successfully');
+        logger.info('[IMAGE_HANDLER] Image sent to Slack successfully');
 
     } catch (error) {
-        console.error('[IMAGE_HANDLER] Error sending image to Slack:', error);
+        logger.error('[IMAGE_HANDLER] Error sending image to Slack:', error);
         throw error;
     }
 }
@@ -99,7 +100,7 @@ async function setLoadingStatus(
             }),
         });
     } catch (error) {
-        console.error('[IMAGE_HANDLER] Error setting status:', error);
+        logger.error('[IMAGE_HANDLER] Error setting status:', error);
     }
 }
 
@@ -115,7 +116,7 @@ export async function handleImageGeneration(
     const { channel, ts, thread_ts } = event;
     const threadTs = thread_ts || ts;
 
-    console.log('[IMAGE_HANDLER] Handling image generation request');
+    logger.info('[IMAGE_HANDLER] Handling image generation request');
 
     try {
         // Set loading status
@@ -142,7 +143,7 @@ export async function handleImageGeneration(
             }
         }
 
-        console.log('[IMAGE_HANDLER] Raw extracted prompt:', prompt);
+        logger.info('[IMAGE_HANDLER] Raw extracted prompt:', prompt);
 
         // 3. Clean up prompt and check for generic/vague terms
         // Apply cleaning to ALL prompts regardless of source
@@ -162,12 +163,12 @@ export async function handleImageGeneration(
 
             // Exact match check on cleaned prompt
             if (genericTerms.includes(cleanPrompt) || cleanPrompt === '' || cleanPrompt.length < 3) {
-                console.log(`[IMAGE_HANDLER] Prompt '${prompt}' (cleaned: '${cleanPrompt}') is too generic or too short. Asking user.`);
+                logger.info(`[IMAGE_HANDLER] Prompt '${prompt}' (cleaned: '${cleanPrompt}') is too generic or too short. Asking user.`);
                 prompt = ''; // Reset to trigger interactive question
             } else {
                 // Use the cleaned prompt for generation
                 prompt = cleanPrompt;
-                console.log('[IMAGE_HANDLER] Using cleaned prompt:', prompt);
+                logger.info('[IMAGE_HANDLER] Using cleaned prompt:', prompt);
             }
         }
 
@@ -181,7 +182,7 @@ export async function handleImageGeneration(
 
         // 4. If still no valid prompt, ASK the user
         if (!prompt) {
-            console.log('[IMAGE_HANDLER] No valid prompt. Asking user for clarification.');
+            logger.info('[IMAGE_HANDLER] No valid prompt. Asking user for clarification.');
             await setLoadingStatus(config.botToken, channel, threadTs, ''); // Clear status
 
             await fetch(`${SLACK_API_BASE}/chat.postMessage`, {
@@ -199,7 +200,7 @@ export async function handleImageGeneration(
             return;
         }
 
-        console.log('[IMAGE_HANDLER] Final prompt for generation:', prompt);
+        logger.info('[IMAGE_HANDLER] Final prompt for generation:', prompt);
 
         // Fetch user's preferred model
         let preferredModel: ImageModel | undefined;
@@ -213,10 +214,10 @@ export async function handleImageGeneration(
 
                 if (data?.preferred_image_model) {
                     preferredModel = data.preferred_image_model as ImageModel;
-                    console.log(`[IMAGE_HANDLER] Using user preference: ${preferredModel}`);
+                    logger.info(`[IMAGE_HANDLER] Using user preference: ${preferredModel}`);
                 }
             } catch (err) {
-                console.warn('[IMAGE_HANDLER] Failed to fetch user preference, using default.');
+                logger.warn('[IMAGE_HANDLER] Failed to fetch user preference, using default.');
             }
         }
 
@@ -242,10 +243,10 @@ export async function handleImageGeneration(
         // Clear loading status
         await setLoadingStatus(config.botToken, channel, threadTs, '');
 
-        console.log('[IMAGE_HANDLER] Image generation complete');
+        logger.info('[IMAGE_HANDLER] Image generation complete');
 
     } catch (error: any) {
-        console.error('[IMAGE_HANDLER] Error in handleImageGeneration:', error);
+        logger.error('[IMAGE_HANDLER] Error in handleImageGeneration:', error);
 
         let errorMessage = "Sorry, I encountered an error generating the image.";
 

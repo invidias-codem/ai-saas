@@ -32,10 +32,10 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6.0.9
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -78,9 +78,10 @@ jobs:
           
           # Extract suggestions (placeholder - in reality would parse review comments)
           echo "[]" > suggestions.json
+          echo "suggestion_count=$(jq 'length' suggestions.json)" >> "$GITHUB_OUTPUT"
 
       - name: Classify and Apply Suggestions
-        if: steps.extract.outputs.pr_number != ''
+        if: steps.extract.outputs.pr_number != '' && steps.extract.outputs.suggestion_count != '0'
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -99,7 +100,8 @@ jobs:
           " || echo "No suggestions to apply"
 
       - name: Commit Applied Changes
-        if: steps.extract.outputs.pr_number != ''
+        id: commit
+        if: steps.extract.outputs.pr_number != '' && steps.extract.outputs.suggestion_count != '0'
         env:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
@@ -119,9 +121,11 @@ jobs:
           
           git pull --rebase origin "$HEAD_BRANCH"
           git push origin HEAD:refs/heads/$HEAD_BRANCH
+          echo "changes_pushed=true" >> "$GITHUB_OUTPUT"
 
       - name: Post Summary Comment
-        if: steps.extract.outputs.pr_number != ''
+        # Only claim completion when a change was actually pushed.
+        if: steps.commit.outputs.changes_pushed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Pass via env to avoid ${{ }} shell injection
@@ -142,3 +146,5 @@ jobs:
           EOF
           
           gh pr comment "$PR_NUMBER" --body-file comment.md || true
+
+

@@ -14,6 +14,8 @@ import { mkdir, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { UcolSpan } from '../ucol/observability/span';
+import type { ExecutionTrace, ITraceEmitter } from '../jepa/executionTrace';
+import { ExecutionTraceEmitter, NoopTraceEmitter } from '../jepa/executionTrace';
 
 export interface ExecutionRequest {
   code: string;
@@ -36,9 +38,17 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_BUFFER_SIZE = 1024 * 1024; // 1MB log cap
 
 export class IsolatedRunner {
+  private traceEmitterRef: ITraceEmitter = new NoopTraceEmitter();
+
+  public setTraceEmitter(emitter: ITraceEmitter | null): void {
+    this.traceEmitterRef = emitter ?? new NoopTraceEmitter();
+  }
+
   public async execute(req: ExecutionRequest): Promise<ExecutionResult> {
     const executionId = randomUUID();
     const timeoutMs = req.timeoutMs || DEFAULT_TIMEOUT_MS;
+    const workspaceId = req.env?.LATTICE_WORKSPACE_ID || 'unknown';
+    const userId = req.env?.LATTICE_USER_ID || 'unknown';
 
     // Correlate execution with Phase 1 UcolSpan
     const span = new UcolSpan({
@@ -58,9 +68,50 @@ export class IsolatedRunner {
 
     const safeEnv = this.buildSandboxEnvironment(req.env, executionId);
 
+    let executionError: Error | null = null;
+    // Capture source files before script runs
+    let preSourceFiles: Record<string, string> = {};
+
+    async function captureSourceFiles(): Promise<Record<string, string>> {
+      const snapshot: Record<string, string> = {};
+      // For isolatedRunner, the only file typically is the script itself
+      // but we can capture any files that might have been pre-staged
+      try {
+        const { readdir, readFile } = await import('fs/promises');
+        const walk = async (current: string, prefix: string) => {
+          let entries;
+          try {
+            entries = await readdir(current, { withFileTypes: true });
+          } catch {
+            return;
+          }
+          for (const entry of entries) {
+            const full = join(current, entry.name);
+            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+            if (entry.isDirectory()) {
+              await walk(full, rel);
+            } else if (entry.isFile() && entry.name !== fileName) {
+              try {
+                snapshot[rel] = await readFile(full, 'utf8');
+              } catch {
+                // best-effort
+              }
+            }
+          }
+        };
+        await walk(scratchDir, '');
+      } catch {
+        // best-effort
+      }
+      return snapshot;
+    }
+
     try {
       await mkdir(scratchDir, { recursive: true, mode: 0o700 });
       await writeFile(filePath, req.code, { mode: 0o600 });
+
+      // Capture source files before execution
+      preSourceFiles = await captureSourceFiles();
 
       span.addEvent('workspace:created', { scratchDir });
 
@@ -105,7 +156,7 @@ export class IsolatedRunner {
         metadata: { timedOut, exitCode },
       });
 
-      return {
+      const result: ExecutionResult = {
         executionId,
         exitCode: timedOut ? 124 : exitCode,
         stdout: stdout.trim(),
@@ -113,8 +164,46 @@ export class IsolatedRunner {
         timedOut,
         durationMs,
       };
+
+      // Build and emit ExecutionTrace (fire-and-forget)
+      const traceExitCode = executionError ? null : (exitCode === null ? null : (timedOut ? 124 : exitCode));
+      const effectiveResult = executionError
+        ? { exitCode: null, stdout: stdout.trim(), stderr: stderr.trim(), timedOut, durationMs: 0 }
+        : { exitCode: timedOut ? 124 : exitCode, stdout: stdout.trim(), stderr: stderr.trim(), timedOut, durationMs: 0 };
+
+      const trace: ExecutionTrace = {
+        traceId: req.traceId || executionId,
+        sessionId: executionId,
+        workspaceId,
+        userId,
+        s_x: {
+          sourceFiles: preSourceFiles,
+          astFingerprint: '',
+          embedding: null,
+        },
+        action: {
+          type: 'execute',
+          command: req.code,
+          language: req.language,
+          metadata: {
+            executionId,
+          },
+        },
+        s_y: {
+          ...effectiveResult,
+          artifacts: [],
+          embedding: null,
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      // Fire-and-forget emission
+      (async () => { await this.traceEmitterRef.emit(trace); })().catch(() => {});
+
+      return result;
     } catch (error: any) {
       span.fail(error, { scratchDir });
+      executionError = error;
       throw error;
     } finally {
       // Guaranteed scratch workspace cleanup

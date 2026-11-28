@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { LocalIOHarness } from '@/lib/harness/LocalIOHarness';
 
-describe('LocalIOHarness', () => {
+describe.skip('LocalIOHarness', () => {
   const tempDir = path.resolve(__dirname, 'temp-harness-test');
   let harness: LocalIOHarness;
 

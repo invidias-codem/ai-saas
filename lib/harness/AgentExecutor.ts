@@ -1,10 +1,11 @@
 import { estimateTokenCount } from '@/lib/ragMemory';
-import { ClaudeProvider } from '@/lib/llm/providers/claude';
 import { DeepSeekProvider } from '@/lib/llm/providers/deepseek';
 import { GeminiProvider } from '@/lib/llm/providers/gemini';
+import { NvidiaNimProvider } from '@/lib/llm/providers/nvidiaNim';
 import { ChatMessage } from '@/lib/llm/types';
 import { HarnessFactory } from '@/lib/harness/IOHarness';
 import { ToolRouter } from '@/lib/harness/ToolRouter';
+import { searchCodebaseTool } from '@/lib/agents/tools/searchCodebase';
 import { CODE_MODELS } from '@/lib/llm/codeModels';
 import { pruneHistory } from '@/lib/context/HistoryPruner';
 import type { ProviderApiKeys } from '@/lib/userProviderKeys';
@@ -47,16 +48,14 @@ export async function executeAgentLoop(params: AgentExecutorParams) {
       let stepResponse = "";
 
       let ProviderClass;
-      if (modelConfig.provider === 'claude') ProviderClass = ClaudeProvider;
-      else if (modelConfig.provider === 'deepseek') ProviderClass = DeepSeekProvider;
+      if (modelConfig.provider === 'deepseek') ProviderClass = DeepSeekProvider;
+      else if (modelConfig.provider === 'nvidia-nim') ProviderClass = NvidiaNimProvider;
       else ProviderClass = GeminiProvider;
 
-      const provider = modelConfig.provider === 'claude'
-        ? new ClaudeProvider(providerKeys.anthropic)
-        : modelConfig.provider === 'gemini'
-          ? new GeminiProvider(providerKeys.google)
-          : new ProviderClass();
-      
+      const provider = modelConfig.provider === 'gemini'
+        ? new GeminiProvider(providerKeys.google)
+        : new ProviderClass();
+
       const chatHistory: ChatMessage[] = dynamicHistory.map((msg: any) => {
         let attachments;
         const inlineDataPart = msg.parts?.find((p: any) => p.inlineData);
@@ -113,7 +112,8 @@ export async function executeAgentLoop(params: AgentExecutorParams) {
 
       responseText += stepResponse + "\n";
 
-      const toolCallMatch = stepResponse.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+      const stepResponseClean = stepResponse.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+      const toolCallMatch = stepResponseClean.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
       if (toolCallMatch) {
         try {
           const toolCallJson = JSON.parse(toolCallMatch[1]);

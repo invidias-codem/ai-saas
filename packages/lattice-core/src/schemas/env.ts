@@ -6,7 +6,7 @@
  */
 import { z } from 'zod';
 
-export const supportedProvidersSchema = z.enum(['google', 'openai', 'anthropic', 'deepseek']);
+export const supportedProvidersSchema = z.enum(['google', 'openai', 'anthropic', 'deepseek', 'nvidia-nim']);
 export type SupportedProvider = z.infer<typeof supportedProvidersSchema>;
 
 export const envSchema = z.object({
@@ -37,6 +37,42 @@ export const envSchema = z.object({
   REPLICATE_API_TOKEN: z.string().min(1).optional(),
   REPLICATE_API_TOKEN_MUSIC: z.string().min(1).optional(),
   REPLICATE_API_TOKEN_VIDEO: z.string().min(1).optional(),
+
+  // NVIDIA NIM (OpenAI-compatible inference)
+  NVIDIA_API_KEY: z.string().min(1).optional(),
+  NVIDIA_NIM_BASE_URL: z.string().url().optional().default('https://integrate.api.nvidia.com/v1'),
+
+  // Apify — social evidence acquisition provider (Acquisition Plane A2).
+  // Optional: absent token ⇒ provider inert (supports=false, no runs).
+  APIFY_API_TOKEN: z.string().min(1).optional(),
+
+  // Apify webhook authentication (A3): expected in the x-lattice-apify-secret
+  // header on /api/webhooks/apify. Absent ⇒ webhook route rejects all calls.
+  APIFY_WEBHOOK_SECRET: z.string().min(1).optional(),
+
+  // Daytona — desktop VM provider (VDI plane). Optional: absent key ⇒ adapter
+  // factory throws at first use (never at import time); registration inert.
+  DAYTONA_API_KEY: z.string().min(1).optional(),
+  DAYTONA_API_URL: z.string().url().optional(),
+  DAYTONA_TARGET: z.string().min(1).optional(),
+
+  // Bluesky: feed polling also accepts the handle used by the engagement agent.
+  BLUESKY_IDENTIFIER: z.string().trim().optional(),
+  BLUESKY_HANDLE: z.string().trim().optional(),
+  BLUESKY_APP_PASSWORD: z.string().optional(),
+  JKLAW_API_KEY: z.string().optional(),
+
+  // TypeSafe Jev (System One decision model) — shadow decision plane.
+  // PINNED VERSION ENFORCED IN SCHEMA (slice 1A): only version-shaped IDs
+  // (e.g. jev-1.13.0) are valid. Aliases (jev-latest, jev-preview) FAIL
+  // validation — confidence thresholds and comparisons calibrate against a
+  // specific version, and an alias can silently move underneath them.
+  TYPESAFE_API_KEY: z.string().min(1).optional(),
+  JEV_MODEL: z
+    .string()
+    .regex(/^jev-\d+\.\d+\.\d+$/, 'JEV_MODEL must be a pinned version (jev-X.Y.Z), never an alias (jev-latest/jev-preview)')
+    .optional()
+    .default('jev-1.13.0'),
 
   // ADD THESE FOR VERTEX AI (IMAGEN)
   GOOGLE_PROJECT_ID: z
@@ -114,6 +150,9 @@ export const envSchema = z.object({
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
 
+  // Trigger.dev v3 — Durable sandbox execution + HITL waitpoints
+  TRIGGER_SECRET_KEY: z.string().optional(),
+
   // Observability
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
@@ -121,12 +160,35 @@ export const envSchema = z.object({
   SENTRY_DSN: z.string().optional(),
   NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
 
+  // Agentic routing
+  LATTICE_AGENTIC_MODEL: z
+    .preprocess((val) => (typeof val === 'string' && val.trim() === '' ? undefined : val), z.string().optional())
+    .default('Hermes-4-70B'),
+  NOUSE_API_KEY: z.string().optional(),
+  NOUS_MODEL_ID: z.string().optional(),
+
+  // NVIDIA NIM — local-first embedding
+  LATTICE_NIM_MODE: z
+    .enum(['local', 'cloud'])
+    .optional()
+    .default('local'),
+  LATTICE_NIM_LOCAL_URL: z.string().url().optional().default('http://127.0.0.1:8000/v1'),
+  LATTICE_NIM_CLOUD_URL: z.string().url().optional().default('https://integrate.api.nvidia.com/v1'),
+  LATTICE_NIM_CLOUD_API_KEY: z.string().optional(),
+  LATTICE_NIM_EMBED_MODEL: z.string().optional().default('nvidia/nv-embedqa-e5-v5'),
+  LATTICE_NIM_EMBED_DIM: z.coerce.number().optional().default(1024),
+  // Embedding request timeout (ms). Aligned to the LLM providers' 50s so embedding
+  // calls fast-fail before Vercel winds down a post-response function, letting
+  // withRetry() reuse the remaining budget instead of silently dropping memory.
+  NIM_EMBEDDING_TIMEOUT_MS: z.coerce.number().optional().default(50_000),
+
   // Billing / Payment
   PAYPAL_CLIENT_ID: z.string().optional(),
   PAYPAL_CLIENT_SECRET: z.string().optional(),
   PAYPAL_WEBHOOK_ID: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_EXPERT_PRICE_ID: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
 }).superRefine((data, ctx) => {
   if (data.DEPLOYMENT_MODE === 'A') {

@@ -8,8 +8,21 @@ import { rankMemoriesIntelligently } from '@/lib/intelligentMemory';
 import { findRelatedEntities, formatGraphContext, addNode } from '@/lib/memory/graphStore';
 import { Message } from './schemas';
 import { searchMemories, storeMemory, getMemoryStats } from '@/lib/memory/vectorStore';
+import { extractedFactSchemaStrict, userPreferencesSchemaStrict } from './schemas';
 import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { supabase } from '@/lib/supabaseClient';
+
+// SECURITY: Normalize remote memory payloads through strict Zod schemas.
+// This strips prototype-polluting keys (__proto__, constructor, etc.) and
+// enforces exact shape before the data touches the orchestration layer.
+function sanitizeFact(raw: Record<string, unknown>) {
+  const result = extractedFactSchemaStrict.safeParse(raw);
+  if (!result.success) {
+    console.warn('[RAG] Dropping malformed fact:', result.error.message);
+    return null;
+  }
+  return result.data;
+}
 
 export interface Source {
   id: string;

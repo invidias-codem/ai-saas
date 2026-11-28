@@ -15,6 +15,7 @@ export interface TokenBudget {
 }
 
 export type ContextSectionKey =
+  | 'personaContext'
   | 'userContextPrompt'
   | 'userProfileContext'
   | 'factContext'
@@ -50,6 +51,7 @@ export interface ContextCompactionResult {
 }
 
 export type PreparedContextSections = {
+  personaContext?: string;
   userContextPrompt?: string;
   userProfileContext?: string;
   factContext?: string;
@@ -57,4 +59,5 @@ export type PreparedContextSections = {
   searchContext?: string;
   memoryContext?: string;
   attachedDocumentContext?: string;
+  strategyContext?: string;
 };

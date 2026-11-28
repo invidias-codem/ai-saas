@@ -80,6 +80,19 @@ jest.mock('@vercel/analytics/server', () => ({
     track: jest.fn<() => Promise<void>>().mockResolvedValue(),
 }));
 
+// Mock the observability bridge: the real module imports langfuse-core, which
+// performs a top-level ESM dynamic import() that the Jest CJS runner cannot
+// execute. We only need the createTrace surface for app code under test.
+jest.mock('@/lib/observability/langfuse', () => ({
+    createTrace: jest.fn(() => ({
+        update: jest.fn(),
+        event: jest.fn(),
+        span: jest.fn(() => ({ end: jest.fn() })),
+        flush: jest.fn(async () => undefined),
+    })),
+    getLangfuseClient: jest.fn(() => null),
+}));
+
 jest.mock('@/lib/analytics/track', () => ({
     trackAIGeneration: jest.fn<() => Promise<void>>().mockResolvedValue(),
     trackAIError: jest.fn<() => Promise<void>>().mockResolvedValue(),

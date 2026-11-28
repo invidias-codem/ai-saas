@@ -71,7 +71,20 @@ export async function hasUnlimitedUsageAccess(userId?: string | null, email?: st
         .map((value) => value.trim())
         .filter(Boolean);
 
-    if (email && masterEmails.includes(email)) {
+    // Resolve email from Clerk if not provided (keeps call sites terse)
+    let resolvedEmail = email;
+    if (!resolvedEmail && userId) {
+        try {
+            const { clerkClient } = await import('@clerk/nextjs/server');
+            const client = await clerkClient();
+            const user = await client.users.getUser(userId);
+            resolvedEmail = user?.emailAddresses?.[0]?.emailAddress || null;
+        } catch {
+            // Clerk lookup failed — continue with whatever we have
+        }
+    }
+
+    if (resolvedEmail && masterEmails.includes(resolvedEmail)) {
         return true;
     }
 
@@ -102,9 +115,32 @@ export async function hasUnlimitedUsageAccess(userId?: string | null, email?: st
             return false;
         }
 
-        return data?.tier === 'enterprise';
+        if (data?.tier === 'enterprise') return true;
+
+        if (!supabaseAdmin) {
+            return false;
+        }
+
+        const { data: subscriptionData } = await supabaseAdmin
+            .from('subscriptions')
+            .select('tier, premium_until')
+            .eq('clerk_user_id', userId)
+            .maybeSingle();
+
+        if (!subscriptionData?.tier) return false;
+
+        // Enterprise tier = unlimited (retained for master/operator accounts)
+        if (subscriptionData.tier === 'enterprise') return true;
+
+        // Pro tier requires a non-expired premium_until timestamp
+        if (subscriptionData.tier === 'pro') {
+            const until = subscriptionData.premium_until ? new Date(subscriptionData.premium_until) : null;
+            return !!until && until > new Date();
+        }
+
+        return false;
     } catch (error) {
-        console.error('[Credits] Exception resolving unlimited access:', error);
+        console.error('[Credits] Exception resolving subscription access:', error);
         return false;
     }
 }
@@ -153,6 +189,12 @@ export async function spendCreditsAtomic(
     if (!supabaseAdmin) {
         console.error("[Credits] Supabase admin client not initialized");
         return { success: false, duplicate: false, remaining: 0, error: "Internal Configuration Error" };
+    }
+
+    // Master users bypass credit spending entirely
+    const isMaster = await hasUnlimitedUsageAccess(userId);
+    if (isMaster) {
+        return { success: true, duplicate: false, remaining: 0, error: undefined };
     }
 
     const { data, error } = await supabaseAdmin.rpc('spend_credits', {

@@ -42,7 +42,7 @@ export type CodeAgentMode = 'fast' | 'quality' | 'agentic';
 export interface CodeModelConfig {
     id: string;
     name: string;
-    provider: 'gemini' | 'claude' | 'deepseek' | 'hermes' | 'openrouter';
+    provider: 'gemini' | 'deepseek' | 'nvidia-nim';
     modelId: string;
     description: string;
     maxTokens: number;
@@ -58,12 +58,19 @@ export interface CompletionOptions {
     topK?: number;
     stream?: boolean;
     signal?: AbortSignal;
+    responseMimeType?: string;
+    /** OpenAI-compatible tool declarations (NIM/vLLM). Ignored by text-only providers. */
+    tools?: import('./toolCallTypes').NimToolSpec[];
+    /** OpenAI-compatible tool choice. Ignored by text-only providers. */
+    tool_choice?: import('./toolCallTypes').NimToolChoice;
 }
 
 export interface StreamResult {
     stream: ReadableStream;
     debug?: any;
     thoughtSignaturePromise?: Promise<string | null>;
+    /** Accumulated tool calls (OpenAI-compatible providers) — undefined for text-only providers. */
+    toolCalls?: import('./toolCallTypes').NimToolCall[];
 }
 
 export interface LLMProvider {

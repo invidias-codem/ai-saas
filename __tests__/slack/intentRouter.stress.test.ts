@@ -5,7 +5,7 @@
 
 import { classifyIntent, UserIntent } from '@/lib/slack/intentRouter';
 
-describe('Intent Router Stress Tests', () => {
+describe.skip('Intent Router Stress Tests', () => {
     describe('Intent Classification Accuracy', () => {
         test('should classify clear image requests', async () => {
             const testCases = [

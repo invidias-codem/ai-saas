@@ -1,172 +1,66 @@
-# lattice-cli
+# Lattice OS CLI
 
-**Sovereign AI Infrastructure Management CLI (v0.2.0)**
+**0.3.1-rc.1 — release candidate; stable distribution is not yet approved.**
 
-The official command-line tool for deploying, managing, and upgrading
-[Lattice OS](https://gen1e.xyz) Docker appliance instances.
+The CLI manages Lattice OS Docker appliance deployments on your existing operating system. The downloads page is `/downloads` in the Lattice OS app. It lists artifacts only after build provenance and release evidence have been reviewed.
 
-## Prerequisites
+## Install
 
-- **Python 3.10+** (zero external dependencies — stdlib only)
-- **Docker Engine** (20.10+) with **Compose v2 plugin**
-- **Docker Hub account** with a Personal Access Token (PAT)
+Choose the executable for your OS and processor. Download `SHA256SUMS` and compare the artifact checksum. Verify GitHub build provenance against the full source commit shown on the downloads page before executing anything:
 
-Generate your PAT at [hub.docker.com/settings/security](https://hub.docker.com/settings/security)
-with `read` scope for pulling private images.
-
-## Installation
-
-### Option 1: Pre-built binary (recommended)
-```bash
-curl -sL https://raw.githubusercontent.com/invidias-codem/ai-saas/main/scripts/lattice-cli/install.sh | bash
+```sh
+gh attestation verify lattice-linux-amd64 --repo invidias-codem/ai-saas --signer-workflow invidias-codem/ai-saas/.github/workflows/build-lattice-cli.yml --source-ref refs/heads/main --source-digest <40-character-source-commit>
 ```
 
-### Option 2: From source
-```bash
-cd scripts/lattice-cli
-pip install -e .
+Alternatively, download and inspect the versioned `install.sh` or `install.ps1` release asset, verify its checksum and provenance, and execute it with an explicit version and source commit:
+
+```sh
+bash install.sh cli-v0.3.1-rc.1 <40-character-source-commit>
 ```
 
-### Option 3: Build standalone binary
-```bash
-pip install nuitka ordered-set
-python scripts/lattice-cli/build.py --nuitka
+```powershell
+.\install.ps1 -Version cli-v0.3.1-rc.1 -SourceCommit <40-character-source-commit>
 ```
 
-## Quick Start
+Installers require the GitHub CLI and install to a user-owned directory without requesting administrator privileges. Add that directory to PATH if needed. No source fallback is performed. Until a candidate is built and published, these assets are unavailable.
 
-```bash
-# 1. Authenticate with Docker Hub
-lattice auth login
+## Check the installation
 
-# 2. Activate your deployment license
-lattice license activate LATTICE-ENT-<your-token>
-
-# 3. Deploy
-lattice deploy start
-
-# 4. Verify everything is healthy
-lattice health check
-
-# 5. View logs
-lattice health logs --follow
+```sh
+lattice --version
+lattice doctor --offline --json
+lattice doctor
 ```
+
+Native binaries bundle Python and cryptography. Docker Engine with Compose v2 (or Docker Desktop with Linux containers) is needed for deployment commands. Offline doctor verifies the CLI runtime; it does not certify appliance deployment.
 
 ## Commands
 
-### Authentication
+Run `lattice <group> --help` and `lattice <group> <command> --help` for arguments.
 
-| Command | Description |
-|---|---|
-| `lattice auth login` | Authenticate with Docker Hub using a PAT |
-| `lattice auth logout` | Clear cached credentials |
-| `lattice auth status` | Show authentication status |
-| `lattice auth generate` | Generate a deployment license token |
+| Group | Commands |
+| --- | --- |
+| auth | login, logout, status; legacy token generation is not a secure entitlement authority |
+| deploy | init, start, stop, restart, status, shell |
+| license | activate, deactivate, show |
+| health | check, logs |
+| upgrade | upgrade, rollback |
+| backup | create, restore, list |
+| org | status, members; remote authentication wiring remains a stable-release blocker |
+| task | run; requires a local API/partner credential |
+| doctor | --offline, --json |
 
-### Deployment
+This candidate is for disposable development evaluation. Known license, organization authentication, credential handling, and backup findings are tracked in [release readiness](../../docs/releases/cli-release-readiness.md). Do not rely on it for production recovery or commercial entitlement enforcement.
 
-| Command | Description |
-|---|---|
-| `lattice deploy init` | Bootstrap .env with secrets |
-| `lattice deploy start` | Full deploy with 7-step preflight validation |
-| `lattice deploy stop` | Stop all services gracefully |
-| `lattice deploy restart` | Restart all services |
-| `lattice deploy status` | Show running container status |
-| `lattice deploy shell` | Open a shell in the app container |
+## Build and test from source
 
-### License Management
+Use Python 3.12 in a virtual environment:
 
-| Command | Description |
-|---|---|
-| `lattice license activate <key>` | Activate a license key |
-| `lattice license deactivate` | Deactivate current license |
-| `lattice license show` | Show license status and features |
-
-### Health & Monitoring
-
-| Command | Description |
-|---|---|
-| `lattice health check` | Run full health check (5-point) |
-| `lattice health logs [-f]` | Stream container logs |
-
-### Upgrade & Rollback
-
-| Command | Description |
-|---|---|
-| `lattice upgrade upgrade` | Upgrade to newer image (default: latest) |
-| `lattice upgrade rollback` | Rollback to previous image tag |
-
-### Backup & Restore
-
-| Command | Description |
-|---|---|
-| `lattice backup create` | Snapshot config + Supabase volumes |
-| `lattice backup restore <path>` | Restore from a backup |
-| `lattice backup list` | List available backups |
-
-### V2 Preflight (runs automatically on deploy start)
-
-| Check | Validates |
-|---|---|
-| Docker daemon | Running, accessible without sudo |
-| Compose v2 | Plugin installed (not deprecated v1) |
-| Host resources | ≥4GB RAM, ≥2 CPUs |
-| Ports | 3000, 5432, 6379 available |
-| Disk space | ≥8GB free |
-| Docker auth | PAT configured |
-| License | Valid and unexpired |
-
-## Configuration
-
-Config lives in `~/.lattice/`:
-
-```
-~/.lattice/
-├── config.toml          # Registry, image tag, deployment mode
-├── auth.json            # Docker Hub auth cache (PATs never stored)
-├── license.json         # Active license key and tier
-├── deployments/         # Per-instance state
-│   └── default.json
-└── backups/             # Backup archives
-    └── default/
+```sh
+python -m pip install --require-hashes -r scripts/lattice-cli/requirements-build.lock
+python -m unittest discover -s scripts/lattice-cli/tests -v
+python scripts/lattice-cli/build.py --pyinstaller
+python scripts/lattice-cli/smoke_binary.py dist/cli/lattice-linux-amd64
 ```
 
-### Custom registry
-
-Edit `~/.lattice/config.toml`:
-```toml
-registry = "registry.yourcompany.com"
-image = "lattice-os"
-tag = "v0.2.0"
-```
-
-### Air-gapped mode
-
-Set `deployment_mode = "air-gapped"` in config, then pre-load the image:
-```bash
-docker load -i lattice-os-v0.2.0.tar.gz
-lattice deploy start --skip-pull
-```
-
-## Architecture Decisions
-
-| Decision | Rationale |
-|---|---|
-| **Zero external deps** | Stdlib only → no dependency conflicts on client machines |
-| **PAT auth via stdin** | Tokens never appear in `/proc/*/cmdline` or shell history |
-| **No phone-home** | License activation is local only — supports air-gapped networks |
-| **Feature-gated tiers** | Community (free) vs Enterprise — gating in config, not billing |
-| **Config-first** | All state in `~/.lattice/` — easy to backup, audit, and version |
-
-## License Keys
-
-Format: `LATTICE-<TIER>-<32 hex chars>`
-
-| Tier | SSO | Multi-node | RBAC | Workspaces |
-|---|---|---|---|---|
-| Community | ✗ | ✗ | ✗ | 5 |
-| Enterprise | ✓ | ✓ | ✓ | Unlimited |
-
----
-
-Built by [JJEM Global Technology, Inc.](https://gen1e.xyz)
+Build natively on each OS/architecture. The GitHub Actions matrix handles five targets and stages a draft prerelease only. PyInstaller bundles Python bytecode; it is not an IP secrecy boundary. Source installs need Python 3.11+ and the dependency in requirements.txt.

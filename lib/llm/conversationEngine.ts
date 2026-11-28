@@ -13,11 +13,12 @@ import { GraphNode } from '../memory/graphStore';
 import { PromotableMemory } from '../memoryPromotion';
 import { Source } from '../ragMemory';
 import { env } from "@/lib/env";
+import { resolveConversationAttachment } from './conversationAttachment';
+import { MAX_CHAT_IMAGES } from '@/lib/types/attachments';
 import { LLMProvider, ChatMessage, CompletionOptions, AgentMode, ChatMessageSchema } from "./types";
-import { GeminiProvider } from "./providers/gemini";
-import { ClaudeProvider } from "./providers/claude";
+import { GeminiProvider, AGENTIC_MODEL } from "./providers/gemini";
 import { DeepSeekProvider } from "./providers/deepseek";
-import { HermesProvider } from "./providers/hermes";
+import { NIM_MODEL_CODE } from "./providers/nvidiaNim";
 import {
   captureMemory,
   extractTags,
@@ -28,8 +29,11 @@ import {
 import { addNode, addEdge, strengthenEdge } from "@/lib/memory/graphStore";
 import { extractFactsFromConversation } from "@/lib/agents/factExtractor";
 import { SecurityAgent } from "@/lib/security/securityAgent";
+import { logEvent } from "@/lib/telemetry";
+import { encodeMediaEvent, hasMediaEnvelope, MediaEnvelope, encodeApprovalEvent } from "@/lib/media/envelope";
 import { emitInteractionAudit } from "@/lib/telemetry/emit";
 import { deriveContextRole } from "@/lib/telemetry/governance";
+import { emitRiskEvent } from "@/lib/telemetry/riskAdapter";
 // ── World Model: Distribution Shift + Self-Benchmarking ──────────────────────
 import { createDistributionShiftDetector } from '@/lib/world-model/distribution-shift';
 import { createBenchmarkingPipeline } from '@/lib/world-model/benchmarking';
@@ -39,15 +43,44 @@ import type { AIOutputAudit } from '@/lib/world-model/types';
 import { deltaEngine } from '@/lib/world-model/delta';
 import { critiqueLLMOutput } from '@/lib/ucol/critics/OutputCritic';
 import type { UcolMemoryPlan, UcolMemoryScope } from '@/lib/ucol/routing/types';
-import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
+import { getEffectiveProviderKeys } from '@/lib/userProviderKeys';
 import { createTrace } from '@/lib/observability/langfuse';
 import { loadSudoPrompt } from '@/lib/ucol/sudoLoader';
+import { createQuarantinePromotionManager } from '@/lib/execution/quarantinePromotionManager';
+import { sandboxManager } from '@/lib/execution/sandboxManager';
+import { withAbort } from '@/lib/runtime/abort';
+import {
+  buildCapabilityManifest,
+  buildWeaverSystemInstruction,
+  derivePreparedCapabilityInputs,
+  logCapabilityResolution,
+  type CapabilityManifest,
+} from '@/lib/agents/core/capabilityManifest';
 
 // ChatMessageSchema imported from types
 
 export const ConversationRequestSchema = z.object({
   messages: z.array(ChatMessageSchema).min(1).max(100),
-  fileData: z.any().optional(), // updated to any to support the normalizedFileData object
+  fileData: z.union([z.string(), z.object({
+    name: z.string().optional(),
+    type: z.string().optional(),
+    mimeType: z.string().optional(),
+    sizeBytes: z.number().optional(),
+    base64Data: z.string().optional(),
+    fileUri: z.string().optional(),
+    storageProvider: z.literal('gcs').optional(),
+    extractedText: z.string().optional(),
+  })]).nullish(),
+  // Multi-photo transport only. Legacy single fileData remains unchanged for PDFs and older clients.
+  fileDataList: z.array(z.object({
+    name: z.string().min(1).max(255),
+    type: z.string().optional(),
+    mimeType: z.string(),
+    sizeBytes: z.number().int().positive(),
+    base64Data: z.string().optional(),
+    fileUri: z.string().optional(),
+    storageProvider: z.literal('gcs').optional(),
+  })).min(2).max(MAX_CHAT_IMAGES).optional(),
   fileName: z.string().max(255).optional(),
   mimeType: z.string().max(100).optional(),
   fileUri: z.string().max(1024).optional(),
@@ -61,6 +94,8 @@ export type ConversationRequest = z.infer<typeof ConversationRequestSchema>;
 
 
 export type ConversationEngineOptions = {
+  /** Request deadline/disconnect, propagated to inference and response streams. */
+  signal?: AbortSignal;
   /**
    * When true, the engine will avoid writing side-effects (memory capture, graph updates).
    * Useful for eval runs and local testing.
@@ -88,6 +123,9 @@ export type ConversationEngineOptions = {
   /** Optional UCOL-resolved memory plan to drive prepared-context assembly. */
   memoryPlan?: UcolMemoryPlan;
 
+  /** Correlation ID for shadow planes (context sieve telemetry). */
+  requestId?: string;
+
   /** Local workspace execution harness */
   ioHarness?: import('@/lib/harness/IOHarness').IOHarness;
 
@@ -96,6 +134,12 @@ export type ConversationEngineOptions = {
 
   /** Optional SudoLang prompt names to inject into the system instruction for this request. */
   sudoPromptNames?: string[];
+
+  /** Optional synthesized persona/system instruction to prepend to the base system prompt. */
+  systemInstruction?: string;
+
+  /** Optional persona session for the Chameleon Consultant layer. */
+  personaSession?: import("@/lib/consultant/personaSession").PersonaSession;
 };
 
 export type ConversationEngineResult = {
@@ -110,6 +154,7 @@ export type ConversationEngineResult = {
     promptVersion?: string | null;
     model?: string;
     userQuery?: string;
+    personaInjected?: boolean;
     confidenceSignal?: {
       contextConfidence: number;
       recommendedTier: string;
@@ -120,6 +165,8 @@ export type ConversationEngineResult = {
       graphEntitiesCount?: number;
       researchResultsCount?: number;
     };
+    pdfExtractionError?: string;
+    error?: string;
   };
 };
 
@@ -133,24 +180,11 @@ function getGoogleApiKey(): string {
   return key;
 }
 
-const FAST_MODEL = process.env.HERMES_MODEL_ID || "hermes3";
-const AGENTIC_MODEL = "claude-sonnet-4-6"; // Claude drives the agentic ReAct loop
-
-function getSystemInstruction() {
-  return `You are 'Genie', a highly capable AI assistant equipped with dynamic tool integrations.
-Current Date: ${new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })}.
-
-CAPABILITIES:
-- You DO have real-time internet access. When you receive "Web Search Results" in your context, it means the system has searched the live internet on your behalf.
-- You DO have long-term memory. When you see "User Profile" or "Relevant Previous Work", it means the system has retrieved past context.
-- Never deny these capabilities. If the context contains the answer, speak authoritatively as if you fetched it yourself.
-
-Provide informative and concise responses. When presenting structured data (like comparisons, statistics, lists suitable for plotting), format it as a standard GitHub Flavored Markdown table whenever possible to facilitate visualization. When you see 'User's Relevant Previous Work' or 'About This User' sections below, use that context to personalize your responses and maintain continuity with their previous interactions and preferences.`;
+// Phase 0 (#440): the instruction is derived from the per-request capability
+// manifest — no unconditional capability claims. Weaver is the customer-facing
+// identity; "Genie" is handled explicitly as a former name of the same assistant.
+function getSystemInstruction(manifest: CapabilityManifest) {
+  return buildWeaverSystemInstruction(manifest);
 }
 
 const GREETING = "Hi there! How can I assist you today? Feel free to ask me anything or attach a file for insights.";
@@ -162,6 +196,8 @@ const GREETING = "Hi there! How can I assist you today? Feel free to ask me anyt
  * - API route (prod)
  * - Eval harness (Mode B replay)
  */
+import { getUserProviderApiKeys } from '@/lib/userProviderKeys';
+
 export async function generateConversationReply(
   args: {
     userId: string;
@@ -171,73 +207,86 @@ export async function generateConversationReply(
   },
   options: ConversationEngineOptions = {}
 ): Promise<ConversationEngineResult> {
+  options.signal?.throwIfAborted();
   const { userId, clerkUser, request, conversationId } = args;
   const parsed = ConversationRequestSchema.parse(request);
   const agentMode = parsed.mode || options.mode || 'fast';
-  const providerKeys = await getUserProviderApiKeys(userId);
-  const nativeProviderKeys = await (await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys);
+  const fileData = typeof parsed.fileData === 'string' ? { base64Data: parsed.fileData } : parsed.fileData;
+  const effectiveMimeType = fileData?.mimeType || fileData?.type || parsed.mimeType;
+  const attachment = resolveConversationAttachment(parsed, userId);
+  const attachments = [
+    ...(attachment ? [attachment] : []),
+    ...(parsed.fileDataList ?? []).map(file => resolveConversationAttachment({ fileData: file }, userId)),
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const hasAttachments = Boolean(attachments.length || fileData?.extractedText);
+  // Phase 0 (#440): server-produced capability manifest for THIS request,
+  // derived from the SAME effective read enforcement retrieval uses (#440
+  // review finding 2). The plan computation is hoisted here — before the
+  // agentic branch — so the manifest and prepareContextBundle cannot drift.
+  // Invalid/missing resolved mode is a typed failure — never a silent default.
+  const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
+  const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
+  const graphReadScope: UcolMemoryScope[] = agentMode === 'fast' ? [] : ['graph'];
+  const fallbackMemoryPlan: UcolMemoryPlan = {
+    readScopes: ['conversation', 'user', ...graphReadScope],
+    retrievalMode: agentMode === 'reasoning' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
+    usePreparedContext: true,
+    useGraphRecall: agentMode !== 'fast',
+    useRecentTaskState: false,
+  };
+  const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan(options.memoryPlan ?? fallbackMemoryPlan);
+  const preparedCapabilityInputs = derivePreparedCapabilityInputs({
+    plan: contextPreparationPlan,
+    disableExternalContext: effectivelyDisabled,
+    skipWebResearch: process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch,
+  });
+  const capabilityManifest = buildCapabilityManifest({
+    resolvedMode: agentMode,
+    workspaceId: parsed.workspaceId ?? null,
+    surface: 'web',
+    memoryReadEnabled: preparedCapabilityInputs.memoryReadEnabled,
+    webResearchEnabled: preparedCapabilityInputs.webResearchEnabled,
+    ioHarnessPresent: Boolean(options.ioHarness),
+  });
+  const providerKeys = await withAbort(getUserProviderApiKeys(userId), options.signal);
+  const nativeProviderKeys = await withAbort((await import('@/lib/native/providerSecretHydrator')).hydrateNativeProviderKeys(providerKeys), options.signal);
 
   // ---------------------------------------------------------
-  // UCOL AGENTIC MODE — Claude + ReAct Loop
+  // UCOL AGENTIC MODE — Nemotron 3 Ultra (NVIDIA NIM) + ReAct Loop
   // Tools: web_search, write_research_paper, write_creative_content
   // ---------------------------------------------------------
   if (agentMode === 'agentic') {
     const { runReActLoop } = await import('@/lib/agents/core/reactLoop');
-    const { ToolRegistry } = await import('@/lib/agents/core/registry');
-    const { dealSentinelTool } = await import('@/lib/agents/tools/dealSentinel');
-    const { webSearchTool } = await import('@/lib/agents/tools/webSearch');
-    const { researchWriterTool } = await import('@/lib/agents/tools/researchWriter');
-    const { novelWriterTool } = await import('@/lib/agents/tools/novelWriter');
-    const { searchCodebaseTool } = await import('@/lib/agents/tools/searchCodebase');
-    const { readFileTool, writeFileTool, patchFileTool } = await import('@/lib/agents/tools/harnessTools');
-    const { executeCommandTool } = await import('@/lib/agents/tools/executionTools');
-    const { discoverDocumentsTool, extractTextTool, summarizeRepoTool, semanticSearchTool } = await import('@/lib/agents/tools/intelligenceTools');
+    const { runNimReactLoop } = await import('@/lib/agents/core/nimReactLoop');
+    const { buildAuthorizedToolSet, registryFromTools } = await import('@/lib/agents/core/agenticToolSet');
 
-    // 1. Initialize Registry with all agentic tools
-    const registry = new ToolRegistry();
-    registry.register(dealSentinelTool);
-    registry.register(webSearchTool);
-    registry.register(researchWriterTool);
-    registry.register(novelWriterTool);
-    registry.register(searchCodebaseTool);
-
-    if (request.mode === 'agentic') {
-      // Phase 1: Local Mutable Capabilities
-      registry.register(readFileTool);
-      registry.register(writeFileTool);
-      registry.register(patchFileTool);
-      registry.register(executeCommandTool);
-
-      // Phase 3 & 4: Intelligence Capabilities
-      registry.register(discoverDocumentsTool);
-      registry.register(extractTextTool);
-      registry.register(summarizeRepoTool);
-      registry.register(semanticSearchTool);
-    }
+    // 1. Authorized tool catalog (Phase 0 #440): one shared, manifest-gated
+    // builder for web AND worker — parity by construction. Gating follows the
+    // RESOLVED runtime mode (not the raw request field), and the set is never
+    // wider than what the worker exposes for the same resolved conversation.
+    const registry = registryFromTools(buildAuthorizedToolSet(capabilityManifest));
+    void logCapabilityResolution({
+      userId,
+      workspaceId: parsed.workspaceId ?? undefined,
+      requestId: options.requestId,
+      conversationId: conversationId ?? undefined,
+      manifest: capabilityManifest,
+      toolNames: registry.getToolNames(),
+    });
 
     // 2. Construct Prompt (Multimodal support)
     const userQuery = parsed.messages[parsed.messages.length - 1]?.text || "";
+    // Strip file metadata tags appended by the client (e.g., "[Attached File: ...]")
+    // to prevent the router from being distracted by file metadata
+    const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
     let promptInput: string | any[] = userQuery;
 
-    if (parsed.fileData && parsed.mimeType) {
+    if (attachments.length) {
       promptInput = [
         { text: userQuery },
-        {
-          inlineData: {
-            mimeType: parsed.mimeType,
-            data: parsed.fileData // Base64
-          }
-        }
-      ];
-    } else if (parsed.fileUri && parsed.mimeType) {
-      promptInput = [
-        { text: userQuery },
-        {
-          fileData: {
-            mimeType: parsed.mimeType,
-            fileUri: parsed.fileUri
-          }
-        }
+        ...attachments.map(item => item.base64Data
+          ? { inlineData: { mimeType: item.mimeType, data: item.base64Data } }
+          : { fileData: { mimeType: item.mimeType, fileUri: item.fileUri } }),
       ];
     }
 
@@ -330,73 +379,175 @@ export async function generateConversationReply(
       orgContext = { orgId: '', userId, permissions: [] };
     }
     // ------------------------------------
-    const { runSwarmOrchestrator } = await import('@/lib/agents/core/orchestrator');
-    const { anthropic, createAnthropic } = await import('@ai-sdk/anthropic');
-    const anthropicProvider = nativeProviderKeys.anthropic
-      ? createAnthropic({ apiKey: nativeProviderKeys.anthropic })
-      : anthropic;
 
-    const initialState = {
-      originalQuery: userQuery,
-      workspaceId: parsed.workspaceId,
-      episodicContext: [], // Context injection is handled above
-      discoveredFiles: [],
-      proposedMutations: [],
-      currentStatus: 'researching' as const,
-      handoffNotes: '',
-      iterationCount: 0,
-      actionLedger: []
+    // Agentic execution uses the NVIDIA NIM Nemotron 3 Ultra model (see providerResolver.ts).
+    const onReasoning = (text: string) => {
+      console.log(`[AgenticReasoning] ${String(text).slice(0, 400)}`);
     };
 
     const textEncoder = new TextEncoder();
-    
-    // We execute the Swarm Orchestrator and stream UI events back
-    const stream = new ReadableStream({
+
+    const workspaceRoot = process.cwd();
+    const sessionId = 'agentic-' + Date.now();
+    const promotionManager = createQuarantinePromotionManager(
+      workspaceRoot,
+      workspaceRoot,
+      (event, payload) => {
+        void emitRiskEvent({
+          eventType: event as any,
+          traceId: sessionId,
+          workspaceId: parsed.workspaceId || undefined,
+          userId,
+          metadata: payload,
+        });
+      },
+    );
+    const { sandboxManager } = await import('@/lib/execution/sandboxManager');
+    sandboxManager.setPromotionManager(promotionManager);
+    // Initialize JEPA trace emitter for execution trace capture
+    const { getDefaultTraceEmitter } = await import('@/lib/jepa');
+    const traceEmitter = await getDefaultTraceEmitter();
+    sandboxManager.setTraceEmitter(traceEmitter);
+
+    // We execute the ReAct loop and stream UI events back
+    const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         const onStreamEvent = (msg: string) => {
-          controller.enqueue(textEncoder.encode(msg + "\n\n"));
+          controller.enqueue(textEncoder.encode(`${msg}\n\n`));
         };
 
         try {
-          const context = {
+          // Hydrate the agent's role for the mutative-tool gate: admins/owners
+          // (with `sensitive_tools:use`) are 'admin'; everyone else is 'user'.
+          const isAdmin = Boolean(
+            orgContext?.permissions && orgContext.permissions.includes('sensitive_tools:use')
+          );
+
+          const agentContext = {
             userId,
-            sessionId: 'session-' + Date.now(),
+            sessionId,
             workspaceId: parsed.workspaceId,
             history: [],
             enableTelemetry: true,
-            ioHarness: options.ioHarness,
+            rootSpan: undefined,
             orgContext,
+            userRole: isAdmin ? ('admin' as const) : ('user' as const),
+            ioHarness: options.ioHarness,
             onStep: (step: any) => {
-              onStreamEvent(step.thought);
+              const text = String(step.thought ?? '');
+              onStreamEvent(text);
+              onReasoning(text);
               if (options.slackStreamCallback) options.slackStreamCallback(step);
-            }
+            },
+            onToolApproval: (approval: { approvalId: string; toolName: string; params: any }) => {
+              controller.enqueue(
+                textEncoder.encode(`${encodeApprovalEvent(approval)}\n`)
+              );
+            },
+            promotionManager,
+            promotionRejectionCount: 0,
           };
 
-          const model = anthropicProvider('claude-3-5-sonnet-20241022');
-          
-          const finalState = await runSwarmOrchestrator(initialState, model, context);
-          
-          // Stream the final output
-          const finalMessage = `**Swarm Execution Complete**\nStatus: ${finalState.currentStatus}\n\n**Handoff Notes:**\n${finalState.handoffNotes}`;
-          controller.enqueue(textEncoder.encode(finalMessage));
-          
-          // --- EPISODIC MEMORY COMPRESSION LOOP ---
-          const shouldTriggerCompression = finalState.iterationCount >= 1 || finalState.currentStatus === 'complete';
-          if (shouldTriggerCompression && parsed.workspaceId && options.ioHarness) {
-            // Use same generic wait-until pattern
-            waitUntil((async () => {
-              try {
-                console.log("[EpisodicMemory] Triggering background compression loop for Swarm DAG...");
-                // (Existing VertexAI compression could be moved here, skipping for brevity in stream)
-              } catch (e) {
-                console.error("[EpisodicMemory] Compression loop failed:", e);
+// ── Trigger.dev durable offload (best-effort, non-blocking) ──────────
+          // When Trigger.dev is configured, kindle the durable `agent-loop` task
+          // alongside the inline run. The inline path remains authoritative for
+          // the current request; the durable run exists for long-horizon / HITL
+          // scenarios that exceed serverless limits. Guarded by env so it is a
+          // no-op until TRIGGER_SECRET_KEY is provisioned.
+          void (async () => {
+            try {
+              const { dispatchAgentLoopToTrigger } = await import('@/lib/trigger/dispatch');
+              const triggerRunId = await dispatchAgentLoopToTrigger({
+                userId,
+                workspaceId: parsed.workspaceId!,
+                conversationId: conversationId ?? undefined,
+                requestId: options.requestId,
+                userQuery: sanitizedQuery,
+                modelName: NIM_MODEL_CODE,
+                mode: 'agentic',
+              });
+              if (triggerRunId) {
+                // Correlate request → durable worker run for attribution
+                // (#440 review finding 5).
+                logEvent({
+                  eventType: 'agent_loop_offloaded',
+                  userId,
+                  workspaceId: parsed.workspaceId || undefined,
+                  metadata: {
+                    requestId: options.requestId ?? 'unknown',
+                    conversationId: conversationId ?? null,
+                    triggerRunId,
+                  },
+                });
               }
-            })());
+            } catch (err) {
+              console.warn('[Trigger.dev] offload dispatch skipped:', err);
+            }
+          })();
+          // ─────────────────────────────────────────────────────────────────────
+
+          // ── Tool-calling route: NIM (OpenAI-compatible) vs Gemini Vertex ──────
+          // NIM (Nemotron 3 Ultra) is the resolved agentic provider. Use the NIM ReAct
+          // loop for text queries when NIM is configured; fall back to the
+          // Gemini Vertex loop for multimodal (attachment-bearing) queries,
+          // which NIM's text-only models cannot serve.
+          const nimConfigured = Boolean(
+            (await import('@/lib/env')).nvidiaNimConfig()?.apiKey
+          );
+          const useNimLoop = nimConfigured && typeof promptInput === 'string';
+
+          let reactResult;
+          if (useNimLoop) {
+            // Phase 0 (#440): the manifest-derived instruction reaches agentic
+            // inference — NIM path (runNimReactLoop passes it to
+            // provider.chatWithTools as the system instruction).
+            reactResult = await runNimReactLoop(
+              sanitizedQuery,
+              agentContext,
+              registry,
+              NIM_MODEL_CODE,
+              getSystemInstruction(capabilityManifest),
+            );
+          } else {
+            // Gemini Vertex fallback (multimodal or NIM-unconfigured) —
+            // StartChatParams.systemInstruction carries the same manifest-derived text.
+            reactResult = await runReActLoop(
+              promptInput,
+              agentContext,
+              registry,
+              AGENTIC_MODEL,
+              getSystemInstruction(capabilityManifest),
+            );
           }
-          
+          const isSuccess = reactResult.status === 'success';
+
+          // Emit structured media events for any media-tool result in the trajectory,
+          // so the client can render inline players/grids instead of raw tool text.
+          const mediaEnvelopes: MediaEnvelope[] = [];
+          for (const step of reactResult.trajectory ?? []) {
+            const data = step.observation?.data;
+            if (hasMediaEnvelope(data) && data._media) {
+              mediaEnvelopes.push(data._media);
+            }
+          }
+          for (const envelope of mediaEnvelopes) {
+            controller.enqueue(textEncoder.encode(`${encodeMediaEvent(envelope)}\n`));
+          }
+
+          const donePayload = {
+            status: reactResult.status,
+            answer: reactResult.answer,
+            trajectory: reactResult.trajectory,
+          };
+          controller.enqueue(textEncoder.encode(JSON.stringify(donePayload)));
           controller.close();
         } catch (err: any) {
-          controller.enqueue(textEncoder.encode(`Swarm execution failed: ${err.message}`));
+          const isProviderDown = String(err).includes('1033') || String(err).includes('Tunnel') || String(err).includes('530') || (err?.status && err.status >= 500);
+          if (isProviderDown) {
+            controller.enqueue(textEncoder.encode('The AI provider is temporarily unavailable. Please try again in a few minutes.'));
+          } else {
+            controller.enqueue(textEncoder.encode(`Agent execution failed: ${err.message}`));
+          }
           controller.close();
         }
       }
@@ -406,7 +557,7 @@ export async function generateConversationReply(
       stream,
       sources: [],
       debug: {
-        model: `claude/${AGENTIC_MODEL}`,
+        model: `nvidia-nim/${NIM_MODEL_CODE}`,
         userQuery,
       }
     };
@@ -418,7 +569,7 @@ export async function generateConversationReply(
   // ─── Budget Kill Switch: enforce per-user and global LLM spend caps ─────────
   // Non-fatal: if Redis is unavailable the check is skipped and the request
   // is allowed through. Enforcement is gated by ENABLE_LLM_BUDGET_ENFORCEMENT=true.
-  const budgetCheck = await budgetKillSwitch.checkBudget(userId);
+  const budgetCheck = await withAbort(budgetKillSwitch.checkBudget(userId), options.signal);
   if (!budgetCheck.allowed) {
     const limitMsg =
       budgetCheck.reason === "global_budget_exceeded"
@@ -436,14 +587,28 @@ export async function generateConversationReply(
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const { messages, fileData, mimeType, workspaceId, documentIds: rawDocumentIds } = parsed;
+  const { messages, workspaceId, documentIds: rawDocumentIds } = parsed;
 
   // Filter out optimistic temp_ IDs that haven't been persisted to DB yet
   const documentIds = rawDocumentIds?.filter((id: string) => id && !id.startsWith('temp_'));
 
+  // Handle PDF extraction — text is either pre-extracted by the API route
+  // or we extract it here if it wasn't done upstream
+  let pdfText: string | null = fileData?.extractedText || null;
+  
+  // Fallback: extract PDF text if not pre-extracted (e.g., direct engine calls)
+  if (!pdfText && fileData && effectiveMimeType === 'application/pdf' && fileData.base64Data) {
+    try {
+      const { extractPdfText } = await import('@/lib/fileProcessing/pdfExtractor');
+      pdfText = await extractPdfText(fileData);
+    } catch (err) {
+      console.error('[ConversationEngine] PDF extraction failed:', err);
+    }
+  }
+
   // Use `let` so the confidence routing layer can upgrade the provider
   // for standard mode when context confidence is low.
-  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys });
+  let providerResolution = resolveProviderForMode({ mode: agentMode, hasAttachments, providerKeys: nativeProviderKeys, personaSession: options.personaSession });
   let { provider, modelId: actualModelId } = providerResolution.execution;
   // Sovereign telemetry: the initially-requested model (before any confidence
   // override or 429 fallback) and the serving provider id.
@@ -451,22 +616,17 @@ export async function generateConversationReply(
   const systemProvider = providerResolution.providerId;
 
   const userQuery = messages[messages.length - 1]?.text || "";
+  // Strip file metadata tags appended by the client (e.g., "[Attached File: ...]")
+  // to prevent the router from being distracted by file metadata
+  const sanitizedQuery = userQuery.replace(/\n*\[Attached File:[^\]]*\]\s*/g, '').trim();
 
-  const heavyContextEnabled = process.env.ENABLE_HEAVY_CONTEXT !== 'false';
-  const effectivelyDisabled = !heavyContextEnabled || options.disableExternalContext;
+  // Phase 0 (#440): heavy-context gates, fallback memory plan, and the
+  // prepared-context plan are computed ONCE above (before the agentic
+  // branch) — the manifest and prepareContextBundle share them by
+  // construction; no duplicate derivation here.
 
-  const graphReadScope: UcolMemoryScope[] = agentMode === 'fast' ? [] : ['graph'];
-  const fallbackMemoryPlan: UcolMemoryPlan = {
-    readScopes: ['conversation', 'user', ...graphReadScope],
-    retrievalMode: agentMode === 'reasoning' ? 'deep' : agentMode === 'quality' ? 'standard' : 'light',
-    usePreparedContext: true,
-    useGraphRecall: agentMode !== 'fast',
-    useRecentTaskState: false,
-  };
-
-  const contextPreparationPlan = createPreparedContextPlanFromMemoryPlan(options.memoryPlan ?? fallbackMemoryPlan);
-
-  const preparedContext = await prepareContextBundle({
+  options.signal?.throwIfAborted();
+  const preparedContext = await withAbort(prepareContextBundle({
     userId,
     clerkUser,
     userQuery,
@@ -478,7 +638,7 @@ export async function generateConversationReply(
       skipWebResearch: process.env.ENABLE_WEB_RESEARCH !== 'true' || options.skipWebResearch,
       plan: contextPreparationPlan,
     },
-  });
+  }), options.signal);
 
   const userContext = preparedContext.userContext;
   const allFacts = preparedContext.raw.allFacts;
@@ -487,6 +647,87 @@ export async function generateConversationReply(
   const graphData = preparedContext.raw.graphData;
   const userProfileMemories = preparedContext.raw.userProfileMemories;
   const memorySources = preparedContext.raw.memorySources;
+
+  // ── Slice 6A: SHADOW context sieve ────────────────────────────────
+  // Records what it WOULD defer. Production prompt is byte-identical:
+  // blocks are a projection over preparedContext.raw; sections/layout
+  // are untouched. Gated by CONTEXT_SIEVE_SHADOW (default off).
+  if (process.env.CONTEXT_SIEVE_SHADOW === 'true') {
+    try {
+      const { buildContextBlocks, sieveShadow, SIEVE_QUESTION_SET_VERSION, SIEVE_POLICY_VERSION } = await import('@/lib/context/sieve');
+      const requestId = options.requestId ?? 'unknown';
+      const started = Date.now();
+      const blocks = buildContextBlocks({
+        requestId,
+        raw: {
+          intelligentFacts,
+          researchResults: preparedContext.raw.researchResults,
+          graphRelatedNodes: graphData?.relatedNodes ?? [],
+          userProfileMemories,
+          memorySources,
+        },
+        sections: {
+          attachedDocumentContext: preparedContext.sections.attachedDocumentContext,
+          strategyContext: preparedContext.sections.strategyContext,
+        },
+        hasAttachments: Boolean(documentIds?.length),
+      });
+
+      // Shadow transport: deterministic lexical-overlap relevance, no model
+      // call in 6A. ponytail: placeholder transport until the JEV question
+      // set exists; keep-all semantics make it safe to run in prod.
+      const query = (userQuery || '').toLowerCase();
+      const words = new Set(query.split(/\W+/).filter((w) => w.length > 3));
+      const relevanceByBlock: Record<string, number> = {};
+      for (const b of blocks) {
+        if (b.protected) continue;
+        const text = b.text.toLowerCase();
+        let hits = 0;
+        for (const w of words) if (text.includes(w)) hits += 1;
+        relevanceByBlock[b.id] = words.size ? hits / words.size : 0.5;
+      }
+
+      const sieved = sieveShadow(blocks, { relevanceByBlock, transportStatus: 'ok' });
+      const latencyMs = Date.now() - started;
+      const createdAt = new Date().toISOString();
+
+      const { logEvent } = await import('@/lib/telemetry');
+      const { buildSieveEvents } = await import('@/lib/context/sieve');
+      // Rows are built PURE here (invariants hold by construction); the
+      // engine only emits them.
+      for (const row of buildSieveEvents({ requestId, blocks, sieved, latencyMs, createdAt })) {
+        logEvent({
+          eventType: 'context_sieve_event',
+          userId,
+          workspaceId: workspaceId ?? undefined,
+          metadata: { ...row },
+        });
+      }
+    } catch (e: any) {
+      // Fail open: exactly one failOpen summary row, never zero events.
+      // Shadow must never affect production.
+      console.warn('[ContextSieve] shadow evaluation failed open:', e?.message || e);
+      try {
+        const { buildFailOpenSummary } = await import('@/lib/context/sieve');
+        const { logEvent } = await import('@/lib/telemetry');
+        logEvent({
+          eventType: 'context_sieve_event',
+          userId,
+          workspaceId: workspaceId ?? undefined,
+          metadata: {
+            ...buildFailOpenSummary({
+              requestId: options.requestId ?? 'unknown',
+              reason: 'exception',
+              latencyMs: 0,
+              createdAt: new Date().toISOString(),
+              message: String(e?.message ?? e).slice(0, 200),
+            }),
+          },
+        });
+      } catch { /* telemetry must never throw */ }
+    }
+  }
+  // ── end Slice 6A ───────────────────────────────────────────────────
 
   // ---------------------------------------------------------
   // SPRINT 4: Security & Reasoning Integration
@@ -532,13 +773,13 @@ export async function generateConversationReply(
         const upgradeMode = confidenceSignal.recommendedTier === 'claude-sonnet'
           ? 'quality'
           : 'reasoning';
-        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys });
+        providerResolution = resolveProviderForMode({ mode: upgradeMode, hasAttachments, providerKeys: nativeProviderKeys, personaSession: options.personaSession });
         provider = providerResolution.execution.provider;
         actualModelId = providerResolution.execution.modelId;
         confidenceOverrideApplied = true;
 
         console.log(
-          `[ConversationEngine] Confidence override: ${FAST_MODEL} → ${actualModelId}` +
+          `[ConversationEngine] Confidence override → ${actualModelId}` +
           ` (ctx_conf=${confidenceSignal.contextConfidence.toFixed(3)},` +
           ` tier=${confidenceSignal.recommendedTier},` +
           ` facts=${confidenceSignal.factCount})`
@@ -554,8 +795,19 @@ export async function generateConversationReply(
   const TOOL_SCHEMA_ESTIMATE = 3000;
   const maxContextBudget = Math.max(0, modelLimits.totalMax - GENERATION_HEADROOM - TOOL_SCHEMA_ESTIMATE);
 
+  // Phase 0 (#440): record capability resolution + (empty) tool exposure for
+  // the prepared-context path. No secrets — statuses and names only.
+  void logCapabilityResolution({
+    userId,
+    workspaceId: workspaceId ?? undefined,
+    requestId: options.requestId,
+    conversationId: conversationId ?? undefined,
+    manifest: capabilityManifest,
+    toolNames: [],
+  });
+
   const allocation = ContextTokenManager.assembleContext(
-    getSystemInstruction(),
+    getSystemInstruction(capabilityManifest),
     preparedContext.sections,
     {
       modelId: actualModelId,
@@ -564,7 +816,97 @@ export async function generateConversationReply(
     }
   );
 
-  let enhancedSystemInstruction = getSystemInstruction() +
+  let baseSystemInstruction = getSystemInstruction(capabilityManifest);
+
+  // Append extracted PDF text to the system instruction if available
+  // Empty text indicates a scanned/image-only PDF (no text layer)
+  if (pdfText && pdfText.trim().length > 0) {
+    baseSystemInstruction += `\n\n[Uploaded Document Content]\n${pdfText}\n[End of Document]`;
+  } else if (effectiveMimeType === 'application/pdf' && pdfText !== null) {
+    // PDF was extracted but returned empty text — likely a scanned document
+    const textEncoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(textEncoder.encode(
+          "We couldn't detect any readable text in this document. It may be a scanned image or a PDF without a text layer. Please try uploading a text-based PDF or copy and paste the content directly."
+        ));
+        controller.close();
+      },
+    });
+    return {
+      stream,
+      sources: [],
+      debug: {
+        model: "pdf-extraction-empty",
+        userQuery,
+        pdfExtractionError: "scanned_pdf_no_text_layer",
+      },
+    };
+  }
+
+  // RAG retrieval for follow-up turns (no fileData but documentIds present)
+  // On Turn 2+, fileData is undefined but the client may pass documentIds
+  // of previously uploaded files. We retrieve semantically relevant chunks
+  // instead of injecting the full document text.
+  if (!pdfText && documentIds && documentIds.length > 0 && workspaceId) {
+    try {
+      const { retrieveRelevantChunks } = await import('@/lib/fileProcessing/chunkEmbedder');
+      const ragContext = await retrieveRelevantChunks(workspaceId, userQuery, documentIds);
+      if (ragContext) {
+        baseSystemInstruction += `\n\n${ragContext}`;
+      }
+    } catch (err) {
+      console.error('[ConversationEngine] RAG retrieval failed:', err);
+    }
+  }
+
+  // ── PERSONA DOMAIN GATE ─────────────────────────────────────────────────────
+  // Evaluate the domain gate BEFORE spending tokens on inference.
+  // Hard-blocked queries return a zero-token templated refusal.
+  // Borderline queries pass through with an outOfDomain warning injected into the persona directive.
+  if (options.personaSession) {
+    const { evaluateDomainGate } = await import("@/lib/consultant/domainGate");
+    const gateResult = evaluateDomainGate(options.personaSession, userQuery);
+
+    if (gateResult.action === "hard_block") {
+      // Zero-token refusal — intercept before any LLM calls
+      const textEncoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(textEncoder.encode(gateResult.refusalMessage || "This query falls outside the expertise of the active consultant."));
+          controller.close();
+        },
+      });
+      return {
+        stream,
+        sources: [],
+        debug: {
+          model: "domain-gate-hard-block",
+          userQuery,
+          personaInjected: true,
+          confidenceSignal: { contextConfidence: gateResult.confidence, recommendedTier: "blocked", overrideApplied: false },
+        },
+      };
+    }
+
+    if (gateResult.action === "borderline") {
+      // Inject outOfDomain warning into base system instruction
+      baseSystemInstruction += `\n\n[SYSTEM NOTICE: The following query is potentially outside the persona's defined domain. Address it strictly through the lens of your persona, or generate a polite, in-character refusal if it is clearly out of scope. Domain confidence: ${gateResult.confidence.toFixed(2)}]`;
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // Inject persona directive into the system prompt if a persona session is active.
+  // This moves persona from a vulnerable user-role message to a structural constraint.
+  let personaInjected = false;
+  if (options.personaSession) {
+    const { buildPersonaDirective } = await import("@/lib/consultant/PersonaContextBuilder");
+    const personaBlock = buildPersonaDirective(options.personaSession);
+    baseSystemInstruction += "\n\n" + personaBlock;
+    personaInjected = true;
+  }
+
+  let enhancedSystemInstruction = baseSystemInstruction +
     "\n\n" + allocation.packedContext;
 
   if (options.sudoPromptNames?.length) {
@@ -593,6 +935,9 @@ export async function generateConversationReply(
       text: msg.text
     } as ChatMessage))
   ];
+
+  // Persona directive is now injected into the system prompt above (see personaSession option).
+  // The old user-role injection was removed because it made persona vulnerable to prompt injection (CWE-1427).
 
   // ── Step 5: Tip-of-context thought signature injection ───────────────────────
   // Load the most recent bot message's stored thought signature and append it
@@ -639,16 +984,12 @@ export async function generateConversationReply(
   // ─────────────────────────────────────────────────────────────────────────────
 
   // Attach explicit files to the last message if present
-  if (fileData && mimeType) {
-    const lastMsg = history[history.length - 1];
-    if (lastMsg && lastMsg.role === 'user') {
-      lastMsg.attachments = lastMsg.attachments || [];
-      lastMsg.attachments.push({
-        name: parsed.fileName || 'attached_file',
-        mimeType: mimeType,
-        base64Data: fileData
-      });
-    }
+  // Skip PDFs that have already been extracted as text — attaching raw binary
+  // causes garbled encoded text in the prompt
+  const lastMessage = history.at(-1);
+  const modelAttachments = attachments.filter(item => item.mimeType !== 'application/pdf');
+  if (modelAttachments.length && lastMessage?.role === 'user') {
+    lastMessage.attachments = modelAttachments;
   }
 
   // Attach explicitly selected document images
@@ -714,49 +1055,81 @@ export async function generateConversationReply(
   })();
   // ─────────────────────────────────────────────────────────────────────────────
 
-  // T-040: For Hermes/fast mode, pass agentic flag so the model executes
-  // rather than describing what it would do. Also forward any tools defined
-  // for this mode so Hermes can make function calls when appropriate.
-  const isHermesMode = agentMode === 'fast';
   let streamResult;
   const trace = createTrace({
     traceName: 'conversation',
     userId,
     sessionId: conversationId || undefined,
     tags: [agentMode, actualModelId, wmDomain],
-    metadata: { hasAttachments: Boolean(fileData && mimeType), contextFactsCount: intelligentFacts.length },
+    metadata: { hasAttachments, contextFactsCount: intelligentFacts.length },
   });
+
+  const updateTrace = (patch: Record<string, unknown>) => {
+    try { trace?.update(patch); } catch {}
+  };
   try {
-    streamResult = await provider.generateStream(history, enhancedSystemInstruction, {
-      model: actualModelId,
-      temperature: 0.9,
-      maxTokens: 2048,
-      ...(isHermesMode ? { agentic: true } : {}),
+    const { executeWithFallback } = await import('@/lib/llm/routing/fallbackRouter');
+    const fallbackResult = await executeWithFallback({
+      primary: {
+        providerId: providerResolution.providerId,
+        modelId: actualModelId,
+        provider,
+      },
+      messages: history,
+      systemInstruction: enhancedSystemInstruction,
+      options: { temperature: 0.9, maxTokens: 2048 },
+      enableMiniMax: true,
+      signal: options.signal,
+      requestId: options.requestId,
     });
+
+    streamResult = fallbackResult;
+    // Persist the actual serving model so downstream side-effects, telemetry,
+    // and the client-facing headers reflect the real (possibly fallback) model.
+    if (fallbackResult.switched) {
+      actualModelId = fallbackResult.actualModelId;
+      console.warn(
+        `[ConversationEngine] Fallback engaged: ${fallbackResult.previousModelId} → ${fallbackResult.actualModelId} (${fallbackResult.systemProvider})`
+      );
+    }
     try {
-      trace.update({
+      updateTrace({
         metadata: {
           completionStatus: 'streaming',
           model: actualModelId,
+          ...(fallbackResult.switched
+            ? { fallbackFrom: fallbackResult.previousModelId, switched: true }
+            : {}),
         },
       });
     } catch {}
   } catch (err: any) {
+    options.signal?.throwIfAborted();
     try {
-      trace.update({ metadata: { error: err?.message || String(err) } });
+      updateTrace({ metadata: { error: err?.message || String(err) } });
     } catch {}
-    if (err?.status === 429 || String(err).includes('429')) {
-      console.warn(`[ConversationEngine] Model ${actualModelId} rate limited, falling back to fast mode`);
-      const fallback = resolveProviderForMode({ mode: 'fast', hasAttachments: Boolean(fileData && mimeType), providerKeys: nativeProviderKeys });
-      actualModelId = fallback.execution.modelId;
-      streamResult = await fallback.execution.provider.generateStream(history, enhancedSystemInstruction, {
+
+    // Fallback chain exhausted — surface a graceful degradation message stream
+    // rather than a hard 500, so the client's streaming reader still consumes a body.
+    console.error(`[ConversationEngine] All providers exhausted: ${err?.message || String(err)}`);
+    const textEncoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          textEncoder.encode('The AI provider is temporarily unavailable. Please try again in a few minutes.')
+        );
+        controller.close();
+      },
+    });
+    return {
+      stream,
+      sources: [],
+      debug: {
         model: actualModelId,
-        temperature: 0.9,
-        maxTokens: 2048,
-      });
-    } else {
-      throw err;
-    }
+        userQuery,
+        error: 'all_providers_exhausted',
+      },
+    };
   }
 
   // ── Sovereign telemetry: emit UDIF 2.0 interaction-audit (non-blocking) ──
@@ -765,7 +1138,7 @@ export async function generateConversationReply(
     try {
       const { calculateInteractionCost } = await import("@/lib/subscription/credits");
       const creditCost = calculateInteractionCost({
-        hasAttachments: Boolean(fileData && mimeType),
+        hasAttachments,
         mode: agentMode as any,
       });
       emitInteractionAudit({
@@ -805,7 +1178,7 @@ export async function generateConversationReply(
       // Clean fullText once before any side effects
       const cleanedFullText = fullText ? fullText.replace(/<thought_signature>[\s\S]*?<\/thought_signature>/gi, '').trim() : '';
 
-      try { trace.update({ metadata: { completionStatus: 'completed', responseLength: cleanedFullText.length } }); } catch {}
+      try { updateTrace({ metadata: { completionStatus: 'completed', responseLength: cleanedFullText.length } }); } catch {}
 
       // Side effects after stream completes
       if (!options.disableSideEffects && fullText) {
@@ -983,18 +1356,71 @@ export async function generateConversationReply(
               }
             }
 
-            // ── OutputCritic: async quality gate (fire-and-forget) ───────────────
+            // ── OutputCritic + PersonaConsistencyCritic: parallel async quality gate ──
             // Never awaited — critic must never add latency to the hot path.
-            // block verdicts → console.error; warn verdicts → console.warn.
-            critiqueLLMOutput(cleanedFullText, { userId, taskType: agentMode }).then(verdict => {
-              if (verdict.severity === 'block') {
-                console.error('[OutputCritic] BLOCK verdict:', verdict.overallReason);
-                // TODO: persist to ucol_critic_verdicts Supabase table (next PR)
-              }
-              if (!verdict.passed) {
-                console.warn('[OutputCritic] Warnings:', verdict.checks.filter(c => !c.passed));
-              }
-            }).catch(() => { /* critic never crashes the hot path */ });
+            // Both critics run in parallel to minimize TTFB impact.
+            if (options.personaSession) {
+              // Run persona consistency critic alongside existing critic
+              Promise.all([
+                critiqueLLMOutput(cleanedFullText, { userId, taskType: agentMode }),
+                (async () => {
+                  const { evaluatePersonaConsistency } = await import("@/lib/consultant/PersonaConsistencyCritic");
+                  return evaluatePersonaConsistency(options.personaSession!, userQuery, cleanedFullText);
+                })(),
+              ]).then(([outputVerdict, personaVerdict]) => {
+                // Handle existing OutputCritic verdict
+                if (outputVerdict.severity === 'block') {
+                  console.error('[OutputCritic] BLOCK verdict:', outputVerdict.overallReason);
+                }
+                if (!outputVerdict.passed) {
+                  console.warn('[OutputCritic] Warnings:', outputVerdict.checks.filter(c => !c.passed));
+                }
+
+                // Handle PersonaConsistencyCritic verdict — tiered action
+                // Note: Response is already streaming to client. We emit
+                // telemetry events that the client subscribes to for UI warnings.
+                if (personaVerdict.driftLevel === 'SEVERE_VIOLATION') {
+                  console.error('[PersonaCritic] SEVERE VIOLATION:', personaVerdict.reason);
+                  // Emit telemetry for client-side warning banner
+                  // Client receives this via SSE and overlays a system warning
+                  logEvent({
+                    eventType: 'persona_critic_verdict',
+                    userId,
+                    metadata: {
+                      driftLevel: 'SEVERE_VIOLATION',
+                      reason: personaVerdict.reason,
+                      conversationId,
+                      personaId: options.personaSession?.personaId,
+                      action: 'warn_user',
+                    },
+                  });
+                } else if (personaVerdict.driftLevel === 'DRIFT_DETECTED') {
+                  console.warn('[PersonaCritic] Drift detected:', personaVerdict.reason);
+                  // Emit telemetry for client-side soft warning
+                  logEvent({
+                    eventType: 'persona_critic_verdict',
+                    userId,
+                    metadata: {
+                      driftLevel: 'DRIFT_DETECTED',
+                      reason: personaVerdict.reason,
+                      conversationId,
+                      personaId: options.personaSession?.personaId,
+                      action: 'flag_response',
+                    },
+                  });
+                }
+              }).catch(() => { /* critic never crashes the hot path */ });
+            } else {
+              // No persona session — run existing critic only
+              critiqueLLMOutput(cleanedFullText, { userId, taskType: agentMode }).then(verdict => {
+                if (verdict.severity === 'block') {
+                  console.error('[OutputCritic] BLOCK verdict:', verdict.overallReason);
+                }
+                if (!verdict.passed) {
+                  console.warn('[OutputCritic] Warnings:', verdict.checks.filter(c => !c.passed));
+                }
+              }).catch(() => { /* critic never crashes the hot path */ });
+            }
             // ────────────────────────────────────────────────────────────────────
 
           } catch (e) {
@@ -1010,33 +1436,18 @@ export async function generateConversationReply(
         waitUntil((async () => {
           try {
             // Pass factsForRouting — enables the two-axis (task + confidence) routing
+            // Note: Only pass userQuery as context, NOT the full text
+            // The router only needs the user's intent, not the document content
             const decision = await classifyQuery(
-              userQuery,
-              cleanedFullText.substring(0, 400),
+              sanitizedQuery,
+              sanitizedQuery, // Pass sanitized query only — NOT cleanedFullText (prevents context distraction)
               factsForRouting,
             );
-
-            // hermes-local: self-hosted Docker Model Runner on Vast.ai — inject knowledge context
-            if (decision.targetNode === 'hermes-local') {
-              try {
-                const { buildOllamaKnowledgeContext } = await import('@/lib/ucol/ollamaKnowledgeContext');
-                const knowledgeCtx = await buildOllamaKnowledgeContext(userId, userQuery);
-                if (knowledgeCtx.factsUsed > 0 || knowledgeCtx.graphNodesUsed > 0) {
-                  console.log(
-                    `[UCOL/Ollama] Knowledge context injected — facts=${knowledgeCtx.factsUsed} nodes=${knowledgeCtx.graphNodesUsed}`
-                  );
-                }
-                // HermesProvider picks up Vast.ai Docker Model Runner automatically via LAMBDA_OLLAMA_URL env
-                // Knowledge context is surfaced in the next turn via the existing context pipeline
-              } catch (e) {
-                console.warn('[UCOL/Ollama] Knowledge context injection failed (non-blocking):', e);
-              }
-            }
 
             if (decision.targetNode === 'jklaw') {
               const { getAgentRouter } = await import('@/lib/ucol/agentRouter');
               const router = getAgentRouter();
-              await router.dispatchToJKlaw(
+              const dispatch = await router.dispatchToJKlaw(
                 {
                   query: userQuery,
                   context: cleanedFullText.substring(0, 400),
@@ -1051,11 +1462,11 @@ export async function generateConversationReply(
                 decision,
                 false // fire-and-forget
               );
-              console.log(
-                `[UCOL] Dispatched "${userQuery.substring(0, 60)}" to JKlaw` +
-                ` (type=${decision.taskType}` +
-                `${decision.memorySignal ? `, ctx_conf=${decision.memorySignal.contextConfidence.toFixed(2)}` : ''})`
-              );
+              if (dispatch.dispatched) {
+                console.log('[UCOL] JKlaw dispatch acknowledged', { taskType: decision.taskType });
+              } else {
+                console.warn('[UCOL] JKlaw dispatch not acknowledged', { taskType: decision.taskType, error: dispatch.error });
+              }
             }
           } catch (e) {
             // Non-blocking — never surface routing errors to users
@@ -1068,7 +1479,7 @@ export async function generateConversationReply(
 
   const stream = originalStream.pipeThrough(transformedStream);
 
-  try { trace.update({ metadata: { completionStatus: 'streaming', model: actualModelId } }); } catch {}
+  try { updateTrace({ metadata: { completionStatus: 'streaming', model: actualModelId } }); } catch {}
 
   return {
     stream,

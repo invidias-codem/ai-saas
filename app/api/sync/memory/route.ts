@@ -16,18 +16,99 @@ import {
   filterValidFacts,
   batchMemorySync,
   calculateSyncMetrics,
-  // FIX: Removed 'MemorySyncMessage' from here, as it's a type 
-  // and is likely not exported from this utility file.
   generateMemorySyncChecksum,
   SyncMetrics,
   getDefaultPreferences,
 } from '@/lib/memorySyncUtils';
-import { ExtractedFact, UserPreferences } from '@/lib/intelligentMemory';
-// FIX: Added a direct import for the type from the dedicated schema file.
+import type { ExtractedFact, UserPreferences } from '@/lib/intelligentMemory';
 import { MemorySyncMessage } from '@/lib/memorySyncUtils';
 import { db } from '@/lib/firebaseAdmin';
 
 export const dynamic = 'force-dynamic';
+
+import { z } from 'zod';
+import { extractedFactSchemaStrict, userPreferencesSchemaStrict } from '@/lib/schemas';
+
+// SECURITY: Strict payload schemas at the API boundary.
+// Any extra keys from remote payloads are rejected before they reach
+// the merge layer, neutralizing prototype pollution and context injection.
+const incomingFactSchema = z.object({
+  id: z.string().optional(),
+  content: z.string(),
+  type: z.enum(['conversation', 'user', 'preference', 'code']).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  sentiment: z.number().optional(),
+  impactScore: z.number().min(0).max(1).optional(),
+  scope: z.enum(['conversation', 'user']).optional(),
+  extractedAt: z.union([z.number(), z.date()]).optional(),
+  expiresAt: z.union([z.number(), z.date()]).optional(),
+  lastUsedAt: z.union([z.number(), z.date()]).optional(),
+  contextRelevance: z.number().optional(),
+  usageCount: z.number().optional(),
+  conversationId: z.string().optional(),
+  userId: z.string().optional(),
+  createdAt: z.union([z.number(), z.date()]).optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
+const incomingFactSchemaStrict = incomingFactSchema.strict();
+
+const incomingPreferencesSchema = z.object({
+  communicationStyle: z.enum(['casual', 'professional', 'technical', 'balanced']).optional(),
+  preferredDepth: z.enum(['brief', 'balanced', 'detailed']).optional(),
+  topics: z.record(z.number()).optional(),
+  sentimentPreference: z.number().min(-1).max(1).optional(),
+  learnedTopics: z.array(z.string()).optional(),
+  avgResponseLength: z.number().min(0).optional(),
+  preferredFormats: z.array(z.string()).optional(),
+});
+
+const incomingPreferencesSchemaStrict = incomingPreferencesSchema.strict();
+
+function normalizeFact(raw: unknown): ExtractedFact | null {
+  const parsed = incomingFactSchemaStrict.safeParse(raw);
+  if (!parsed.success) {
+    console.warn('[Sync] Dropping malformed fact payload:', parsed.error.message);
+    return null;
+  }
+  const f = parsed.data;
+  return {
+    id: f.id,
+    content: f.content,
+    type: f.type || 'conversation',
+    confidence: f.confidence ?? 0.7,
+    sentiment: f.sentiment,
+    impactScore: f.impactScore,
+    scope: f.scope || 'user',
+    extractedAt: f.extractedAt instanceof Date ? f.extractedAt : (f.extractedAt ? new Date(f.extractedAt) : undefined),
+    expiresAt: f.expiresAt instanceof Date ? f.expiresAt : (f.expiresAt ? new Date(f.expiresAt) : undefined),
+    lastUsedAt: f.lastUsedAt instanceof Date ? f.lastUsedAt : (f.lastUsedAt ? new Date(f.lastUsedAt as any) : undefined),
+    contextRelevance: f.contextRelevance,
+    usageCount: f.usageCount,
+    conversationId: f.conversationId,
+    userId: f.userId,
+    createdAt: f.createdAt instanceof Date ? f.createdAt.getTime() : f.createdAt,
+    metadata: f.metadata,
+  };
+}
+
+function normalizePreferences(raw: unknown): UserPreferences | null {
+  const parsed = incomingPreferencesSchemaStrict.safeParse(raw);
+  if (!parsed.success) {
+    console.warn('[Sync] Dropping malformed preferences payload:', parsed.error.message);
+    return null;
+  }
+  const p = parsed.data;
+  return {
+    communicationStyle: p.communicationStyle || 'balanced',
+    preferredDepth: p.preferredDepth || 'balanced',
+    topics: p.topics || {},
+    sentimentPreference: p.sentimentPreference ?? 0,
+    learnedTopics: p.learnedTopics || [],
+    avgResponseLength: p.avgResponseLength ?? 150,
+    preferredFormats: p.preferredFormats || [],
+  };
+}
 
 interface SyncPayload {
   deviceId: string;

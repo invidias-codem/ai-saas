@@ -7,8 +7,11 @@ interface StereoBarsProps {
   bars?: number;
 }
 
+// Module-level stable random seed
+const SEED = Array.from({ length: 24 }).map(() => Math.random());
+
 const StereoBars: React.FC<StereoBarsProps> = ({ active = false, bars = 24 }) => {
-  const seed = React.useMemo(() => Array.from({ length: bars }).map(() => Math.random()), [bars]);
+  const seed = SEED;
 
   return (
     <div className="flex items-end gap-1 h-14">

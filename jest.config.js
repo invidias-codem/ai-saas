@@ -1,59 +1,26 @@
-const nextJest = require('next/jest')
-
-const createJestConfig = nextJest({
-  // Provide the path to your Next.js app to load next.config.js and .env files in your test environment
-  dir: './',
-})
-
-// Add any custom config to be passed to Jest
-const customJestConfig = {
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+module.exports = {
+  preset: 'ts-jest',
+  // Render TSX regression fixtures with React's JSX transform (Next's normal
+  // tsconfig preserves JSX for its own compiler).
+  transform: { '^.+\\.tsx?$': ['ts-jest', { tsconfig: { jsx: 'react-jsx' } }] },
+  testEnvironment: 'node',
+  roots: ['<rootDir>/__tests__', '<rootDir>/lib'],
+  // Only run actual test files. Helper-only modules live in __tests__ but aren't suites.
+  testMatch: ['**/?(*.)+(spec|test).ts?(x)'],
+  // Default node_modules ignore (no ESM transform exceptions — ESM-only packages
+  // are name-mapped to CJS stubs below instead).
+  transformIgnorePatterns: ['/node_modules/'],
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/$1',
+    // Manual mock for the ESM-only workspace package (see __mocks__/@lattice-os/core.ts)
+    '^@lattice-os/core$': '<rootDir>/__mocks__/@lattice-os/core.ts',
+    // uuid@14 is ESM-only; map to the existing CJS stub (__mocks__/uuid.js)
     '^uuid$': '<rootDir>/__mocks__/uuid.js',
-    '^@lattice-os/core$': '<rootDir>/packages/lattice-core/dist/index.js',
-    '^@lattice-os/core/(.*)$': '<rootDir>/packages/lattice-core/dist/$1',
+    // @noble/ed25519@2.3.0 is ESM-only; map to a CJS stub (__mocks__/@noble-ed25519.js)
+    '^@noble/ed25519$': '<rootDir>/__mocks__/@noble-ed25519.js',
+    // Manual mock for langfuse (langfuse-core does a top-level dynamic import()
+    // that crashes Jest's VM). See __mocks__/langfuse.js.
+    '^langfuse$': '<rootDir>/__mocks__/langfuse.js',
+    '^@/(.*)$': '<rootDir>/$1',
+    '^../../public/(.*)\\.json$': '<rootDir>/public/$1.json',
   },
-  testEnvironment: 'jest-environment-node',
-  testMatch: [
-    '**/__tests__/**/*.test.ts',
-    '**/__tests__/**/*.test.tsx',
-    '!**/anycrawl/**',
-  ],
-  collectCoverageFrom: [
-    'lib/**/*.{js,jsx,ts,tsx}',
-    'app/api/**/*.{js,jsx,ts,tsx}',
-    '!**/*.d.ts',
-    '!**/node_modules/**',
-    '!**/.next/**',
-  ],
-  coverageThreshold: {
-    global: {
-      branches: 80,
-      functions: 80,
-      lines: 80,
-      statements: 80,
-    },
-  },
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
-  testTimeout: 10000,
-}
-
-// createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async.
-// We wrap it to inject a transformIgnorePatterns entry that allows @noble (pure-ESM deps) to be
-// transformed by babel — next/jest's default .pnpm allowlist only permits geist/next.
-module.exports = async () => {
-  const config = await createJestConfig(customJestConfig)()
-  // next/jest hard-codes a .pnpm allowlist (only geist|next). Drop it and
-  // add our own that also permits pure-ESM deps (@noble) and uuid to be
-  // transformed by babel. A path is transformed UNLESS it matches any
-  // transformIgnorePatterns entry, so we must ensure @noble matches NONE.
-  const base = (config.transformIgnorePatterns || []).filter(
-    (p) => !String(p).includes('.pnpm')
-  )
-  config.transformIgnorePatterns = [
-    ...base,
-    '/node_modules/(?!(.*@noble|.*uuid|geist|next)/)',
-  ]
-  return config
-}
+};

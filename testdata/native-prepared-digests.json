@@ -1,0 +1,131 @@
+[
+  {
+    "material": {
+      "proposal_id": "local-proposal-00000000000000000000000000000001",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 7
+      },
+      "display_root": "/selected/project",
+      "read_only": false,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "create_file",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": "draft.md",
+        "content": "hello\n资料 <script>literal</script>"
+      },
+      "precondition": {
+        "parent_identity": {
+          "volume": "000000000000001a",
+          "file": "000000000000002b"
+        }
+      }
+    },
+    "digest": "d4f353b9f4c735933dd7852c7c05ce61bd6980f5e918f7b73665686696b6fbb4"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-00000000000000000000000000000002",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 7
+      },
+      "display_root": "/selected/project",
+      "read_only": false,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "create_directory",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": "draft.md"
+      },
+      "precondition": {
+        "parent_identity": {
+          "volume": "000000000000001a",
+          "file": "000000000000002b"
+        }
+      }
+    },
+    "digest": "8087e8a59ec8aebe456cadd5dd5a30e83cbd6a0e0da50e8544afd197c90c8653"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-00000000000000000000000000000003",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 7
+      },
+      "display_root": "/selected/project",
+      "read_only": false,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "write_text",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": "draft.md",
+        "content": "new\n资料‮%100"
+      },
+      "precondition": {
+        "parent_identity": {
+          "volume": "000000000000001a",
+          "file": "0123456789abcdef0123456789abcdef"
+        },
+        "base": {
+          "identity": {
+            "volume": "000000000000001a",
+            "file": "000000000000003c"
+          },
+          "content_sha3": "9b6a8ca7547adf8b239f5d6f93aaa2653965424c0afa1f4fa50c422be3d28029",
+          "byte_count": 34,
+          "content": "before\n⁦<script>literal</script>"
+        }
+      }
+    },
+    "digest": "0577b44545a971fa049810952a3702324f68a68520891aecc95b52cd16a5adef"
+  },
+  {
+    "material": {
+      "proposal_id": "local-proposal-00000000000000000000000000000004",
+      "authority": {
+        "principal_id": "local-user-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "workspace_id": "local-workspace-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "generation": "cccccccccccccccccccccccccccccccc",
+        "policy_revision": 1,
+        "grant_revision": 7
+      },
+      "display_root": "/selected/project",
+      "read_only": false,
+      "ttl_ms": 300000,
+      "operation": {
+        "kind": "write_text",
+        "grant_id": "local-grant-dddddddddddddddddddddddddddddddd",
+        "relative_path": "draft.md",
+        "content": ""
+      },
+      "precondition": {
+        "parent_identity": {
+          "volume": "000000000000001a",
+          "file": "0123456789abcdef0123456789abcdef"
+        },
+        "base": {
+          "identity": {
+            "volume": "000000000000001a",
+            "file": "fedcba9876543210fedcba9876543210"
+          },
+          "content_sha3": "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+          "byte_count": 0,
+          "content": ""
+        }
+      }
+    },
+    "digest": "6e1a35dd3a197a1244d552919995934edb526b8734e6828714699666c9e41134"
+  }
+]

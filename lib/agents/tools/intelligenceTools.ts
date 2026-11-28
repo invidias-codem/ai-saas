@@ -116,3 +116,74 @@ export const semanticSearchTool: Tool<{ query: string }, any> = {
         return { success: true, data: res };
     }
 };
+
+export const workspaceSourcesSearchTool: Tool<{ query: string; targetWorkspaceId?: string }, any> = {
+    name: "query_workspace_sources",
+    description: "Searches a workspace knowledge base (Data Refinery) for factual market data, competitor intelligence, and provided documentation. By default this searches the conversation's selected workspace; pass targetWorkspaceId (an id from workspace_list) to search another workspace you are authorized to access — explicit targeting reads that workspace only and never changes the conversation's selected workspace. Each result contains: (1) content — the factual text you must cite, and (2) lineage — optional metadata showing SUPERSEDES/CAUSES transitions. Use lineage ONLY to explain WHY state changed, never as a citation target. Cite content using [1], [2], etc.",
+    schema: z.object({
+        query: z.string().describe("The semantic search term derived from the user's prompt."),
+        targetWorkspaceId: z.string().uuid().optional().describe("Explicit workspace to search, from workspace_list. Omit to search the conversation's selected workspace."),
+    }),
+    risk: "read-only",
+    timeoutMs: 15_000,
+    execute: async (input, context) => {
+        if (!context.userId) {
+            return { success: false, error: "Missing user context." };
+        }
+        const effectiveWorkspaceId = input.targetWorkspaceId ?? context.workspaceId;
+        if (!effectiveWorkspaceId) {
+            return { success: false, error: "Missing workspace context." };
+        }
+
+        // #442: explicit targeting authorizes against the SAME shared seam —
+        // ownership or accepted membership. Uniform denial discloses nothing,
+        // and reading another workspace never touches the conversation's
+        // selected workspace or its memory.
+        const { getWorkspaceAccess, WORKSPACE_ACCESS_DENIED_MESSAGE } = await import('@/lib/security/workspaceAccess');
+        const access = await getWorkspaceAccess(context.userId, effectiveWorkspaceId);
+        if (!access) {
+            return { success: false, error: WORKSPACE_ACCESS_DENIED_MESSAGE };
+        }
+
+        try {
+            const { queryWorkspaceSources } = await import('@/lib/workspace/sources');
+            const results = await queryWorkspaceSources({
+                workspaceId: effectiveWorkspaceId,
+                userId: context.userId,
+                query: input.query,
+                matchCount: 8,
+                matchThreshold: 0.7,
+            });
+
+            if (!results.length) {
+                return { success: true, data: "No relevant sources found in the Data Refinery for this query." };
+            }
+
+            const formatted = results
+                .map((r, idx) => {
+                    const title = r.title || r.origin_uri || `Source ${idx + 1}`;
+                    const uri = r.origin_uri ? `\nURI: ${r.origin_uri}` : '';
+                    const sim = typeof r.similarity === 'number' ? `\nSimilarity: ${(r.similarity * 100).toFixed(1)}%` : '';
+                    
+                    // Format lineage metadata (SUPERSEDES edges, causal transitions)
+                    let lineageText = '';
+                    if (r.lineage && r.lineage.length > 0) {
+                        const transitions = r.lineage
+                            .filter((l: any) => l.relationship === 'SUPERSEDES' || l.relationship === 'CAUSES')
+                            .map((l: any) => `  - ${l.relationship}: ${l.content} (${(l.confidence * 100).toFixed(0)}% confidence)`)
+                            .join('\n');
+                        if (transitions) {
+                            lineageText = `\nLineage:\n${transitions}`;
+                        }
+                    }
+                    
+                    return `[${idx + 1}] ${title}${uri}${sim}\n${r.content}${lineageText}`;
+                })
+                .join('\n\n---\n\n');
+
+            return { success: true, data: formatted };
+        } catch (e: any) {
+            return { success: false, error: e?.message || 'workspace_source_query_failed' };
+        }
+    }
+};

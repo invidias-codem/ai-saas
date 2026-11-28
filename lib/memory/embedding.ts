@@ -1,31 +1,88 @@
 /**
- * embedding.ts — Unified Embedding Provider
+ * embedding.ts — Gemini Embedding Provider
  *
- * Primary:  Vast.ai / self-hosted embeddings (768-dim)
- * Secondary: Gemini embeddings (3072-dim)
+ * Single provider: Gemini (gemini-embedding-2 GA, 3072-dim).
  *
- * Important architectural shift:
- * Embeddings are no longer treated as anonymous vectors.
- * They are provider-specific retrieval artifacts with an explicit
- * dimension and retrieval lane.
+ * gemini-embedding-2-preview reached its shutdown date (Aug 10 2026); the GA
+ * model defaults to 3072 dimensions, so the memory lane is unchanged.
+ *
+ * Cache keys are namespaced per embedding model + dimension and hashed over
+ * the FULL text (old key was a 500-char prefix — colliding documents shared
+ * embeddings). The Redis prefix bumps on every embedding-space migration so
+ * stale vectors from the retired model can never be served.
+ *
+ * Degraded zero-vectors are NEVER cached — a transient provider failure must
+ * not poison retrieval for the cache TTL.
  */
 
-const PRIMARY_EMBEDDING_DIM = 768;
-const SECONDARY_EMBEDDING_DIM = 3072;
+const EMBEDDING_DIM = 3072;
 const L1_CACHE_TTL_MS = 1000 * 60 * 60;
 const L2_CACHE_TTL_SEC = 60 * 60 * 24;
 const MAX_L1_CACHE_SIZE = 100;
-const OLLAMA_TIMEOUT_MS = 10_000;
-const REDIS_KEY_PREFIX = 'embed:v2:';
+const EMBED_RETRY_MAX_ATTEMPTS = 4;
+const EMBED_RETRY_BASE_MS = 500;
+const EMBED_RETRY_MAX_MS = 4000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRateLimitError(err: any): boolean {
+  if (!err) return false;
+  const status = err?.status;
+  const message = String(err?.message || err);
+  return status === 429 || status === '429' || message.includes('429') || /rate ?limit/i.test(message);
+}
+
+async function withExponentialBackoff<T>(fn: () => Promise<T>): Promise<T> {
+  let attempt = 0;
+  let lastError: any;
+  while (attempt < EMBED_RETRY_MAX_ATTEMPTS) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (!isRateLimitError(err)) {
+        throw err;
+      }
+      attempt++;
+      if (attempt >= EMBED_RETRY_MAX_ATTEMPTS) {
+        break;
+      }
+      const jitter = Math.floor(Math.random() * 250);
+      const delay = Math.min(EMBED_RETRY_BASE_MS * 2 ** (attempt - 1) + jitter, EMBED_RETRY_MAX_MS);
+      console.warn(`[Embedding] Rate limited on attempt ${attempt}/${EMBED_RETRY_MAX_ATTEMPTS}, backing off ${delay}ms`);
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
+
+// ponytail: bump on every embedding-space migration (model or dimension
+// change). v3 = gemini-embedding-2 GA switch; old keys (embed:v2:*) are
+// abandoned in place — TTL evicts them.
+const REDIS_KEY_PREFIX = 'embed:v3:';
+
+export const EMBEDDING_MODEL = 'gemini-embedding-2';
+
+function cacheKeyFor(text: string): string {
+  // Full-text hash: model + dimension + sha256 — no 500-char prefix collisions.
+  const hash = require('node:crypto').createHash('sha256').update(text).digest('hex');
+  return `embedding:${EMBEDDING_MODEL}:3072:${hash}`;
+}
 
 export type EmbeddingDimension = 768 | 3072;
-export type EmbeddingProvider = 'self_hosted' | 'gemini' | 'zero_vector';
+export type EmbeddingProvider = 'gemini' | 'zero_vector';
 
 export type EmbeddingResult = {
   vector: number[];
   dimension: EmbeddingDimension;
   provider: EmbeddingProvider;
   model: string;
+  /** True when Gemini failed and this is a lexical-fallback placeholder.
+   *  Callers should degrade to keyword/BM25 search rather than treating the
+   *  zero vector as a real embedding. */
+  degraded?: boolean;
 };
 
 interface CacheEntry {
@@ -75,8 +132,8 @@ async function getL2Cached(key: string): Promise<EmbeddingResult | null> {
     if (
       parsed &&
       Array.isArray(parsed.vector) &&
-      (parsed.dimension === PRIMARY_EMBEDDING_DIM || parsed.dimension === SECONDARY_EMBEDDING_DIM) &&
-      parsed.vector.length === parsed.dimension
+      parsed.dimension === EMBEDDING_DIM &&
+      parsed.vector.length === EMBEDDING_DIM
     ) {
       return parsed as EmbeddingResult;
     }
@@ -97,86 +154,12 @@ async function setL2Cache(key: string, result: EmbeddingResult): Promise<void> {
   }
 }
 
-function ensureHttps(rawUrl: string): string {
-  if (/^https?:\/\//i.test(rawUrl)) return rawUrl;
-  return `https://${rawUrl}`;
-}
-
-function buildEmbeddingResult(
-  vector: number[],
-  provider: EmbeddingProvider,
-  model: string
-): EmbeddingResult {
+function buildEmbeddingResult(vector: number[], provider: EmbeddingProvider, model: string): EmbeddingResult {
   const dimension = vector.length;
-  if (dimension !== PRIMARY_EMBEDDING_DIM && dimension !== SECONDARY_EMBEDDING_DIM) {
-    throw new Error(`[Embedding] Unsupported embedding dimension: ${dimension}`);
+  if (dimension !== EMBEDDING_DIM) {
+    throw new Error(`[Embedding] Unsupported embedding dimension: ${dimension} (expected ${EMBEDDING_DIM})`);
   }
-  return {
-    vector,
-    dimension: dimension as EmbeddingDimension,
-    provider,
-    model,
-  };
-}
-
-async function embedWithLambda(text: string): Promise<EmbeddingResult> {
-  const embedUrl = process.env.LAMBDA_EMBED_URL ? ensureHttps(process.env.LAMBDA_EMBED_URL) : undefined;
-  const ollamaUrl = process.env.LAMBDA_OLLAMA_URL ? ensureHttps(process.env.LAMBDA_OLLAMA_URL) : undefined;
-
-  if (embedUrl) {
-    const url = `${embedUrl.replace(/\/$/, '')}/v1/embeddings`;
-    const model = process.env.EMBED_MODEL || 'BAAI/bge-base-en-v1.5';
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: text, model }),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(`[Embedding] Lambda embed server HTTP ${res.status}: ${body}`);
-      }
-      const json = await res.json();
-      const embedding = json?.data?.[0]?.embedding;
-      if (!Array.isArray(embedding) || embedding.length === 0) {
-        throw new Error('[Embedding] Lambda embed server returned empty embedding');
-      }
-      return buildEmbeddingResult(embedding as number[], 'self_hosted', model);
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  if (ollamaUrl) {
-    const model = process.env.OLLAMA_EMBEDDING_MODEL || 'nomic-embed-text';
-    const url = `${ollamaUrl.replace(/\/$/, '')}/api/embeddings`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt: text }),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(`[Embedding] Ollama HTTP ${res.status}: ${body}`);
-      }
-      const json = await res.json();
-      if (!Array.isArray(json.embedding) || json.embedding.length === 0) {
-        throw new Error('[Embedding] Ollama returned empty embedding');
-      }
-      return buildEmbeddingResult(json.embedding as number[], 'self_hosted', model);
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  throw new Error('[Embedding] Neither LAMBDA_EMBED_URL nor LAMBDA_OLLAMA_URL is set');
+  return { vector, dimension, provider, model };
 }
 
 async function embedWithGemini(text: string): Promise<EmbeddingResult> {
@@ -186,60 +169,58 @@ async function embedWithGemini(text: string): Promise<EmbeddingResult> {
 
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-  // Using the latest multimodal embedding model which natively outputs 3072 dimensions
-  const modelName = 'gemini-embedding-2-preview';
-  const model = genAI.getGenerativeModel({ model: modelName });
-  const result = await model.embedContent(text);
-  const values = result.embedding?.values ?? [];
-  if (values.length === 0) throw new Error('[Embedding] Gemini returned empty embedding');
-  return buildEmbeddingResult(values, 'gemini', modelName);
+  const model = genAI.getGenerativeModel({ model: EMBEDDING_MODEL });
+
+  const result = await withExponentialBackoff(async () => {
+    const result = await model.embedContent(text);
+    const values = result.embedding?.values ?? [];
+    if (values.length === 0) throw new Error('[Embedding] Gemini returned empty embedding');
+    if (values.length !== EMBEDDING_DIM) {
+      // GA model defaults to 3072; guard against silent dimension drift.
+      throw new Error(`[Embedding] Gemini returned ${values.length} dims (expected ${EMBEDDING_DIM})`);
+    }
+    return buildEmbeddingResult(values, 'gemini', EMBEDDING_MODEL);
+  });
+
+  return result;
 }
 
 export async function generateEmbeddingWithMetadata(text: string): Promise<EmbeddingResult> {
-  const cacheKey = text.substring(0, 500);
+  const cacheKey = cacheKeyFor(text);
 
   const l1Hit = getL1Cached(cacheKey);
-  if (l1Hit) {
-
-    return l1Hit;
-  }
+  if (l1Hit) return l1Hit;
 
   const l2Hit = await getL2Cached(cacheKey);
   if (l2Hit) {
-
     setL1Cache(cacheKey, l2Hit);
     return l2Hit;
   }
 
   let result: EmbeddingResult | null = null;
 
-  if (process.env.LAMBDA_EMBED_URL || process.env.LAMBDA_OLLAMA_URL) {
-    try {
-      result = await embedWithLambda(text);
-    } catch (err) {
-      console.warn('[Embedding] Vast.ai / self-hosted failed, trying fallback:', err);
-    }
-  }
-
-  if (!result && process.env.GOOGLE_API_KEY) {
-    try {
-      result = await embedWithGemini(text);
-    } catch (err: any) {
-      if (err?.status === 429 || String(err).includes('429')) {
-        console.warn('[Embedding] Gemini rate limited');
-      } else {
-        console.warn('[Embedding] Gemini failed:', err);
-      }
+  try {
+    result = await embedWithGemini(text);
+  } catch (err: any) {
+    const message = String(err?.message || err);
+    if (isRateLimitError(err)) {
+      console.warn('[Embedding] Gemini rate limited');
+    } else {
+      console.warn('[Embedding] Gemini embedding failed:', message);
     }
   }
 
   if (!result) {
-    console.warn('[Embedding] All providers failed — returning zero vector');
-    result = {
-      vector: new Array(PRIMARY_EMBEDDING_DIM).fill(0),
-      dimension: PRIMARY_EMBEDDING_DIM,
+    console.warn('[Embedding] Gemini failed — returning degraded zero vector (lexical fallback)');
+    // NEVER cache a degraded result (L1 or L2): a transient provider failure
+    // must not serve zero-vectors for the cache TTL. Callers see degraded=true
+    // and route to lexical retrieval.
+    return {
+      vector: new Array(EMBEDDING_DIM).fill(0),
+      dimension: EMBEDDING_DIM,
       provider: 'zero_vector',
       model: 'zero-vector-fallback',
+      degraded: true,
     };
   }
 
@@ -254,7 +235,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 export function getEmbeddingDimension(): number {
-  return PRIMARY_EMBEDDING_DIM;
+  return EMBEDDING_DIM;
 }
 
 export function clearEmbeddingCache(): void {

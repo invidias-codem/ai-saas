@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, RefreshCcw } from "lucide-react";
 
 interface Repo {
   id: number;
@@ -32,6 +32,11 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
   const [allowedRepos, setAllowedRepos] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [indexing, setIndexing] = useState<Record<string, boolean>>({});
+  const [indexErrors, setIndexErrors] = useState<Record<string, string>>({});
 
   async function fetchWorkspaces() {
     try {
@@ -81,7 +86,7 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
       // Async data loads on open.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchRepos();
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       fetchWorkspaces();
     }
   }, [isOpen]);
@@ -93,33 +98,94 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
       fetchAllowedRepos(selectedWorkspaceId);
     } else {
       // Reset repos when the modal closes or workspace changes.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setAllowedRepos(new Set());
     }
   }, [selectedWorkspaceId, isOpen]);
 
   const toggleRepo = async (repoFullName: string, checked: boolean) => {
     if (!selectedWorkspaceId) return;
+    setSaveError(null);
+    setSaveSuccess(null);
+    setSaving(true);
     try {
       if (checked) {
-        await fetch(`/api/workspaces/${selectedWorkspaceId}/repos`, {
+        const linkRes = await fetch(`/api/workspaces/${selectedWorkspaceId}/repos`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ repo_full_name: repoFullName })
         });
+        if (!linkRes.ok) {
+          const text = await linkRes.text().catch(() => '');
+          throw new Error(`Failed to link repo${text ? ': ' + text : ''}`);
+        }
         setAllowedRepos(prev => new Set(prev).add(repoFullName));
+
+        const patchRes = await fetch(`/api/workspaces/${selectedWorkspaceId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active_github_repo: repoFullName })
+        });
+        if (!patchRes.ok) {
+          const text = await patchRes.text().catch(() => '');
+          throw new Error(`Failed to save active repo${text ? ': ' + text : ''}`);
+        }
+
+        const patchData = await patchRes.json().catch(() => ({}));
+        const confirmedActive = patchData?.workspace?.active_github_repo || repoFullName;
+        setSaveSuccess(`Active repo saved: ${confirmedActive}`);
+        emitWorkspaceRepoSync();
+
+        // Kick off background indexing so the repo is actually searchable.
+        setIndexing((prev) => ({ ...prev, [repoFullName]: true }));
+        setIndexErrors((prev) => {
+          const next = { ...prev };
+          delete next[repoFullName];
+          return next;
+        });
+        fetch('/api/github/index', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ owner: repoFullName.split('/')[0], repo: repoFullName.split('/')[1] }),
+        })
+          .then(async (res) => {
+            const text = await res.text().catch(() => '');
+            if (!res.ok) {
+              throw new Error(text || 'Indexing request failed');
+            }
+          })
+          .catch((err) => {
+            console.error('[RepoSelectorModal] background indexing failed:', err);
+            setIndexErrors((prev) => ({ ...prev, [repoFullName]: err?.message || 'Indexing failed' }));
+          })
+          .finally(() => {
+            setIndexing((prev) => {
+              const next = { ...prev };
+              delete next[repoFullName];
+              return next;
+            });
+          });
       } else {
-        await fetch(`/api/workspaces/${selectedWorkspaceId}/repos?repo_full_name=${encodeURIComponent(repoFullName)}`, {
+        const deleteRes = await fetch(`/api/workspaces/${selectedWorkspaceId}/repos?repo_full_name=${encodeURIComponent(repoFullName)}`, {
           method: "DELETE"
         });
+        if (!deleteRes.ok) {
+          const text = await deleteRes.text().catch(() => '');
+          throw new Error(`Failed to unlink repo${text ? ': ' + text : ''}`);
+        }
         setAllowedRepos(prev => {
           const next = new Set(prev);
           next.delete(repoFullName);
           return next;
         });
+        setSaveSuccess(`Removed from workspace`);
+        emitWorkspaceRepoSync();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to toggle repo", err);
+      setSaveError(err?.message || "Something went wrong while saving.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -127,9 +193,15 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
     repo.full_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const emitWorkspaceRepoSync = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('workspace:repo-sync', { detail: { workspaceId: selectedWorkspaceId } }));
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] h-[80vh] flex flex-col">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-[600px] min-w-0 h-[min(85dvh,700px)] max-h-[85dvh] flex flex-col overflow-hidden px-3 sm:px-6">
         <DialogHeader>
           <DialogTitle>Select Repositories</DialogTitle>
           <DialogDescription>
@@ -138,10 +210,10 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
         </DialogHeader>
 
         {workspaces.length > 0 && (
-          <div className="mt-4 flex items-center gap-3">
-            <span className="text-sm font-medium text-slate-700 whitespace-nowrap">Configure for:</span>
+          <div className="mt-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <span className="shrink-0 text-sm font-medium text-foreground">Configure for:</span>
             <Select value={selectedWorkspaceId || ""} onValueChange={setSelectedWorkspaceId}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full min-w-0">
                 <SelectValue placeholder="Select a workspace" />
               </SelectTrigger>
               <SelectContent>
@@ -150,6 +222,13 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        )}
+
+        {(saveError || saveSuccess) && (
+          <div className="mt-3 text-xs">
+            {saveError && <p className="text-destructive">{saveError}</p>}
+            {saveSuccess && <p className="text-emerald-600">{saveSuccess}</p>}
           </div>
         )}
 
@@ -163,17 +242,17 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+        <div className="flex-1 min-w-0 min-h-0 overflow-x-hidden overflow-y-auto space-y-3 pr-1 sm:pr-2">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
           ) : (
             filteredRepos.map((repo) => (
-              <div key={repo.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">{repo.full_name}</span>
+              <div key={repo.id} className="flex min-w-0 items-start justify-between gap-3 p-3 border rounded-lg hover:bg-muted/50 transition">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="font-medium text-sm break-all">{repo.full_name}</span>
                     {repo.private && (
                       <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border">
                         Private
@@ -184,7 +263,8 @@ export const RepoSelectorModal = ({ isOpen, onOpenChange }: RepoSelectorModalPro
                     Last pushed: {new Date(repo.pushed_at).toLocaleDateString()}
                   </span>
                 </div>
-                <Switch 
+                <Switch
+                  className="shrink-0"
                   disabled={!selectedWorkspaceId}
                   checked={allowedRepos.has(repo.full_name)}
                   onCheckedChange={(checked) => toggleRepo(repo.full_name, checked)}

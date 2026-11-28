@@ -4,22 +4,22 @@ package executil
 
 import (
 	"os/exec"
+	"sync"
 	"syscall"
 )
 
-// SetGroupAttr sets pgid creation attributes on Unix to enable process group isolation.
-func SetGroupAttr(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-}
+func resolveExecutable(name string, _ Shell) (string, error) { return exec.LookPath(name) }
 
-// KillGroup kills the entire process group aggressively on Unix.
-func KillGroup(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return nil
+func startManaged(cmd *exec.Cmd, _ Shell, _ string) (func(), error) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		return nil, err
 	}
-	pgid, err := syscall.Getpgid(cmd.Process.Pid)
-	if err == nil {
-		return syscall.Kill(-pgid, syscall.SIGKILL)
-	}
-	return cmd.Process.Kill()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			// Use the known child group ID, even if the group leader has exited.
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		})
+	}, nil
 }

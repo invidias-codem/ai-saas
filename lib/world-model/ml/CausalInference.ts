@@ -250,6 +250,34 @@ export class CausalInference {
     context: GraphContext,
     maxDepth = 3
   ): Promise<CausalEdge[]> {
+    // Prefer the DB-owned traversal (get_causal_chain RPC) — Postgres handles
+    // cycle-pruning and temporal validity. Fall back to the in-memory BFS when
+    // the RPC is unavailable (e.g. offline / tests).
+    try {
+      const { supabase } = await import('@/lib/supabaseClient');
+      const { data, error } = await supabase.rpc('get_causal_chain', {
+        p_root_node_id: entityId,
+        p_max_depth: maxDepth,
+        p_min_causal_strength: 0.0,
+      });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        return data.map((row: any) => ({
+          id: row.id ?? `${row.source_node_id}:${row.target_node_id}`,
+          source_id: row.source_node_id,
+          target_id: row.target_node_id,
+          relationship_type: row.relationship_type,
+          valid_from: new Date(row.valid_from ?? Date.now()),
+          valid_until: row.valid_until ? new Date(row.valid_until) : undefined,
+          confidence: row.confidence ?? 1.0,
+          causal_strength: row.causal_strength,
+          created_at: new Date(),
+        } as CausalEdge));
+      }
+    } catch (err) {
+      console.warn('[CausalInference] get_causal_chain RPC unavailable, falling back to in-memory BFS:', err);
+    }
+
+    // In-memory BFS fallback
     const { nodes, edges } = context
     const nodeMap = new Map(nodes.map(n => [n.id, n]))
 
@@ -265,7 +293,9 @@ export class CausalInference {
         e => e.source_id === curr.id &&
              (e.relationship_type === 'CAUSES' ||
               e.relationship_type === 'PRECEDES' ||
-              e.relationship_type === 'SUPPORTS')
+              e.relationship_type === 'SUPPORTS' ||
+              e.relationship_type === 'ENABLES' ||
+              e.relationship_type === 'REQUIRES')
       )
 
       for (const edge of outgoing) {
@@ -274,7 +304,6 @@ export class CausalInference {
 
         if (!targetNode || !sourceNode) continue
 
-        // Enrich edge with inferred causal strength
         const strength = await this.inferStrength(sourceNode, targetNode, context)
         const enrichedEdge: CausalEdge = {
           ...edge,
@@ -289,7 +318,6 @@ export class CausalInference {
       }
     }
 
-    // Sort by causal strength descending
     return chain.sort((a, b) => (b.causal_strength ?? 0) - (a.causal_strength ?? 0))
   }
 

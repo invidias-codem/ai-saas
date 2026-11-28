@@ -4,130 +4,122 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"time"
 )
 
-// CommandResult represents the outcome of a command execution.
 type CommandResult struct {
-	Ok        bool
-	Output    string
-	Error     string
-	ExitCode  int
-	Signal    string
-	Truncated bool
-	TimedOut  bool
+	Ok         bool
+	Output     string
+	Error      string
+	ExitCode   int
+	Signal     string
+	Truncated  bool
+	TimedOut   bool
+	Cancelled  bool
+	Shell      Shell
+	DurationMs int64
 }
 
-// RunShellCommand executes a command in a platform-appropriate shell (sh vs cmd.exe)
-// with absolute bounds on timeout context and output size limits.
-func RunShellCommand(ctx context.Context, workspaceRoot, command string, timeoutMs int, maxOutputBytes int) (*CommandResult, error) {
-	// 1. Establish context timeout
-	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
-	defer cancel()
-
-	// 2. Select appropriate shell per GOOS
-	var shellName string
-	var shellArgs []string
+// RunShellCommand preserves the legacy platform shell for internal callers.
+func RunShellCommand(ctx context.Context, root, command string, timeoutMs, limit int) (*CommandResult, error) {
+	shell := SH
 	if runtime.GOOS == "windows" {
-		shellName = "cmd.exe"
-		shellArgs = []string{"/c", command}
-	} else {
-		shellName = "sh"
-		shellArgs = []string{"-c", command}
+		shell = CMD
 	}
+	return RunCommand(ctx, root, command, shell, timeoutMs, limit)
+}
 
-	cmd := exec.CommandContext(timeoutCtx, shellName, shellArgs...)
-	cmd.Dir = workspaceRoot
-
-	// 3. Attach bounded writer capturing stdout & stderr together
-	writer := NewBoundedWriter(maxOutputBytes)
-	cmd.Stdout = writer
-	cmd.Stderr = writer
-
-	// 4. Configure process group attributes
-	SetGroupAttr(cmd)
-
-	// 5. Start the command execution
-	if err := cmd.Start(); err != nil {
-		return &CommandResult{
-			Ok:    false,
-			Error: fmt.Sprintf("Failed to spawn command: %v", err),
-		}, nil
+// RunCommand owns the whole process tree. It does not provide filesystem or
+// network isolation; callers must provide OS restrictions for untrusted code.
+func RunCommand(ctx context.Context, root, command string, shell Shell, timeoutMs, limit int) (*CommandResult, error) {
+	args, err := commandArgs(runtime.GOOS, command, shell)
+	if err != nil {
+		return nil, err
 	}
-
-	// 6. Wait for command completion or timeout cancellation
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	var waitErr error
-	select {
-	case <-timeoutCtx.Done():
-		// Context timed out or was cancelled
-		_ = KillGroup(cmd)
-		
-		// Wait for process resource cleanup
-		<-done
-
-		// Return timeout representation
-		return &CommandResult{
-			Ok:        false,
-			TimedOut:  true,
-			Truncated: writer.IsTruncated(),
-			Output:    writer.String(),
-			Error:     "Command timed out",
-			ExitCode:  -1,
-		}, nil
-	case waitErr = <-done:
-		// Process completed execution
+	if shell == "" {
+		shell = Direct
 	}
-
-	// 7. Extract exit characteristics
-	exitCode := 0
-	var exitErr *exec.ExitError
-	if waitErr != nil {
-		if errors.As(waitErr, &exitErr) {
-			exitCode = exitErr.ProcessState.ExitCode()
-		} else {
-			// Some other execution error occurred
-			exitCode = -1
+	if timeoutMs <= 0 {
+		timeoutMs = 30000
+	}
+	if timeoutMs > 120000 {
+		timeoutMs = 120000
+	}
+	if limit <= 0 || limit > 512*1024 {
+		limit = 512 * 1024
+	}
+	started := time.Now()
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
+	defer cancel()
+	result := &CommandResult{ExitCode: -1, Shell: shell}
+	finish := func() (*CommandResult, error) {
+		result.DurationMs = time.Since(started).Milliseconds()
+		return result, nil
+	}
+	if ctx.Err() != nil {
+		result.TimedOut = errors.Is(ctx.Err(), context.DeadlineExceeded)
+		result.Cancelled = !result.TimedOut
+		result.Error = ctx.Err().Error()
+		return finish()
+	}
+	name, err := resolveExecutable(args[0], shell)
+	if err != nil {
+		result.Error = fmt.Sprintf("Executable unavailable: %v", err)
+		return finish()
+	}
+	cmd := exec.Command(name, args[1:]...)
+	cmd.Dir = root
+	// The daemon's RPC credential must never be inherited by executed scripts.
+	for _, variable := range os.Environ() {
+		key, _, _ := strings.Cut(variable, "=")
+		if !strings.EqualFold(key, "LATTICE_AUTH_TOKEN") {
+			cmd.Env = append(cmd.Env, variable)
 		}
 	}
-
-	// 8. Classify based on truncation status
-	if writer.IsTruncated() {
-		// Output size limit triggered (pipe broken intentionally)
-		_ = KillGroup(cmd)
-		return &CommandResult{
-			Ok:        false,
-			Truncated: true,
-			Output:    writer.String(),
-			Error:     "Command terminated due to output size limit",
-			ExitCode:  exitCode,
-		}, nil
+	cmd.Env = append(cmd.Env, "CI=true", "NONINTERACTIVE=1")
+	cmd.WaitDelay = time.Second
+	writer := NewBoundedWriter(limit)
+	cmd.Stdout, cmd.Stderr = writer, writer
+	stop, err := startManaged(cmd, shell, command)
+	if err != nil {
+		result.Error = fmt.Sprintf("Failed to start command: %v", err)
+		return finish()
 	}
-
-	// Success case vs normal execution failure
-	if exitCode == 0 && waitErr == nil {
-		return &CommandResult{
-			Ok:        true,
-			Output:    writer.String(),
-			ExitCode:  0,
-			Truncated: false,
-			TimedOut:  false,
-		}, nil
+	defer stop()
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	var waitErr error
+	select {
+	case waitErr = <-done:
+	case <-ctx.Done():
+		stop()
+		waitErr = <-done
+		result.TimedOut = errors.Is(ctx.Err(), context.DeadlineExceeded)
+		result.Cancelled = !result.TimedOut
+	case <-writer.Exceeded():
+		stop()
+		waitErr = <-done
 	}
-
-	// Return exit non-zero result
-	return &CommandResult{
-		Ok:        false,
-		Output:    writer.String(),
-		Error:     fmt.Sprintf("Command failed with code %d", exitCode),
-		ExitCode:  exitCode,
-		Truncated: false,
-		TimedOut:  false,
-	}, nil
+	result.Output = writer.String()
+	result.Truncated = writer.IsTruncated()
+	if cmd.ProcessState != nil {
+		result.ExitCode = cmd.ProcessState.ExitCode()
+	}
+	switch {
+	case result.TimedOut:
+		result.Error = "Command timed out"
+	case result.Cancelled:
+		result.Error = "Command cancelled"
+	case result.Truncated:
+		result.Error = "Command terminated due to output size limit"
+	case waitErr != nil:
+		result.Error = fmt.Sprintf("Command failed: %v", waitErr)
+	default:
+		result.Ok = true
+	}
+	return finish()
 }

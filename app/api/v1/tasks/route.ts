@@ -18,6 +18,7 @@ import {
   type AgentTaskRecord,
 } from '@/lib/ucol/agentTaskSchema';
 import { waitUntil } from '@vercel/functions';
+import type { AgentContext } from '@/lib/agents/core/types';
 import { SPAN_ATTRS } from '@/lib/ucol/observability/span';
 import { auditEnterprise } from '@/lib/security/auditLog';
 import { getOrgAccess, type OrgAccess } from '@/lib/security/orgAccess';
@@ -376,7 +377,7 @@ async function runAgentTask(input: {
       });
     }
 
-    const agentContext = {
+    const agentContext: AgentContext = {
       userId,
       sessionId: `task-${taskId}`,
       workspaceId,
@@ -388,6 +389,7 @@ async function runAgentTask(input: {
           thought: String(step.thought ?? '').slice(0, 200),
         });
       },
+      operatorApprovalMode: 'non-interactive',
     };
 
     const useBlogExecution = taskType === 'blog_post';
@@ -420,7 +422,7 @@ async function runAgentTask(input: {
         'Return the create_blog_pr result exactly, including prUrl and prNumber.',
       ].join('\n');
 
-      const blogAgentContext = {
+      const blogAgentContext: AgentContext = {
         ...agentContext,
         sessionId: `blog-${taskId}`,
         rootSpan: span,
@@ -534,16 +536,69 @@ async function runAgentTask(input: {
         const reactResult = await runReActLoop(taskInput, agentContext, registry, resolved.execution.modelId);
 
         const isSuccess = reactResult.status === 'success';
+        const isHalted = reactResult.status === 'halted_for_approval';
+        const finalStatus = isHalted ? 'pending_approval' : isSuccess ? 'completed' : 'failed';
+
+        const updatePayload: any = {
+          status: finalStatus,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (isHalted && reactResult.promotionState) {
+          updatePayload.result = JSON.stringify({
+            status: 'halted_for_approval',
+            promotionState: reactResult.promotionState,
+          });
+        } else {
+          updatePayload.result = reactResult.answer;
+        }
+
+        if (!isSuccess && !isHalted) {
+          updatePayload.error = reactResult.answer;
+          updatePayload.completed_at = new Date().toISOString();
+        }
+
+        if (isSuccess || isHalted) {
+          updatePayload.completed_at = new Date().toISOString();
+        }
+
         await supabaseAdmin!
           .from('agent_tasks')
-          .update({
-            status: isSuccess ? 'completed' : 'failed',
-            result: reactResult.answer,
-            error: isSuccess ? null : reactResult.answer,
-            completed_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq('id', taskId);
+
+        if (isHalted && reactResult.promotionState) {
+          span.addEvent('agent.halted_for_approval', {
+            artifactCount: reactResult.promotionState.artifacts.length,
+            sessionId: reactResult.promotionState.sessionId,
+            rejectionCount: reactResult.promotionState.rejectionCount,
+          });
+          span.end({ responseLength: 0 });
+          void exportTaskTraceToOpik({
+            traceId: span.traceId,
+            workspaceId,
+            orgId: orgContext?.orgId ?? '',
+            taskType,
+            memoryNodeIds,
+            executionSteps: reactResult.trajectory?.length ?? 0,
+            interceptedCount: 0,
+            durationMs: Date.now() - createdAtMs,
+          });
+          void auditEnterprise(
+            'agent.task.pending_approval',
+            userId,
+            { taskId, taskType, routingTier, modelPreference, artifactCount: reactResult.promotionState.artifacts.length },
+            {
+              orgId: orgContext?.orgId,
+              actorId: actorUserId,
+              eventType: 'task.pending_approval',
+              traceId: span.traceId,
+              decision: 'DENY',
+              payload: { artifactCount: reactResult.promotionState.artifacts.length, sessionId: reactResult.promotionState.sessionId },
+            }
+          );
+          return;
+        }
 
         span.end({ responseLength: reactResult.answer.length });
         void exportTaskTraceToOpik({

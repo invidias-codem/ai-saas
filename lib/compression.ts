@@ -39,7 +39,10 @@ export function safeDecompress(text: string): string {
     if (text.startsWith(PREFIX)) {
         const compressedData = text.slice(PREFIX.length);
         const decompressed = LZString.decompressFromUTF16(compressedData);
-        return decompressed || ''; // Return empty string if decompression fails
+        if (decompressed === null) {
+            throw new Error(`[compression] corrupt compressed data: decompression failed`);
+        }
+        return decompressed;
     }
 
     // Assume uncompressed (legacy data)

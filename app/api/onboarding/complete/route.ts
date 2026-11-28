@@ -182,6 +182,32 @@ export async function POST(req: Request) {
 
       if (workspaceError) throw workspaceError;
       workspace = newWorkspace;
+    } else if (workspace.onboarding_state === 'starter') {
+      // Existing default workspace that never finished onboarding — flip it
+      // so /dashboard stops bouncing the user back to the wizard.
+      const { data: updatedWorkspace, error: updateError } = await supabaseAdmin
+        .from('workspaces')
+        .update({
+          onboarding_state: 'configured',
+          default_operating_profile_id: profile.id,
+        })
+        .eq('id', workspace.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+      workspace = updatedWorkspace;
+    }
+
+    // If the starter default workspace still exists alongside this one, flip it
+    // too so the server gate on /dashboard and /onboarding stops looping.
+    if (!workspace.is_default) {
+      await supabaseAdmin
+        .from('workspaces')
+        .update({ onboarding_state: 'configured' })
+        .eq('user_id', user.userId)
+        .eq('is_default', true)
+        .eq('onboarding_state', 'starter');
     }
 
     await supabaseAdmin.from('workspace_state').upsert({
@@ -229,7 +255,7 @@ export async function POST(req: Request) {
       workspace,
       operatingProfile: profile,
       conversation,
-      redirectTo: `/workspaces/${workspace.id}`,
+      redirectTo: `/workspaces/${workspace.id}/conversation`,
     });
   } catch (error) {
     const authResponse = handleAuthError(error);

@@ -2,8 +2,10 @@ package harness
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/invidias-codem/ai-saas/go-harness/internal/netguard"
 	"net/http"
 )
 
@@ -18,6 +20,7 @@ type IngestPayload struct {
 }
 
 type IngestClient struct {
+	ctx          context.Context
 	WorkspaceID  string
 	RepoFullName string
 	AuthToken    string
@@ -27,7 +30,12 @@ type IngestClient struct {
 }
 
 func NewIngestClient(workspaceID, repoFullName, authToken, apiBaseURL string) *IngestClient {
+	return NewIngestClientContext(context.Background(), workspaceID, repoFullName, authToken, apiBaseURL)
+}
+
+func NewIngestClientContext(ctx context.Context, workspaceID, repoFullName, authToken, apiBaseURL string) *IngestClient {
 	return &IngestClient{
+		ctx:          ctx,
 		WorkspaceID:  workspaceID,
 		RepoFullName: repoFullName,
 		AuthToken:    authToken,
@@ -67,9 +75,12 @@ func (c *IngestClient) Flush() error {
 		return fmt.Errorf("failed to marshal ingest payload: %v", err)
 	}
 
-	url := fmt.Sprintf("%s/api/workspaces/%s/ingest", c.APIBaseURL, c.WorkspaceID)
-	
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	url, err := netguard.APIURL(c.APIBaseURL, c.WorkspaceID, "ingest")
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(c.ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create ingest request: %v", err)
 	}
@@ -77,7 +88,7 @@ func (c *IngestClient) Flush() error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.AuthToken))
 
-	client := &http.Client{}
+	client := netguard.CloudClient
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("ingest request failed: %v", err)

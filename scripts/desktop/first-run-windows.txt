@@ -1,0 +1,94 @@
+LATTICE OS PREVIEW - FIRST WINDOWS INSTALL
+
+This is an unsigned evaluation build for Windows 11 x64. Its current workflow
+is local folder access and individually reviewed file changes. Chat, AI model
+downloads, durable project memory and task recovery are not included here.
+
+You do not need a GitHub checkout, Node, Go, Rust, a terminal, an account or API
+keys to use the installed app. GitHub sign-in/repository access is needed only
+to download the CI artifact. Internet may be needed once to install Microsoft's
+WebView2 runtime. The app and its local service are bundled in the installer.
+
+1. EXTRACT AND INSTALL
+
+   In File Explorer, right-click the downloaded artifact ZIP, then Extract All.
+   Keep the extracted files together. Start with a Windows x64 machine; this
+   package is not qualified for Windows on ARM.
+
+   SHA256SUMS records the installer hash. To compare it, optionally open
+   PowerShell in the extracted folder and run:
+     Get-FileHash -Algorithm SHA256 -LiteralPath .\lattice-desktop-windows-x64-setup.exe
+   Compare the full hash with the same filename in SHA256SUMS.
+
+   Double-click lattice-desktop-windows-x64-setup.exe. Use normal interactive
+   setup; it installs for your current Windows user. Allow WebView2 setup to
+   finish if it is offered. Launch Lattice OS Preview from setup or Start.
+
+   This package is unsigned. If Windows shows a warning or blocks installation,
+   record the exact message and publisher in TEST-NOTES.txt. Do not disable
+   Defender or SmartScreen. A blocked install is useful test feedback.
+
+   If an earlier Lattice OS Preview is installed, record that fact. For a fresh
+   install test, close it and uninstall it in Settings > Apps > Installed apps
+   before proceeding. Keep project files; upgrade/rollback is a separate gate.
+
+2. FIRST LAUNCH AND READ ACCESS
+
+   Copy the included "Lattice Test Workspace" folder into Documents. Test in
+   this disposable folder first; no private documents are needed.
+
+   Wait for "Local service connected" in the app. If it has not connected after
+   about 15 seconds, record the visible status, close/reopen once, and report
+   the result. No cloud login or development server should appear.
+
+   Click "Choose folder". In the Windows folder picker select that copied
+   folder, then confirm read access in the next native dialog. The folder
+   should be shown as read only. Cancelling either dialog should grant nothing.
+
+   Enter welcome.txt in "Path within the selected folder", then "Read text".
+   The content should match welcome.txt opened in Notepad, including "café".
+   "Inspect path" should show a file and byte count. Use . as the path and
+   "List folder" to see welcome.txt.
+
+3. FIRST REVIEWED CHANGE
+
+   Click "Allow reviewed changes" and confirm the native warning. This enables
+   proposals; each change still needs its own review and explicit apply.
+
+   Enter my-first-change.txt as the path. Put "Hello from my Windows test."
+   in the content box. Select "Create a new file", then "Prepare & open review".
+   A separate review window should open with the exact target and proposed text.
+
+   Read/scroll each byte view to its end, tick the acknowledgment and accept.
+   Back in the main window click "Check decision", then "Apply accepted change".
+   Expect succeeded. Open my-first-change.txt in File Explorer/Notepad and
+   confirm the text. Editing the draft or accepting review alone must not write.
+
+   If you deny a separate proposal, apply must remain disabled and no target
+   file should appear. Do not retry an uncertain apply blindly; use "Check
+   operation outcome" and check the file on disk, then record the result.
+
+4. REOPEN AND UNINSTALL
+
+   Close the app and launch it again from Start. The local service should
+   reconnect, while folder permission must be requested again. Your test files
+   should still exist in Documents. "Restart service" also clears authority.
+
+   To remove the preview, close it and use Settings > Apps > Installed apps >
+   Lattice OS Preview > Uninstall. Your Documents test folder should remain.
+
+5. WHAT TO REPORT
+
+   Fill in TEST-NOTES.txt. Include your actual Windows version (Start > winver),
+   the source commit and installer hash, the first failing step, exact error
+   message/code, and a screenshot if useful. The app's footer has "Build
+   information" with the exact compiled source. Remove private paths/content
+   from screenshots. Send the notes back in this conversation; nothing is
+   uploaded automatically.
+
+   Command execution is intentionally unavailable: supported modes return
+   LOCAL_SANDBOX_REQUIRED; an unavailable shell returns LOCAL_SHELL_UNAVAILABLE.
+   These results are expected. Do not add/install a shell to get past the gate.
+
+This test will supply manual Windows 11 evidence. CI on Windows Server does
+not establish that result. This preview is not designated a stable release.

@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, useRef, ChangeEvent, KeyboardEvent, useEffect } from "react";
-import { safeLocalStorage } from "@/lib/safeStorage";
-import axios from "axios";
+import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -17,50 +15,34 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, ArrowDown, Github } from "lucide-react";
+import { Paperclip, AlertCircle, SendHorizontal, X, Copy, Check, RefreshCcw } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 import { CodeIcon } from "@radix-ui/react-icons";
 import { cn } from "@/lib/utils";
 import { PersonIcon } from "@radix-ui/react-icons";
 import { ShareIconButton } from "@/components/share-button";
 import { GitHubRepoModal } from "@/components/github-repo-modal";
-import { GitHubConsentModal } from "@/components/github-consent-modal";
-
-// ... (keep existing imports)
 
 import { CodeModelProvider, useCodeModel } from "@/contexts/CodeModelContext";
 import { CodeModelToggle } from "@/components/chat/CodeModelToggle";
-import { CODE_MODELS, ProviderKeyState } from "@/lib/llm/codeModels";
-import {
-  getSessionMemoryFromStorage,
-  saveSessionMemoryToStorage,
-  SessionMessage
-} from "@/lib/sessionClientMemory";
-import { createNewConversation } from "@/lib/conversationManager";
-
-// ... (keep existing imports)
+import { ProviderKeyState } from "@/lib/llm/codeModels";
+import { useChatScroll } from "@/components/chat/useChatScroll";
+import { ScrollToBottom } from "@/components/chat/ScrollToBottom";
+import { useCodeFileUpload, CodeSelectedFile } from "@/components/chat/useCodeFileUpload";
+import { useGithubRepoContext } from "@/components/chat/useGithubRepoContext";
+import { useMemoryCount } from "@/components/chat/useMemoryCount";
+import { MemoryInsights } from "@/components/chat/MemoryInsights";
+import { useCodeConversation, CodeContext } from "@/components/chat/useCodeConversation";
+import { useCodeStream } from "@/components/chat/useCodeStream";
 
 // Content Component (Inner)
-
-interface CodeContext {
-  workspaceId: string | null;
-  workspaceName: string | null;
-  operatingProfileId: string | null;
-  operatingProfileName: string | null;
-  operatingProfileMode: string | null;
-}
-
-interface SelectedFile {
-  name: string;
-  type: string;
-  base64Data: string;
-}
 
 interface Message {
   id?: string;
   role: "user" | "bot";
   text: string;
   timestamp: Date;
-  fileData?: SelectedFile;
+  fileData?: CodeSelectedFile;
 }
 
 const CodeBlock = ({ codeString, language }: { codeString: string, language: string }) => {
@@ -105,14 +87,8 @@ const CodeBlock = ({ codeString, language }: { codeString: string, language: str
   );
 };
 
-const codeConversationRowKey = (workspaceId?: string | null, operatingProfileId?: string | null) => 
-  `weaver_code_conversation_id:${workspaceId || "global"}:${operatingProfileId || "global"}`;
-
-const getLocalCodeSessionId = (workspaceId?: string | null, operatingProfileId?: string | null) => 
-  `local-code-session:${workspaceId || "global"}:${operatingProfileId || "global"}`;
-
 function CodePageContent() {
-  const { codeModel, setCodeModel, providerKeyState, setProviderKeyState } = useCodeModel();
+  const { codeModel, setProviderKeyState } = useCodeModel();
 
   // OpenRouter visibility: refresh configured-provider state from settings API.
   useEffect(() => {
@@ -136,400 +112,225 @@ function CodePageContent() {
   }, [setProviderKeyState]);
 
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [codeContext, setCodeContext] = useState<CodeContext>({ workspaceId: null, workspaceName: null, operatingProfileId: null, operatingProfileName: null, operatingProfileMode: null });
-  const [userInput, setUserInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
-  const [saveToMemory, setSaveToMemory] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null); // Chat container for scroll
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const [memoryCount, setMemoryCount] = useState<number>(0);
-  const [isMemoryPulsing, setIsMemoryPulsing] = useState(false);
 
-  // GitHub State
-  const [activeRepo, setActiveRepo] = useState<string | null>(null);
-  const [isRepoModalOpen, setIsRepoModalOpen] = useState(false);
+  // Code context + conversation bootstrap (C6): hydrate workspace/profile,
+  // resolve/restore the row-backed conversation, and persist messages.
+  const { codeContext, conversationId } = useCodeConversation({
+    messages,
+    onRestoreMessages: setMessages,
+    onHideGreeting: () => setShowGreeting(false),
+  });
 
-  // GitHub Consent State (for Actions - separate from Context)
-  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState(false);
-  const [gitHubAction, setGitHubAction] = useState<any>(null);
+  // Code file attachment (C2): base64 read + save-to-memory toggle.
+  const {
+    selectedFile,
+    saveToMemory,
+    setSaveToMemory,
+    fileInputRef,
+    handleFileChange,
+    removeFile,
+  } = useCodeFileUpload(setError, setLoading);
 
-  const handleGitHubClick = () => {
-    setIsRepoModalOpen(true);
-  };
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
-  const handleRepoIndexComplete = (repoInfo: { owner: string; repo: string; fileCount: number }) => {
-    setActiveRepo(`${repoInfo.owner}/${repoInfo.repo}`);
-    setIsRepoModalOpen(false);
+  // Memory count badge (C5): reuses the lean count hook (no episodic fetch).
+  const { memoryCount, isMemoryPulsing } = useMemoryCount(messages.length);
 
-    // Add a system message to confirm context is loaded
-    const botMessage: Message = {
-      text: `📚 **Repository Linked:** \`${repoInfo.owner}/${repoInfo.repo}\`\nI have indexed ${repoInfo.fileCount} code files from this repository. You can now ask questions about the codebase!`,
-      role: "bot",
-      timestamp: new Date()
-    };
-    setMessages((prev) => [...prev, botMessage]);
-    setShowGreeting(false);
-  };
-
-  const handleGitHubActionConfirm = async () => {
-    console.log("Executing GitHub action:", gitHubAction);
-    setIsGitHubModalOpen(false);
-    // Mock execution for UI demo
-    const botMessage: Message = { text: `✅ Successfully executed GitHub Action: ${gitHubAction?.type} on ${gitHubAction?.repo}`, role: "bot", timestamp: new Date() };
-    setMessages((prev) => [...prev, botMessage]);
-  };
+  // GitHub repo context (C3): active repo, linked-repo hydration, index status,
+  // reindex, and persist-on-select. The onRepoLinked callback adds the
+  // confirmation system message + clears the greeting.
+  const {
+    activeRepo,
+    isRepoModalOpen,
+    repoIndexed,
+    reindexing,
+    openRepoModal,
+    closeRepoModal,
+    reindexActiveRepo,
+    handleRepoIndexComplete,
+  } = useGithubRepoContext({
+    workspaceId: codeContext.workspaceId,
+    onRepoLinked: (fullName, fileCount) => {
+      const botMessage: Message = {
+        text: `📚 **Repository Linked:** \`${fullName}\`\nI have indexed ${fileCount} code files from this repository. You can now ask questions about the codebase!`,
+        role: "bot",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, botMessage]);
+      setShowGreeting(false);
+    },
+  });
 
   const GREETING_MESSAGE = "Ask me a coding question, debug code, or attach a file for analysis.";
 
-  // ... (keep existing scroll and effect logic)
-
-  // Scroll to bottom function for manual trigger
-  const scrollToBottom = () => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTo({
-        top: chatContainerRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-  // Track scroll position to show/hide scroll-to-bottom button
-  useEffect(() => {
-    const container = chatContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      // Show button when scrolled up more than 200px from bottom
-      const isScrolledUp = scrollHeight - scrollTop - clientHeight > 200;
-      setShowScrollButton(isScrolledUp && messages.length > 2);
-    };
-
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [messages.length]);
-
-  useEffect(() => {
-    const loadCodeContext = async () => {
-      try {
-        const [workspaceRes, profileRes] = await Promise.all([
-          axios.get('/api/workspaces/default'),
-          axios.get('/api/operating-profiles/default'),
-        ]);
-
-        const workspace = workspaceRes.data?.workspace ?? null;
-        const profile = profileRes.data?.operatingProfile ?? null;
-
-        setCodeContext({
-          workspaceId: workspace?.id ?? null,
-          workspaceName: workspace?.name ?? null,
-          operatingProfileId: profile?.id ?? workspace?.default_operating_profile_id ?? null,
-          operatingProfileName: profile?.name ?? null,
-          operatingProfileMode: profile?.mode ?? null,
-        });
-      } catch (err) {
-        console.error('[CODE_CONTEXT_LOAD_ERROR]', err);
-      }
-    };
-
-    loadCodeContext();
-  }, []);
-
-  // Persistence for Code Session
-
-  useEffect(() => {
-    const bootstrapCodeConversation = async () => {
-      try {
-        const conversationRowKey = codeConversationRowKey(codeContext.workspaceId, codeContext.operatingProfileId);
-        let resolvedConversationId = safeLocalStorage.getItem(conversationRowKey);
-
-        if (!resolvedConversationId && codeContext.workspaceId) {
-          const created = await createNewConversation({
-            title: codeContext.workspaceName ? `${codeContext.workspaceName} Code` : 'Code Conversation',
-            workspaceId: codeContext.workspaceId ?? undefined,
-            operatingProfileId: codeContext.operatingProfileId ?? undefined,
-          });
-
-          if (created?.id) {
-            resolvedConversationId = created.id;
-            safeLocalStorage.setItem(conversationRowKey, created.id);
-          }
-        }
-
-        if (resolvedConversationId) {
-          setConversationId(resolvedConversationId);
-          const response = await fetch(`/api/conversations/${resolvedConversationId}`, { credentials: 'include' });
-          if (response.ok) {
-            const data = await response.json();
-            const restoredMessages: Message[] = (data.messages || []).map((msg: any) => ({
-              id: msg.id,
-              text: msg.text,
-              role: msg.role,
-              timestamp: new Date(msg.timestamp),
-              fileData: msg.fileData,
-            }));
-            
-            // Authoritative rule: Row-backed history wins.
-            setMessages(restoredMessages);
-            if (restoredMessages.length > 0) {
-              setShowGreeting(false);
-            }
-            return;
-          }
-        }
-
-        // Only fall back to local storage if we absolutely could not establish or fetch a conversation
-        const localSessionId = getLocalCodeSessionId(codeContext.workspaceId, codeContext.operatingProfileId);
-        const savedMessages = getSessionMemoryFromStorage(localSessionId);
-        if (savedMessages.length > 0) {
-          const restoredMessages: Message[] = savedMessages.map(msg => ({
-            text: msg.text,
-            role: msg.role,
-            timestamp: new Date(msg.timestamp),
-            fileData: msg.fileData
-          }));
-          setMessages(restoredMessages);
-          setShowGreeting(false);
-        }
-      } catch (err) {
-        console.error('[CODE_CONVERSATION_BOOTSTRAP_ERROR]', err);
-      }
-    };
-
-    if (codeContext.workspaceId || codeContext.operatingProfileId) {
-      bootstrapCodeConversation();
-    }
-  }, [codeContext.workspaceId, codeContext.operatingProfileId, codeContext.workspaceName]);
-
-  // Save to storage on change
-  useEffect(() => {
-    if (messages.length > 0) {
-      const sessionMessages: SessionMessage[] = messages.map(msg => ({
-        text: msg.text,
-        role: msg.role,
-        timestamp: msg.timestamp.getTime(),
-        fileData: msg.fileData
-      }));
-      const localSessionId = getLocalCodeSessionId(codeContext.workspaceId, codeContext.operatingProfileId);
-      saveSessionMemoryToStorage(sessionMessages, 'current-user', 'code-session', localSessionId);
-    }
-  }, [messages, codeContext.workspaceId, codeContext.operatingProfileId]);
-
-  // Fetch Memory Count
-  const fetchMemoryCount = async () => {
-    try {
-      const res = await axios.get("/api/memory/count");
-      if (res.data.count !== undefined) {
-        setMemoryCount(res.data.count);
-      }
-    } catch (err) {
-      console.error("Failed to fetch memory count:", err);
-    }
-  };
-
-
-  useEffect(() => {
-    // Initial memory-count load on mount — a data-fetch effect.
-    fetchMemoryCount();
-  }, []);
-
-  // Trigger fetch on new message (bot response)
-  useEffect(() => {
-    if (messages.length > 0) {
-      fetchMemoryCount();
-      setIsMemoryPulsing(true);
-      const timer = setTimeout(() => setIsMemoryPulsing(false), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [messages.length]);
-
-  // Helper function to read file as Base64
-  const readFileAsBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64String = (reader.result as string).split(',')[1];
-        resolve(base64String);
-      };
-      reader.onerror = (error) => reject(error);
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Handle sending message
-  const handleSendMessage = async () => {
-    const trimmedInput = userInput.trim();
-    if (!trimmedInput && !selectedFile) return;
-
-    setLoading(true);
-    setError(null);
-    setShowGreeting(false);
-
-    let messageText = trimmedInput;
-    if (selectedFile) {
-      messageText += `\n\n[Analysing File: ${selectedFile.name}]`;
-    }
-
-    const userMessage: Message = {
-      text: messageText,
-      role: "user",
-      timestamp: new Date(),
-      fileData: selectedFile ? {
-        name: selectedFile.name,
-        type: selectedFile.type,
-        base64Data: selectedFile.base64Data
-      } : undefined
-    };
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setUserInput("");
-
-
-    setSelectedFile(null);
-
-    try {
-      const response = await axios.post("/api/code", {
-        messages: newMessages.map(msg => ({
-          role: msg.role,
-          text: msg.text,
-          fileData: msg.fileData // Pass stored file data for history reconstruction
-        })),
-        currentUserPrompt: trimmedInput,
-        fileData: selectedFile,
-        saveToMemory: saveToMemory, // Pass memory flag
-        model: codeModel, // Pass selected model
-        activeRepo: activeRepo, // Pass active GitHub repo context
-        workspaceId: codeContext.workspaceId,
-        operatingProfileId: codeContext.operatingProfileId,
-        operatingProfileMode: codeContext.operatingProfileMode,
-        conversationId
-      });
-
-      const botMessage: Message = { text: response.data.text, role: "bot", timestamp: new Date() };
-      setMessages((prevMessages) => [...prevMessages, botMessage]);
-    } catch (error: any) {
-      console.error("[CODE_PAGE_ERROR]", error);
-      if (error.response?.status === 401) {
-        window.location.href = "/sign-in?redirect_url=" + encodeURIComponent(window.location.pathname);
-        return;
-      }
-      setError(error.response?.data?.details || "Sorry, something went wrong processing your request.");
-    } finally {
-      setLoading(false);
-      trackActivity("message");
-    }
-  };
-
-  const handleAttachClick = () => { fileInputRef.current?.click(); };
-
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setLoading(true);
-      setError(null);
-      try {
-        const base64Data = await readFileAsBase64(file);
-        setSelectedFile({
-          name: file.name,
-          type: file.type || 'text/plain',
-          base64Data: base64Data
-        });
-      } catch (err) {
-        console.error("Error reading file:", err);
-        setError("Sorry, could not read the selected file.");
-        setSelectedFile(null);
-      } finally {
-        setLoading(false);
-      }
-    }
-    if (fileInputRef.current) { fileInputRef.current.value = ""; }
-  };
-
-  const handleKeyPress = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    } else if (e.key === 'Tab' && !e.shiftKey) {
-      e.preventDefault();
-      const { selectionStart, selectionEnd, value } = e.currentTarget;
-      setUserInput(value.substring(0, selectionStart) + '  ' + value.substring(selectionEnd));
-      e.currentTarget.selectionStart = e.currentTarget.selectionEnd = selectionStart + 2;
-    }
-  };
+  // Chat scroll management (C1): refs, manual scroll-to-bottom, and
+  // "scrolled up" detection that drives the floating ScrollToBottom button.
+  const { chatContainerRef, bottomRef, scrollToBottom, showScrollButton } = useChatScroll(messages.length);
 
   // Modern Typing Indicator (matching conversation page)
   // Nudge Integration
   const { showNudge, trackActivity, dismissNudge } = useSupportNudge();
 
+  // Code send pipeline (C7): input + non-streaming POST to /api/code.
+  const {
+    userInput,
+    handleInputChange,
+    handleSendMessage,
+    handleKeyPress,
+  } = useCodeStream({
+    messages,
+    setMessages,
+    selectedFile,
+    saveToMemory,
+    removeFile,
+    codeModel,
+    activeRepo,
+    codeContext,
+    conversationId,
+    setError,
+    setLoading,
+    setShowGreeting,
+    trackActivity,
+  });
+
   return (
     <div className="flex flex-col h-[100dvh] bg-background text-foreground relative overflow-hidden">
       <KoFiNudge isOpen={showNudge} onClose={dismissNudge} />
 
-      {/* Header - Compact and pinned top */}
-      <header className="flex-none px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-md z-20 flex items-center justify-between sticky top-0">
-        <div className="flex items-center gap-2">
-          {/* Title and Icon */}
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-green-500/10 flex items-center justify-center">
-              <CodeIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <h1 className="text-sm font-semibold leading-tight">Weaver Code</h1>
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className={cn("text-[10px] text-muted-foreground transition-all duration-300 flex items-center gap-1", isMemoryPulsing && "text-green-500 font-bold scale-105")}>
-                  <span className={cn("w-1.5 h-1.5 rounded-full bg-green-500", isMemoryPulsing && "animate-ping")} />
-                  {memoryCount} memories
-                </div>
-                {(codeContext.workspaceName || codeContext.operatingProfileName) && (
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground rounded-full bg-muted px-2 py-0.5">
-                    <span>{codeContext.workspaceName ?? "Workspace"}</span>
-                    {codeContext.operatingProfileName && <span>· {codeContext.operatingProfileName}</span>}
-                  </div>
-                )}
-              </div>
-            </div>
+      {/* Header - Compact: structural nav + overflow menu */}
+      <header className="flex-none px-3 py-2 sm:px-4 sm:py-3 border-b border-border/40 bg-background/80 backdrop-blur-md z-20 flex items-center justify-between sticky top-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="h-8 w-8 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+            <CodeIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
           </div>
+          <h1 className="text-sm font-semibold leading-tight truncate">Weaver Code</h1>
         </div>
 
-        {/* Right Actions */}
-        <div className="flex gap-2 items-center">
-          {/* Active Repo Badge */}
-          {activeRepo && (
-            <div className="flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-md text-xs font-medium border border-green-500/20">
-              <Github className="h-3 w-3" />
-              <span className="max-w-[100px] truncate">{activeRepo}</span>
-              <button onClick={() => setActiveRepo(null)} className="ml-1 hover:text-green-800 dark:hover:text-green-200"><X className="h-3 w-3" /></button>
+        {/* Desktop-only indicators */}
+        <div className="hidden md:flex items-center gap-2">
+          <MemoryInsights memoryCount={memoryCount} isMemoryPulsing={isMemoryPulsing} variant="compact" accent="green" />
+          {(codeContext.workspaceName || codeContext.operatingProfileName) && (
+            <div className="flex items-center gap-1 text-[10px] text-muted-foreground rounded-full bg-muted px-2 py-0.5">
+              <span>{codeContext.workspaceName ?? "Workspace"}</span>
+              {codeContext.operatingProfileName && <span>· {codeContext.operatingProfileName}</span>}
             </div>
           )}
-
-          {/* GitHub Connect Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", activeRepo && "text-green-600")}
-            onClick={handleGitHubClick}
-            title={activeRepo ? "Manage Repository" : "Load Repository Context"}
-          >
-            <Github className="h-4 w-4" />
-          </Button>
-
+          {activeRepo ? (
+            <button
+              onClick={openRepoModal}
+              className="flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-600 dark:text-green-400 rounded-md text-xs font-medium border border-green-500/20 hover:border-green-500/40 transition"
+            >
+              <BrandIcon name="Github" className="h-3 w-3" size={12} />
+              <span className="max-w-[120px] truncate">{activeRepo}</span>
+              {repoIndexed === true && (
+                <span className="text-[10px] font-medium bg-green-500/20 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded-full">indexed</span>
+              )}
+              {repoIndexed === false && (
+                <span className="text-[10px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded-full">indexing</span>
+              )}
+              <button
+                type="button"
+                onClick={reindexActiveRepo}
+                disabled={reindexing}
+                className="ml-1 inline-flex items-center gap-1 text-[10px] font-medium bg-slate-500/10 text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded-full hover:bg-slate-500/20 transition disabled:opacity-50"
+              >
+                <RefreshCcw className="h-3 w-3" />
+                {reindexing ? 'indexing' : 're-index'}
+              </button>
+            </button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openRepoModal}
+              className="gap-2 text-xs"
+            >
+              <BrandIcon name="Github" className="h-3.5 w-3.5" size={14} />
+              Connect GitHub Repo
+            </Button>
+          )}
           {messages.length > 0 && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
               <AlertCircle className="h-3 w-3" />
               {messages.length} msgs
             </div>
           )}
         </div>
+
+        {/* Mobile overflow menu */}
+        <div className="flex md:hidden items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground"
+            onClick={() => setShowMobileMenu(true)}
+            aria-label="More options"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+            </svg>
+          </Button>
+        </div>
       </header>
 
+      {/* Mobile Menu Overlay */}
+      {showMobileMenu && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowMobileMenu(false)} />
+          <div className="absolute right-0 top-0 h-full w-72 bg-background border-l border-border p-4 shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold">Options</h2>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowMobileMenu(false)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="space-y-4">
+              <CodeModelToggle disabled={loading} />
+              <MemoryInsights memoryCount={memoryCount} isMemoryPulsing={isMemoryPulsing} variant="mobile" accent="green" />
+              {(codeContext.workspaceName || codeContext.operatingProfileName) && (
+                <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2 text-sm">
+                  <span className="font-medium">{codeContext.workspaceName}</span>
+                  {codeContext.operatingProfileName && (
+                    <span className="text-xs text-muted-foreground"> · {codeContext.operatingProfileName}</span>
+                  )}
+                </div>
+              )}
+              {activeRepo ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => {
+                    openRepoModal();
+                    setShowMobileMenu(false);
+                  }}
+                >
+                  <BrandIcon name="Github" className="h-4 w-4" size={16} />
+                  <span className="truncate">{activeRepo}</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  onClick={() => {
+                    openRepoModal();
+                    setShowMobileMenu(false);
+                  }}
+                >
+                  <BrandIcon name="Github" className="h-4 w-4" size={16} />
+                  Connect GitHub Repo
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Chat Area */}
-      {/* ... (keep existing chat area) ... */}
       <div ref={chatContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden w-full scroll-smooth">
         <div className="max-w-3xl mx-auto w-full px-4 py-6 md:px-6 min-h-0">
 
@@ -545,8 +346,8 @@ function CodePageContent() {
                   {GREETING_MESSAGE}
                 </p>
                 <div className="flex justify-center pt-4">
-                  <Button variant="outline" size="sm" onClick={handleGitHubClick} className="gap-2 text-xs">
-                    <Github className="h-3.5 w-3.5" />
+                  <Button variant="outline" size="sm" onClick={openRepoModal} className="gap-2 text-xs">
+                    <BrandIcon name="Github" className="h-3.5 w-3.5" size={14} />
                     Load Repository Context
                   </Button>
                 </div>
@@ -569,7 +370,7 @@ function CodePageContent() {
                 <div className="flex-shrink-0 mt-1">
                   {msg.role === "bot" ? (
                     <Avatar className="h-8 w-8 ring-1 ring-border/50 bg-background">
-                      <AvatarImage src="/Genie.png" />
+                      <AvatarImage src="/lattice-logo.png" />
                       <AvatarFallback className="text-[10px] bg-gradient-to-br from-green-500 to-emerald-500 text-white">AI</AvatarFallback>
                     </Avatar>
                   ) : (
@@ -660,15 +461,7 @@ function CodePageContent() {
       </div>
 
       {/* ... (Scroll button) ... */}
-      {showScrollButton && (
-        <button
-          onClick={scrollToBottom}
-          className="fixed bottom-28 right-6 z-30 h-10 w-10 rounded-full bg-green-600 hover:bg-green-700 text-white shadow-lg flex items-center justify-center transition-all duration-200 animate-in fade-in slide-in-from-bottom-2"
-          aria-label="Scroll to bottom"
-        >
-          <ArrowDown className="h-5 w-5" />
-        </button>
-      )}
+      {showScrollButton && <ScrollToBottom onClick={scrollToBottom} accent="green" />}
 
       {/* Input Area */}
       <div className="flex-none w-full p-4 bg-gradient-to-t from-background via-background to-transparent pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -680,7 +473,7 @@ function CodePageContent() {
                 <Paperclip className="h-3 w-3 text-green-500" />
                 <span className="max-w-[150px] truncate">{selectedFile.name}</span>
                 <button
-                  onClick={() => setSelectedFile(null)}
+                  onClick={removeFile}
                   className="text-muted-foreground hover:text-destructive transition-colors ml-1"
                 >
                   <X className="h-3 w-3" />
@@ -704,32 +497,53 @@ function CodePageContent() {
 
           {/* Input Container */}
           <div className="relative flex items-end gap-2 bg-muted/40 hover:bg-muted/60 focus-within:bg-background focus-within:ring-2 focus-within:ring-green-500/20 border border-border/50 rounded-[26px] p-2 transition-all duration-200 shadow-sm">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              style={{ display: 'none' }}
-              accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.yml,.md,.txt,.xml,.sql,.sh,.bash,.env,.config,text/plain,application/json,image/*"
-            />
+            
+            {/* Left: attachment group (hidden on mobile, shown on desktop) */}
+            <div className="hidden sm:block">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
+                accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.yml,.md,.txt,.xml,.sql,.sh,.bash,.env,.config,text/plain,application/json,image/*"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              >
+                <Paperclip className="h-5 w-5" />
+              </Button>
+            </div>
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.click();
-                } else {
-                  console.error("File input ref is null");
-                }
-              }}
-              disabled={loading}
-              className="h-10 w-10 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/50 shrink-0"
-            >
-              <Paperclip className="h-5 w-5" />
-            </Button>
+            {/* Mobile: grouped + button for attachments */}
+            <div className="sm:hidden relative">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
+                accept=".js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.cs,.go,.php,.rb,.swift,.kt,.html,.css,.scss,.json,.yaml,.yml,.md,.txt,.xml,.sql,.sh,.bash,.env,.config,text/plain,application/json,image/*"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                className="h-9 w-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </Button>
+            </div>
 
-            <div className="pb-1 shrink-0">
+            {/* Model selector — mobile: above input, desktop: inline */}
+            <div className="hidden sm:block pb-1 shrink-0">
               <CodeModelToggle disabled={loading} />
             </div>
 
@@ -737,12 +551,13 @@ function CodePageContent() {
               rows={1}
               placeholder="Ask a coding question..."
               value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyPress}
               disabled={loading}
               className="flex-1 min-h-[44px] max-h-32 py-3 bg-transparent border-0 focus-visible:ring-0 resize-none text-base leading-relaxed placeholder:text-muted-foreground/70 font-mono"
             />
 
+            {/* Send button — always visible, never pushed off-screen */}
             <Button
               onClick={handleSendMessage}
               disabled={loading || (!userInput.trim() && !selectedFile)}
@@ -758,6 +573,11 @@ function CodePageContent() {
             </Button>
           </div>
 
+          {/* Mobile model selector — above input bar */}
+          <div className="sm:hidden flex justify-center mt-2">
+            <CodeModelToggle disabled={loading} />
+          </div>
+
           <div className="text-center mt-2">
             <p className="text-[10px] text-muted-foreground/60 font-medium">
               AI generated code. Review before using.
@@ -766,18 +586,10 @@ function CodePageContent() {
         </div>
       </div>
 
-      {/* GitHub Consent Modal */}
-      <GitHubConsentModal
-        isOpen={isGitHubModalOpen}
-        onClose={() => setIsGitHubModalOpen(false)}
-        onConfirm={handleGitHubActionConfirm}
-        action={gitHubAction || { type: 'commit', repo: 'unknown', description: 'No action pending' }}
-      />
-
       {/* GitHub Repo Modal for Context Loading */}
       <GitHubRepoModal
         isOpen={isRepoModalOpen}
-        onClose={() => setIsRepoModalOpen(false)}
+        onClose={closeRepoModal}
         onIndexComplete={handleRepoIndexComplete}
       />
     </div>
@@ -798,7 +610,7 @@ function TypingIndicator() {
   return (
     <div className="flex items-center space-x-3 mb-6 animate-in fade-in duration-300">
       <Avatar className="h-8 w-8 ring-1 ring-border/50">
-        <AvatarImage src="/Genie.png" />
+        <AvatarImage src="/lattice-logo.png" />
         <AvatarFallback className="bg-gradient-to-br from-green-500 to-emerald-500 text-white text-xs">AI</AvatarFallback>
       </Avatar>
       <div className="flex items-center space-x-1.5 h-8">

@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { BlueskyPoster } from './BlueskyPoster';
 import { BlueskySafetyPolicy } from './BlueskySafetyPolicy';
+import { nimGenerate } from './nimGenerate';
 
 const CTA_SUFFIX = ' — gen1e.xyz';
 const POST_MAX_CHARS = 290;
@@ -98,18 +98,9 @@ Return only the post text.`;
   }
 
   private async generatePostText(): Promise<string> {
-    const apiKey = process.env.BLUESKY_GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-    if (!apiKey) {
-      throw new Error('[BlueskyProactivePoster] Missing BLUESKY_GEMINI_API_KEY or GOOGLE_API_KEY');
-    }
-
     const prompt = await this.buildPrompt();
-    const gemini = new GoogleGenerativeAI(apiKey);
-    const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-
-    return normalizePost(text);
+    const text = await nimGenerate(prompt, '');
+    return normalizePost(text.trim());
   }
 
   private async logPost(text: string, responseUri: string) {

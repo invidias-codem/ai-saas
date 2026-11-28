@@ -1,7 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
 import { searchMemories } from '@/lib/memory/vectorStore';
 import { findRelatedEntities, formatGraphContext } from '@/lib/memory/graphStore';
+import { nimGenerate } from './nimGenerate';
 import { EngagementLearningStore } from './EngagementLearningStore';
 
 function formatError(err: unknown) {
@@ -234,31 +234,10 @@ function buildPrompt(packet: GroundingPacket): string {
 }
 
 async function generateWithGemini(prompt: string): Promise<string> {
-  const apiKey = process.env.BLUESKY_GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? '';
-  if (!apiKey) {
-    throw new Error('[ProactivePostPlanner] Missing BLUESKY_GEMINI_API_KEY or GOOGLE_API_KEY');
-  }
-
-  const gemini = new GoogleGenerativeAI(apiKey);
-  const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      // gemini-2.5-flash is a thinking model: with a tight maxOutputTokens it
-      // spends nearly the whole budget on internal reasoning and emits only a
-      // truncated fragment (e.g. "AI agents", "Too many"), which the quality
-      // gates then (correctly) suppress as too_vague/stale_mix. Disabling the
-      // thinking budget frees the tokens for the actual post, and 220 tokens is
-      // ample headroom for a <300-char Bluesky post.
-      // NOTE: thinkingConfig is honored at runtime by the API but not yet in the
-      // @google/generative-ai v0.24 TS types, hence the cast.
-      maxOutputTokens: 220,
-      temperature: 0.85,
-      thinkingConfig: { thinkingBudget: 0 },
-    } as any,
-  });
-
-  return result.response.text().trim();
+  // NIM (DeepSeek-V4-Pro) primary with Gemini fallback — unified with the
+  // responder. The prompt is self-contained (system instruction is inlined by
+  // buildPrompt), so no separate system prompt is passed.
+  return nimGenerate(prompt, '');
 }
 
 function inferTopicsFromLane(lane: BlueskyTopicLane): string[] {

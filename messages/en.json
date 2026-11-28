@@ -8,6 +8,12 @@
     "supportProject": "Support the project and help fund the next layer of work.",
     "supportOnKoFi": "Support on Ko-fi"
   },
+  "FileGateNudge": {
+    "title": "Unlock File Uploads",
+    "description": "Document uploads and deep-dive analysis are premium features. Support Lattice OS on Ko-fi to unlock this feature and more.",
+    "ctaLabel": "Support on Ko-fi",
+    "dismissLabel": "Maybe later"
+  },
   "SupportGenie": {
     "title": "Support Lattice OS",
     "description": "Support the project and help fund future development.",
@@ -24,28 +30,28 @@
     "button": "Support Lattice OS ❤️"
   },
   "Metadata": {
-      "title": "Lattice OS: Sovereign AI Infrastructure for Regulated Industries",
-      "description": "On-premises intelligence that compounds — your data never leaves your network. Lattice OS is a memory-native orchestration layer for regulated industries that need GDPR-ready, HIPAA-aligned, self-hosted AI workflows.",
-      "keywords": "Lattice OS, sovereign AI, on-premises AI, self-hosted AI, GDPR AI, HIPAA AI, regulated AI, memory-native, intelligent orchestration, data sovereignty, edge AI"
+    "title": "Lattice OS: Sovereign AI Infrastructure for Regulated Industries",
+    "description": "On-premises intelligence that compounds — your data never leaves your network. Lattice OS is a memory-native orchestration layer for regulated industries that need GDPR-ready, HIPAA-aligned, self-hosted AI workflows.",
+    "keywords": "Lattice OS, sovereign AI, on-premises AI, self-hosted AI, GDPR AI, HIPAA AI, regulated AI, memory-native, intelligent orchestration, data sovereignty, edge AI"
   },
   "Landing": {
     "hero": {
-        "badge": "Sovereign AI Infrastructure · On-Premises First · Zero Data Exfiltration",
-        "headline1": "Your intelligence layer.",
-        "headline2": "Your network.",
-        "headline3": "Your rules.",
-        "subhead": "Lattice OS runs on your hardware, in your network, under your control. No cloud round-trips, no third-party telemetry, no subscription lock-in. Built for regulated industries that can't afford to send sensitive work to someone else's infrastructure.",
-        "cta": "Deploy on Your Infrastructure",
-        "ctaSecondary": "See how sovereignty works",
-        "graphLabel": "Self-Hosted Memory Layer",
-        "title": "Sovereign AI infrastructure for the real world",
-        "description": "On-premises orchestration, persistent memory, and regulated workflows — built so your intelligence work never leaves your network.",
-        "login": "Access your instance"
+      "badge": "Sovereign AI Infrastructure · On-Premises First · Zero Data Exfiltration",
+      "headline1": "Your intelligence layer.",
+      "headline2": "Your network.",
+      "headline3": "Your rules.",
+      "subhead": "Lattice OS runs on your hardware, in your network, under your control. No cloud round-trips, no third-party telemetry, no subscription lock-in. Built for regulated industries that can't afford to send sensitive work to someone else's infrastructure.",
+      "cta": "Deploy on Your Infrastructure",
+      "ctaSecondary": "See how sovereignty works",
+      "graphLabel": "Self-Hosted Memory Layer",
+      "title": "Sovereign AI infrastructure for the real world",
+      "description": "On-premises orchestration, persistent memory, and regulated workflows — built so your intelligence work never leaves your network.",
+      "login": "Access your instance"
     },
     "ucol": {
-        "eyebrow": "Proportional Intelligence",
-        "title": "Not every task needs a frontier model.",
-        "subtitle": "Lattice routes work through layered execution: reflex for fast local responses, memory for contextual recall, and heavy compute only when the task justifies the cost. Models run when they should — not on every keystroke.",
+      "eyebrow": "Proportional Intelligence",
+      "title": "Not every task needs a frontier model.",
+      "subtitle": "Lattice routes work through layered execution: reflex for fast local responses, memory for contextual recall, and heavy compute only when the task justifies the cost. Models run when they should — not on every keystroke.",
       "flowLabel": "Reflex → Memory → Heavy Compute (event-gated)",
       "card1Title": "Local-First Inference",
       "card1Body": "Simple tasks resolve on-device with sub-10ms latency. No cloud calls, no token costs, no round-trip delays. Only escalate when the task demands it.",
@@ -57,78 +63,89 @@
       "card4Body": "Models don't poll. They respond to events. User queries, memory triggers, system signals — compute activates on demand, not on a timer."
     },
     "memory": {
-        "eyebrow": "Persistent Knowledge Graph",
-        "title": "Your intelligence compounds. It doesn't reset.",
-        "subtitle": "Unlike cloud AI that starts from scratch every session, Lattice builds a temporal knowledge graph with causal edges, delta scoring, and retrieval-aware assembly. Your organization's knowledge persists across every interaction, project, and model.",
-        "stat1Value": "Persistent",
-        "stat1Label": "Knowledge graph survives infrastructure restarts and model changes",
-        "stat2Value": "Signed",
-        "stat2Label": "Every memory write is cryptographically verifiable",
-        "stat3Value": "Compounding",
-        "stat3Label": "Intelligence improves as the system is used — not as you pay more"
+      "eyebrow": "Persistent Knowledge Graph",
+      "title": "Your intelligence compounds. It doesn't reset.",
+      "subtitle": "Unlike cloud AI that starts from scratch every session, Lattice builds a temporal knowledge graph with causal edges, delta scoring, and retrieval-aware assembly. Your organization's knowledge persists across every interaction, project, and model.",
+      "stat1Value": "Persistent",
+      "stat1Label": "Knowledge graph survives infrastructure restarts and model changes",
+      "stat2Value": "Signed",
+      "stat2Label": "Every memory write is cryptographically verifiable",
+      "stat3Value": "Compounding",
+      "stat3Label": "Intelligence improves as the system is used — not as you pay more"
     },
     "features": {
-        "title": "Intelligence infrastructure you actually control",
-        "subtitle": "Lattice OS combines persistent memory, model orchestration, edge-native execution, and regulatory alignment into one self-hosted platform — built so regulated organizations can deploy AI with confidence.",
-        "conversation": "Memory-Aware Execution",
-        "conversationDesc": "Conversations backed by a temporal knowledge graph that persists across sessions, models, and infrastructure restarts. Every interaction adds to your organization's compounding intelligence.",
-        "code": "Code & Repository Understanding",
-        "codeDesc": "Workspace-scoped code intelligence linked to your repositories. Architectural decisions, project context, and code history persist across developer turnover.",
-        "research": "Regulated Research Workflows",
-        "researchDesc": "Persistent context and structured memory for research, analysis, and synthesis in regulated industries where data residency and audit trails are non-negotiable.",
-        "hybrid": "Proportional Inference",
-        "hybridDesc": "Event-gated routing through reflex, memory, and heavy compute layers. Models only activate when the task justifies it — no wasted compute, no unnecessary cloud calls.",
-        "memoryLayer": "Cryptographic Memory Provenance",
-        "memoryLayerDesc": "Signed knowledge graph writes, causal edges, and temporal validity tracking. Every memory mutation is traceable for compliance reviews and forensic analysis.",
-        "infrastructure": "On-Premises Appliance",
-        "infrastructureDesc": "Ship as a Docker container on your hardware. Air-gapped operation, network isolation, and self-signed certificates supported. No vendor dependency on your infrastructure."
+      "title": "Intelligence infrastructure you actually control",
+      "subtitle": "Lattice OS combines persistent memory, model orchestration, edge-native execution, and regulatory alignment into one self-hosted platform — built so regulated organizations can deploy AI with confidence.",
+      "conversation": "Memory-Aware Execution",
+      "conversationDesc": "Conversations backed by a temporal knowledge graph that persists across sessions, models, and infrastructure restarts. Every interaction adds to your organization's compounding intelligence.",
+      "code": "Code & Repository Understanding",
+      "codeDesc": "Workspace-scoped code intelligence linked to your repositories. Architectural decisions, project context, and code history persist across developer turnover.",
+      "research": "Regulated Research Workflows",
+      "researchDesc": "Persistent context and structured memory for research, analysis, and synthesis in regulated industries where data residency and audit trails are non-negotiable.",
+      "hybrid": "Proportional Inference",
+      "hybridDesc": "Event-gated routing through reflex, memory, and heavy compute layers. Models only activate when the task justifies it — no wasted compute, no unnecessary cloud calls.",
+      "memoryLayer": "Cryptographic Memory Provenance",
+      "memoryLayerDesc": "Signed knowledge graph writes, causal edges, and temporal validity tracking. Every memory mutation is traceable for compliance reviews and forensic analysis.",
+      "infrastructure": "On-Premises Appliance",
+      "infrastructureDesc": "Ship as a Docker container on your hardware. Air-gapped operation, network isolation, and self-signed certificates supported. No vendor dependency on your infrastructure."
     },
     "compliance": {
-        "eyebrow": "Built for Regulated Industries",
-        "title": "GDPR-ready. HIPAA-aligned. Your audit, your rules.",
-        "subtitle": "Every intelligence operation is logged, signed, and traceable. Lattice OS ships with the security primitives that regulated organizations need to deploy AI without compliance risk.",
-        "gdprTitle": "GDPR / European Data Residency",
-        "gdprBody": "Data stays in your jurisdiction. No cross-border transfers. Right-to-deletion built into the memory layer. No third-party telemetry.",
-        "hipaaTitle": "HIPAA / Healthcare Safeguards",
-        "hipaaBody": "Encryption at rest and in transit. Append-only audit logs. Role-based access control. Memory writes are cryptographically signed for tamper evidence.",
-        "doraTitle": "DORA / Financial Resilience",
-        "doraBody": "Operational resilience through on-premises operation. No dependency on third-party cloud availability. Self-contained disaster recovery for intelligence workloads.",
-        "soc2Title": "SOC 2 Type II Readiness",
-        "soc2Body": "Immutable audit trail. Access controls on every memory operation. Workspace-level isolation prevents cross-tenant data contamination."
+      "eyebrow": "Built for Regulated Industries",
+      "title": "GDPR-ready. HIPAA-aligned. Your audit, your rules.",
+      "subtitle": "Every intelligence operation is logged, signed, and traceable. Lattice OS ships with the security primitives that regulated organizations need to deploy AI without compliance risk.",
+      "gdprTitle": "GDPR / European Data Residency",
+      "gdprBody": "Data stays in your jurisdiction. No cross-border transfers. Right-to-deletion built into the memory layer. No third-party telemetry.",
+      "hipaaTitle": "HIPAA / Healthcare Safeguards",
+      "hipaaBody": "Encryption at rest and in transit. Append-only audit logs. Role-based access control. Memory writes are cryptographically signed for tamper evidence.",
+      "doraTitle": "DORA / Financial Resilience",
+      "doraBody": "Operational resilience through on-premises operation. No dependency on third-party cloud availability. Self-contained disaster recovery for intelligence workloads.",
+      "soc2Title": "SOC 2 Type II Readiness",
+      "soc2Body": "Immutable audit trail. Access controls on every memory operation. Workspace-level isolation prevents cross-tenant data contamination."
     },
     "cta": {
-        "title": "Deploy sovereign AI on your infrastructure",
-        "subtitle": "Self-hosted orchestration, persistent knowledge graph, and regulated workflows — built so your intelligence layer never leaves your network.",
-        "button": "Deploy Lattice OS"
+      "title": "Deploy sovereign AI on your infrastructure",
+      "subtitle": "Self-hosted orchestration, persistent knowledge graph, and regulated workflows — built so your intelligence layer never leaves your network.",
+      "button": "Deploy Lattice OS"
     },
     "pricing": {
-      "title": "Simple, credit-based pricing",
-      "subtitle": "Buy credits, then spend them across the tools you use—no hidden subscriptions.",
-      "freeTierName": "Free",
-      "freeTierUnit": "to start",
-      "freeTierSubtitle": "Get started with welcome credits, no credit card required.",
-      "freeTierFeature1": "Welcome credits on signup",
-      "freeTierFeature2": "Access to core assistants",
-      "freeTierFeature3": "Pay-as-you-go top-ups",
-      "creatorBundle": "Starter Pack",
-      "creatorBundleUnit": "one-time · 250 credits",
-      "creatorBundleFeature1": "250 compute credits ($1 = 50 credits)",
-      "creatorBundleFeature2": "Use across chat, code, image, and music",
-      "creatorBundleFeature3": "No expiration",
-      "proStudio": "Pro Pack",
-      "proStudioUnit": "one-time · 1,000 credits",
-      "proStudioFeature1": "1,000 compute credits ($1 = 50 credits)",
-      "proStudioFeature2": "Covers heavy media generation workloads",
-      "proStudioFeature3": "Workspace-ready environment",
-      "enterprise": "Enterprise / OEM",
-      "enterprisePriceLabel": "Talk to sales",
-      "enterpriseUnit": "license & deployment",
-      "enterpriseSubtitle": "Workspace isolation, private deployment, and licensed feature access.",
-      "enterpriseFeature1": "License-gated feature access",
-      "enterpriseFeature2": "Self-hosted Docker appliance",
-      "enterpriseFeature3": "Workspace and seat controls",
-      "startCreating": "Get started",
-      "disclaimer": "Credits are consumed per operation depending on the tool and context used."
+      "eyebrow": "Intelligence as a Service",
+      "title": "Intelligence as a Service.",
+      "subtitle": "Stop paying by the token or wrestling with prompt engineering. Rent a customized, data-backed expert designed to compound your workflow.",
+      "standardOS": {
+        "name": "Standard OS",
+        "price": "$0",
+        "unit": "forever free",
+        "subtitle": "For individuals moving beyond generic chat wrappers.",
+        "cta": "Start Building",
+        "feature1": "Multi-model chat interface (Gemini, Claude, DeepSeek)",
+        "feature2": "Basic persistent conversation memory",
+        "feature3": "Standard workspace source ingestion (PDFs, URLs, text)",
+        "feature4": "Access to the standard Weaver base persona"
+      },
+      "theExpert": {
+        "name": "The Expert",
+        "price": "$49",
+        "unit": "per month or $100/year",
+        "subtitle": "For operators, founders, and agencies who need on-demand, hyper-specialized domain consulting.",
+        "cta": "Rent Your Consultant",
+        "feature1": "The Chameleon Engine: dynamic persona synthesis tailored to your exact workspace constraints",
+        "feature2": "Data Refinery access for continuously updated, temporal market intelligence",
+        "feature3": "UCOL debate loops: full Code Builder and multi-agent reasoning",
+        "feature4": "Priority orchestration: uncapped, zero-latency routing to the optimal LLM"
+      },
+      "enterprise": {
+        "name": "Enterprise",
+        "price": "Custom",
+        "unit": "license & deployment",
+        "subtitle": "For organizations integrating the Unified Context Orchestration Layer across their data.",
+        "cta": "Contact Sales",
+        "feature1": "Shared workspace knowledge graphs with role-based access control",
+        "feature2": "Custom Data Refinery scraping targets for your specific niche",
+        "feature3": "Dedicated Relay orchestration agents for internal workflows",
+        "feature4": "SOC2 & GDPR compliant data export and deletion"
+      },
+      "disclaimer": "Prices reflect the consultant rental model. Credits are no longer the primary billing unit for expert tiers.",
+      "startCreating": "Start 7-Day Trial"
     },
     "footer": {
       "rights": "© {year} Lattice OS. All rights reserved."
@@ -145,6 +162,164 @@
       "card3Body": "Optimized for ~5µW inference on ARM devices. Event-gated execution means models only run when needed — not always-on polling. Built for low-power, high-reliability environments.",
       "card4Title": "Cryptographic Provenance",
       "card4Body": "Every memory write is signed. Every knowledge graph mutation is traceable. Audit logs prove your AI's reasoning chain for compliance reviews, HIPAA safeguards, and forensic analysis."
+    },
+    "expert": {
+      "badge": "Expert as a Service",
+      "headline1": "Rentable intellect.",
+      "headline2": "Precision execution.",
+      "subhead": "Onboard a curated domain expert. Its knowledge substrate is pre-loaded with your context. The execution environment is quarantined. The reasoning is transparent.",
+      "ctaNav": "Start 7-Day Trial",
+      "ctaHeroPrimary": "Deploy Your Consultant",
+      "ctaSecondary": "Inspect the mechanics",
+      "mechanics": {
+        "eyebrow": "The Moat",
+        "title": "Curate your own Consultant.",
+        "subtitle": "Use the onboarding wizard to select an expert, load your knowledge substrate, and launch a quarantined execution environment with transparent trajectory.",
+        "item1Title": "Sandboxed Execution",
+        "item1Body": "Every mutation is quarantined and integrity-verified before promotion. No side effects. No leakage.",
+        "item2Title": "The Data Refinery",
+        "item2Body": "We continuously scrape, verify, and structure niche market data so your consultant is always operating on the freshest intelligence.",
+        "item3Title": "Trajectory Transparency",
+        "item3Body": "Observe the raw reasoning stream. Inspect the agent trajectory before accepting the output.",
+        "item4Title": "Precision Execution",
+        "item4Body": "Clinical tool use. No approximation. Rentable intellect for operators who need exact outputs."
+      },
+      "cta": {
+        "title": "Initialize your session.",
+        "subtitle": "Three steps. No sales call. No enterprise contract. Just instant access to a quarantined, trajectory-visible execution environment.",
+        "ctaFooterPrimary": "Rent Your Expert Today",
+        "roster": {
+          "eyebrow": "The Roster",
+          "title": "Specialized intellect, on demand.",
+          "subtitle": "Each expert is a curated execution environment with a proprietary knowledge substrate. Choose the operator for your domain.",
+          "cta": "View pricing"
+        }
+      },
+      "formEyebrow": "Consultation",
+      "responseTitle": "Consultation Output",
+      "newQuery": "New query",
+      "processing": "Processing...",
+      "workflowDemoPlaceholder": "Submit a consultation above to see grounded reasoning here."
+    },
+    "expertV2": {
+      "badge": "Expert-as-a-Service",
+      "headline1": "Turn your company's knowledge into an AI specialist that",
+      "headline2": "ships work, not just answers.",
+      "subhead": "Lattice gives you the platform to build workspace-scoped AI experts from your documents, code, and operating procedures. It remembers decisions across sessions, reasons over proprietary context, and triggers approved actions across your team's existing toolchain.",
+      "ctaHeroPrimary": "Create your first expert",
+      "ctaSecondary": "See it in action",
+      "problem": {
+        "eyebrow": "The Real Cost of Tribal Knowledge",
+        "title": "Your experts lose time answering the same questions twice.",
+        "body1": "When institutional knowledge is locked inside code repositories, Slack threads, and unindexed documents, organizations pay a heavy operational tax. New hires require weeks of hand-holding before contributing independently. Senior specialists lose hours every week recreating analysis, code briefs, and client deliverables that already exist somewhere in the organization.",
+        "body2": "Standard AI tools leave this gap because they do not retain your proprietary context across work or connect naturally to the tools where the work must be finished.",
+        "metric1Value": "[3 to 4 weeks]",
+        "metric1Label": "Lost time before new team members achieve autonomous productivity",
+        "metric2Value": "[15% to 25%]",
+        "metric2Label": "Time spent recreating existing research and specs",
+        "metric3Value": "[Days to Hours]",
+        "metric3Label": "Delay in synthesizing cross-functional context"
+      },
+      "solution": {
+        "eyebrow": "The Lattice Solution",
+        "title": "A memory-rich specialist built on your business.",
+        "outcome1": "Carry context across sessions",
+        "delivery1": "Persistent memory and retrieval keep approved documents, prior decisions, and project history available to the specialist.",
+        "outcome2": "Get answers grounded in company context",
+        "delivery2": "Context orchestration assembles relevant workspace knowledge and routes each task to an appropriate model path.",
+        "outcome3": "Keep sensitive work separated",
+        "delivery3": "Workspace-scoped access controls and isolated knowledge stores help keep team context within its intended boundary.",
+        "outcome4": "Move from response to next step",
+        "delivery4": "Connected integrations can trigger approved actions or send reports into tools such as GitHub, Slack, Google Docs, and email."
+      },
+      "socialProof": {
+        "eyebrow": "Evidence, Not Promises",
+        "title": "Show the work your specialist removes.",
+        "metric1Value": "[X]%",
+        "metric1Label": "Reduction in recurring internal onboarding questions",
+        "metric2Value": "[X] Hours",
+        "metric2Label": "Saved per specialist weekly on research and report drafting",
+        "securityNote": "Isolated vector stores with Bring-Your-Own-Key (BYOK) encryption.",
+        "testimonialQuote": "[Approved customer statement describing one measurable business outcome. Include a realistic time or human-baseline comparison.]",
+        "testimonialAuthor": "[Approved title]",
+        "testimonialCompany": "[Company or approved descriptor]",
+        "testimonialOutcome": "[X]% reduction in [verified metric]"
+      },
+      "workflow": {
+        "eyebrow": "How It Works",
+        "title": "Ask once. Keep the context. Move the work forward.",
+        "prompt": "Summarize last week's repository pull requests into a risk brief for the product team.",
+        "step1Title": "Connect Context",
+        "step1Desc": "Ingest repositories, internal documentation, and approved runbooks into an isolated workspace.",
+        "step2Title": "Prompt the Expert",
+        "step2Desc": "Ask in plain language for analysis, summaries, or structured deliverables.",
+        "step3Title": "Inspect Grounded Reasoning",
+        "step3Desc": "Review the output with workspace context and permissions visible.",
+        "step4Title": "Trigger Downstream Action",
+        "step4Desc": "Export the result to Google Docs, DOCX, email, or Slack through approved actions."
+      },
+      "useCases": {
+        "engineering": {
+          "title": "Your codebase has an expert now.",
+          "body": "Help developers understand architecture, trace decisions, search repositories, and get productive faster.",
+          "cta": "Explore the Engineering Expert"
+        },
+        "services": {
+          "title": "Turn your firm's playbook into capacity.",
+          "body": "Give consultants, legal teams, and agencies a shared expert that works from approved templates and research history.",
+          "cta": "Explore the Services Expert"
+        },
+        "operations": {
+          "title": "Make the next step part of the answer.",
+          "body": "Connect knowledge to action. Generate a report, prepare a document, send an update, or route work.",
+          "cta": "Explore the Operations Expert"
+        }
+      },
+      "trust": {
+        "eyebrow": "AI that fits the way your business is governed.",
+        "title": "Built for organizations where context is competitive advantage.",
+        "workspace": "Keep team context, knowledge, and actions organized around the workspace that owns them.",
+        "integrations": "Connect external tools deliberately and limit what the expert is allowed to do.",
+        "providers": "Use the model providers and routing strategy that fit your organization's requirements.",
+        "visibility": "Build a clear record of how experts are used and where work is sent."
+      },
+      "footer": {
+        "title": "Give your team an expert that remembers how work gets done.",
+        "body": "Start with one high-value workflow, one team, and one measurable outcome. Then expand the expert as your organization sees where persistent context creates the most leverage.",
+        "cta": "Create your first expert",
+        "secondaryCta": "Talk to an expert",
+        "microcopy": "No migration project required. Start with the knowledge your team already uses."
+      },
+      "abVariants": {
+        "a": {
+          "badge": "Expert-as-a-Service",
+          "headline1": "Stop repeating the work your team already knows how to do.",
+          "headline2": "",
+          "subhead": "Lattice turns approved company knowledge into a specialist that helps your team find context, prepare deliverables, and move routine work into the next step.",
+          "ctaHeroPrimary": "Put your knowledge to work",
+          "ctaSecondary": "See it in action"
+        },
+        "b": {
+          "badge": "Expert-as-a-Service",
+          "headline1": "AI for business context, with a clear path to controlled action.",
+          "headline2": "",
+          "subhead": "Lattice gives teams a workspace-scoped specialist that works from approved knowledge, follows defined permissions, and sends work into the tools your organization already uses.",
+          "ctaHeroPrimary": "See the platform",
+          "ctaSecondary": "See it in action"
+        },
+        "c": {
+          "badge": "Expert-as-a-Service",
+          "headline1": "Scale your best people without losing what makes them valuable.",
+          "headline2": "",
+          "subhead": "Lattice captures the expertise behind your processes and makes it available as a persistent specialist for the teams that need it.",
+          "ctaHeroPrimary": "Build a specialist for your team",
+          "ctaSecondary": "See it in action"
+        }
+      },
+      "meta": {
+        "title": "Lattice | Expert-as-a-Service for teams that need AI with context",
+        "description": "Turn your company's knowledge into a persistent AI expert that understands your documents and code, remembers context, and helps your team complete work across connected tools."
+      }
     }
   },
   "Sidebar": {
@@ -225,5 +400,304 @@
     "creditsTitle": "Compute Credits",
     "creditsHint": "1 USD = 50 credits. Top up to keep using premium tools like image, video, and code generation.",
     "topUp": "Top up"
+  },
+  "Docs": {
+    "hero": {
+      "badge": "Documentation Hub · Beta onboarding, CLI, appliance deployment",
+      "title": "Docs for onboarding, operating, and extending Lattice OS",
+      "subtitle": "New users get a clear path from install to first memory-aware workspace. Power users get direct entry points for Docker appliance deployment, V3 licensing, air-gapped operation, Enterprise rollout, route verification, and incident debugging.",
+      "ctaPrimary": "Start Quick Onboarding",
+      "ctaSecondary": "Power-User Recipes",
+      "ctaGithub": "Docs on GitHub",
+      "ctaSource": "Source Code"
+    },
+    "features": {
+      "onboardingTitle": "Onboarding-first",
+      "onboardingDesc": "Maps the fastest route through beta tracks, CLI install, license activation, deployment, and first useful workspace.",
+      "applianceTitle": "Appliance-ready",
+      "applianceDesc": "Explains the Docker appliance path, preflight validation, health checks, backups, upgrades, and rollback workflows.",
+      "securityTitle": "Security-aware",
+      "securityDesc": "Makes trust boundaries, public routes, workspace isolation, and cryptographic license verification explicit."
+    },
+    "newUser": {
+      "title": "New user path",
+      "subtitle": "If someone just received access, this is the shortest path from zero context to a working local Lattice OS instance.",
+      "step1": {
+        "step": "01",
+        "title": "Pick the right track",
+        "description": "New testers should start with the beta track that matches their intent: quick evaluation, source build, enterprise rollout, or privacy/compliance review.",
+        "cta": "Open beta tracks"
+      },
+      "step2": {
+        "step": "02",
+        "title": "Install the lattice CLI",
+        "description": "The CLI manages auth, license activation, Docker appliance deployment, preflight checks, logs, backups, and upgrades.",
+        "command": "# Download and verify the versioned CLI from /downloads\nlattice --version\nlattice doctor --offline --json",
+        "cta": "Open verified downloads"
+      },
+      "step3": {
+        "step": "03",
+        "title": "Activate licensing and initialize",
+        "description": "V3 licenses are ed25519-signed and verified locally, so Enterprise features can unlock without a phone-home dependency.",
+        "command": "lattice license activate <lattice-v3-key>\nlattice deploy init --name beta --tier enterprise"
+      },
+      "step4": {
+        "step": "04",
+        "title": "Run preflight, deploy, then smoke test",
+        "description": "Deployment starts with Docker, Compose v2, resources, ports, disk, auth, and license checks. Finish by creating a workspace and verifying memory-aware chat.",
+        "command": "lattice deploy start --name beta\nlattice health check --instance beta",
+        "cta": "Open your dashboard"
+      }
+    },
+    "howToUse": {
+      "title": "How to use this docs set",
+      "audiences": {
+        "newUsers": {
+          "title": "New users",
+          "description": "Start with the beta track picker, install the CLI, deploy locally, create a workspace, and verify the first memory-aware conversation."
+        },
+        "developers": {
+          "title": "Developers",
+          "description": "Use the architecture, reference, CLI, and source-file map docs to understand where behavior lives and how the major subsystems fit together."
+        },
+        "operators": {
+          "title": "Operators",
+          "description": "Use truth surfaces, deployment, preflight, route verification, and incident debugging docs to diagnose live-system issues more reliably."
+        },
+        "powerUsers": {
+          "title": "Power users",
+          "description": "Use the recipe cards to jump straight to niche flows: air-gapped deployments, custom registries, Enterprise rollout, backups, and rollback."
+        }
+      }
+    },
+    "recipes": {
+      "title": "Power-user recipes",
+      "subtitle": "For niche questions, start from the recipe that matches the job instead of reading the docs linearly.",
+      "selfHosted": {
+        "title": "Self-hosted Docker appliance",
+        "description": "Use the CLI and deployment docs when you need a single-server install with explicit data-residency control."
+      },
+      "airGapped": {
+        "title": "Air-gapped / regulated environment",
+        "description": "Use local license verification, pre-loaded Docker images, no-egress configuration, and audit-oriented health evidence."
+      },
+      "enterprise": {
+        "title": "Enterprise rollout",
+        "description": "Understand workspace-as-project isolation, Enterprise feature gates, SSO/RBAC expectations, backup cadence, and rollback paths."
+      },
+      "debug": {
+        "title": "Debug a weird route or runtime issue",
+        "description": "Start from truth surfaces, verify public/protected boundaries, then use request examples and source maps to find the owning code path."
+      }
+    },
+    "sections": {
+      "overview": {
+        "title": "Overview",
+        "description": "Start here for the high-level platform story, technology transparency, and positioning.",
+        "items": {
+          "index": {
+            "title": "Documentation Index",
+            "description": "The backbone index for the repository documentation system and the best place to see what exists today."
+          },
+          "transparency": {
+            "title": "Technology Transparency",
+            "description": "Explicit explanation of the stack, hosting surfaces, AI/runtime layers, and major product boundaries."
+          },
+          "seo": {
+            "title": "SEO Strategy",
+            "description": "How Lattice OS should talk about memory-native AI, hybrid inference, and workspace intelligence for search and discovery."
+          }
+        }
+      },
+      "onboarding": {
+        "title": "Onboarding",
+        "description": "Guided paths for beta testers, developers, enterprise evaluators, and privacy-focused teams.",
+        "items": {
+          "betaPicker": {
+            "title": "Beta Track Picker",
+            "description": "Choose between Quick Start, Developer, Enterprise, and Privacy & Compliance onboarding paths."
+          },
+          "quickStart": {
+            "title": "Quick Start",
+            "description": "15-minute path from CLI install to first workspace and first memory-aware conversation."
+          },
+          "devTrack": {
+            "title": "Developer Track",
+            "description": "Source builds, custom registries, CI deployment stubs, and standalone binary builds."
+          },
+          "enterpriseTrack": {
+            "title": "Enterprise Track",
+            "description": "Licensing, workspace isolation, SSO/RBAC expectations, backups, health checks, upgrades, and rollback."
+          },
+          "privacyTrack": {
+            "title": "Privacy & Compliance Track",
+            "description": "Air-gapped deployment pattern for regulated environments where data cannot leave the network."
+          }
+        }
+      },
+      "cliAppliance": {
+        "title": "CLI & Appliance",
+        "description": "Manage Lattice OS as an installable Docker appliance with local preflight checks and cryptographic licensing.",
+        "items": {
+          "cliRef": {
+            "title": "lattice-cli Command Reference",
+            "description": "Install options, auth, deploy, health, upgrade, backup, restore, and configuration reference for lattice-cli v0.3.0."
+          },
+          "v3License": {
+            "title": "V3 Cryptographic Licensing",
+            "description": "ed25519-signed license payloads with embedded public-key verification for offline-capable Enterprise activation."
+          },
+          "selfHostedTopology": {
+            "title": "Self-Hosted Topology",
+            "description": "How the app, database, storage, auth, and optional workers fit together in self-hosted installs."
+          },
+          "preflightChecklist": {
+            "title": "Self-Hosted Preflight Checklist",
+            "description": "The practical preflight and smoke-test checklist for deciding whether a fresh install is usable."
+          }
+        }
+      },
+      "architecture": {
+        "title": "Architecture",
+        "description": "Understand how Lattice OS is structured and where the platform is headed.",
+        "items": {
+          "systemArch": {
+            "title": "System Architecture",
+            "description": "High-level system layers, trust zones, and request flow."
+          },
+          "runtimeRouting": {
+            "title": "Runtime Mode Routing",
+            "description": "How the server resolves effective runtime behavior from context instead of trusting client toggles."
+          },
+          "memoryContext": {
+            "title": "Memory and Context Architecture",
+            "description": "Prepared context, layered memory direction, and why raw history is not enough."
+          },
+          "workspaceModel": {
+            "title": "Workspace and Operating Profile Model",
+            "description": "Why workspace is the primary container and operating profile is the behavior-shaping layer."
+          },
+          "retrievalGraph": {
+            "title": "Retrieval and Graph Strategy",
+            "description": "How retrieval and future graph-aware systems support structured context assembly."
+          }
+        }
+      },
+      "security": {
+        "title": "Security",
+        "description": "Make route visibility, trust boundaries, and authority models explicit.",
+        "items": {
+          "publicRoutes": {
+            "title": "Public Routes",
+            "description": "Which routes are intended to remain public and how route gating is actually enforced."
+          },
+          "trustBoundaries": {
+            "title": "Trust Boundaries",
+            "description": "The platform's major trust zones across public users, authenticated users, backend jobs, integrations, and operators."
+          },
+          "licenseVerification": {
+            "title": "License Verification Boundary",
+            "description": "Power users can inspect the public-key verification path without exposing the private signing key."
+          }
+        }
+      },
+      "operations": {
+        "title": "Operations",
+        "description": "Operational discipline for deployment, verification, and debugging in a multi-surface platform.",
+        "items": {
+          "truthSurfaces": {
+            "title": "Truth Surfaces",
+            "description": "How to choose the right evidence source when code, CI, deploy logs, and runtime disagree."
+          },
+          "deployment": {
+            "title": "Deployment",
+            "description": "How code moves from repo state to live runtime and what to verify along the way."
+          },
+          "deviceInstallation": {"title":"Device-aware installation","description":"How the install chooser behaves on iPhone, Android, and desktop; what it does not install or authorize."},
+      "deploymentModes": {
+            "title": "Deployment Modes",
+            "description": "Official business deployment modes and the recommended support order for self-hosted adoption."
+          },
+          "routeVerification": {
+            "title": "Route Verification Checklist",
+            "description": "Checklist for validating public, protected, localized, and API-dependent routes."
+          },
+          "incidentDebugging": {
+            "title": "Incident Debugging",
+            "description": "A practical method for classifying incidents, choosing truth surfaces, and narrowing failure boundaries."
+          }
+        }
+      },
+      "reference": {
+        "title": "Reference",
+        "description": "Concrete developer-facing reference material for APIs, environment configuration, and repo navigation.",
+        "items": {
+          "apiRef": {
+            "title": "API Reference",
+            "description": "Human-readable map of important API surfaces, public/protected boundaries, and debugging notes."
+          },
+          "envVars": {
+            "title": "Environment Variables",
+            "description": "Public vs server-only configuration surfaces and the major variables that shape runtime behavior."
+          },
+          "requestResponse": {
+            "title": "Request and Response Examples",
+            "description": "Concrete payload examples for important API routes."
+          },
+          "sourceFileMap": {
+            "title": "Source File Map",
+            "description": "Where important route, runtime, auth, and subsystem files live in the repository."
+          }
+        }
+      },
+      "decisions": {
+        "title": "Decisions",
+        "description": "Architectural decision records that capture why the platform evolved the way it did.",
+        "items": {
+          "adrIndex": {
+            "title": "ADR Index",
+            "description": "Entry point for the architecture decision record set."
+          },
+          "adrSet": {
+            "title": "Current ADR Set",
+            "description": "Covers workspace-first architecture, server-resolved runtime routing, prepared context, public/authenticated boundary separation, deploy truth vs runtime truth, and more."
+          }
+        }
+      }
+    },
+    "sidebar": {
+      "label": "Documentation"
+    },
+    "usefulFor": {
+      "label": "Use This Docs Set For",
+      "item1": "First-run onboarding",
+      "item2": "Docker appliance installs",
+      "item3": "Enterprise and air-gap reviews",
+      "item4": "Operational debugging",
+      "item5": "Security boundary review"
+    },
+    "cta": {
+      "needPath": "Need a path that is not documented yet?",
+      "needPathDesc": "If you're trying to understand a route, runtime behavior, deployment issue, integration surface, or compliance requirement that isn't clear yet, use support and we can turn the answer into a reusable doc path.",
+      "support": "Contact Support",
+      "dashboard": "Open Product"
+    },
+    "nav": {
+      "viewSource": "View source",
+      "externalLink": "External link",
+      "command": "Command",
+      "step": "Step"
+    },
+    "languageSelector": {
+      "previewNotice": "Translation preview: available articles open in your selected language; other technical articles remain in English. Commands and source paths are unchanged.",
+      "label": "Language",
+      "selectLanguage": "Select language",
+      "en": "English",
+      "es": "Español",
+      "fr": "Français",
+      "de": "Deutsch",
+      "th": "ไทย",
+      "vi": "Tiếng Việt"
+    }
   }
 }

@@ -63,6 +63,8 @@ export type RelationshipType =
   | 'ASSERTED_BY'       // claim → speaker (solves attribution collapse)
   | 'CONTEXT_OF'        // claim was made in this context
   | 'SUPERSEDES'        // newer fact replaces older
+  | 'ENABLES'           // structural dependency: A enables/permits B
+  | 'REQUIRES'          // structural prerequisite: A depends on / requires B
 
 // ─────────────────────────────────────────────
 // Entity Types
@@ -131,7 +133,29 @@ export interface CausalEdge {
   confidence: number
   causal_strength?: number    // For CAUSES edges: 0.0 (weak) → 1.0 (deterministic)
 
+  // Standardized delta for mutating events (SUPERSEDES/CONTRADICTS/OBSOLETED)
+  delta?: DeltaPayload
+
   created_at: Date
+}
+
+// ─────────────────────────────────────────────
+// Standardized Delta Payload (serialization-stable contract)
+// Carried on SUPERSEDES / CONTRADICTS / OBSOLETED events.
+// Mirrors normalize_wm_delta() in the 20260829 migration.
+// ─────────────────────────────────────────────
+
+export interface DeltaEvidence {
+  edge_id: string
+  weight: number            // 0.0 – 1.0
+}
+
+export interface DeltaPayload {
+  before: unknown           // previous value / payload
+  after: unknown | null     // new value / payload (null for OBSOLETED)
+  reason: string            // human/machine rationale (non-empty)
+  evidence: DeltaEvidence[] // list of { edge_id, weight }
+  score: number             // delta_score 0.0 = confirmed → 1.0 = fabricated
 }
 
 // ─────────────────────────────────────────────

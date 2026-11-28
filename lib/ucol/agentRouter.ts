@@ -79,7 +79,7 @@ const CONFIDENCE_OVERRIDABLE = new Set<TaskType>([
 const CONFIDENCE_TIER_TO_NODE: Record<ConfidenceModelTier, RoutingDecision['targetNode']> = {
   'gemini-flash':  'gemini-flash',
   'deepseek':      'deepseek',
-  'claude-sonnet': 'claude',
+  'claude-sonnet': 'deepseek',
 } as Record<ConfidenceModelTier, RoutingDecision['targetNode']>;
 
 /**
@@ -87,19 +87,14 @@ const CONFIDENCE_TIER_TO_NODE: Record<ConfidenceModelTier, RoutingDecision['targ
  * Used to determine whether a confidence override is an upgrade or downgrade
  * based on actual node comparison, not raw confidence score.
  */
-// NODE_COST_RANK only applies to LLM nodes — tools are bypassed by the
+// LLM_NODE_COST_RANK only applies to LLM nodes — tools are bypassed by the
 // isToolNode() guard below and never go through confidence override logic.
 const LLM_NODE_COST_RANK: Partial<Record<string, number>> = {
-  'hermes-local':   0,  // self-hosted, zero API cost — cheapest tier
-  'gemini-flash':   1,
   'deepseek':       2,
   'context-router': 2,
-  'claude':         3,
+  'gemini-flash':   1,
   'jklaw':          3,
 };
-
-/** True when the self-hosted Vast.ai Docker Model Runner node is configured and should be used */
-const LAMBDA_OLLAMA_ENABLED = !!process.env.LAMBDA_OLLAMA_URL;
 
 /** Returns true when a routing decision targets a CLI tool harness */
 export function isToolNode(targetNode: RoutingDecision['targetNode']): boolean {
@@ -127,6 +122,10 @@ export interface RoutingDecision {
     source?: 'procedural_memory' | 'llm_routing';
     /** Populated when source is 'procedural_memory' — the pre-learned tool sequence */
     proceduralSequence?: ToolStep[];
+    /** True when the query is outside the persona's defined domain */
+    outOfDomain?: boolean;
+    /** The persona session that influenced this routing decision */
+    personaSession?: import("@/lib/consultant/personaSession").PersonaSession;
 }
 
 export interface AgentRouterGoalContext {
@@ -155,6 +154,8 @@ export interface AgentRouterTask {
     goalContext?: AgentRouterGoalContext;
     /** Require human approval before performing destructive actions (T-008) */
     allowDestructiveActions?: boolean;
+    /** Active persona session — enforces domain boundaries and minimum model tier */
+    personaSession?: import("@/lib/consultant/personaSession").PersonaSession;
 }
 
 export interface AgentRouterResult {
@@ -207,12 +208,12 @@ Respond with ONLY a JSON object:
 const ROUTING_TABLE: Record<TaskType, RoutingDecision['targetNode']> = {
     // ── LLM nodes ───────────────────────────────────────────────────────
     code_generation:   'context-router',
-    quick_answer:      LAMBDA_OLLAMA_ENABLED ? 'hermes-local' : 'gemini-flash',
-    quality_analysis:  'claude',
+    quick_answer:      'deepseek',
+    quality_analysis:  'deepseek',
     deep_reasoning:    'deepseek',
-    memory_extract:    'gemini-flash',
+    memory_extract:    'deepseek',
     memory_synthesize: 'deepseek',
-    user_profile:      'claude',
+    user_profile:      'deepseek',
     research:          'jklaw',
     strategy:          'jklaw',
     orchestration:     'jklaw',
@@ -259,6 +260,7 @@ export class AgentRouter {
     // ─── Classify a task ─────────────────────────────────────────────────
 
     async classify(task: AgentRouterTask): Promise<RoutingDecision> {
+        
         // Fast-path overrides (highest priority — never confidence-overridden)
         if (task.requireOrchestration) {
             return {
@@ -279,6 +281,13 @@ export class AgentRouter {
                 reasoning: 'Speed preferred — routing to Gemini Flash',
                 allowDestructiveActions: task.allowDestructiveActions ?? false,
             };
+        }
+
+        // Persona domain check — if query is outside persona's domain, mark it
+        let personaDomainMatch = true;
+        if (task.personaSession) {
+            const { isWithinPersonaDomain } = await import('@/lib/consultant/personaSession');
+            personaDomainMatch = isWithinPersonaDomain(task.personaSession, task.query);
         }
 
         // ── Procedural Memory Fast-Path ───────────────────────────────────
@@ -331,7 +340,7 @@ export class AgentRouter {
             const result = await this.gemini.generateStream(
                 [{ role: 'user', text: `Query: ${task.query}${task.context ? `\n\nContext: ${task.context.substring(0, 500)}` : ''}` }],
                 CLASSIFIER_SYSTEM_PROMPT,
-                { model: 'gemini-2.5-flash', temperature: 0.1, maxTokens: 256 }
+                { model: 'gemini-2.5-flash', temperature: 0.1, maxTokens: 256, responseMimeType: 'application/json' }
             );
 
             const reader = result.stream.getReader();
@@ -344,10 +353,45 @@ export class AgentRouter {
             }
 
             const cleanedRaw = raw.replace(/<thought_signature>[\s\S]*/gi, '').trim();
-            const match = cleanedRaw.match(/\{[\s\S]*\}/);
-            if (!match) throw new Error('No JSON in classifier response');
-
-            const parsed = JSON.parse(match[0]);
+    
+            // Strip markdown blocks if the LLM hallucinates them
+            const strippedRaw = cleanedRaw.replace(/```json\n?|\n?```/g, '').trim();
+    
+    
+            // Try multiple JSON extraction strategies
+            let parsed: any = null;
+    
+            // Strategy 1: Find JSON object with regex
+            const match = strippedRaw.match(/\{[\s\S]*\}/);
+            if (match) {
+                try {
+                    parsed = JSON.parse(match[0]);
+                } catch {
+                    // Strategy 2: Try to fix common JSON issues
+                    const fixed = match[0]
+                        .replace(/,\s*}/g, '}')  // Remove trailing commas
+                        .replace(/,\s*]/g, ']')
+                        .replace(/'/g, '"');     // Fix single quotes
+                    parsed = JSON.parse(fixed);
+                }
+            }
+            
+            // Strategy 3: If still no valid JSON, try to extract taskType from plain text
+            if (!parsed) {
+                const lower = strippedRaw.toLowerCase();
+                if (lower.includes('code_generation') || lower.includes('write') || lower.includes('code')) {
+                    parsed = { taskType: 'code_generation', confidence: 0.5, reasoning: 'Extracted from plain text' };
+                } else if (lower.includes('research') || lower.includes('search')) {
+                    parsed = { taskType: 'research', confidence: 0.5, reasoning: 'Extracted from plain text' };
+                } else if (lower.includes('quick') || lower.includes('simple')) {
+                    parsed = { taskType: 'quick_answer', confidence: 0.5, reasoning: 'Extracted from plain text' };
+                }
+            }
+            
+            if (!parsed) {
+                throw new Error('No JSON in classifier response');
+            }
+            
             taskType = (parsed.taskType as TaskType) || 'unknown';
             classifierConfidence = parsed.confidence ?? 0.7;
             classifierReasoning = parsed.reasoning || 'Classified by Gemini Flash router';
@@ -399,6 +443,8 @@ export class AgentRouter {
                 confidenceOverride: overrideApplied,
                 allowDestructiveActions: task.allowDestructiveActions ?? false,
                 source: 'llm_routing' as const,
+                outOfDomain: !personaDomainMatch,
+                personaSession: task.personaSession,
             };
         }
 
@@ -411,6 +457,8 @@ export class AgentRouter {
             ...(memorySignal ? { memorySignal, confidenceOverride: false } : {}),
             allowDestructiveActions: task.allowDestructiveActions ?? false,
             source: 'llm_routing' as const,
+            outOfDomain: !personaDomainMatch,
+            personaSession: task.personaSession,
         };
     }
 
@@ -468,11 +516,7 @@ export class AgentRouter {
             // using the Ollama /api/generate format. Faster, no Clerk overhead.
             if (this.twinRouterUrl) {
                 try {
-                    const twinController = new AbortController();
-                    const twinTimeout = setTimeout(
-                        () => twinController.abort(),
-                        waitForResponse ? 30000 : 6000
-                    );
+                    const twinSignal = AbortSignal.timeout(waitForResponse ? 30000 : 6000);
 
                     // Build a rich prompt that gives JKlaw full context
                     const twinPrompt = [
@@ -491,10 +535,9 @@ export class AgentRouter {
                             stream: false,
                             options: { temperature: 0.7, num_predict: 1024 },
                         }),
-                        signal: twinController.signal,
+                        signal: twinSignal,
                     });
 
-                    clearTimeout(twinTimeout);
 
                     if (twinRes.ok) {
                         const twinData = await twinRes.json();
@@ -513,9 +556,10 @@ export class AgentRouter {
                     if (twinErr.name !== 'AbortError') {
                         console.warn(`[AgentRouter] Twin router unreachable: ${twinErr.message} — falling back`);
                     }
-                    // AbortError on fire-and-forget = intentional, treat as dispatched
-                    if (twinErr.name === 'AbortError' && !waitForResponse) {
-                        return { dispatched: true };
+                    // A timeout has no acknowledgement. Do not retry an ambiguous
+                    // submission through another transport or claim it succeeded.
+                    if (twinErr.name === 'AbortError' || twinErr.name === 'TimeoutError') {
+                        return { dispatched: false, error: 'JKlaw dispatch timed out; outcome unknown' };
                     }
                 }
             }
@@ -527,8 +571,7 @@ export class AgentRouter {
                 return { dispatched: false, error: 'No dispatch path available: JKLAW_API_KEY and JKLAW_TWIN_URL both unset' };
             }
 
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), waitForResponse ? 25000 : 5000);
+            const signal = AbortSignal.timeout(waitForResponse ? 25000 : 5000);
 
             const res = await fetch(this.jklawUrl, {
                 method: 'POST',
@@ -541,10 +584,9 @@ export class AgentRouter {
                         : {}),
                 },
                 body: JSON.stringify(payload),
-                signal: controller.signal,
+                signal,
             });
 
-            clearTimeout(timeout);
 
             if (!res.ok) {
                 return { dispatched: false, error: `JKlaw returned ${res.status}` };
@@ -555,10 +597,11 @@ export class AgentRouter {
                 return { dispatched: true, response: data.response };
             }
 
+            await res.body?.cancel();
             return { dispatched: true };
         } catch (err: any) {
-            if (err.name === 'AbortError') {
-                return { dispatched: true };
+            if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+                return { dispatched: false, error: 'JKlaw dispatch timed out; outcome unknown' };
             }
             return { dispatched: false, error: err.message };
         }
@@ -601,14 +644,16 @@ export function getAgentRouter(): AgentRouter {
 /**
  * Quick-classify a query without full routing.
  * Pass memoryFacts to enable confidence-aware classification.
+ * Pass personaSession to enable domain gate enforcement.
  * userId defaults to 'system' for internal classification calls.
  */
 export async function classifyQuery(
     query: string,
     context?: string,
     memoryFacts?: ExtractedFact[],
-    userId: string = 'system'
+    userId: string = 'system',
+    personaSession?: import("@/lib/consultant/personaSession").PersonaSession
 ): Promise<RoutingDecision> {
     const router = getAgentRouter();
-    return router.classify({ query, context, memoryFacts, userId });
+    return router.classify({ query, context, memoryFacts, userId, personaSession });
 }

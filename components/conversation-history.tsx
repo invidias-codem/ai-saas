@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { MessageSquare, Trash2, Plus, Loader2, MessageCircle, Layers3 } from "lucide-react";
+import { Trash2, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,14 @@ import {
     setActiveConversation,
 } from "@/lib/conversationManager";
 import { clearSessionMemoryStorage } from "@/lib/sessionClientMemory";
+
+export const CONVERSATIONS_INVALIDATE_EVENT = 'conversations:invalidate';
+
+export function emitConversationsInvalidate() {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(CONVERSATIONS_INVALIDATE_EVENT));
+}
+
 import {
     AlertDialog,
     AlertDialogAction,
@@ -35,17 +43,22 @@ interface Conversation {
     preview?: string;
 }
 
+interface ConversationHistoryProps {
+    onNavigate?: () => void;
+    initialConversations?: Conversation[];
+}
+
 function extractWorkspaceId(pathname: string | null): string | null {
     if (!pathname) return null;
     const match = pathname.match(/\/workspaces\/([^/]+)/);
     return match ? decodeURIComponent(match[1]) : null;
 }
 
-export function ConversationHistory({ onNavigate }: { onNavigate?: () => void }) {
+export function ConversationHistory({ onNavigate, initialConversations }: ConversationHistoryProps) {
     const router = useRouter();
     const pathname = usePathname();
-    const [conversations, setConversations] = useState<Conversation[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [conversations, setConversations] = useState<Conversation[]>(initialConversations ?? []);
+    const [loading, setLoading] = useState(!initialConversations);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [creatingNew, setCreatingNew] = useState(false);
 
@@ -68,10 +81,24 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
     }
 
     useEffect(() => {
-        // Initial data load on mount/route change — async fetch + setState.
+        // Skip the mount fetch when the RSC shell already seeded the list.
+        if (initialConversations) return;
+        // Fetch on mount (or pathname change) — external data load.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         loadConversations();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pathname]);
+
+    // Targeted invalidation: refetch when a conversation is created/deleted
+    // elsewhere in the app (e.g. /conversation/new route handler, vault
+    // restore). Cheap event bus; avoids re-fetching on every URL change.
+    useEffect(() => {
+        const handler = () => {
+            loadConversations();
+        };
+        window.addEventListener(CONVERSATIONS_INVALIDATE_EVENT, handler);
+        return () => window.removeEventListener(CONVERSATIONS_INVALIDATE_EVENT, handler);
+    }, []);
 
     const visibleConversations = useMemo(() => {
         if (!activeWorkspaceId) return conversations;
@@ -84,6 +111,7 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
             const success = await deleteConversation(id);
             if (success) {
                 setConversations((prev) => prev.filter((c) => c.id !== id));
+                emitConversationsInvalidate();
                 if (id === activeId) {
                     clearSessionMemoryStorage();
                     onNavigate?.();
@@ -106,7 +134,8 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
         try {
             clearSessionMemoryStorage();
             if (activeWorkspaceId) {
-                router.push(`/workspaces/${activeWorkspaceId}/conversation`);
+                // Blank-slate guarantee: resolver bypasses last-open restore.
+                router.push(`/workspaces/${activeWorkspaceId}/conversation?action=new`);
             } else {
                 router.push('/conversation/new');
             }
@@ -149,10 +178,10 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
 
             {loading ? (
                 <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-6 h-6 animate-spin text-[#a0a0a0]" />
+                    <Loader2 className="h-6 w-6 text-muted-foreground motion-safe:animate-spin" />
                 </div>
             ) : visibleConversations.length === 0 ? (
-                <div className="text-center py-8 text-[#a0a0a0]">
+                <div className="py-5 text-center text-muted-foreground">
                     <p className="text-sm">
                         {isWorkspaceScopedView ? 'No workspace conversations.' : 'No conversations yet.'}
                     </p>
@@ -163,40 +192,45 @@ export function ConversationHistory({ onNavigate }: { onNavigate?: () => void })
                         <div
                             key={conv.id}
                             className={cn(
-                                "group flex items-center justify-between px-3 py-2 rounded-full transition-colors cursor-pointer text-[13px]",
-                                conv.id === activeId 
-                                    ? "bg-[#2a2a2a] text-[#e3e3e3] font-medium" 
-                                    : "bg-transparent text-[#c0c0c0] hover:bg-white/5"
+                                "flex items-center gap-1 rounded-lg pr-1 text-[13px] transition-colors",
+                                conv.id === activeId
+                                    ? "bg-accent font-semibold text-accent-foreground ring-1 ring-inset ring-primary/25"
+                                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                             )}
-                            onClick={() => handleSelectConversation(conv)}
                         >
-                            <p className="truncate mr-2 w-full">
+                            <button
+                                type="button"
+                                aria-current={conv.id === activeId ? "page" : undefined}
+                                onClick={() => handleSelectConversation(conv)}
+                                className="min-h-9 min-w-0 flex-1 truncate rounded-lg py-1.5 pl-3 text-left"
+                            >
                                 {conv.title}
-                            </p>
+                            </button>
 
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                     <Button
-                                        size="sm"
+                                        type="button"
+                                        size="icon"
                                         variant="ghost"
-                                        className="h-5 w-5 p-0 text-[#808080] hover:text-[#ff6b6b] hover:bg-transparent flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={(e) => e.stopPropagation()}
+                                        aria-label={`Delete conversation: ${conv.title}`}
+                                        className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-danger-surface hover:text-destructive"
                                     >
-                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                                     </Button>
                                 </AlertDialogTrigger>
-                                <AlertDialogContent className="bg-[#1e1e1e] border-[#333] text-[#e3e3e3]">
+                                <AlertDialogContent className="w-[calc(100%-2rem)] break-words rounded-lg">
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Delete Conversation?</AlertDialogTitle>
-                                        <AlertDialogDescription className="text-[#a0a0a0]">
+                                        <AlertDialogDescription>
                                             This will permanently delete &quot;{conv.title}&quot;. This action cannot be undone.
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                        <AlertDialogCancel className="bg-[#2a2a2a] hover:bg-[#3a3a3a] text-white border-none">Cancel</AlertDialogCancel>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
                                         <AlertDialogAction
                                             onClick={() => handleDelete(conv.id)}
-                                            className="bg-[#d32f2f] hover:bg-[#b71c1c] text-white"
+                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                         >
                                             Delete
                                         </AlertDialogAction>

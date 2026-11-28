@@ -1,4 +1,5 @@
 import { CodeModelConfig } from './types';
+import { NIM_MODEL_DEEPSEEK_V4_PRO, NIM_MODEL_CODE } from './providers/nvidiaNim';
 
 export const CODE_MODELS: Record<string, CodeModelConfig> = {
     fast: {
@@ -12,59 +13,26 @@ export const CODE_MODELS: Record<string, CodeModelConfig> = {
     quality: {
         id: 'quality',
         name: 'Quality',
-        provider: 'claude',
-        modelId: 'claude-sonnet-4-20250514',
-        description: 'Best code quality and reasoning',
-        maxTokens: 8192,
-    },
-    'claude-3-5-sonnet': {
-        id: 'claude-3-5-sonnet',
-        name: 'Claude 3.5 Sonnet',
-        provider: 'claude',
-        modelId: 'claude-3-5-sonnet-20241022',
-        description: 'Artifact-friendly Sonnet for code, UI, and diagrams',
-        maxTokens: 8192,
-        supportsArtifacts: true,
+        provider: 'nvidia-nim',
+        modelId: NIM_MODEL_DEEPSEEK_V4_PRO,
+        description: 'DeepSeek V4 Pro on NVIDIA NIM — best reasoning and quality',
+        maxTokens: 16384,
     },
     agentic: {
         id: 'agentic',
         name: 'Agentic',
-        provider: 'gemini',
-        modelId: 'gemini-2.5-pro',
-        description: 'Autonomous code execution and tool use',
-        maxTokens: 8192,
+        provider: 'nvidia-nim',
+        modelId: NIM_MODEL_CODE,
+        description: 'Nemotron 3 Ultra on NVIDIA NIM — autonomous code execution and tool use',
+        maxTokens: 16384,
         supportsCodeExecution: true,
     },
     reasoning: {
         id: 'reasoning',
         name: 'Reasoning',
-        provider: 'deepseek',
-        modelId: 'deepseek-r1',
-        description: 'Advanced reasoning for complex problems',
-        maxTokens: 32768,
-    },
-    'openrouter-llama-4': {
-        id: 'openrouter-llama-4',
-        name: 'Llama 4 Maverick (OpenRouter)',
-        provider: 'openrouter',
-        modelId: 'meta/llama-4-maverick',
-        description: 'OpenRouter-backed Llama 4 Maverick',
-        maxTokens: 8192,
-    },
-    'openrouter-qwen3-235b': {
-        id: 'openrouter-qwen3-235b',
-        name: 'Qwen3 235B A22B (OpenRouter)',
-        provider: 'openrouter',
-        modelId: 'qwen/qwen3-235b-a22b',
-        description: 'OpenRouter-backed Qwen3 235B MoE',
-        maxTokens: 32768,
-    },
-    'openrouter-deepseek-r1': {
-        id: 'openrouter-deepseek-r1',
-        name: 'DeepSeek R1 (OpenRouter)',
-        provider: 'openrouter',
-        modelId: 'deepseek/deepseek-r1',
-        description: 'OpenRouter-backed DeepSeek R1',
+        provider: 'nvidia-nim',
+        modelId: NIM_MODEL_DEEPSEEK_V4_PRO,
+        description: 'DeepSeek V4 Pro — advanced reasoning for complex problems',
         maxTokens: 32768,
     },
 };

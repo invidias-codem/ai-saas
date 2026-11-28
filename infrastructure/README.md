@@ -50,7 +50,6 @@ Returns:
 Set these env vars in Vercel:
 - `LAMBDA_TWIN_URL` — Cloudflare tunnel URL for the twin router (port 8002)
 - `LAMBDA_EMBED_URL` — Cloudflare tunnel URL for embeddings (port 8001)
-- `LAMBDA_OLLAMA_URL` — Legacy (kept for BlueskyResponder fallback)
 
 ## Deploy
 

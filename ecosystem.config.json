@@ -1,0 +1,28 @@
+{
+  "apps": [
+    {
+      "name": "jepa-main",
+      "script": "research/world-model/jepa-local/p2p/main_worker.py",
+      "interpreter": "/Users/jjem/.hermes/hermes-agent/venv/bin/python",
+      "cwd": "/Users/jjem/Projects/ai-saas",
+      "watch": ["research/world-model/jepa-local/**/*.py"],
+      "watch_options": {
+        "followSymlinks": false,
+        "usePolling": true,
+        "interval": 1000
+      },
+      "max_restarts": 10,
+      "restart_delay": 3000,
+      "env": {
+        "PYTHONPATH": "research/world-model/jepa-local",
+        "SUPABASE_TELEMETRY_URL": "",
+        "SUPABASE_SERVICE_ROLE_KEY": "",
+        "GOSSIP_DRAIN_INTERVAL_SECONDS": "30",
+        "AEA_INTERVAL_SECONDS": "60",
+        "TELEMETRY_INTERVAL_SECONDS": "60",
+        "ONNX_SYNC_INTERVAL_SECONDS": "300",
+        "JEPA_ONNX_PATH": "/Users/jjem/Projects/ai-saas/public/wasm/predictor.onnx"
+      }
+    }
+  ]
+}

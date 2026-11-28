@@ -16,11 +16,11 @@ class SocketClient {
     // We pass the token as a query parameter so the Desktop Core (websocket-server.ts) can authenticate the upgrade request.
     const wsUrl = `ws://${info.ip}:${info.port}?token=${encodeURIComponent(info.token)}`;
     
-    console.log(`[SocketClient] Connecting to ${wsUrl}`);
+    logger.info(`[SocketClient] Connecting to ${wsUrl}`);
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
-      console.log('[SocketClient] Connected successfully');
+      logger.info('[SocketClient] Connected successfully');
       this.reconnectAttempts = 0;
       useLatticeStore.getState().setStatus('connected');
     };
@@ -41,16 +41,16 @@ class SocketClient {
           });
         }
       } catch (err) {
-        console.warn('[SocketClient] Failed to parse message', event.data);
+        logger.warn('[SocketClient] Failed to parse message', event.data);
       }
     };
 
     this.ws.onerror = (error: any) => {
-      console.error('[SocketClient] WebSocket error', error.message || 'Unknown error');
+      logger.error('[SocketClient] WebSocket error', error.message || 'Unknown error');
     };
 
     this.ws.onclose = (event) => {
-      console.log(`[SocketClient] Disconnected (code: ${event.code})`);
+      logger.info(`[SocketClient] Disconnected (code: ${event.code})`);
       
       if (this.isIntentionalDisconnect) {
         useLatticeStore.getState().setStatus('idle');
@@ -70,7 +70,7 @@ class SocketClient {
     this.reconnectAttempts++;
     const backoffTime = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 10000); // Max 10 seconds
     
-    console.log(`[SocketClient] Reconnecting in ${backoffTime}ms (Attempt ${this.reconnectAttempts})`);
+    logger.info(`[SocketClient] Reconnecting in ${backoffTime}ms (Attempt ${this.reconnectAttempts})`);
     
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -97,9 +97,9 @@ class SocketClient {
   public haltExecution() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ action: 'halt' }));
-      console.log('[SocketClient] Halt execution payload sent');
+      logger.info('[SocketClient] Halt execution payload sent');
     } else {
-      console.warn('[SocketClient] Cannot halt: WebSocket is not open');
+      logger.warn('[SocketClient] Cannot halt: WebSocket is not open');
     }
   }
 }

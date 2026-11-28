@@ -100,6 +100,12 @@ async function drainStreamForPostGen(
     fullText += decoder.decode(value, { stream: true });
   }
 
+  // Strip system-event sentinel lines before the text reaches post-gen
+  // (memory writes / telemetry) — they are transport metadata, not content.
+  fullText = fullText
+    .replace(/__MODEL_SWITCH_EVENT__:[^\n]*\n?/g, '')
+    .replace(/__PROVIDER_ERROR_EVENT__:[^\n]*\n?/g, '');
+
   const thoughtSignature = await thoughtSignatureSource().catch(() => null);
   return { text: fullText, thoughtSignature };
 }
@@ -207,8 +213,14 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
         const resultSpan = execResult.span || span;
         resultSpan.end({ responseLength: text.length });
         emitAuditFromResult(resultSpan, execResult, resolved, user.userId, billing, featureType);
+        // 3A: 'success' here is COMPLETION-grade only (text produced), NOT
+        // task-quality. Quality evidence (verification/critic/correction)
+        // is a separate future signal; do not read this as task success.
         const streamOutcome = text ? 'success' : 'failed';
-        const streamCorrectionSignal = execResult.routingDecision?.intent?.urgency === 'high' ? 'implicit' : 'none';
+        // 3A: high urgency is NOT a correction signal. Synthetic inference
+        // removed — correctionSignal stays 'none' until real evidence
+        // (regenerate, rollback, explicit user correction) is wired in.
+        const streamCorrectionSignal = 'none' as const;
         waitUntil(
           logRoutingTelemetry({
             decision: execResult.routingDecision,
@@ -286,8 +298,10 @@ export async function runRuntimeBridge(options: RuntimeBridgeOptions): Promise<N
   span.end({ responseVia: 'json' });
   emitAuditFromResult(span, execResult, resolved, user.userId, billing, featureType);
 
+  // 3A: completion-grade only — see stream path comment.
   const outcome = execResult.text ? 'success' : 'failed';
-  const userCorrectionSignal = execResult.routingDecision?.intent?.urgency === 'high' ? 'implicit' : 'none';
+  // 3A: synthetic correction inference removed.
+  const userCorrectionSignal = 'none' as const;
 
   waitUntil(
     logRoutingTelemetry({

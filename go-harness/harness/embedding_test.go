@@ -15,7 +15,9 @@ func TestVectorIndex_InsertAndSearch(t *testing.T) {
 		t.Fatalf("Failed to initialize vector index: %v", err)
 	}
 
-	workspaceId := "test_workspace_1"
+	defer vi.Close()
+
+ workspaceId := "test_workspace_1"
 	filePath := "test_file.go"
 	
 	// Mock chunks

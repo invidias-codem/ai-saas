@@ -45,6 +45,22 @@ jest.mock('@/lib/memory/confidenceScoring', () => ({
 // Mock intelligentMemory (re-exported type)
 jest.mock('@/lib/intelligentMemory', () => ({}));
 
+// Mock Langfuse observability to avoid ESM/dynamic-import issues in Jest
+jest.mock('@/lib/observability/langfuse', () => ({
+  getLangfuseClient: jest.fn(() => ({
+    trace: jest.fn(() => ({
+      span: jest.fn(() => ({
+        event: jest.fn(),
+        update: jest.fn(),
+        end: jest.fn(),
+      })),
+      update: jest.fn(),
+    })),
+    flushAsync: jest.fn(),
+  })),
+  createTrace: jest.fn(),
+}));
+
 // ─── Imports ─────────────────────────────────────────────────────────────────
 
 import { createClient } from '@supabase/supabase-js';

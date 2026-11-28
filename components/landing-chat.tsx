@@ -199,7 +199,7 @@ export const LandingChat = () => {
                                     <div className="flex-shrink-0 mt-1">
                                         {msg.role === "bot" ? (
                                             <Avatar className="h-8 w-8 ring-1 ring-white/20 bg-[#1a1a2e]">
-                                                <AvatarImage src="/Genie.png" />
+                                                <AvatarImage src="/lattice-logo.png" />
                                                 <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
                                             </Avatar>
                                         ) : (
@@ -354,7 +354,7 @@ function TypingIndicator() {
         <div className="flex gap-3 mb-6">
             <div className="flex-shrink-0 mt-1">
                 <Avatar className="h-8 w-8 ring-1 ring-white/20 bg-[#1a1a2e]">
-                    <AvatarImage src="/Genie.png" />
+                    <AvatarImage src="/lattice-logo.png" />
                     <AvatarFallback className="text-[10px] bg-gradient-to-br from-indigo-500 to-purple-500 text-white">AI</AvatarFallback>
                 </Avatar>
             </div>

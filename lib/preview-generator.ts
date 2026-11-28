@@ -17,7 +17,7 @@ interface PdfParseModule {
 // Dynamic require for pdf-parse (CommonJS module without proper ESM exports)
 function getPdfParse() {
   // Use require for the CJS module - this works in Node.js API routes
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const pdfParseModule = require('pdf-parse') as PdfParseModule;
   // pdf-parse CJS exports PDFParse as named export
   const PDFParse = pdfParseModule.PDFParse || pdfParseModule.default;

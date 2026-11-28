@@ -9,7 +9,7 @@ import argparse
 import sys
 
 from . import __version__
-from . import auth, deploy, license, health, upgrade, backup, crypto_license, org, task
+from . import auth, deploy, license, health, upgrade, backup, crypto_license, org, task, doctor, agent
 
 
 BANNER = f"""
@@ -21,6 +21,11 @@ BANNER = f"""
 
 
 def main():
+    # Keep redirected output predictable on Windows as well as in terminals.
+    if sys.platform == "win32":
+        for stream in (sys.stdout, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(
         prog="lattice",
         description="Lattice OS CLI — manage Docker appliance deployments",
@@ -47,6 +52,11 @@ Built by JJEM Global Technology, Inc.
     )
 
     sub = parser.add_subparsers(dest="command", help="Command group")
+
+    doctor_parser = sub.add_parser("doctor", help="Check CLI integrity and deployment prerequisites")
+    doctor_parser.add_argument("--offline", action="store_true", help="Check CLI runtime only; do not contact Docker")
+    doctor_parser.add_argument("--json", action="store_true", help="Machine-readable diagnostics")
+    doctor_parser.set_defaults(handler=doctor.cmd_doctor)
 
     # ── Auth ──────────────────────────────────────────────────────────
     auth_parser = sub.add_parser("auth", help="Docker Hub authentication")
@@ -130,6 +140,24 @@ Built by JJEM Global Technology, Inc.
             p.add_argument(*flags, **kwargs)
         p.set_defaults(handler=spec["handler"])
 
+    # ── Agent ───────────────────────────────────────────────────────────
+    agent_parser = sub.add_parser("agent", help="Local agent runtime (supervisor client)")
+    agent_sub = agent_parser.add_subparsers(dest="subcommand")
+    for name, spec in agent.get_subcommands().items():
+        if spec.get("sub"):
+            nested = agent_sub.add_parser(name, help=spec["help"])
+            nested_sub = nested.add_subparsers(dest="subcommand2")
+            for nname, nspec in spec["sub"].items():
+                np = nested_sub.add_parser(nname, help=nspec["help"])
+                for flags, kwargs in nspec["args"]:
+                    np.add_argument(*flags, **kwargs)
+                np.set_defaults(handler=nspec["handler"])
+        else:
+            p = agent_sub.add_parser(name, help=spec["help"])
+            for flags, kwargs in spec["args"]:
+                p.add_argument(*flags, **kwargs)
+            p.set_defaults(handler=spec["handler"])
+
     args = parser.parse_args()
 
     # No command given — show banner + help
@@ -153,6 +181,7 @@ Built by JJEM Global Technology, Inc.
             "dev": crypto_parser,
             "org": org_parser,
             "task": task_parser,
+            "agent": agent_parser,
             }
         if args.command in sub_parsers:
             sub_parsers[args.command].print_help()
@@ -161,7 +190,7 @@ Built by JJEM Global Technology, Inc.
         return 0
 
     # Show banner unless --quiet
-    if not args.quiet:
+    if not args.quiet and not getattr(args, "json", False):
         print(BANNER)
 
     try:

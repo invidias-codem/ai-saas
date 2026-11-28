@@ -213,14 +213,28 @@ export async function strengthenEdge(
                 trustTier
             );
 
+            // Update edge weight — updated_at column may not exist in all environments
+            // so we catch PGRST204 errors gracefully
             const { error: updateError } = await supabase
                 .from('graph_edges')
                 .update({ weight: newWeight, updated_at: new Date().toISOString() })
                 .eq('id', existing.id);
 
             if (updateError) {
-                console.error('[GraphStore] Error strengthening edge projection:', updateError);
-                return null;
+                // If updated_at column doesn't exist, retry without it
+                if (updateError.code === 'PGRST204') {
+                    const { error: retryError } = await supabase
+                        .from('graph_edges')
+                        .update({ weight: newWeight })
+                        .eq('id', existing.id);
+                    if (retryError) {
+                        console.error('[GraphStore] Error strengthening edge projection:', retryError);
+                        return null;
+                    }
+                } else {
+                    console.error('[GraphStore] Error strengthening edge projection:', updateError);
+                    return null;
+                }
             }
             return existing.id;
         } else {

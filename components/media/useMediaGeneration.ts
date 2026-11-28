@@ -1,0 +1,159 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import axios from "axios";
+import { ReplicatePrediction, GenerationStatus, isUsableMediaUrl } from "./types";
+
+interface UseMediaGenerationOptions {
+  /** POST endpoint that starts the prediction (video/music). */
+  submitUrl: string;
+  /** Poll endpoint template; `${id}` is replaced with the prediction id. */
+  pollUrlTemplate: string;
+  /** Server-prefetched result: restores completed output or resumes pending polling. */
+  initialPrediction?: ReplicatePrediction | null;
+  /** Called with the terminal prediction on success. */
+  onSucceeded?: (prediction: ReplicatePrediction) => void;
+  /** Called with a human-readable message on failure. */
+  onFailed?: (message: string) => void;
+}
+
+/**
+ * Shared async generation dispatch: POST to start a Replicate prediction, then
+ * a 3s polling loop with a `starting → processing → succeeded/failed/canceled`
+ * state machine.
+ *
+ * Extracted from video/music content.tsx (M4). Image's transport is
+ * synchronous (POST returns `{ images }` directly, no poll) and is deliberately
+ * NOT folded in — see note in the media tracer-bullet spec. The hook owns the
+ * generation status (`status`/`isLoading`) and delegates terminal results to
+ * `onSucceeded`/`onFailed`, so each surface keeps its own result state and
+ * error-message nuances.
+ */
+export function useMediaGeneration({
+  submitUrl,
+  pollUrlTemplate,
+  initialPrediction,
+  onSucceeded,
+  onFailed,
+}: UseMediaGenerationOptions) {
+  const [status, setStatus] = useState<GenerationStatus>(() => {
+    if (!initialPrediction) return 'idle';
+    if (initialPrediction.status === 'succeeded') return isUsableMediaUrl(initialPrediction.output) ? 'completed' : 'failed';
+    if (initialPrediction.status === 'failed' || initialPrediction.status === 'canceled') return 'failed';
+    return 'generating';
+  });
+  const [predictionId, setPredictionId] = useState<string | null>(() =>
+    initialPrediction && ['starting', 'processing'].includes(initialPrediction.status) ? initialPrediction.id : null,
+  );
+
+  // Ref-hold the callbacks so the poll interval's closure stays fresh.
+  // Synced in an effect (React Compiler forbids mutating refs during render).
+  const onSucceededRef = useRef(onSucceeded);
+  const onFailedRef = useRef(onFailed);
+  useEffect(() => {
+    onSucceededRef.current = onSucceeded;
+    onFailedRef.current = onFailed;
+  });
+
+  const isLoading = status === "generating";
+
+  /** Start a prediction; resolves when it reaches a terminal state via callbacks. */
+  const start = async (
+    values: unknown,
+    handleSubmitError?: (err: any) => string
+  ): Promise<void> => {
+    setStatus("generating");
+    setPredictionId(null);
+
+    try {
+      const response = await axios.post<ReplicatePrediction>(submitUrl, values, {
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+      });
+      const prediction = response.data;
+
+      if (prediction && prediction.id) {
+        setPredictionId(prediction.id);
+      } else {
+        throw new Error("API response did not contain a prediction ID.");
+      }
+    } catch (err: any) {
+      console.error("[MEDIA_GEN_SUBMIT_ERROR]", err);
+      const message = handleSubmitError
+        ? handleSubmitError(err)
+        : err?.response?.data?.details || "Sorry, something went wrong starting generation.";
+      onFailedRef.current?.(message);
+      setStatus("failed");
+    }
+  };
+
+  // Polling loop.
+  useEffect(() => {
+    if (!predictionId) return;
+    let cancelled = false;
+    let inFlight = false;
+    let failures = 0;
+
+    const interval = setInterval(async () => {
+      if (inFlight || cancelled) return;
+      inFlight = true;
+      try {
+        const url = pollUrlTemplate.replace("${id}", predictionId);
+        const response = await axios.get<ReplicatePrediction>(url);
+        const prediction = response.data;
+        if (cancelled) return;
+        failures = 0;
+
+        switch (prediction.status) {
+          case "succeeded":
+            setPredictionId(null);
+            // Final-output validation: a 'succeeded' status without a usable
+            // URL is treated as failure, not success. Prevents rendering a
+            // blank <video> card after Replicate nominally finished.
+            if (!isUsableMediaUrl(prediction.output)) {
+              setStatus("failed");
+              onFailedRef.current?.(
+                prediction.error?.detail || "Generation completed but produced no usable output. Please try again."
+              );
+              clearInterval(interval);
+              break;
+            }
+            setStatus("completed");
+            onSucceededRef.current?.(prediction);
+            clearInterval(interval);
+            break;
+          case "failed":
+          case "canceled":
+            setPredictionId(null);
+            setStatus("failed");
+            onFailedRef.current?.(prediction.error?.detail || "Generation failed.");
+            clearInterval(interval);
+            break;
+          case "starting":
+          case "processing":
+            // Still generating; keep polling.
+            break;
+        }
+      } catch (err: any) {
+        if (cancelled) return;
+        // Brief network/storage/dispatch outages must not discard a durable job.
+        if (++failures < 3 && (!err?.response || err.response.status >= 500 || err.response.status === 429)) return;
+        console.error("[MEDIA_GEN_POLL_ERROR]", err);
+        setPredictionId(null);
+        setStatus("failed");
+        onFailedRef.current?.("Unable to reconnect. Refresh this page to check your saved generation.");
+        clearInterval(interval);
+      } finally {
+        inFlight = false;
+      }
+    }, 3000);
+
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [predictionId, pollUrlTemplate]);
+
+  return {
+    status,
+    isLoading,
+    predictionId,
+    start,
+  };
+}

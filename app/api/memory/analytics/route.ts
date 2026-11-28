@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { requireAuth, getClientIP } from '@/lib/security/apiAuth';
 import { limitApiEndpoint } from '@/lib/security/rateLimit';
@@ -69,10 +68,11 @@ export async function GET(req: Request) {
       });
     }
 
-    // Fetch memories from memory_bank
+    // Analytics never consumes vectors or metadata; serializing those columns
+    // can exhaust the Data API statement timeout even with the user/date index.
     const { data: memories, error } = await supabase
       .from('memory_bank')
-      .select('*')
+      .select('id,content,type,scope,confidence,extracted_at,expires_at')
       .eq('user_id', user.userId)
       .order('extracted_at', { ascending: false }) as { data: Memory[] | null; error: any };
 

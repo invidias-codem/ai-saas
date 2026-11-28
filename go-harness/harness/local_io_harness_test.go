@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -170,7 +171,11 @@ func TestLocalIOHarness_Commands(t *testing.T) {
 	defer h.Close()
 
 	// 1. Success execution
-	res := h.RunCommand(ctx, `echo "hello harness integration test"`, nil)
+	echoCommand := `echo "hello harness integration test"`
+	if runtime.GOOS == "windows" {
+		echoCommand = `echo hello harness integration test`
+	}
+	res := h.RunCommand(ctx, echoCommand, nil)
 	if !res.Ok {
 		t.Fatalf("command failed: %s", res.Error)
 	}
@@ -190,7 +195,11 @@ func TestLocalIOHarness_Commands(t *testing.T) {
 
 	// 3. Timeout execution
 	shortTimeout := 100
-	resTimeout := h.RunCommand(ctx, `sleep 5`, &shortTimeout)
+	timeoutCommand := `sleep 5`
+	if runtime.GOOS == "windows" {
+		timeoutCommand = `powershell.exe -NoLogo -NoProfile -NonInteractive -Command "Start-Sleep -Seconds 5"`
+	}
+	resTimeout := h.RunCommand(ctx, timeoutCommand, &shortTimeout)
 	if resTimeout.Ok {
 		t.Errorf("expected command timeout")
 	}

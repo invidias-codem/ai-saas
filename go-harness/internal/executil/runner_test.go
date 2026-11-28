@@ -2,6 +2,7 @@ package executil
 
 import (
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -10,7 +11,7 @@ func TestRunShellCommand(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Test benign success
-	res, err := RunShellCommand(ctx, ".", `echo "hello execution world"`, 5000, 1024)
+	res, err := RunShellCommand(ctx, ".", `echo hello execution world`, 5000, 1024)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -23,7 +24,11 @@ func TestRunShellCommand(t *testing.T) {
 	}
 
 	// 2. Test timeout
-	resTimeout, err := RunShellCommand(ctx, ".", `sleep 2`, 100, 1024)
+	timeoutCommand := `sleep 2`
+	if runtime.GOOS == "windows" {
+		timeoutCommand = `powershell.exe -NoLogo -NoProfile -NonInteractive -Command "Start-Sleep -Seconds 2"`
+	}
+	resTimeout, err := RunShellCommand(ctx, ".", timeoutCommand, 100, 1024)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

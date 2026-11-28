@@ -28,6 +28,11 @@ export const useGuestChatStore = create<GuestChatState>()(
       limitReached: false,
 
       addMessage: (message) => set((state) => {
+        // Flag cookie so the server-side /dashboard knows there is local
+        // guest state to sync after auth (localStorage is server-invisible).
+        if (state.messages.length === 0 && typeof document !== 'undefined') {
+          document.cookie = 'pending_guest_sync=1; path=/; max-age=3600';
+        }
         // Initialize session ID on first message if not present
         const sessionId = state.guestSessionId || uuidv4();
         return {

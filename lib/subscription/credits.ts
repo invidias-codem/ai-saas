@@ -72,13 +72,18 @@ export async function getUserCredits(userId: string): Promise<number> {
  * `currentCredits` is now only used as a fallback return value on failure.
  * Returns the remaining balance after the spend.
  */
-export async function deductUserCredits(userId: string, currentCredits: number, amount: number): Promise<number> {
+export async function deductUserCredits(
+    userId: string,
+    currentCredits: number,
+    amount: number,
+    idempotencyKey?: string | null
+): Promise<number> {
     if (amount <= 0) return currentCredits;
     try {
         const result = await spendCreditsAtomic(
             userId,
             amount,
-            null,
+            idempotencyKey ?? null,
             'Chat/agent interaction'
         );
 

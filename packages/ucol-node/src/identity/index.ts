@@ -18,7 +18,7 @@ const sha512Sync = (...msgs: Uint8Array[]): Uint8Array => {
   const combined = Buffer.concat(msgs);
   return createHash('sha512').update(combined).digest();
 };
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const edAny = ed as any;
 if (edAny.utils) edAny.utils.sha512Sync = sha512Sync;
 if (edAny.etc) edAny.etc.sha512Sync = sha512Sync;

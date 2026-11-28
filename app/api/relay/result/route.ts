@@ -23,7 +23,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'commandId and status are required' }, { status: 400 });
     }
 
-    if (supabaseAdmin && commandId !== 'mock-command-id' && !process.env.MOCK_USER_ID) {
+    const isMock = process.env.NODE_ENV === 'test' && process.env.MOCK_USER_ID;
+    if (supabaseAdmin && commandId !== 'mock-command-id' && !isMock) {
       const { error: updateError } = await supabaseAdmin
         .from('relay_commands')
         .update({

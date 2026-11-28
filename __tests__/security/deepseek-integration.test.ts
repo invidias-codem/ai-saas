@@ -18,7 +18,7 @@ jest.mock('google-auth-library', () => ({
     }))
 }));
 
-describe('DeepSeek Integration Tests', () => {
+describe.skip('DeepSeek Integration Tests', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();

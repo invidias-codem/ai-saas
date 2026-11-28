@@ -39,15 +39,15 @@ export default function WorkspaceMemoryPage() {
   }, [workspaceId]);
 
   return (
-    <div className="min-h-screen px-4 md:px-10 lg:px-16 py-8 space-y-8">
-      <div className="space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-300 text-sm font-medium">
-          <Sparkles className="w-4 h-4" />
+    <div className="min-h-screen px-3 sm:px-4 md:px-10 lg:px-16 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8">
+      <div className="space-y-2 sm:space-y:3">
+        <div className="inline-flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-purple-500/20 bg-purple-500/10 text-purple-700 dark:text-purple-300 text-xs sm:text-sm font-medium">
+          <Sparkles className="w-3 h-3 sm:w-4 sm:h-4" />
           Workspace memory
         </div>
-        <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Memory in this workspace</h1>
-        <p className="text-muted-foreground max-w-2xl">
-          This is the first visible step toward workspace-scoped memory. For now, it filters user memories by workspace metadata where available.
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight">Memory in this workspace</h1>
+        <p className="text-xs sm:text-sm md:text-base text-muted-foreground max-w-2xl">
+          This is the first visible step toward workspace-scoped memory.
         </p>
       </div>
 

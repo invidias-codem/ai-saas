@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Slack,
   CheckCircle2,
   XCircle,
   ExternalLink,
@@ -17,6 +16,7 @@ import {
   HelpCircle,
   Sparkles,
 } from "lucide-react";
+import { BrandIcon } from "@/lib/icons/brandIcons";
 import { cn } from "@/lib/utils";
 
 interface SlackConfig {
@@ -75,7 +75,7 @@ export function SlackIntegration({ userId }: SlackIntegrationProps) {
         'token_exchange_failed': 'Failed to complete the connection. Please try again.',
         'callback_failed': 'Connection failed. Please try again.',
       };
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       setErrorMessage(errorMessages[slackError] || `Connection error: ${slackError}`);
       // Clear URL params
       const timeout = setTimeout(() => {
@@ -246,10 +246,10 @@ export function SlackIntegration({ userId }: SlackIntegrationProps) {
             "p-3 rounded-xl",
             config.connected ? "bg-green-100" : "bg-[#4A154B]/10"
           )}>
-            <Slack className={cn(
+            <BrandIcon name="Slack" className={cn(
               "w-6 h-6",
               config.connected ? "text-green-600" : "text-[#4A154B]"
-            )} />
+            )} size={24} />
           </div>
           <div>
             <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -447,7 +447,7 @@ export function SlackIntegration({ userId }: SlackIntegrationProps) {
                 </>
               ) : (
                 <>
-                  <Slack className="w-5 h-5 mr-2" />
+                  <BrandIcon name="Slack" className="w-5 h-5 mr-2" size={20} />
                   Connect to Slack
                 </>
               )}

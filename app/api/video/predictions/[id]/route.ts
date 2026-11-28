@@ -1,59 +1,25 @@
-// app/api/video/predictions/[id]/route.ts
-
-import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { env } from '@/lib/env'; // Your environment variables
-import Replicate from 'replicate'; // Import the Replicate library
+import { getOwnedVideoJob, toVideoPrediction } from '@/lib/media/videoStore';
+import { dispatchVideoCompletion } from '@/lib/media/videoDispatch';
+import { limitVideoRead } from '@/lib/media/videoReadAuth';
 
-// Initialize the Replicate client
-const replicate = new Replicate({
-  auth: env.REPLICATE_API_TOKEN,
-});
-
-/**
- * GET handler to fetch the status of a specific Replicate prediction.
- */
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { userId } = await auth();
+  if (!userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  const limited = await limitVideoRead(request, userId);
+  if (limited) return limited;
   try {
-    // 1. Clerk Authentication (optional but recommended)
-    // You should secure this endpoint to prevent others from polling your job statuses.
-    const { userId } = await auth();
-    if (!userId) {
-      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" }
-      });
+    const { id } = await params;
+    const job = await getOwnedVideoJob(userId, id);
+    if (!job) return Response.json({ error: 'Video not found' }, { status: 404 });
+    if (!['succeeded', 'failed', 'canceled'].includes(job.status)) {
+      await dispatchVideoCompletion(job);
     }
-
-    // 2. Get predictionId from the URL
-    const { id: predictionId } = await params;
-    if (!predictionId) {
-      return new NextResponse(JSON.stringify({ error: "Prediction ID is required." }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-
-    // 3. Call Replicate to get the prediction status
-    const prediction = await replicate.predictions.get(predictionId);
-
-    // 4. Return the full prediction object
-    // The client can inspect prediction.status ("starting", "processing", "succeeded", "failed")
-    // and prediction.output (if succeeded)
-    return NextResponse.json(prediction);
-
-  } catch (error: any) {
-    console.error('[REPLICATE_GET_PREDICTION_ERROR]', error);
-    const details = error.message || "Failed to fetch prediction status.";
-    return new NextResponse(JSON.stringify({
-      error: "Internal Server Error",
-      details: details
-    }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" }
+    return Response.json(toVideoPrediction(job), {
+      headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' },
     });
+  } catch {
+    console.error('[VIDEO_STATUS_READ_FAILED]');
+    return Response.json({ error: 'Unable to read video status' }, { status: 503 });
   }
 }

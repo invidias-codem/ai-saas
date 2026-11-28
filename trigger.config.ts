@@ -1,0 +1,44 @@
+import { defineConfig } from "@trigger.dev/sdk";
+import { syncEnvVars } from "@trigger.dev/build/extensions/core";
+import { env } from './lib/env';
+
+/**
+ * Trigger.dev v3 project configuration for Lattice OS.
+ *
+ * Trigger.dev runs persistent background tasks in its own cloud runtime,
+ * independent of the Next.js serverless lifecycle — this is what lets us
+ * bypass Vercel's function timeout for multi-step agent loops, sandboxed code
+ * execution, and human-in-the-loop (HITL) waitpoints.
+ *
+ * Env: TRIGGER_SECRET_KEY (server-only, signs the webhook) is read from .env
+ * and provided by the Trigger.dev dashboard after `trigger.dev login`.
+ */
+export default defineConfig({
+  project: "proj_nrmfrudcizidgnsdgzox",
+  dirs: ["./src/trigger"],
+  maxDuration: 900,
+  retries: {
+    enabledInDev: true,
+    default: {
+      maxAttempts: 3,
+      factor: 2,
+      minTimeoutInMs: 1_000,
+      maxTimeoutInMs: 60_000,
+      randomize: true,
+    },
+  },
+  build: {
+    extensions: [
+      syncEnvVars(async () => ({
+        NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        NVIDIA_API_KEY: process.env.NVIDIA_API_KEY!,
+        ...(env.REPLICATE_API_TOKEN_VIDEO || env.REPLICATE_API_TOKEN ? {
+          REPLICATE_API_TOKEN_VIDEO: (env.REPLICATE_API_TOKEN_VIDEO || env.REPLICATE_API_TOKEN)!,
+        } : {}),
+        ...(env.TRIGGER_SECRET_KEY ? { TRIGGER_SECRET_KEY: env.TRIGGER_SECRET_KEY } : {}),
+        ...(env.APIFY_API_TOKEN ? { APIFY_API_TOKEN: env.APIFY_API_TOKEN } : {}),
+      })),
+    ],
+  },
+});

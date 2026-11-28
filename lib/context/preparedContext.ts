@@ -21,44 +21,33 @@ import { getUserProfile, formatUserProfileForPrompt } from '@/lib/memoryPromotio
 import { generateEmbedding } from '@/lib/memory/embedding';
 import { scoreContextForRouting } from '@/lib/memory/confidenceScoring';
 import { getAttachedDocumentContext } from '@/lib/llm/contextAggregator';
+// Slice 6A: one canonical PreparedContextSections. types.ts owns the
+// canonical shape; preparedContext re-exports so existing import paths
+// keep working. Closes the strategyContext drift at the boundary we are
+// about to formalize.
+export type { PreparedContextSections } from '@/lib/context/types';
+import type { PreparedContextSections } from '@/lib/context/types';
 
-export type PreparedContextPlan = {
-  retrievalMode?: UcolRetrievalMode;
-  readScopes?: UcolMemoryScope[];
-  useGraphRecall?: boolean;
-  usePreparedContext?: boolean;
-  useRecentTaskState?: boolean;
-  factLimit?: number;
-  memoryLimit?: number;
-  researchLimit?: number;
-};
-
-export type PreparedContextOptions = {
-  disableExternalContext?: boolean;
-  skipWebResearch?: boolean;
-  plan?: PreparedContextPlan;
-};
-
-export type PreparedContextSections = {
-  userContextPrompt: string;
-  userProfileContext: string;
-  factContext: string;
-  graphContext: string;
-  searchContext: string;
-  memoryContext: string;
-  attachedDocumentContext?: string;
-};
-
-export type PreparedContextReadEnforcement = {
-  allowedScopes: UcolMemoryScope[];
-  factsReadAllowed: boolean;
-  userProfileReadAllowed: boolean;
-  graphReadAllowed: boolean;
-  conversationMemoryReadAllowed: boolean;
-  workspaceMemoryReadAllowed: boolean;
-  taskMemoryReadAllowed: boolean;
-  researchReadAllowed: boolean;
-};
+// Phase 0 (#440 review finding 2): the plan/enforcement layer moved to
+// lib/context/readEnforcement.ts so the capability manifest derives from the
+// SAME effective read enforcement retrieval uses. Re-exported here to keep
+// existing import paths working (PreparedContextSections precedent).
+export {
+  createPreparedContextPlanFromMemoryPlan,
+  normalizePreparedContextPlan,
+  buildReadEnforcement,
+} from '@/lib/context/readEnforcement';
+export type {
+  PreparedContextPlan,
+  PreparedContextOptions,
+  PreparedContextReadEnforcement,
+} from '@/lib/context/readEnforcement';
+import { normalizePreparedContextPlan, buildReadEnforcement } from '@/lib/context/readEnforcement';
+import type {
+  PreparedContextPlan,
+  PreparedContextOptions,
+  PreparedContextReadEnforcement,
+} from '@/lib/context/readEnforcement';
 
 export type PreparedContextBundle = {
   userContext: Awaited<ReturnType<typeof gatherUserContext>>;
@@ -122,60 +111,9 @@ function createPromptSection(
   };
 }
 
-function normalizePreparedContextPlan(plan?: PreparedContextPlan): Required<PreparedContextPlan> {
-  const retrievalMode = plan?.retrievalMode ?? 'standard';
-
-  return {
-    retrievalMode,
-    readScopes: plan?.readScopes ?? ['conversation', 'user'],
-    useGraphRecall: plan?.useGraphRecall ?? (retrievalMode === 'deep' || retrievalMode === 'standard'),
-    usePreparedContext: plan?.usePreparedContext ?? true,
-    useRecentTaskState: plan?.useRecentTaskState ?? false,
-    factLimit: plan?.factLimit ?? (retrievalMode === 'deep' ? 15 : retrievalMode === 'standard' ? 10 : 5),
-    memoryLimit: plan?.memoryLimit ?? (retrievalMode === 'deep' ? 8 : retrievalMode === 'standard' ? 5 : 3),
-    researchLimit: plan?.researchLimit ?? (retrievalMode === 'deep' ? 5 : retrievalMode === 'standard' ? 3 : 0),
-  };
-}
-
-export function createPreparedContextPlanFromMemoryPlan(memoryPlan?: UcolMemoryPlan | null): PreparedContextPlan {
-  if (!memoryPlan) {
-    return {
-      retrievalMode: 'standard',
-      readScopes: ['conversation', 'user'],
-      useGraphRecall: true,
-      usePreparedContext: true,
-      useRecentTaskState: false,
-    };
-  }
-
-  return {
-    retrievalMode: memoryPlan.retrievalMode,
-    readScopes: memoryPlan.readScopes,
-    useGraphRecall: memoryPlan.useGraphRecall,
-    usePreparedContext: memoryPlan.usePreparedContext,
-    useRecentTaskState: memoryPlan.useRecentTaskState,
-    factLimit: memoryPlan.retrievalMode === 'deep' ? 15 : memoryPlan.retrievalMode === 'standard' ? 10 : 5,
-    memoryLimit: memoryPlan.retrievalMode === 'deep' ? 8 : memoryPlan.retrievalMode === 'standard' ? 5 : 3,
-    researchLimit: memoryPlan.retrievalMode === 'deep' ? 5 : memoryPlan.retrievalMode === 'standard' ? 3 : 0,
-  };
-}
-
-
-function buildReadEnforcement(plan: Required<PreparedContextPlan>, options?: PreparedContextOptions): PreparedContextReadEnforcement {
-  const allowedScopes = [...plan.readScopes];
-  const effectivelyDisabled = Boolean(options?.disableExternalContext) || plan.usePreparedContext === false;
-
-  return {
-    allowedScopes,
-    factsReadAllowed: !effectivelyDisabled && allowedScopes.some((scope) => scope === 'conversation' || scope === 'workspace' || scope === 'user'),
-    userProfileReadAllowed: !effectivelyDisabled && allowedScopes.includes('user'),
-    graphReadAllowed: !effectivelyDisabled && plan.useGraphRecall && allowedScopes.includes('graph'),
-    conversationMemoryReadAllowed: !effectivelyDisabled && allowedScopes.includes('conversation'),
-    workspaceMemoryReadAllowed: !effectivelyDisabled && allowedScopes.includes('workspace'),
-    taskMemoryReadAllowed: !effectivelyDisabled && plan.useRecentTaskState && allowedScopes.includes('task'),
-    researchReadAllowed: !effectivelyDisabled && !options?.skipWebResearch && plan.researchLimit > 0,
-  };
-}
+// normalizePreparedContextPlan / createPreparedContextPlanFromMemoryPlan /
+// buildReadEnforcement moved to lib/context/readEnforcement.ts (#440 review
+// finding 2) — re-exported above.
 
 async function computeFactSimilarities(allFacts: ExtractedFact[], userQuery: string): Promise<Map<string, number>> {
   const similarities = new Map<string, number>();
@@ -310,6 +248,28 @@ export async function prepareContextBundle(args: {
     attachedDocumentContext = await getAttachedDocumentContext(userQuery, workspaceId, documentIds);
   }
 
+  // ── EMSH Strategy Synthesis (non-blocking, cold-start safe) ──────────────
+  // Query high-fitness genotypes matching this intent and synthesize a reusable
+  // operating strategy. Fenced by a short timeout so a cold/empty genotypes table
+  // (or a slow Supabase round-trip) never adds latency to the chat hot path.
+  let strategyContext = '';
+  if (!effectivelyDisabled) {
+    try {
+      const { synthesizeStrategy } = await import('@/lib/emSh/recombinationEngine');
+      const strategy = await Promise.race([
+        synthesizeStrategy({ userQuery, workspaceId }),
+        new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), 1500)
+        ),
+      ]);
+      if (strategy && strategy.prompt) {
+        strategyContext = `${strategy.prompt}\n`;
+      }
+    } catch (e: any) {
+      console.warn('[PreparedContext] Strategy synthesis skipped (non-blocking):', e?.message || e);
+    }
+  }
+
   return {
     userContext,
     sections: {
@@ -320,6 +280,7 @@ export async function prepareContextBundle(args: {
       searchContext,
       memoryContext: [memoryContext, workspaceMemoryContext].filter(Boolean).join('\n\n'),
       attachedDocumentContext,
+      strategyContext,
     },
     raw: {
       allFacts,
@@ -349,13 +310,14 @@ export function layoutPromptContext(
   budgetTokens: number = 6000,
 ): PromptLayoutResult {
   const candidates: PromptSection[] = [
-    createPromptSection('userContextPrompt', 'User Context', sections.userContextPrompt, 100, true),
-    createPromptSection('userProfileContext', 'User Profile', sections.userProfileContext, 90),
-    createPromptSection('factContext', 'Fact Context', sections.factContext, 95),
-    createPromptSection('graphContext', 'Graph Context', sections.graphContext, 80),
-    createPromptSection('searchContext', 'Search Context', sections.searchContext, 60),
-    createPromptSection('memoryContext', 'Memory Context', sections.memoryContext, 85),
+    createPromptSection('userContextPrompt', 'User Context', sections.userContextPrompt || '', 100, true),
     createPromptSection('attachedDocumentContext', 'Attached Documents', sections.attachedDocumentContext || '', 98),
+    createPromptSection('strategyContext', 'Operating Strategy', sections.strategyContext || '', 92),
+    createPromptSection('factContext', 'Fact Context', sections.factContext || '', 95),
+    createPromptSection('userProfileContext', 'User Profile', sections.userProfileContext || '', 90),
+    createPromptSection('graphContext', 'Graph Context', sections.graphContext || '', 80),
+    createPromptSection('searchContext', 'Search Context', sections.searchContext || '', 60),
+    createPromptSection('memoryContext', 'Memory Context', sections.memoryContext || '', 85),
   ].filter((section) => section.text && section.text.trim().length > 0);
 
   const includedSections: PromptSection[] = [];

@@ -70,4 +70,7 @@ export async function recordExecution(
   // Standalone stub — no-op
 }
 
-export default { findProceduralMatch, recordExecution };
+const _findProceduralMatch = findProceduralMatch;
+const _recordExecution = recordExecution;
+
+export default { findProceduralMatch: _findProceduralMatch, recordExecution: _recordExecution };

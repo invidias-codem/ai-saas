@@ -1,5 +1,3 @@
-"use client";
-
 import { Heading } from "@/components/heading";
 import { Database, Download, HardDrive, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -19,7 +17,7 @@ const DataSettingsPage = () => {
                 bgColor="bg-pink-700/10"
             />
 
-            <div className="px-4 lg:px-8 space-y-8 pb-10">
+            <div className="px-4 lg:px-8 space-y-4 sm:space-y-6 md:space-y-8 pb-10">
                 {/* Import Section */}
                 <div className="space-y-4">
                     <div>
