@@ -332,3 +332,7 @@ This backbone doc should be followed by more specific architecture documents for
 - public route boundaries
 - truth surfaces and deployment verification
 - API reference behavior
+
+## Infrastructure Plane (IP0 / IP1a — proposed adoption)
+
+Terraform is a separate operator-controlled management plane, not part of the UCOL request path. It owns only explicitly adopted durable cloud resources; account VM leases, sandbox creation, runtime lifecycle and database migrations remain with their current owners. See [Infrastructure Plane architecture](infrastructure-plane.md). The initial Terraform fixture is local-only; no live resources are managed yet.

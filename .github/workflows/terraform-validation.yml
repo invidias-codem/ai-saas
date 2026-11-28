@@ -1,0 +1,37 @@
+name: Terraform Validation
+
+on:
+  pull_request:
+    paths:
+      - 'infrastructure/terraform/**'
+      - '.github/workflows/terraform-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.16.7"
+          terraform_wrapper: false
+      - name: Check format
+        run: terraform fmt -check -recursive infrastructure/terraform
+      - name: Initialize without remote backend
+        run: terraform -chdir=infrastructure/terraform/fixtures/ownership init -backend=false -input=false
+      - name: Validate fixture
+        run: terraform -chdir=infrastructure/terraform/fixtures/ownership validate
+      - name: Run plan-only fixture tests
+        run: terraform -chdir=infrastructure/terraform/fixtures/ownership test -no-color
