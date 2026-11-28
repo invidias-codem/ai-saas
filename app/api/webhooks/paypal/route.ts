@@ -1,29 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { clerkClient } from "@clerk/nextjs/server";
-import { createClient } from "@supabase/supabase-js";
+import { verifyPayPalWebhook } from "@/lib/paypal/webhookVerification";
 import { z } from "zod";
 
-// PayPal can deliver webhooks as JSON or multipart/form-data (with a form field
-// named `data` containing the JSON payload). This route handles both so it
-// matches the actual webhook payload boundary, not just JSON.
+// Maximum credit amount per webhook event to prevent overrun from a single
+// malicious or erroneous event. $10,000 USD = 1,000,000 cents.
+const MAX_AMOUNT_CENTS = 1_000_000;
 
-const PAYPAL_WEBHOOK_ID = process.env.PAYPAL_WEBHOOK_ID;
-import { CREDITS_PER_DOLLAR, matchPack } from '@/lib/subscription/packs';
-
-const getSupabaseAdmin = () => {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-};
+// Strict decimal amount: whole dollars with up to 2 fractional digits.
+// Rejects partially numeric strings (e.g. "10abc") that parseFloat would accept.
+const DECIMAL_AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
 
 const eventEnvelopeSchema = z.object({
   event_type: z.string().optional(),
   id: z.string().optional(),
-  webhook_id: z.string().optional(),
   resource: z
     .object({
       id: z.string().optional(),
+      status: z.string().optional(),
       amount: z
         .object({
           value: z.string().optional(),
@@ -31,10 +24,10 @@ const eventEnvelopeSchema = z.object({
         })
         .passthrough()
         .optional(),
-      payer: z
+      payee: z
         .object({
-          email_address: z.string().optional(),
-          payer_id: z.string().optional(),
+          email: z.string().optional(),
+          merchant_id: z.string().optional(),
         })
         .passthrough()
         .optional(),
@@ -46,7 +39,7 @@ const eventEnvelopeSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get("content-type") || "";
-    let raw: any;
+    let rawBody: string;
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await req.formData();
@@ -54,46 +47,104 @@ export async function POST(req: NextRequest) {
       if (typeof dataField !== "string") {
         return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
       }
-      raw = JSON.parse(dataField);
+      rawBody = dataField;
     } else {
-      raw = await req.json();
+      rawBody = await req.text();
     }
 
-    const parsed = eventEnvelopeSchema.parse(raw);
+    // ── 1. Verify PayPal webhook signature BEFORE any DB writes ──
+    const headers: Record<string, string | undefined> = {};
+    req.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
 
-    const webhookId = parsed.webhook_id || parsed.id;
-    if (!PAYPAL_WEBHOOK_ID || webhookId !== PAYPAL_WEBHOOK_ID) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const verification = await verifyPayPalWebhook(headers, rawBody);
+    if (!verification.verified) {
+      return NextResponse.json(
+        { error: "Webhook verification failed", reason: verification.reason },
+        { status: 401 },
+      );
     }
 
-    const eventType = parsed.event_type;
-    if (!eventType || eventType !== "PAYMENT.CAPTURE.COMPLETED") {
+    // ── 2. Parse and validate the event envelope ──
+    const parsed = eventEnvelopeSchema.parse(JSON.parse(rawBody));
+
+    if (parsed.event_type !== "PAYMENT.CAPTURE.COMPLETED") {
       return NextResponse.json({ status: "ignored" }, { status: 200 });
     }
 
-    const transactionId = parsed.resource?.id || parsed.id;
-    const payerEmail =
-      parsed.resource?.payer?.email_address ||
-      parsed.resource?.payer?.payer_id ||
-      "";
-
-    const rawAmount = parsed.resource?.amount?.value;
-    const amount = parseFloat(rawAmount || "0");
-    const currency = parsed.resource?.amount?.currency_code || "USD";
-
-    if (!transactionId || !payerEmail || amount <= 0) {
-      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    const resource = parsed.resource;
+    if (!resource) {
+      return NextResponse.json({ error: "Missing resource" }, { status: 400 });
     }
 
-    const supabaseAdmin = getSupabaseAdmin();
+    // ── 3. Validate capture status ──
+    if (resource.status !== "COMPLETED") {
+      return NextResponse.json(
+        { error: `Capture not completed: ${resource.status ?? 'missing'}` },
+        { status: 400 },
+      );
+    }
+
+    // ── 4. Validate currency ──
+    const currency = resource.amount?.currency_code;
+    if (!currency || currency !== "USD") {
+      return NextResponse.json(
+        { error: `Unsupported currency: ${currency ?? 'missing'}` },
+        { status: 400 },
+      );
+    }
+
+    // ── 5. Validate amount: strict decimal, integer cents ──
+    const rawAmount = resource.amount?.value;
+    if (!rawAmount || typeof rawAmount !== "string" || !DECIMAL_AMOUNT_RE.test(rawAmount)) {
+      return NextResponse.json({ error: "Invalid amount format" }, { status: 400 });
+    }
+    const amountCents = Math.round(Number(rawAmount) * 100);
+    if (amountCents <= 0) {
+      return NextResponse.json({ error: "Amount must be positive" }, { status: 400 });
+    }
+    if (amountCents > MAX_AMOUNT_CENTS) {
+      return NextResponse.json(
+        { error: "Amount exceeds per-event cap" },
+        { status: 400 },
+      );
+    }
+
+    // ── 6. Validate capture ID (no fallback to webhook event ID) ──
+    const transactionId = resource.id;
+    if (!transactionId || typeof transactionId !== "string" || transactionId.trim() === "") {
+      return NextResponse.json({ error: "Missing capture ID" }, { status: 400 });
+    }
+
+    // ── 7. Validate merchant/beneficiary binding — fail-closed ──
+    // Reject when PAYPAL_MERCHANT_ID is not configured OR does not match.
+    // Read at request time so test env mutations are visible.
+    const expectedMerchantId = process.env.PAYPAL_MERCHANT_ID;
+    if (!expectedMerchantId) {
+      return NextResponse.json(
+        { error: "Merchant configuration missing; settlement blocked" },
+        { status: 400 },
+      );
+    }
+    const payee = resource.payee;
+    if (!payee || !payee.merchant_id || payee.merchant_id !== expectedMerchantId) {
+      return NextResponse.json(
+        { error: "Merchant/beneficiary binding missing or mismatch" },
+        { status: 400 },
+      );
+    }
+
+    // ── 8. Idempotency: record payment event, reject duplicates ──
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
 
     const { error: insertError } = await supabaseAdmin
       .from("payment_events")
-      .insert({
-        transaction_id: transactionId,
-        email: payerEmail,
-        amount: `${amount} ${currency}`,
-      });
+      .insert({ transaction_id: transactionId, amount: `${amountCents / 100} ${currency}` });
 
     if (insertError) {
       if (insertError.code === "23505") {
@@ -102,36 +153,17 @@ export async function POST(req: NextRequest) {
       throw insertError;
     }
 
-    const client = await clerkClient();
-    const users = await client.users.getUserList({
-      emailAddress: [payerEmail],
-    });
-
-    if (users.data.length === 0) {
-      return NextResponse.json({ status: "Unmatched user email" }, { status: 200 });
-    }
-
-    const user = users.data[0];
-
-    // Credit the unified ledger (supporter_credits) — same ledger all spend
-    // paths deduct from.
-    const creditsToAdd = Math.floor(amount * CREDITS_PER_DOLLAR);
-    const pack = matchPack(amount);
-
-    const { error: creditError } = await supabaseAdmin.rpc('increment_credits', {
-      p_user_id: user.id,
-      p_amount: creditsToAdd,
-      p_type: 'TOP_UP',
-      p_description: `PayPal top-up: ${amount} ${currency}${pack ? ` (${pack.name})` : ''} (TX ${transactionId})`,
-      p_metadata: { source: 'paypal', transaction_id: transactionId, amount, currency, pack: pack?.id ?? null },
-    });
-
-    if (creditError) {
-      console.error(`PayPal Webhook: failed to credit ledger for ${payerEmail}:`, creditError);
-      return NextResponse.json({ error: "Credit update failed" }, { status: 500 });
-    }
-
-    return NextResponse.json({ status: "Success", creditsAdded: creditsToAdd }, { status: 200 });
+    // ── 9. Settlement pending S8 atomic ledger qualification ──
+    // Credits are NOT issued. Authoritative ownership (purchase intent → user
+    // binding) is established through S8. Until then, credit settlement is
+    // fail-closed: no payer-email lookups, no Clerk mutations, no ledger writes.
+    return NextResponse.json(
+      {
+        status: "Settlement pending S8 atomic ledger qualification",
+        transaction_id: transactionId,
+      },
+      { status: 402 },
+    );
   } catch (error) {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
