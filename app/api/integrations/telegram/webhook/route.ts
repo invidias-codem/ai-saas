@@ -1,5 +1,5 @@
-import { execFileSync, execSync } from 'child_process';
-import path from 'path';
+import { env } from '@/lib/env';
+import { verifyTelegramWebhookSecret, isTelegramPrivateAdmin } from '@/lib/security/telegramWebhookAuth';
 
 import { NextResponse } from 'next/server';
 
@@ -60,35 +60,17 @@ async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
 }
 
 /**
- * Send a generic typing action (helpful for long running tasks)
- */
-async function sendChatAction(chatId: number, action: string = 'typing') {
-    await fetch(`${API_URL}/sendChatAction`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, action })
-    });
-}
-
-/**
  * Handle incoming Telegram Webhook
  */
 export async function POST(req: Request) {
-    console.log('[TELEGRAM] Webhook received'); // Debug log
-
-    if (!BOT_TOKEN) {
-        console.error('[TELEGRAM] Error: BOT_TOKEN is missing');
-        return NextResponse.json({ error: 'Config missing' }, { status: 500 });
-    }
+    const verification = verifyTelegramWebhookSecret(
+        env.TELEGRAM_WEBHOOK_SECRET, req.headers.get('x-telegram-bot-api-secret-token'),
+    );
+    if (!verification.ok) return NextResponse.json({ error: 'Webhook unavailable or unauthorized' }, { status: verification.status });
+    if (!BOT_TOKEN) return NextResponse.json({ error: 'Webhook unavailable' }, { status: 503 });
 
     try {
-        const bodyText = await req.text();
-        console.log('[TELEGRAM] Body:', bodyText);
-
-        if (!bodyText) return NextResponse.json({ ok: true });
-
-        const update: TelegramUpdate = JSON.parse(bodyText);
-        console.log('[TELEGRAM] Parsed update:', JSON.stringify(update, null, 2));
+        const update: TelegramUpdate = await req.json();
 
         // 1. Handle Messages
         if (update.message) {
@@ -99,7 +81,7 @@ export async function POST(req: Request) {
             if (update.message.contact) {
                 const sharedPhone = update.message.contact.phone_number.replace('+', '');
 
-                if (AUTH_PHONE && sharedPhone === AUTH_PHONE) {
+                if (AUTH_PHONE && sharedPhone === AUTH_PHONE && update.message.contact.user_id === update.message.from.id && update.message.chat.type === 'private') {
                     // Correct user
                     // We can verify user_id here but simpler to just authorize the session/chat_id concept implicitly for now.
                     // In a real app we'd store the allowed Chat ID in DB.
@@ -135,7 +117,7 @@ export async function POST(req: Request) {
                     // This is secure and one-time setup.
                     await sendMessage(chatId, `✅ **Identity Verified!**\n\nYour Phone: \`${sharedPhone}\` matches authorized user.\n\n⚠️ **One-time Setup:**\nPlease add this to your \`.env.local\` to enable commands:\n\`TELEGRAM_ADMIN_CHAT_ID=${chatId}\``);
                 } else {
-                    await sendMessage(chatId, `❌ **Unauthorized Phone:** \`${sharedPhone}\`\nAllowed: \`${AUTH_PHONE}\``);
+                    await sendMessage(chatId, "Contact verification failed.");
                 }
                 return NextResponse.json({ ok: true });
             }
@@ -144,7 +126,7 @@ export async function POST(req: Request) {
             const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID;
 
             // If user is NOT admin
-            if (!ADMIN_CHAT_ID || String(chatId) !== ADMIN_CHAT_ID) {
+            if (!isTelegramPrivateAdmin(ADMIN_CHAT_ID, update.message.chat, update.message.from)) {
                 // If they are trying to verify, let them (handled above in 'contact')
 
                 // Otherwise, treat as SUPPORT TICKET
@@ -177,185 +159,23 @@ export async function POST(req: Request) {
                 await sendMessage(parseInt(targetId), `👨‍💻 **Support:**\n${replyText}`);
                 await sendMessage(chatId, `✅ Reply sent to ${targetId}.`);
 
-            } else if (text.startsWith('/engineer')) {
-                const task = text.replace('/engineer', '').trim();
-                if (!task) {
-                    await sendMessage(chatId, "🦞 **Genie Engineer**\n\nPlease describe a task: `/engineer Update the readme`");
-                    return NextResponse.json({ ok: true });
-                }
-
-                await sendMessage(chatId, "🦞 **Planning task...**");
-                await sendChatAction(chatId, 'typing');
-
-                try {
-                    // Dynamic path construction to bypass Turbopack static analysis
-    // Dev-only script path — not resolved at build time
-    // Sourced from env so Turbopack cannot statically trace it as a module
-    const scriptPath = process.env.ENGINEER_SCRIPT_PATH as string;
-                    // Run plan
-                    const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
-                        encoding: 'utf-8',
-                        env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY } // Ensure keys are passed
-                    });
-
-                    // Extract JSON
-                    const jsonMatch = output.match(/---JSON_START---([\s\S]*?)---JSON_END---/);
-                    if (!jsonMatch) throw new Error("Could not parse engineer plan.");
-
-                    const plan = JSON.parse(jsonMatch[1]);
-                    const planDesc = plan.plan || "Complexity unknown";
-                    const steps = plan.steps || [];
-
-                    const summary = `**Plan Proposed:**\n${planDesc}\n\n**Steps:**\n` + steps.map((s: any, i: number) => `${i + 1}. ${s.type === 'write' ? '📝 Write' : '💻 Run'} \`${s.path || s.command}\``).join('\n');
-
-                    // Send Approval UI (Local Only)
-                    await sendMessage(chatId, summary, {
-                        inline_keyboard: [
-                            [
-                                { text: "✅ Approve (Run Locally)", callback_data: `APPROVE_PLAN` }
-                            ],
-                            [
-                                { text: "🔄 Retry", callback_data: "RETRY_PLAN" },
-                                { text: "❌ Cancel", callback_data: "CANCEL" }
-                            ]
-                        ]
-                    });
-
-                    // Save plan to loose temp file for stateless approval
-                    const fs = require('fs');
-                    const tmpPath = path.join(process.cwd(), '.next/cache/latest_plan.json'); // use .next cache dir
-                    fs.writeFileSync(tmpPath, JSON.stringify({ task, plan }));
-
-                } catch (e: any) {
-                    await sendMessage(chatId, `❌ **Error:** ${e.message}`);
-                }
-
-            } else if (text.startsWith('/blog')) {
-                const topic = text.replace('/blog', '').trim();
-                if (!topic) {
-                    await sendMessage(chatId, "✍️ **Genie Blogger**\n\nPlease provide a topic: `/blog The Future of AI`");
-                    return NextResponse.json({ ok: true });
-                }
-
-                await sendMessage(chatId, "✍️ **Drafting blog post...**");
-                await sendChatAction(chatId, 'typing');
-
-                try {
-                    // Construct a specific engineering task for blogging
-                    const today = new Date().toISOString().split('T')[0]; // "2026-02-03"
-                    const task = `Write a high-quality blog post about "${topic}" in content/blog/. IMPORTANT: Use this exact frontmatter with publishedAt: "${today}", author: "genie-team", and category: "engineering". Quote any title/description values that contain colons. Use the existing MDX files as a reference for style. Create a new file with a kebab-case filename. Ensure the content is engaging and technical.`;
-
-                    // Dynamic path construction to bypass Turbopack static analysis
-    // Dev-only script path — not resolved at build time
-    // Sourced from env so Turbopack cannot statically trace it as a module
-    const scriptPath = process.env.ENGINEER_SCRIPT_PATH as string;
-                    // Run plan using the SAME engineer logic
-                    const output = execFileSync('node', [scriptPath, task, '--plan-only'], {
-                        encoding: 'utf-8',
-                        env: { ...process.env, GOOGLE_API_KEY: process.env.GOOGLE_API_KEY }
-                    });
-
-                    // Extract JSON
-                    const jsonMatch = output.match(/---JSON_START---([\s\S]*?)---JSON_END---/);
-                    if (!jsonMatch) throw new Error("Could not parse blog plan.");
-
-                    const plan = JSON.parse(jsonMatch[1]);
-                    const planDesc = plan.plan || "Complexity unknown";
-                    const steps = plan.steps || [];
-
-                    const summary = `**Blog Draft Ready:**\n${planDesc}\n\n**Steps:**\n` + steps.map((s: any, i: number) => `${i + 1}. ${s.type === 'write' ? '📝 Create' : '💻 Run'} \`${s.path || s.command}\``).join('\n');
-
-                    // Send Approval UI (Same callback logic works because it uses latest_plan.json)
-                    await sendMessage(chatId, summary, {
-                        inline_keyboard: [
-                            [
-                                { text: "✅ Publish (Commit & Push)", callback_data: `APPROVE_PLAN` }
-                            ],
-                            [
-                                { text: "🔄 Retry", callback_data: "RETRY_PLAN" },
-                                { text: "❌ Cancel", callback_data: "CANCEL" }
-                            ]
-                        ]
-                    });
-
-                    // Save plan to loose temp file for stateless approval
-                    const fs = require('fs');
-                    const tmpPath = path.join(process.cwd(), '.next/cache/latest_plan.json');
-                    fs.writeFileSync(tmpPath, JSON.stringify({ task, plan }));
-
-                } catch (e: any) {
-                    await sendMessage(chatId, `❌ **Error:** ${e.message}`);
-                }
+            } else if (text.startsWith('/engineer') || text.startsWith('/blog')) {
+                await sendMessage(chatId, "Engineering and publishing commands are disabled pending approval qualification.");
             } else {
                 await sendMessage(chatId, `🤖 I didn't understand that.\nCommands:\n\`/engineer <task>\` - Autonomous coding\n\`/blog <topic>\` - Write a blog post\n\`/reply <id> <msg>\` - Reply to support`);
             }
         }
 
-        // 2. Handle Callbacks (Button Clicks)
+        // Existing callback approval uses a mutable, shared temp-file plan.
+        // Do not execute or push until approvals are bound to an immutable
+        // plan digest, current principal and durable one-time claim.
         if (update.callback_query) {
-            const chatId = update.callback_query.message.chat.id;
-            const data = update.callback_query.data;
-
-            if (data === 'CANCEL') {
-                await sendMessage(chatId, "🚫 **Task Cancelled.**");
-            } else if (data === 'APPROVE_PLAN') {
-                await sendMessage(chatId, "🛠️ **Executing Plan Locally...**");
-                await sendChatAction(chatId, 'typing');
-
-                // Retrieve state
-                const fs = require('fs');
-                const tmpPath = path.join(process.cwd(), '.next/cache/latest_plan.json');
-
-                if (fs.existsSync(tmpPath)) {
-                    const stored = JSON.parse(fs.readFileSync(tmpPath, 'utf-8'));
-
-                    try {
-                        // Dynamic path construction to bypass Turbopack static analysis
-    // Dev-only script path — not resolved at build time
-    // Sourced from env so Turbopack cannot statically trace it as a module
-    const scriptPath = process.env.ENGINEER_SCRIPT_PATH as string;
-                        // Execute using file path (Safe from shell escaping issues)
-                        execFileSync('node', [scriptPath, 'EXECUTE', '--plan-file', tmpPath], {
-                            encoding: 'utf-8',
-                            env: { ...process.env }
-                        });
-
-                        // Execution Success - Now Ask to Push
-                        // Get current branch name
-                        const branchName = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
-
-                        await sendMessage(chatId, `✅ **Local Execution Complete!**\nBranch: \`${branchName}\`\n\nReady to push to GitHub?`, {
-                            inline_keyboard: [[{ text: "🚀 Push & Open PR", callback_data: "PUSH_PR" }]]
-                        });
-
-                    } catch (e: any) {
-                        await sendMessage(chatId, `❌ **Execution Failed:** ${e.message}`);
-                    }
-                } else {
-                    await sendMessage(chatId, "⚠️ Plan expired. Run /engineer again.");
-                }
-            } else if (data === 'PUSH_PR') {
-                await sendMessage(chatId, "🚀 **Pushing to GitHub...**");
-
-                try {
-                    const branchName = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
-                    execSync(`git push -u origin ${branchName}`, { encoding: 'utf-8' });
-
-                    const prUrl = `https://github.com/invidias-codem/ai-saas/compare/main...${branchName}?expand=1`;
-
-                    await sendMessage(chatId, `✅ **Pushed Successfully!**\n\nClick below to open PR (Reviews will start automatically):\n\n[🔗 Create Pull Request](${prUrl})`, {
-                        disable_web_page_preview: true
-                    });
-
-                } catch (e: any) {
-                    await sendMessage(chatId, `❌ **Push Failed:** ${e.message}`);
-                }
-            }
+            return NextResponse.json({ error: 'Interactive execution is disabled pending qualification' }, { status: 403 });
         }
 
         return NextResponse.json({ ok: true });
     } catch (err: any) {
-        console.error('Telegram Webhook Error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        console.error('Telegram webhook processing failed');
+        return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
     }
 }
