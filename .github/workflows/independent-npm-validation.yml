@@ -52,6 +52,27 @@ jobs:
       - name: Functions TypeScript build
         if: matrix.check == 'build'
         run: npm run build
+      - name: Verify deployment-local webhook validator parity and behavior
+        if: matrix.check == 'build'
+        run: |
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const shared = fs.readFileSync('../lib/security/urlValidator.ts', 'utf8');
+          const local = fs.readFileSync('src/webhookUrlValidator.ts', 'utf8');
+          for (const [start, end] of [['const WEBHOOK_DOMAINS = [', '\n];'], ['export function validateWebhookUrl(', '\n}\n']]) {
+            const extract = (s) => {
+              const a = s.indexOf(start), b = s.indexOf(end, a);
+              assert.ok(a >= 0 && b > a);
+              return s.slice(a, b + end.length);
+            };
+            assert.equal(extract(local), extract(shared));
+          }
+          const { validateWebhookUrl } = require('./lib/webhookUrlValidator.js');
+          for (const u of ['https://hooks.slack.com/test', 'https://hooks.zapier.com/test']) assert.equal(validateWebhookUrl(u).valid, true);
+          for (const u of ['not-a-url', 'http://hooks.slack.com/test', 'https://example.invalid/test', 'https://hooks.slack.com.example.invalid/test']) assert.equal(validateWebhookUrl(u).valid, false);
+          console.log('Validator parity and six synthetic URL checks passed');
+          NODE
       - name: Remote TypeScript check
         if: matrix.check == 'typecheck'
         run: ./node_modules/.bin/tsc --noEmit
