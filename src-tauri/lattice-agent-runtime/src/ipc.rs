@@ -13,7 +13,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
 use thiserror::Error;
+#[cfg(unix)]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+#[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tracing::{debug, error, info};
@@ -374,9 +376,11 @@ impl IpcServer {
             Self::write_message(&mut s, &response).await?;
         }
 
-        // Register client
+        // Register client — fails closed: not authenticated until a real
+        // auth provider validates the client. config.require_auth only
+        // controls whether auth is enforced; it never auto-authenticates.
         let client = ConnectedClient {
-            authenticated: !config.require_auth, // If no auth required, mark as authenticated
+            authenticated: false,
             tx,
         };
         clients.write().await.insert(client_id.clone(), client);
@@ -442,12 +446,15 @@ impl IpcServer {
             IpcMessage::Hello { .. } => {
                 // Already handled in handshake
             }
-            IpcMessage::Authenticate { token } => {
-                // Simple token-based auth for now
+            IpcMessage::Authenticate { token: _token } => {
+                // Placeholder authentication — fails closed.
+                // This does NOT prove credential ownership. It rejects all
+                // tokens until a real authentication provider is wired in.
+                // Genuine auth, authorization, and negative security tests
+                // must pass before this transport is activated.
                 let mut clients_lock = clients.write().await;
                 if let Some(client) = clients_lock.get_mut(client_id) {
-                    // In production, validate token against stored credentials
-                    let success = !token.is_empty(); // Placeholder
+                    let success = false; // fail closed: no token is accepted
                     client.authenticated = success;
 
                     let response = IpcMessage::AuthenticateResponse {
