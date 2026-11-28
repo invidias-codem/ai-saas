@@ -596,8 +596,8 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0
       hono:
-        specifier: ^4.12.34
-        version: 4.13.1
+        specifier: ^4.13.16
+        version: 4.13.23
       uuid:
         specifier: ^14.0.0
         version: 14.0.1
@@ -8449,8 +8449,8 @@ packages:
     resolution: {integrity: sha512-1yrb/+w6HWQJrUCLkJ2IF5jNIPvvFkblV5RNOYl6bV+OA6p9GLcMpHFFGTosSvHvcAUibuUukRqhlYI4z32C7Q==}
     engines: {node: '>=16.9.0'}
 
-  hono@4.13.1:
-    resolution: {integrity: sha512-kdJoFVv2xmayw6cY09H7AbMJMt8Jn5jdlEdXsP7AGBdF2DIptVlKlOLKXP41yPip4/a3yQPv9gVcJYI8YY04dw==}
+  hono@4.13.23:
+    resolution: {integrity: sha512-OS90dj7dcsftEEWCOef8jRbnHE5lbrOq0hNRqjSyPsOnaGZvvfof1KS05hQNb4kUOCfDq1mG3PmHoX37DMnHQg==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@4.1.0:
@@ -22159,7 +22159,7 @@ snapshots:
 
   hono@4.12.27: {}
 
-  hono@4.13.1: {}
+  hono@4.13.23: {}
 
   hosted-git-info@4.1.0:
     dependencies:
