@@ -4,7 +4,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { env } from "@/lib/env";
-import { defaultLocale } from "@/i18n";
+import { defaultLocale, locales } from "@/i18n";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ModalProvider } from "@/components/modal-provider";
 import { DesktopAuthProvider } from "@/components/providers/DesktopAuthProvider";
@@ -54,12 +54,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Locale is resolved from the NEXT_LOCALE cookie (set by next-intl
-  // middleware when added) and falls back to the configured defaultLocale.
-  // This is not hardcoded to English: adding more locales to i18n.ts and
-  // enabling next-intl middleware will make lang track the active locale.
+  // Locale is resolved from the NEXT_LOCALE cookie and validated against
+  // supported locales. Invalid or missing cookies fall back to defaultLocale.
+  // This prevents lang attribute mismatch when a cookie names an unsupported
+  // locale (e.g. cookie=fr while only en is supported).
   const cookieStore = await cookies();
-  const locale = cookieStore.get("NEXT_LOCALE")?.value ?? defaultLocale;
+  const cookieLocale = cookieStore.get("NEXT_LOCALE")?.value;
+  const locale = locales.includes(cookieLocale as any) ? cookieLocale : defaultLocale;
 
   return (
     <html lang={locale} suppressHydrationWarning={true}>
