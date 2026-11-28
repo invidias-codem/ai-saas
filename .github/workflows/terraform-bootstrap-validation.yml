@@ -1,0 +1,55 @@
+name: Terraform Bootstrap Validation
+
+on:
+  pull_request:
+    paths:
+      - 'infrastructure/terraform/**'
+      - '.github/workflows/terraform-bootstrap-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mocked-bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.16.7"
+          terraform_wrapper: false
+      - name: Format check
+        run: terraform fmt -check -recursive infrastructure/terraform
+      - name: Resolve or verify provider lock
+        working-directory: infrastructure/terraform/bootstrap/gcs-state
+        run: |
+          set -euo pipefail
+          if git ls-files --error-unmatch .terraform.lock.hcl >/dev/null 2>&1; then
+            terraform init -backend=false -input=false -lockfile=readonly
+            terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64 -platform=windows_amd64
+            git diff --exit-code -- .terraform.lock.hcl
+          else
+            terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64 -platform=windows_amd64
+            echo "::notice::Candidate lock only; review and commit it before live use."
+            echo "::group::Provider lock candidate (public provider metadata only)"
+            cat .terraform.lock.hcl
+            echo "::endgroup::"
+            terraform init -backend=false -input=false -lockfile=readonly
+          fi
+      - name: Validate bootstrap
+        run: terraform -chdir=infrastructure/terraform/bootstrap/gcs-state validate
+      - name: Run mocked plan-only tests
+        run: terraform -chdir=infrastructure/terraform/bootstrap/gcs-state test -no-color
+      - name: Validate remote state smoke root without backend connection
+        run: |
+          terraform -chdir=infrastructure/terraform/fixtures/remote-state-smoke init -backend=false -input=false
+          terraform -chdir=infrastructure/terraform/fixtures/remote-state-smoke validate
