@@ -49,6 +49,23 @@ Historical work references (status must be reconciled against current main): #50
 - Conversation and Approval surfaces are projections of authorized durable records, not raw model transcripts.
 - Research Plane is a specialized consumer of execution and evidence contracts, not a second generic execution platform.
 
+### Infrastructure provisioning and placement (reconciliation)
+
+Terraform is the operator-controlled management plane for durable infrastructure,
+not a per-request execution engine. The Execution Plane retains dynamic workload
+ownership; Account Compute retains reservations, leases and lifecycle. Financial
+authority must authorize a resource envelope before the runtime broker allocates
+billable resources. Workload and descendant resource controls must be enforced
+by a qualified supervisor and independently verified. No raw Terraform state,
+plans, or infrastructure credentials are available to agents or guests.
+
+Provider selection is deferred to TF-1A.1P: compare qualified total cost,
+identity, region/residency, isolation, aggregate quotas, availability and verified
+teardown. GCP, OCI and DigitalOcean are candidates, not selected providers.
+The credential-free foundation is tracked in #542; the optional GCP state
+candidate is #543. No cloud attachment, import, apply or production activation
+follows from accepting this RFC. See the proposed Infrastructure Plane in #542.
+
 ## 5. Canonical resource model (conceptual, not migration DDL)
 
 Every tenant-owned resource has a stable ID, authoritative tenant/workspace scope, lifecycle state, version and audit provenance. Scope derives from server-verified identity and membership, never a client-supplied owner field alone.
