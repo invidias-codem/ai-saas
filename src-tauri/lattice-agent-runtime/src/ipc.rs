@@ -85,15 +85,22 @@ pub enum IpcMessage {
         client_type: ClientType,
         capabilities: Vec<String>,
     },
-    /// Server hello response.
+    /// Server hello response — includes nonce challenge for client authentication.
     HelloResponse {
         protocol_version: u32,
         server_identity: String,
         accepted: bool,
         reason: Option<String>,
+        /// Cryptographic challenge the client must echo in its Authenticate request.
+        /// Absent when authentication is not required or the connection is rejected.
+        nonce_challenge: Option<String>,
     },
-    /// Authenticate request (for future extensibility).
-    Authenticate { token: String },
+    /// Authenticate request — binds the client token to the server's nonce challenge.
+    Authenticate {
+        token: String,
+        /// The nonce challenge received from the server in HelloResponse.
+        nonce: String,
+    },
     /// Authentication response.
     AuthenticateResponse {
         success: bool,
@@ -172,7 +179,7 @@ struct ConnectedClient {
 /// client to detect duplicate command submissions (replay attacks).
 pub struct NonceTracker {
     nonces: Mutex<HashMap<String, NonceEntry>>,
-    request_ids: Mutex<HashMap<String, HashMap<String, u64>>>,
+    request_ids: Mutex<HashMap<String, HashMap<String, RequestIdEntry>>>,
 }
 
 struct NonceEntry {
@@ -180,8 +187,15 @@ struct NonceEntry {
     used: bool,
 }
 
+struct RequestIdEntry {
+    created_at: u64,
+}
+
 /// Nonce TTL in seconds (5 minutes).
 const NONCE_TTL_SECS: u64 = 300;
+
+/// Request ID TTL in seconds (10 minutes) — bounds replay state growth.
+const REQUEST_ID_TTL_SECS: u64 = 600;
 
 impl NonceTracker {
     pub fn new() -> Self {
@@ -239,19 +253,27 @@ impl NonceTracker {
         }
     }
 
-    /// Record a request ID for replay detection.
+    /// Record a request ID for replay detection with bounded TTL.
     /// Returns `false` if the request ID was already seen for this client.
     pub async fn record_request_id(&self, client_id: &str, request_id: &str) -> bool {
-        let mut ids = self.request_ids.lock().await;
-        let client_ids = ids.entry(client_id.to_string()).or_default();
-        if client_ids.contains_key(request_id) {
-            return false; // Replay detected
-        }
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        client_ids.insert(request_id.to_string(), now);
+
+        let mut ids = self.request_ids.lock().await;
+
+        // Clean expired request IDs across all clients
+        ids.retain(|_, client_ids| {
+            client_ids.retain(|_, entry| now - entry.created_at < REQUEST_ID_TTL_SECS);
+            !client_ids.is_empty()
+        });
+
+        let client_ids = ids.entry(client_id.to_string()).or_default();
+        if client_ids.contains_key(request_id) {
+            return false; // Replay detected
+        }
+        client_ids.insert(request_id.to_string(), RequestIdEntry { created_at: now });
         true
     }
 }
@@ -369,15 +391,19 @@ impl IpcServer {
     /// authenticate handshake before any command is processed.
     #[cfg(all(windows, feature = "windows-ipc"))]
     pub async fn start(&mut self) -> IpcResult<()> {
-        let pipe_name = format!(
-            "{}{}-{}",
-            windows_named_pipe::PIPE_NAME_PREFIX,
-            self.profile_id,
-            self.config.client_identity
-        );
-
         let sd = windows_named_pipe::UserSecurityDescriptor::new()
             .map_err(|e| IpcError::Io(e.to_string()))?;
+
+        // Bind pipe name to logon session for per-session isolation.
+        // Two processes as the same user but in different logon sessions
+        // get different pipe names and cannot connect to each other.
+        let pipe_name = format!(
+            "{}{}-{}-{:x}",
+            windows_named_pipe::PIPE_NAME_PREFIX,
+            self.profile_id,
+            self.config.client_identity,
+            sd.logon_session_luid()
+        );
 
         info!("Windows named-pipe IPC server listening on {}", pipe_name);
 
@@ -518,6 +544,7 @@ impl IpcServer {
                     "Protocol version mismatch: expected {}, got {}",
                     config.protocol_version, protocol_version
                 )),
+                nonce_challenge: None,
             };
             {
                 let mut s = stream.lock().await;
@@ -537,6 +564,7 @@ impl IpcServer {
             server_identity: config.client_identity.clone(),
             accepted: true,
             reason: None,
+            nonce_challenge: None,
         };
         {
             let mut s = stream.lock().await;
@@ -630,7 +658,7 @@ impl IpcServer {
                 pipe_name_wide.as_ptr(),
                 PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
                 PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-                PIPE_UNLIMITED_INSTANCES,
+                32, // Bounded max pipe instances (was PIPE_UNLIMITED_INSTANCES)
                 windows_named_pipe::MAX_MESSAGE_SIZE as u32,
                 windows_named_pipe::MAX_MESSAGE_SIZE as u32,
                 0,
@@ -720,6 +748,7 @@ impl IpcServer {
                     "Protocol version mismatch: expected {}, got {}",
                     config.protocol_version, protocol_version
                 )),
+                nonce_challenge: None,
             };
             {
                 let mut s = stream.clone();
@@ -743,6 +772,7 @@ impl IpcServer {
             server_identity: config.client_identity.clone(),
             accepted: true,
             reason: None,
+            nonce_challenge: Some(nonce.clone()),
         };
         {
             let mut s = stream.clone();
@@ -777,13 +807,14 @@ impl IpcServer {
             Self::read_message_named_pipe(&mut s).await?
         };
 
-        let IpcMessage::Authenticate { token } = auth_msg else {
+        let IpcMessage::Authenticate { token, nonce } = auth_msg else {
             return Err(IpcError::InvalidMessage(
                 "Expected authenticate message".to_string(),
             ));
         };
 
-        // Validate token via Credential Broker (fail-closed)
+        // Validate token via Credential Broker (fail-closed).
+        // The nonce echoes the server's challenge, binding the proof to the challenge.
         let auth_result =
             Self::validate_auth_token(&credential_broker, &token, &nonce, &nonce_tracker);
 
@@ -903,26 +934,30 @@ impl IpcServer {
             return Err(IpcError::AuthenticationFailed("Token mismatch".to_string()));
         }
 
-        // Validate the nonce challenge (single-use, not expired)
+        // Validate the nonce challenge (single-use, not expired).
+        // The client echoes the server's challenge, binding the authentication
+        // proof to this specific challenge — replay is rejected by validate_challenge.
         if !nonce_tracker.validate_challenge(expected_nonce).await {
             return Err(IpcError::AuthenticationFailed(
                 "Invalid or expired nonce".to_string(),
             ));
         }
 
-        // Bind session identity to the authenticated token
-        Ok(format!("session-{}", token.len()))
+        // Bind session identity to a fresh UUID — never derived from token material.
+        Ok(Uuid::new_v4().to_string())
     }
 
     /// Validate an authentication token via Credential Broker (Unix).
     ///
     /// Fail-closed: any error or missing token rejects authentication.
-    /// No nonce challenge on Unix — socket-level isolation provides
-    /// additional protection.
+    /// Unix domain sockets provide socket-level isolation; the nonce
+    /// parameter is accepted for interface consistency with Windows but
+    /// is not challenged on Unix.
     #[cfg(unix)]
     async fn validate_auth_token(
         credential_broker: &Arc<CredentialBroker>,
         token: &str,
+        _nonce: &str,
     ) -> IpcResult<String> {
         if token.is_empty() {
             return Err(IpcError::AuthenticationFailed("Empty token".to_string()));
@@ -950,7 +985,7 @@ impl IpcServer {
             return Err(IpcError::AuthenticationFailed("Token mismatch".to_string()));
         }
 
-        Ok(format!("session-{}", token.len()))
+        Ok(Uuid::new_v4().to_string())
     }
 
     /// Process an incoming message on a named-pipe connection.
@@ -1073,9 +1108,11 @@ impl IpcServer {
             IpcMessage::Hello { .. } => {
                 // Already handled in handshake
             }
-            IpcMessage::Authenticate { token } => {
-                // Validate token via Credential Broker (fail-closed)
-                let auth_result = Self::validate_auth_token(credential_broker, &token).await;
+            IpcMessage::Authenticate { token, nonce } => {
+                // Validate token via Credential Broker (fail-closed).
+                // The nonce echoes the server's challenge, binding the proof to the challenge.
+                let auth_result =
+                    Self::validate_auth_token(credential_broker, &token, &nonce).await;
 
                 let (success, session_id) = match auth_result {
                     Ok(sid) => (true, Some(sid)),
@@ -1188,8 +1225,7 @@ impl IpcServer {
 
         let mut buf = vec![0u8; len];
         stream.read_exact(&mut buf).await?;
-        let msg = serde_json::from_slice(&buf)?;
-        Ok(msg)
+        Ok(serde_json::from_slice(&buf)?)
     }
 
     /// Write a framed message to the stream.
@@ -1207,6 +1243,8 @@ impl IpcServer {
 /// IPC client for connecting to the runtime.
 pub struct IpcClient {
     config: IpcConfig,
+    #[allow(dead_code)]
+    credential_broker: Arc<CredentialBroker>,
     stream: Option<Arc<Mutex<StreamImpl>>>,
     rx: Option<mpsc::UnboundedReceiver<IpcMessage>>,
     request_id: u64,
@@ -1214,9 +1252,13 @@ pub struct IpcClient {
 
 impl IpcClient {
     /// Create a new IPC client.
-    pub fn new(config: IpcConfig) -> Self {
+    ///
+    /// `credential_broker` is required to retrieve the stored IPC auth token
+    /// for the authentication handshake.
+    pub fn new(config: IpcConfig, credential_broker: Arc<CredentialBroker>) -> Self {
         Self {
             config,
+            credential_broker,
             stream: None,
             rx: None,
             request_id: 0,
@@ -1293,39 +1335,53 @@ impl IpcClient {
     /// Connect to the runtime on Windows named-pipe transport.
     ///
     /// Requires the `windows-ipc` feature. Opens a named pipe, performs
-    /// authentication handshake via Credential Broker.
+    /// the full authentication handshake via Credential Broker.
     ///
     /// connect() returns success only after authentication completes.
     /// No commands can be sent before authentication succeeds.
+    /// Connection and authentication are bounded by `connect_timeout_ms`.
     #[cfg(all(windows, feature = "windows-ipc"))]
     pub async fn connect(&mut self) -> IpcResult<()> {
+        let timeout = std::time::Duration::from_millis(self.config.connect_timeout_ms);
+
+        // Derive pipe name with logon session LUID for per-session isolation.
+        // Must match the server's pipe name exactly.
+        let logon_session_luid = windows_named_pipe::current_logon_session_luid()
+            .map_err(|e| IpcError::Io(e.to_string()))?;
+
         let pipe_name = format!(
-            "{}{}-{}",
+            "{}{}-{}-{:x}",
             windows_named_pipe::PIPE_NAME_PREFIX,
             self.config.client_identity,
-            self.config.client_identity
+            self.config.client_identity,
+            logon_session_luid
         );
 
         let pipe_name_wide: Vec<u16> = pipe_name.encode_utf16().chain(Some(0)).collect();
 
-        let pipe = unsafe {
-            let handle = CreateFileW(
-                pipe_name_wide.as_ptr(),
-                GENERIC_READ | GENERIC_WRITE,
-                0,
-                std::ptr::null_mut(),
-                OPEN_EXISTING,
-                SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
-                std::ptr::null_mut(),
-            );
-            if handle == INVALID_HANDLE_VALUE {
-                return Err(IpcError::Io(format!(
-                    "CreateFileW failed: {}",
-                    io::Error::last_os_error()
-                )));
-            }
-            OwnedHandle::from_raw_handle(handle)
-        };
+        let pipe = tokio::time::timeout(timeout, async {
+            let handle = unsafe {
+                let handle = CreateFileW(
+                    pipe_name_wide.as_ptr(),
+                    GENERIC_READ | GENERIC_WRITE,
+                    0,
+                    std::ptr::null_mut(),
+                    OPEN_EXISTING,
+                    SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
+                    std::ptr::null_mut(),
+                );
+                if handle == INVALID_HANDLE_VALUE {
+                    return Err(IpcError::Io(format!(
+                        "CreateFileW failed: {}",
+                        io::Error::last_os_error()
+                    )));
+                }
+                Ok(OwnedHandle::from_raw_handle(handle))
+            };
+            handle
+        })
+        .await
+        .map_err(|_| IpcError::Timeout("Connection timed out".to_string()))??;
 
         self.stream = Some(Arc::new(Mutex::new(pipe)));
 
@@ -1341,29 +1397,101 @@ impl IpcClient {
             Self::write_message_named_pipe(&mut stream, &hello).await?;
         }
 
-        // Read hello response
-        let response = {
+        // Read hello response with nonce challenge
+        let response = tokio::time::timeout(timeout, async {
             let mut stream = self.stream.as_ref().unwrap().lock().await;
-            Self::read_message_named_pipe(&mut stream).await?
-        };
-        match response {
+            Self::read_message_named_pipe(&mut stream).await
+        })
+        .await
+        .map_err(|_| IpcError::Timeout("Hello response timed out".to_string()))??;
+
+        let nonce_challenge = match response {
             IpcMessage::HelloResponse {
-                accepted, reason, ..
+                accepted,
+                reason,
+                nonce_challenge,
+                ..
             } => {
                 if !accepted {
                     return Err(IpcError::AuthenticationFailed(
                         reason.unwrap_or("Unknown reason".to_string()),
                     ));
                 }
+                nonce_challenge.ok_or_else(|| {
+                    IpcError::AuthenticationFailed(
+                        "Server did not send nonce challenge".to_string(),
+                    )
+                })?
             }
             _ => {
                 return Err(IpcError::InvalidMessage(
                     "Expected hello response".to_string(),
+                ))
+            }
+        };
+
+        // Retrieve stored IPC auth token from Credential Broker
+        let stored = self
+            .credential_broker
+            .get_secret(
+                ProviderKind::Local,
+                CredentialKind::ApiKey,
+                Some("ipc-auth"),
+            )
+            .await
+            .map_err(|e| IpcError::AuthenticationFailed(format!("Broker error: {e}")))?;
+
+        let token = match stored {
+            Some(t) => t.to_string(),
+            None => {
+                return Err(IpcError::AuthenticationFailed(
+                    "No IPC auth token configured".to_string(),
                 ));
+            }
+        };
+
+        // Send authenticate with proof bound to nonce challenge
+        let auth_msg = IpcMessage::Authenticate {
+            token,
+            nonce: nonce_challenge.clone(),
+        };
+        {
+            let mut stream = self.stream.as_ref().unwrap().lock().await;
+            Self::write_message_named_pipe(&mut stream, &auth_msg).await?;
+        }
+
+        // Read authenticate response with timeout
+        let auth_response = tokio::time::timeout(timeout, async {
+            let mut stream = self.stream.as_ref().unwrap().lock().await;
+            Self::read_message_named_pipe(&mut stream).await
+        })
+        .await
+        .map_err(|_| IpcError::Timeout("Authentication response timed out".to_string()))??;
+
+        match auth_response {
+            IpcMessage::AuthenticateResponse {
+                success,
+                session_id,
+                ..
+            } => {
+                if !success {
+                    return Err(IpcError::AuthenticationFailed(
+                        "Authentication rejected by server".to_string(),
+                    ));
+                }
+                debug!(
+                    "Client authenticated successfully (session: {:?})",
+                    session_id
+                );
+            }
+            _ => {
+                return Err(IpcError::InvalidMessage(
+                    "Expected authenticate response".to_string(),
+                ))
             }
         }
 
-        // Spawn reader
+        // Spawn reader task AFTER authentication succeeds
         let (tx, rx) = mpsc::unbounded_channel();
         self.rx = Some(rx);
         let stream = self.stream.as_ref().unwrap().clone();
@@ -1583,6 +1711,37 @@ impl IpcClient {
         .map_err(|e| IpcError::Io(e.to_string()))??;
         Ok(result)
     }
+    /// Read a framed message from a Windows named pipe.
+    #[cfg(all(windows, feature = "windows-ipc"))]
+    async fn read_message_named_pipe(
+        stream: &mut std::os::windows::io::OwnedHandle,
+    ) -> IpcResult<IpcMessage> {
+        let result = tokio::task::spawn_blocking(move || {
+            windows_named_pipe::read_named_pipe_message(stream)
+        })
+        .await
+        .map_err(|e| IpcError::Io(e.to_string()))??;
+        Ok(result)
+    }
+
+    /// Write a framed message to a Windows named pipe.
+    #[cfg(all(windows, feature = "windows-ipc"))]
+    async fn write_message_named_pipe(
+        stream: &mut std::os::windows::io::OwnedHandle,
+        msg: &IpcMessage,
+    ) -> IpcResult<()> {
+        let data = serde_json::to_vec(msg)?;
+        if data.len() > windows_named_pipe::MAX_MESSAGE_SIZE {
+            return Err(IpcError::InvalidMessage("Message too large".to_string()));
+        }
+        let len = data.len() as u32;
+        let result = tokio::task::spawn_blocking(move || {
+            windows_named_pipe::write_named_pipe_message(stream, &len.to_be_bytes(), &data)
+        })
+        .await
+        .map_err(|e| IpcError::Io(e.to_string()))??;
+        Ok(result)
+    }
 }
 
 #[cfg(all(windows, not(feature = "windows-ipc")))]
@@ -1734,19 +1893,20 @@ pub mod windows_named_pipe {
     /// Security descriptor granting pipe access only to the current user's logon SID.
     pub struct UserSecurityDescriptor {
         sd: Vec<u8>,
+        /// Logon session LUID (AuthenticationId) — binds the pipe to a
+        /// specific logon session for per-session isolation.
+        logon_session_luid: u64,
     }
 
     impl UserSecurityDescriptor {
         /// Creates a new security descriptor with a DACL allowing only
         /// the current user's logon SID to access the pipe.
+        ///
+        /// The security descriptor and its DACL are allocated in a single
+        /// buffer so that `SetSecurityDescriptorDacl` never stores a
+        /// dangling pointer to freed memory.
         pub fn new() -> io::Result<Self> {
             unsafe {
-                let mut sd = vec![0u8; SECURITY_DESCRIPTOR_MIN_LENGTH as usize];
-                if InitializeSecurityDescriptor(sd.as_mut_ptr(), SECURITY_DESCRIPTOR_REVISION) == 0
-                {
-                    return Err(io::Error::last_os_error());
-                }
-
                 // Get current process token
                 let mut token = HANDLE::null();
                 if OpenProcessToken(
@@ -1781,20 +1941,34 @@ pub mod windows_named_pipe {
                 let token_user = &*(token_user.as_ptr() as *const TOKEN_USER);
                 let user_sid = token_user.User.Sid;
 
-                // Build DACL with one ACE allowing the user SID
+                // Get logon session LUID for per-session isolation
+                let logon_session_luid = Self::get_logon_session_luid(token)?;
+
+                // Get SID length
                 let sid_length = GetLengthSid(user_sid) as u32;
                 let ace_size = (std::mem::size_of::<ACCESS_ALLOWED_ACE>() as u32)
                     - (std::mem::size_of::<DWORD>() as u32)
                     + sid_length;
                 let dacl_size = (std::mem::size_of::<ACL>() as u32) + ace_size;
-                let mut dacl = vec![0u8; dacl_size as usize];
 
-                if InitializeAcl(dacl.as_mut_ptr(), dacl_size, ACL_REVISION) == 0 {
+                // Single buffer: security descriptor + DACL
+                let sd_size = SECURITY_DESCRIPTOR_MIN_LENGTH as usize;
+                let total_size = sd_size + dacl_size as usize;
+                let mut buf = vec![0u8; total_size];
+
+                let sd_ptr = buf.as_mut_ptr();
+                if InitializeSecurityDescriptor(sd_ptr, SECURITY_DESCRIPTOR_REVISION) == 0 {
+                    return Err(io::Error::last_os_error());
+                }
+
+                // Build DACL after the security descriptor in the same buffer
+                let dacl_ptr = unsafe { sd_ptr.add(sd_size) };
+                if InitializeAcl(dacl_ptr, dacl_size, ACL_REVISION) == 0 {
                     return Err(io::Error::last_os_error());
                 }
 
                 if AddAccessAllowedAce(
-                    dacl.as_mut_ptr(),
+                    dacl_ptr,
                     ACL_REVISION,
                     GENERIC_READ | GENERIC_WRITE,
                     user_sid,
@@ -1803,12 +1977,22 @@ pub mod windows_named_pipe {
                     return Err(io::Error::last_os_error());
                 }
 
-                if SetSecurityDescriptorDacl(sd.as_mut_ptr(), 1, dacl.as_ptr(), 0) == 0 {
+                // SetSecurityDescriptorDacl stores the DACL pointer — it must
+                // point into the same buffer that owns the security descriptor.
+                if SetSecurityDescriptorDacl(sd_ptr, 1, dacl_ptr, 0) == 0 {
                     return Err(io::Error::last_os_error());
                 }
 
-                Ok(Self { sd })
+                Ok(Self {
+                    sd: buf,
+                    logon_session_luid,
+                })
             }
+        }
+
+        /// Returns the logon session LUID for pipe name derivation.
+        pub fn logon_session_luid(&self) -> u64 {
+            self.logon_session_luid
         }
 
         /// Returns security attributes for use with CreateNamedPipeW.
@@ -1818,6 +2002,36 @@ pub mod windows_named_pipe {
                 lpSecurityDescriptor: self.sd.as_ptr(),
                 bInheritHandle: 0,
             }
+        }
+
+        /// Retrieves the logon session LUID (AuthenticationId) from the token.
+        ///
+        /// The LUID uniquely identifies the logon session. Two processes running
+        /// as the same user but in different logon sessions have different LUIDs.
+        fn get_logon_session_luid(token: HANDLE) -> io::Result<u64> {
+            let mut needed = 0u32;
+            GetTokenInformation(token, TokenStatistics, std::ptr::null_mut(), 0, &mut needed);
+            if needed == 0 {
+                return Err(io::Error::last_os_error());
+            }
+
+            let mut stats = vec![0u8; needed as usize];
+            if GetTokenInformation(
+                token,
+                TokenStatistics,
+                stats.as_mut_ptr() as *mut _,
+                needed,
+                &mut needed,
+            ) == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+
+            // TOKEN_STATISTICS: AuthenticationId (LUID) is at offset 0 (8 bytes)
+            // The struct layout: LUID AuthenticationId; ... other fields
+            let luid_low = u32::from_le_bytes([stats[0], stats[1], stats[2], stats[3]]);
+            let luid_high = u32::from_le_bytes([stats[4], stats[5], stats[6], stats[7]]);
+            Ok(((luid_high as u64) << 32) | (luid_low as u64))
         }
     }
 
@@ -1942,7 +2156,7 @@ pub mod windows_named_pipe {
                 pipe_name_wide.as_ptr(),
                 PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
                 PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-                PIPE_UNLIMITED_INSTANCES,
+                32, // Bounded max pipe instances (was PIPE_UNLIMITED_INSTANCES)
                 MAX_MESSAGE_SIZE as u32,
                 MAX_MESSAGE_SIZE as u32,
                 0,
