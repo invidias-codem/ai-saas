@@ -262,6 +262,7 @@ impl RuntimeSupervisor {
             IpcServer::new(
                 instance.profile_id.clone(),
                 instance.ipc_config.clone(),
+                self.credential_broker.clone(),
                 instance.state_machine.clone(),
                 agent_loop.clone(),
             )
